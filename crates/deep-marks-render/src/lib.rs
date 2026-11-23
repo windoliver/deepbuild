@@ -511,6 +511,8 @@ fn check(
     issues.extend(found);
     let (found, vectors) = deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), twin);
     issues.extend(found);
+    // #2053: a normal page the size of its image, read from the store.
+    issues.extend(asset::page_issues(doc, store));
     // #406: a quote's raw bytes against its source's, and a formula's numbers.
     issues.extend(deep_canvas_marks::check::quotes(doc, |sha| {
         asset::bytes(store, sha)
@@ -633,13 +635,16 @@ fn check(
     }
     let ok = !issues.iter().any(|i| i.severity == "error");
     let numbers = [deep_canvas_marks::check::numbers(doc).0, formula_numbers].concat();
+    // #2053: an image's normal page outside a lit group draws as it would without it.
+    let items = doc.get("items").and_then(Value::as_object);
+    let page_notices = deep_canvas_marks::light::unlit_pages(items.unwrap_or(&Map::new()));
     let answer = json!({
         "ok": ok,
         "issues": issues.iter().map(|i| i.to_json()).collect::<Vec<_>>(),
         // #397: every number a mark set or an axis shows, with what it traces to; #406: a
         // template's story numbers, a quote's quotation and a formula's numbers.
         "numbers": numbers,
-        "notices": result.notices.iter().map(|n| n.to_json()).chain(formula_notices).collect::<Vec<_>>(),
+        "notices": result.notices.iter().map(|n| n.to_json()).chain(formula_notices).chain(page_notices).collect::<Vec<_>>(),
         "curves": curves,
         "lowered": result.lowered,
         "expansions": expansions,
@@ -702,7 +707,7 @@ fn verdict(checked: &mut Value, accepted: &[(String, String)]) {
 
 /// The issues a planted check lets through, by its name. #2031 AC6's accepts a 17th light on one
 /// group; #2032 AC6's two accept an open path that occludes, and a lit group's occluders past
-/// their cap.
+/// their cap; #2053 AC4's a normal page whose size isn't its image's.
 fn let_through(planted: Option<&str>) -> Option<fn(&Value) -> bool> {
     Some(match planted? {
         "light_accepts_seventeenth" => |i| {
@@ -715,6 +720,8 @@ fn let_through(planted: Option<&str>) -> Option<fn(&Value) -> bool> {
         "occlude_accepts_past_cap" => {
             |i| i["code"] == "out_of_range" && i["actual"]["segments"].is_number()
         }
+        // #2053 AC4's: a normal page of another size than its image's.
+        "normal_accepts_smaller_page" => |i| i["code"] == "normal_page_size",
         _ => return None,
     })
 }
@@ -1076,6 +1083,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     || p == "drops_cells_by_corner_signs"
                     || p == "decodes_before_header"
                     || p == "cap_counts_copies_only"
+                    || p == "decoder_ignores_orientation"
                     || vertical_plant(p).is_some() =>
             {
                 (Planted::None, false, false)
@@ -1348,6 +1356,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 Some(Value::String(p)) if p == "drops_glyph" => (false, true, false),
                 Some(Value::String(p)) if p == "stock_bt601_fragment" => (false, false, true),
                 Some(Value::String(p)) if p == "cap_counts_copies_only" => (false, false, false),
+                Some(Value::String(p)) if p == "decoder_ignores_orientation" => {
+                    (false, false, false)
+                }
                 Some(_) => return None,
             };
             Request::Render {
@@ -1363,6 +1374,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 stock_fragment,
                 image_plant: match input.get("planted").and_then(Value::as_str) {
                     Some("cap_counts_copies_only") => asset::Plant::CapCountsCopiesOnly,
+                    Some("decoder_ignores_orientation") => asset::Plant::IgnoresOrientation,
                     _ => asset::Plant::None,
                 },
             }

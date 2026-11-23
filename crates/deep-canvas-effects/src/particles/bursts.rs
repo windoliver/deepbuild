@@ -123,6 +123,9 @@ impl Resolve for Nothing {}
 /// The cap on a `where` or `count` expression's ops.
 const OPS: usize = 64;
 
+/// #552's planted burst, which ignores this copy's fog gate.
+pub const IGNORES_FOG: &str = "burst_ignores_fog";
+
 /// `emit.on: {list, kinds, where, count, max_bursts, cooldown}` over the document's baked lists:
 /// each matching row a burst at its time and point, at most `max_bursts`, a pair (a, b) bursting
 /// again only `cooldown` after its last. A list the document hasn't baked is `unbaked_list`; a
@@ -138,6 +141,17 @@ pub fn from_list(id: &str, on: &Value, doc: &Value) -> Result<Vec<Event>, Refusa
         )
         .with(Value::from(list))
     })?;
+    // #552's planted burst reads the rows this copy's fog gated too.
+    let mut all;
+    let rows = match doc["fogged"][list].as_array() {
+        Some(fogged) if doc["planted"] == IGNORES_FOG => {
+            all = rows.clone();
+            all.extend(fogged.iter().cloned());
+            all.sort_by_key(|r| r["t"].as_i64().unwrap_or(0));
+            &all
+        }
+        _ => rows,
+    };
     let kinds: Vec<&str> = on["kinds"]
         .as_array()
         .map(|k| k.iter().filter_map(Value::as_str).collect())

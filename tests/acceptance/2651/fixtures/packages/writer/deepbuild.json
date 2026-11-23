@@ -1,0 +1,8 @@
+{
+  "id": "t2651/__NAME__",
+  "version": "1.0.0",
+  "digest": "",
+  "access": { "words": ["record"] },
+  "actions": ["ext.__NAME__.seen"],
+  "requires": { "preview": ["deep.on", "deep.registerAction"] }
+}

@@ -4215,6 +4215,13 @@ pub enum Planted {
     LightDefaultAmbientZero,
     LightEveryChild,
     LightStaleList,
+    /// #2053's twins: a normal page's green read the other way up; a paged pixel's term
+    /// multiplied by max(0, N·L) alone; a page's normals left unturned when its image turns.
+    NormalFlippedGreen,
+    NormalDotAlone,
+    NormalUnturned,
+    /// #2053's `path` twin: each light's height kept from the frame before.
+    LightStaleHeight,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -4893,8 +4900,8 @@ pub(crate) fn shaped_text(spec: &TextSpec) -> Option<Arc<deep_text::Shaped>> {
 
 mod placed;
 mod scopes;
-use scopes::{ancestor_scope, is_under, scopes_of};
 use placed::*;
+use scopes::{ancestor_scope, is_under, scopes_of};
 
 /// #467: an item's marks with what its paint builds from their coverage (Paint: drop; Paint:
 /// shade, `kind: inner`; Paint: glow, bevel and satin). A drop without blur is the item's own

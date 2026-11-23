@@ -1,0 +1,110 @@
+17:07  up 1 day, 21:33, 3 users, load averages: 67.21 63.58 71.64
+== after, symlinked TMPDIR=/tmp/e3005/link
+-- build: HEAD e1494d5ff, packages/extension-host/src as committed
+-- dist/jobs.js spawns by real path: 2
+-- hub home /tmp/e3005/link/h-5lWK/home, its real path /private/tmp/e3005/link/h-5lWK/home
+-- hub ready: 1
+$ deep install packages/jobs/score
+Source: ~/private/deepbuild-core/.claude/worktrees/fix-2563-inbox-option-ids-a4b643/packages/jobs/score
+  deepbuild/score@1.0.0, digest d1:fd6d8beac98c0b0fb915f2d46f54d62f6917e449d696af32ebf23bd71bd313f8, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: none
+  check kinds: score.render.pitch
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+  hosts: none
+Installed deepbuild/score@1.0.0
+exit 0
+$ deep install packages/jobs/import
+Source: ~/private/deepbuild-core/.claude/worktrees/fix-2563-inbox-option-ids-a4b643/packages/jobs/import
+  deepbuild/import@1.0.0, digest d1:8fb7886bb7379869e52b92cf43fdc0a33c984675ae074a2b8457bb6eeeff8cc9, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: none
+  check kinds: import.document, import.colors_mapped, import.no_expression
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+  hosts: none
+Installed deepbuild/import@1.0.0
+exit 0
+$ deep install packages/jobs/typeset
+Source: ~/private/deepbuild-core/.claude/worktrees/fix-2563-inbox-option-ids-a4b643/packages/jobs/typeset
+  deepbuild/typeset@1.0.0, digest d1:76517463e9549758fc78967e7a8d8ea1494672464db017c89821238a40ac3dfb, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: none
+  check kinds: typeset.unknown_command, typeset.parts_apart, typeset.outlines
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+  hosts: none
+Installed deepbuild/typeset@1.0.0
+exit 0
+-- hub stopped
+
+== after, real TMPDIR=/private/tmp/e3005/real
+-- build: HEAD e1494d5ff, packages/extension-host/src as committed
+-- dist/jobs.js spawns by real path: 2
+-- hub home /private/tmp/e3005/real/h-lskT/home, its real path /private/tmp/e3005/real/h-lskT/home
+-- hub ready: 1
+$ deep install packages/jobs/score
+Source: ~/private/deepbuild-core/.claude/worktrees/fix-2563-inbox-option-ids-a4b643/packages/jobs/score
+  deepbuild/score@1.0.0, digest d1:fd6d8beac98c0b0fb915f2d46f54d62f6917e449d696af32ebf23bd71bd313f8, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: none
+  check kinds: score.render.pitch
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+  hosts: none
+Installed deepbuild/score@1.0.0
+exit 0
+$ deep install packages/jobs/import
+Source: ~/private/deepbuild-core/.claude/worktrees/fix-2563-inbox-option-ids-a4b643/packages/jobs/import
+  deepbuild/import@1.0.0, digest d1:8fb7886bb7379869e52b92cf43fdc0a33c984675ae074a2b8457bb6eeeff8cc9, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: none
+  check kinds: import.document, import.colors_mapped, import.no_expression
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+  hosts: none
+Installed deepbuild/import@1.0.0
+exit 0
+$ deep install packages/jobs/typeset
+Source: ~/private/deepbuild-core/.claude/worktrees/fix-2563-inbox-option-ids-a4b643/packages/jobs/typeset
+  deepbuild/typeset@1.0.0, digest d1:76517463e9549758fc78967e7a8d8ea1494672464db017c89821238a40ac3dfb, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: none
+  check kinds: typeset.unknown_command, typeset.parts_apart, typeset.outlines
+  provides: none
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+  hosts: none
+Installed deepbuild/typeset@1.0.0
+exit 0
+-- hub stopped

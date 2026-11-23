@@ -1,0 +1,239 @@
+Base result for tests/acceptance/2136 (#2136), written first, before any fix.
+
+Base commit: 654c560c1 (origin/main), the worktree otherwise clean
+Date: 2026-11-22
+Node: v24.22.0 (darwin, arm64)
+Load average when the run started: 106.46 80.77 50.63 (other sessions' work; nothing here waits on or reads the load)
+Command: node --test 'tests/acceptance/2136/*.test.mjs'   (33 s wall)
+
+Result: 7 tests, 6 fail, 1 passes.
+  #2136.bcf37dea  FAILS at its assertion: the run's last line is "PASS affected: ... 1 passed" though the runner was killed
+  #2136.2bc42651  PASSES on the base: lanes.mjs already gives the unit lane's second command an --exclude for every
+                  by-hand entry (97 by-hand files under an alone folder, each the value of one). Its wrong program is the
+                  twin alone-excludes-nothing (twins.json); its run on that twin is the second part of this file.
+  #2136.06841e2a  FAILS at its assertion: the node command's patterns expand to the 2 live files and 3 fixture files
+  #2136.3bd30215  FAILS at its assertion: the fixture case's test/cart.test.js is in the parallel node block
+  #2136.e7710a49  both tests FAIL at their assertions: two of the three canvas-closures jobs leave their output in no
+                  log; the one finding is read 2 times
+  #2136.4948c95b  FAILS at its assertion: 60 listings of the repository's files, not 1 (the lane's lines are as expected)
+
+Paths: <checkout> is the checkout's root, <sandbox> a test's own temporary folder, <home> the home folder.
+
+==== 1. The suite on the base commit ====
+
+✖ #2136.3bd30215 a change to a source file of a gate fixture case puts no file under packages/*/fixtures/ in any block of the plan (6755.294042ms)
+✖ #2136.e7710a49 no two of the lint lane's commands get one label: each job's output is in a log no other lint job wrote (17576.60975ms)
+✖ #2136.e7710a49 a closures run with one FAIL line beside a passing drift run yields that finding once (12158.338083ms)
+✖ #2136.4948c95b for a change that touches 60 paths, the lifecycle lane prints the lines it printed before and git ls-files is spawned once for the table lookup (32361.369ms)
+✖ #2136.bcf37dea a node job whose report holds a start row for its file and no fail row, and whose runner a signal ended, leaves the run's last line INCONCLUSIVE, not PASS (17064.269458ms)
+✔ #2136.2bc42651 every by-hand file under an alone folder is the value of an --exclude in the unit lane's second command (2373.3915ms)
+✖ #2136.06841e2a no file named *.live.test.mjs and no file under a fixtures folder is among the files the unit lane's node command's patterns expand to (2519.861292ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 1
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 32532.956333
+
+✖ failing tests:
+
+test at tests/acceptance/2136/fixture-selection.test.mjs:13:1
+✖ #2136.3bd30215 a change to a source file of a gate fixture case puts no file under packages/*/fixtures/ in any block of the plan (6755.294042ms)
+  AssertionError [ERR_ASSERTION]: a change to packages/conformance/fixtures/gate/cases/answered-fail/base/src/cart.js puts a fixture project's file in a block of the plan
+  exit 0
+  stdout:
+  parallel node: packages/conformance/fixtures/gate/cases/answered-fail/base/test/cart.test.js tests/fixture-2136/plain.test.mjs
+  
+  stderr:
+  
+  + actual - expected
+  
+  + [
+  +   'parallel node: packages/conformance/fixtures/gate/cases/answered-fail/base/test/cart.test.js'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2136/fixture-selection.test.mjs:34:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'parallel node: packages/conformance/fixtures/gate/cases/answered-fail/base/test/cart.test.js' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2136/lint-logs.test.mjs:18:1
+✖ #2136.e7710a49 no two of the lint lane's commands get one label: each job's output is in a log no other lint job wrote (17576.60975ms)
+  AssertionError [ERR_ASSERTION]: of the lint lane's 28 jobs, 3 left their output in no log and 0 logs hold more than one job's, so two jobs had one label
+  exit 0
+  stdout:
+  NOTE docs/note-2136.txt reaches no test
+  JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)
+  TIMED the timed list, from scripts/lanes.mjs (304): tests/acceptan …
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 0 passed, in 9 s at load 119; logs in <sandbox>/tmp/deep-affected-CLriSs
+  
+  stderr:
+  
+  + actual - expected
+  
+    {
+      shared: [],
+  +   unlogged: [
+  +     'ran-2136 [canvas-closures.mjs closures]',
+  +     'ran-2136 [canvas-closures.mjs drift]',
+  +     'ran-2136 [canvas-closures.mjs paths]'
+  +   ]
+  -   unlogged: []
+    }
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2136/lint-logs.test.mjs:30:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { shared: [], unlogged: [ 'ran-2136 [canvas-closures.mjs closures]', 'ran-2136 [canvas-closures.mjs drift]', 'ran-2136 [canvas-closures.mjs paths]' ] },
+    expected: { shared: [], unlogged: [] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2136/lint-logs.test.mjs:33:1
+✖ #2136.e7710a49 a closures run with one FAIL line beside a passing drift run yields that finding once (12158.338083ms)
+  AssertionError [ERR_ASSERTION]: the closures job's one finding is read 3 times, not once
+  exit 1
+  stdout:
+  NOTE docs/note-2136.txt reaches no test
+  JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)
+  NEW FAIL closure-2136: a planted finding
+  NEW FAIL closure-2136: a planted finding
+  NEW FAIL closure-2136: a planted finding
+  TIMED the timed list, from scripts/lanes.mjs (304): tests/acceptan …
+  FAIL affected: 3 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 0 passed, in 6 s at load 126; logs in <sandbox>/tmp/deep-affected-UOMm4e
+  
+  stderr:
+  
+  
+  3 !== 1
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2136/lint-logs.test.mjs:59:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 3,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2136/proof-listing.test.mjs:32:1
+✖ #2136.4948c95b for a change that touches 60 paths, the lifecycle lane prints the lines it printed before and git ls-files is spawned once for the table lookup (32361.369ms)
+  AssertionError [ERR_ASSERTION]: git ls-files was spawned 60 times to list the repository's files for a change of 60 paths, not once (62 ls-files calls in all)
+  exit 1
+  stdout:
+  PASS lifecycle: door.machine@1: each of its 3 reachable states reaches a final state
+  FAIL lifecycle: lamp.machine@1: state stuck has no move to a final state (packages/contracts/schemas/lamp.machine@1.json)
+    Fix: Give every state reachable from the initial one a sequence of moves to a final state.
+  proof: wall time 29.3 s
+  
+  stderr:
+  
+  
+  60 !== 1
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2136/proof-listing.test.mjs:79:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 60,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2136/runner-exit.test.mjs:38:1
+✖ #2136.bcf37dea a node job whose report holds a start row for its file and no fail row, and whose runner a signal ended, leaves the run's last line INCONCLUSIVE, not PASS (17064.269458ms)
+  AssertionError [ERR_ASSERTION]: the run's last line is PASS though its node job's runner was killed part way through its file
+  exit 0
+  stdout:
+  parallel node: tests/fixture-2136/killed.test.mjs
+  JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)
+  TIMED the timed list, from scripts/lanes.mjs (304): tests/acceptan …
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 9 s at load 119; logs in <sandbox>/tmp/deep-affected-X67s8H
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2136/runner-exit.test.mjs:59:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 9 s at load 119; logs in <sandbox>/tmp/deep-affected-X67s8H',
+    expected: /^PASS\b/,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2136/unit-lane-node.test.mjs:10:1
+✖ #2136.06841e2a no file named *.live.test.mjs and no file under a fixtures folder is among the files the unit lane's node command's patterns expand to (2519.861292ms)
+  AssertionError [ERR_ASSERTION]: the unit lane's node command (node --test tests/*.test.mjs packages/**/test/**/*.test.mjs) runs 2 live test files and 3 files under a fixtures folder
+  + actual - expected
+  
+  + [
+  +   'packages/conformance/fixtures/gate/cases/passes-on-retry/base/test/cart.test.mjs',
+  +   'packages/conformance/fixtures/gate/cases/passes-on-retry/fix/test/cart.test.mjs',
+  +   'packages/conformance/fixtures/gate/cases/passes-on-retry/head/test/cart.test.mjs',
+  +   'tests/panel-host.live.test.mjs',
+  +   'tests/panel-keys.live.test.mjs'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2136/unit-lane-node.test.mjs:20:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'packages/conformance/fixtures/gate/cases/passes-on-retry/base/test/cart.test.mjs', 'packages/conformance/fixtures/gate/cases/passes-on-retry/fix/test/cart.test.mjs', 'packages/conformance/fixtures/gate/cases/passes-on-retry/head/test/cart.test.mjs', 'tests/panel-host.live.test.mjs', 'tests/panel-keys.live.test.mjs' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+==== 2. #2136.2bc42651 on its twin, alone-excludes-nothing ====
+
+Run by hand in a scratch copy (<twin copy>): `git archive HEAD scripts tests package.json`, this folder copied in, the
+twin's scripts/lanes.mjs laid over scripts/lanes.mjs, node_modules linked, `git init` and `git add -A`; then
+node --test tests/acceptance/2136/unit-lane-alone.test.mjs
+
+✖ #2136.2bc42651 every by-hand file under an alone folder is the value of an --exclude in the unit lane's second command (993.7225ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1118.838708
+
+✖ failing tests:
+
+test at tests/acceptance/2136/unit-lane-alone.test.mjs:11:1
+✖ #2136.2bc42651 every by-hand file under an alone folder is the value of an --exclude in the unit lane's second command (993.7225ms)
+  AssertionError [ERR_ASSERTION]: 97 of the 97 by-hand files under an alone folder are the value of no --exclude in the unit lane's second command, so the block runs them
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/1018/redraft-ac6/budgets.test.ts',
+  +   'tests/acceptance/103/budgets.test.ts',
+  +   'tests/acceptance/1098/budgets.test.ts',
+  ... (the other 94 of the 97 files, then the stack; cut)

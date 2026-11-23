@@ -1,0 +1,83 @@
+{
+ "base": "3c500c0c8",
+ "program": {
+  "bytes": 1071102,
+  "sha256": "70b6308cd4e3dfe8abad85185fbe4686c476f91ea10aa990e6e8bf647a62923f"
+ },
+ "allocations": 2670020,
+ "answers": {
+  "admitted": {
+   "check": [],
+   "rewrite": {
+    "sha256": "a95f04a3d51e58e1dcd270e46baf7a5e3449cd33e07f76a9b88d138dfbde92c8"
+   }
+  },
+  "memory_grows": {
+   "check": [
+    {
+     "rule": "limit",
+     "what": "memory 0 can grow: its maximum must equal its minimum (1 pages)",
+     "limit": {
+      "name": "memory",
+      "max": 1,
+      "actual": 2
+     }
+    }
+   ],
+   "rewrite": {
+    "sha256": "631b660294dc3c2fd1c405b7d1b5a5765ebf88b98300926ec7e328e9460c48ea"
+   }
+  },
+  "import": {
+   "check": [
+    {
+     "rule": "import",
+     "what": "the program imports the global env.g; a program imports nothing",
+     "import": {
+      "module": "env",
+      "name": "g"
+     }
+    }
+   ],
+   "rewrite": {
+    "sha256": "625d580d1ded8b792bdcfb6de59b3eb0a6c484a58be933324aa07ec1efcdb5f1"
+   }
+  },
+  "vector_in_function_1500": {
+   "check": [
+    {
+     "rule": "proposal",
+     "what": "function 1500 uses a vector instruction, v128.const, from the simd proposal",
+     "instruction": "v128.const",
+     "function": 1500,
+     "proposal": "simd"
+    }
+   ],
+   "rewrite": {
+    "refused": "SIMD support is not enabled (at offset 0xc426a)"
+   }
+  },
+  "mismatch_in_function_1000": {
+   "check": [
+    {
+     "rule": "valid",
+     "what": "not a valid program under the subset: type mismatch: expected i32, found f64 at offset 535949"
+    }
+   ],
+   "rewrite": {
+    "refused": "type mismatch: expected i32, found f64 (at offset 0x82d8d)"
+   }
+  },
+  "underflow_in_function_1999": {
+   "check": [
+    {
+     "rule": "valid",
+     "what": "not a valid program under the subset: type mismatch: expected a type but nothing on stack at offset 1070573"
+    }
+   ],
+   "rewrite": {
+    "refused": "type mismatch: expected a type but nothing on stack (at offset 0x1055ed)"
+   }
+  }
+ }
+}

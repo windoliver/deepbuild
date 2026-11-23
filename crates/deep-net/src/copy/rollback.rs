@@ -201,6 +201,7 @@ impl<S: Stepper> Copy<S> {
         if self.roll.trapped.as_ref().is_some_and(|(k, _)| *k >= s) {
             self.roll.trapped = None;
         }
+        self.unflag(s);
         self.next = s;
         while self.next < to && self.roll.trapped.is_none() && self.end.is_none() {
             self.run(self.now);
@@ -224,10 +225,18 @@ impl<S: Stepper> Copy<S> {
         while self.roll.settled < upto {
             let k = self.roll.settled;
             self.roll.settled += 1;
+            // #552: a step's draws once it is confirmed.
+            if self.end.is_none() {
+                self.drawn(k);
+            }
             if let Ok(i) = self.hashes.binary_search_by_key(&k, |h| h.step) {
                 let h = self.hashes[i];
                 self.owed.push_back(h);
                 self.compare(k);
+            }
+            // #278: a nonzero `finish` ends the match once its step is confirmed.
+            if self.confirm(k) {
+                break;
             }
         }
         let settled = self.roll.settled;

@@ -72,12 +72,12 @@ use deep_gpu::surface::FORMAT;
 use deep_canvas::gauge::Kept;
 
 pub use crate::diag::{draw_offscreen_diag, white, Diag, DiagCounts};
+pub use crate::mesh::tangents_derived;
 use crate::mesh::{Mesh, MESHES};
 pub use crate::module::{
     draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
     LIGHT, PYRAMID_NS_PER_PX,
 };
-pub use crate::mesh::tangents_derived;
 pub use crate::planted::Planted;
 pub use crate::readouts::{lay_over, readouts_as_labels};
 use crate::set::Set;
@@ -3797,8 +3797,7 @@ impl Renderer {
         self.counts.lists_bytes = self.fill.bytes(&self.cluster_buffer);
         let [w, h] = self.internal();
         let px = f64::from(w) * f64::from(h);
-        self.counts.light_estimate =
-            fill::estimate(scene, px, self.fill.walked, self.fill.listed);
+        self.counts.light_estimate = fill::estimate(scene, px, self.fill.walked, self.fill.listed);
         if remade {
             self.clusters = None;
             self.rebind_lights(device);
@@ -6525,7 +6524,7 @@ impl Renderer {
 
     /// Each cluster's fill lights as the frame just drawn walked them, by ID with their weights
     /// (#1634), read back from the pass's lists.
-    pub fn read_clusters(&self, device: &Device) -> Vec<([u32; 3], Vec<(String, f32)>)> {
+    pub fn read_clusters(&self, device: &Device) -> Vec<fill::Cluster> {
         self.fill.read(device, &self.cluster_buffer)
     }
 

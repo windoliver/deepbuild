@@ -1,0 +1,9 @@
+{
+  "upFront": [
+    "deep_status"
+  ],
+  "servers": {
+    "deep": "DeepBuild records this session's work; only check results decide when it is done, never your word. Begin each task with deep_status, which is loaded already: its reply says where your session stands and what to call next. Every other deep_* tool loads when you search for it, so name in one search each tool your task needs. By block: Event: deep_search. Claim: deep_claim. Check: deep_propose, deep_run. Ask: deep_ask, deep_wait, deep_root_plan. Evidence and open item: deep_open_item, deep_evidence. Environment and lease: deep_env. Screen and panel: deep_show, deep_drive. Job: deep_job. Canvas: deep_kinds, deep_query.",
+    "deep-actions": "Actions the plug-ins installed in DeepBuild offer, such as sending a message or changing data outside the repo. Search for find_actions to list them with each one's input schema, and for call_action to run one by name, once a task needs a plug-in's action."
+  }
+}

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "Each file builds cargo binaries (deep-physics in release, the wasm32 library, and the merge base's deep-physics in a second checkout under target/), and ac4-budget times an 800-body world's steps, as #2308's, #191's and #1921's suites do." }

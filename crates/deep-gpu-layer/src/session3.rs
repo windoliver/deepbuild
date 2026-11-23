@@ -160,11 +160,13 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         .iter()
         .position(|q| p == Some(*q))
         .map_or(0, |i| 16 << i)
-            // #458's, above #1381's bit: scene3d.wgsl's `P_SUM_CLAMPED` and the two after it.
+            // #458's, above #1381's bit: scene3d.wgsl's `P_SUM_CLAMPED` and the two after it, then
+            // #2054's `P_WINDOW_SQUARED`.
             | [
                 Planted::LightSumClamped,
                 Planted::ShadesByLocalTangent,
                 Planted::ShadowBrightens,
+                Planted::LightWindowSquared,
             ]
             .iter()
             .position(|q| p == Some(*q))
@@ -682,7 +684,7 @@ pub fn view_depth(app: &App) -> Result<Option<Vec<u8>>, Value> {
 
 /// #1634: each cluster's fill lights as the frame the session drew last walked them, read back
 /// from the cluster pass's lists: nothing on the noop lane, which runs no pass.
-pub fn clusters(app: &App) -> Vec<([u32; 3], Vec<(String, f32)>)> {
+pub fn clusters(app: &App) -> Vec<deep_scene3d_render::fill::Cluster> {
     if app.backend == Backend::Noop {
         return Vec::new();
     }

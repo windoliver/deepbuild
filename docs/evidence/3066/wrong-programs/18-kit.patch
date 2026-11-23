@@ -1,0 +1,11 @@
+--- a/packages/conformance/src/kit.ts	2026-11-21 22:36:46
++++ b/packages/conformance/src/kit.ts	2026-11-21 22:36:46
+@@ -149,7 +149,7 @@
+       ids.push(...events.flatMap((event) => (event.data.id === undefined ? [] : [String(event.data.id)])));
+     }
+     const twice = ids.find((id, i) => ids.indexOf(id) !== i);
+-    if (twice) h.fail(`${RULE_MESSAGES.order}: ${twice} names two events of call call_one`, [R.order.code]);
++    if (twice) h.fail(`${RULE_MESSAGES.order}: an ID names two events of call call_one`, [R.order.code]);
+   }),
+   kase('permission/not-from-label', {}, (h) => notAllowed(h, answered({ option: 'allow', label: 'Allow', decision: 'deny' }), 'with the option labelled "Allow" that declares deny')),
+   kase('permission/not-from-words', {}, (h) => notAllowed(h, answered({ words: 'yes but not on main' }), 'with the words "yes but not on main" and decision none')),

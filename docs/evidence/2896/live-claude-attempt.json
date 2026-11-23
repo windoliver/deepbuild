@@ -1,0 +1,54 @@
+[
+ {
+  "init": {
+   "claude_code_version": "2.1.326",
+   "model": "claude-haiku-5-5",
+   "mcp_servers": [
+    {
+     "name": "deep",
+     "status": "connected",
+     "source": "dynamic"
+    }
+   ]
+  }
+ },
+ {
+  "tool_use": "ToolSearch",
+  "input": {
+   "query": "select:mcp__deep__deep_query",
+   "max_results": 1
+  }
+ },
+ {
+  "tool_result": ""
+ },
+ {
+  "tool_use": "mcp__deep__deep_query",
+  "input": {
+   "doc": "01JB2896D00000000000000002",
+   "what": "rows",
+   "cap": 3000,
+   "rev": null,
+   "items": null,
+   "paths": null,
+   "at": null,
+   "cursor": null,
+   "expect": null,
+   "path": null,
+   "t": null,
+   "target": null,
+   "by": null
+  }
+ },
+ {
+  "tool_result": "{\"code\":\"no_session\",\"core\":\"core@0.0.0\",\"set_digest\":\"3fc9deaca5c5b3767c76882d3435451aab21e9d72dd7ff9efc144a9c6d9bc1f1\"}",
+  "is_error": true
+ },
+ {
+  "text": "ROWS=unknown NEXT=unknown FILED=no FIRST=unknown LAST=unknown. The one `deep_query` call failed with `no_session`, so it returned no rows array; I did not retry because you asked for exactly one call. The session likely needs to be set up before the document can be read."
+ },
+ {
+  "result": "success",
+  "cost_usd": 0.00349869
+ }
+]

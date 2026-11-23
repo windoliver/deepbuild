@@ -1,0 +1,406 @@
+The whole suite at the base, 512d194bb (origin/main), on this Mac, then the one twin laid over the base (twins.json).
+The checkout's path is replaced by <repo> (the twin's copy by <twin-NAME>), the home folder by ~.
+Section 1: the base. 10 tests: 9 fail at their assertion, 1 passes (AC1's own test, on the issue's exact line: at the
+base a `;` written against the profile makes the owner `aws-profile:dev;`, which no rule covers, so that one spelling
+is denied already; README.md, "What the base does"). Section 2: that passing test, with AC1's others, on its twin.
+
+======== 1. base ========
+# date: 2026-11-22T00:10:44Z
+# base: 512d194bb2885717f655528fe3e2d102d9cc7640 (Merge pull request #2972 from windoliver/feat/2494-panel-gpu-view)
+# load average: { 93.06 76.60 66.16 }
+# command: npx vitest run tests/acceptance/2134 --reporter=verbose
+
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/2134/valued-options.test.ts > #2134.45c65c46 an option's value before the subcommand is never read as the subcommand, for pulumi, cdk and npm > #2134.45c65c46 `pulumi -C infra up` and `cdk --profile prod deploy` match effect:cloud-resource, and `npm --prefix web install left-pad` matches effect:dependency 126ms
+   → each must match (matched: true): `pulumi -C infra up`: false, not true; `cdk --profile prod deploy`: false, not true: expected [ …(2) ] to deeply equal []
+ ✓ tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 with a standing rule for profile dev's owner and no hub, `aws s3 ls --profile dev; aws kms create-key --profile prod` exits 2 with the no-unnamed-cloud-resource denial 179ms
+ × tests/acceptance/2134/valued-options.test.ts > #2134.45c65c46 an option's value before the subcommand is never read as the subcommand, for pulumi, cdk and npm > #2134.45c65c46 an option's value that spells a subcommand is not read as one, and a run that creates or installs nothing still matches nothing 83ms
+   → none creates a cloud resource or adds a dependency, so none must match (matched: false): `pulumi -C up preview`: true, not false; `pulumi --cwd up preview`: true, not false; `cdk --profile deploy diff`: true, not false; `cdk --app deploy diff`: true, not false; `npm -C install run build`: true, not false; `pnpm -C install run build`: true, not false; `bun -C install run build`: true, not false: expected [ …(7) ] to deeply equal []
+ × tests/acceptance/2134/valued-options.test.ts > #2134.45c65c46 an option's value before the subcommand is never read as the subcommand, for pulumi, cdk and npm > #2134.45c65c46 scope: each of pulumi's and cdk's valued options before the subcommand leaves the create matched 93ms
+   → each must match effect:cloud-resource (matched: true): `pulumi -C infra up`: false, not true; `pulumi --cwd infra up`: false, not true; `pulumi -s dev up`: false, not true; `pulumi --stack dev up`: false, not true; `pulumi --color always up`: false, not true; `cdk --profile prod deploy`: false, not true; `cdk --app app.js deploy`: false, not true; `cdk -a app.js deploy`: false, not true; `cdk -o out deploy`: false, not true; `cdk --output out deploy`: false, not true; `cdk -c stage=prod deploy`: false, not true; `cdk --context stage=prod deploy`: false, not true: expected [ …(12) ] to deeply equal []
+ × tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: the same two runs, joined or spelled another way, are denied the same 121ms
+   → each line creates its key under profile prod, which no standing rule covers, so each must exit 2 with the no-unnamed-cloud-resource denial: `aws s3 ls --profile dev ; aws kms create-key --profile prod`: allowed, not denied; `aws s3 ls --profile dev && aws kms create-key --profile prod`: allowed, not denied; `aws s3 ls --profile dev
+aws kms create-key --profile prod`: allowed, not denied; `aws --profile dev s3 ls && aws --profile prod kms create-key`: allowed, not denied; `aws s3 ls --profile=dev && aws kms create-key --profile=prod`: allowed, not denied: expected [ …(5) ] to deeply equal []
+ × tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: the owner is read from the creating run, so a create under the covered profile is still covered beside a run under another 98ms
+   → each line's one creating run is under profile dev, whose owner the standing rule covers, so each must be allowed: `aws s3 ls --profile prod && aws kms create-key --profile dev`: denied, not allowed; `aws s3 ls --profile prod; aws kms create-key --profile dev`: denied, not allowed; `aws kms create-key --profile dev; aws s3 ls --profile prod`: denied, not allowed; `echo --profile prod && aws kms create-key --profile dev`: denied, not allowed: expected [ …(4) ] to deeply equal []
+ × tests/acceptance/2134/valued-options.test.ts > #2134.45c65c46 an option's value before the subcommand is never read as the subcommand, for pulumi, cdk and npm > #2134.45c65c46 scope: each of npm's, pnpm's and bun's valued options before the subcommand leaves the install matched 93ms
+   → each must match effect:dependency (matched: true): `npm -C web install left-pad`: false, not true; `pnpm -C web install left-pad`: false, not true; `bun -C web install left-pad`: false, not true: expected [ …(3) ] to deeply equal []
+ × tests/acceptance/2134/valued-options.test.ts > #2134.45c65c46 an option's value before the subcommand is never read as the subcommand, for pulumi, cdk and npm > #2134.45c65c46 with the first-party entries and no hub, `pulumi -C infra up` and `cdk --profile prod deploy` exit 2 with the no-unnamed-cloud-resource denial 87ms
+   → each must exit 2 with the no-unnamed-cloud-resource denial: `pulumi -C infra up`: allowed, not denied; `cdk --profile prod deploy`: allowed, not denied: expected [ …(2) ] to deeply equal []
+ × tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: AWS_PROFILE in the creating run's own environment names its owner 137ms
+   → the standing rule covers profile dev's owner only, and each run names its profile by AWS_PROFILE: `no default profile: AWS_PROFILE=dev aws kms create-key`: denied, not allowed: expected [ Array(1) ] to deeply equal []
+ × tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: a line with more than one creating run, or creating runs under different owners, is not covered 87ms
+   → each line holds two creating runs, so each must exit 2 with the no-unnamed-cloud-resource denial: `aws kms create-key --profile dev && aws kms create-key --profile dev`: allowed, not denied; `aws kms create-key --profile dev && aws kms create-key --profile prod`: allowed, not denied; `aws kms create-key --profile dev && pulumi up`: allowed, not denied: expected [ …(3) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: the same two runs, joined or spelled another way, are denied the same
+AssertionError: each line creates its key under profile prod, which no standing rule covers, so each must exit 2 with the no-unnamed-cloud-resource denial: `aws s3 ls --profile dev ; aws kms create-key --profile prod`: allowed, not denied; `aws s3 ls --profile dev && aws kms create-key --profile prod`: allowed, not denied; `aws s3 ls --profile dev
+aws kms create-key --profile prod`: allowed, not denied; `aws --profile dev s3 ls && aws --profile prod kms create-key`: allowed, not denied; `aws s3 ls --profile=dev && aws kms create-key --profile=prod`: allowed, not denied: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`aws s3 ls --profile dev ; aws kms create-key --profile prod`: allowed, not denied",
++   "`aws s3 ls --profile dev && aws kms create-key --profile prod`: allowed, not denied",
++   "`aws s3 ls --profile dev
++ aws kms create-key --profile prod`: allowed, not denied",
++   "`aws --profile dev s3 ls && aws --profile prod kms create-key`: allowed, not denied",
++   "`aws s3 ls --profile=dev && aws kms create-key --profile=prod`: allowed, not denied",
++ ]
+
+ ❯ tests/acceptance/2134/standing-owner.test.ts:41:178
+     39|     ];
+     40|     const off = wrong(await decisions(h, lines), each(lines, 'denied')…
+     41|     expect(off, `each line creates its key under profile ${PROD.profil…
+       |                                                                                                                                                                                  ^
+     42|   }, T);
+     43|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: the owner is read from the creating run, so a create under the covered profile is still covered beside a run under another
+AssertionError: each line's one creating run is under profile dev, whose owner the standing rule covers, so each must be allowed: `aws s3 ls --profile prod && aws kms create-key --profile dev`: denied, not allowed; `aws s3 ls --profile prod; aws kms create-key --profile dev`: denied, not allowed; `aws kms create-key --profile dev; aws s3 ls --profile prod`: denied, not allowed; `echo --profile prod && aws kms create-key --profile dev`: denied, not allowed: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`aws s3 ls --profile prod && aws kms create-key --profile dev`: denied, not allowed",
++   "`aws s3 ls --profile prod; aws kms create-key --profile dev`: denied, not allowed",
++   "`aws kms create-key --profile dev; aws s3 ls --profile prod`: denied, not allowed",
++   "`echo --profile prod && aws kms create-key --profile dev`: denied, not allowed",
++ ]
+
+ ❯ tests/acceptance/2134/standing-owner.test.ts:54:163
+     52|     ];
+     53|     const off = wrong(await decisions(h, lines), each(lines, 'allowed'…
+     54|     expect(off, `each line's one creating run is under profile ${DEV.p…
+       |                                                                                                                                                                   ^
+     55|   }, T);
+     56|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: AWS_PROFILE in the creating run's own environment names its owner
+AssertionError: the standing rule covers profile dev's owner only, and each run names its profile by AWS_PROFILE: `no default profile: AWS_PROFILE=dev aws kms create-key`: denied, not allowed: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`no default profile: AWS_PROFILE=dev aws kms create-key`: denied, not allowed",
++ ]
+
+ ❯ tests/acceptance/2134/standing-owner.test.ts:77:147
+     75|       [`no default profile: ${under(PROD.profile)}`]: 'denied',
+     76|     });
+     77|     expect(off, `the standing rule covers profile ${DEV.profile}'s own…
+       |                                                                                                                                                   ^
+     78|   }, T);
+     79|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: a line with more than one creating run, or creating runs under different owners, is not covered
+AssertionError: each line holds two creating runs, so each must exit 2 with the no-unnamed-cloud-resource denial: `aws kms create-key --profile dev && aws kms create-key --profile dev`: allowed, not denied; `aws kms create-key --profile dev && aws kms create-key --profile prod`: allowed, not denied; `aws kms create-key --profile dev && pulumi up`: allowed, not denied: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`aws kms create-key --profile dev && aws kms create-key --profile dev`: allowed, not denied",
++   "`aws kms create-key --profile dev && aws kms create-key --profile prod`: allowed, not denied",
++   "`aws kms create-key --profile dev && pulumi up`: allowed, not denied",
++ ]
+
+ ❯ tests/acceptance/2134/standing-owner.test.ts:89:125
+     87|     ];
+     88|     const off = wrong(await decisions(h, lines), each(lines, 'denied')…
+     89|     expect(off, `each line holds two creating runs, so each must exit …
+       |                                                                                                                             ^
+     90|   }, T);
+     91| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  tests/acceptance/2134/valued-options.test.ts > #2134.45c65c46 an option's value before the subcommand is never read as the subcommand, for pulumi, cdk and npm > #2134.45c65c46 `pulumi -C infra up` and `cdk --profile prod deploy` match effect:cloud-resource, and `npm --prefix web install left-pad` matches effect:dependency
+AssertionError: each must match (matched: true): `pulumi -C infra up`: false, not true; `cdk --profile prod deploy`: false, not true: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`pulumi -C infra up`: false, not true",
++   "`cdk --profile prod deploy`: false, not true",
++ ]
+
+ ❯ tests/acceptance/2134/valued-options.test.ts:36:71
+     34|     };
+     35|     const off = wrong(got, { 'pulumi -C infra up': true, 'cdk --profil…
+     36|     expect(off, `each must match (matched: true): ${off.join('; ')}`).…
+       |                                                                       ^
+     37|   }, T);
+     38|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  tests/acceptance/2134/valued-options.test.ts > #2134.45c65c46 an option's value before the subcommand is never read as the subcommand, for pulumi, cdk and npm > #2134.45c65c46 an option's value that spells a subcommand is not read as one, and a run that creates or installs nothing still matches nothing
+AssertionError: none creates a cloud resource or adds a dependency, so none must match (matched: false): `pulumi -C up preview`: true, not false; `pulumi --cwd up preview`: true, not false; `cdk --profile deploy diff`: true, not false; `cdk --app deploy diff`: true, not false; `npm -C install run build`: true, not false; `pnpm -C install run build`: true, not false; `bun -C install run build`: true, not false: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`pulumi -C up preview`: true, not false",
++   "`pulumi --cwd up preview`: true, not false",
++   "`cdk --profile deploy diff`: true, not false",
++   "`cdk --app deploy diff`: true, not false",
++   "`npm -C install run build`: true, not false",
++   "`pnpm -C install run build`: true, not false",
++   "`bun -C install run build`: true, not false",
++ ]
+
+ ❯ tests/acceptance/2134/valued-options.test.ts:45:127
+     43|     const dependency = ['npm -C install run build', 'pnpm -C install r…
+     44|     const off = [...wrong(await matches(h, cloud, CLOUD), each(cloud, …
+     45|     expect(off, `none creates a cloud resource or adds a dependency, s…
+       |                                                                                                                               ^
+     46|   }, T);
+     47|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  tests/acceptance/2134/valued-options.test.ts > #2134.45c65c46 an option's value before the subcommand is never read as the subcommand, for pulumi, cdk and npm > #2134.45c65c46 scope: each of pulumi's and cdk's valued options before the subcommand leaves the create matched
+AssertionError: each must match effect:cloud-resource (matched: true): `pulumi -C infra up`: false, not true; `pulumi --cwd infra up`: false, not true; `pulumi -s dev up`: false, not true; `pulumi --stack dev up`: false, not true; `pulumi --color always up`: false, not true; `cdk --profile prod deploy`: false, not true; `cdk --app app.js deploy`: false, not true; `cdk -a app.js deploy`: false, not true; `cdk -o out deploy`: false, not true; `cdk --output out deploy`: false, not true; `cdk -c stage=prod deploy`: false, not true; `cdk --context stage=prod deploy`: false, not true: expected [ …(12) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`pulumi -C infra up`: false, not true",
++   "`pulumi --cwd infra up`: false, not true",
++   "`pulumi -s dev up`: false, not true",
++   "`pulumi --stack dev up`: false, not true",
++   "`pulumi --color always up`: false, not true",
++   "`cdk --profile prod deploy`: false, not true",
++   "`cdk --app app.js deploy`: false, not true",
++   "`cdk -a app.js deploy`: false, not true",
++   "`cdk -o out deploy`: false, not true",
++   "`cdk --output out deploy`: false, not true",
++   "`cdk -c stage=prod deploy`: false, not true",
++   "`cdk --context stage=prod deploy`: false, not true",
++ ]
+
+ ❯ tests/acceptance/2134/valued-options.test.ts:56:80
+     54|     ];
+     55|     const off = wrong(await matches(h, lines, CLOUD), each(lines, true…
+     56|     expect(off, `each must match ${CLOUD} (matched: true): ${off.join(…
+       |                                                                                ^
+     57|   }, T);
+     58|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  tests/acceptance/2134/valued-options.test.ts > #2134.45c65c46 an option's value before the subcommand is never read as the subcommand, for pulumi, cdk and npm > #2134.45c65c46 scope: each of npm's, pnpm's and bun's valued options before the subcommand leaves the install matched
+AssertionError: each must match effect:dependency (matched: true): `npm -C web install left-pad`: false, not true; `pnpm -C web install left-pad`: false, not true; `bun -C web install left-pad`: false, not true: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`npm -C web install left-pad`: false, not true",
++   "`pnpm -C web install left-pad`: false, not true",
++   "`bun -C web install left-pad`: false, not true",
++ ]
+
+ ❯ tests/acceptance/2134/valued-options.test.ts:64:85
+     62|     const lines = ['npm', 'pnpm', 'bun'].flatMap((tool) => ['--prefix …
+     63|     const off = wrong(await matches(h, lines, DEPENDENCY), each(lines,…
+     64|     expect(off, `each must match ${DEPENDENCY} (matched: true): ${off.…
+       |                                                                                     ^
+     65|   }, T);
+     66|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  tests/acceptance/2134/valued-options.test.ts > #2134.45c65c46 an option's value before the subcommand is never read as the subcommand, for pulumi, cdk and npm > #2134.45c65c46 with the first-party entries and no hub, `pulumi -C infra up` and `cdk --profile prod deploy` exit 2 with the no-unnamed-cloud-resource denial
+AssertionError: each must exit 2 with the no-unnamed-cloud-resource denial: `pulumi -C infra up`: allowed, not denied; `cdk --profile prod deploy`: allowed, not denied: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`pulumi -C infra up`: allowed, not denied",
++   "`cdk --profile prod deploy`: allowed, not denied",
++ ]
+
+ ❯ tests/acceptance/2134/valued-options.test.ts:76:87
+     74|     const lines = ['pulumi -C infra up', 'cdk --profile prod deploy'];
+     75|     const off = wrong(await decisions(h, lines), each(lines, 'denied')…
+     76|     expect(off, `each must exit 2 with the ${CLOUD_GUARD} denial: ${of…
+       |                                                                                       ^
+     77|   }, T);
+     78| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  9 failed | 1 passed (10)
+   Start at  16:10:45
+   Duration  1.38s (tests 96%, transform 2%, import 1%, setup 1%)
+
+======== 2. twin owner-from-the-lines-first-profile (AC1, #2134.c62f68e2) ========
+# date: 2026-11-22T00:11:03Z
+# base: 512d194bb2885717f655528fe3e2d102d9cc7640 (Merge pull request #2972 from windoliver/feat/2494-panel-gpu-view), with tests/acceptance/2134/twins/owner-from-the-lines-first-profile/crates/deep-hook/src/main.rs laid over crates/deep-hook/src/main.rs in a copy of the checkout (cp -cR)
+# load average: { 82.61 75.30 65.93 }
+# command: npx vitest run tests/acceptance/2134/standing-owner.test.ts --reporter=verbose -t '#2134.c62f68e2'
+
+
+ RUN  v5.0.5 <twin-owner-from-the-lines-first-profile>
+
+ × tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 with a standing rule for profile dev's owner and no hub, `aws s3 ls --profile dev; aws kms create-key --profile prod` exits 2 with the no-unnamed-cloud-resource denial 180ms
+   → the key is created under profile prod, which no standing rule covers, so the call must exit 2: exit 0, stdout "", stderr "": expected +0 to be 2 // Object.is equality
+ × tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: the same two runs, joined or spelled another way, are denied the same 119ms
+   → each line creates its key under profile prod, which no standing rule covers, so each must exit 2 with the no-unnamed-cloud-resource denial: `aws s3 ls --profile dev ; aws kms create-key --profile prod`: allowed, not denied; `aws s3 ls --profile dev && aws kms create-key --profile prod`: allowed, not denied; `aws s3 ls --profile dev
+aws kms create-key --profile prod`: allowed, not denied; `aws --profile dev s3 ls && aws --profile prod kms create-key`: allowed, not denied; `aws s3 ls --profile=dev && aws kms create-key --profile=prod`: allowed, not denied: expected [ …(5) ] to deeply equal []
+ × tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: the owner is read from the creating run, so a create under the covered profile is still covered beside a run under another 98ms
+   → each line's one creating run is under profile dev, whose owner the standing rule covers, so each must be allowed: `aws s3 ls --profile prod && aws kms create-key --profile dev`: denied, not allowed; `aws s3 ls --profile prod; aws kms create-key --profile dev`: denied, not allowed; `echo --profile prod && aws kms create-key --profile dev`: denied, not allowed: expected [ …(3) ] to deeply equal []
+ × tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: AWS_PROFILE in the creating run's own environment names its owner 142ms
+   → the standing rule covers profile dev's owner only, and each run names its profile by AWS_PROFILE: `no default profile: AWS_PROFILE=dev aws kms create-key`: denied, not allowed: expected [ Array(1) ] to deeply equal []
+ × tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: a line with more than one creating run, or creating runs under different owners, is not covered 90ms
+   → each line holds two creating runs, so each must exit 2 with the no-unnamed-cloud-resource denial: `aws kms create-key --profile dev && aws kms create-key --profile dev`: allowed, not denied; `aws kms create-key --profile dev && aws kms create-key --profile prod`: allowed, not denied; `aws kms create-key --profile dev && pulumi up`: allowed, not denied: expected [ …(3) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 with a standing rule for profile dev's owner and no hub, `aws s3 ls --profile dev; aws kms create-key --profile prod` exits 2 with the no-unnamed-cloud-resource denial
+AssertionError: the key is created under profile prod, which no standing rule covers, so the call must exit 2: exit 0, stdout "", stderr "": expected +0 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 0
+
+ ❯ tests/acceptance/2134/standing-owner.test.ts:26:141
+     24|     await controls(h);
+     25|     const r = await hook(h, LINE);
+     26|     expect(r.code, `the key is created under profile ${PROD.profile}, …
+       |                                                                                                                                             ^
+     27|     expect(words(r), `the denial must be ${CLOUD_GUARD}'s: ${shown(r)}…
+     28|   }, T);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: the same two runs, joined or spelled another way, are denied the same
+AssertionError: each line creates its key under profile prod, which no standing rule covers, so each must exit 2 with the no-unnamed-cloud-resource denial: `aws s3 ls --profile dev ; aws kms create-key --profile prod`: allowed, not denied; `aws s3 ls --profile dev && aws kms create-key --profile prod`: allowed, not denied; `aws s3 ls --profile dev
+aws kms create-key --profile prod`: allowed, not denied; `aws --profile dev s3 ls && aws --profile prod kms create-key`: allowed, not denied; `aws s3 ls --profile=dev && aws kms create-key --profile=prod`: allowed, not denied: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`aws s3 ls --profile dev ; aws kms create-key --profile prod`: allowed, not denied",
++   "`aws s3 ls --profile dev && aws kms create-key --profile prod`: allowed, not denied",
++   "`aws s3 ls --profile dev
++ aws kms create-key --profile prod`: allowed, not denied",
++   "`aws --profile dev s3 ls && aws --profile prod kms create-key`: allowed, not denied",
++   "`aws s3 ls --profile=dev && aws kms create-key --profile=prod`: allowed, not denied",
++ ]
+
+ ❯ tests/acceptance/2134/standing-owner.test.ts:41:178
+     39|     ];
+     40|     const off = wrong(await decisions(h, lines), each(lines, 'denied')…
+     41|     expect(off, `each line creates its key under profile ${PROD.profil…
+       |                                                                                                                                                                                  ^
+     42|   }, T);
+     43|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: the owner is read from the creating run, so a create under the covered profile is still covered beside a run under another
+AssertionError: each line's one creating run is under profile dev, whose owner the standing rule covers, so each must be allowed: `aws s3 ls --profile prod && aws kms create-key --profile dev`: denied, not allowed; `aws s3 ls --profile prod; aws kms create-key --profile dev`: denied, not allowed; `echo --profile prod && aws kms create-key --profile dev`: denied, not allowed: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`aws s3 ls --profile prod && aws kms create-key --profile dev`: denied, not allowed",
++   "`aws s3 ls --profile prod; aws kms create-key --profile dev`: denied, not allowed",
++   "`echo --profile prod && aws kms create-key --profile dev`: denied, not allowed",
++ ]
+
+ ❯ tests/acceptance/2134/standing-owner.test.ts:54:163
+     52|     ];
+     53|     const off = wrong(await decisions(h, lines), each(lines, 'allowed'…
+     54|     expect(off, `each line's one creating run is under profile ${DEV.p…
+       |                                                                                                                                                                   ^
+     55|   }, T);
+     56|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: AWS_PROFILE in the creating run's own environment names its owner
+AssertionError: the standing rule covers profile dev's owner only, and each run names its profile by AWS_PROFILE: `no default profile: AWS_PROFILE=dev aws kms create-key`: denied, not allowed: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`no default profile: AWS_PROFILE=dev aws kms create-key`: denied, not allowed",
++ ]
+
+ ❯ tests/acceptance/2134/standing-owner.test.ts:77:147
+     75|       [`no default profile: ${under(PROD.profile)}`]: 'denied',
+     76|     });
+     77|     expect(off, `the standing rule covers profile ${DEV.profile}'s own…
+       |                                                                                                                                                   ^
+     78|   }, T);
+     79|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/2134/standing-owner.test.ts > #2134.c62f68e2 a standing rule for one cloud account covers only a create that runs under that account > #2134.c62f68e2 scope: a line with more than one creating run, or creating runs under different owners, is not covered
+AssertionError: each line holds two creating runs, so each must exit 2 with the no-unnamed-cloud-resource denial: `aws kms create-key --profile dev && aws kms create-key --profile dev`: allowed, not denied; `aws kms create-key --profile dev && aws kms create-key --profile prod`: allowed, not denied; `aws kms create-key --profile dev && pulumi up`: allowed, not denied: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`aws kms create-key --profile dev && aws kms create-key --profile dev`: allowed, not denied",
++   "`aws kms create-key --profile dev && aws kms create-key --profile prod`: allowed, not denied",
++   "`aws kms create-key --profile dev && pulumi up`: allowed, not denied",
++ ]
+
+ ❯ tests/acceptance/2134/standing-owner.test.ts:89:125
+     87|     ];
+     88|     const off = wrong(await decisions(h, lines), each(lines, 'denied')…
+     89|     expect(off, `each line holds two creating runs, so each must exit …
+       |                                                                                                                             ^
+     90|   }, T);
+     91| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  16:11:04
+   Duration  1.33s (tests 98%, transform 1%, setup 1%, import 1%)

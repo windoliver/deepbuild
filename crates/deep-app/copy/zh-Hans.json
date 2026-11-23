@@ -1476,6 +1476,10 @@
     "text": "所有仓库",
     "source": "d32667b9181b75951bc9a3319d781c90073c8bdf5b0ae94c50bfab3bf0b51be7"
   },
+  "views.feature_absent": {
+    "text": "feature_absent：{0}",
+    "source": "0e0d3b45b497b3add6cdf57ffa5a4e6b22900507132da463495f51ca88db7456"
+  },
   "views.hours": {
     "text": "{0} 小时",
     "source": "477a1b5f11304d3e4904bcc5f70ea9f89a78fd3a25058562e0278fa4675c570f"
@@ -1499,6 +1503,10 @@
   "views.mcp_servers": {
     "text": "MCP 服务器",
     "source": "22a7559f09bf8f82c510280f934bf50db4c45cc611fd4dd47d7cbf7c7d4f5b82"
+  },
+  "views.module_missing": {
+    "text": "module_missing：{0}",
+    "source": "e5478626ebfeeb1233dce4925f9f11bc15f3110ae4afcf098fe80697f9b4b2f6"
   },
   "views.needs_you": {
     "text": "待你处理",
