@@ -1448,3 +1448,8 @@ byHand.push('tests/acceptance/269/ac6-budgets.test.ts');
 // #3236's files (blind) each build deep-show; criterion 7 drives headless Chrome, 8 a real window read through AppKit,
 // 9 release builds here and at the merge base.
 alone.push('tests/acceptance/3236/');
+// #3236's criterion 8 was redrafted blind: the first draft's client hears each announcement twice
+// (tests/acceptance/3236-redraft-ac8/DISPUTE.md). The redraft runs in its place, both opening real windows, and the
+// hidden-window regression opens one too.
+alone.push('tests/acceptance/3236-redraft-ac8/', 'tests/live-window-hidden.test.ts');
+byHand.push('tests/acceptance/3236/ac8-appkit.test.ts');
