@@ -1,0 +1,12 @@
+This suite PASSES on the base (61aa8eb06bb8e41f93ddff044b5a9df8771fbab6): the fix for #62 is already on it, so a pass here is expected.
+Command: node node_modules/vitest/vitest.mjs run tests/acceptance/62-sweep-2047 (Node 24.22.0, exit 0, load average { 117.17 120.49 104.04 }). The checkout path is redacted to <checkout>.
+
+
+ RUN  v5.0.5 <checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  19:35:17
+   Duration  97.34s (tests 99%, transform 1%)
+

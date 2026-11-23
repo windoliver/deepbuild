@@ -1,0 +1,17 @@
+{
+  "lane": "catalogue drift",
+  "state": "INCONCLUSIVE",
+  "host": "spark-c89f",
+  "platform": "linux-arm64",
+  "tree": "64dbf5f42dd84ba7c03ff21865553f5d49a4e5ac",
+  "tests": [],
+  "bundle": "ae28ad1852359b5eca85bf907e24fc5dbad11caaba13f66b398e4d8073cd4aa4",
+  "recipe": {
+    "commit": "c1ae84eb5367a3ceffb48d8f0e95560e0890ef3b",
+    "base": "c5df09056c91fb8caab0a28da34db159d431e1b8",
+    "tree": "64dbf5f42dd84ba7c03ff21865553f5d49a4e5ac",
+    "bundle": "ae28ad1852359b5eca85bf907e24fc5dbad11caaba13f66b398e4d8073cd4aa4",
+    "untracked": "cc3b571e945e5415ce76c757e7a37adbf00e6940871a012ba80598ccd4c22860",
+    "from": "MacBook-Pro.local"
+  }
+}
