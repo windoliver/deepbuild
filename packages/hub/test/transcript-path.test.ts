@@ -2,22 +2,23 @@
 // way deep-hook sends them: at the session's end, and before a push held in a proceed turn raises its ask (within
 // ARCHIVE_WAIT_MS). The agent's projects folder is made one the archive can pass through but not list before the
 // session's transcript is written, so the walk, the hub's own pass included, can't reach it: only the named path does.
-import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { hookLine, reply, send, session, withHub } from './hub.js';
 
 const QUESTION = 'Shall I push the fix to main?';
 /**
  * The hub's archive reads Claude Code's folder under HOME only when CLAUDE_CONFIG_DIR is unset: '' makes it skip that.
- * PATH loses every folder holding a `claude`: at SessionStart the hub runs `claude auth status` in the session's home
- * (#1033), which writes `.claude/.claude.json` there and can outlive the hub's stop, racing the home's removal.
+ * A `claude` that exits 1 comes first on PATH: at SessionStart the hub runs `claude auth status` in the session's home
+ * (#1033), and a real one writes `.claude/.claude.json` there and can outlive the hub's stop, racing the home's removal.
  */
-const HOME_ONLY = {
-  CLAUDE_CONFIG_DIR: '',
-  PATH: (process.env.PATH ?? '').split(delimiter).filter((dir) => dir && !existsSync(join(dir, 'claude'))).join(delimiter),
-};
+const STUB = mkdtempSync(join(tmpdir(), 'hub-2316-stub-'));
+writeFileSync(join(STUB, 'claude'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+afterAll(() => rmSync(STUB, { recursive: true, force: true }));
+const HOME_ONLY = { CLAUDE_CONFIG_DIR: '', PATH: `${STUB}${delimiter}${process.env.PATH ?? ''}` };
 const handle = (id: string) => `session:${id.replace(/-/g, '')}`;
 
 /** Runs `body` with `home`'s Claude Code projects folder unlistable, its mode put back after. */
@@ -37,6 +38,12 @@ async function unlistable(home: string, body: (projects: string) => Promise<void
 const copied = (root: string): string[] => {
   const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
   try { return (db.prepare("SELECT json_extract(data, '$.session') AS s FROM events WHERE kind = 'transcript.archived'").all() as { s: string }[]).map((r) => r.s); } finally { db.close(); }
+};
+/** Whether the record's first `transcript.archived` comes before its first `ask.created`. */
+const copiedBeforeAsk = (root: string): boolean => {
+  const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+  const first = (kind: string) => (db.prepare('SELECT MIN(log_pos) AS p FROM events WHERE kind = ?').get(kind) as { p: number | null }).p;
+  try { const copy = first('transcript.archived'); const ask = first('ask.created'); return copy !== null && ask !== null && copy < ask; } finally { db.close(); }
 };
 const line = (id: string, uuid: string, cwd: string, role: 'user' | 'assistant', text: string) =>
   `${JSON.stringify({ type: role, sessionId: id, uuid, cwd, message: { role, content: role === 'user' ? text : [{ type: 'text', text }] } })}\n`;
@@ -76,7 +83,8 @@ describe('the hub copies a session from the path its hook named', () => {
         if (copied(root).length) throw Error(`BLOCKED: the transcript was copied before the push: ${copied(root).join(', ')}`);
         const held = await reply(sock, hookLine('01K74FKZVK8Q2X5R7M3N9P4T82', 'PreToolUse', s.payload('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'git push origin main' }, tool_use_id: 'toolu_01Push2316' }), { ppid: process.pid, matched: ['authority-push'] }));
         expect(`${held.exit} ${held.stdout}${held.stderr}`, 'the push is held by an authority ask').toMatch(/^2 .*waits for ask:/s);
-        expect(copied(root), "the held push copied the transcript at its hook's transcript_path before its ask").toEqual([handle(id)]);
+        expect(copied(root), "the held push copied the transcript at its hook's transcript_path").toEqual([handle(id)]);
+        expect(copiedBeforeAsk(root), 'the copy landed before the ask was raised').toBe(true);
       });
     }, { ...HOME_ONLY, DEEP_HUB_TEST_SORTER: sorter }); } finally { rmSync(sorter, { force: true }); }
   }, 60_000);
@@ -94,7 +102,8 @@ describe('the hub copies a session from the path its hook named', () => {
         if (copied(root).length) throw Error(`BLOCKED: the transcript was copied before the push: ${copied(root).join(', ')}`);
         const held = await reply(sock, hookLine('01K74FKZVK8Q2X5R7M3N9P4T91', 'PreToolUse', s.payload('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'git push origin main' }, tool_use_id: 'toolu_01Push2316b' }), { ppid: process.pid, matched: ['push-needs-ask'] }));
         expect(`${held.exit} ${held.stdout}${held.stderr}`, 'the push is denied by push-needs-ask and waits for its ask').toMatch(/^2 .*push-needs-ask.*waits for ask:/s);
-        expect(copied(root), "the push's ask copied the transcript at its hook's transcript_path before it was raised").toEqual([handle(id)]);
+        expect(copied(root), "the push's ask copied the transcript at its hook's transcript_path").toEqual([handle(id)]);
+        expect(copiedBeforeAsk(root), 'the copy landed before the ask was raised').toBe(true);
       });
     }, HOME_ONLY);
   }, 60_000);
