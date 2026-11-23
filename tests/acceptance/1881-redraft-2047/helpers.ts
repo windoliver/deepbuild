@@ -303,17 +303,17 @@ export function changed(pins: Record<string, string>): string[] {
 export interface Ran { file: string; name: string; status: string; message: string }
 export interface SuiteRun { tests: Ran[]; fileErrors: string[]; missing: string[]; seconds: number }
 /**
- * Runs `files` (paths from the checkout root) with the checkout's own vitest, one file at a time, with `testTimeout`, in
- * an environment without this run's vitest variables. Each test's status and first failure lines come from vitest's
- * JSON report.
+ * Runs the tests of `files` (paths from the checkout root) whose names match `namePattern` with the checkout's own
+ * vitest, one file at a time, with `testTimeout`, in an environment without this run's vitest variables. Each test's
+ * status and first failure lines come from vitest's JSON report; a test the pattern leaves out reports as skipped.
  */
-export function runSuites(files: readonly string[], testTimeout: number): SuiteRun {
+export function runSuites(files: readonly string[], testTimeout: number, namePattern: string): SuiteRun {
   const dir = mkdtempSync(join(tmpdir(), 'blind1881r-suites-'));
   try {
     const report = join(dir, 'report.json');
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('VITEST') && k !== 'DEEP_PROOF_VITEST_REPORT')) as NodeJS.ProcessEnv;
     const started = Date.now();
-    const run = spawnSync(process.execPath, [join(REPO, 'node_modules', 'vitest', 'vitest.mjs'), 'run', '--no-file-parallelism', `--testTimeout=${testTimeout}`, '--reporter=json', `--outputFile.json=${report}`, ...files], {
+    const run = spawnSync(process.execPath, [join(REPO, 'node_modules', 'vitest', 'vitest.mjs'), 'run', '--no-file-parallelism', `--testTimeout=${testTimeout}`, `--testNamePattern=${namePattern}`, '--reporter=json', `--outputFile.json=${report}`, ...files], {
       cwd: REPO, env, encoding: 'utf8', maxBuffer: 512 * 1024 * 1024, timeout: 3_600_000, killSignal: 'SIGKILL',
     });
     const seconds = Math.round((Date.now() - started) / 1000);

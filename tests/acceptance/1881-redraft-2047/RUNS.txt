@@ -29,6 +29,34 @@ result's reason; temporary folders shortened to <tmp>, the checkout to <repo>.
  (The base and twin runs above and below predate that change: there, the second test failed with the INCONCLUSIVE
  message; it now skips with it. Nothing else changed.)
 
+== Redraft (#1881.e56f5a3e held by one test): the second suites85.test.ts test is gone, and #85's criterion 12
+   measurement is left out of the inner run by --testNamePattern=^(?!.*on the reference Mac, a task closes within)
+   and out of the judgement (README: open). vitest list with that pattern on tests/acceptance/85/budgets.test.ts keeps
+   only its lane test. ==
+
+ Base, suites85.test.ts --reporter=verbose (load 6 at start), 193 s:
+   (This worktree's target/ had been removed by another session's disk cleanup, so the first try failed with every #85
+   hub test saying "no deep-hook is built"; cargo build --locked -p deep-hook, then the run.)
+ ✓ #1881.e56f5a3e #85's suites pass unchanged: every test under tests/acceptance/85 but its criterion 12 reference-Mac
+   measurement, as the base holds it, passes
+     #1881.e56f5a3e: 40 of 40 judged tests passed in 193 s
+ Tests  1 passed (1)
+
+ Twin no-remote-reads-as-none, suites85.test.ts (load 9), 194 s:
+ × the same test
+     #1881.e56f5a3e: 38 of 40 judged tests passed in 194 s
+     AssertionError: #85's suites, run unchanged:
+       tests/acceptance/85/hub/cutoff.test.ts › ... #85.d3d3e12b continues with the gh pr create call named as outcome
+       unknown; ... fails: AssertionError: the forge receives one PR: a continue that lets the identical gh pr create
+       run opens a second (the hub's reply to it: {"v":1,"exit":0,"stdout":"","stderr":""}): expected 2 to be 1
+       tests/acceptance/85/hub/cutoff.test.ts › ... #85.d3d3e12b fails on a continue that omits the call, ... (the same)
+     ❯ suites85.test.ts:65:82
+ Tests  1 failed (1)
+ Restored: git restore of the source, its diff empty, npm run build --workspaces --if-present exit 0.
+
+ Every other section of this file predates the redraft (two suites85 tests, the second skipping or failing as
+ INCONCLUSIVE); lookup.test.ts and its twins are unchanged since.
+
 == Twin scope-id-lookup (#1881.6ee547f4), laid over packages/hub/src/answer-delivery.ts, hub rebuilt; lookup.test.ts (load 25), 5.7 s ==
 
  × #1881.6ee547f4 ... records that pull request's URL

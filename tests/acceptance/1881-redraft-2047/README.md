@@ -21,7 +21,7 @@ IDs are `#1881.` and the first 8 hex digits of SHA-256 of each criterion's text,
 |---|---|---|---|
 | `#1881.6ee547f4` | With a stand-in forge that holds one open pull request for the session's branch under the origin's owner and name, a cut-off turn records that pull request's URL. On the merge base the request goes to `/repos/<scope ID>/pulls` and finds none | `lookup.test.ts`, first test: the session's record holds one `session.reading` naming `https://github.com/acme/cart/pull/1`, and the forge was asked `GET /repos/acme/cart/pulls…` | `scope-id-lookup` |
 | `#1881.5d46b7e2` | In a checkout with no remote, the stand-in forge receives no request | `lookup.test.ts`, second test: the forge's request log is empty for the whole run | `no-remote-asks-by-scope-id` |
-| `#1881.e56f5a3e` | #85's suites pass unchanged | `suites85.test.ts`, two tests: #85's files keep the base's bytes, and every test in every #85 test file passes when the checkout's own vitest runs them; the second judges #85's reference-Mac budget measurement | `no-remote-reads-as-none` |
+| `#1881.e56f5a3e` | #85's suites pass unchanged | `suites85.test.ts`, one test: #85's files keep the base's bytes, and every test in every #85 test file but one passes when the checkout's own vitest runs them. The one left out, #85's criterion 12 reference-Mac budget measurement, is **open** here (below) | `no-remote-reads-as-none` |
 
 ## The scenario (`lookup.test.ts`)
 
@@ -61,12 +61,24 @@ precedent found by `git grep -n "suites pass" -- tests/acceptance`; `tests/accep
   the base (READMEs and BASE-FAILURE files are not pinned; they don't change what runs).
 - **Pass** is: the checkout's own vitest runs all 17 #85 test files, one at a time, with `--testTimeout=240000` (the
   longest #85's READMEs give), and every test passes: none failed, skipped or missing, and each file reports tests.
-- **#85's criterion 12 measurement** (`budgets.test.ts`, "on the reference Mac, …") counts readings only on a reference
-  Mac (Mac15,7 or Mac15,12) and otherwise skips as INCONCLUSIVE by its own rule. It is judged by the second test, which
-  skips the same way (`ctx.skip('INCONCLUSIVE (not a reference Mac): …')`, as #85's `budgets.test.ts` does) wherever
-  that test skips, fails where it fails, and passes only where it passes. The proof lanes read the skip as
-  INCONCLUSIVE, so on any other Mac `#1881.e56f5a3e` reads INCONCLUSIVE, never PASS, which is what invariant 2 asks. The first test judges every
-  other #85 test, so the rest of #85 is judged on any Mac.
+- **Left out, and open: #85's criterion 12 measurement** (`budgets.test.ts`, "on the reference Mac, a task closes
+  within 10 s …"). No tagged test of this suite holds it, because none could be proven by the before lane
+  (`scripts/proof-runs.mjs`: a tagged test must pass on the change and fail at its assertion on the merge base or a
+  twin; one that skips as it runs reads INCONCLUSIVE, and one that passes everywhere reads FAIL):
+  - It takes a reading only on a reference Mac (Mac15,7 or Mac15,12) with Low Power Mode off, thermal state nominal and
+    the Mac not loaded past its core count, and skips as INCONCLUSIVE otherwise, or when its runs straddle a limit. So
+    off a reference Mac a test over it skips on every run.
+  - It drives the asks core and the record directly and never reaches the hub's pull request lookup, the code #1881
+    changes. No twin of #1881's can make it fail, so on a reference Mac a test over it passes on every twin.
+
+  So `suites85.test.ts` leaves it out of its run (vitest's `--testNamePattern` with a negative lookahead on its name)
+  and out of its judgement. Whether #85's criterion 12 still holds after #1881 is for `budgets.test.ts` itself, run on
+  a reference Mac by #85's own lane; this suite does not prove that part of "#85's suites pass unchanged". An earlier
+  draft of this folder held it with a second tagged test that skipped (and before that failed) as INCONCLUSIVE off a
+  reference Mac; that test could never be proven, so it was dropped.
+- **Time:** the one test runs #85's other 40 tests in about 4 to 8 minutes here (load 25 to 190), inside the before
+  lane's 20-minute vitest cap (`scripts/proof-runs.mjs`) with `lookup.test.ts`'s 10 s, but not with a wide margin on a
+  heavily loaded Mac.
 
 ## Twins
 
@@ -87,8 +99,7 @@ On this Mac (Apple M5 Max, macOS 27.2, not one of #85's reference Macs), at the 
 |---|---|---|---|
 | `#1881.6ee547f4` | `lookup.test.ts` first | pass | `scope-id-lookup`: fails at its first `expect`: no reading names the PR; the forge got `GET /repos/cartwork<digest>/pulls?…` and nothing else |
 | `#1881.5d46b7e2` | `lookup.test.ts` second | pass | `no-remote-asks-by-scope-id`: fails at its first `expect`, the log holding `GET /repos/cartwork<digest>/pulls?…` (the first test passes on this twin) |
-| `#1881.e56f5a3e` | `suites85.test.ts` first | pass (all 40 judged #85 tests, 17 files) | `no-remote-reads-as-none`: fails at its `expect`: 38 of 40 passed, both of #85's `hub/cutoff.test.ts` tests failing with "the forge receives one PR: … opens a second" |
-| `#1881.e56f5a3e` | `suites85.test.ts` second | skipped, INCONCLUSIVE (not a reference Mac) | INCONCLUSIVE, as on the base (that twin run predates the change to a skip; it failed with the INCONCLUSIVE message then) |
+| `#1881.e56f5a3e` | `suites85.test.ts` | pass (all 40 judged #85 tests, 17 files; RUNS.txt) | `no-remote-reads-as-none`: fails at its `expect`: 38 of 40 passed, both of #85's `hub/cutoff.test.ts` tests failing with "the forge receives one PR: … opens a second" |
 
 The `scope-id-lookup` twin also fails `#1881.5d46b7e2`, and `no-remote-reads-as-none` also fails it (at its
 precondition: the identical call is let through). After each twin the source was restored (`git diff --stat` empty)
@@ -114,4 +125,4 @@ nothing leaves 127.0.0.1.
 - A remote other than `origin`, an SSH origin URL, a host other than github.com: the issue names the origin's owner and
   name only.
 - A forge slower than the gate's hold: the stand-in answers at once.
-- #85's budget measurement off a reference Mac: INCONCLUSIVE by #85's own rule (above).
+- #85's criterion 12 budget measurement: left out and open (above).
