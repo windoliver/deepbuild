@@ -626,6 +626,11 @@ timed.push('tests/acceptance/1700/budgets.test.ts');
 alone.push('tests/acceptance/1781/');
 // #409's files each build deep-show and export films through the GPU; 409-oracle also runs the outside film gate.
 alone.push('tests/acceptance/409/', 'tests/acceptance/409-oracle/');
+// #2697 moved the craft checks' text from the skill to the guide deep_kinds serves: #409's skill test, kept as written,
+// runs by hand only, and its blind redraft, which reads the guide, runs in its place. Both build deep-show; #2697's own
+// files also build it in a copy of the checkout when the guide isn't in the copy's gallery, and run #26's drift test.
+byHand.push('tests/acceptance/409/skill.test.ts');
+alone.push('tests/acceptance/409-redraft-2697/', 'tests/acceptance/2697/');
 // #1163's files each build deep-show; exports.test.ts exports the 600-frame 1080p film six times.
 alone.push('tests/acceptance/1163/');
 // #1164's files build deep-show, deep-sandbox and a Rust program for wasm32, and play a game through the hub.
