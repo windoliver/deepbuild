@@ -243,6 +243,8 @@ fn slot(t: &Ty) -> String {
 
 mod input_bytes;
 pub use input_bytes::*;
+mod options;
+pub use options::Options;
 
 /// A uniform slot's value as its declared type.
 fn unslot(expr: &str, t: &Ty) -> String {
@@ -1170,27 +1172,6 @@ fn crate_unify(a: &Ty, b: &Ty) -> Ty {
     }
 }
 
-/// How the core writes a pass: the planted wrong program that lifts its red by two 10-bit codes
-/// (as the display reads them) is reachable only through the binary's `--planted`.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Options {
-    pub off_by_two: bool,
-    /// The planted emitter that drops a swizzle's last lane (writes it as zero).
-    pub drops_swizzle_last: bool,
-    /// The planted binding that declares a vec3 attribute at WGSL's 16-byte `vec3` stride over
-    /// its packed 12-byte data.
-    pub attribute_stride_16: bool,
-    /// The planted small-array index that wraps (`i mod n`) instead of clamping (#483).
-    pub index_wraps: bool,
-    /// The planted indirect dispatch with no guard against its count (#484).
-    pub no_count_guard: bool,
-    /// #431's planted `sample_grad`, which takes the implicit derivatives of uv and ignores the
-    /// gradients given.
-    pub sample_grad_implicit: bool,
-    /// #431's planted fbm, which wraps only its first octave on the period.
-    pub period_first_octave: bool,
-}
-
 /// The inputs' uniform, the sampler and the texture and storage bindings, in binding order.
 fn bindings(c: &Checked, options: Options, m: &mut String) {
     m.push_str(FRAME);
@@ -1344,6 +1325,9 @@ pub fn pass(c: &Checked, options: Options) -> String {
     if let Some(cov) = c.op.outputs.get("coverage") {
         let (e, t) = w.arg(cov);
         ret = format!("({ret}) * {}", cast(&e, &t, &Ty::F32));
+    }
+    if options.nearest_half {
+        ret = format!("bitcast<vec4<f32>>((bitcast<vec4<u32>>({ret}) + vec4<u32>(0x1000u)) & vec4<u32>(0xffffe000u))");
     }
     if options.off_by_two {
         w.line(&format!("var out = {ret};"));

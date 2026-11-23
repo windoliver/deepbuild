@@ -3,8 +3,13 @@
 //! params (inputs from `param`, each with a unit, a range and a default), its declared cost and
 //! its `grow`, the px it reaches past what it covers. The grow is the pack's, for the group that
 //! runs it, so the operator check reads the graph without it.
+//!
+//! Every graph reads and writes premultiplied color. One that places a centre, a pivot or an edge
+//! takes `bounds`, its group's own bounds as a uv rect of the pass's target, which the group's
+//! compositor fills (the whole target anywhere else); and a param in px reaches it in the
+//! target's px, so a graph divides px by the screen's size and nothing else.
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 /// The pack's manifest.
 pub const PACK: &str = include_str!("../../../packs/fx-1.0.0/pack.json");
@@ -43,6 +48,36 @@ pub fn named(pack: &Value) -> Vec<Named> {
         })
         .collect();
     out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
+/// `graph` for a pass's `params`: a step's literal field that its `params` names (a spline's
+/// points, fixed when its operator is checked) takes the pass's values, each name the param given
+/// or else its input's default. Any other graph comes back as it is.
+pub fn baked(graph: &Value, params: &Map<String, Value>) -> Value {
+    fn fill(shape: &Value, value: &dyn Fn(&str) -> Value) -> Value {
+        match shape {
+            Value::String(name) => value(name),
+            Value::Array(a) => Value::Array(a.iter().map(|s| fill(s, value)).collect()),
+            other => other.clone(),
+        }
+    }
+    let mut out = graph.clone();
+    let value = |name: &str| match params.get(name) {
+        Some(v) if !v.is_null() => v.clone(),
+        _ => graph["inputs"][name]["default"].clone(),
+    };
+    for step in out["steps"]
+        .as_object_mut()
+        .into_iter()
+        .flatten()
+        .map(|(_, s)| s)
+    {
+        let named = step.get("params").and_then(Value::as_object).cloned();
+        for (field, shape) in named.into_iter().flatten() {
+            step["args"][field] = fill(&shape, &value);
+        }
+    }
     out
 }
 
