@@ -120,13 +120,17 @@ export class SessionMemory {
 
   /** The rule lines an agent's edit removed, still in force; each leaves once you apply the proposal it became. */
   private async heldRules(): Promise<Held[]> {
-    const held = readHeld(this.options.services.root.dir);
-    const kept: Held[] = [];
-    for (const h of held) {
+    const dir = this.options.services.root.dir;
+    const applied = new Set<Held>();
+    for (const h of readHeld(dir)) {
       const [answer] = (await this.options.services.record.raw(`SELECT json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'ask.answered' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [h.ask])) as { answer: unknown }[];
-      if (answer?.answer !== 'apply') kept.push(h);
+      if (answer?.answer === 'apply') applied.add(h);
     }
-    if (kept.length !== held.length) saveHeld(this.options.services.root.dir, kept);
+    // Read again after the waits: a line held or raised meanwhile (#2076) stays as it was saved; only the applied leave.
+    const gone = (h: Held) => [...applied].some((a) => a.id === h.id && a.repo === h.repo && a.ask === h.ask);
+    const held = readHeld(dir);
+    const kept = held.filter((h) => !gone(h));
+    if (kept.length !== held.length) saveHeld(dir, kept);
     return kept;
   }
 
@@ -252,7 +256,8 @@ export class SessionMemory {
     saveHeld(this.options.services.root.dir, held);
     for (const h of fresh) {
       const error = await this.raiseHeld(h);
-      if (error !== undefined) await this.options.events.appendReading(session, agent, `The rule “${h.text}” in ${h.file} stays held: an agent's edit took its line out, and its proposal to you couldn't be raised (${error}). It is raised again at the next rules sync.`).catch(() => undefined);
+      // Each part cut, so the reading fits session.reading@1 (8192 characters) however long the rule or the error.
+      if (error !== undefined) await this.options.events.appendReading(session, agent, `The rule “${h.text.slice(0, 3000)}” in ${h.file.slice(0, 500)} stays held: an agent's edit took its line out, and its proposal to you couldn't be raised (${error.slice(0, 3000)}). It is raised again at the next rules sync.`).catch(() => undefined);
     }
   }
 
