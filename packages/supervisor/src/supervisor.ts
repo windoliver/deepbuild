@@ -546,7 +546,8 @@ class LocalSupervisor implements Supervisor {
           const { operation } = said;
           const whole = said.target || '(none)';
           const seen = `${run} ${operation} ${sha256(whole)}`;
-          if (!this.admit(run, seen)) continue;
+          // A run already forgotten keeps nothing here: what it holds was freed with it.
+          if (!this.runs.has(run) || !this.admit(run, seen)) continue;
           recorded = recorded.then(() => this.recordDenial(run, operation, cut(whole))).catch(() => this.unadmit(run, seen));
         }
       }).on('error', () => undefined).on('close', () => void recorded.then(resolve));
@@ -1117,8 +1118,9 @@ class LocalSupervisor implements Supervisor {
     const outcome = left.length ? 'unfinished' : 'clean';
     await r.egress?.close();
     delete r.egress;
-    // A run that left a process still refuses: its closing event waits for the recheck that finds them gone.
-    if (!left.length) await this.closeRefusals(r);
+    // A run that left a process still refuses: its closing event waits for the recheck that finds them gone. One
+    // that left only a key unclean refuses nothing more.
+    if (!this.lingering.has(r)) await this.closeRefusals(r);
     if (r.watched !== undefined && this.watchedRuns.get(r.watched) === r) this.watchedRuns.delete(r.watched);
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';
@@ -1207,8 +1209,9 @@ class LocalSupervisor implements Supervisor {
     // before their ends are recorded, so what they forked is recorded first: a gone process forks nothing more.
     for (const r of this.closed ? [] : [...this.lingering]) {
       if ((await this.leftovers(r, this.recheck)).length) continue;
+      // A closing event the record didn't take is tried again at the next tick.
+      if (!(await this.closeRefusals(r).then(() => true, () => false))) continue;
       this.lingering.delete(r);
-      await this.closeRefusals(r).catch(() => undefined);
     }
     // Nothing to read for until an unblock ask is open, a key is out of its pool or a run waits: a tick then costs nothing.
     if (!this.asked.size && !this.waiters.length && ![...this.keys.values()].some((k) => k.retired)) return;
