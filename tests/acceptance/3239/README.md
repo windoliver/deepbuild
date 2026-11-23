@@ -212,9 +212,25 @@ budgets stay unwrapped". All four tests passed on it (`BASE-FAILURE.txt`).
 ```sh
 node --test tests/acceptance/3239/ac4-design.test.mjs        # milliseconds
 node --test tests/acceptance/3239/ac2-outside-build.test.mjs # a second or two
-node --test tests/acceptance/3239/ac1-bare-builds.test.mjs   # 10-15 s here: four sandboxes, about 140 cargo calls
-node --test tests/acceptance/3239/ac3-unit-lane.test.mjs     # about a minute: four of the unit lane's files
+node --test tests/acceptance/3239/ac1-bare-builds.test.mjs   # 11-19 s, later 133-134 s: four sandboxes, about 140 cargo calls
+node --test tests/acceptance/3239/ac3-unit-lane.test.mjs     # about a minute, 191 s on its twin: four of the unit lane's files
 ```
+
+Times as `node --test` printed them, with the machine's 1-minute load at the start and the end where I have it:
+
+| Run | Time | Load |
+|---|---|---|
+| AC1 on the base, beside the other three files | 11 s | 28 to 30 |
+| AC1 on the base, alone | 15 s | 50 to 52 |
+| AC1 on the throwaway, with AC2 and AC4 | 15 s for the three files | 66 to 73 |
+| AC1 on `first-cargo-only` | 19 s | 52 to 66 |
+| AC1 on `repo-wide-off`, under a throttle grant | 134 s | not recorded |
+| AC1 on `requires-caller`, under a throttle grant | 133 s | not recorded |
+| AC3 on the base, beside the other three files | 56 s | 28 to 30 |
+| AC3 on the throwaway | 57 s | 22 to 14 |
+| AC3 on `requires-caller` | 191 s | 14 to 57 |
+
+I haven't found out what made the last AC1 runs slower.
 
 They need the pinned toolchain (`rust-toolchain.toml`) installed with clippy, `cc` and `/usr/bin/time`, and no
 `node_modules`. On a shared machine, through its throttle: `node scripts/throttle.mjs test --wait 30 -- scripts/lease
@@ -227,9 +243,10 @@ the reference Mac.
 write only into their sandboxes' target folders, never the checkout's `target/`, so no sibling file's binary goes
 missing under them (the `alone` reason). No file holds a resource another suite uses: each sandbox has its own `HOME`,
 throttle table, caches and records. AC3's run has its own `HOME`. No file times a budget, takes the machine's timed
-grant or reads its load or fingerprint, and each file ran in about a minute or less here (`slow` is two minutes). The
-suite runs in the parallel `node --test` block, as 1116, 1874 and 2665 do. `tests/takes-timed.test.mjs` reads the
-helpers as handling the table themselves: they name `HOME`.
+grant or reads its load or fingerprint. `slow` is a file whose fastest recorded run takes over two minutes: AC1's fastest
+in the table above is 11 s and AC3's 56 s, though three runs there took longer than two minutes. The suite runs in the
+parallel `node --test` block, as 1116, 1874 and 2665 do. `tests/takes-timed.test.mjs` reads the helpers as handling the
+table themselves: they name `HOME`.
 
 ## Known limits
 
