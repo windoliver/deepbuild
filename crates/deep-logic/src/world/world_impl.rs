@@ -1245,7 +1245,7 @@ impl World {
             let s = v.as_str()?.as_bytes();
             let digit = |c: u8| char::from(c).to_digit(16);
             (s.len() % 2 == 0).then_some(())?;
-            (s.chunks_exact(2))
+            (s.as_chunks::<2>().0.iter())
                 .map(|p| Some((digit(p[0])? * 16 + digit(p[1])?) as u8))
                 .collect()
         };

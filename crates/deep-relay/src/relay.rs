@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 
 use rustls::{ServerConfig, ServerConnection, StreamOwned};
 use serde_json::{json, Value};
+use tungstenite::handshake::server::{Callback, ErrorResponse, Request, Response};
 use tungstenite::Message;
 
 use crate::wire::{self, MatchId};
@@ -167,6 +168,27 @@ impl Rate {
     }
 }
 
+/// #277: the handshake's answer to a copy that offers relay@2's WebSocket subprotocol: the
+/// subprotocol, and `true` in the flag it holds.
+struct Asked<'a>(&'a mut bool);
+
+impl Callback for Asked<'_> {
+    fn on_request(self, req: &Request, mut res: Response) -> Result<Response, ErrorResponse> {
+        let offered = req.headers().get_all("Sec-WebSocket-Protocol");
+        let offers = offered.iter().filter_map(|v| v.to_str().ok());
+        if offers
+            .flat_map(|v| v.split(','))
+            .any(|p| p.trim() == wire::SUBPROTOCOL2)
+        {
+            if let Ok(v) = wire::SUBPROTOCOL2.parse() {
+                res.headers_mut().insert("Sec-WebSocket-Protocol", v);
+                *self.0 = true;
+            }
+        }
+        Ok(res)
+    }
+}
+
 fn connection(stream: TcpStream, tls: Arc<ServerConfig>, state: &State) {
     let n = state.connections.fetch_add(1, Ordering::Relaxed);
     let _ = stream.set_read_timeout(Some(HANDSHAKE));
@@ -176,21 +198,7 @@ fn connection(stream: TcpStream, tls: Arc<ServerConfig>, state: &State) {
     };
     // #277: a copy that asks for relay@2 by the WebSocket subprotocol gets it.
     let mut two = false;
-    let asked = |req: &tungstenite::handshake::server::Request,
-                 mut res: tungstenite::handshake::server::Response| {
-        let offered = req.headers().get_all("Sec-WebSocket-Protocol");
-        let offers = offered.iter().filter_map(|v| v.to_str().ok());
-        if offers
-            .flat_map(|v| v.split(','))
-            .any(|p| p.trim() == wire::SUBPROTOCOL2)
-        {
-            if let Ok(v) = wire::SUBPROTOCOL2.parse() {
-                res.headers_mut().insert("Sec-WebSocket-Protocol", v);
-                two = true;
-            }
-        }
-        Ok(res)
-    };
+    let asked = Asked(&mut two);
     let Ok(mut ws) = tungstenite::accept_hdr(StreamOwned::new(tls, stream), asked) else {
         return;
     };

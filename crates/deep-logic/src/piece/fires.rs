@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn an_item_that_fires_and_exports_no_fires_at_is_refused() {
         let bytes = wat::parse_str(
-            &FIRES_AT_3.replace(r#"(global (export "fires_at") i32 (i32.const 2048))"#, ""),
+            FIRES_AT_3.replace(r#"(global (export "fires_at") i32 (i32.const 2048))"#, ""),
         )
         .expect("it assembles");
         let sha = deep_canvas_sandbox::rewrite::hash(&bytes);
