@@ -12,7 +12,7 @@ use deep_play::derive::Fired;
 use serde_json::{Map, Value};
 
 /// The entries the build's canvas modules fire in `form`, each module's in the order it writes
-/// them (#1834 adds logic's).
+/// them; a logic item's come from the form's `logic_fires` (deep_play::derive, #1834).
 pub(crate) fn fired(form: &Value) -> Vec<Fired> {
     #[allow(unused_mut)]
     let mut out = Vec::new();

@@ -112,9 +112,9 @@ AssertionError: the judge finds nothing wrong: expected [ …(3) ] to deeply equ
 
 - []
 + [
-+   "the record holds no host change as you for change 1 of 3 (/home/dh1946c244bb44/dh1946-c244bb44/p1/file) on dh-ubuntu",
-+   "the record holds no host change as you for change 2 of 3 (/home/dh1946c244bb44/dh1946-c244bb44/p2/file) on dh-ubuntu",
-+   "the record holds no host change as you for change 3 of 3 (/home/dh1946c244bb44/dh1946-c244bb44/p3/file) on dh-ubuntu",
++   "the record holds no host change as you for change 1 of 3 (~/dh1946-c244bb44/p1/file) on dh-ubuntu",
++   "the record holds no host change as you for change 2 of 3 (~/dh1946-c244bb44/p2/file) on dh-ubuntu",
++   "the record holds no host change as you for change 3 of 3 (~/dh1946-c244bb44/p3/file) on dh-ubuntu",
 + ]
 
  ❯ tests/acceptance/1946/partial.test.ts:18:67

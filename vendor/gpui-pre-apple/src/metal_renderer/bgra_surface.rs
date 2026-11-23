@@ -29,6 +29,10 @@ pub(super) struct BgraSurfaces {
     clear: metal::RenderPipelineState,
     /// DeepBuild patch (windoliver/deepbuild#1434): the chrome layers' pipelines and targets, built with these.
     pub(super) chrome: super::chrome_layers::Chrome,
+    /// DeepBuild patch (windoliver/deepbuild#499): the tagged NV12 pipeline, built with these.
+    pub(super) ycbcr: metal::RenderPipelineState,
+    /// The pixel buffers the frame being encoded samples, for its surfaces report.
+    pub(super) sampled: Vec<u64>,
 }
 
 impl BgraSurfaces {
@@ -53,6 +57,8 @@ impl BgraSurfaces {
             ),
             clear: super::clear_surface::pipeline(device, library), // DeepBuild patch (windoliver/deepbuild#177)
             chrome: super::chrome_layers::Chrome::new(device, library), // DeepBuild patch (windoliver/deepbuild#1434)
+            ycbcr: super::ycbcr_surface::pipeline(device, library), // DeepBuild patch (windoliver/deepbuild#499)
+            sampled: Vec::new(),
         }
     }
 }
@@ -71,11 +77,11 @@ impl MetalRenderer {
     /// so this comes before the completed handler can run. The frame's number, when it was reported.
     pub(super) fn surfaces_encoded(&mut self) -> Option<u64> {
         gpu_ledger::committed();
-        (!self.sampled_surfaces.is_empty() && gpu_surfaces::has_hook()).then(|| {
+        (!self.bgra_surfaces.sampled.is_empty() && gpu_surfaces::has_hook()).then(|| {
             let frame = gpu_surfaces::next_frame();
             gpu_surfaces::report(gpu_surfaces::Event::Encoded {
                 frame,
-                surfaces: mem::take(&mut self.sampled_surfaces),
+                surfaces: mem::take(&mut self.bgra_surfaces.sampled),
             });
             frame
         })
@@ -154,7 +160,7 @@ impl MetalRenderer {
             1,
             instance as u64,
         );
-        self.sampled_surfaces
+        self.bgra_surfaces.sampled
             .push(ptr::from_ref(image_buffer) as usize as u64);
     }
 }

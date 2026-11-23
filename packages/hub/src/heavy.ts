@@ -197,8 +197,11 @@ type Jobs = 'jobserver' | 'n' | 'none' | number;
 
 // ---- The hub's queue.
 
-/** One kind a `deep lease` names: its lease kind and mode, `gpu:exclusive` for an export or a timing check. */
-interface Need { kind: string; mode: Mode }
+/**
+ * One kind a `deep lease` names: its lease kind and mode, `gpu:exclusive` for an export or a timing check, and on a pool
+ * the units the hub reads for it (#3218), never the call's.
+ */
+interface Need { kind: string; mode: Mode; units?: number }
 const KIND = /^([a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*)(?::(shared|exclusive))?$/;
 function needsOf(kinds: unknown): Need[] {
   if (!Array.isArray(kinds)) throw Error('name the kinds as a list');
@@ -249,7 +252,8 @@ export interface HeavyOptions {
   /**
    * The planted wrong programs: `ignores-memory-pressure`, `exclusive-beside-shared`, `releases-on-parent-exit`;
    * #1016's `jobserver-per-build`, `refills-while-running` and `share-ignores-running-build`; and #1411's
-   * `restores-only-when-idle`, `no-hysteresis`, `holds-back-every-token` and `pool-holds-fixed-count`.
+   * `restores-only-when-idle`, `no-hysteresis`, `holds-back-every-token` and `pool-holds-fixed-count`; and #3218's
+   * `serves-whichever-fits`.
    */
   plant?: string;
   pressure?: () => Pressure;
@@ -257,6 +261,11 @@ export interface HeavyOptions {
   free?: (path: string) => number;
   /** A command joined the queue: the beat that ticks it starts again if it had stopped (#2648). */
   wake?: () => void;
+  /**
+   * The units of a pool kind a queued command takes, read by the hub (its heavy.command@1 entry or a reading, #3220),
+   * never from the call's params; undefined, or no `unitsOf`, is 1. Asked as it joins, for each kind it names (#3218).
+   */
+  unitsOf?: (need: { kind: string; command: string; cwd: string }) => number | undefined;
 }
 
 const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
@@ -286,10 +295,14 @@ export class HeavyQueue {
       if (typeof params.ticket === 'string') throw Error('this deep lease lost its place in the queue; run it again');
       if (!peer) throw Error('deep lease names no process, so whose session it runs for is unknown; run the deep command itself');
       const id = await session();
-      const needs = [{ kind: 'cpu.slot', mode: 'exclusive' as Mode }, ...needsOf(params.kinds ?? [])];
+      const [command, cwd] = [String(params.command ?? '').slice(0, 2000), String(params.cwd ?? '')];
+      const needs: Need[] = [{ kind: 'cpu.slot', mode: 'exclusive' }, ...needsOf(params.kinds ?? []).map((n) => {
+        const units = this.o.unitsOf?.({ kind: n.kind, command, cwd });
+        return units === undefined ? n : { ...n, units };
+      })];
       w = {
         ticket: `lease-wait:${randomBytes(6).toString('hex')}`, secret: randomBytes(16).toString('hex'), holder: id ? `session:${letters(id)}` : 'cli', ...(id ? { session: id } : {}),
-        command: String(params.command ?? '').slice(0, 2000), cwd: String(params.cwd ?? ''), needs, jobs: jobsOf(params.jobs), peer, queued: now, seen: now, waits: {},
+        command, cwd, needs, jobs: jobsOf(params.jobs), peer, queued: now, seen: now, waits: {},
       };
       this.waiting.push(w);
       this.o.wake?.();
@@ -335,8 +348,9 @@ export class HeavyQueue {
       w.blockedOn = 'disk';
       return { kind: 'disk', line: `deep lease: waiting for disk: the volume has ${(free / 1e9).toFixed(1)} GB free, under the ${(DISK_FLOOR / 1e9).toFixed(1)} GB disk floor, so \`${w.command}\` starts once there is room` };
     }
-    // A freed slot or kind goes to the first in line that waits for it.
-    const ahead = before.find((x) => x.blockedOn === 'memory' || x.blockedOn === 'disk' || w.needs.some((n) => n.kind === x.blockedOn) || (x.blockedOn === 'jobs' && this.takes(w)));
+    // A freed slot or kind goes to the first in line that waits for it, however little a later one needs of it (#3218).
+    // The planted wrong program for #3218's AC8 serves whichever fits.
+    const ahead = this.o.plant === 'serves-whichever-fits' ? undefined : before.find((x) => x.blockedOn === 'memory' || x.blockedOn === 'disk' || w.needs.some((n) => n.kind === x.blockedOn) || (x.blockedOn === 'jobs' && this.takes(w)));
     if (ahead?.blockedOn) {
       const kind = ahead.blockedOn;
       w.blockedOn = kind;
@@ -347,19 +361,27 @@ export class HeavyQueue {
     const run = `${RUN_PREFIX}${letters(w.ticket.slice('lease-wait:'.length)).toUpperCase()}${Date.now().toString(36).toUpperCase()}`;
     const agent = w.session ? this.o.agentOf(w.session) : undefined;
     const caller: Caller = { holder: w.holder, run, ...(agent ? { agent } : {}) };
-    const got: Lease[] = [];
-    for (const n of w.needs) {
+    // Every kind in one ask, granted whole or refused whole, so a refusal appends nothing (#3218).
+    const asks = w.needs.map((n) => ({
+      resource: resourceOf(n.kind, this.o.slow),
       // The planted wrong program for AC6 grants an exclusive GPU lease beside shared ones.
-      const mode: Mode = this.o.plant === 'exclusive-beside-shared' && n.kind === 'gpu' ? 'shared' : n.mode;
-      const r = await this.o.table.lease(caller, resourceOf(n.kind, this.o.slow), mode).catch((e: Error) => ({ status: 'error' as const, message: e.message }));
-      if (r.status === 'granted') { got.push(r.lease); continue; }
-      for (const l of got) await this.o.table.release(l.id, []).catch(() => undefined);
-      if (r.status === 'error') throw Error(`deep lease can't lease ${n.kind}: ${r.message}`);
-      w.blockedOn = n.kind;
-      const holders = 'holders' in r ? r.holders : [];
-      const by = [...new Set(holders.map((l) => this.who(l.holder)))].join(', ');
-      return { kind: n.kind === 'cpu.slot' ? 'slot' : n.kind, line: await this.line(w, n.kind, by ? `held by ${by}` : r.message) };
+      mode: this.o.plant === 'exclusive-beside-shared' && n.kind === 'gpu' ? 'shared' as Mode : n.mode,
+      ...(n.units !== undefined ? { units: n.units } : {}),
+    }));
+    const r = await this.o.table.ask(caller, asks).catch((e: Error) => ({ status: 'error' as const, message: e.message }));
+    // An ask past its pool's size never fits, so it never waits: it loses its place and says why.
+    if (r.status === 'error' || (r.status === 'BLOCKED' && r.reason === 'size')) {
+      const at = this.waiting.indexOf(w);
+      if (at >= 0) this.waiting.splice(at, 1);
+      throw Error(`deep lease can't lease ${w.needs.map((n) => n.kind).join(', ')}: ${r.message}`);
     }
+    if (r.status !== 'granted') {
+      const kind = r.resource.kind;
+      w.blockedOn = kind;
+      const by = [...new Set(r.holders.map((l) => this.who(l.holder)))].join(', ');
+      return { kind: kind === 'cpu.slot' ? 'slot' : kind, line: await this.line(w, kind, by ? `held by ${by}` : r.message) };
+    }
+    const got = r.leases;
     // The pool's tokens: one backing a build's first job, or a runner's share of those free as its worker count.
     const jobs = this.jobs(w, run);
     if (!jobs) {
