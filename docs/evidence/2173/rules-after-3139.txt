@@ -1,0 +1,22 @@
+# node scripts/repo-rules.mjs, 2026-11-23T05:53:18.909Z
+# checkout: HEAD ed824b3f72a22ec36a566c1b93d73d1cdb19d944; merge of main 2a5bd60fd (with #3139's lint change), plus the png row for crates/deep-codecs/Cargo.toml in the working tree
+# PATH starts with /opt/homebrew/opt/rustup/bin (cargo, for the physics-build lane); Node v24.22.2; one-minute load 98
+# exit 0 in 51.7 s; 0 FAIL/INVALID/BLOCKED lines, 0 of them outside tests/acceptance/
+# FAIL lines naming accesskit_macos: 0 (the NOTE for vendor/accesskit_macos/Cargo.toml is the vendored crate itself)
+PASS workflows: .github/workflows/ has no entries
+PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+PASS secrets: 20814 files scanned, 35 lockfiles and 1269 binary files skipped, 48 allowed
+PASS deps: 192 package.json files and 82 crates match scripts/repo-rules.json
+PASS cards: 41 packages and 54 crates have cards with the four headings; 136 deviations, each naming a file that exists
+PASS security: SECURITY.md names the private report form, .github/ISSUE_TEMPLATE/config.yml links it, and CONTRIBUTING.md and SECURITY.md state the rule in the same words
+PASS physics-build: rapier3d 0.36.1 [alloc, dim3, enhanced-determinism, f32, serde-serialize, std], parry3d 0.31.1, rapier2d 0.36.1 [alloc, dim2, enhanced-determinism, f32, serde-serialize, std], parry2d 0.31.1, none of simd8, parallel, block-solver, fem, unsync-callbacks, fast-math, and no rustflags with target-cpu=native or +fma
+NOTE deps: vendor/accesskit_macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-apple/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/llrt_crypto/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/mitex-spec-gen/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/mitex-spec/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/symphonia-codec-vorbis/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE size: +1719 -1 handwritten lines against merge base 2a5bd60fd, lockfiles and binary files excluded; over the guideline of about 400, so the PR says why it can't be split

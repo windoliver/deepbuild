@@ -1,0 +1,24 @@
+tests/acceptance/806/replay393.test.ts, AC1 #393 AC9, on b3870b8357a3 (#2896 merged with main 2f05ccb3e), before the fix:
+ FAIL  tests/acceptance/806/replay393.test.ts > AC1 #393's and #384's acceptance scenarios, played against the hub and the app instead of the deep-show stand-in, give the same replies field for field (#393) > AC1 #393 AC9: 5,000 unnamed marks refused give the stand-in's replies, the full list by its evidence hash compared by content
+AssertionError: #393 AC9, 5,000 unnamed marks refused: the read cap, truncated, and the full list by its evidence hash: the hub's replies against the stand-in's: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "call 1 (deep_show): field `issues` is [{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"m-1\"],\"path\":\"items/m-1/name\",\"actual\":null,\"what\":\"not a string\",\"fix\":\"Give the field a value of its type inside its range.\"},{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"m-10\"],\"path\":\" on the 
++   "call 1 (deep_show): field `truncated` is {\"shown\":34,\"total\":5000,\"by_code\":{\"out_of_range\":5000}} on the hub, {\"shown\":38,\"total\":5000,\"by_code\":{\"out_of_range\":5000}} on the stand-in",
++ ]
+
+ ❯ expectReplayed tests/acceptance/806/ac1.ts:17:75
+     15|   const r = await replay(entry.build, entry.assets, { app: entry.app, …
+     16|   const what = `${entry.from}, ${entry.about}`;
+     17|   expect(r.failures, `${what}: the hub's replies against the stand-in'…
+       |                                                                           ^
+     18|   for (const [call, bound] of Object.entries(entry.bounds ?? {})) {
+     19|     const ms = r.hub.ms[Number(call) - 1]!;
+ ❯ tests/acceptance/806/replay393.test.ts:30:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+

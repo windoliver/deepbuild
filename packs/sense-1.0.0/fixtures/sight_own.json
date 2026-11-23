@@ -1,0 +1,84 @@
+{
+  "name": "sight_own",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "1992bdc33fbf806cfca639b13fb6270b7dc3ee9bbbccf6568717e95d8b69ac02",
+      "writes": {
+        "blip": {
+          "type": "i32",
+          "count": 1
+        },
+        "blip_pos": {
+          "type": "vec2",
+          "count": 1
+        },
+        "fog": {
+          "type": "i32",
+          "count": 16
+        },
+        "ghost": {
+          "type": "i32",
+          "count": 1
+        },
+        "ghost_kind": {
+          "type": "i32",
+          "count": 1
+        },
+        "ghost_pos": {
+          "type": "vec2",
+          "count": 1
+        },
+        "seen": {
+          "type": "i32",
+          "count": 1
+        }
+      },
+      "assets": [
+        "ed157458eb34298525be72dbfa7f70a3b4133981ad8f13a7a7c8c9ff123340a4",
+        "6bed6ecd7fb8a2ef5778c39309a072b28fd839f212be56b3537c590866129ce7"
+      ],
+      "budget": {
+        "fuel": 4000000,
+        "memory": 4
+      },
+      "links": [
+        {
+          "name": "sense.sight@1.0.0",
+          "asset": "c3d3c48ce89f99bce6ee6e73c7b599529003baba401749492df1348c3586b723"
+        }
+      ]
+    }
+  },
+  "track": [],
+  "steps": 1,
+  "expect": {
+    "arrays": {
+      "0": {
+        "fog": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "seen": [
+          1
+        ]
+      }
+    },
+    "tolerance": "exact"
+  },
+  "answer": "A flat 16 m plate, 2 × 2 sight cells and 4 × 4 fog cells, one side of player 1, importing sense.sight by its own name: its eye at the centre, range 100 m, sees every cell (fog 2 throughout) and its own unit (seen 1)."
+}

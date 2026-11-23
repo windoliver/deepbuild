@@ -11,7 +11,7 @@ use std::f64::consts::PI;
 use deep_canvas::ops;
 use serde_json::{json, Value};
 
-use crate::doc::{most_contact_hz, BodyKind, World};
+use crate::doc::{most_contact_hz, Body, BodyKind, World};
 
 /// The lint's code.
 pub const SMALL_BODY: &str = "physics.small_body";
@@ -54,17 +54,25 @@ fn least_rate(w: &World, hz: f64) -> Option<f64> {
     None
 }
 
+/// #2317: body `b` of `w`'s thinnest extent, m, when this lint names it of kind `unit`; none for
+/// any other body. A backend that keeps a pair's contact points within a share of
+/// `solver.length_unit` reads it, since such a body is thinner than that distance.
+pub fn unit_extent(w: &World, b: &Body) -> Option<f64> {
+    let extent = crate::fast::thinnest(w, b, usize::MAX).filter(|_| b.kind == BodyKind::Dynamic);
+    extent.filter(|e| *e < w.solver.length_unit * LEAST_SHARE)
+}
+
 /// The lint's issues over `w`, a body at a time in ID order, its `unit` issue before its `soft`.
 pub fn issues(w: &World, planted: Planted) -> Vec<Value> {
     let unit = w.solver.length_unit;
     let g = ops::sqrt(w.gravity.iter().map(|x| x * x).sum());
     let sinks = sink(g, w.solver.contact_hz);
-    let shapes = match planted {
-        Planted::None => usize::MAX,
-        Planted::FirstShape => 1,
-    };
     let mut out = Vec::new();
     for (id, b) in &w.bodies {
+        let shapes = match planted {
+            Planted::None => b.shapes.len(),
+            Planted::FirstShape => 1,
+        };
         let Some(extent) =
             crate::fast::thinnest(w, b, shapes).filter(|_| b.kind == BodyKind::Dynamic)
         else {

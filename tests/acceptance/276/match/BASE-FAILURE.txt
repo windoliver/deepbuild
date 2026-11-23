@@ -1,0 +1,77 @@
+The AC4 file run once at the base fcbfca05f (main e575a47af plus #189's branch), November 20, 2026, on an M-series
+Mac at a 1-minute load near 200, unleased (no built CLI for scripts/lease), with:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/276/match ac4-match.test.ts --testTimeout=600000 --hookTimeout=180000
+
+Exit code 1. All three tests fail at their first call, the layout probe's check in deep-logic, which refuses the
+logic item's profile field ("logic@1 has no field profile"): the feature is missing. The 720 s are the builds of the
+assembler and deep-logic in a cleared target folder; deep-show was not built (it is built only after the logic calls).
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/276/match ac4-match.test.ts --testTimeout=600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-276-a3f02b/agent-ae46c0581bbde10cc/tests/acceptance/276/match
+
+ ❯ ac4-match.test.ts (3 tests | 3 failed) 719961ms
+   ❯ #276: a profile record in a two-seat match (3)
+     × AC4 #276.fc1389e0: each copy's record enters at step 0 as its player's entry, the copies' hashes agree at every checkpoint, and a step past confirmed writes no record 719948ms
+     × AC4 #276.fc1389e0: planted net_profile_from_own_store: the copy that reads its peer's profile from its own store desyncs and fails, naming step 0 2ms
+     × Scope #276: the Join prompt of a piece whose logic declares a profile says "Your profile's numbers go to the other players." 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4-match.test.ts > #276: a profile record in a two-seat match > AC4 #276.fc1389e0: each copy's record enters at step 0 as its player's entry, the copies' hashes agree at every checkpoint, and a step past confirmed writes no record
+AssertionError: check of a layout probe whose logic item declares a profile admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:159:71
+    157| export function check(p: JsonObject, what: string): Record<string, Che…
+    158|   const [r] = logic([{ call: 'check', piece: p }], what);
+    159|   expect(r!['ok'], `${what} admits the piece (ok: true): ${show(r)}`).…
+       |                                                                       ^
+    160|   return Object.fromEntries(Object.entries(obj(r!['items'], `${what}.i…
+    161|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions fixtures.ts:110:39
+ ❯ ac4-match.test.ts:29:32
+ ❯ helpers.ts:117:46
+ ❯ ac4-match.test.ts:47:19
+ ❯ helpers.ts:117:46
+ ❯ ac4-match.test.ts:110:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac4-match.test.ts > #276: a profile record in a two-seat match > AC4 #276.fc1389e0: planted net_profile_from_own_store: the copy that reads its peer's profile from its own store desyncs and fails, naming step 0
+ FAIL  ac4-match.test.ts > #276: a profile record in a two-seat match > Scope #276: the Join prompt of a piece whose logic declares a profile says "Your profile's numbers go to the other players."
+AssertionError: check of a layout probe whose logic item declares a profile admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"rules","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+Expected: "true"
+Received: "false"
+
+ ❯ check helpers.ts:159:71
+    157| export function check(p: JsonObject, what: string): Record<string, Che…
+    158|   const [r] = logic([{ call: 'check', piece: p }], what);
+    159|   expect(r!['ok'], `${what} admits the piece (ok: true): ${show(r)}`).…
+       |                                                                       ^
+    160|   return Object.fromEntries(Object.entries(obj(r!['items'], `${what}.i…
+    161|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions fixtures.ts:110:39
+ ❯ ac4-match.test.ts:29:32
+ ❯ helpers.ts:117:46
+ ❯ ac4-match.test.ts:47:19
+ ❯ helpers.ts:117:46
+ ❯ ac4-match.test.ts:110:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  18:40:41
+   Duration  722.51s (tests 100%)
+
+

@@ -720,11 +720,11 @@ pub fn drawing_of(
             });
         }
         if let Some((frame, units)) = diffed_code(sched, session, program_of, &d.frame) {
-            let mut runs = d.runs.clone();
+            let mut runs = (*d.runs).clone();
             runs.extend(units);
             *d = Arc::new(Drawing {
                 frame,
-                runs,
+                runs: Arc::new(runs),
                 animated: d.animated.clone(),
                 built: d.built,
                 damage: Vec::new(),

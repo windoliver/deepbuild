@@ -21,6 +21,9 @@ use crate::evidence;
 use crate::hub::{Call, Eval, EvalTime, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
 use crate::snapshot::{self, Drawn, Unfit};
 
+#[cfg(target_os = "macos")]
+mod drawn2d;
+
 /// An operator's error as a revision's issue.
 pub fn op_issue(i: &OpIssue) -> Issue {
     let what = format!("{} can't evaluate this", i.operator);
@@ -545,7 +548,7 @@ impl<'a> Hub<'a> {
         if e.shown {
             let d = drawing.as_ref().and_then(|d| d.drawing.as_deref());
             let doc = document.as_ref().unwrap_or(&Value::Null);
-            let shown = crate::entries::shown_of(doc, d.map(|d| &d.frame), d.map(|d| &d.runs));
+            let shown = crate::entries::shown_of(doc, d.map(|d| &d.frame), d.map(|d| &*d.runs));
             reply["shown"] = Value::Object(shown);
         }
         let drawing = drawing.filter(|_| e.pixels);
@@ -797,6 +800,8 @@ impl<'a> Hub<'a> {
         let mut out = Vec::with_capacity(f.count);
         let mut revised_now = false;
         let mut seen = BTreeMap::new();
+        // #553: the net module works in a frame only for a piece with a net item.
+        let mut net = self.has_net(&f.doc);
         for k in 0..f.count {
             if f.paced {
                 let due = started + period * k as u32;
@@ -820,6 +825,7 @@ impl<'a> Hub<'a> {
                 let (document, _) = pending.take().expect("checked above");
                 revised = self.revise(&f.doc, document);
                 revised_now = true;
+                net = self.has_net(&f.doc);
             }
             let t = f.from + f.step * k as i64;
             self.load_frame(&f.doc, t);
@@ -836,6 +842,15 @@ impl<'a> Hub<'a> {
             let (ran, allocs) =
                 crate::count_allocations(|| session.frame(&mut self.sched, t, &view));
             let ms = frame_started.elapsed().as_secs_f64() * 1000.0;
+            // #553: the net module's work in the frame: its match's state on the panel.
+            let net_ns = match net {
+                true => {
+                    let before = thread_cpu_ns();
+                    self.net_frame(&f.doc);
+                    thread_cpu_ns() - before
+                }
+                false => 0,
+            };
             // #855: the JSON values the frame's operators wrote, each counted by the heap
             // allocations it takes, which a copy of it takes again, and its shared handle.
             let json_values: u64 = self
@@ -846,7 +861,7 @@ impl<'a> Hub<'a> {
                 .sum();
             let mut frame = json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms,
                                    "frame_ms": ms, "settling": pending.is_some(),
-                                   "json_values": json_values});
+                                   "json_values": json_values, "net_ns": net_ns});
             // #1732: the solves of each arrangement this frame ran, from the scheduler's nodes.
             frame["solves"] = solves(&self.sched, &self.sessions[&f.doc], revised_now);
             frame["remaps"] = remaps(&self.sched, &self.sessions[&f.doc]);
@@ -869,12 +884,21 @@ impl<'a> Hub<'a> {
                         d.status.as_ref().map(Arc::as_ptr),
                     )
                 });
-                let hash = match (&last, &drawing) {
-                    (Some((a, b, hash)), Some(d)) if (*a, *b) == ptrs && d.boxes.is_empty() => {
+                // #1561: a drawn look's frame is the GPU's, drawn again whatever the drawing,
+                // since its camera moves the page under marks that hold still.
+                #[cfg(target_os = "macos")]
+                let drawn = drawing.as_ref().and_then(|d| self.drawn_png(&f.doc, t, d));
+                #[cfg(not(target_os = "macos"))]
+                let drawn: Option<Option<String>> = None;
+                let hash = match (drawn, &last, &drawing) {
+                    (Some(sha), ..) => sha,
+                    (None, Some((a, b, hash)), Some(d))
+                        if (*a, *b) == ptrs && d.boxes.is_empty() =>
+                    {
                         Some(hash.clone())
                     }
-                    (_, Some(d)) => self.canonical_png(d, None).ok().map(|(sha, _, _)| sha),
-                    (_, None) => None,
+                    (None, _, Some(d)) => self.canonical_png(d, None).ok().map(|(sha, _, _)| sha),
+                    (None, _, None) => None,
                 };
                 if let Some(hash) = &hash {
                     last = Some((ptrs.0, ptrs.1, hash.clone()));
@@ -918,7 +942,7 @@ impl<'a> Hub<'a> {
     }
 
     /// A whole revision of `doc` from whoever sent its last one, admitted as a deep_show call is.
-    fn revise(&mut self, doc: &str, document: &Value) -> Value {
+    pub(crate) fn revise(&mut self, doc: &str, document: &Value) -> Value {
         let Some(via) = self.vias.get(doc).cloned() else {
             return json!({"outcome": "refused", "code": "no_session"});
         };
@@ -1210,6 +1234,54 @@ fn solves(
     Value::Object(out)
 }
 
+/// #194's wrong program: a piece that does work per frame because it names a catalog.
+pub const VALIDATED_PER_FRAME: &str = "catalog_validated_per_frame";
+
+impl Hub<'_> {
+    /// Planted (#194): at each frame of `doc`, each catalog asset a logic item names validated
+    /// again under its layout, as if no verdict were kept, so the sandbox runs once more a frame.
+    fn catalogs_validated_again(&mut self, doc: &str) {
+        if self.scenario.module_planted.as_deref() != Some(VALIDATED_PER_FRAME) {
+            return;
+        }
+        let Some(form) = self.forms.get(doc) else {
+            return;
+        };
+        let items = form["items"].as_object().into_iter().flatten();
+        let named: Vec<&str> = items
+            .filter(|(_, i)| i["kind"] == "logic@1")
+            .flat_map(|(_, i)| {
+                i.pointer("/params/assets")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+            })
+            .filter_map(Value::as_str)
+            .collect();
+        let catalogs: Vec<(String, String)> = form["assets"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(_, a)| a["kind"] == "catalog")
+            .filter_map(|(_, a)| {
+                Some((
+                    a["sha256"].as_str()?.to_string(),
+                    a["layout"].as_str()?.to_string(),
+                ))
+            })
+            .filter(|(sha, _)| named.contains(&sha.as_str()))
+            .collect();
+        for (sha, layout) in catalogs {
+            if let Some(bytes) = crate::evidence::read(&self.scenario.evidence, &sha) {
+                self.sandbox.forget(&sha);
+                let _ = self
+                    .sandbox
+                    .validate_bytes(&self.startup.sealed, &layout, &bytes);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod story_tests {
     use deep_canvas::registry::{BuildSet, Registry};
@@ -1332,54 +1404,6 @@ mod story_tests {
             assert_eq!(shown("q"), head, "a counter on #head at {t}");
             assert_eq!(shown("r"), count, "a counter on a driver at {t}");
             assert_eq!(at_dot, Some(dot), "an item on #head at {t}");
-        }
-    }
-}
-
-/// #194's wrong program: a piece that does work per frame because it names a catalog.
-pub const VALIDATED_PER_FRAME: &str = "catalog_validated_per_frame";
-
-impl Hub<'_> {
-    /// Planted (#194): at each frame of `doc`, each catalog asset a logic item names validated
-    /// again under its layout, as if no verdict were kept, so the sandbox runs once more a frame.
-    fn catalogs_validated_again(&mut self, doc: &str) {
-        if self.scenario.module_planted.as_deref() != Some(VALIDATED_PER_FRAME) {
-            return;
-        }
-        let Some(form) = self.forms.get(doc) else {
-            return;
-        };
-        let items = form["items"].as_object().into_iter().flatten();
-        let named: Vec<&str> = items
-            .filter(|(_, i)| i["kind"] == "logic@1")
-            .flat_map(|(_, i)| {
-                i.pointer("/params/assets")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-            })
-            .filter_map(Value::as_str)
-            .collect();
-        let catalogs: Vec<(String, String)> = form["assets"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .filter(|(_, a)| a["kind"] == "catalog")
-            .filter_map(|(_, a)| {
-                Some((
-                    a["sha256"].as_str()?.to_string(),
-                    a["layout"].as_str()?.to_string(),
-                ))
-            })
-            .filter(|(sha, _)| named.contains(&sha.as_str()))
-            .collect();
-        for (sha, layout) in catalogs {
-            if let Some(bytes) = crate::evidence::read(&self.scenario.evidence, &sha) {
-                self.sandbox.forget(&sha);
-                let _ = self
-                    .sandbox
-                    .validate_bytes(&self.startup.sealed, &layout, &bytes);
-            }
         }
     }
 }

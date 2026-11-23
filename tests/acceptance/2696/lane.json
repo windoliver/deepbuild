@@ -1,0 +1,1 @@
+{ "alone": true, "why": "base.test.mjs builds the merge base in a scratch folder and starts ten hubs to read the core thread's heap; lint.test.mjs puts one file into this checkout's packages/verdicts/dist while the lint lane's commands run, and removes it" }

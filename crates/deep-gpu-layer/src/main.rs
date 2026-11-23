@@ -23,7 +23,7 @@ mod columns;
 mod compare;
 mod compile;
 mod conformance;
-mod drawn;
+mod counting;
 mod effects;
 mod envelope;
 #[cfg(feature = "test-faults")]
@@ -37,23 +37,21 @@ mod flows2d;
 mod frames;
 mod full_lane;
 mod golden;
-mod groups;
+mod grids2d;
 mod guard;
 mod hdr;
 mod host;
-mod indexed;
+use deep_groups_render::indexed;
 mod insets;
 mod interp_suite;
 mod levels;
 mod live;
-mod lightfx;
 mod liveview;
 mod lod;
 mod look_ops;
 mod marks2d;
 mod op_transition;
 mod opframe;
-mod paintfx;
 mod parity;
 mod particles;
 mod physics;
@@ -63,6 +61,7 @@ mod records;
 mod reference;
 mod regions;
 mod relation;
+mod reseed;
 mod scene;
 mod seam;
 mod session3;
@@ -94,6 +93,10 @@ use deep_gpu::seam::Startup;
 use deep_gpu::surface::Path;
 use gpui_kit::HeadlessAppContext;
 use serde_json::{json, Value};
+
+// #1561: the 2D compositor and the drawn passes are a render crate's, which deep-show draws
+// through too.
+pub(crate) use deep_groups_render::{drawn, groups, lightfx};
 
 use crate::scene::Scene;
 use crate::window::Win;
@@ -133,6 +136,8 @@ pub enum Planted {
     LaneAdapterFromConfiguration,
     AbsoluteF32WorldPositions,
     LightCutAbsoluteIlluminance,
+    /// #2054's: a local light faded by (1 − (d ÷ range)²)², not the design's window.
+    LightWindowSquared,
     /// #430's wrong programs (tests/acceptance/430/README.md: Planted programs).
     GroupPassAtLayerEnd,
     GroupPassReadsEarlier,
@@ -175,6 +180,9 @@ pub enum Planted {
     /// plate whose horizon table is never read, and its sky occlusion from its slope alone.
     TerrainNoHorizonBake,
     TerrainOcclusionFromSlope,
+    /// #2215's wrong program (tests/acceptance/2215/README.md: Assumed surfaces 3): the frame's
+    /// receipt lists no part that refracts through the round lobe.
+    RasterListsNothing,
     /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
     ForwardZ,
     EncodesTwice,
@@ -197,6 +205,14 @@ pub enum Planted {
     PassOffByTwo,
     BloomWithoutKaris,
     PassesOneGpu,
+    /// #161's wrong programs (tests/acceptance/161/README.md: Planted programs).
+    FxLevelsGpuOffByTwo,
+    SliceShiftSeededByFrame,
+    InvertOnPremultiplied,
+    InvertWithoutAlphaGuard,
+    TwirlCenterFromFrameOrigin,
+    BlurRadiusInDevicePx,
+    KeyKeepsColorAtAlpha0,
     /// #508's wrong programs (tests/acceptance/508/README.md: Surfaces this job invents, 10): a
     /// plume's haze run before the check readbacks are taken, so they read its bent pixels; and
     /// the film effects taking their time from the wall clock instead of the frame's t.
@@ -229,6 +245,11 @@ pub enum Planted {
     FlareFixedGhosts,
     /// #465: the flare built as if nothing covered its light.
     FlareIgnoresOcclusion,
+    /// #2691's wrong programs (tests/acceptance/2691/README.md: Planted programs): the mirror's
+    /// pass at half of half the internal size; a plain mirror's lookup by the pixel's place over
+    /// the frame's full size.
+    MirrorHalvesTwice,
+    MirrorSamplesFullFrame,
     /// #468: a circle of confusion linear in |d − s|, matched to the physical one at 10 m.
     CocLinearInDistance,
     /// #166: the water's foam carried from frame to frame as simulation state.
@@ -309,6 +330,9 @@ pub enum Planted {
     CreaseBelowAngle,
     EdgesDeriveEveryFrame,
     EdgesDashOtherSpace,
+    /// #1782's, by name (tests/acceptance/1782/README.md: Planted programs): a crease line's
+    /// wrong picker, and a hidden style's wrong span classifiers, cache, edge IDs and dash.
+    HiddenLines(&'static str),
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
@@ -356,6 +380,11 @@ pub enum Planted {
     HalftonePopTakesDotPasses,
     InkFillFlat,
     RimKeepsFirst,
+    /// #1561's wrong programs (tests/acceptance/1561/README.md: Planted programs): a live window
+    /// that hands a 2D document's frames no page and none of its look's drawn fields; and a
+    /// frame that reuses the last frame's marks drawn with no page.
+    LivePassesNoPage,
+    ReuseDropsPage,
     DropsClouds,
     /// #424's wrong programs.
     AddWritesDepth,
@@ -407,6 +436,15 @@ pub enum Planted {
     OneMirrorPerFrame,
     OneLightCutPerFrame,
     InsetPremultipliedAsStraight,
+    /// #298's wrong programs (tests/acceptance/298/README.md: Planted programs): a clamp of each
+    /// axis on its own, of an unmirrored behind-camera projection, and to the frame instead of the
+    /// safe frame; a driver that reads the frame before's `edge` and `edge_angle`; a leader that
+    /// draws while its overlay is clamped.
+    ClampEachAxis,
+    ClampUnmirroredBehind,
+    ClampToFrame,
+    EdgeFromPreviousFrame,
+    LeaderDrawsWhileClamped,
     BandFadeByWallClock,
     LevelByEarlierFrame,
     BandMasksIndependent,
@@ -526,6 +564,12 @@ pub enum Planted {
     BoundsBindPose,
     /// #450's: a whole trail drawn from the frames drawn so far (tests/acceptance/450/README.md).
     TrailAppendsPerFrame,
+    /// #265's (tests/acceptance/265/README.md: Planted programs): a world-space emitter's anchor
+    /// kept from the frames drawn, a trail through a linear array's stored steps, and a wake
+    /// that keeps the last frame's samples.
+    AnchorKeptFromFrame,
+    TrailReadsStoredSteps,
+    WakeKeepsLastFrame,
     /// #451's: particles on a vector field's stream move instead in a straight line along the
     /// field's arrow at their birth point (tests/acceptance/451/README.md: The planted program).
     ParticlesFollowArrows,
@@ -545,9 +589,57 @@ pub enum Planted {
     ShadowInsideOutline,
     ShadowRemovesAmbient,
     ShadowEdgeAliased,
+    /// #2053's wrong programs (tests/acceptance/2053/README.md: Planted programs).
+    NormalFlippedGreen,
+    NormalDotAlone,
+    NormalUnturned,
+    LightStaleHeight,
+    /// #269's wrong programs (tests/acceptance/269/README.md: Plants): a played frame's grid image
+    /// holds the step before its own; a pixel takes its cell's role before the rebuild.
+    GridKeepsPreviousStep,
+    GridRoleBeforeRebuild,
 }
 
 impl Planted {
+    /// The compositor's wrong program this one is, if it is one of the render crate's (#1561).
+    pub(crate) fn composed(self) -> Option<deep_groups_render::Planted> {
+        use deep_groups_render::Planted as P;
+        Some(match self {
+            Planted::GroupPassAtLayerEnd => P::GroupPassAtLayerEnd,
+            Planted::GroupPassReadsEarlier => P::GroupPassReadsEarlier,
+            Planted::GroupPassPastGrow => P::GroupPassPastGrow,
+            Planted::BackdropReadsLaterItems => P::BackdropReadsLaterItems,
+            Planted::BackdropPastCoverage => P::BackdropPastCoverage,
+            Planted::BevelLitOpposite => P::BevelLitOpposite,
+            Planted::LightLinearFalloff => P::LightLinearFalloff,
+            Planted::LightEncodedSum => P::LightEncodedSum,
+            Planted::LightDefaultAmbientZero => P::LightDefaultAmbientZero,
+            Planted::LightEveryChild => P::LightEveryChild,
+            Planted::LightStaleList => P::LightStaleList,
+            Planted::VividLightAsLinearLight => P::VividLightAsLinearLight,
+            Planted::PassLinearIn2d => P::PassLinearIn2d,
+            Planted::PassEncodedIn3d => P::PassEncodedIn3d,
+            Planted::InkFillFlat => P::InkFillFlat,
+            Planted::RimKeepsFirst => P::RimKeepsFirst,
+            Planted::ShadowBoundingBoxes => P::ShadowBoundingBoxes,
+            Planted::SunFarPointLight => P::SunFarPointLight,
+            Planted::ShadowInsideOutline => P::ShadowInsideOutline,
+            Planted::ShadowRemovesAmbient => P::ShadowRemovesAmbient,
+            Planted::ShadowEdgeAliased => P::ShadowEdgeAliased,
+            Planted::NormalFlippedGreen => P::NormalFlippedGreen,
+            Planted::NormalDotAlone => P::NormalDotAlone,
+            Planted::NormalUnturned => P::NormalUnturned,
+            Planted::LightStaleHeight => P::LightStaleHeight,
+            Planted::SliceShiftSeededByFrame => P::SliceShiftSeededByFrame,
+            Planted::InvertOnPremultiplied => P::InvertOnPremultiplied,
+            Planted::InvertWithoutAlphaGuard => P::InvertWithoutAlphaGuard,
+            Planted::TwirlCenterFromFrameOrigin => P::TwirlCenterFromFrameOrigin,
+            Planted::BlurRadiusInDevicePx => P::BlurRadiusInDevicePx,
+            Planted::KeyKeepsColorAtAlpha0 => P::KeyKeepsColorAtAlpha0,
+            _ => return None,
+        })
+    }
+
     fn parse(name: &str) -> Option<Planted> {
         Some(match name {
             "warms_in_use_at_t0" => Planted::WarmsInUseAtT0,
@@ -571,6 +663,7 @@ impl Planted {
             "lane_adapter_from_configuration" => Planted::LaneAdapterFromConfiguration,
             "absolute_f32_world_positions" => Planted::AbsoluteF32WorldPositions,
             "light_cut_absolute_illuminance" => Planted::LightCutAbsoluteIlluminance,
+            "light_window_squared" => Planted::LightWindowSquared,
             "group_pass_at_layer_end" => Planted::GroupPassAtLayerEnd,
             "group_pass_reads_earlier" => Planted::GroupPassReadsEarlier,
             "group_pass_past_grow" => Planted::GroupPassPastGrow,
@@ -589,6 +682,10 @@ impl Planted {
             "shadow_inside_outline" => Planted::ShadowInsideOutline,
             "shadow_removes_ambient" => Planted::ShadowRemovesAmbient,
             "shadow_edge_aliased" => Planted::ShadowEdgeAliased,
+            "normal_flipped_green" => Planted::NormalFlippedGreen,
+            "normal_dot_alone" => Planted::NormalDotAlone,
+            "normal_unturned" => Planted::NormalUnturned,
+            "light_stale_height" => Planted::LightStaleHeight,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,
@@ -625,6 +722,13 @@ impl Planted {
             "noise_from_frame_counter" => Planted::NoiseFromFrameCounter,
             "noise_from_clock" => Planted::NoiseFromClock,
             "pass_off_by_two" => Planted::PassOffByTwo,
+            "fx_levels_gpu_off_by_two" => Planted::FxLevelsGpuOffByTwo,
+            "slice_shift_seeded_by_frame" => Planted::SliceShiftSeededByFrame,
+            "invert_on_premultiplied" => Planted::InvertOnPremultiplied,
+            "invert_without_alpha_guard" => Planted::InvertWithoutAlphaGuard,
+            "twirl_center_from_frame_origin" => Planted::TwirlCenterFromFrameOrigin,
+            "blur_radius_in_device_px" => Planted::BlurRadiusInDevicePx,
+            "key_keeps_color_at_alpha_0" => Planted::KeyKeepsColorAtAlpha0,
             "bloom_without_karis" => Planted::BloomWithoutKaris,
             "passes_one_gpu" => Planted::PassesOneGpu,
             "haze_feeds_check_readback" => Planted::HazeFeedsCheckReadback,
@@ -649,6 +753,8 @@ impl Planted {
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
             "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
+            "mirror_halves_twice" => Planted::MirrorHalvesTwice,
+            "mirror_samples_full_frame" => Planted::MirrorSamplesFullFrame,
             "coc_linear_in_distance" => Planted::CocLinearInDistance,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
@@ -683,6 +789,8 @@ impl Planted {
             "puff_block_copy" => Planted::PuffBlockCopy,
             "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
+            "grid_keeps_previous_step" => Planted::GridKeepsPreviousStep,
+            "grid_role_before_rebuild" => Planted::GridRoleBeforeRebuild,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
@@ -701,6 +809,9 @@ impl Planted {
             "inherit_previous_frame" => Planted::InheritPreviousFrame,
             "bounds_bind_pose" => Planted::BoundsBindPose,
             "trail_appends_per_frame" => Planted::TrailAppendsPerFrame,
+            "anchor_kept_from_frame" => Planted::AnchorKeptFromFrame,
+            "trail_reads_stored_steps" => Planted::TrailReadsStoredSteps,
+            "wake_keeps_last_frame" => Planted::WakeKeepsLastFrame,
             "particles_follow_arrows" => Planted::ParticlesFollowArrows,
             "axes_mod_applies_transform" => Planted::AxesModAppliesTransform,
             "axes3d_own_tick_rule" => Planted::Axes3dOwnTickRule,
@@ -749,6 +860,8 @@ impl Planted {
             "halftone_pop_takes_dot_passes" => Planted::HalftonePopTakesDotPasses,
             "ink_fill_flat" => Planted::InkFillFlat,
             "rim_keeps_first" => Planted::RimKeepsFirst,
+            "live_passes_no_page" => Planted::LivePassesNoPage,
+            "reuse_drops_page" => Planted::ReuseDropsPage,
             "drops_clouds" => Planted::DropsClouds,
             "add_writes_depth" => Planted::AddWritesDepth,
             "add_skips_depth_test" => Planted::AddWithoutDepthTest,
@@ -788,6 +901,11 @@ impl Planted {
             "one_mirror_per_frame" => Planted::OneMirrorPerFrame,
             "one_light_cut_per_frame" => Planted::OneLightCutPerFrame,
             "inset_premultiplied_as_straight" => Planted::InsetPremultipliedAsStraight,
+            "clamp_each_axis" => Planted::ClampEachAxis,
+            "clamp_unmirrored_behind" => Planted::ClampUnmirroredBehind,
+            "clamp_to_frame" => Planted::ClampToFrame,
+            "edge_from_previous_frame" => Planted::EdgeFromPreviousFrame,
+            "leader_draws_while_clamped" => Planted::LeaderDrawsWhileClamped,
             "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
             "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
             "band_masks_independent" => Planted::BandMasksIndependent,
@@ -872,7 +990,11 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
-            _ => return None,
+            "raster_lists_nothing" => Planted::RasterListsNothing,
+            _ => {
+                let planted = deep_canvas_scene3d::spans::PLANTED;
+                Planted::HiddenLines(planted.iter().find(|p| p.0 == name)?.0)
+            }
         })
     }
 }
@@ -922,6 +1044,11 @@ pub fn refused(code: &str, reason: impl Into<String>) -> Value {
 }
 
 impl App {
+    /// The app's planted program as the compositor's render crate names it (#1561).
+    pub(crate) fn composed(&self) -> Option<deep_groups_render::Planted> {
+        self.planted.and_then(Planted::composed)
+    }
+
     pub fn scene(&mut self, path: &str) -> Result<Arc<Scene>, Value> {
         if let Some(s) = self.scenes.get(path) {
             return Ok(s.clone());
@@ -1156,38 +1283,6 @@ impl App {
         }
     }
 }
-
-/// The counting allocator (issue #379, `test-meter` builds only): every allocation is offered to
-/// the core's count, which keeps only the frame path's own.
-#[cfg(feature = "test-meter")]
-struct Counting;
-
-#[cfg(feature = "test-meter")]
-// SAFETY: every call passes straight to the system allocator.
-unsafe impl std::alloc::GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.alloc(layout) }
-    }
-
-    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.alloc_zeroed(layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.realloc(ptr, layout, size) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-        unsafe { std::alloc::System.dealloc(ptr, layout) }
-    }
-}
-
-#[cfg(feature = "test-meter")]
-#[global_allocator]
-static COUNTING: Counting = Counting;
 
 fn bad_input() -> ! {
     println!("{}", json!({"ok": false, "code": "bad_input"}));

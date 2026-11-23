@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { pkg, requestId } from '../../../tests/acceptance/363/helpers.ts';
 import { hubWorld, REPO, type HubWorld, type Line } from '../../../tests/acceptance/363/hub.ts';
 import { CODES } from '../src/codes.js';
-import { actionToolList } from '../src/tools.js';
+import { actionToolList, instructionsFor } from '../src/tools.js';
 
 const HOOK = join(REPO, 'target/debug/deep-hook');
 const SERVERS = { node: [process.execPath, join(REPO, 'packages/cli/dist/main.js'), 'mcp', 'actions'], rust: [HOOK, 'mcp', 'actions'] } as const;
@@ -45,9 +45,9 @@ beforeAll(async () => {
 }, 240_000);
 
 describe('deep-hook mcp actions answers as deep mcp actions does', () => {
-  it('its data file is the hub\'s action tools and codes', () => {
+  it('its data file is the hub\'s action tools, codes and instructions', () => {
     const file = JSON.parse(readFileSync(join(REPO, 'crates/deep-hook/src/actions.json'), 'utf8'));
-    expect(file, 'run node scripts/actions-server.mjs after building the hub, and rebuild deep-hook').toEqual({ tools: actionToolList(), codes: CODES });
+    expect(file, 'run node scripts/actions-server.mjs after building the hub, and rebuild deep-hook').toEqual({ tools: actionToolList(), codes: CODES, instructions: instructionsFor('deep-actions') });
   });
 
   it.each([

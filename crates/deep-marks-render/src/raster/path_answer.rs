@@ -52,8 +52,17 @@ pub fn path_answer(
                 .get(&req.item)
                 .and_then(deep_canvas_marks::light::evaluated)
             {
-                let shown = match (&before, req.planted == Planted::LightStaleList) {
-                    (Some(kept), true) => kept.clone(),
+                let shown = match (&before, req.planted) {
+                    (Some(kept), Planted::LightStaleList) => kept.clone(),
+                    // #2053's twin: each light's height kept from the frame before.
+                    (Some(kept), Planted::LightStaleHeight) => {
+                        let mut shown = light.clone();
+                        let lights = shown["lights"].as_array_mut().into_iter().flatten();
+                        for (k, l) in lights.enumerate() {
+                            l["height"] = kept["lights"][k]["height"].clone();
+                        }
+                        shown
+                    }
                     _ => light.clone(),
                 };
                 before = Some(light);
@@ -156,5 +165,29 @@ pub fn path_answer(
     };
     match run() {
         Ok(v) | Err(v) => v,
+    }
+}
+
+/// A `path` line's planted value, or `None` for one the surface doesn't name.
+pub fn planted_path(name: &str) -> Option<Planted> {
+    const OPS: [&str; 7] = [
+        "trim",
+        "round_corners",
+        "offset_path",
+        "zigzag",
+        "pucker",
+        "twist",
+        "repeater",
+    ];
+    match name {
+        deep_canvas_marks::warp::ANCHORS_ONLY => Some(Planted::WarpAnchorsOnly),
+        "merge_zero_fills" => Some(Planted::MergeZeroFills),
+        "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
+        "light_stale_list" => Some(Planted::LightStaleList),
+        "light_stale_height" => Some(Planted::LightStaleHeight),
+        _ => {
+            let op = name.strip_prefix("moved:")?;
+            OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))
+        }
     }
 }

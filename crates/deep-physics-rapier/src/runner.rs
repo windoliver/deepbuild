@@ -36,7 +36,9 @@ pub mod contact;
 mod dims;
 pub mod fast;
 mod held;
+mod join;
 pub mod kit;
+pub mod laws;
 pub mod links;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
@@ -95,6 +97,8 @@ pub struct Run {
     vehicle: crate::VehiclePlant,
     /// #2240's planted check or output.
     centre: centre::Plant,
+    /// #2371's twin: a track keeps both of two `set`s of one target and path on one step.
+    set_applies_both: bool,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -315,15 +319,6 @@ impl Track {
     fn json(&self) -> Value {
         Value::Array(self.entries.iter().map(Entry::json).collect())
     }
-
-    /// The call's `track` (absent: none), resolved against `w`, or the reply refusing an entry.
-    fn read(w: &World, call: &Value) -> Result<Track, Value> {
-        let t = call.get("track").unwrap_or(&Value::Null);
-        if t.is_null() {
-            return Ok(Track::default());
-        }
-        track::read(w, t).map(Track::of).map_err(|r| refused(&[*r]))
-    }
 }
 
 /// What one run steps and takes besides its hashes.
@@ -374,6 +369,8 @@ struct Trace {
     vehicles: Map<String, Value>,
     wheels: BTreeMap<String, Vec<Vec<f64>>>,
     posed: BTreeMap<String, String>,
+    /// #2035: by body, each state a place's step ended in (cut.rs).
+    cuts: deep_canvas_physics::cut::Cuts,
 }
 
 /// What a run's world reads of its scene over `steps` steps, as its bake key holds it: `[]` when
@@ -472,6 +469,7 @@ impl Run {
             ccd_on_kinematic: false,
             vehicle: crate::VehiclePlant::None,
             centre: centre::Plant::None,
+            set_applies_both: false,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -501,6 +499,7 @@ impl Run {
             Some("solve_cap_reports_success") => run.twin = Twin::SolveCapSuccess,
             Some("mass_ratio_declared_only") => run.declared_masses_only = true,
             Some("volume_without_constraint") => run.no_volume = true,
+            Some("set_applies_both") => run.set_applies_both = true,
             Some(name)
                 if !kit::planted(name, &mut run)
                     && !vehicle::planted(name, &mut run)
@@ -509,7 +508,8 @@ impl Run {
                     && !centre::planted(name, &mut run)
                     && !fast::planted(name, &mut run)
                     && !dims::planted(name, &mut run)
-                    && !links::planted(name, &mut run) =>
+                    && !links::planted(name, &mut run)
+                    && !laws::planted(name, &mut run) =>
             {
                 return None
             }
@@ -592,7 +592,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = links::check(v, self).map_err(refused)?;
+        let w = laws::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -637,6 +637,7 @@ impl Run {
         let c = b.canonical();
         let joints = b.joints();
         t.step_hashes.push(self.hash(&c, &joints));
+        deep_canvas_physics::cut::note(&mut t.cuts, &b.placed, k);
         let bodies = c.iter().filter(|x| x.values.len() == FIELDS.len());
         t.fast
             .step(k, bodies.map(|x| (x.id.as_str(), x.values.as_slice())));
@@ -796,13 +797,11 @@ impl Run {
             steps,
             Some(&self.build.target),
         );
-        let mut outputs = bake::outputs(&t.positions, &t.readings, rate, frame, w.step_rate, steps);
-        vehicle::outputs(&mut outputs, t, frame, w);
         let rank = occurrence::ranks(w);
         t.shaped = shape_uses(&t.occurrences, w);
         let record = json!({"key": key, "step_hashes": t.step_hashes, "ring": ring(t),
                             "checkpoints": t.ring.kept.iter().map(|k| checkpoint(&k.checkpoint)).collect::<Vec<_>>(),
-                            "outputs": outputs, "positions": t.positions, "values": t.values, "track": track,
+                            "outputs": vehicle::outputs(self, t, (rate, frame), w, steps), "positions": t.positions, "values": t.values, "track": track,
                             "occurrences": occurrence::listed(&t.occurrences),
                             "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
         (key, record)
@@ -817,7 +816,7 @@ impl Run {
                 match self
                     .subject(call)?
                     .and_then(|(world, _)| self.build(&world))
-                    .and_then(|(w, b)| Track::read(&w, call).map(|_| (w, b)))
+                    .and_then(|(w, b)| self.track(&w, call).map(|_| (w, b)))
                 {
                     Ok((w, b)) => {
                         let (soft, backend) = held::held(&w, &b.held());
@@ -841,7 +840,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match self.build(&world).and_then(|(w, _)| Track::read(&w, call)) {
+                let track = match self.build(&world).and_then(|(w, _)| self.track(&w, call)) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -901,6 +900,10 @@ impl Run {
                     if !t.vehicles.is_empty() {
                         reply["vehicles"] = Value::Object(t.vehicles);
                     }
+                    // #2288: the frame of each moved or turned instancer an output writes.
+                    if let Some(s) = scene.as_ref().filter(|s| !s.frames.is_empty()) {
+                        reply["frames"] = Value::Object(s.frames.clone());
+                    }
                     reply
                 }))
             }
@@ -917,7 +920,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match Track::read(&w, call) {
+                let track = match self.track(&w, call) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -1001,7 +1004,7 @@ impl Run {
                     .iter()
                     .map(Value::as_str)
                     .collect::<Option<_>>()?;
-                let track = match self.build(world).and_then(|(w, _)| Track::read(&w, call)) {
+                let track = match self.build(world).and_then(|(w, _)| self.track(&w, call)) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -1069,7 +1072,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match Track::read(&w, call) {
+                let track = match self.track(&w, call) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -1358,60 +1361,8 @@ impl Run {
     }
 }
 
-/// The wasm32 build's entry (issue #2012): the runner as a module with no imports, one call line in, one reply line
-/// out, through its own memory. `deep_physics_alloc(len)` gives room for a call's UTF-8; `deep_physics_call(ptr, len)`
-/// answers it, takes the call's room back, and returns the reply's room as `ptr << 32 | len`, which
-/// `deep_physics_free(ptr, len)` gives back.
 #[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::Run;
-
-    fn leak(mut bytes: Vec<u8>) -> *mut u8 {
-        bytes.shrink_to_fit();
-        let p = bytes.as_mut_ptr();
-        std::mem::forget(bytes);
-        p
-    }
-
-    #[no_mangle]
-    pub extern "C" fn deep_physics_alloc(len: usize) -> *mut u8 {
-        leak(vec![0; len])
-    }
-
-    /// # Safety
-    /// `ptr` and `len` are a room `deep_physics_alloc` or `deep_physics_call` gave, not yet given back.
-    #[no_mangle]
-    pub unsafe extern "C" fn deep_physics_free(ptr: *mut u8, len: usize) {
-        // SAFETY: the caller gives back a room this module leaked with exactly this length and capacity.
-        drop(unsafe { Vec::from_raw_parts(ptr, len, len) });
-    }
-
-    /// One step of the world `time_build` built, for a page that times it on its own clock: 1, or 0 without one.
-    #[no_mangle]
-    pub extern "C" fn deep_physics_step() -> u32 {
-        u32::from(super::timed_step())
-    }
-
-    /// Notes the step's most-tested pair, outside the timed step.
-    #[no_mangle]
-    pub extern "C" fn deep_physics_note() {
-        super::timed_note();
-    }
-
-    /// # Safety
-    /// `ptr` and `len` are a room `deep_physics_alloc` gave, holding the call's UTF-8.
-    #[no_mangle]
-    pub unsafe extern "C" fn deep_physics_call(ptr: *mut u8, len: usize) -> u64 {
-        // SAFETY: as `deep_physics_free`; the room is taken back here.
-        let call = unsafe { Vec::from_raw_parts(ptr, len, len) };
-        let reply = match (Run::new(None), std::str::from_utf8(&call)) {
-            (Some(run), Ok(line)) => run.line(line),
-            _ => super::BAD_INPUT.to_string(),
-        };
-        let n = reply.len();
-        (leak(reply.into_bytes()) as u64) << 32 | n as u64
-    }
-}
+mod wasm;
 
 /// #525: a world its scene steps one step at a time while sound plays, each step the bake's own
 /// (its scene's targets, the inputs its track derives, its rows sorted), so a live world's list

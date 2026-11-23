@@ -4,7 +4,8 @@
 import { spawnSync } from 'node:child_process';
 import { lstatSync } from 'node:fs';
 import { basename, dirname, join, posix } from 'node:path';
-import { APPROVERS, blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, relativeImports, removedLines, resolveModule, RUNNER_CONFIG, show, signersIn, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
+import { LANE_FILE } from './lanes.mjs';
+import { APPROVERS, blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, readAll, relativeImports, removedLines, resolveModule, RUNNER_CONFIG, show, signersIn, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
 
 const FIX = 'Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.';
 // Your decisions: the four invariants in AGENTS.md, and each row of the tables under Decisions.
@@ -12,14 +13,14 @@ const DECISIONS = {
   'AGENTS.md': { heading: '## The four invariants', what: 'one of the four invariants', row: () => true },
   'docs/technical-design.md': { heading: '## Decisions', what: 'a row under Decisions', row: (line) => line.startsWith('|') },
 };
-// The proof lanes' own code, lanes.mjs, which names the test paths and the timed tests, the throttle, perf, the
+// The proof lanes' own code, lanes.mjs and its lists in lanes-lists.mjs, which name the test paths and the timed tests, the throttle, perf, the
 // budget window and benchmark.mjs's judges, which decide when a budget counts, affected.mjs, which decides which tests a change runs, the bays and the shards, which decide what
 // a proof's build reuses: once main holds the lanes, the change runs its own copy of them, so an edit of them is an
 // edit of the checks. So is an edit of a test runner's config (RUNNER_CONFIG), which can stub the code under test
 // only where it finds the change. The x86_64 lane and its image pin decide which replay counts as another machine.
 // main-watch.mjs decides whether landings pause and which landing broke main, and known-failures-check.mjs whether a
 // listed failure may stand.
-const LANES_CODE = /^scripts\/(?:(?:proof[^/]*|lanes|throttle|perf|budget-window|benchmark|affected|bays|shards|lane-x86|main-watch|known-failures-check)\.mjs|lane-x86\.json)$/;
+const LANES_CODE = /^scripts\/(?:(?:proof[^/]*|lanes|lanes-lists|throttle|perf|budget-window|benchmark|affected|bays|shards|lane-x86|main-watch|known-failures-check)\.mjs|lane-x86\.json)$/;
 // The skips the lanes let stand are a decision of the same weight, so that key is guarded: any change to it.
 const SKIPS_FILE = 'scripts/known-failures.json';
 const skipsIn = (text) => {
@@ -139,9 +140,25 @@ const listEdit = (before, after) => {
   return [added.length && `adds ${added.join(', ')}`, removed.length && `removes ${removed.join(', ')}`].filter(Boolean).join(' and ') || 'changes it';
 };
 
+/** Why a suite's lane file isn't `{ "alone": true, "why": "<reason>" }` (lanes.mjs, LANE_FILE), or null when it is. */
+function laneFileProblem(text) {
+  let lane;
+  try {
+    lane = JSON.parse(text);
+  } catch {
+    return 'it is not JSON';
+  }
+  if (!lane || typeof lane !== 'object' || Array.isArray(lane)) return 'it is not a JSON object';
+  const others = Object.keys(lane).filter((key) => key !== 'alone' && key !== 'why');
+  if (others.length) return `it says ${others.map((key) => JSON.stringify(key)).join(', ')}, and a lane file may say only "alone" and "why"`;
+  if (lane.alone !== true) return 'its "alone" is not true';
+  if (typeof lane.why !== 'string' || !lane.why.trim()) return 'it gives no "why"';
+  return null;
+}
+
 export function guard({ root, change, issue }, approvals, say) {
-  // With an issue, the guard keeps its tags; with none, every tag.
-  const relevant = (text) => tagsIn(text).filter((tag) => !issue?.number || tag.startsWith(`#${issue.number}.`));
+  // Every tag, whatever issue the change names (#2487): another issue's tagged test is as guarded as its own.
+  const relevant = tagsIn;
   let refused = 0;
   // A key that signs with no person there approves nothing, and the list the change leaves holds none.
   for (const why of approvals.refused ?? []) {
@@ -168,6 +185,11 @@ export function guard({ root, change, issue }, approvals, say) {
     const folder = path.split('/').slice(0, at).join('/');
     return scripts.some((script) => folder === '' || script.startsWith(`${folder}/`));
   };
+  // A suite's lane file (#1327): a new one lands with its own issue's suite, in the shape lanes.mjs reads, with no
+  // approval, since it can only make a run stricter; a landed one is a check, guarded as a test is.
+  // Folded as a disk that ignores case folds it, which reads tests/Acceptance/1/lane.jſon as tests/acceptance/1/lane.json.
+  const fold = (path) => path.normalize('NFKC').toUpperCase().toLowerCase();
+  const isLaneFile = (path) => /^tests\/acceptance\/(?:.*\/)?lane\.json$/.test(fold(path));
   const isCheck = (path) => LANES_CODE.test(path) || RUNNER_CONFIG.test(path) || configNamed.has(path);
   const checkEdit = (path, how) => ({ detail: `${path}: ${LANES_CODE.test(path) ? "the proof lanes' own code" : RUNNER_CONFIG.test(path) ? "the test runner's config" : "a file the test runner's config names"} changed${how}` });
   for (const commit of change.commits) {
@@ -185,6 +207,24 @@ export function guard({ root, change, issue }, approvals, say) {
     };
     for (const path of commit.merge?.conflicts ?? []) for (const edit of conflictEdits(root, commit, path, relevant)) judge(edit, path, ...edit.test ? [named(path, edit.test)] : []);
     if (lanesOnMain) for (const path of (commit.merge?.conflicts ?? []).filter(isCheck)) judge(checkEdit(path, ' in resolving a merge conflict'), path);
+    // A suite's lane file: one landed on main is a check, as a test is; one the change adds or edits must have the one
+    // shape lanes.mjs reads, which no approval changes, and a new one lands only in the folder of the issue the change names.
+    const laneEdits = (path, edited, how) => {
+      const landed = show(root, change.base, path) !== null, text = show(root, commit.sha, path);
+      if (landed && edited) judge({ detail: `${path}: a landed suite's lane file ${text === null ? 'removed' : 'changed'}${how}` }, path);
+      if (text === null) return;
+      // A name a disk that folds case reads as tests/acceptance/<issue>/lane.json is refused even approved, as is a wrong
+      // shape there; anywhere else lanes.mjs never reads it.
+      const problem = laneFileProblem(text), folder = LANE_FILE.exec(path)?.[1], read = LANE_FILE.test(fold(path));
+      if (read && !folder) judge({ detail: `${path}: a lane file named other than exactly ${fold(path)}, which a disk that folds case reads in its place${how}`, hard: true }, path);
+      else if (problem && read) judge({ detail: `${path}: a suite's lane file refused${how}, since ${problem}`, hard: true }, path);
+      else if (landed) return;
+      else if (!folder) judge({ detail: `${path}: a lane file lanes.mjs never reads, since it reads only tests/acceptance/<issue>/lane.json` }, path);
+      else if (folder !== String(issue?.number)) judge({ detail: `${path}: a lane file in #${folder}'s folder, added by a change ${issue?.number ? `that names #${issue.number}` : 'that names no issue'}; a new one lands only with its own issue's suite` }, path);
+      // A landed suite's tests run where they ran: alone, a test that fails only beside the parallel block would pass.
+      else if (git(root, ['ls-tree', '--name-only', change.base, '--', `tests/acceptance/${folder}/`]).trim()) judge({ detail: `${path}: a lane file added to tests/acceptance/${folder}/, whose files landed before it; a new one lands only with its suite` }, path);
+    };
+    for (const path of (commit.merge?.conflicts ?? []).filter(isLaneFile)) laneEdits(path, true, ' in resolving a merge conflict');
     if (commit.merge?.conflicts.includes(APPROVERS)) judge({ detail: `${APPROVERS}: changed in resolving a merge conflict` }, APPROVERS);
     // A conflict's resolution keeps either side's list, or it is an edit of its own.
     if (lanesOnMain && commit.merge?.conflicts.includes(SKIPS_FILE) && !commit.merge.parents.some((parent) => skipsIn(show(root, parent, SKIPS_FILE)) === skipsIn(show(root, commit.sha, SKIPS_FILE)))) judge({ detail: `${SKIPS_FILE}: the skips key changed in resolving a merge conflict` }, SKIPS_FILE);
@@ -220,6 +260,7 @@ export function guard({ root, change, issue }, approvals, say) {
           for (const edit of fixtureEdits(root, commit, { path: shadowed, status: 'D', hunks: [] }, show(root, commit.parent, shadowed), relevant)) judge({ ...edit, detail: edit.detail.replace(`${shadowed}: deleted`, `${shadowed}: ${how.slice(2)}`) }, file.path, shadowed);
         }
       }
+      if (isLaneFile(file.path)) laneEdits(file.path, file.status === 'D' || file.hunks.length > 0, '');
       if (before === null) continue; // an added file removes nothing
       if (isTestFile(file.path)) for (const edit of testEdits(root, commit, file, before, relevant)) judge(edit, file.path, ...edit.test ? [named(file.path, edit.test)] : []);
       else if (underTestPaths(file.path)) for (const edit of fixtureEdits(root, commit, file, before, relevant)) judge(edit, file.path);
@@ -501,7 +542,9 @@ function winnable(root, rev, held) {
   const names = [basename(stem), ...(/\.[cm]?tsx?$/.test(held) ? ['.js', '.mjs', '.cjs', '.jsx'].map((extension) => basename(stem) + extension) : []), ...(basename(stem) === 'index' ? [basename(dirname(stem))] : [])];
   const grep = spawnSync('git', ['grep', '-l', '-F', ...names.flatMap((name) => ['-e', name]), rev, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
   const specifier = RegExp(`['"\`/](?:${names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})['"\`]`);
-  return grep.stdout.split('\n').filter(Boolean).some((hit) => specifier.test(show(root, rev, hit.slice(rev.length + 1)) ?? ''));
+  const hits = grep.stdout.split('\n').filter(Boolean).map((hit) => hit.slice(rev.length + 1));
+  readAll(root, rev, hits);
+  return hits.some((file) => specifier.test(show(root, rev, file) ?? ''));
 }
 
 // The tagged tests whose span, or whose file, names the fixture's path, from the repo root or the
@@ -512,8 +555,9 @@ function readersOf(root, rev, path, relevant, seen = new Set([path])) {
   const stem = SCRIPT.test(path) ? path.replace(SCRIPT, '') : null;
   const grep = spawnSync('git', ['grep', '-l', '-F', '-e', basename(stem ?? path), '-e', basename(dirname(path)), rev, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
   const readers = [];
-  for (const hit of grep.stdout.split('\n').filter(Boolean)) {
-    const file = hit.slice(rev.length + 1);
+  const hits = grep.stdout.split('\n').filter(Boolean).map((hit) => hit.slice(rev.length + 1));
+  readAll(root, rev, hits.filter((file) => !seen.has(file) && underTestPaths(file)));
+  for (const file of hits) {
     if (seen.has(file) || !underTestPaths(file)) continue;
     const source = show(root, rev, file);
     const relative = posix.relative(dirname(file), path);

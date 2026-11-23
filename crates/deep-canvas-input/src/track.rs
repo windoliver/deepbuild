@@ -115,69 +115,214 @@ impl Entry {
     }
 }
 
+/// Entries a chunk of the kept track holds: the track grows a chunk at a time, so what it holds
+/// past its entries is under one chunk.
+const CHUNK: usize = 4096;
+
+/// A kept value's kind, in a kept entry's `flags` bits 0–1.
+const POS: u8 = 0;
+const NEG: u8 = 1;
+const FLOAT: u8 = 2;
+/// A value that isn't a number, or an entry with samples: kept in `others` by its index.
+const OTHER: u8 = 3;
+const SERIAL: u8 = 1 << 2;
+const PLAYER: u8 = 1 << 3;
+
+/// One entry as the track keeps it, in 32 bytes (#1250: a 60-minute play's track as a held key
+/// writes it, an entry a step, kept in under 8 MiB; canvas primitives: Input track, "about 32 B
+/// per entry").
+#[derive(Clone, Copy, Debug, Default)]
+struct Kept {
+    t: i64,
+    /// The value: an u64, an i64 or an f64's bits, by the kind in `flags`.
+    bits: u64,
+    seq: u32,
+    serial: u32,
+    control: u16,
+    writer: u8,
+    player: u8,
+    flags: u8,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Track {
-    entries: Vec<Entry>,
-    /// Each control's entries, as indexes into `entries`, in time order.
-    by_control: BTreeMap<String, Vec<usize>>,
+    chunks: Vec<Vec<Kept>>,
+    len: usize,
+    /// Each control's name, by the ID its entries keep.
+    names: Vec<String>,
+    ids: BTreeMap<String, u16>,
+    /// Each control's entries, as indexes into the track, in time order, by control ID.
+    by_control: Vec<Vec<u32>>,
+    /// Each entry whose value isn't a number, or that has samples, by its index.
+    others: BTreeMap<u32, (Value, Option<Vec<Sample>>)>,
     pub fork_at: Option<i64>,
 }
 
+fn writer_of(w: Writer) -> u8 {
+    match w {
+        Writer::You => 0,
+        Writer::Tour => 1,
+        Writer::Agent => 2,
+        Writer::Peer => 3,
+    }
+}
+
+fn writer_from(w: u8) -> Writer {
+    match w {
+        1 => Writer::Tour,
+        2 => Writer::Agent,
+        3 => Writer::Peer,
+        _ => Writer::You,
+    }
+}
+
 impl Track {
-    pub fn entries(&self) -> &[Entry] {
-        &self.entries
+    fn kept(&self, i: usize) -> &Kept {
+        &self.chunks[i / CHUNK][i % CHUNK]
+    }
+
+    fn t_at(&self, i: usize) -> i64 {
+        self.kept(i).t
+    }
+
+    /// The first index whose entry is past `t`.
+    fn after(&self, t: i64) -> usize {
+        let (mut lo, mut hi) = (0, self.len);
+        while lo < hi {
+            let mid = (lo + hi) / 2;
+            if self.t_at(mid) <= t {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        lo
+    }
+
+    /// Entry `i` as the track's readers take it.
+    fn entry(&self, i: usize) -> Entry {
+        let k = self.kept(i);
+        let (value, samples) = match k.flags & 3 {
+            POS => (json!(k.bits), None),
+            NEG => (json!(k.bits as i64), None),
+            FLOAT => (
+                serde_json::Number::from_f64(f64::from_bits(k.bits))
+                    .map_or(Value::Null, Value::Number),
+                None,
+            ),
+            _ => self
+                .others
+                .get(&(i as u32))
+                .cloned()
+                .unwrap_or((Value::Null, None)),
+        };
+        Entry {
+            t: k.t,
+            seq: k.seq,
+            control: self.names[usize::from(k.control)].clone(),
+            value,
+            samples,
+            writer: writer_from(k.writer),
+            serial: (k.flags & SERIAL != 0).then_some(k.serial),
+            player: (k.flags & PLAYER != 0).then_some(k.player),
+        }
+    }
+
+    /// Entry `i`, as the track's readers take it.
+    pub fn get(&self, i: usize) -> Option<Entry> {
+        (i < self.len).then(|| self.entry(i))
+    }
+
+    /// The entries in order, as the track's readers take them.
+    pub fn entries(&self) -> Vec<Entry> {
+        (0..self.len).map(|i| self.entry(i)).collect()
     }
 
     pub fn len(&self) -> usize {
-        self.entries.len()
+        self.len
     }
 
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.len == 0
     }
 
     /// The last entry's flick, the live edge a tour writes past.
     pub fn last_t(&self) -> Option<i64> {
-        self.entries.last().map(|e| e.t)
+        self.len.checked_sub(1).map(|i| self.t_at(i))
     }
 
     /// Appends `e` at its flick: the entries after it are dropped, which forks the track there.
     /// Returns how many were dropped.
-    pub fn append(&mut self, mut e: Entry) -> usize {
-        let keep = self.entries.partition_point(|x| x.t <= e.t);
+    pub fn append(&mut self, e: Entry) -> usize {
+        let keep = self.after(e.t);
         let dropped = self.drop_after(keep);
         if dropped > 0 {
             self.fork_at = Some(e.t);
         }
-        e.seq = self.entries[..keep]
-            .iter()
-            .rev()
-            .take_while(|x| x.t == e.t)
-            .count() as u32;
-        self.by_control
-            .entry(e.control.clone())
-            .or_default()
-            .push(self.entries.len());
-        self.entries.push(e);
+        let seq = (0..keep).rev().take_while(|&i| self.t_at(i) == e.t).count() as u32;
+        let control = match self.ids.get(&e.control) {
+            Some(id) => *id,
+            None => {
+                let id = self.names.len() as u16;
+                self.names.push(e.control.clone());
+                self.ids.insert(e.control.clone(), id);
+                self.by_control.push(Vec::new());
+                id
+            }
+        };
+        let i = self.len;
+        let number = e.value.as_number().filter(|_| e.samples.is_none());
+        let (bits, kind) = match number {
+            Some(n) if n.is_u64() => (n.as_u64().unwrap_or(0), POS),
+            Some(n) if n.is_i64() => (n.as_i64().unwrap_or(0) as u64, NEG),
+            Some(n) => (n.as_f64().unwrap_or(0.0).to_bits(), FLOAT),
+            None => {
+                self.others.insert(i as u32, (e.value, e.samples));
+                (0, OTHER)
+            }
+        };
+        let kept = Kept {
+            t: e.t,
+            bits,
+            seq,
+            serial: e.serial.unwrap_or(0),
+            control,
+            writer: writer_of(e.writer),
+            player: e.player.unwrap_or(0),
+            flags: kind
+                | if e.serial.is_some() { SERIAL } else { 0 }
+                | if e.player.is_some() { PLAYER } else { 0 },
+        };
+        if self.chunks.last().is_none_or(|c| c.len() == CHUNK) {
+            self.chunks.push(Vec::with_capacity(CHUNK));
+        }
+        self.chunks.last_mut().expect("a chunk").push(kept);
+        self.by_control[usize::from(control)].push(i as u32);
+        self.len += 1;
         dropped
     }
 
     /// Drops every entry from index `keep` on; the count dropped.
     fn drop_after(&mut self, keep: usize) -> usize {
-        let dropped = self.entries.len() - keep;
+        let dropped = self.len - keep;
         if dropped > 0 {
-            self.entries.truncate(keep);
-            for list in self.by_control.values_mut() {
-                let k = list.partition_point(|&i| i < keep);
+            self.chunks.truncate(keep.div_ceil(CHUNK));
+            if let Some(last) = self.chunks.last_mut() {
+                last.truncate(keep - (keep - 1) / CHUNK * CHUNK);
+            }
+            self.len = keep;
+            for list in &mut self.by_control {
+                let k = list.partition_point(|&i| (i as usize) < keep);
                 list.truncate(k);
             }
+            self.others.retain(|i, _| (*i as usize) < keep);
         }
         dropped
     }
 
     /// The planted transport's scrub: drops the entries after `t` as if a seek were an edit.
     pub fn cut_after(&mut self, t: i64) -> usize {
-        let keep = self.entries.partition_point(|x| x.t <= t);
+        let keep = self.after(t);
         let dropped = self.drop_after(keep);
         if dropped > 0 {
             self.fork_at = Some(t);
@@ -185,37 +330,63 @@ impl Track {
         dropped
     }
 
+    fn list(&self, control: &str) -> Option<&Vec<u32>> {
+        self.by_control.get(usize::from(*self.ids.get(control)?))
+    }
+
     /// `control`'s last entry at or before `t`, by binary search over its own entries.
-    pub fn last_at(&self, control: &str, t: i64) -> Option<&Entry> {
-        let list = self.by_control.get(control)?;
-        let k = list.partition_point(|&i| self.entries[i].t <= t);
-        k.checked_sub(1).map(|k| &self.entries[list[k]])
+    pub fn last_at(&self, control: &str, t: i64) -> Option<Entry> {
+        let list = self.list(control)?;
+        let k = list.partition_point(|&i| self.t_at(i as usize) <= t);
+        k.checked_sub(1).map(|k| self.entry(list[k] as usize))
     }
 
     /// The planted lookup: the same answer by scanning the whole track. `last` walks every entry,
     /// which is the plant, so it stays.
     #[allow(clippy::double_ended_iterator_last)]
-    pub fn last_at_scanning(&self, control: &str, t: i64) -> Option<&Entry> {
-        self.entries
-            .iter()
+    pub fn last_at_scanning(&self, control: &str, t: i64) -> Option<Entry> {
+        (0..self.len)
+            .map(|i| self.entry(i))
             .filter(|e| e.control == control && e.t <= t)
             .last()
     }
 
     /// How many of `control`'s entries are at or before `t`.
     pub fn count_at(&self, control: &str, t: i64) -> usize {
-        self.by_control
-            .get(control)
-            .map_or(0, |list| list.partition_point(|&i| self.entries[i].t <= t))
+        self.list(control).map_or(0, |list| {
+            list.partition_point(|&i| self.t_at(i as usize) <= t)
+        })
     }
 
     /// `control`'s entries, in time order.
-    pub fn of(&self, control: &str) -> impl Iterator<Item = &Entry> {
-        self.by_control
-            .get(control)
+    pub fn of(&self, control: &str) -> impl Iterator<Item = Entry> + '_ {
+        self.list(control)
             .into_iter()
             .flatten()
-            .map(|&i| &self.entries[i])
+            .map(|&i| self.entry(i as usize))
+    }
+
+    /// #1250: every byte the track holds to keep its entries, their values and its index: its
+    /// chunks as allocated, each control's list of indexes, its names, and each entry kept whole
+    /// beside them, by its JSON's length.
+    pub fn kept_bytes(&self) -> usize {
+        use std::mem::size_of;
+        let chunks: usize = (self.chunks.iter())
+            .map(|c| c.capacity() * size_of::<Kept>() + size_of::<Vec<Kept>>())
+            .sum();
+        let lists: usize = (self.by_control.iter())
+            .map(|l| l.capacity() * size_of::<u32>() + size_of::<Vec<u32>>())
+            .sum();
+        let names: usize = (self.names.iter())
+            .map(|n| 2 * (n.capacity() + size_of::<String>()) + size_of::<u16>())
+            .sum();
+        let others: usize = (self.others.values())
+            .map(|(v, s)| {
+                let samples = s.as_ref().map_or(0, |s| s.len() * size_of::<Sample>());
+                size_of::<(u32, Value, Option<Vec<Sample>>)>() + v.to_string().len() + samples
+            })
+            .sum();
+        size_of::<Track>() + chunks + lists + names + others
     }
 
     /// The track's hash: of [`Track::bytes`].
@@ -227,14 +398,14 @@ impl Track {
     /// a web bundle's track file, so the bundle's track is the app's by hash).
     pub fn bytes(&self) -> Vec<u8> {
         let doc = json!({
-            "entries": self.entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
+            "entries": (0..self.len).map(|i| self.entry(i).to_json()).collect::<Vec<_>>(),
             "fork_at": self.fork_at,
         });
         doc.to_string().into_bytes()
     }
 
     pub fn to_json(&self) -> Value {
-        Value::Array(self.entries.iter().map(Entry::to_json).collect())
+        Value::Array((0..self.len).map(|i| self.entry(i).to_json()).collect())
     }
 }
 
@@ -269,5 +440,46 @@ mod tests {
         assert_eq!(tr.count_at("a", 100), 2);
         assert_eq!(tr.last_at_scanning("a", 15).map(|x| x.t), Some(10));
         assert_ne!(h, Track::default().hash());
+    }
+
+    /// #1250: each value comes back as written, a number of any kind or not, across chunks and a
+    /// fork, and a held key's hour of entries is kept in under 8 MiB.
+    #[test]
+    fn values_come_back_as_written_and_an_hour_of_steps_keeps_in_8_mib() {
+        let mut tr = Track::default();
+        let values = [
+            json!(1),
+            json!(-2),
+            json!(0.25),
+            json!("go"),
+            json!({"set": 1, "key": 2}),
+        ];
+        for (k, v) in values.iter().cycle().take(3 * CHUNK + 7).enumerate() {
+            let mut x = e(k as i64, "a", 0.0);
+            x.value = v.clone();
+            x.player = (k % 2 == 0).then_some(2);
+            tr.append(x);
+        }
+        let all = tr.entries();
+        assert_eq!(all.len(), 3 * CHUNK + 7);
+        for (k, x) in all.iter().enumerate() {
+            assert_eq!(x.value, values[k % values.len()]);
+            assert_eq!(x.player, (k % 2 == 0).then_some(2));
+        }
+        tr.append(e(CHUNK as i64 + 3, "b", 1.5));
+        assert_eq!(tr.len(), CHUNK + 5);
+        assert_eq!(
+            tr.last_at("a", i64::MAX).map(|x| x.value),
+            Some(values[(CHUNK + 3) % 5].clone())
+        );
+        let mut hour = Track::default();
+        for k in 0..216_000_i64 {
+            hour.append(e(k * 11_760_000, "move", ((k / 60) % 5 - 2) as f64));
+        }
+        assert!(
+            hour.kept_bytes() < 8 * 1024 * 1024,
+            "{} bytes",
+            hour.kept_bytes()
+        );
     }
 }

@@ -391,11 +391,25 @@ impl Replica {
                 .min()
                 .filter(|due| *due <= until)
                 .unwrap_or(until);
+            self.read_hub_before(next);
             self.step_to(next);
             self.run_due();
             if next == until {
                 return;
             }
+        }
+    }
+
+    /// Each device's app reads the hub at every tick of its reader after now and before `at`, as the app's loop does
+    /// ([`record::TICK`]): a hub that stopped answering reads as down only once it has been a while (#1461, #3100).
+    fn read_hub_before(&mut self, at: u64) {
+        let tick = record::TICK.as_millis() as u64;
+        let mut read = (self.now / tick + 1) * tick;
+        while read < at {
+            for device in &mut self.devices {
+                device.watch.tick(read, || record::read(Duration::ZERO));
+            }
+            read += tick;
         }
     }
 

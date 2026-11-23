@@ -216,52 +216,7 @@ pub struct Run {
     pub shaped: Arc<Shaped>,
 }
 
-impl Canonical for TextSpec {
-    fn encode(&self, out: &mut Vec<u8>) {
-        self.text.encode(out);
-        self.font.encode(out);
-        self.family.unwrap_or("").encode(out);
-        self.fallback.len().encode(out);
-        for family in &self.fallback {
-            family.encode(out);
-        }
-        self.lang.as_deref().unwrap_or("").encode(out);
-        self.size.encode(out);
-        self.weight.encode(out);
-        self.width.encode(out);
-        self.max_lines.encode(out);
-        self.mask.encode(out);
-        (self.align as u8).encode(out);
-        self.bound.encode(out);
-        // #1964: a run with styled spans; one without encodes as it did before them.
-        if !self.spans.is_empty() {
-            format!("{:?}", self.spans).encode(out);
-        }
-        // #1215: a vertical text's columns; a horizontal one encodes as it did before them.
-        if let deep_text::Flow::Vertical(c) = self.flow {
-            (c.rl, c.upright, c.combine).encode(out);
-            c.height.map(f64::from).encode(out);
-            self.line_height.encode(out);
-        }
-    }
-}
-
-impl Canonical for Run {
-    fn encode(&self, out: &mut Vec<u8>) {
-        self.spec.encode(out);
-        let s = &self.shaped;
-        s.glyphs.len().encode(out);
-        for g in &s.glyphs {
-            (g.font.index, g.size, g.id, g.x, g.y, g.grapheme).encode(out);
-            // #1215: a glyph a vertical run turns; an upright one encodes as before.
-            if g.turn {
-                true.encode(out);
-            }
-        }
-        (s.width, s.height, s.lines, s.ellipsized).encode(out);
-        s.shown.encode(out);
-    }
-}
+mod runs;
 
 /// The text module's shapers: a fixed count, never one taken from the machine, so texts shaping
 /// on several of the scheduler's threads don't wait on one (#857). Each holds only the bundled
@@ -888,7 +843,10 @@ pub fn look_tokens(look: &crate::look::Look) -> BTreeMap<String, Value> {
     // has it, as an entry text's range assumes.
     let fallback = &look.light_type.fallback;
     if !fonts.is_empty() || !fallback.is_empty() {
-        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts, "fallback": fallback }));
+        out.insert(
+            TYPE_TOKEN.into(),
+            json!({ "fonts": fonts, "fallback": fallback }),
+        );
     }
     out
 }
@@ -912,7 +870,9 @@ fn type_of(tokens: &BTreeMap<String, Value>) -> scene::Type {
     }
     let fallback = tokens.get(TYPE_TOKEN).and_then(|t| t.get("fallback"));
     let fallback = fallback.and_then(Value::as_array).into_iter().flatten();
-    ty.fallback = fallback.filter_map(|f| face(f).map(|face| face.family)).collect();
+    ty.fallback = fallback
+        .filter_map(|f| face(f).map(|face| face.family))
+        .collect();
     ty
 }
 
@@ -1261,8 +1221,10 @@ pub fn marks2d_planted(planted: relations::Planted) -> Module {
 #[derive(Debug)]
 pub struct Drawing {
     pub frame: Frame,
-    pub runs: BTreeMap<String, Arc<Run>>,
-    pub animated: BTreeMap<String, Vec<crate::animated::Unit>>,
+    /// Each text's run and each animated text's units, shared with the next frame that replaces
+    /// marks in this one's list (#2660), never copied.
+    pub runs: Arc<BTreeMap<String, Arc<Run>>>,
+    pub animated: Arc<BTreeMap<String, Vec<crate::animated::Unit>>>,
     /// The marks this frame put into its draw list: every mark when it built the list, the
     /// changed items' when it replaced them in the last one (#896).
     pub built: usize,
@@ -1303,7 +1265,7 @@ impl Canonical for Frame {
 
 impl deep_canvas::schedule::Canonical for Drawing {
     fn encode(&self, out: &mut Vec<u8>) {
-        deep_canvas::schedule::Canonical::encode(&(&self.frame, &self.runs, &self.animated), out);
+        deep_canvas::schedule::Canonical::encode(&(&self.frame, &*self.runs, &*self.animated), out);
     }
 }
 
@@ -1747,15 +1709,21 @@ fn item(v: &mut View<'_>) -> Result<(), OpError> {
     v.write("marks2d.item", Val::typed(placed))
 }
 
-/// What a frame reads of the document beside its items: every other member, as written.
-fn envelope_of(doc: &Value) -> Key {
+/// What a frame reads of the document beside its items: every other member, as written. The
+/// revision's own key of them stands in for hashing them again, with the ID, which it leaves out
+/// (#2660).
+fn envelope_of(v: &mut View<'_>, doc: &Value) -> Result<Key, OpError> {
     let mut h = Hasher::new("marks2d.envelope");
+    if let Some(kept) = v.envelope()? {
+        let id = doc.get("id").and_then(Value::as_str).unwrap_or_default();
+        return Ok(h.key(&kept).text(id).finish());
+    }
     for (k, v) in doc.as_object().into_iter().flatten() {
         if k != "items" {
             h.text(k).bytes(&canonical(v));
         }
     }
-    h.finish()
+    Ok(h.finish())
 }
 
 /// The last frame's draw list with the marks of the items whose own marks changed replaced in
@@ -1835,8 +1803,8 @@ fn replaced(v: &mut View<'_>, envelope: Key) -> Result<Option<Drawing>, OpError>
     }
     Ok(Some(Drawing {
         frame,
-        runs: last.runs.clone(),
-        animated: last.animated.clone(),
+        runs: Arc::clone(&last.runs),
+        animated: Arc::clone(&last.animated),
         built,
         damage,
         basis: Some(Basis {
@@ -1886,7 +1854,7 @@ fn warp_time(v: &mut View<'_>) -> Result<(), OpError> {
 /// The frame's draw list from every item's evaluated fields and transform.
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
-    let envelope = envelope_of(doc);
+    let envelope = envelope_of(v, doc)?;
     if let Some(drawing) = replaced(v, envelope)? {
         return v.write("marks2d.frame", Val::typed(drawing));
     }
@@ -1980,7 +1948,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     // #223's twin: a flow that finds its stream table by a vector field's kind.
     let planted = match v.planted() {
         Some(crate::warp::FLOW_BY_KIND) => scene::Planted::WarpFlowByKind,
-        _ => scene::Planted::None,
+        p => crate::atlas::planted(p, &mut items),
     };
     let (frame, basis) = match scene::frame_prebuilt(
         doc,
@@ -2027,8 +1995,8 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         "marks2d.frame",
         Val::typed(Drawing {
             frame,
-            runs,
-            animated,
+            runs: Arc::new(runs),
+            animated: Arc::new(animated),
             built,
             damage: Vec::new(),
             basis,

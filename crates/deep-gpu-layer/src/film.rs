@@ -64,6 +64,9 @@ const FLICKS_PER_SECOND: i64 = 705_600_000;
 pub struct Encoded {
     pub at: Arc<Mutex<Option<(Instant, u64)>>>,
     pub spans: Spans,
+    /// #269: whether the frame's grid images are timed, and what its drawing's grid images did.
+    pub grid_timings: bool,
+    pub grids: Arc<Mutex<Option<deep_marks_render::grid_gpu::GridFrame>>>,
 }
 
 /// A look's light theme as the 2D marks read it: its roles and its type.
@@ -166,6 +169,7 @@ fn marks_at(
 ) -> Result<Marked, Value> {
     program.evaluate(t, eval::Validity::Full, state);
     let mut items = eval::items(doc, program, state);
+    crate::grids2d::fill(doc, &mut items, t);
     // #451: graphs drawn as marks2d's items, and 2D particles as their dots along the curves as
     // laid out at t.
     let mixed = crate::flows2d::lower(doc, &mut items, t, planted, palette)?;
@@ -211,14 +215,15 @@ fn marks_at(
         pinned: t,
         ..Record::default()
     };
-    crate::lightfx::stale(planted, &mut items);
+    crate::lightfx::stale(planted.and_then(Planted::composed), &mut items);
     let frame = scene::frame_planted(
         doc,
         &items,
         (palette, ty),
         &record,
         1.0,
-        crate::lightfx::scene_plant(planted).unwrap_or(scene::Planted::None),
+        crate::lightfx::scene_plant(planted.and_then(Planted::composed))
+            .unwrap_or(scene::Planted::None),
     )
     .map_err(|r| refused(r.code, r.path))?;
     let layers = frame
@@ -233,9 +238,19 @@ fn hex(c: &image::Rgba<u8>) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
-/// A rendered frame's encode ms and GPU ms, its fills and glyph runs, its hash when asked for, and
-/// its bytes when kept.
-type Rendered = (f64, f64, u64, Option<String>, Option<Vec<u8>>);
+/// A rendered frame's encode ms and GPU ms, its fills and glyph runs, its hash when asked for, its
+/// bytes when kept, and (#269) what its grid images did, with their GPU ms.
+type Rendered = (
+    f64,
+    f64,
+    u64,
+    Option<String>,
+    Option<Vec<u8>>,
+    (
+        deep_marks_render::grid_gpu::GridFrame,
+        BTreeMap<String, f64>,
+    ),
+);
 
 /// Frame `n` encoded and submitted on the render side and waited for there: the encode's CPU ms,
 /// the GPU layer's ms from the end of the encode to the work done, and the fills and glyph runs
@@ -275,7 +290,15 @@ fn render(app: &App, n: u64, encoded: &Encoded, hash: bool, keep: bool) -> Resul
             let bytes = (hash || keep).then(|| view.read(drawn.slot)).flatten();
             let pixels = bytes.as_ref().filter(|_| hash).map(|b| frames::hex(b));
             let kept = bytes.filter(|_| keep);
-            Ok((encode.as_secs_f64() * 1e3, gpu, fills, pixels, kept))
+            let grids = encoded
+                .grids
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
+            let grids = grids.unwrap_or_default();
+            let draw_ms = grids.draw_ms(&state.gpu.device().device);
+            let ms = encode.as_secs_f64() * 1e3;
+            Ok((ms, gpu, fills, pixels, kept, (grids, draw_ms)))
         })
         .map_err(|e| refused("render_failed", e))
 }
@@ -288,7 +311,7 @@ pub fn film2d(app: &mut App, out: &str, call: &Value) -> Value {
 
 fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let bad = |what: &str| refused("bad_input", what);
-    let doc = call["doc"]
+    let mut doc = call["doc"]
         .as_object()
         .cloned()
         .ok_or_else(|| bad("doc is an object"))?;
@@ -319,6 +342,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         .ok_or_else(|| bad("fps"))? as i64;
     let from = call["from"].as_u64().unwrap_or(0);
     let hash = call["hash"] == true;
+    // #269: each frame's grid image uploads, and their draws timed.
+    let (counts, timings) = (call["counts"] == true, call["timings"] == true);
     // #464: the targets a captured frame writes beside its final PNG, reduced motion and the
     // flicker check over the frames played.
     let targets: Vec<&str> = call["targets"]
@@ -372,6 +397,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     // #462: the document's revision hash as the film opened it, and the document it holds.
     let opened_hash = revision(&doc)?;
     let mut held = doc.clone();
+    // #269: the document's logic items run from the call's assets through the film's last frame.
+    let last = [from + count - 1];
+    crate::grids2d::bake(&mut doc, call, (&last, fps as u64), app.planted)?;
     let capture: Vec<u64> = call["capture"]
         .as_array()
         .into_iter()
@@ -462,7 +490,19 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                        items: &Map<String, Value>| {
         ix.as_ref().map(|ix| {
             let marks: Vec<Arc<Drawn>> = layers.iter().flatten().cloned().collect();
-            Arc::new(crate::indexed::frame(ix, &marks, items, "ground", planted))
+            let plant = match planted {
+                Some(crate::Planted::PartialCoverage) => {
+                    Some(crate::indexed::Plant::PartialCoverage)
+                }
+                Some(crate::Planted::PuffFullOpacity) => {
+                    Some(crate::indexed::Plant::PuffFullOpacity)
+                }
+                Some(crate::Planted::LightAfterUpscale) => {
+                    Some(crate::indexed::Plant::LightAfterUpscale)
+                }
+                _ => None,
+            };
+            Arc::new(crate::indexed::frame(ix, &marks, items, "ground", plant))
         })
     };
     let snap =
@@ -539,6 +579,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     let baseline = frames::baseline_ns(app);
     let packs = Arc::new(packs_of(call)?);
+    // #2053: the store the film's images and normal pages are read from.
+    let store = call["store"].as_str().map(std::path::PathBuf::from);
     let frame2 =
         |layers, n, look: &(Palette, Type), page: Option<Arc<Page>>, print, indexed| Frame2 {
             indexed,
@@ -550,6 +592,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             page,
             print,
             mix: None,
+            store: store.clone(),
         };
     // The frame at `n`: drawn in its first side's look (`own`, the film's, outside every shot),
     // with each other look it mixes (#462) drawn as a frame of its own; its ground and its
@@ -567,7 +610,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 BTreeMap<String, Volume>,
             );
             let mut one = |d: Drawing<'_>, origin: Option<[u32; 2]>| -> Result<One, Value> {
-                let (drawn, ground, view, lamps, items, volumes) = marks_at(
+                let (mut drawn, ground, view, lamps, items, volumes) = marks_at(
                     &doc,
                     &program,
                     &mut state,
@@ -578,6 +621,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     planted,
                     origin,
                 )?;
+                // #2053: each lit image's normal page, read as stored.
+                for layer in &mut drawn {
+                    for m in layer.iter_mut() {
+                        let paged = deep_marks_render::gpu::paged(m, store.as_deref())?;
+                        if let Some(p) = paged {
+                            *m = Arc::new(p);
+                        }
+                    }
+                }
                 let print = printing_at(n, d.def, d.look, &items, view.as_ref(), ground)?;
                 let index = index_frame(d.ix, &drawn, &items);
                 let page = d
@@ -620,6 +672,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let encoded = Encoded {
         at: Arc::new(Mutex::new(None)),
         spans: app.worker.call(|state| Spans::new(&state.gpu.device())),
+        grid_timings: timings,
+        grids: Arc::new(Mutex::new(None)),
     };
     let taps = crate::print2d::Taps::default();
     *taps.want_linear.lock().unwrap_or_else(|e| e.into_inner()) = wants_linear;
@@ -637,6 +691,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
 
     let mut listed = Vec::with_capacity(count as usize);
     let mut lumas: Vec<Vec<f32>> = Vec::new();
+    // #161: each frame's marks and time, and the packs' operators, for the reseed rule.
+    let mut seen: Vec<crate::reseed::Seen> = Vec::new();
+    let mut named = Arc::new(Vec::new());
     let mut switches = Vec::new();
     let mut movie = Movie::new(out, export, size);
     let played = (|| -> Result<(), Value> {
@@ -672,6 +729,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             // #1619: what the look's finish pass is given for this frame, on any backend.
             let finish_hash = frame.print.as_ref().map(|p| p.finish_hash(size));
+            if checks_flicker {
+                seen.push((frame.layers.clone(), at(n)));
+                named = frame.packs.clone();
+            }
             *marks.lock().unwrap_or_else(|e| e.into_inner()) = Arc::new(frame);
             {
                 let win = app.window.as_ref().expect("opened");
@@ -682,7 +743,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let built = started.elapsed().as_secs_f64() * 1e3;
             let keep = export || checks_flicker || capture.contains(&n);
-            let (encode_ms, layer_gpu_ms, fills, mut pixels, mut bytes) = render(
+            let (encode_ms, layer_gpu_ms, fills, mut pixels, mut bytes, grids) = render(
                 app,
                 k,
                 &encoded,
@@ -734,6 +795,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if let Some(h) = finish_hash {
                 row["finish_hash"] = json!(h);
             }
+            crate::grids2d::report(&mut row, &items, &grids.0, &grids.1, (counts, timings));
             // #451: each asked 2D particles item's evaluated data at the frame's time.
             if !asked.is_empty() {
                 row["particles"] = crate::flows2d::report(&doc, &program, at(n), &asked, planted)?;
@@ -789,6 +851,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     if checks_flicker {
         reply["flicker"] = crate::print2d::flicker(&lumas, fps as f64);
+        let reseed = crate::reseed::reseeded(&seen, &lumas, &named);
+        if !reseed.is_empty() {
+            reply["flicker"]["verdict"] = json!("FAIL");
+            reply["flicker"]["reseed"] = json!(reseed);
+        }
     }
     if export {
         reply["export"] = movie.finish()?;

@@ -45,12 +45,20 @@ fn register(r: &mut Registrar) {
             "",
             json!(""),
         ),
-        ranged("players", "", 2.0, [2.0, 8.0]),
+        // #278: one count, or a range a room starts within on the first player's Start.
+        param(
+            "players",
+            ParamType::Json("2 to 8 | {min: 1 to 8, max: 2 to 8}"),
+            "",
+            json!(2),
+        ),
         ranged("step_rate", "Hz", 60.0, [1.0, 240.0]),
         ranged("delay", "", 2.0, [0.0, 30.0]),
         ranged("window", "", 8.0, [0.0, 16.0]),
         ranged("hash_every", "", 60.0, [1.0, 100_000.0]),
         ranged("timeout", "s", 5.0, [0.05, 3600.0]),
+        // #552: the controls whose entries take a random draw (Net: random draws after commit).
+        param("draw_after", ParamType::Json("[control ID]"), "", json!([])),
     ];
     let net = Entry {
         family: "",
@@ -64,6 +72,7 @@ fn register(r: &mut Registrar) {
     };
     r.kind(net, &[], "");
     r.rule("net", relay_rule);
+    r.rule("net", players_rule);
     r.rule("net", rate_rule);
     // #550: deep_run's net kinds (Check input: net kinds), each running copies of the document's
     // match in one process over the test relay, through what the build binds.
@@ -79,6 +88,11 @@ fn register(r: &mut Registrar) {
         issues(budget_report(d, i))
     })
     .check_report(budget_report);
+    // #280: net.feel, what players would feel on a seeded network.
+    r.check("net.feel", "any", &["net.feel"], |d, i| {
+        issues(feel_report(d, i))
+    })
+    .check_report(feel_report);
     r.code(
         "net.rollback",
         "A copy ran a match step before it held every player's entries for it, or a held-back run parted from the on-time run.",
@@ -93,13 +107,19 @@ fn register(r: &mut Registrar) {
     );
     r.code(
         "net.budget",
-        "A match step passes the class's frame time.",
-        "Split the work across steps with its progress in memory.",
+        "A match step passes the class's frame time, or the net item declares a window past the one a host it plays on reports.",
+        "Split the work across steps with its progress in memory, or declare at most the reported window, 0 for lockstep.",
+        false,
+    );
+    r.code(
+        "net.feel",
+        "A copy's stall, rollback depth or correction distance passed its bound on the seeded network, or a copy waited past its deadline.",
+        "Raise the delay to the latency the players need, lighten the step, or play lockstep.",
         false,
     );
     // Each code's planted fixture (#138's kit): a match whose logic traps at its first step, so
     // every copy ends it faulted and no net check kind can pass on it.
-    for code in ["net.rollback", "net.desync", "net.budget"] {
+    for code in ["net.rollback", "net.desync", "net.budget", "net.feel"] {
         planted(r, code);
     }
 }
@@ -135,6 +155,7 @@ pub struct Runs {
     pub rollback: ReportRun,
     pub desync: ReportRun,
     pub budget: ReportRun,
+    pub feel: ReportRun,
 }
 
 static RUNS: OnceLock<Runs> = OnceLock::new();
@@ -165,6 +186,11 @@ fn desync_report(doc: &Value, input: &Value) -> Report {
 fn budget_report(doc: &Value, input: &Value) -> Report {
     RUNS.get()
         .map_or_else(|| unbound("net.budget"), |r| (r.budget)(doc, input))
+}
+
+fn feel_report(doc: &Value, input: &Value) -> Report {
+    RUNS.get()
+        .map_or_else(|| unbound("net.feel"), |r| (r.feel)(doc, input))
 }
 
 fn issues(report: Report) -> Vec<(String, Raised)> {
@@ -226,6 +252,38 @@ fn relay_rule(_: &Value, id: &str, item: &Value) -> Vec<Raised> {
             fix_ops: None,
         }],
     }
+}
+
+/// #278: `players` is a whole count from 2 to 8, or `{min, max}` with min from 1, max from 2 to 8
+/// and min no more than max.
+fn players_rule(_: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    let whole = |v: &Value, lo: f64| {
+        v.as_f64()
+            .is_some_and(|n| n.fract() == 0.0 && (lo..=8.0).contains(&n))
+    };
+    let p = &item["params"]["players"];
+    let ok = match p {
+        Value::Null => true,
+        Value::Object(o) => {
+            o.keys().all(|k| k == "min" || k == "max")
+                && whole(&p["min"], 1.0)
+                && whole(&p["max"], 2.0)
+                && p["min"].as_f64() <= p["max"].as_f64()
+        }
+        n => whole(n, 2.0),
+    };
+    if ok {
+        return Vec::new();
+    }
+    vec![Raised {
+        code: "out_of_range",
+        severity: "error",
+        path: format!("items/{id}/params/players"),
+        what: format!(
+            "a net item's players is a count from 2 to 8, or {{min, max}} with min from 1, max from 2 to 8 and min no more than max; {p} isn't"
+        ),
+        fix_ops: None,
+    }]
 }
 
 /// #551: the planted rate rule, which accepts only items that step faster than the match.
@@ -350,7 +408,17 @@ pub struct Config {
     /// The relay's URL as written, and the host it names; empty where the item names none.
     pub relay: String,
     pub host: String,
+    /// The match's seats: its one count, or its range's `max`.
     pub players: u8,
+    /// #278: the copies that must have joined before the match starts: `players`, or the range's
+    /// `min`; and whether the item declares a range, so the first player's Start starts it.
+    pub min: u8,
+    pub ranged: bool,
+    /// #278: the logic item and its bool array named `open` (a Join after the start is accepted
+    /// only while it's true), and the one named `finish` (nonzero at a confirmed step ends the
+    /// match as finished).
+    pub open: Option<(String, String)>,
+    pub finish: Option<(String, String)>,
     pub step_rate: i64,
     pub delay: i64,
     pub window: i64,
@@ -359,6 +427,10 @@ pub struct Config {
     pub timeout: i64,
     /// The document's `controls`: what a player's entry must name, within its range (#550).
     pub controls: Value,
+    /// #552: the controls whose entries take a random draw after commit.
+    pub draw_after: Vec<String>,
+    /// #552: the piece reads `match.me`, so its Join prompt says its fog is a courtesy.
+    pub courtesy: bool,
     /// #277: a logic item reads `net.seats`, so a leave, a drop or an absence hands the seat to
     /// the piece's bot at one agreed step; else the match ends as before, nothing playing it.
     pub seats: bool,
@@ -375,17 +447,39 @@ impl Config {
                 .clamp(range[0], range[1])
         };
         let timeout = p.get("timeout").and_then(Value::as_f64).unwrap_or(5.0);
+        let (min, players, ranged) = match p.get("players").filter(|v| v.is_object()) {
+            Some(range) => {
+                let of = |k: &str, d: f64| range[k].as_f64().unwrap_or(d) as i64;
+                let max = of("max", 8.0).clamp(2, 8);
+                (of("min", 2.0).clamp(1, max) as u8, max as u8, true)
+            }
+            None => {
+                let n = whole("players", 2, [2, 8]) as u8;
+                (n, n, false)
+            }
+        };
         Some(Config {
             item: id.to_string(),
             relay: p["relay"].as_str().unwrap_or_default().to_string(),
             host: host_of(&p["relay"]).unwrap_or_default(),
-            players: whole("players", 2, [2, 8]) as u8,
+            players,
+            min,
+            ranged,
+            open: named(form, "open"),
+            finish: named(form, "finish"),
             step_rate: whole("step_rate", 60, [1, 240]),
             delay: whole("delay", 2, [0, 30]),
             window: whole("window", 8, [0, 16]),
             hash_every: whole("hash_every", 60, [1, 100_000]),
             timeout: (timeout.max(0.05) * FLICKS as f64).round() as i64,
-            controls: form.get("controls").cloned().unwrap_or(json!({})),
+            controls: controls(form),
+            draw_after: p["draw_after"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|c| Some(c.as_str()?.to_string()))
+                .collect(),
+            courtesy: crate::prompt::reads_me(form),
             seats: reads_seats(form),
         })
     }
@@ -393,6 +487,69 @@ impl Config {
     /// One match step, in flicks.
     pub fn step(&self) -> i64 {
         FLICKS / self.step_rate
+    }
+
+    /// #278: the match is a room's: it starts on the first player's Start, takes a Join while its
+    /// lobby is open, or finishes and starts again. Every other match plays as before.
+    pub fn room(&self) -> bool {
+        self.ranged || self.open.is_some() || self.finish.is_some()
+    }
+}
+
+/// #278: the first logic item of `form` that names one of its arrays as `field` (`open` or
+/// `finish`), with the array's name.
+fn named(form: &Value, field: &str) -> Option<(String, String)> {
+    let items = form.get("items").and_then(Value::as_object);
+    items.into_iter().flatten().find_map(|(id, i)| {
+        let logic = i["kind"].as_str().is_some_and(|k| k.starts_with("logic@"));
+        let array = i["params"][field].as_str().filter(|_| logic)?;
+        Some((id.clone(), array.to_string()))
+    })
+}
+
+/// The document's `controls`, and under [`PROFILE`] the shape of the profile record a logic item
+/// keeps (#276), which each player's step-0 entry is held to.
+fn controls(form: &Value) -> Value {
+    let mut c = form.get("controls").cloned().unwrap_or(json!({}));
+    let items = form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    if let Some(arrays) = items
+        .filter_map(|(_, i)| i.pointer("/params/profile/arrays"))
+        .next()
+    {
+        c[PROFILE] = json!({"profile": arrays});
+    }
+    c
+}
+
+/// #276: the control key a player's profile record entry travels under, at step 0 only.
+pub const PROFILE: &str = ":profile";
+
+/// #276: a profile record's entry, `{profile: sha256, arrays}`, holds an array of each name the
+/// piece's profile declares, of its count, and nothing else.
+fn admit_profile(shape: &Value, value: &Value) -> Result<(), Value> {
+    let fits = |name: &str, want: &Value| {
+        let n = want.get("count").and_then(Value::as_u64).unwrap_or(1) as usize;
+        value["arrays"][name]
+            .as_array()
+            .is_some_and(|a| a.len() == n && a.iter().all(|x| x.is_number() || x.is_boolean()))
+    };
+    let shape = shape.as_object().cloned().unwrap_or_default();
+    let ok = value["profile"].as_str().is_some_and(|h| h.len() == 64)
+        && value["arrays"]
+            .as_object()
+            .is_some_and(|a| a.len() == shape.len())
+        && shape.iter().all(|(n, w)| fits(n, w));
+    if ok {
+        Ok(())
+    } else {
+        Err(
+            json!({"code": "out_of_range", "control": PROFILE, "value": value,
+            "what": "a profile record's entry holds the arrays the piece's profile declares"}),
+        )
     }
 }
 
@@ -412,13 +569,20 @@ pub fn reads_seats(form: &Value) -> bool {
 }
 
 pub fn admit(controls: &Value, control: &str, value: &Value) -> Result<(), Value> {
+    // #552: a draw's commitment and bits are the net module's own entries.
+    if control == crate::draw::COMMIT || control == crate::draw::REVEAL {
+        return crate::draw::admit(control, value);
+    }
+    if let Some(shape) = controls.get(PROFILE).filter(|_| control == PROFILE) {
+        return admit_profile(&shape["profile"], value);
+    }
     // #277: a seat entry the net module writes, never a player's control.
     if control == crate::copy::SEAT {
         return match crate::copy::Seat::named(value.as_str().unwrap_or_default()) {
             Some(_) => Ok(()),
             None => Err(
                 json!({"code": "out_of_range", "control": control, "value": value,
-                               "what": "a seat is left, absent or back"}),
+                               "what": "a seat is left, absent, back or joined"}),
             ),
         };
     }
@@ -494,6 +658,35 @@ mod tests {
             (FLICKS / 20, 5 * FLICKS, "r.test")
         );
         assert_eq!(Config::of(&json!({"items": {}})), None);
+    }
+
+    #[test]
+    fn a_range_of_players_makes_a_room_and_one_count_keeps_todays_match() {
+        let net = |players: Value| json!({"kind": "net@1", "params": {"relay": "https://r.test", "players": players}});
+        let c = Config::of(&json!({"items": {"m": net(json!({"min": 2, "max": 8}))}})).unwrap();
+        assert_eq!((c.min, c.players, c.ranged, c.room()), (2, 8, true, true));
+        let c = Config::of(&json!({"items": {"m": net(json!(4))}})).unwrap();
+        assert_eq!((c.min, c.players, c.ranged, c.room()), (4, 4, false, false));
+        let rules = json!({"kind": "logic@1", "params": {"open": "lobby", "finish": "done"}});
+        let c = Config::of(&json!({"items": {"m": net(json!(4)), "rules": rules}})).unwrap();
+        assert_eq!(c.open, Some(("rules".into(), "lobby".into())));
+        assert_eq!(c.finish, Some(("rules".into(), "done".into())));
+        assert!(c.room() && !c.ranged);
+        for (bad, ok) in [
+            (json!({"min": 2, "max": 8}), true),
+            (json!({"min": 1, "max": 2}), true),
+            (json!(8), true),
+            (json!(1), false),
+            (json!(2.5), false),
+            (json!({"min": 3, "max": 2}), false),
+            (json!({"min": 0, "max": 8}), false),
+            (json!({"min": 2, "max": 9}), false),
+            (json!({"min": 2}), false),
+            (json!({"min": 2, "max": 8, "open": true}), false),
+        ] {
+            let raised = players_rule(&Value::Null, "m", &net(bad.clone()));
+            assert_eq!(raised.is_empty(), ok, "{bad}");
+        }
     }
 
     #[test]

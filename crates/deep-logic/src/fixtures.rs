@@ -319,7 +319,12 @@ impl Logic {
             let judged = self
                 .judge_interface(&piece_v, iface, pack.agent)
                 .map_err(refused)?;
-            interfaces.push(json!({"name": iface.name, "label": iface.label, "digest": iface.digest, "judged": judged}));
+            let mut entry = json!({"name": iface.name, "label": iface.label, "digest": iface.digest, "judged": judged});
+            // #1255: its kind kit, each planted twin raising the rule it names.
+            if !iface.twins.is_empty() {
+                entry["kit"] = self.kit(&piece_v, iface, pack.agent).map_err(refused)?;
+            }
+            interfaces.push(entry);
         }
         let mut libraries = Vec::new();
         for (label, e) in &pack.libs {
