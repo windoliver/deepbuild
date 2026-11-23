@@ -1,6 +1,6 @@
-//! `judge` (#981, #980, #1255): a piece's run read by an interface's kind rules, for each logic
-//! item with `lanes` (lanes@1's), with `process` (process@1's) or with `separation`
-//! (separation@1's).
+//! `judge` (#981, #980, #1255, #1181): a piece's run read by an interface's kind rules, for each
+//! logic item with `lanes` (lanes@1's), with `process` (process@1's), with `separation`
+//! (separation@1's) or with `circuit` (circuit@1's).
 
 use std::rc::Rc;
 
@@ -8,7 +8,7 @@ use serde_json::{json, Map, Value};
 
 use crate::piece::Item;
 use crate::world::{track_of, Record, World};
-use crate::{bad, bake, first_party, lanes, process, separation, track, world, Logic};
+use crate::{bad, bake, circuit, first_party, lanes, process, separation, track, world, Logic};
 
 /// A first-party interface's default for a rule's param, as its pack gives it.
 fn default_of(interface: &str, rule: &str, param: &str) -> Option<f64> {
@@ -104,6 +104,19 @@ impl Logic {
                 .into()
         };
         for item in &piece.items {
+            // #1181: circuit@1's rules read the arrays its library writes at every step.
+            if let Some(c) = &item.circuit {
+                let rules = line.get("rules").unwrap_or(&Value::Null);
+                let mut judge = circuit::Judge::new(item, c, rules).map_err(|e| bad(&e))?;
+                let mut player = bake::Player::new(&rec, item);
+                for k in 0..steps {
+                    if let Some(b) = player.at(k) {
+                        judge.step(k, b);
+                    }
+                }
+                out.insert(item.id.clone(), judge.result());
+                continue;
+            }
             if let Some(t) = &item.separation {
                 let last = bake::Player::new(&rec, item)
                     .at(steps - 1)

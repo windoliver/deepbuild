@@ -1,0 +1,163 @@
+FAIL size: benchmarks/canvas.mjs: 2082 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-app/src/kinds.rs: 1567 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-app/src/states.rs: 1672 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-app/src/views.rs: 5026 lines, over its ceiling of 3606
+  Fix: Split or shrink the file to 3606 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-input/src/session.rs: 1504 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-canvas-marks/src/animator.rs: 1807 lines, over its ceiling of 1782
+  Fix: Split or shrink the file to 1782 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-marks/src/data.rs: 2261 lines, over its ceiling of 2250
+  Fix: Split or shrink the file to 2250 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-marks/src/look.rs: 1764 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-canvas-marks/src/modules.rs: 2066 lines, over its ceiling of 2040
+  Fix: Split or shrink the file to 2040 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-marks/src/scene.rs: 5923 lines, over its ceiling of 5841
+  Fix: Split or shrink the file to 5841 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-scene3d/src/builders.rs: 2603 lines, over its ceiling of 2589
+  Fix: Split or shrink the file to 2589 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-scene3d/src/light.rs: 1546 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-canvas-scene3d/src/scene.rs: 3641 lines, over its ceiling of 3541
+  Fix: Split or shrink the file to 3541 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-scene3d/src/spec.rs: 2306 lines, over its ceiling of 2183
+  Fix: Split or shrink the file to 2183 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/document/check.rs: 2737 lines, over its ceiling of 2570
+  Fix: Split or shrink the file to 2570 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/document/packs.rs: 3247 lines, over its ceiling of 3223
+  Fix: Split or shrink the file to 3223 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/expr.rs: 2355 lines, over its ceiling of 2319
+  Fix: Split or shrink the file to 2319 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/registry/mod.rs: 3815 lines, over its ceiling of 3711
+  Fix: Split or shrink the file to 3711 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/scope.rs: 1551 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-gpu-layer/src/marks2d.rs: 1534 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-gpu-layer/src/view3d.rs: 2358 lines, over its ceiling of 2152
+  Fix: Split or shrink the file to 2152 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-hook/src/main.rs: 2064 lines, over its ceiling of 1978
+  Fix: Split or shrink the file to 1978 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-hook/src/matcher.rs: 2312 lines, over its ceiling of 1993
+  Fix: Split or shrink the file to 1993 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-logic/src/lib.rs: 1524 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-logic/src/world/world_impl.rs: 1650 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-marks-render/src/lib.rs: 1527 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-marks-render/src/raster.rs: 1771 lines, over its ceiling of 1712
+  Fix: Split or shrink the file to 1712 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-physics-rapier/src/lib.rs: 1550 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-player/web/dist/figure/player.js: 2075 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-player/web/dist/full/player.js: 3021 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-player/web/dist/game2d/player.js: 2196 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-replica/src/drive/mod.rs: 2699 lines, over its ceiling of 2297
+  Fix: Split or shrink the file to 2297 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-scene3d-render/src/lib.rs: 9612 lines, over its ceiling of 9002
+  Fix: Split or shrink the file to 9002 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-scene3d-render/src/scene3d.wgsl: 3398 lines, over its ceiling of 3159
+  Fix: Split or shrink the file to 3159 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-show/src/export/pptx.rs: 1887 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-show/src/hub.rs: 2697 lines, over its ceiling of 2668
+  Fix: Split or shrink the file to 2668 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-show/src/kinds.rs: 1503 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-show/src/kit/modules.rs: 1557 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-show/src/main.rs: 2986 lines, over its ceiling of 2958
+  Fix: Split or shrink the file to 2958 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-show/src/sandbox.rs: 1526 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-show/src/shared/calls.rs: 1560 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: packages/asks/src/index.ts: 2453 lines, over its ceiling of 2059
+  Fix: Split or shrink the file to 2059 lines or fewer: a ceiling never rises.
+FAIL size: packages/extension-host/src/host.ts: 3445 lines, over its ceiling of 3201
+  Fix: Split or shrink the file to 3201 lines or fewer: a ceiling never rises.
+FAIL size: packages/hub/src/server.ts: 1556 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: packages/hub/src/stop-judging.ts: 1505 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: scripts/lanes.mjs: 2024 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/1327/twins/lanes-replace-alone/scripts/lanes.mjs: 1774 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/1856/twins/missing-rules-always-unreadable/crates/deep-hook/src/main.rs: 2004 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/1865/twins/confirmed-stop-exits-nonzero/packages/hub/src/server.ts: 1526 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/1865/twins/confirms-only-with-peer/packages/hub/src/server.ts: 1527 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/1865/twins/refuses-every-stop/packages/hub/src/server.ts: 1526 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/1865/twins/restart-exits-zero/packages/hub/src/server.ts: 1527 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2042/twins/denies-every-unread-payload/crates/deep-hook/src/main.rs: 1985 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2042/twins/reads-1-mib-at-most/crates/deep-hook/src/main.rs: 1985 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2134/twins/owner-from-the-lines-first-profile/crates/deep-hook/src/main.rs: 2077 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2204-redraft-ac3/twins/away-denial-dropped/crates/deep-hook/src/main.rs: 1974 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2204-redraft-ac3/twins/away-denial-unnamed/crates/deep-hook/src/main.rs: 1978 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2204/twins/rules-read-on-every-event/crates/deep-hook/src/main.rs: 2007 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2219/twins/mode-read-as-any/crates/deep-hook/src/main.rs: 1978 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2219/twins/skips-unreadable-entry/crates/deep-hook/src/main.rs: 1978 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2312/twins/refusal-dropped/packages/extension-host/src/host.ts: 3337 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2492/twins/active-handle-left-running/packages/extension-host/src/host.ts: 3424 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2492/twins/late-handle-left-running/packages/extension-host/src/host.ts: 3423 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2647/twins/reuses-first-diff/packages/asks/src/index.ts: 2286 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2694/twins/drops_kept_write/crates/deep-show/src/main.rs: 3087 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2694/twins/reads_hold_the_clock/crates/deep-show/src/main.rs: 3093 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2973/twins/bad-file-reads-empty/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2973/twins/crash-spends/packages/hub/src/server.ts: 1540 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2973/twins/promote-checks-after-drain/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2973/twins/promote-needs-three/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2973/twins/promote-room-for-one/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2973/twins/rollback-without-restart/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2973/twins/start-refused-when-spent/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2973/twins/stop-refused-when-spent/packages/hub/src/server.ts: 1540 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2973/twins/window-by-wall-clock/packages/hub/src/server.ts: 1539 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2973/twins/window-never-slides/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2974/twins/drain-asks-confirm/packages/hub/src/server.ts: 1529 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2975/twins/confirmed-stop-exits-75/packages/hub/src/server.ts: 1528 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2975/twins/dev-signal-exits-75/packages/hub/src/server.ts: 1528 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2975/twins/signal-75-during-confirmed-stop/packages/hub/src/server.ts: 1531 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: tests/acceptance/2975/twins/signal-waits-restart-after/packages/hub/src/server.ts: 1532 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+exit 1

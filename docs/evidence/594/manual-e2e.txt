@@ -1,5 +1,6 @@
 #594 manual e2e: the perf lane, run end to end by hand twice, on 2026-11-19 on a Mac15,12 (a reference Mac model; thermal
 "fair", load 8 to 59 from other sessions' builds, mains power).
+The fixture box is written <sandbox>, and the home folder inside it <sandbox-home>.
 
 1. Full repository (not finished: the disk filled)
 ---------------------------------------------------
@@ -27,7 +28,7 @@ own elapsed line says 21.02 s.
 
 Read it as:
 - First run: each side builds its own dependencies in its warm-up, into its own kept directory under the cache
-  (<sandbox>/home/.cache/deepbuild-perf/<host>-<clone>/<side>/target), never the working tree's target/; no measured
+  (<sandbox-home>/.cache/deepbuild-perf/<host>-<clone>/<side>/target), never the working tree's target/; no measured
   run compiles a dependency, so no clippy check is charged to the measured workload; perf PASS, cpuMs 350 vs base
   320 (ratio 1.094, margin 1.5).
 - Second run: the kept copies are written 0 files, and no side compiles any dependency in warm-up or measured run;
@@ -89,8 +90,8 @@ fixture repo: <sandbox>/repo; machine: Mac15,12, power ac, lowPower false, therm
 ===== first preflight: exit 0, 2955.1 s wall; machine after: Mac15,12, power ac, lowPower false, thermal fair, load 7.87 29.74 47.04 =====
 Warming builds (not timed)
 RUN perf
-perf: base copy <sandbox>/home/.cache/deepbuild-perf/<host>-459959f82bcd/base/copy: wrote 142 files, deleted 0; rewrote what the last run left with other bytes: nothing
-perf: without-tests copy <sandbox>/home/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/copy: wrote 142 files, deleted 0; rewrote what the last run left with other bytes: nothing
+perf: base copy <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/base/copy: wrote 142 files, deleted 0; rewrote what the last run left with other bytes: nothing
+perf: without-tests copy <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/copy: wrote 142 files, deleted 0; rewrote what the last run left with other bytes: nothing
 perf: the change's own tests (tests/added.test.mjs) account for 10 ms of CPU; the checks without them are compared with the merge base
 {"task":"preflight","baseCommit":"b1ccd2faab2c92707792b2cf1a55f7b521c8b1c3","status":"PASS","samples":1,"current":{"elapsedMs":504.70395800000006,"cpuMs":350,"peakBytes":50642944,"instructions":327116772},"base":{"elapsedMs":466.55837500000007,"cpuMs":320,"peakBytes":50298880,"instructions":322691810},"full":{"elapsedMs":516.6655830000527,"cpuMs":360,"peakBytes":50315264,"instructions":323122639},"ownTests":["tests/added.test.mjs"],"ownTestsCpuMs":10,"counter":"/usr/bin/time -l and scripts/count-children.c: instructions retired, children included","fingerprint":{"model":"Mac15,12","chip":"Apple M3","memoryBytes":17179869184,"power":"ac","lowPowerMode":false,"thermalState":"fair","macosBuild":"26B131"}}
 PASS perf (11.62 s)
@@ -122,12 +123,12 @@ working tree:
   of which clippy checks charged to the measured run: 0
   all measured compiles: none
 merge base:
-  warm-up dependency compiles: 2 (dep_a --emit=dep-info,metadata,link -> <sandbox>/home/.cache/deepbuild-perf/<host>-459959f82bcd/base/target/debug/deps; dep_a --emit=dep-info,metadata -> <sandbox>/home/.cache/deepbuild-perf/<host>-459959f82bcd/base/target/debug/deps)
+  warm-up dependency compiles: 2 (dep_a --emit=dep-info,metadata,link -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/base/target/debug/deps; dep_a --emit=dep-info,metadata -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/base/target/debug/deps)
   measured dependency compiles: 0 (none)
   of which clippy checks charged to the measured run: 0
   all measured compiles: none
 without own tests:
-  warm-up dependency compiles: 4 (dep_a --emit=dep-info,metadata,link -> <sandbox>/home/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps; dep_b --emit=dep-info,metadata,link -> <sandbox>/home/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps; dep_a --emit=dep-info,metadata -> <sandbox>/home/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps; dep_b --emit=dep-info,metadata -> <sandbox>/home/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps)
+  warm-up dependency compiles: 4 (dep_a --emit=dep-info,metadata,link -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps; dep_b --emit=dep-info,metadata,link -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps; dep_a --emit=dep-info,metadata -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps; dep_b --emit=dep-info,metadata -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps)
   measured dependency compiles: 0 (none)
   of which clippy checks charged to the measured run: 0
   all measured compiles: none
@@ -136,8 +137,8 @@ verdict: status PASS, current.cpuMs 350, base.cpuMs 320, ratio 1.094 (margin 1.5
 ===== second preflight: exit 0, 5.5 s wall; machine after: Mac15,12, power ac, lowPower false, thermal fair, load 8.36 29.48 46.85 =====
 Warming builds (not timed)
 RUN perf
-perf: base copy <sandbox>/home/.cache/deepbuild-perf/<host>-459959f82bcd/base/copy: wrote 0 files, deleted 0; rewrote what the last run left with other bytes: nothing
-perf: without-tests copy <sandbox>/home/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/copy: wrote 0 files, deleted 0; rewrote what the last run left with other bytes: nothing
+perf: base copy <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/base/copy: wrote 0 files, deleted 0; rewrote what the last run left with other bytes: nothing
+perf: without-tests copy <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/copy: wrote 0 files, deleted 0; rewrote what the last run left with other bytes: nothing
 perf: the change's own tests (tests/added.test.mjs) account for -10 ms of CPU; the checks without them are compared with the merge base
 {"task":"preflight","baseCommit":"b1ccd2faab2c92707792b2cf1a55f7b521c8b1c3","status":"PASS","samples":1,"current":{"elapsedMs":425.2938340000005,"cpuMs":330,"peakBytes":50692096,"instructions":322062133},"base":{"elapsedMs":454.5696250000001,"cpuMs":350,"peakBytes":50626560,"instructions":320996412},"full":{"elapsedMs":401.4157500000001,"cpuMs":320,"peakBytes":50511872,"instructions":321649600},"ownTests":["tests/added.test.mjs"],"ownTestsCpuMs":-10,"counter":"/usr/bin/time -l and scripts/count-children.c: instructions retired, children included","fingerprint":{"model":"Mac15,12","chip":"Apple M3","memoryBytes":17179869184,"power":"ac","lowPowerMode":false,"thermalState":"fair","macosBuild":"26B131"}}
 PASS perf (4.32 s)
