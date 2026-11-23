@@ -150,6 +150,8 @@ export class SessionMemory {
       if (r.scope === 'all' && reaches(r, own, lost)) lines.set(ruleHandle(r), r.text);
     }
     for (const e of await this.options.services.record.startSlice(session)) lines.set(e.target, e.text);
+    // A rule you typed whose save is still on its way is in every session's set already (#2539, #344).
+    for (const [target, text] of this.typing) if (!lines.has(target)) lines.set(target, text);
     return { handles: [...lines.keys()], lines };
   }
 
@@ -159,12 +161,21 @@ export class SessionMemory {
     return st;
   }
 
-  /** The record of what a session was given, at the log position its rules and start slice were read at. */
+  /**
+   * The record of what a session was given, at the log position its rules and start slice were read at. Appended, not
+   * waited for: it commits behind any evidence sync, and a hook's reply never waits for one (#2539).
+   */
   private async delivered(session: string, via: 'start' | 'prompt' | 'notice', rules: string[]): Promise<void> {
     const [row] = (await this.options.services.record.raw('SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events')) as { pos: number }[];
     const ts = this.options.services.now();
-    await this.options.events.append(this.options.events.connection('core', { session }), { v: 1, id: ulid(ts), kind: 'session.rules_delivered', ts, subject: `session:${letters(session)}`, data: { via, pos: Number(row?.pos ?? 0), rules } });
+    void this.options.events.append(this.options.events.connection('core', { session }), { v: 1, id: ulid(ts), kind: 'session.rules_delivered', ts, subject: `session:${letters(session)}`, data: { via, pos: Number(row?.pos ?? 0), rules } })
+      .catch((error: unknown) => process.stderr.write(`deep hub: the rules given to ${session} were not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
   }
+  /** The rules you typed on their way to the record, by target, and their saving, one after another (#2539). */
+  private readonly typing = new Map<string, string>();
+  private saving: Promise<void> = Promise.resolve();
+  /** Settles once every rule typed so far is saved or failed. */
+  saved(): Promise<void> { return this.saving; }
 
   /** At a session's start: its rules, first; after a compaction or a resume its next prompt carries every rule you typed, and a scoped rule is heard once more. */
   async startRules(meta: HookMeta): Promise<Piece[] | undefined> {
@@ -179,7 +190,7 @@ export class SessionMemory {
   private async saveTyped(prompt: string): Promise<Set<string>> {
     const out = new Set<string>();
     if (prompt.includes('<task-notification>')) return out;
-    const have = new Set((await this.typedRules()).map((t) => t.target));
+    const have = new Set([...(await this.typedRules()).map((t) => t.target), ...this.typing.keys()]);
     for (const m of prompt.matchAll(TYPED_RULE)) {
       const text = m[1]!.trim();
       if (!text) continue;
@@ -187,10 +198,16 @@ export class SessionMemory {
       out.add(target);
       if (have.has(target)) continue;
       have.add(target);
-      // The rule's own words are its evidence, never the rest of the prompt.
-      const at = await this.options.services.record.keep(this.options.events.connection('core'), { bytes: new TextEncoder().encode(`rule: ${text}.`), kind: 'user.rule', source: 'prompt' });
-      const ts = this.options.services.now();
-      await this.options.events.append(this.options.events.connection('cli'), { v: 1, id: ulid(ts), kind: 'learn.applied', ts, data: { layer: 'base', target, diff: `+ ${text}`, evidence: [{ at, quote: text }], scope: 'all', replay: null, applied_by: 'you', supersedes: null } });
+      this.typing.set(target, text);
+      // Saved behind the prompt's reply, after the rules typed before it: its evidence's event and the change commit
+      // behind any evidence sync, which the reply never waits for (#2539). The rule's own words are its evidence, never
+      // the rest of the prompt.
+      this.saving = this.saving.then(async () => {
+        const at = await this.options.services.record.keep(this.options.events.connection('core'), { bytes: new TextEncoder().encode(`rule: ${text}.`), kind: 'user.rule', source: 'prompt' });
+        const ts = this.options.services.now();
+        await this.options.events.append(this.options.events.connection('cli'), { v: 1, id: ulid(ts), kind: 'learn.applied', ts, data: { layer: 'base', target, diff: `+ ${text}`, evidence: [{ at, quote: text }], scope: 'all', replay: null, applied_by: 'you', supersedes: null } });
+      }).catch((error: unknown) => { process.stderr.write(`deep hub: your rule ${target} was not saved: ${error instanceof Error ? error.message : String(error)}\n`); })
+        .finally(() => this.typing.delete(target));
     }
     return out;
   }

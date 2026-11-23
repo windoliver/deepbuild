@@ -293,6 +293,7 @@ interface Prepared {
   /** The write this event carries out: its receipt commits with it. */
   receipt?: Receipt;
 }
+interface Waiting { session: string | null; holds?: ReadonlySet<string | null>; resumes(): boolean; done: Promise<void>; land(): void }
 interface Pending { prepared: Prepared; resolve(appended: Appended): void; reject(error: Error): void }
 type Outcome = { ok: true; appended: Appended; prepared: Prepared; log_pos: number } | { ok: false; error: RecordError; prepared: Prepared };
 
@@ -313,8 +314,17 @@ class SqliteRecord implements RecordStore {
   private readonly evidenceWriter: EvidenceWriter | undefined;
   private readonly queue: Pending[] = [];
   private scheduled = false;
-  /** A FULL commit waiting for the evidence it names to sync: every commit after it waits too, so the log keeps arrival order. */
-  private syncing: Promise<void> | undefined;
+  /**
+   * The commits that may wait, each for an earlier one or for the evidence it names to sync (#1410), in arrival order:
+   * its session (null for an event of none, and for a batch) and whether it resumes an ended session, read from the log
+   * as it now stands. A session's commit waits for its session's earlier ones, and for an earlier batch holding its
+   * events; one of no session, and a batch, waits for every earlier one.
+   * So each session's events keep their arrival order, an event of no session lands after everything before it, and
+   * another session's commit lands meanwhile, never waiting on that sync (#2539).
+   */
+  private readonly waiting: Waiting[] = [];
+  /** The waiting commit now writing, whose own FULL write may move how far the log is durable. */
+  private committing: Waiting | undefined;
   /** The one stop every close waits for, once a close began. */
   private closing: Promise<void> | undefined;
   private inFlight = 0;
@@ -399,9 +409,12 @@ class SqliteRecord implements RecordStore {
 
   /** Runs `work` in one synchronous=FULL commit, which also records how far the log is durable. */
   private full(work: () => void): void {
+    // Not while another waiting commit resumes an ended session: how far the log is durable must not pass its end
+    // before the resume lands, or a start after a cut would read that end as clean (#2539).
+    const held = this.waiting.some((w) => w !== this.committing && w.resumes());
     this.backend.commit(this.db, 'full', () => {
       work();
-      this.stmt("INSERT INTO meta (key, value) VALUES ('durable', (SELECT coalesce(max(log_pos), 0) FROM events)) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run();
+      if (!held) this.stmt("INSERT INTO meta (key, value) VALUES ('durable', (SELECT coalesce(max(log_pos), 0) FROM events)) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run();
     });
   }
   private commitMeta(values: Record<string, string>): void {
@@ -602,13 +615,20 @@ class SqliteRecord implements RecordStore {
     }
     this.sealed(prepared);
     if (CORE_ONLY.has(input.kind) || this.options.commitEach) {
-      while (this.syncing) await this.syncing;
-      const mode = CORE_ONLY.has(input.kind) || this.resumes([prepared]) ? 'full' : 'normal';
-      const synced = this.evidenceSynced([prepared], mode);
-      if (synced) await synced;
-      const [outcome] = this.commit([prepared], mode);
-      if (!outcome!.ok) throw outcome!.error;
-      return outcome!.appended;
+      const me = this.arrive(prepared.session, () => this.resumes([prepared]));
+      try {
+        // Its mode is read once the commits before it landed, from the log they left.
+        for (let wait = this.earlier(me); wait; wait = this.earlier(me)) await wait;
+        const mode = CORE_ONLY.has(input.kind) || me.resumes() ? 'full' : 'normal';
+        const synced = this.evidenceSynced([prepared], mode);
+        if (synced) await synced;
+        this.committing = me;
+        const [outcome] = this.commit([prepared], mode);
+        if (!outcome!.ok) throw outcome!.error;
+        return outcome!.appended;
+      } finally {
+        this.landed(me);
+      }
     }
     // The core reads what a learned change cites in the evidence store before it is in force; a refusal is its
     // event, queued right behind the change so both land in one commit, and the projection never reads bytes.
@@ -655,16 +675,21 @@ class SqliteRecord implements RecordStore {
   private async flush(): Promise<void> {
     const batch = this.queue.splice(0);
     let outcomes: Outcome[] = [];
+    let me: Waiting | undefined;
     try {
       const items = batch.map((p) => p.prepared);
-      while (this.syncing) await this.syncing;
-      const mode = this.resumes(items) ? 'full' : 'normal';
+      // A batch may hold several sessions' events, so it waits as an event of no session does.
+      me = this.arrive(null, () => this.resumes(items), new Set(items.map((p) => p.session)));
+      for (let wait = this.earlier(me); wait; wait = this.earlier(me)) await wait;
+      const mode = me.resumes() ? 'full' : 'normal';
       const synced = this.evidenceSynced(items, mode);
       if (synced) await synced;
+      this.committing = me;
       if (items.length) outcomes = this.commit(items, mode);
     } catch (error) {
       for (const p of batch) p.reject(error as Error);
     } finally {
+      if (me) this.landed(me);
       this.scheduled = false;
       if (this.queue.length) {
         this.scheduled = true;
@@ -678,20 +703,38 @@ class SqliteRecord implements RecordStore {
     }
   }
 
+  /** A commit that may wait, at the end of the line; `earlier` is what it waits for, `landed` ends its turn there. */
+  private arrive(session: string | null, resumes: () => boolean, holds?: ReadonlySet<string | null>): Waiting {
+    let land!: () => void;
+    const me: Waiting = { session, ...(holds ? { holds } : {}), resumes, done: new Promise<void>((resolve) => (land = resolve)), land: () => land() };
+    this.waiting.push(me);
+    return me;
+  }
+  /**
+   * What a commit waits for before it reads its mode, or undefined, so a commit with nothing before it stays in this
+   * turn: each earlier one of its session or holding its events, or every earlier one when it has none.
+   */
+  private earlier(me: Waiting): Promise<unknown> | undefined {
+    const before = this.waiting.slice(0, this.waiting.indexOf(me)).filter((w) => me.session === null || w.session === me.session || w.holds?.has(me.session) === true);
+    return before.length ? Promise.all(before.map((w) => w.done)) : undefined;
+  }
+  private landed(me: Waiting): void {
+    if (this.committing === me) this.committing = undefined;
+    this.waiting.splice(this.waiting.indexOf(me), 1);
+    me.land();
+  }
   /**
    * Before a commit: the evidence a FULL one names, synced with its folders (#1410), so a commit that survives a power
-   * cut never names a file that didn't. The caller first waits for a FULL commit already waiting, so a later event never
-   * lands first and its own mode is read from the log that commit left. The sync runs off this thread. A record opened without a store holds no files to sync. Undefined
-   * when there is nothing to wait for, so such a commit stays in this turn.
+   * cut never names a file that didn't. The caller first waits for the commits before it (`earlier`), so its own mode
+   * is read from the log they left. The sync runs off this thread. A record opened without a store holds no files to
+   * sync. Undefined when there is nothing to wait for, so such a commit stays in this turn.
    */
   private evidenceSynced(items: readonly Prepared[], mode: Durability): Promise<void> | undefined {
     const named = mode === 'full' && this.options.evidence ? [...new Set(items.flatMap((p) => [...p.evidence, ...namedIn(p.data)]))] : [];
     return named.length ? this.syncNamed(items, named) : undefined;
   }
   private async syncNamed(items: readonly Prepared[], named: string[]): Promise<void> {
-    const synced = this.options.evidence!.sync(named);
-    const waiting = (this.syncing = synced.then(() => undefined, () => undefined).finally(() => { if (this.syncing === waiting) this.syncing = undefined; }));
-    await synced.catch((error: unknown) => {
+    await this.options.evidence!.sync(named).catch((error: unknown) => {
       // Nothing of the commit is in the log, as when the storage refuses it: its sessions have lost events.
       for (const p of items) if (p.session) this.markLost(p.session);
       throw new RecordError('storage', `the evidence a FULL commit names could not be synced: ${error instanceof Error ? error.message : String(error)}`);
