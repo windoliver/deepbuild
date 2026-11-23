@@ -1,0 +1,1 @@
+{ "alone": true, "why": "each file builds deep-logic and #416's assembler with cargo; ac07 starts headless Chrome, ac08 builds deep-show (the full set), ac03 runs 3.6 million circuit steps and ac09 is a timed budget" }

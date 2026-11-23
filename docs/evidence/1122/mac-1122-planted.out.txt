@@ -1,0 +1,10 @@
+✔ #1122.b0863068 a planted bug in the darwin-only branch of packages/record/src/storage.ts makes the merged unit verdict FAIL (13243.831167ms)
+✔ #1122.b0863068 a planted bug in deep-hook's macOS args_of makes the merged unit verdict FAIL (172782.5775ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 186150.390792
