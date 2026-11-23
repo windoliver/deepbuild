@@ -986,7 +986,8 @@ impl World {
         }
         let h = l.step_hash(&rows);
         report(rec, item, k, l, Some(h), fuel, pages, &rows);
-        crate::piece::fires::record(rec, item, k, fires);
+        let at = k + i64::from(self.planted.fire_one_step_late);
+        crate::piece::fires::record(rec, item, at, fires);
     }
 
     /// Runs each item's `preview` (Logic: preview) when the state it would read changed since its

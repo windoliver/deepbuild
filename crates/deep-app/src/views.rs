@@ -4618,9 +4618,13 @@ pub struct Shell {
     _frame: Option<Subscription>,
 }
 
+/// The window's root, which a narrow window's region is set on (#1808): the app's own, a global, so an app never
+/// reaches another's on the same thread, as a replica's second device would (#3100).
+struct ShellRoot(WeakEntity<Shell>);
+
+impl Global for ShellRoot {}
+
 thread_local! {
-    /// The window's root, which a narrow window's region is set on (#1808).
-    static SHELL: RefCell<Option<WeakEntity<Shell>>> = const { RefCell::new(None) };
     /// Whether the window is too narrow for both regions, as it last drew: its pages then carry the count (#1808).
     static NARROW: Cell<bool> = const { Cell::new(false) };
 }
@@ -4632,7 +4636,9 @@ pub fn narrow() -> bool {
 
 /// A narrow window shows the page (`true`) or the list (#1808); a wide one shows both whatever this says.
 pub fn show_page_region(page: bool, cx: &mut App) {
-    let Some(shell) = SHELL.with(|shell| shell.borrow().as_ref().and_then(WeakEntity::upgrade))
+    let Some(shell) = cx
+        .try_global::<ShellRoot>()
+        .and_then(|root| root.0.upgrade())
     else {
         return;
     };
@@ -4682,7 +4688,8 @@ impl Shell {
         } else {
             crate::open::open_first(window, cx);
         }
-        SHELL.with(|shell| *shell.borrow_mut() = Some(cx.entity().downgrade()));
+        let root = ShellRoot(cx.entity().downgrade());
+        cx.set_global(root);
         Self {
             dock,
             commands: None,
