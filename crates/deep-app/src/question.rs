@@ -396,7 +396,12 @@ impl Controller {
     /// The whole seconds before a held yes's steps start, as the receipt says them (#1101); `None` with no hold
     /// counting down.
     fn counted(&self) -> Option<u64> {
-        let held = self.receipt.as_ref()?.held.as_ref().filter(|held| !held.ran)?;
+        let held = self
+            .receipt
+            .as_ref()?
+            .held
+            .as_ref()
+            .filter(|held| !held.ran)?;
         Some(held.until.saturating_sub(self.now).div_ceil(1000))
     }
 
@@ -509,8 +514,16 @@ impl Controller {
     /// withdrawn (Undo on another device, or the hub starting again during it), when the ask is open here again.
     pub fn hold_changed(&mut self, events: &[Value], now: u64) {
         self.now = now;
-        if let Some(held) = self.receipt.as_mut().and_then(|receipt| receipt.held.as_mut()) {
-            let holds: Vec<Option<Hold>> = held.asks.iter().map(|ask| kinds::hold(events, ask)).collect();
+        if let Some(held) = self
+            .receipt
+            .as_mut()
+            .and_then(|receipt| receipt.held.as_mut())
+        {
+            let holds: Vec<Option<Hold>> = held
+                .asks
+                .iter()
+                .map(|ask| kinds::hold(events, ask))
+                .collect();
             if holds.contains(&Some(Hold::Withdrawn)) {
                 self.receipt = None;
                 self.machine.undo(now);
@@ -1116,7 +1129,11 @@ impl Controller {
 
     /// Takes back the answer the receipt shows. Inside the hub's hold it asks the hub to withdraw the yes (#1101).
     fn undo_answer(&mut self, t: u64, now: u64) -> Did {
-        if self.receipt.as_ref().is_some_and(|receipt| receipt.held.is_some()) {
+        if self
+            .receipt
+            .as_ref()
+            .is_some_and(|receipt| receipt.held.is_some())
+        {
             self.undos.push(json!({ "ask": self.model.ask }));
         }
         self.receipt = None;
@@ -1228,7 +1245,9 @@ impl Controller {
             }
         }
         // The steps a yes runs that can't be undone wait out the hub's hold first (#1101).
-        let held = allow.then(|| self.held_by_yes()).filter(|asks| !asks.is_empty());
+        let held = allow
+            .then(|| self.held_by_yes())
+            .filter(|asks| !asks.is_empty());
         self.receipt = Some(Receipt {
             says: label,
             also,

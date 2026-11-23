@@ -71,10 +71,10 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
   let switched = false;
   const putBack = () => { if (previous) switchTo(versions, previous); else rmSync(join(versions, 'current'), { force: true }); };
   // Once stopped, the lift waits for a renewal under way, and none follows it: the loop parks until the exit. Up to
-  // the restart, a stop also puts back the build that was in.
+  // the restart, a stop also puts back the build that was in. A stopped promotion failed, so it exits 1 (exit.code@1).
   let stopping = false;
   const park = () => new Promise<never>(() => undefined);
-  const interrupted = () => { stopping = true; void renewal.catch(() => undefined).then(() => { if (switched) putBack(); }).then(lift).finally(() => process.exit(130)); };
+  const interrupted = () => { stopping = true; void renewal.catch(() => undefined).then(() => { if (switched) putBack(); }).then(lift).finally(() => process.exit(1)); };
   const unhook = () => { process.removeListener('SIGINT', interrupted); process.removeListener('SIGTERM', interrupted); };
   process.once('SIGINT', interrupted);
   process.once('SIGTERM', interrupted);

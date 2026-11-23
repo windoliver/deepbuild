@@ -1,0 +1,133 @@
+{
+  "name": "phase",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "b84a892352bc5aeb6ae76c01b96bd247bbab4258f06198d0316ea4a69b774a05",
+      "step_rate": 240,
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 2
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 2
+        },
+        "i": {
+          "type": "f64",
+          "count": 2
+        },
+        "p": {
+          "type": "f64",
+          "count": 2
+        },
+        "r": {
+          "type": "f64",
+          "count": 2
+        },
+        "on": {
+          "type": "i32",
+          "count": 2
+        },
+        "energy": {
+          "type": "f64",
+          "count": 2
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 2
+        },
+        "drift": {
+          "type": "f64",
+          "count": 2
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 2
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "n",
+          "a"
+        ],
+        "parts": [
+          {
+            "id": "gen",
+            "kind": "source_ac",
+            "from": "n",
+            "to": "a",
+            "v_rms": 120,
+            "f": 60,
+            "phase": 90,
+            "r_internal": 2
+          },
+          {
+            "id": "load",
+            "kind": "resistor",
+            "from": "a",
+            "to": "n",
+            "r": 58
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "track": [],
+  "steps": 3,
+  "expect": {
+    "arrays": {
+      "0": {
+        "i_rms": [
+          2,
+          2
+        ],
+        "i": [
+          2.8284271247461903,
+          2.8284271247461903
+        ],
+        "p": [
+          232,
+          232
+        ],
+        "v": [
+          0,
+          164.04877323527904
+        ],
+        "r": [
+          2,
+          58
+        ]
+      },
+      "1": {
+        "i": [
+          0,
+          0
+        ],
+        "v": [
+          0,
+          0
+        ]
+      },
+      "2": {
+        "i": [
+          -2.8284271247461903,
+          -2.8284271247461903
+        ],
+        "v": [
+          0,
+          -164.04877323527904
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-15,
+      "rel": 1e-9
+    }
+  },
+  "answer": "120 V rms behind 2 Ω into 58 Ω: 120 ÷ 60 = 2 A rms, the terminals at 120 − 2 × 2 = 116 V rms, the source giving 116 × 2 = 232 W there and the load taking 2² × 58 = 232 W. The wave is √2 × sin(2π × 60 × t + 90°): at step k, t = k ÷ 240 s, a quarter cycle a step, so sin(90°), sin(180°), sin(270°) = 1, 0, −1: the current 2√2, 0, −2√2 A and node a 116√2, 0, −116√2 V."
+}

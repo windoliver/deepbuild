@@ -8,7 +8,7 @@ import ts from 'typescript';
 import { named, testPaths } from './lanes.mjs';
 import { git, show } from './proof-approvals.mjs';
 
-export { APPROVERS, git, readApprovals, show, signersIn } from './proof-approvals.mjs';
+export { APPROVERS, git, readAll, readApprovals, show, signersIn } from './proof-approvals.mjs';
 
 const TAG = /#(\d+)\.([0-9a-f]{8})\b/g;
 export const tagsIn = (text) => [...new Set([...text.matchAll(TAG)].map(([tag]) => tag))];

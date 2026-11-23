@@ -22,6 +22,7 @@ import { activePlant as plant } from './plant.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
+import { PROOFS, proofsProblem } from './guards.js';
 import { claudeHomes, denyHolds, homeMods, loginPlan, managedSettings, overrideWords } from './mods.js';
 import { probeSignIn } from './sign-in.js';
 import { lostIn } from './rule-load.js';
@@ -174,6 +175,10 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   const shadows = plant() === 'statusline-user-settings-only' ? [] : shadowedBy(repo);
   for (const s of shadows) add('claude.statusline_shadowed', 'claude-code', 'statusline_shadowed', 'warn', `${s.file} sets ${s.key}, which Claude Code runs instead of the forwarder in ${repo}, so no plan window is read there`, `Take ${s.key} out of ${s.file}, or run your status line from statusline.yours in ~/.deepbuild/config.json, which the forwarder runs after it reads the windows.`);
   items.push(...rulesItems(repo));
+  // The guard entries' planted calls and twins (#2695): deep-hook never reads them, so its guards hold without them.
+  const proofs = proofsProblem(root);
+  if (proofs) add('guards.proofs', 'deepbuild', 'proofs_unreadable', 'warn', `${proofs.why}; deep-hook's guards hold without it, but the rules page names a guard as enforcing a rule only by its proof${proofs.unreadable ? ', and every install is refused while it can\'t be read, the product store\'s guard at each hub start included' : ''}`, `${proofs.unreadable ? `Make ${join(root, PROOFS)} readable JSON again, or remove it and run` : 'Run'} \`deep setup\`, which writes the shipped entries' proofs again; add your own entries again with \`deep guard add\`.`);
+  else if (existsSync(join(root, PROOFS)) && isObj(readJson(join(root, 'rules.json'))?.entries)) add('guards.proofs', 'deepbuild', 'healthy', 'ok', `the proof of every shipped guard entry rules.json has is held, in ${join(root, PROOFS)} or rules.json`, 'Nothing to do.');
 
   // Each agent's binary, version, sign-in and billing; Claude Code's token lifetime, test prompt and jobs' binary.
   const path = env.PATH ?? '';

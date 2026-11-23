@@ -1,0 +1,52 @@
+# #2215 acceptance suite at the base, 5f5791e2d (main after #3068), before any implementation.
+#
+# Run on a Mac17,10 (macOS 27.2, Metal), not a reference Mac, under a one-minute load of about 130, each file once and
+# alone, with deep-gpu built at the base (cargo build --locked --bin deep-gpu, rustc 1.99.1):
+#
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2215 <file> \
+#     --testTimeout=600000 --hookTimeout=600000 --no-file-parallelism
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/2215/tsconfig.json   -> exit 0, no errors
+#
+# The base has no path-traced final (#178, on the unbuilt ray layer #475): view3d ignores the call’s export object and
+# draws raster, and its receipt (receipt: true) is {decoded_bytes, maps} with no final block, so every finals test stops
+# at its first final with BLOCKED naming #178, before any reading or planted run. Raster draws #428’s round blur.
+# deep-gpu refuses every --planted name this suite uses at startup (Planted::parse has none of them: bad_input, exit 2),
+# but no test reaches a planted run at the base.
+
+ac1-stretch.test.ts        FAIL (1 failed), BLOCKED at its first final:
+  AssertionError: BLOCKED: half: view3d drew no path-traced final (#178): its receipt has no final block, so the frame
+  is raster (receipt {"decoded_bytes":0,"maps":[]}); unblock: Path-traced finals (#178): export: {frames: path_traced,
+  path: {samples}} on an export-class view3d, on a GPU with hardware ray queries, with the Paths table answering
+  material@1 in a final
+
+ac2-rotation.test.ts       FAIL (1 failed), BLOCKED at its first final:
+  AssertionError: BLOCKED: r0: view3d drew no path-traced final (#178): its receipt has no final block, so the frame is
+  raster (receipt {"decoded_bytes":0,"maps":[]}); unblock: Path-traced finals (#178): …
+
+ac3-reflection.test.ts     FAIL (1 failed), BLOCKED at its first final:
+  AssertionError: BLOCKED: refracted: view3d drew no path-traced final (#178): its receipt has no final block, so the
+  frame is raster (receipt {"decoded_bytes":0,"maps":[]}); unblock: Path-traced finals (#178): …
+
+ac4-raster.test.ts         FAIL (1 failed), at the listing, for the expected reason; the round blur already holds:
+  AC4 #2215.87722da6: raster spreads 13.21 px along u, 13.21 px along v (ratio 1.00); receipt {"decoded_bytes":0,"maps":[]}
+  AssertionError: raster’s frame of the fixture:
+  + "pane: drawn with transmission 1 and anisotropy strength 0.5, but the frame’s receipt lists no {item: pane, what:
+    anisotropic_transmission} in warnings (receipt {\"decoded_bytes\":0,\"maps\":[]})"
+
+ac5-nothing-moves.test.ts  1 passed, 1 failed:
+  in raster: PASS, by construction: hashes.json’s raster hashes were recorded at this base on this machine (README: The
+    corpus), so nothing has moved yet. It is the regression guard; at this base, #428’s planted
+    transmission_ignores_roughness (deep-gpu run with that planted name, the same corpus calls) moves frost’s final and
+    linear hashes and no other member’s, which this test fails, naming frost:
+      castle final moved false linear moved false; surfaces false false; brushed false false; frost true true
+    and the true program’s frames are drawn, not blank (castle 4,624 distinct colours, surfaces 535, brushed 256,
+    frost 68).
+  in finals: BLOCKED at its first final:
+    AssertionError: BLOCKED: castle as a final: view3d drew no path-traced final (#178): its receipt has no final block,
+    so the frame is raster (receipt {"decoded_bytes":0,"maps":[]}); unblock: Path-traced finals (#178): …
+
+# The fixture at the base in raster (a probe, the same documents and calls): the pane covers every pixel of the frame
+# (262,144 ids of pane); strength 0.5, strength 0, rotation 90 and the mirrored-disk document all read 13.21 px along u
+# and along v, centroid (256, 256), summed luminance 1,969.6 (the disk’s 2,059 px at radiance 1 times 0.96, the pane’s
+# 1 − F); the mirrored disk is never seen directly (that frame equals the one without it), as raster has no reflection
+# of an emitter.

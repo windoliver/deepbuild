@@ -16,7 +16,7 @@ Why each fails at the base:
 Output (ANSI colors stripped):
 
 
- RUN  v5.0.5 /private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-github-issue-331-51c758/5ae409bb-f2be-4541-b815-f796c7e8221b/scratchpad/base403/tests/acceptance/403
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-github-issue-331-51c758/5ae409bb-f2be-4541-b815-f796c7e8221b/scratchpad/base403/tests/acceptance/403
 
  × check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 in a build without the logic module, a requirement whose check input names logic.determinism is BLOCKED with module_missing naming the kind and logic, never PASS or INCONCLUSIVE 42ms
    → the binary builds: deep-show with features full,test-leave-out-logic: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
