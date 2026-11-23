@@ -1,11 +1,10 @@
 // `deep "<words>" [--file <path>]... [--json]` (#1342): your words, with any file you attach, to the running hub as
 // the app's box sends them. It waits until the card is ready, or the brief is refused, and says which in plain words;
 // with --json, the card's ask or the reason. It asks nothing itself: the card comes to your list.
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { call, notAnswered } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl } from './paths.js';
 
 const USAGE = 'Usage: deep "<what you want done>" [--file <path>]... [--json]';
 /** How often it reads where the brief is, and how long it waits for the card. */
@@ -24,7 +23,8 @@ export async function wordsCommand(args: readonly string[]): Promise<number> {
   }
   if (!words?.trim()) { process.stderr.write(`${USAGE}\n`); return 2; }
   const say = async (): Promise<Record<string, unknown>> => {
-    const reply = await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'box.say', { words, files });
+    const { path: socket, token } = hubControl();
+    const reply = await call(socket, token, 'box.say', { words, files });
     if ('error' in reply) throw new Refusal(reply.error.remediation);
     return reply.result as Record<string, unknown>;
   };

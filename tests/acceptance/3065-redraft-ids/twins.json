@@ -1,0 +1,15 @@
+{
+  "#3065.064dd59e": [
+    "reads-helper-source",
+    "sees-bin-dir-only"
+  ],
+  "#3065.f0068a87": [
+    "writes-empty-rows"
+  ],
+  "#3065.b2bdedd7": [
+    "drops-no-row-tests"
+  ],
+  "#3065.e9e9237a": [
+    "keeps-environment"
+  ]
+}

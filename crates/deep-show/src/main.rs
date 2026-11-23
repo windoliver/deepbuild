@@ -44,6 +44,7 @@ mod host;
 mod hub;
 mod input;
 mod jobs;
+mod joins;
 mod kept;
 mod kinds;
 mod kinds_word;
@@ -689,7 +690,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" | "play_match" | "sockets" | "replay" => return net::parse(name, c),
+        "match" | "play_match" | "lobby" | "sockets" | "replay" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -763,6 +764,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
         // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
         "fingerprint" => return Some(Call::Fingerprint),
+        "ship" => {
+            return Some(Call::Ship {
+                bundle: c.get("bundle")?.as_str()?.to_string(),
+                chrome: c.get("chrome")?.as_str()?.to_string(),
+            })
+        }
         "footprint" => return Some(Call::Footprint),
         "draw" => {
             let output = c.get("output")?.as_str()?;
@@ -823,6 +830,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 tour_pointer: flag("tour_pointer")?,
             })));
         }
+        "play_frames" => return joins::parse(c).map(|p| Call::PlayFrames(Box::new(p))),
         "frames" => {
             // #856: a whole revision arriving at a frame's latch.
             let revise = match c.get("revise") {
@@ -1371,7 +1379,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
-                || deep_canvas_marks::arrays::PLANTED.contains(p)
+                || deep_canvas_marks::arrays::PLANTED.contains(p) || deep_canvas_marks::atlas::PLANTED.contains(p) || *p == spatial::HIT_READS_QUADS
                 // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
                 || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
@@ -2783,6 +2791,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             Ok(StartPlanted::KitAdmitsAll(Box::leak(
                 name.to_string().into_boxed_str(),
             )))
+        }
+        _ if joins::planted(twin).is_some() => {
+            joins::planted(twin).map(StartPlanted::Run).ok_or(())
         }
         _ if export_planted(twin).is_some() => {
             export_planted(twin).map(StartPlanted::Run).ok_or(())

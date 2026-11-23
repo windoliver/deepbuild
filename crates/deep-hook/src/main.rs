@@ -248,7 +248,8 @@ const REMOVED: &str = "was removed after setup (`deep setup` writes it again)";
 
 /// ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}, "classes": {<tool>: <class>}}`; nothing when it
 /// is missing before setup has finished, and why not when it was removed since, can't be read or isn't that shape.
-/// Other members, such as each entry's planted call and twin, are the hub's.
+/// Other members are the hub's. Each entry's planted call and twin are in proofs.json beside it, which deep-hook never
+/// opens (#2695); a rules.json an older hub wrote still holds them, and they are parsed with it until the next install.
 fn rules() -> Result<Rules, String> {
     // The planted wrong program for #304's AC1 reads no entry: its one rule is compiled in.
     if cfg!(feature = "plant-compiled-rule") {
@@ -298,39 +299,16 @@ fn standing(value: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
-/// The cloud owner a command creates its resource under, as the hub names it: an AWS command's account, by its
-/// `--profile`'s `sso_account_id` in ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
-fn cloud_owner(command: &str) -> Option<String> {
-    let words: Vec<&str> = command.split_whitespace().collect();
-    if words.first().map(|w| w.trim_matches(['"', '\''])) != Some("aws") {
-        return None;
+/// The cloud owner an AWS profile creates its resource under, as the hub names it: the profile's `sso_account_id` in
+/// ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
+fn cloud_owner(profile: &str) -> String {
+    let aws = PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws");
+    let config = fs::read_to_string(aws.join("config")).unwrap_or_default();
+    let credentials = fs::read_to_string(aws.join("credentials")).unwrap_or_default();
+    match matcher::aws_account(&config, &credentials, profile) {
+        Some(account) => format!("aws:{account}"),
+        None => format!("aws-profile:{profile}"),
     }
-    let profile = words
-        .iter()
-        .position(|w| *w == "--profile" || w.starts_with("--profile="))
-        .and_then(|i| match words[i].strip_prefix("--profile=") {
-            Some(p) => Some(p),
-            None => words.get(i + 1).copied(),
-        })
-        .unwrap_or("default")
-        .trim_matches(['"', '\'']);
-    let config = fs::read_to_string(
-        PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws/config"),
-    )
-    .unwrap_or_default();
-    let mut section = String::new();
-    for line in config.lines().map(str::trim) {
-        if let Some(head) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
-            section = head.trim_start_matches("profile ").trim().to_string();
-        } else if section == profile {
-            if let Some((key, value)) = line.split_once('=') {
-                if key.trim() == "sso_account_id" {
-                    return Some(format!("aws:{}", value.trim()));
-                }
-            }
-        }
-    }
-    Some(format!("aws-profile:{profile}"))
 }
 
 /// A `classes` member, `{<tool>: read | change | send | destructive}`; none when it is absent.
@@ -598,17 +576,13 @@ fn check() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Whether a standing rule the hub copied covers the cloud resource this call creates (#23).
-fn covered(parsed: Option<&Value>, rules: &Rules) -> bool {
-    match parsed
-        .and_then(|p| member(p, "tool_input"))
-        .and_then(|i| member(i, "command"))
-    {
-        Some(Value::String(c)) => {
-            cloud_owner(c).is_some_and(|owner| rules.standing.contains(&owner))
-        }
-        _ => false,
-    }
+/// Whether a standing rule the hub copied covers the cloud resource this call creates (#23): the owner is read from
+/// the one run that creates it, when the reader can know its profile; a call with more than one such run is covered by
+/// none (#2134).
+fn covered(called: Option<&matcher::Call>, rules: &Rules) -> bool {
+    called
+        .and_then(matcher::Call::aws_profile)
+        .is_some_and(|profile| rules.standing.contains(&cloud_owner(&profile)))
 }
 
 /// What each fail_closed entry a call matched says, denying it with the hub away.
@@ -707,7 +681,7 @@ fn matching() -> ExitCode {
                     .map(|(g, _)| quoted(&g.name))
                     .collect::<Vec<_>>()
                     .join(",");
-                let denied = denials(&matched, covered(parsed.as_ref(), &rules))
+                let denied = denials(&matched, covered(called.as_ref(), &rules))
                     .iter()
                     .map(|d| quoted(d))
                     .collect::<Vec<_>>()
@@ -1287,7 +1261,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let matched = met(&rules.guards, called.as_ref());
     // A cloud resource a standing rule the hub copied covers is let through, and spooled like any call (#23).
     // With the hub away, each fail_closed entry the call matched still denies it, each in its own words.
-    let denied = denials(&matched, covered(parsed.as_ref(), &rules));
+    let denied = denials(&matched, covered(called.as_ref(), &rules));
     if !denied.is_empty() {
         let _ = DENIAL.set(denied.join("\n"));
     }
