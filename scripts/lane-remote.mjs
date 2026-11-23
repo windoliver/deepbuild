@@ -127,14 +127,15 @@ function far() {
   if (head !== manifest.commit) blocked(`the commit shipped is ${manifest.commit}; ${hostname()} holds ${head}`);
   const tree = exactTree(cwd);
   if (!tree || tree !== manifest.tree) blocked(`the tree shipped is ${manifest.tree}; ${hostname()} holds ${tree ?? 'none'}`);
+  // Through the machine's throttle: a status but 0 is a missing grant (its line says so above) or the command's failure.
   const build = (...command) => spawnSync(process.execPath, ['scripts/throttle.mjs', 'build', '--wait', '30', '--', ...command], { cwd, stdio: 'inherit' }).status === 0;
   // npm ci only when the lock's bytes changed since the last install here, as in a bay.
   const marker = join(cwd, git(['rev-parse', '--git-dir']).trim(), 'lane-remote-installed'), want = sha(readFileSync(join(cwd, 'package-lock.json')));
   if (!existsSync(join(cwd, 'node_modules')) || !existsSync(marker) || readFileSync(marker, 'utf8') !== want) {
-    if (!build('npm', 'ci')) blocked('npm ci failed, so the lane was not run');
+    if (!build('npm', 'ci')) blocked('npm ci got no build grant or failed, as the line above says, so the lane was not run');
     writeFileSync(marker, want);
   }
-  if (!build('npm', 'run', 'build', '--workspaces')) blocked("the packages' build failed, so the lane was not run");
+  if (!build('npm', 'run', 'build', '--workspaces')) blocked("the packages' build got no build grant or failed, as the line above says, so the lane was not run");
   // A record an earlier run of this tree left is not this run's.
   rmSync(record(tree), { force: true });
   runLanes([lane], { cwd });
