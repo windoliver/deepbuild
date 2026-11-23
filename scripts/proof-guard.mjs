@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { lstatSync } from 'node:fs';
 import { basename, dirname, join, posix } from 'node:path';
 import { LANE_FILE } from './lanes.mjs';
-import { APPROVERS, blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, relativeImports, removedLines, resolveModule, RUNNER_CONFIG, show, signersIn, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
+import { APPROVERS, blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, readAll, relativeImports, removedLines, resolveModule, RUNNER_CONFIG, show, signersIn, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
 
 const FIX = 'Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.';
 // Your decisions: the four invariants in AGENTS.md, and each row of the tables under Decisions.
@@ -13,14 +13,14 @@ const DECISIONS = {
   'AGENTS.md': { heading: '## The four invariants', what: 'one of the four invariants', row: () => true },
   'docs/technical-design.md': { heading: '## Decisions', what: 'a row under Decisions', row: (line) => line.startsWith('|') },
 };
-// The proof lanes' own code, lanes.mjs, which names the test paths and the timed tests, the throttle, perf, the
+// The proof lanes' own code, lanes.mjs and its lists in lanes-lists.mjs, which name the test paths and the timed tests, the throttle, perf, the
 // budget window and benchmark.mjs's judges, which decide when a budget counts, affected.mjs, which decides which tests a change runs, the bays and the shards, which decide what
 // a proof's build reuses: once main holds the lanes, the change runs its own copy of them, so an edit of them is an
 // edit of the checks. So is an edit of a test runner's config (RUNNER_CONFIG), which can stub the code under test
 // only where it finds the change. The x86_64 lane and its image pin decide which replay counts as another machine.
 // main-watch.mjs decides whether landings pause and which landing broke main, and known-failures-check.mjs whether a
 // listed failure may stand.
-const LANES_CODE = /^scripts\/(?:(?:proof[^/]*|lanes|throttle|perf|budget-window|benchmark|affected|bays|shards|lane-x86|main-watch|known-failures-check)\.mjs|lane-x86\.json)$/;
+const LANES_CODE = /^scripts\/(?:(?:proof[^/]*|lanes|lanes-lists|throttle|perf|budget-window|benchmark|affected|bays|shards|lane-x86|main-watch|known-failures-check)\.mjs|lane-x86\.json)$/;
 // The skips the lanes let stand are a decision of the same weight, so that key is guarded: any change to it.
 const SKIPS_FILE = 'scripts/known-failures.json';
 const skipsIn = (text) => {
@@ -542,7 +542,9 @@ function winnable(root, rev, held) {
   const names = [basename(stem), ...(/\.[cm]?tsx?$/.test(held) ? ['.js', '.mjs', '.cjs', '.jsx'].map((extension) => basename(stem) + extension) : []), ...(basename(stem) === 'index' ? [basename(dirname(stem))] : [])];
   const grep = spawnSync('git', ['grep', '-l', '-F', ...names.flatMap((name) => ['-e', name]), rev, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
   const specifier = RegExp(`['"\`/](?:${names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})['"\`]`);
-  return grep.stdout.split('\n').filter(Boolean).some((hit) => specifier.test(show(root, rev, hit.slice(rev.length + 1)) ?? ''));
+  const hits = grep.stdout.split('\n').filter(Boolean).map((hit) => hit.slice(rev.length + 1));
+  readAll(root, rev, hits);
+  return hits.some((file) => specifier.test(show(root, rev, file) ?? ''));
 }
 
 // The tagged tests whose span, or whose file, names the fixture's path, from the repo root or the
@@ -553,8 +555,9 @@ function readersOf(root, rev, path, relevant, seen = new Set([path])) {
   const stem = SCRIPT.test(path) ? path.replace(SCRIPT, '') : null;
   const grep = spawnSync('git', ['grep', '-l', '-F', '-e', basename(stem ?? path), '-e', basename(dirname(path)), rev, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
   const readers = [];
-  for (const hit of grep.stdout.split('\n').filter(Boolean)) {
-    const file = hit.slice(rev.length + 1);
+  const hits = grep.stdout.split('\n').filter(Boolean).map((hit) => hit.slice(rev.length + 1));
+  readAll(root, rev, hits.filter((file) => !seen.has(file) && underTestPaths(file)));
+  for (const file of hits) {
     if (seen.has(file) || !underTestPaths(file)) continue;
     const source = show(root, rev, file);
     const relative = posix.relative(dirname(file), path);

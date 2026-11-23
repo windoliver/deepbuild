@@ -106,7 +106,10 @@ pub(crate) fn take_trails(scene: &mut Scene, from: &Scene) {
 
 /// #265: each water's wake samples, newest first with their flicks, as the last frame this
 /// process drew kept them: the planted `wake_keeps_last_frame` draws these.
-static WAKES: Mutex<BTreeMap<String, Vec<(i64, [f64; 2])>>> = Mutex::new(BTreeMap::new());
+static WAKES: Mutex<Wakes> = Mutex::new(BTreeMap::new());
+
+/// Each water's wake samples, newest first: each sample's flicks and place.
+type Wakes = BTreeMap<String, Vec<(i64, [f64; 2])>>;
 
 /// The planted `wake_keeps_last_frame`: a wake's samples are those the last frame this process
 /// drew kept, less those older than its span, and the item's place at t; it never reads the

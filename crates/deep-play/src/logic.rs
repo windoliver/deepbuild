@@ -135,6 +135,8 @@ pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
         issues.extend(grid_glyphs(form));
     }
     issues.extend(readers(form, entries));
+    // #269: each grid image's grid, and every cell of it past its roles.
+    issues.extend(deep_canvas_marks::grid_image::check(form, entries));
     // #297: entry texts' controls and players, and their fit.
     if let Some(map) = form.as_object() {
         issues.extend(deep_canvas_marks::entries::check_issues(map));
@@ -477,6 +479,9 @@ pub fn raised_at(form: &Value, t: Option<i64>, locale: &str) -> Vec<Issue> {
     });
     #[cfg(not(feature = "cells"))]
     let mut out = Vec::new();
+    if let Some(t) = t {
+        out.extend(deep_canvas_marks::grid_image::raised_at(form, t));
+    }
     out.extend(deep_canvas_motion::held::unmapped(form, t));
     out.extend(deep_canvas_marks::copy::raised_at(map, t, locale));
     out.extend(deep_canvas_marks::copy::column_missing(map, t, locale));

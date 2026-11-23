@@ -275,7 +275,10 @@ static DRAWN: Mutex<Vec<f64>> = Mutex::new(Vec::new());
 
 /// #265: where each item's anchor stood at each frame this process drew, with the frame's time
 /// in s, in order: the planted `anchor_kept_from_frame` reads them.
-static ANCHORED: Mutex<BTreeMap<String, Vec<(f64, [f64; 3])>>> = Mutex::new(BTreeMap::new());
+static ANCHORED: Mutex<Anchors> = Mutex::new(BTreeMap::new());
+
+/// Each item's anchor at each frame drawn: the frame's time in s and where the anchor stood.
+type Anchors = BTreeMap<String, Vec<(f64, [f64; 3])>>;
 
 /// The planted `anchor_kept_from_frame`: each birth bucket's anchor where the last frame this
 /// process drew at or before the bucket placed it, and with no such frame where this frame does,

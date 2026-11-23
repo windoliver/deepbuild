@@ -289,7 +289,7 @@ fn ranked(edges: &EdgesOf) -> Vec<[V3; 2]> {
             (ka, kb) => ([kb, ka], [*b, *a]),
         })
         .collect();
-    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.sort_by_key(|a| a.0);
     out.into_iter().map(|(_, ends)| ends).collect()
 }
 

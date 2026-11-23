@@ -353,6 +353,21 @@ test('a file a config-named setup file reaches by a template literal or a path f
   for (const path of ['tests/hook.ts', 'tests/root.ts']) assert.ok(problems(result, 'guard').some((found) => found.startsWith(`FAIL guard: ${path}: a file the test runner's config names changed`)), show(result));
 });
 
+test('every test that reads a deleted fixture is named, read together in one git process, whatever bytes and names their files hold', (t) => {
+  // Multibyte text and a name with a space ahead of later readers: each file read whole, from its own bytes (#3179).
+  const reads = (name, text) => `import assert from 'node:assert/strict';\nimport test from 'node:test';\n// ${text}\n\ntest('${c1} ${name}', () => {\n  assert.ok(readFileSync('data.txt'));\n});\n`;
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      'scripts/proof-guard.mjs': '// the guard\n', [`${dir}/data.txt`]: 'tea 3\n',
+      [`${dir}/a.test.mjs`]: reads('one', 'é—日本語 🍵 '.repeat(40)), [`${dir}/b c.test.mjs`]: reads('two', 'ü\\n'.repeat(30)), [`${dir}/d.test.mjs`]: reads('three', 'plain'),
+    },
+    commits: [{ files: { [`${dir}/data.txt`]: null }, message: `Drop\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  const found = problems(result, 'guard');
+  assert.ok(found.some((line) => line.startsWith(`FAIL guard: ${dir}/data.txt: deleted; read by ${dir}/a.test.mjs › ${c1} one, ${dir}/b c.test.mjs › ${c1} two, ${dir}/d.test.mjs › ${c1} three`)), show(result));
+});
+
 test('a helper read as its folder, and files a resolver may take in place of a guarded one, are guarded as it is', (t) => {
   const reads = (from) => `import { it } from 'vitest';\nimport cases from '${from}';\n\nit('${c1} sums', () => {\n  if (cases.want !== 3) throw Error('wrong');\n});\n`;
   const scene = (files) => repo(t, {

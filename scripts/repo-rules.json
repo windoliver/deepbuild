@@ -2181,6 +2181,10 @@
           "spec": "^0.25",
           "why": "Issue #498: PNG images decoded in the worker; already in the tree (deep-show, deep-app)."
         },
+        "png": {
+          "spec": "^0.18",
+          "why": "Issue #1488: a still converted at intake is written as a PNG tagged sRGB; already in the tree (image's PNG codec)."
+        },
         "basisu_c_sys": {
           "spec": "^0.9.1",
           "why": "Issue #423: KTX2 maps (Basis Universal ETC1S or UASTC) transcoded to BC in the decode worker."
@@ -2869,126 +2873,6 @@
         }
       }
     },
-    "tests/acceptance/12/twins/build-without-cargo/package.json": {
-      "devDependencies": {
-        "@microsoft/api-extractor": {
-          "spec": "7.60.0",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; @microsoft/api-extractor is the root's own entry, unchanged."
-        },
-        "@stryker-mutator/core": {
-          "spec": "10.0.0",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; @stryker-mutator/core is the root's own entry, unchanged."
-        },
-        "@types/better-sqlite3": {
-          "spec": "7.6.13",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; @types/better-sqlite3 is the root's own entry, unchanged."
-        },
-        "@types/node": {
-          "spec": "24.19.2",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; @types/node is the root's own entry, unchanged."
-        },
-        "fast-check": {
-          "spec": "4.10.2",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; fast-check is the root's own entry, unchanged."
-        },
-        "gpt-tokenizer": {
-          "spec": "4.0.0",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; gpt-tokenizer is the root's own entry, unchanged."
-        },
-        "jest": {
-          "spec": "30.5.2",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; jest is the root's own entry, unchanged."
-        },
-        "typescript": {
-          "spec": "5.9.3",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; typescript is the root's own entry, unchanged."
-        },
-        "vitest": {
-          "spec": "5.0.5",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; vitest is the root's own entry, unchanged."
-        }
-      }
-    },
-    "tests/acceptance/12/twins/no-deep-bin/package.json": {
-      "devDependencies": {
-        "@microsoft/api-extractor": {
-          "spec": "7.60.0",
-          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; @microsoft/api-extractor is the root's own entry, unchanged."
-        },
-        "@stryker-mutator/core": {
-          "spec": "10.0.0",
-          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; @stryker-mutator/core is the root's own entry, unchanged."
-        },
-        "@types/better-sqlite3": {
-          "spec": "7.6.13",
-          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; @types/better-sqlite3 is the root's own entry, unchanged."
-        },
-        "@types/node": {
-          "spec": "24.19.2",
-          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; @types/node is the root's own entry, unchanged."
-        },
-        "fast-check": {
-          "spec": "4.10.2",
-          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; fast-check is the root's own entry, unchanged."
-        },
-        "gpt-tokenizer": {
-          "spec": "4.0.0",
-          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; gpt-tokenizer is the root's own entry, unchanged."
-        },
-        "jest": {
-          "spec": "30.5.2",
-          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; jest is the root's own entry, unchanged."
-        },
-        "typescript": {
-          "spec": "5.9.3",
-          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; typescript is the root's own entry, unchanged."
-        },
-        "vitest": {
-          "spec": "5.0.5",
-          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; vitest is the root's own entry, unchanged."
-        }
-      }
-    },
-    "tests/acceptance/12/twins/release-check-local/package.json": {
-      "devDependencies": {
-        "@microsoft/api-extractor": {
-          "spec": "7.60.0",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; @microsoft/api-extractor is the root's own entry, unchanged."
-        },
-        "@stryker-mutator/core": {
-          "spec": "10.0.0",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; @stryker-mutator/core is the root's own entry, unchanged."
-        },
-        "@types/better-sqlite3": {
-          "spec": "7.6.13",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; @types/better-sqlite3 is the root's own entry, unchanged."
-        },
-        "@types/node": {
-          "spec": "24.19.2",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; @types/node is the root's own entry, unchanged."
-        },
-        "fast-check": {
-          "spec": "4.10.2",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; fast-check is the root's own entry, unchanged."
-        },
-        "gpt-tokenizer": {
-          "spec": "4.0.0",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; gpt-tokenizer is the root's own entry, unchanged."
-        },
-        "jest": {
-          "spec": "30.5.2",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; jest is the root's own entry, unchanged."
-        },
-        "typescript": {
-          "spec": "5.9.3",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; typescript is the root's own entry, unchanged."
-        },
-        "vitest": {
-          "spec": "5.0.5",
-          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; vitest is the root's own entry, unchanged."
-        }
-      }
-    },
     "crates/deep-player/Cargo.toml": {
       "dependencies": {
         "deep-canvas": {
@@ -3234,6 +3118,114 @@
           "why": "Issue #194: names a packed catalog by the SHA-256 of its table.layout@1 bytes, as the evidence store does. Already in the workspace tree."
         }
       }
+    },
+    "tests/acceptance/189/carry/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #189's carry suite: its own assembler for the fixtures, #534's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #189's carry suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/189/saves/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #189's saves suite: its own assembler for the fixtures, #531's, cut down, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #189's saves suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/192/dungeon/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #192's dungeon suite: its own assembler for the fixtures, a copy of #190's, which also writes relocatable objects, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #192's dungeon suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/276/match/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #276's match suite: its own assembler for the fixtures, #189's carry suite's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #276's match suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/276/record/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #276's record suite: its own assembler for the fixtures, #189's carry suite's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #276's record suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/276/web/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #276's web suite: its own assembler for the fixtures, #189's carry suite's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #276's web suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/416/interfaces/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #416's interfaces suite: its own assembler for the fixtures, #190's source, built with this lockfile, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #416's interfaces suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/416/layouts/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #416's layouts suite: its own assembler for the fixtures, #531's, cut down, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #416's layouts suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/851/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #851's blind suite: its own assembler for the fixtures, #189's carry suite's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #851's blind suite: validates each fixture module before it is written."
+        }
+      }
     }
   },
   "allowedFindings": [
@@ -3400,10 +3392,16 @@
       "why": "A contract fixture: a staged delete's folder under the placeholder user you; no real home."
     },
     {
-      "path": "tests/acceptance/1946/BASE-FAILURE.txt",
-      "kind": "home path",
-      "sha256": "c2ac37b4b37cd2b3c313d53b379116b5a9397b0cf4da758c4d3bd619c71f5684",
-      "why": "Issue #1946's blind suite: the throwaway account dh1946c244bb44 its base run made on the test host, in the saved base failure; no real home."
+      "path": "tests/acceptance/2651/lib.mjs",
+      "kind": "API key",
+      "sha256": "e7955e3523b0953051a8e7aea4055b68664241496cd56f51fbef02b81a5cdc3c",
+      "why": "Issue #2651's blind suite: a made-up access token (dh2651FAKE) written into a temp home's credentials file; no real credential."
+    },
+    {
+      "path": "tests/acceptance/2651/lib.mjs",
+      "kind": "API key",
+      "sha256": "533983d7c2f80a6f023d94767711b12a3536d38aa44c3ed852052b69375b4e37",
+      "why": "Issue #2651's blind suite: a made-up refresh token (dh2651FAKE) written into a temp home's credentials file; no real credential."
     }
   ]
 }
