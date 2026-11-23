@@ -12,7 +12,7 @@ import { duration, type Delivery } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallRule } from '@deepbuild/gate';
-import type { SessionRoute } from '@deepbuild/adapters';
+import { routeOf } from './route-of.js';
 import { type WindowReport } from '@deepbuild/runner';
 import { type Grant } from '@deepbuild/supervisor';
 import { recordVerdict, verdictHash, verdictLine, type Result } from '@deepbuild/verdicts';
@@ -935,24 +935,6 @@ export class StopJudging {
     for (const reading of readings) if (!stands(standing, reading)) await this.options.events.appendReading(meta.session, meta.agent, reading);
   }
 
-  /**
-   * The route the session's adapter read at its starts (#1886), as each session.start keeps it: any start's proxied
-   * key holds for the session, since its transcript may name a model from that start; null where it has no start or
-   * one recorded no route, so its model reads as unknown.
-   */
-  async routeOf(session: string | null): Promise<SessionRoute | null> {
-    if (!session) return null;
-    const rows = (await this.options.services.record.raw(`SELECT json_extract(data, '$.route') AS route FROM events WHERE session_id = ? AND kind = 'session.start' ORDER BY log_pos`, [session])) as { route: string | null }[];
-    if (!rows.length) return null;
-    const route: SessionRoute = {};
-    for (const row of rows) {
-      const read: unknown = row.route ? JSON.parse(row.route) : undefined;
-      if (typeof read !== 'object' || read === null) return null;
-      for (const [key, set] of Object.entries(read)) if (typeof set === 'boolean') route[key] = route[key] === true || set;
-    }
-    return route;
-  }
-
   /** The pull request a session opened, as its readings record it: the newest. */
   async prOf(session: string | null): Promise<string | undefined> {
     if (!session) return undefined;
@@ -1079,7 +1061,7 @@ export class StopJudging {
       // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
       // a work kind; the review on every claim that opens or updates a PR, its second model through the runner under
       // your reserve (#87); the numbers check on every claim whose words state a number or a speed with the check behind it (#1863).
-      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', transcript: this.options.state().sessions.get(r.session)?.transcript, pr: await this.prOf(r.session), route: await this.routeOf(r.session) };
+      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', transcript: this.options.state().sessions.get(r.session)?.transcript, pr: await this.prOf(r.session), route: await routeOf(this.options.services.record, r.session) };
       const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
       const docs = docChecksIn(approved?.spec);
       for (const c of checks) {

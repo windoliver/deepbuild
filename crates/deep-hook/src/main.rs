@@ -28,6 +28,7 @@ mod cow;
 mod heavy;
 mod remote;
 mod spool_file;
+mod start_keys;
 mod tool_paths;
 
 use cow::clone;
@@ -35,30 +36,6 @@ use cow::clone;
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
 const ACK_BUDGET: Duration = Duration::from_millis(20);
-
-/// The environment variables that make an agent bill an API account instead of your plan. SessionStart
-/// reports whether each is set, never its value.
-const BILLING_KEYS: &[&str] = &[
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_AUTH_TOKEN",
-    "CLAUDE_CODE_USE_BEDROCK",
-    "CLAUDE_CODE_USE_VERTEX",
-    "OPENAI_API_KEY",
-];
-
-/// The environment variables that move the route to an agent's model off its own, beside the billing keys that do
-/// (#1886): SessionStart reports whether each is set, never its value, and the agent's adapter reads the route from
-/// both.
-const ROUTE_KEYS: &[&str] = &[
-    "ANTHROPIC_BASE_URL",
-    "ANTHROPIC_BEDROCK_BASE_URL",
-    "ANTHROPIC_VERTEX_BASE_URL",
-    "ANTHROPIC_FOUNDRY_BASE_URL",
-    "ANTHROPIC_AWS_BASE_URL",
-    "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
-    "ANTHROPIC_GOOGLE_CLOUD_BASE_URL",
-    "OPENAI_BASE_URL",
-];
 
 // A release build refuses the planted programs' feature (#1408).
 #[cfg(all(feature = "env-plants", not(debug_assertions)))]
@@ -1324,31 +1301,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         .unwrap_or_default();
     // At SessionStart, whether each billing and route key is set in the environment the agent gave this process.
     let billing = if event == "SessionStart" {
-        let keys = BILLING_KEYS
-            .iter()
-            .map(|key| {
-                // A key counts when set; a CLAUDE_CODE_USE_ switch only when on, as Claude Code reads it.
-                let value = env::var(key).unwrap_or_default().to_ascii_lowercase();
-                let set = if key.starts_with("CLAUDE_CODE_USE_") {
-                    matches!(value.as_str(), "1" | "true" | "yes" | "on")
-                } else {
-                    !value.is_empty()
-                };
-                format!("\"{key}\":{set}")
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-        let route = ROUTE_KEYS
-            .iter()
-            .map(|key| {
-                format!(
-                    "\"{key}\":{}",
-                    env::var_os(key).is_some_and(|v| !v.is_empty())
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-        format!(",\"billing\":{{{keys}}},\"route\":{{{route}}}")
+        start_keys::reported()
     } else {
         String::new()
     };

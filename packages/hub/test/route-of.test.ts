@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { openRecord, ulid } from '@deepbuild/record';
-import { StopJudging, type StopJudgingOptions } from '../src/stop-judging.js';
+import { routeOf } from '../src/route-of.js';
 
 const OWN = { ANTHROPIC_BASE_URL: false, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_CODE_USE_BEDROCK: false, CLAUDE_CODE_USE_VERTEX: false };
 
@@ -26,13 +26,12 @@ it('reads every start of the session, and none where a start recorded no route',
     await start('unrecorded');
     await start('then-unrecorded', OWN);
     await start('then-unrecorded');
-    const judging = new StopJudging({ settings: {}, services: { record } } as unknown as StopJudgingOptions);
-    expect(await judging.routeOf('resumed'), 'started behind a base URL, resumed without it').toEqual({ ...OWN, ANTHROPIC_BASE_URL: true });
-    expect(await judging.routeOf('proxied-later'), 'started on its own route, resumed behind a base URL').toEqual({ ...OWN, ANTHROPIC_BASE_URL: true });
-    expect(await judging.routeOf('own'), 'on the agent\'s own route').toEqual(OWN);
-    expect(await judging.routeOf('unrecorded'), 'a start that recorded no route').toBeNull();
-    expect(await judging.routeOf('then-unrecorded'), 'a later start that recorded no route').toBeNull();
-    expect(await judging.routeOf('never-started'), 'no start').toBeNull();
+    expect(await routeOf(record, 'resumed'), 'started behind a base URL, resumed without it').toEqual({ ...OWN, ANTHROPIC_BASE_URL: true });
+    expect(await routeOf(record, 'proxied-later'), 'started on its own route, resumed behind a base URL').toEqual({ ...OWN, ANTHROPIC_BASE_URL: true });
+    expect(await routeOf(record, 'own'), 'on the agent\'s own route').toEqual(OWN);
+    expect(await routeOf(record, 'unrecorded'), 'a start that recorded no route').toBeNull();
+    expect(await routeOf(record, 'then-unrecorded'), 'a later start that recorded no route').toBeNull();
+    expect(await routeOf(record, 'never-started'), 'no start').toBeNull();
   } finally {
     await record.close();
     rmSync(dir, { recursive: true, force: true });
