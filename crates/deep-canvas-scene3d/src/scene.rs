@@ -2944,7 +2944,7 @@ pub(crate) fn evaluate_compiled(
 }
 
 /// The document's frame interval in flicks: its transport's `frame_rate`, 60/1 by default.
-fn frame_interval(map: &Map<String, Value>) -> i64 {
+pub(crate) fn frame_interval(map: &Map<String, Value>) -> i64 {
     let (p, q) = map
         .get("transport")
         .and_then(deep_canvas::document::frame_rate_of)

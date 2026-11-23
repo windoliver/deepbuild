@@ -374,6 +374,8 @@ fn run_view(
             Ok((crate::regions::Seen::Camera(sc.camera), sc.volumes))
         })?;
     }
+    // #3034: a camera whose eye goes below a water part is refused before any frame draws.
+    dry(&args, &mut labels, &read, app.planted)?;
     let (doc_look, doc_look_json) = (args.look.clone(), args.look_json.clone());
     // #462's planted strokes: the camera the frame before drew through.
     let mut last_camera: Option<deep_canvas_scene3d::scene::Camera> = None;

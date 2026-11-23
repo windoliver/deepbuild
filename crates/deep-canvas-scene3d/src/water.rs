@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 
 use serde_json::{json, Value};
 
-use crate::scene::{Layer3, Refused};
+use crate::scene::{Layer3, Refused, Scene};
 
 /// The most waves one water sums.
 pub const MAX_WAVES: usize = 4;
@@ -345,6 +345,17 @@ impl Water {
         let cell = (1.0 / (self.rain * RING_LIFE).sqrt()).max(2.0 * RING_SPEED * RING_LIFE);
         let slot = 1.0 / (self.rain * cell * cell);
         (cell, slot, (RING_LIFE / slot - 1e-9).ceil() as u32)
+    }
+
+    /// #3034: the part whose surface at rest `eye` lies below: inside its extent in x and z,
+    /// and lower than the water's level.
+    pub fn over(&self, eye: [f64; 3]) -> Option<&str> {
+        let covers = |[x0, z0, x1, z1]: &[f64; 4]| {
+            eye[0] >= *x0 && eye[0] <= *x1 && eye[2] >= *z0 && eye[2] <= *z1
+        };
+        (self.plates.iter())
+            .find(|(_, plate)| eye[1] < self.level && covers(plate))
+            .map(|(part, _)| part.as_str())
     }
 }
 
@@ -802,6 +813,31 @@ pub fn dragged(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
     Ok(())
 }
 
+/// #3034: water is drawn for an eye above it, so a camera whose eye goes below a water part
+/// during the document's span is refused at check: the issue, naming the camera, the part and
+/// the first frame time the eye is below, or `None`. `at` is the scene at a time as the host
+/// draws it; a document with no water reads none.
+pub fn submerged(doc: &Value, mut at: impl FnMut(i64) -> Option<Scene>) -> Option<Value> {
+    let map = doc.as_object()?;
+    let wet = |i: &Value| i.pointer("/params/water").is_some_and(Value::is_object);
+    if !map.get("items")?.as_object()?.values().any(wet) {
+        return None;
+    }
+    let camera = map.get("camera")?.as_str()?;
+    let span = doc.pointer("/transport/span").cloned().unwrap_or(json!(0));
+    let span = deep_canvas::document::duration(doc, &span).unwrap_or(0);
+    let step = crate::scene::frame_interval(map).max(1);
+    (0..=span.max(0) / step).map(|k| k * step).find_map(|t| {
+        let scene = at(t)?;
+        let part = scene.water.as_ref()?.over(scene.camera.eye)?;
+        let s = t as f64 / FLICKS;
+        Some(json!({"code": "out_of_range", "severity": "error", "path": format!("items/{camera}/params"),
+            "ids": [camera, part], "actual": {"camera": camera, "part": part, "t": t},
+            "what": format!("the eye of {camera} is below the water of {part} at {s} s: water is drawn for an eye above it"),
+            "fix": "Keep the camera's eye above the water's surface through the document's span."}))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use deep_canvas_motion::occurrence::Occurrence;
@@ -949,6 +985,47 @@ mod tests {
         let split = |k: i64| if k % 2 == 0 { 1.0 } else { -1.0 };
         assert!(read(within(65, F / 65, split)).is_ok());
         assert!(read(within(65, F / 32, |_| 1.0)).is_ok());
+    }
+
+    /// #3034: a 20 m lake at y = 0 seen from `eye`, over a span of 4 s.
+    fn lake(eye: [f64; 3]) -> Value {
+        json!({
+            "format": 1, "profile": "scene", "title": "T", "size": [320, 180], "camera": "cam",
+            "transport": {"span": "4s"},
+            "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "name": "C", "order": "a0", "layer": "main", "params": {"projection": "perspective", "position": eye, "target": [0, 0, 0], "fov": 40}},
+                "wet": {"id": "wet", "kind": "material@1", "name": "M", "order": "a1", "layer": "main", "params": {"water": {}}},
+                "lake": {"id": "lake", "kind": "plate@1", "name": "L", "order": "b0", "layer": "main", "material": "wet", "params": {"grid": [4, 4], "size": [20, 20]}, "at": {"pos": [0, 0, 0]}}
+            }
+        })
+    }
+
+    fn look() -> crate::look::Look3 {
+        crate::look::Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}}))
+            .unwrap()
+    }
+
+    /// #3034: a camera keyed through the surface is refused, naming the camera, the part and the
+    /// first frame time its eye is below; one that stays above the water is not.
+    #[test]
+    fn a_camera_keyed_below_the_water_is_refused_at_its_first_frame_below() {
+        let look = look();
+        let at = |doc: &Value, t: i64| {
+            crate::scene::evaluate(doc, t, &look, &mut crate::label::Labels::new()).ok()
+        };
+        let mut doc = lake([0.0, 2.0, 3.0]);
+        assert_eq!(submerged(&doc, |t| at(&doc, t)), None);
+        doc["channels"] = json!({"dive": {"target": "items/cam/params/position/1", "type": "f32",
+            "keys": {"k0": {"t": "0s", "value": 2.0078125, "interp": "linear"},
+                     "k1": {"t": "4s", "value": -1.9921875, "interp": "linear"}}}});
+        let issue = submerged(&doc, |t| at(&doc, t)).expect("the dive is refused");
+        // The eye meets the surface between the frames at 2 s and a sixtieth of a second later.
+        assert_eq!(
+            issue["actual"],
+            json!({"camera": "cam", "part": "lake", "t": 2 * F + F / 60})
+        );
+        assert_eq!(issue["ids"], json!(["cam", "lake"]));
     }
 
     /// #2760: a list none of whose kinds carries a point is refused, naming the list.
