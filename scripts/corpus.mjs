@@ -264,9 +264,9 @@ function inTerminal(argv) {
  * One scripted session. Steps type text and wait for the turn to end, wait for more stops, press keys in a dialog and
  * wait for the hook they lead to, or kill the agent mid-call or where it stands.
  */
-async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
+async function session({ argv, cwd, dir, terminal, steps, startAfter, env = {} }) {
   const [shell, args] = terminal ? inTerminal(argv) : [argv[0], argv.slice(1)];
-  const child = spawn(shell, args, { cwd, env: { ...cleanEnv(), TERM: 'xterm-256color' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(shell, args, { cwd, env: { ...cleanEnv(), TERM: 'xterm-256color', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
   let screen = '';
   child.stdout.setEncoding('utf8').on('data', (chunk) => { screen += chunk; });
   child.stderr.setEncoding('utf8').on('data', (chunk) => { screen += chunk; });
@@ -320,7 +320,9 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
         if (step.prompt) await type(step.prompt);
         if (step.killOn && !(await until(() => recorded().some(step.killOn), 180_000))) { blocked = 'the call to crash on never started'; break; }
         await sleep(1000);
-        for (const { pid, command } of await descendants(child.pid)) if (command.includes(step.binary)) try { process.kill(pid, 'SIGKILL'); } catch {}
+        // A signal step (SIGINT, as Ctrl-C) reaches the outermost process alone, which hands it on.
+        const targets = (await descendants(child.pid)).filter(({ command }) => command.includes(step.binary));
+        for (const { pid } of step.signal ? targets.slice(0, 1) : targets) try { process.kill(pid, step.signal ?? 'SIGKILL'); } catch {}
         await sleep(2000);
       }
       if (step.wait) await sleep(step.wait);
@@ -459,8 +461,6 @@ async function recordClaude(out, bin, facts, only, version) {
 // so every Codex session runs in a folder your config already trusts, DEEP_CORPUS_CODEX_TRUSTED,
 // with its files in a folder of its own inside it, and recording writes nothing into your config.
 async function recordCodex(out, bin, facts, only, version) {
-  const trusted = process.env.DEEP_CORPUS_CODEX_TRUSTED;
-  if (!trusted) return [{ scenario: 'all', dir: out, blocked: 'set DEEP_CORPUS_CODEX_TRUSTED to a folder your Codex config already trusts', payloads: [] }];
   const listed = Object.keys(facts.events?.versions?.[version] ?? {});
   const hooks = listed.length ? listed : [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
   const job = facts.launch.readOnlyJob.args;
@@ -469,6 +469,32 @@ async function recordCodex(out, bin, facts, only, version) {
     const command = [process.execPath, join(root, 'scripts/corpus.mjs'), 'hook', dir].map(quote).join(' ');
     return [...hooks.flatMap((hook) => ['-c', `hooks.${hook}=[{hooks=[{type="command",command=${JSON.stringify(command)}}]}]`]), '--dangerously-bypass-hook-trust'];
   };
+  const picked = (name) => !only || only.includes(name);
+  const results = [];
+  // Three sessions run the real Codex binary on a scripted model (scripts/corpus-codex-model.mjs), each in a Codex home
+  // of its own, as pi's sets script pi's model (#3136): a spawned child, a compaction mid-turn and an interrupt. They
+  // need no sign-in, no trusted folder and no plan usage. Their model is one every covered version's catalog holds.
+  const scripted = [
+    { name: 'subagent', prompt: 'Spawn one subagent, wait for it, then reply with what it said.' },
+    { name: 'compact', prompt: 'Run the shell command: echo before-compact', extra: ['-c', 'model_auto_compact_token_limit=1000'] },
+    { name: 'interrupt', prompt: 'Run the shell command: sleep 30 && echo slept', interrupt: true },
+  ].filter(({ name }) => picked(name) && (name !== 'interrupt' || hooks.includes('Interrupt')));
+  for (const scenario of scripted) {
+    const dir = join(out, scenario.name), home = join(dir, 'codex-home'), work = join(dir, 'work');
+    for (const path of [home, work]) mkdirSync(path, { recursive: true });
+    const scriptedModel = await (await import('./corpus-codex-model.mjs')).scriptedModel(scenario.name);
+    try {
+      const provider = ['-m', 'gpt-5.4', '-c', 'model_provider="corpus"', '-c', `model_providers.corpus={name="corpus",base_url="${scriptedModel.url}",wire_api="responses"}`];
+      const argv = [bin, 'exec', '--json', '--skip-git-repo-check', '--ignore-user-config', ...provider, ...hookArgs(dir), '-c', 'sandbox_mode="workspace-write"', ...(scenario.extra ?? []), scenario.prompt];
+      const steps = scenario.interrupt ? [{ killOn: hook('PreToolUse'), binary: 'codex', signal: 'SIGINT' }] : [];
+      results.push({ scenario: scenario.name, dir, ...(await session({ argv, cwd: realpathSync(work), dir, terminal: false, steps, env: { CODEX_HOME: home } })) });
+    } finally {
+      scriptedModel.close();
+    }
+  }
+  if (!['tools', 'patches', 'crash', 'permission', 'goal'].some(picked)) return results;
+  const trusted = process.env.DEEP_CORPUS_CODEX_TRUSTED;
+  if (!trusted) return [...results, { scenario: 'all', dir: out, blocked: 'set DEEP_CORPUS_CODEX_TRUSTED to a folder your Codex config already trusts', payloads: [] }];
   const exec = (dir, extra) => [bin, 'exec', '--json', '--skip-git-repo-check', '--ignore-user-config', ...model, ...hookArgs(dir), ...(extra.length ? extra : ['-c', 'sandbox_mode="workspace-write"'])];
   const patch = (folder, indent) => ['*** Begin Patch', `*** Update File: ${folder}/notes.txt`, '@@', `-line ${indent ? 'two' : 'one'}`, `+line ${indent ? '2' : '1'}`, '*** End Patch'].map((line) => `${indent}${line}`).join('\n');
   const shell = (text) => `Run this exact command with your shell tool, not apply_patch, and nothing else:\napply_patch <<'EOF'\n${text}\nEOF`;
@@ -476,11 +502,8 @@ async function recordCodex(out, bin, facts, only, version) {
     { name: 'tools', prompts: (f) => [`Run the shell command: echo corpus-probe. Then use your apply_patch tool to add the file ${f}/added.txt containing the line one. Then run the shell command: ls /definitely/not/here. Then reply done.`] },
     { name: 'patches', prompts: (f) => [shell(patch(f, '')), shell(patch(f, '  '))] },
     { name: 'crash', prompts: () => ['Run the shell command: sleep 30 && echo slept'], crash: true },
-    // A spawned child (#3136): SubagentStart, and SubagentStop in place of the child's own Stop.
-    { name: 'subagent', prompts: () => ['Use your spawn_agent tool to start one subagent with the task: run the shell command echo from-subagent and reply with its output. Then use your wait_agent tool to wait for it to finish, and reply with what it said.'] },
   ];
-  const results = [];
-  for (const scenario of scenarios.filter(({ name }) => !only || only.includes(name))) {
+  for (const scenario of scenarios.filter(({ name }) => picked(name))) {
     const dir = join(out, scenario.name), folder = `deep-corpus-${scenario.name}-${Date.now()}`, files = join(trusted, folder);
     mkdirSync(dir, { recursive: true });
     mkdirSync(files);
@@ -503,20 +526,16 @@ async function recordCodex(out, bin, facts, only, version) {
   let models = [];
   try { models = JSON.parse(readFileSync(join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'models_cache.json'), 'utf8')).models.map(({ slug }) => slug); } catch {}
   const quiet = models.length ? ['-c', `tui.model_availability_nux={ ${models.map((slug) => `${JSON.stringify(slug)} = 100`).join(', ')} }`] : [];
-  const tui = async (name, args, steps) => {
-    if (only && !only.includes(name)) return;
+  const tui = async (name, args, prompt, stops) => {
+    if (!picked(name)) return;
     const dir = join(out, name);
     mkdirSync(dir, { recursive: true });
     const argv = [bin, ...model, ...hookArgs(dir), ...(args.includes('-s') ? [] : ['-s', 'workspace-write']), ...args, '-c', 'check_for_update_on_startup=false', ...quiet];
-    results.push({ scenario: name, dir, ...(await session({ argv, cwd: trusted, dir, terminal: true, steps: Object.assign(steps, { exit: '/quit' }), startAfter: (text) => /›/.test(text) && text.length > 200 })) });
+    results.push({ scenario: name, dir, ...(await session({ argv, cwd: trusted, dir, terminal: true, steps: Object.assign([{ type: prompt }, ...(stops ? [{ stops }] : [])], { exit: '/quit' }), startAfter: (text) => /›/.test(text) && text.length > 200 })) });
   };
   const made = join(trusted, `deep-corpus-permission-${Date.now()}.txt`), goal = join(trusted, `deep-corpus-goal-${Date.now()}.txt`);
-  await tui('permission', ['-s', 'read-only', '-a', 'on-request'], [{ type: `Run the shell command: touch ${made}. The sandbox is read-only, so request escalated permissions for it. Then reply done.` }]);
-  await tui('goal', ['-a', 'never'], [{ type: `Create a goal with your create_goal tool: write the numbers 1, 2 and 3 into ${goal}, one number per turn, ending each turn after writing one number. Then write 1 and end your turn.` }, { stops: 2 }]);
-  // Compaction (#3136): /compact in the terminal UI fires PreCompact and PostCompact, trigger manual.
-  await tui('compact', ['-a', 'never'], [{ type: 'Run the shell command: echo before-compact' }, { type: '/compact', until: hook('PostCompact') }]);
-  // An interrupt (#3136): Esc while a shell call runs ends the turn with Interrupt, not Stop, on a version that lists it.
-  if (hooks.includes('Interrupt')) await tui('interrupt', ['-a', 'never'], [{ type: 'Run the shell command: sleep 30 && echo slept', until: hook('PreToolUse') }, { wait: 2000 }, { keys: '\x1b', until: hook('Interrupt') }]);
+  await tui('permission', ['-s', 'read-only', '-a', 'on-request'], `Run the shell command: touch ${made}. The sandbox is read-only, so request escalated permissions for it. Then reply done.`);
+  await tui('goal', ['-a', 'never'], `Create a goal with your create_goal tool: write the numbers 1, 2 and 3 into ${goal}, one number per turn, ending each turn after writing one number. Then write 1 and end your turn.`, 2);
   for (const file of [made, goal]) rmSync(file, { force: true });
   return results;
 }
