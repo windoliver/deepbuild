@@ -3392,6 +3392,18 @@
       "kind": "home path",
       "sha256": "c2ac37b4b37cd2b3c313d53b379116b5a9397b0cf4da758c4d3bd619c71f5684",
       "why": "Issue #1946's blind suite: the throwaway account dh1946c244bb44 its base run made on the test host, in the saved base failure; no real home."
+    },
+    {
+      "path": "tests/acceptance/2651/lib.mjs",
+      "kind": "API key",
+      "sha256": "e7955e3523b0953051a8e7aea4055b68664241496cd56f51fbef02b81a5cdc3c",
+      "why": "Issue #2651's blind suite: a made-up access token (dh2651FAKE) written into a temp home's credentials file; no real credential."
+    },
+    {
+      "path": "tests/acceptance/2651/lib.mjs",
+      "kind": "API key",
+      "sha256": "533983d7c2f80a6f023d94767711b12a3536d38aa44c3ed852052b69375b4e37",
+      "why": "Issue #2651's blind suite: a made-up refresh token (dh2651FAKE) written into a temp home's credentials file; no real credential."
     }
   ]
 }
