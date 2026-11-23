@@ -209,6 +209,7 @@ fn same_layer_but_solids(a: &Layer3, b: &Layer3) -> bool {
         puffs,
         fed,
         draw_names,
+        hidden,
     } = a;
     *id == b.id
         && *lines == b.lines
@@ -219,6 +220,7 @@ fn same_layer_but_solids(a: &Layer3, b: &Layer3) -> bool {
         && *puffs == b.puffs
         && *fed == b.fed
         && *draw_names == b.draw_names
+        && *hidden == b.hidden
 }
 
 /// Every field but the layers and their sources, which the caller reads.

@@ -159,6 +159,14 @@
     "text": "回答",
     "source": "b2a3aa602762a782e47a4f8e93bb5ae1b8819d1b92b7e6ceb3ef46a3c7077eb0"
   },
+  "card.evidence": {
+    "text": "这次判断依据的图片",
+    "source": "ff39ee05d246d1de4f22355a1e501033c1c197f264f9a5d9ffd17cb16197df25"
+  },
+  "card.picture": {
+    "text": "第 {0} 张图片，共 {1} 张",
+    "source": "37b423ca2e02a194d66ce8508293e68cdae95303a0207689092237ae7537f67c"
+  },
   "card.recommended": {
     "text": "推荐",
     "source": "dd6d876548037ec722252b45795206575e7040eba1ca076cf1732a4a903cadba"
@@ -935,9 +943,17 @@
     "text": "，来自 deep inbox",
     "source": "9c361c2ad2d69fa3441df8697e5c2fda0aba20bbe213499bcf9d7120565d343c"
   },
+  "open.from_inbox_unseen": {
+    "text": "，来自 deep inbox，未看图片即作答",
+    "source": "5322487fe80741f7477abe6d8c656679f9d3e05d333a2e52743ceae007c76a46"
+  },
   "open.in_the_app": {
     "text": "，在应用中",
     "source": "0b81c04d81386d08b681ad5a264d3859abea2ea62810d89acfa9ce9221a94938"
+  },
+  "open.in_the_app_unseen": {
+    "text": "，在应用中，未看图片即作答",
+    "source": "1a27c9a121bad7dbbc55279d8581e4b6a09badaae7ad737092787381c97ac66e"
   },
   "open.no_match": {
     "text": "没有与“{0}”匹配的内容",
@@ -950,6 +966,10 @@
   "open.through": {
     "text": "，通过 {0}",
     "source": "cf58ebd0baa9fd7381df924591b916b263dc96ab09aaf4a13a5fe3ee455396a9"
+  },
+  "open.through_unseen": {
+    "text": "，通过 {0}，未看图片即作答",
+    "source": "2afe0a4a8289b1cf49404ad6a7fda297edf16080afce80da62a7af53f49192ae"
   },
   "plain.agent_fixing": {
     "text": "智能体正在修复，第 {0} 次尝试，共 {1} 次。",
@@ -1013,6 +1033,10 @@
     "text": "{0}：{1}",
     "source": "fb62fe2ae6b2ae6cd472717ded838cce62600f4789e31aa5873e7e69407848bc"
   },
+  "question.look_first": {
+    "text": "请先看完每张图片",
+    "source": "a03e2d16d6a97a5cdde61769edb8f22ca9d3ec914574845b1546defd337d542f"
+  },
   "question.more_options": {
     "text": {
       "other": "还有 {0} 个选项"
@@ -1023,9 +1047,17 @@
     "text": "请先展开全部选项",
     "source": "4c84965237ab727940c7d12bf99ae52edb29e9ee6089a0caa1c3935b8515d6d2"
   },
+  "question.option_left": {
+    "text": "{0} · {2} 张中有 {1} 张尚未显示",
+    "source": "4ccd461dcf3f0da3b3bcaded3e5738a82cc2489f4bb38975d661283fda8d991a"
+  },
   "question.past_call": {
     "text": "以往的决定：{0} · {1}",
     "source": "8449dd9bb30798937c9d13b904ee32b510065a0bd8b37744d072d289626220c6"
+  },
+  "question.pictures_left": {
+    "text": "{1} 张中有 {0} 张尚未显示",
+    "source": "8cc86d37ca882a525c31042bba305f3f3fcdfe59d36f7d322d8f58eaf1d00cf0"
   },
   "question.ran_for_good": {
     "text": "已运行 · 无法撤销",
@@ -1455,6 +1487,10 @@
   "views.by_handle": {
     "text": " · {0}（按句柄）",
     "source": "be329ed8eec14a437039d3ca3886c5d47aae5dc34533a11257e949fca250f82f"
+  },
+  "views.call_unseen": {
+    "text": "“{0}”未看图片即作答",
+    "source": "4d6c8e85fdc3eb63aec5de33fabb5c7dcb97cad77ad4bab8e059dc84e36e2f4a"
   },
   "views.cant_reach": {
     "text": "它的会话连不上 DeepBuild：{0}",

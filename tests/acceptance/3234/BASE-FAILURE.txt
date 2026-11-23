@@ -1,0 +1,69 @@
+#3234's acceptance tests at the base, f8c6cff822b5b960d35312d75d44769616a95516 (main), 2026-11-23 04:30-04:55 local.
+Machine: Mac17,10, Apple M5 Max, 64 GiB, 18 cores: not a reference Mac. One-minute load 40 to 230 through the runs.
+Run from the checkout with `scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/3234 <file>
+--no-file-parallelism --testTimeout=600000` (the lease ran unleased: no hub of the user's answered), after `npm ci
+--ignore-scripts` and `npm run build --workspaces`. Every home folder below is written as ~, every temp folder as <tmp>.
+
+Type-check: `node node_modules/typescript/bin/tsc -p tests/acceptance/3234/tsconfig.json` exits 0.
+
+## numbers.test.ts (AC8, AC9): run whole, 4 of 4 fail at their own assertion
+
+ FAIL  numbers.test.ts > AC8 #3234.432669e1 ... reads 6 and 2 on Numbers with the median time a picture (hand count: 6, 2, 4000 ms)
+  AssertionError: the fixture can't be recorded: an answer with each picture's entry (pictures: [{sha256, shown, scale, ms}]) is refused: an answer has no field pictures
+ FAIL  numbers.test.ts > AC8 #3234.432669e1 wrong program: a count that folds them into 8 fails this test
+  AssertionError: the fixture can't be recorded: an answer with each picture's entry (pictures: [{sha256, shown, scale, ms}]) is refused: an answer has no field pictures
+ FAIL  numbers.test.ts > AC9 #3234.f499fe58: 10 accepted calls in a row, ... they read two runs of 5
+  AssertionError: the fixture can't be recorded: an answer with each picture's entry (pictures: [{sha256, shown, scale, ms}]) is refused: an answer has no field pictures
+ FAIL  numbers.test.ts > AC9 #3234.f499fe58 wrong program: a planted reading that gives one median for the whole run fails this test
+  AssertionError: the fixture can't be recorded: an answer with each picture's entry (pictures: [{sha256, shown, scale, ms}]) is refused: an answer has no field pictures
+      Tests  4 failed (4)
+   Duration  31.36s
+
+The asks core refuses the field (packages/asks/src/answers.ts, ANSWER_FIELDS), so the per-picture record (README,
+Pinned 4) is the missing behavior each fails on; the hand counts themselves pass (6, 2, 4000 ms; runs of 10 and 5).
+
+## budgets.test.ts, AC10's frame timing: run alone (-t "adds under 0.1 ms"), INCONCLUSIVE before any build
+
+ FAIL  budgets.test.ts > AC10 #3234.d6a29dc6: tracking what was drawn adds under 0.1 ms to a frame that draws 20 pictures, against the merge base, on the reference Mac (a target, measured)
+  AssertionError: INCONCLUSIVE: AC10's frame timing is a reading only here (not a reference Mac: Mac17,10 / Apple M5 Max / 64 GiB); nothing was built or timed; this is not a pass
+      Tests  1 failed | 1 skipped (2)
+
+## The replica's files: not run to their assertions here (BLOCKED on the machine's build queue)
+
+card.test.ts was started (04:35): its world was made and its hub started, and its first replica asked #1101's
+`driveBin` for `deep-drive` (`--features deep-app/test-confirm`), whose build waits for a grant of
+`scripts/throttle.mjs build`. A preflight held the machine's timed window (52 minutes in, `scripts/preflight.mjs`) with
+12 builds queued ahead, at a load of 180 to 230, so no build could start for hours, and building outside the throttle
+would have disturbed the window's timings. The run was stopped after 12 minutes, by its own PIDs (vitest, the throttle
+request, its hub), and its two temp folders removed. card, answer, terminal, batch and shown, and AC10's idle test,
+were therefore not run at the base on this machine. A full run needs the build (about 40 minutes when a grant comes).
+
+At the base the taste card draws no picture (#1455: kinds.rs's taste branch claims none; no `picture:<sha256>` node
+exists), so each replica test's first judge fails there, by its own message:
+- card.test.ts AC1: `the card for ask:<ULID> ("Does the new header look right on all four pages?") draws none of its
+  four pictures (no node picture:<sha256> for …)`; its plant test: the planted run reads the same, so "armed with
+  pictures not shown" is never named. AC2: `… never draws its screenshot <sha256> whole inside the window`; its plant
+  test finds no "armed while … was drawn only at scale". AC6: `… draws its pictures (nodes picture:<sha256>)`, expected
+  0 to be greater than 0.
+- answer.test.ts AC3 and AC4 and both plants: `the fixture's premise doesn't hold: three of the card's pictures must be
+  shown and one never drawn whole; shown none, never drawn whole <four hashes>`.
+- batch.test.ts AC7 and its plant: `the card for ask:<ULID> draws no row for each of the batch's three asks` if the
+  base draws no `card-row` for them, else `the wheel never drew row 1's pictures (…) whole at half their size or more`.
+- budgets.test.ts AC10 idle: `the page draws all twenty pictures whole at once`, expected 0 to be 20.
+- shown.test.ts AC11: `count: the accepting option doesn't read 2 of 4 not shown yet`, and the other two states.
+- terminal.test.ts AC5: the record and the verdict line read as below; its plant test fails first on the same judge
+  passing the program as shipped.
+
+## The fixtures, probed at the base (a scratch vitest file outside this folder, not committed)
+
+terminal.test.ts's world with a batch added (`makeWorld` as the suite has it): the record took every seeded event
+(session.start, task.created, ask.created, ask.batched, claim.made@2, verdict.made@2 as the core writes them), the hub
+started on it, and:
+- the claim's verdict line (`status.read`'s row for the session) read
+  `INCONCLUSIVE 0/1 · next: DeepBuild · session/<8 hex>/<claim ULID>` before the terminal answer and the same after it:
+  no "answered unseen";
+- `deep inbox answer ask:<ULID> looks-right` exited 0 (`… answered looks-right, saved as a decision for repo:shop`),
+  and the record's `ask.answered` held `{"answer":"looks-right","option":"looks-right","plan_hash":null,
+  "decision":"none","via":"inbox","verified":true,"on":{"kind":"evidence","ref":"<the manifest's sha256>"},
+  "token":null,"words":null,"image":null}`: `via` as AC5 wants, and no `pictures`;
+- `deep numbers --json` answered with rows `approval.wait`, `billing.mode`, `handbacks_sent_back`: no taste rows.
