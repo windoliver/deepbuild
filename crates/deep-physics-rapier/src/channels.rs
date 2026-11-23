@@ -3,6 +3,8 @@
 //! a vec3 field, its body's pose at every frame from the states after each step, positions lerped
 //! and rotations nlerped between the two steps around the frame (Physics output).
 
+use std::collections::BTreeSet;
+
 use deep_canvas_physics::doc::{Read, World};
 use deep_canvas_physics::occurrence::step_flicks;
 use serde_json::{json, Map, Value};
@@ -29,8 +31,15 @@ fn euler(q: [f64; 4]) -> [f64; 3] {
 
 /// A body's pose at `t` flicks from its states after each step (`step` flicks apart): the two
 /// steps around it mixed by α, positions lerped and rotations nlerped (Physics output), or the
-/// earlier step's with `hold`.
-pub fn pose_at(states: &[Value], t: i64, step: i64, hold: bool) -> Option<([f64; 3], [f64; 4])> {
+/// earlier step's with `hold`; #2035: the later one, with no blend, where `cuts` lists it, a
+/// place's step having ended there.
+pub fn pose_at(
+    states: &[Value],
+    t: i64,
+    step: i64,
+    hold: bool,
+    cuts: &BTreeSet<u64>,
+) -> Option<([f64; 3], [f64; 4])> {
     let (k, rem) = ((t / step) as usize, t % step);
     let a = pose_of(states.get(k)?)?;
     if rem == 0 || hold {
@@ -39,6 +48,9 @@ pub fn pose_at(states: &[Value], t: i64, step: i64, hold: bool) -> Option<([f64;
     let Some(b) = states.get(k + 1).and_then(pose_of) else {
         return Some(a);
     };
+    if cuts.contains(&(k as u64 + 1)) {
+        return Some(b);
+    }
     let alpha = rem as f64 / step as f64;
     let pos = [0, 1, 2].map(|i| a.0[i] + alpha * (b.0[i] - a.0[i]));
     let dot: f64 = (0..4).map(|i| a.1[i] * b.1[i]).sum();
@@ -96,9 +108,10 @@ pub fn output_channels(
             continue;
         };
         let states = bodies[&o.from].as_array().cloned().unwrap_or_default();
+        let cuts = deep_canvas_physics::cut::of(&reply["outputs"], &o.from);
         let poses: Vec<_> = frames
             .iter()
-            .filter_map(|t| pose_at(&states, *t, step, o.hold))
+            .filter_map(|t| pose_at(&states, *t, step, o.hold, &cuts))
             .collect();
         let name = |part: &str| format!("physics-{id}-{oid}-{part}");
         match (o.read, to.strip_suffix("/at")) {

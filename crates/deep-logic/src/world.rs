@@ -343,7 +343,8 @@ impl Live {
             // A dropped checkpoint's map changes go to the next one the ring stores; later
             // changes win.
             if let (Some(c), Some(st)) = (carry_map, self.paged.as_mut()) {
-                let (crate::pages::MapPart::Whole(mut all) | crate::pages::MapPart::Changes(mut all)) = c.map;
+                let (crate::pages::MapPart::Whole(mut all)
+                | crate::pages::MapPart::Changes(mut all)) = c.map;
                 all.extend(std::mem::take(&mut st.changed));
                 st.changed = all;
             }
@@ -875,17 +876,19 @@ pub fn arrays_of<'a>(
 /// Each item's arrays as a frame at `t` (flicks) draws them from what it `shown`, by
 /// `<item>.<write>` (Logic: interpolated writes): a held write as its last step stored it; a
 /// linear write from the value before that step toward it by α = (t − that step's time) ÷ the
-/// step length, so it reads one step late. Nothing else reads this: steps, hashes and checks read
-/// the stored. The planted blend draws toward the next step, as a physics output blends.
+/// step length, so it reads one step late. #2035: an element whose `cut` that step left true shows
+/// that step's value with no blend. Nothing else reads this: steps, hashes and checks read the
+/// stored. The planted blend draws toward the next step, as a physics output blends; the planted
+/// evaluator `cut_ignored` blends across a cut.
 pub fn drawn<'a>(
     piece: &Piece,
     shown: impl Iterator<Item = (i64, &'a [u8], &'a [u8])>,
     t: i64,
-    forward: bool,
+    planted: &Planted,
 ) -> Map<String, Value> {
     let mut out = Map::new();
     for (item, (last, prev, arrays)) in piece.items.iter().zip(shown) {
-        let since = if forward {
+        let since = if planted.linear_blends_forward {
             t.rem_euclid(item.step)
         } else {
             (t - last * item.step).clamp(0, item.step)
@@ -894,10 +897,13 @@ pub fn drawn<'a>(
             let e = item.write(&w.name).expect("a write entry");
             let size = w.ty.size() as usize;
             let at = e.offset as usize;
+            let cut = w.cut.as_deref().filter(|_| !planted.cut_ignored);
+            let cut = cut.and_then(|c| item.write(c)).map(|c| c.offset as usize);
+            let jumps = |n: usize| cut.is_some_and(|c| arrays[c + 4 * n..][..4] != [0; 4]);
             let values: Vec<Value> = (0..w.count as usize)
                 .map(|n| {
                     let to = &arrays[at + n * size..][..size];
-                    if !w.linear || prev.is_empty() || last < 0 || since >= item.step {
+                    if !w.linear || prev.is_empty() || last < 0 || since >= item.step || jumps(n) {
                         return w.ty.value(to);
                     }
                     let from = &prev[at + n * size..][..size];
