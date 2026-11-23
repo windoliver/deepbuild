@@ -195,6 +195,8 @@ pub enum Planted {
     ProbeFromDepth,
     /// #1401: a probe that meets nothing answers the item drawn nearest its pixel.
     ProbeNearestItem,
+    /// #1722: a render-back of a 3D revision drops its 3D writer layers and draws its 2D marks.
+    RenderBack2dOnly,
     /// #1729: a 3D frame skips a `mesh.asset@1` whose file isn't in the store, with no issue.
     SkipsMissingMeshAsset,
     /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
@@ -1214,7 +1216,7 @@ impl<'a> Hub<'a> {
         // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs);
         // #3017: its visible table from the object-ID pass it drew.
         self.shown3d(doc, t, size)
-            .map(|(rgba, shown)| (rgba, size, shown))
+            .map(|(rgba, shown, _)| (rgba, size, shown))
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.

@@ -2421,6 +2421,23 @@ For: hex boards: a tactics map, a strategy board, a hex puzzle, a board game exp
 
 **Lands:** R6, with the logic module
 
+#### Grid image `grid_image@1`
+
+For: a team arena game's minimap, who holds which ground as smooth blobs of each team's color; a cellular automaton or a heat of claims drawn as one picture
+
+**Fields**
+
+- `grid: <logic>.<name>, size: [cols, rows: u16], cell: [u, u], roles: [role | none] ≤ 16, sample: nearest | smooth = nearest, edge: px = 1` (a 2D item of the data module's, beside the mark sets; its `at.pos` is the grid's top left, x right and y down)
+- Issue: `grid.out_of_range {array, cell: [x, y], value, step}`
+
+**Semantics:** A grid image draws a logic item's i32 array of cols × rows values, row-major, as one image of cols × rows cells, each `cell` u wide and high, read through the core's column view as the logic module gives the array at t (Array and table: column view), so seeking equals playing and the data module doesn't depend on logic; an array that isn't i32, or whose count isn't cols × rows, is refused at check, naming both. Each value v picks `roles[v]`, a look role or `none`, which draws nothing. Under `nearest` each pixel takes its own cell's role. Under `smooth` each role's share, 1 in the cells that hold it and 0 elsewhere, is rebuilt at each pixel's center by the interpolating Catmull-Rom cubic over the 4 × 4 cells around it, the grid's edge cells extended past it, so a cell's own center keeps its role and the shares sum to 1. The pixel takes the role, `none` included, with the largest share, ties to the lower index, and blends toward the runner-up over `edge` px by the distance to where the runner-up's share overtakes, from the two shares' difference and its gradient: a lone held cell draws a rounded blob, three roles meet at a corner without a hole, and no pixel shows a role its neighboring cells don't hold. A value past `roles` draws nothing in its cell and raises `grid.out_of_range`, naming the array, the cell, the value and the step, as the cell grid's logic grid does; it never wraps into the list. Roles come from the look, never a status color. The GPU layer keeps each grid on the device a byte a cell: a frame of the step after the one it holds uploads only the rows holding a cell that step changed, a frame of the same step uploads nothing, and any other frame, a new reader or a seek, uploads the whole grid; a compute pass then rebuilds the image from the grid in the same f32 sums as the core's CPU rebuild, which 2D goldens, snapshots and checks draw, so the two agree within one 8-bit level. GPUI draws no grid image: a writer layer holding one draws on the GPU layer.
+
+**Cost:** One byte a cell on the device; a changed row uploads cols bytes; the rebuild reads 16 cells a pixel, a 512 × 512 px image about 0.3 ms of GPU on the reference Mac (estimate). Budget class: data view, figure, export.
+
+**It can never:** Wrap a value into its roles; pick a role itself; draw a status color; keep a frame's grid past its step; read the grid other than as the logic module gives it at t
+
+**Lands:** R6, with the logic module
+
 #### Bound value
 
 **Fields**

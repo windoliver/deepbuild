@@ -1,0 +1,111 @@
+# deep-replica --view <view> [--window WxH], TZ=UTC: the snapshot before the fix (first) and after it (second)
+== first-screen-ref
+10 vs 11 nodes; only in first: 0; only in second: 1
+  second only: ('needs-you-pop-out', 'button', 'Pop out Needs you', (468, 40, 48, 48), 'heading:needs-you')
+same node, other bounds: 0
+== needs-you-600x900
+14 vs 14 nodes; only in first: 0; only in second: 0
+same node, other bounds: 0
+== needs-you-900x600
+109 vs 118 nodes; only in first: 0; only in second: 9
+  second only: ('needs-you-pop-out', 'button', 'Pop out Needs you', (438, 40, 48, 48), 'heading:needs-you')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:time', 'label', '15:00', (486, 224, 0, 64), 'ask:01MCBHQR604RSDCGT0XNF4YCAH')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:applies', 'label', '15:00', (412, 236, 74, 40), 'ask:01MCBHQR604RSDCGT0XNF4YCAH:time')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time', 'label', '14:00', (486, 736, 0, 64), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:applies', 'label', '14:00', (412, 748, 74, 40), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:time', 'label', '12:00', (486, 928, 0, 64), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:applies', 'label', '12:00', (412, 940, 74, 40), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP:time')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:time', 'label', '15:00', (486, 1056, 0, 64), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:applies', 'label', '15:00', (412, 1068, 74, 40), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY:time')
+same node, other bounds: 0
+== needs-you-ref
+177 vs 190 nodes; only in first: 0; only in second: 13
+  second only: ('needs-you-pop-out', 'button', 'Pop out Needs you', (438, 40, 48, 48), 'heading:needs-you')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:time', 'label', '15:00', (486, 224, 0, 64), 'ask:01MCBHQR604RSDCGT0XNF4YCAH')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:applies', 'label', '15:00', (412, 236, 74, 40), 'ask:01MCBHQR604RSDCGT0XNF4YCAH:time')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time', 'label', '14:00', (486, 736, 0, 64), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:applies', 'label', '14:00', (412, 748, 74, 40), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:time', 'label', '12:00', (486, 928, 0, 64), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:applies', 'label', '12:00', (412, 940, 74, 40), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP:time')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:time', 'label', '15:00', (486, 1056, 0, 64), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:applies', 'label', '15:00', (412, 1068, 74, 40), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY:time')
+  second only: ('ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:time', 'label', '13:00', (486, 1248, 0, 64), 'ask:01MCBJTHF0G3F0RX9V9R3RAQQZ')
+  second only: ('ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:applies', 'label', '13:00', (412, 1260, 74, 40), 'ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:time')
+  second only: ('ask:01MCBK7BM0KJTAA4KEFCSDT2CA:time', 'label', '14:00', (486, 1568, 0, 64), 'ask:01MCBK7BM0KJTAA4KEFCSDT2CA')
+  second only: ('ask:01MCBK7BM0KJTAA4KEFCSDT2CA:applies', 'label', '14:00', (412, 1580, 74, 40), 'ask:01MCBK7BM0KJTAA4KEFCSDT2CA:time')
+same node, other bounds: 0
+== rules-600x900
+6 vs 6 nodes; only in first: 0; only in second: 0
+same node, other bounds: 0
+== rules-900x600
+9 vs 10 nodes; only in first: 0; only in second: 1
+  second only: ('needs-you-pop-out', 'button', 'Pop out Needs you', (468, 40, 48, 48), 'heading:needs-you')
+same node, other bounds: 0
+== rules-ref
+9 vs 10 nodes; only in first: 0; only in second: 1
+  second only: ('needs-you-pop-out', 'button', 'Pop out Needs you', (468, 40, 48, 48), 'heading:needs-you')
+same node, other bounds: 0
+== session-600x900
+11 vs 11 nodes; only in first: 0; only in second: 0
+same node, other bounds: 0
+== session-900x600
+107 vs 116 nodes; only in first: 0; only in second: 9
+  second only: ('needs-you-pop-out', 'button', 'Pop out Needs you', (438, 40, 48, 48), 'heading:needs-you')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:time', 'label', '15:00', (486, 224, 0, 64), 'ask:01MCBHQR604RSDCGT0XNF4YCAH')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:applies', 'label', '15:00', (412, 236, 74, 40), 'ask:01MCBHQR604RSDCGT0XNF4YCAH:time')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time', 'label', '14:00', (486, 736, 0, 64), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:applies', 'label', '14:00', (412, 748, 74, 40), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:time', 'label', '12:00', (486, 928, 0, 64), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:applies', 'label', '12:00', (412, 940, 74, 40), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP:time')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:time', 'label', '15:00', (486, 1056, 0, 64), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:applies', 'label', '15:00', (412, 1068, 74, 40), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY:time')
+same node, other bounds: 0
+== session-ref
+175 vs 188 nodes; only in first: 0; only in second: 13
+  second only: ('needs-you-pop-out', 'button', 'Pop out Needs you', (438, 40, 48, 48), 'heading:needs-you')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:time', 'label', '15:00', (486, 224, 0, 64), 'ask:01MCBHQR604RSDCGT0XNF4YCAH')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:applies', 'label', '15:00', (412, 236, 74, 40), 'ask:01MCBHQR604RSDCGT0XNF4YCAH:time')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time', 'label', '14:00', (486, 736, 0, 64), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:applies', 'label', '14:00', (412, 748, 74, 40), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:time', 'label', '12:00', (486, 928, 0, 64), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:applies', 'label', '12:00', (412, 940, 74, 40), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP:time')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:time', 'label', '15:00', (486, 1056, 0, 64), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:applies', 'label', '15:00', (412, 1068, 74, 40), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY:time')
+  second only: ('ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:time', 'label', '13:00', (486, 1248, 0, 64), 'ask:01MCBJTHF0G3F0RX9V9R3RAQQZ')
+  second only: ('ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:applies', 'label', '13:00', (412, 1260, 74, 40), 'ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:time')
+  second only: ('ask:01MCBK7BM0KJTAA4KEFCSDT2CA:time', 'label', '14:00', (486, 1568, 0, 64), 'ask:01MCBK7BM0KJTAA4KEFCSDT2CA')
+  second only: ('ask:01MCBK7BM0KJTAA4KEFCSDT2CA:applies', 'label', '14:00', (412, 1580, 74, 40), 'ask:01MCBK7BM0KJTAA4KEFCSDT2CA:time')
+same node, other bounds: 0
+== sidebar-600x900
+14 vs 14 nodes; only in first: 0; only in second: 0
+same node, other bounds: 0
+== sidebar-900x600
+109 vs 118 nodes; only in first: 0; only in second: 9
+  second only: ('needs-you-pop-out', 'button', 'Pop out Needs you', (438, 40, 48, 48), 'heading:needs-you')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:time', 'label', '15:00', (486, 224, 0, 64), 'ask:01MCBHQR604RSDCGT0XNF4YCAH')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:applies', 'label', '15:00', (412, 236, 74, 40), 'ask:01MCBHQR604RSDCGT0XNF4YCAH:time')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time', 'label', '14:00', (486, 736, 0, 64), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:applies', 'label', '14:00', (412, 748, 74, 40), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:time', 'label', '12:00', (486, 928, 0, 64), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:applies', 'label', '12:00', (412, 940, 74, 40), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP:time')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:time', 'label', '15:00', (486, 1056, 0, 64), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:applies', 'label', '15:00', (412, 1068, 74, 40), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY:time')
+same node, other bounds: 0
+== sidebar-ref
+177 vs 190 nodes; only in first: 0; only in second: 13
+  second only: ('needs-you-pop-out', 'button', 'Pop out Needs you', (438, 40, 48, 48), 'heading:needs-you')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:time', 'label', '15:00', (486, 224, 0, 64), 'ask:01MCBHQR604RSDCGT0XNF4YCAH')
+  second only: ('ask:01MCBHQR604RSDCGT0XNF4YCAH:applies', 'label', '15:00', (412, 236, 74, 40), 'ask:01MCBHQR604RSDCGT0XNF4YCAH:time')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time', 'label', '14:00', (486, 736, 0, 64), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C')
+  second only: ('ask:01MCBJ87H07MNWWA7Q4AEDZN1C:applies', 'label', '14:00', (412, 748, 74, 40), 'ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:time', 'label', '12:00', (486, 928, 0, 64), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP')
+  second only: ('ask:01MCBJDQA0AQA7A53MHVBC3EFP:applies', 'label', '12:00', (412, 940, 74, 40), 'ask:01MCBJDQA0AQA7A53MHVBC3EFP:time')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:time', 'label', '15:00', (486, 1056, 0, 64), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY')
+  second only: ('ask:01MCBJN1P00Y2QKCG37JSPXQKY:applies', 'label', '15:00', (412, 1068, 74, 40), 'ask:01MCBJN1P00Y2QKCG37JSPXQKY:time')
+  second only: ('ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:time', 'label', '13:00', (486, 1248, 0, 64), 'ask:01MCBJTHF0G3F0RX9V9R3RAQQZ')
+  second only: ('ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:applies', 'label', '13:00', (412, 1260, 74, 40), 'ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:time')
+  second only: ('ask:01MCBK7BM0KJTAA4KEFCSDT2CA:time', 'label', '14:00', (486, 1568, 0, 64), 'ask:01MCBK7BM0KJTAA4KEFCSDT2CA')
+  second only: ('ask:01MCBK7BM0KJTAA4KEFCSDT2CA:applies', 'label', '14:00', (412, 1580, 74, 40), 'ask:01MCBK7BM0KJTAA4KEFCSDT2CA:time')
+same node, other bounds: 0
+
+# home isn't a view deep-replica draws (exit 2 both before and after), so it isn't listed

@@ -1,0 +1,75 @@
+# cargo test --locked -p deep-replica --no-fail-fast, once, with the fix, at load about 150-190 (Mac17,10)
+# Each target's result line, then each test that didn't pass and whether scripts/known-failures.json lists it
+deep_replica                               test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+deep_drive                                 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+deep_live                                  test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+deep_plain_words                           test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+deep_replica                               test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+deep_replica_canvas                        test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+acceptance_1425                            test result: FAILED. 5 passed; 4 failed
+acceptance_1425_ac3                        test result: ok. 2 passed; 0 failed
+acceptance_1454_panel_redraft              test result: FAILED. 1 passed; 3 failed
+acceptance_1620_planted_loader             test result: ok. 3 passed; 0 failed
+acceptance_326_panels                      test result: FAILED. 4 passed; 1 failed
+acceptance_326_panels_planted              test result: ok. 3 passed; 0 failed
+acceptance_326_panels_planted_redraft      test result: ok. 2 passed; 0 failed
+acceptance_326_panels_redraft              test result: FAILED. 0 passed; 1 failed
+acceptance_326_surfaces                    test result: FAILED. 21 passed; 1 failed
+acceptance_327_ac1_redraft                 test result: ok. 3 passed; 0 failed; 0 blocked
+acceptance_327_ac3_redraft                 test result: ok. 2 passed; 0 failed; 0 blocked
+acceptance_327_card                        test result: FAILED. 15 passed; 1 failed; 3 blocked
+acceptance_327_planted                     test result: ok. 9 passed; 0 failed; 0 blocked
+acceptance_883                             test result: ok. 18 passed; 0 failed
+acceptance_883_ac3_redraft                 test result: ok. 2 passed; 0 failed
+acceptance_994_sound                       test result: ok. 2 passed; 0 failed
+acceptance_994_window                      test result: ok. 6 passed; 0 failed
+card_size                                  test result: ok. 1 passed; 0 failed
+drive                                      test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.68s
+headless                                   test result: FAILED. 18 passed; 1 failed
+tree_state                                 test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.91s
+view_kit                                   test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.90s
+view_kit                                   test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+FAILED   cargo -p deep-replica --test acceptance_1425 › #1425.3d839088 the view each panel registers in a slot draws the merge base's tree, byte for byte
+         listed
+FAILED   cargo -p deep-replica --test acceptance_1425 › #1425.782e7a69 planted: a host that skips the load check loads the gpui-kit panel, and the load judge fails it naming the panel
+         not listed
+FAILED   cargo -p deep-replica --test acceptance_1425 › #1425.30ab78a9 the load path timed with the module check and without it, for each of the 12 panels
+         not listed
+FAILED   cargo -p deep-replica --test acceptance_1425 › #1425.711d0cb9 planted: a pack check that skips the per-frame check passes the panel, and the judge fails it naming the panel
+         not listed
+FAILED   cargo -p deep-replica --test acceptance_1454_panel_redraft › the_fixture_loads_and_paints_its_words_in_the_sidebar_slot
+         listed
+FAILED   cargo -p deep-replica --test acceptance_1454_panel_redraft › wrong_fixture_with_no_words_paints_no_ink
+         listed
+FAILED   cargo -p deep-replica --test acceptance_1454_panel_redraft › wrong_fixture_dialog_from_gpui_base_is_refused_and_never_loads
+         listed
+FAILED   cargo -p deep-replica --test acceptance_326_panels › needs_you_and_session_page_share_each_log_pos
+         listed
+FAILED   cargo -p deep-replica --test acceptance_326_panels_redraft › needs_you_and_session_page_share_each_log_pos
+         listed
+FAILED   cargo -p deep-replica --test acceptance_326_surfaces › ac2_only_one_device_plays_a_sound
+         listed
+BLOCKED  cargo -p deep-replica --test acceptance_327_card › ac5_with_voice_control_every_card_kind_can_be_answered_through_the_confirmation
+         BLOCKED by design, never listed
+BLOCKED  cargo -p deep-replica --test acceptance_327_card › ac5_with_switch_control_every_card_kind_can_be_answered_through_the_confirmation
+         BLOCKED by design, never listed
+BLOCKED  cargo -p deep-replica --test acceptance_327_card › ac5_voiceover_reads_each_cards_question_options_deadline_and_default
+         BLOCKED by design, never listed
+FAILED   cargo -p deep-replica --test acceptance_327_card › ac6_each_kind_renders_from_its_fixture_with_question_options_deadline_default_and_its_fields
+         listed
+FAILED   cargo -p deep-replica --test headless › replica_launch_under_two_seconds
+         not listed
+FAILED   cargo -p deep-replica --test tree_state › a_state_is_read_as_its_status_map_entry
+         listed
+FAILED   cargo -p deep-replica --test tree_state › the_snapshot_holds_the_menu_bar_title_and_the_ringed_row_as_focus
+         listed
+
+# Read against the listing
+# - Every FAILED line the listing names fails as listed. tree_state's menu-bar count now reads "174 asks need you" where
+#   its #3149 entry says 162: the twelve ask:<id>:time and ask:<id>:applies nodes the snapshot now holds are also nodes
+#   named ask:<id>:<slot>, the cause that entry already gives.
+# - The three unlisted acceptance_1425 lines each say BLOCKED in their message: the env-plants loaders they need aren't
+#   built into a `-p deep-replica` run. The unit lane builds the workspace, where they are. Nothing here touches them.
+# - headless › replica_launch_under_two_seconds: one launch took 2007.7 ms at load about 190 (2007.7, 1897.5, 1397.8,
+#   1118.4, 1096.3). It passed in the suite's own run at load 62 (after.txt).

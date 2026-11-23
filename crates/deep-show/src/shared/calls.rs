@@ -1034,9 +1034,16 @@ impl Hub<'_> {
         let unreadable = unreadable_handles(&doc, |h| self.can_read(&writer, h));
         issues.extend(unreadable.into_iter().filter(|i| i.ids.iter().any(mine)));
         let mut drawn = None;
-        // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does.
+        // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does,
+        // with its 2D items over its 3D frame (#1722).
         let three = deep_canvas_scene3d::scene::has_3d(&doc);
-        if !three && !issues.iter().any(|i| i.severity == "error" && !i.carried) {
+        let fit = !issues.iter().any(|i| i.severity == "error" && !i.carried);
+        if three && fit {
+            match self.items2d(&doc, show.t) {
+                Ok(d) => drawn = d,
+                Err(Unfit { code, path }) => issues.push(unfit_issue(code, path)),
+            }
+        } else if fit {
             // Each recipe instance's derived items draw in its place (#306).
             let shown = drawable(&crate::packs::drawn(&doc, &result.expansions));
             // #499: a video image item draws its frame at the revision's time.
