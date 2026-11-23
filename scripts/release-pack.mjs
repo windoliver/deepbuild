@@ -23,16 +23,17 @@ import { contentsOf, extract } from './release-artifacts.mjs';
 // is written removes what this run wrote there, and the last turn comes after the cleanup, before success is said.
 let work;
 const written = [];
+// What it wrote to <out> goes first, the seconds-long removal of the clean checkout after.
 const drop = () => {
-  if (work) rmSync(work, { recursive: true, force: true });
   for (const file of written) rmSync(file, { force: true });
+  if (work) rmSync(work, { recursive: true, force: true });
 };
 const fail = (message) => {
   console.error(`release-pack: ${message}`);
   drop();
   process.exit(1);
 };
-for (const [signal, number] of [['SIGINT', 2], ['SIGTERM', 15], ['SIGHUP', 1]]) process.once(signal, () => { drop(); process.exit(128 + number); });
+for (const [signal, number] of [['SIGINT', 2], ['SIGTERM', 15], ['SIGHUP', 1]]) process.on(signal, () => { drop(); process.exit(128 + number); }); // on, not once: a second stop mid-cleanup is not fatal
 const turn = () => new Promise((settle) => setImmediate(settle));
 const run = (cmd, args, cwd) => {
   const r = spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
