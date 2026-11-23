@@ -57,8 +57,8 @@ fn main() {
 
 /// Issue #2892: each of the player's module sets (crates/deep-player/web/dist) as the web bundle
 /// stores it, `<set>.wasm.gz` in OUT_DIR, so no export spends its time deflating the player. This
-/// script reruns on any source change, so a set is deflated again only when its player or the
-/// compressor changed (the key beside it: SHA-256 over both).
+/// script reruns on a change to a source it digests, so a set is deflated again only when its
+/// player or the compressor changed (the key beside it: SHA-256 over both).
 fn stored_players(manifest_dir: &Path, out_dir: &Path) {
     let dist = manifest_dir.join("../deep-player/web/dist");
     for set in ["figure", "game2d", "full"] {
@@ -86,8 +86,11 @@ fn stored_players(manifest_dir: &Path, out_dir: &Path) {
 /// its path dependencies, transitively, each folder whole but hidden entries and what the
 /// workspace's `.gitignore` names), and the workspace's `Cargo.lock`, each file by its path and
 /// its bytes. A rebuild from changed sources is another build; one from the same sources is the
-/// same build. Issue #3299: the script reruns when one of those files changes, never for a file
-/// it doesn't read, so the typings gpui-shell writes into a panel folder rebuild nothing.
+/// same build. Issue #3299: the script reruns when one of those files changes or goes, never for
+/// a file it doesn't read, so the typings gpui-shell writes into a panel folder rebuild nothing.
+/// Cargo watches a folder only whole, ignored files and all, so a file added where no file it
+/// reads names it (a crate's new `build.rs`, which cargo finds by itself) reruns the script only
+/// with the next change to one it reads; until then the binary carries the digest it had.
 fn source_digest(manifest_dir: &Path) -> String {
     let crates = manifest_dir.parent().expect("a crate sits in crates/");
     let root = crates.parent().expect("crates/ sits in the workspace");
