@@ -23,32 +23,26 @@ const word = (text) => text.replace(/\W+/g, '-');
 const quote = (text) => `'${text.replaceAll("'", "'\\''")}'`;
 const lanes = () => join(homedir(), '.deepbuild', 'lanes');
 const git = (args, options = {}) => execFileSync('git', ['-c', 'core.quotePath=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 1 << 30, stdio: ['ignore', 'pipe', 'pipe'], ...options });
+// A run that reaches no verdict stops by throwing, so the exit status is set as the output drains: process.exit would
+// cut a piped stdout short on macOS, the lane's last lines with it.
+class Blocked extends Error {}
 const blocked = (why) => {
-  console.log(`BLOCKED lane-remote: ${why}`);
-  process.exit(3);
+  throw new Blocked(why);
 };
 
 const args = process.argv.slice(2);
 const mode = args[0] === '--host' && args.length === 3 ? 'near' : args[0] === '--only' && args.length === 2 ? 'only' : args.length === 1 && !args[0].startsWith('--') ? 'far' : null;
 if (!mode) {
   console.error('usage: node scripts/lane-remote.mjs --host <host> <lane> | --only <lane> | <lane> < manifest');
-  process.exit(2);
+  process.exit(3);
 }
 const lane = checks.find(({ name }) => name === args.at(-1));
-if (!lane) blocked(`lanes.mjs has no check lane named ${args.at(-1)}`);
 const record = (tree) => join(lanes(), `${tree}-${word(lane.name)}.json`);
 /** A record with fields added, written back where it was. */
 function amend(file, more) {
   const amended = { ...JSON.parse(readFileSync(file, 'utf8')), ...more };
   writeFileSync(file, `${JSON.stringify(amended, null, 2)}\n`);
   return amended;
-}
-
-try {
-  process.exitCode = mode === 'near' ? await near(args[1]) : mode === 'far' ? far() : await only();
-} catch (error) {
-  // Whatever broke, no verdict was reached: never the exit status of a FAIL.
-  blocked(error.message.split('\n')[0]);
 }
 
 /** Ships the tree on disk to the host's worktree for this one, runs the lane there and fetches its record back. */
@@ -150,15 +144,19 @@ function far() {
   return EXIT[state] ?? 3;
 }
 
-/** A vitest command's arguments after `run`: its options, each --exclude with its glob, and the paths it names. */
+// The vitest options the lanes' commands give a value to, as their next argument.
+const VALUED = ['--root', '-t', '--testNamePattern', '--config', '--project', '--dir'];
+
+/** A vitest command's arguments after `run`: its options with their values, each --exclude glob, and the paths it names. */
 function vitestArgs(args) {
   const rest = args.slice(args.indexOf('run') + 1), options = [], paths = [], excludes = [];
   rest.forEach((arg, at) => {
     if (rest[at - 1] === '--exclude') excludes.push(arg);
-    else if (arg.startsWith('-') || rest[at - 1] === '-t') options.push(arg);
+    else if (arg.startsWith('-') || VALUED.includes(rest[at - 1])) options.push(arg);
     else paths.push(arg);
   });
-  return { head: args.slice(0, args.indexOf('run') + 1), options: options.filter((arg) => arg !== '--exclude'), paths, excludes };
+  const root = rest[rest.indexOf('--root') + 1];
+  return { head: args.slice(0, args.indexOf('run') + 1), options: options.filter((arg) => arg !== '--exclude'), paths, excludes, root: rest.includes('--root') ? root.replace(/\/$/, '') : null };
 }
 
 /** Whether a lane's command runs tests by vitest, cargo test or node --test. */
@@ -166,22 +164,28 @@ function isTest([command, ...args]) {
   return args.some((arg) => arg.endsWith('vitest.mjs')) || (command === 'cargo' && args[0] === 'test') || (command === process.execPath && args[0] === '--test');
 }
 
-/** The lane's test command narrowed to the files and crates; null when none of them is its to run, or it runs no test. */
+/**
+ * The lane's test command narrowed to the files and crates, with the repo's files and crates it runs; null when none of
+ * them is its to run, or it runs no test.
+ */
 function narrow([command, ...args], files, crates, runner) {
   if (args.some((arg) => arg.endsWith('vitest.mjs'))) {
-    const { head, options, paths, excludes } = vitestArgs(args);
-    const out = (file) => excludes.some((glob) => (glob.endsWith('**') ? file.startsWith(glob.slice(0, -2)) : file === glob));
-    const own = files.filter((file) => runner(file) === 'vitest' && (!paths.length || paths.some((path) => file.includes(path))) && !out(file));
-    return own.length ? [command, ...head, ...options, ...excludes.flatMap((glob) => ['--exclude', glob]), ...own] : null;
+    const { head, options, paths, excludes, root } = vitestArgs(args);
+    // Under --root, vitest reads paths and globs from that folder.
+    const at = (file) => (root ? file.slice(root.length + 1) : file);
+    const out = (file) => excludes.some((glob) => (glob.endsWith('**') ? at(file).startsWith(glob.slice(0, -2)) : at(file) === glob));
+    const own = files.filter((file) => runner(file) === 'vitest' && (!root || file.startsWith(`${root}/`)) && (!paths.length || paths.some((path) => at(file).includes(path))) && !out(file));
+    return own.length ? { command: [command, ...head, ...options, ...excludes.flatMap((glob) => ['--exclude', glob]), ...own.map(at)], files: own, crates: [] } : null;
   }
   if (command === 'cargo' && args[0] === 'test') {
-    // The whole workspace narrows to the crates; a command that names its own crates runs when one of them is among them.
-    if (!args.includes('--workspace')) return args.some((arg, at) => args[at - 1] === '-p' && crates.includes(arg)) ? [command, ...args] : null;
-    return crates.length ? [command, ...args.flatMap((arg) => (arg === '--workspace' ? crates.flatMap((name) => ['-p', name]) : [arg]))] : null;
+    // The whole workspace narrows to the crates; a command that names its own crates runs whole when one is among them.
+    const named = args.filter((arg, at) => args[at - 1] === '-p');
+    if (!args.includes('--workspace')) return named.some((name) => crates.includes(name)) ? { command: [command, ...args], files: [], crates: named } : null;
+    return crates.length ? { command: [command, ...args.flatMap((arg) => (arg === '--workspace' ? crates.flatMap((name) => ['-p', name]) : [arg]))], files: [], crates } : null;
   }
   if (command === process.execPath && args[0] === '--test') {
     const own = files.filter((file) => runner(file) === 'node' && args.slice(1).some((glob) => matchesGlob(file, glob)));
-    return own.length ? [command, '--test', ...own] : null;
+    return own.length ? { command: [command, '--test', ...own], files: own, crates: [] } : null;
   }
   return null;
 }
@@ -212,8 +216,11 @@ async function only() {
   const wide = (cargo) => reached.wide.filter((node) => node.startsWith('cargo test -p ') === cargo).map((node) => node.replace('cargo test -p ', ''));
   const files = [...new Set([...reached.tests, ...wide(false), ...skipped.filter((file) => isTestFile(file) && existsSync(join(cwd, file)))])].sort();
   const crates = [...new Set([...reached.crates, ...wide(true), ...skipped.flatMap((id) => id.match(/^cargo -p (\S+)/)?.[1] ?? [])])].sort();
-  const commands = lane.commands.map((command) => narrow(command, files, crates, (file) => runnerOf(file, source(file)))).filter(Boolean);
-  const ran = (names) => names.filter((name) => commands.some((command) => command.includes(name)));
+  // A platform-branching file every suite reads, as a runner's setup, reaches every test: the lane's tests run whole.
+  const narrowed = reached.every.length ? lane.commands.filter(isTest).map((command) => ({ command, files: [], crates: [] }))
+    : lane.commands.map((command) => narrow(command, files, crates, (file) => runnerOf(file, source(file)))).filter(Boolean);
+  const commands = narrowed.map(({ command }) => command);
+  const ran = (key) => [...new Set(narrowed.flatMap((one) => one[key]))].sort();
   // A whole run of the lane on this Mac and tree already holds every row a narrowed one would: it stands.
   if (!existsSync(record(tree)) || read(`${tree}-${word(lane.name)}.json`).only) {
     rmSync(record(tree), { force: true });
@@ -221,9 +228,19 @@ async function only() {
     if (commands.length) runLanes([{ ...lane, commands }], { cwd });
     else writeRecord(lane.name, 'PASS', tree, []);
     if (!existsSync(record(tree))) blocked(`${lane.name} wrote no record of tree ${tree}`);
-    amend(record(tree), { only: { files: ran(files), crates: ran(crates) } });
+    amend(record(tree), { only: { files: ran('files'), crates: ran('crates'), ...(reached.every.length && { every: reached.every }) } });
   }
   const state = mergeRecords(tree).states[lane.name];
   console.log(`RECORD ${record(tree)}\n${state} ${lane.name} (merged)`);
   return EXIT[state];
+}
+
+// Last, so every declaration above is in place before the run.
+try {
+  if (!lane) blocked(`lanes.mjs has no check lane named ${args.at(-1)}`);
+  process.exitCode = mode === 'near' ? await near(args[1]) : mode === 'far' ? far() : await only();
+} catch (error) {
+  // Whatever broke, no verdict was reached: never the exit status of a FAIL.
+  console.log(`BLOCKED lane-remote: ${error.message.split('\n')[0]}`);
+  process.exitCode = 3;
 }

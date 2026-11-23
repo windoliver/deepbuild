@@ -1919,6 +1919,11 @@ export function mergeRecords(tree) {
   for (const lane of new Set(records.map((r) => r.lane))) {
     const mac = records.filter((r) => r.lane === lane && String(r.platform).startsWith('darwin'));
     const group = lane === 'lint' ? mac : records.filter((r) => r.lane === lane);
+    // A lane only Macs ran reads as it did before any merge: its records' own states.
+    if (mac.length && group.length === mac.length) {
+      states[lane] = worst(mac.map((r) => read(r.state))) ?? 'PASS';
+      continue;
+    }
     // Each record's rows by ID first: within one record a skipped row and a row that ran stay what that lane read.
     const rows = new Map(), own = [];
     for (const r of group) {
@@ -2036,11 +2041,11 @@ export function runLanes(lanes, { cwd = root } = {}) {
           // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
           // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
           const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
-          found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error };
+          found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error, lone: !failed };
         }
         // What no test's row carries, as a missing grant or a runner that died, is the lane's own finding: the record
         // names it, so a merge with another machine's rows (parallel-proof §8) can't lose it.
-        if (found && !run.tests.some(({ state }) => state === found.state)) findings.push({ state: found.state, note: found.error });
+        if (found && (found.lone || (results?.noGrant && found.error === results.noGrant) || !run.tests.some(({ state }) => state === found.state))) findings.push({ state: found.state, note: found.error });
         if (stands(found, failure)) failure = found;
       }
       const elapsed = ((performance.now() - started) / 1000).toFixed(2);
