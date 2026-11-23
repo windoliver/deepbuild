@@ -30,6 +30,8 @@ DA1815_SCREENS=<dir> ... shown        # keeps AC5's pictures, for the taste call
   `driveBin` (in a grant of `scripts/throttle.mjs build`, kept in `$TMPDIR/da1101-bin-<uid>-<checkout>/`, reused while it is
   newer than every Rust source). With no `DEEP_HUB_PLANT` it draws as shipped (#1498's suite does the same). AC4's timed
   half builds a release replica with `frame-clocks` in a target folder of its own, only on a fit reference Mac.
+- **Time.** A debug frame of AC1's 4,100 lines costs about a second of CPU on a page that lays out every line, as the base's
+  does: at a load of 300 its base run took 12 minutes a replica, on a quiet Mac a minute or two.
 - **Folders and processes.** Every HOME is a temp folder (#16's `makeHome`). No hub, no CLI and no network: the replica is
   launched on a fixture record. Only what a test started is stopped, by PID.
 - **Lanes.** `lane.json` makes the folder `alone` (binary). `shown.test.ts` is run by hand (`byHand`) if the lanes should
@@ -57,9 +59,10 @@ merged ones; the tests use exactly these.
    `session-detail` (the newest failed run's `actual`, split on newlines, among them), each a node named by its line. The
    title and every other heading, labels, the state word and why, the return card, the list's rows and controls are chrome.
    No new kind of content is needed: a fixture's "message" is a line of a failed run.
-6. **The replica and its calls, all merged:** `launch {from: "fixture", fixture, theme, frames: "dirty", read_back: "off"}`, `see` (nodes with `id`,
-   `name`, `value`, `bounds`; `runs`; `address`; `log_pos`; `hub`, every call the app made of its hub), `act` press, type
-   and menu, `open`, `wait_for {t}`, `menus`, `screenshot`, `close`. No new call.
+6. **The replica and its calls, all merged:** `launch {from: "fixture", fixture, theme, frames, read_back}` (AC2 and AC3 draw only
+   the frames a real window would, `frames: "dirty"`, so a view left stale shows), `see` (nodes with `id`, `name`, `value`,
+   `bounds`; `runs`; `address`; `log_pos`; `hub`, every call the app made of its hub), `act` press, type and menu, `open`,
+   `wait_for {t, step_ms}`, `menus`, `screenshot`, `close`. No new call.
 
 ## Plants
 

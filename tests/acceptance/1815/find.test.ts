@@ -17,7 +17,8 @@ afterAll(cleanup, 60_000);
 
 async function walk(plant?: string): Promise<string[]> {
   const [first, second, third] = LONG.match as [string, string, string];
-  return on([LONG], { plant }, async (r) => {
+  // Every frame drawn, which is cheaper on 4,100 lines than judging what a real window would draw; AC2 and AC3 do that.
+  return on([LONG], { plant, every: true }, async (r) => {
     const before = await openPage(r, LONG);
     const opened = await find(r);
     const at = field(opened);
@@ -50,11 +51,11 @@ async function walk(plant?: string): Promise<string[]> {
 describe(`AC1 ${ID.walk} find walks every match on the page`, () => {
   it(`AC1 ${ID.walk}: with "${WORD}" in three messages, one 4,000 lines down, ⌘F "${WORD}" reads "1 of 3", and Return twice lands on the third with its line inside the lane; the field sits in the title row, ⇧Return walks back, and nothing is sent`, async () => {
     expect(await walk()).toEqual([]);
-  }, 60 * MIN);
+  }, 240 * MIN);
 
   it(`AC1 ${ID.walk} wrong program: a find that searches only drawn rows reads "1 of 2", naming the missed line`, async () => {
     expect((await walk(PLANT.drawnOnly)).join('\n'), `the planted find (README, Plants: ${PLANT.drawnOnly})`).toContain(`reads "1 of 2", not "1 of 3": it missed "${LONG.match[2]!}"`);
-  }, 60 * MIN);
+  }, 240 * MIN);
 
   it(`AC1 ${ID.walk} Scope: ⌘F is one action of the table, in the Edit menu under its name with its key, and picking it opens the field`, async () => {
     const table = (JSON.parse(readFileSync(join(REPO, 'crates/deep-app/src/actions.json'), 'utf8')) as { actions: { name: string; key: string | null }[] }).actions;
@@ -69,7 +70,7 @@ describe(`AC1 ${ID.walk} find walks every match on the page`, () => {
       const x = await until(r, (l) => field(l) !== undefined, 1000);
       expect(field(x), 'picking it opens the field').toBeDefined();
     });
-  }, 60 * MIN);
+  }, 240 * MIN);
 });
 
 // ---- AC2: chrome isn't searched.
@@ -99,12 +100,12 @@ async function chrome(plant?: string): Promise<{ state: string; failures: string
 describe(`AC2 ${ID.chrome} find searches content, never chrome`, () => {
   it(`AC2 ${ID.chrome}: a word that appears only in a row's state word or a heading isn't a match`, async () => {
     expect((await chrome()).failures).toEqual([]);
-  }, 60 * MIN);
+  }, 240 * MIN);
 
   it(`AC2 ${ID.chrome} wrong program: a find that matches chrome fails, naming the string`, async () => {
     const { state, failures } = await chrome(PLANT.matchesChrome);
     for (const word of [state, HEADING_WORD]) expect(failures.join('\n'), `the planted find (README, Plants: ${PLANT.matchesChrome})`).toContain(`find matches "${word}", which only`);
-  }, 60 * MIN);
+  }, 240 * MIN);
 });
 
 // ---- AC3: Escape, and an ask's page.
@@ -155,13 +156,13 @@ async function closes(plant?: string): Promise<string[]> {
 describe(`AC3 ${ID.closes} Escape closes it, and an ask's page has none`, () => {
   it(`AC3 ${ID.closes}: Escape closes the field and the page keeps its scroll place; with a card presented, ⌘F writes nothing and moves nothing`, async () => {
     expect(await closes()).toEqual([]);
-  }, 60 * MIN);
+  }, 240 * MIN);
 
   it(`AC3 ${ID.closes} wrong program: a find whose Escape takes the page back to its top fails, naming the line`, async () => {
     expect((await closes(PLANT.escapeRewinds)).join('\n'), `the planted find (README, Plants: ${PLANT.escapeRewinds})`).toContain(`after Escape the page lost its scroll place: "${SHORT.match[2]!}"`);
-  }, 60 * MIN);
+  }, 240 * MIN);
 
   it(`AC3 ${ID.closes} wrong program: a find that opens over a presented card fails, naming the ask`, async () => {
     expect((await closes(PLANT.onAsk)).join('\n'), `the planted find (README, Plants: ${PLANT.onAsk})`).toContain(`⌘F on ${ASK_AT} with a card presented opens the field`);
-  }, 60 * MIN);
+  }, 240 * MIN);
 });

@@ -4,7 +4,7 @@
 // - On a fit reference Mac only (#1097's gate; elsewhere INCONCLUSIVE before anything is built): a release replica with
 //   `frame-clocks`, five runs after one warm-up, each a fresh process. A run gives two readings: the wall time from
 //   sending the key until the window that shows the match is drawn, which holds the replica's own reading of the window
-//   too, so it can only be too long; and the main thread's CPU time over the same frames, which leaves out anything off
+//   too, so it can only be too long; and the main thread's CPU time over the frames it drew, which leaves out anything off
 //   that thread, so it can only be too short. scripts/benchmark.mjs's judgeLimit passes the first or fails the second;
 //   anything between, as a loaded Mac's reading, is INCONCLUSIVE, never PASS.
 import { spawnSync } from 'node:child_process';
@@ -14,7 +14,7 @@ import { performance } from 'node:perf_hooks';
 import { afterAll, describe, expect, it } from 'vitest';
 import { environmentProblem } from '../1097/helpers.ts';
 import {
-  BIG, blocked, cleanup, FAR, field, find, ID, inconclusive, inLane, look, MIN, NO_FIELD, on, open, openPage, placeOf, REPO, said, sha256, SHORT, type Line,
+  BIG, blocked, cleanup, FAR, field, find, ID, inconclusive, inLane, look, MIN, NO_FIELD, on, open, openPage, placeOf, REPO, rest, said, sha256, SHORT, type Line,
 } from './helpers.ts';
 
 afterAll(cleanup, 60_000);
@@ -25,7 +25,7 @@ interface Reading { place: string | null; inLane: boolean; wall: number; cpu: nu
 
 /** One key typed in the field on the 10,000-line page, until its match shows or a second of the replica's clock has passed. */
 async function firstMatch(bin?: string): Promise<Reading> {
-  return on([BIG, SHORT], bin ? { bin } : {}, async (r) => {
+  return on([BIG, SHORT], bin ? { bin } : { every: true }, async (r) => {
     // ⌘F first where a frame is cheap: with no field there, nothing is asked of the big page.
     await openPage(r, SHORT);
     if (!field(await find(r))) expect.fail(NO_FIELD(SHORT));
@@ -36,6 +36,8 @@ async function firstMatch(bin?: string): Promise<Reading> {
     // An empty field, whatever the one on the other page held.
     await r.press('cmd-a');
     await r.press('backspace');
+    // At rest, so the frames drawn from here are the key's.
+    await rest(r, 100);
     const from = r.t;
     let wall = 0;
     const timed = async (call: Line): Promise<void> => { const t = performance.now(); await r.must(String(call.call), call); wall += performance.now() - t; };
@@ -47,8 +49,8 @@ async function firstMatch(bin?: string): Promise<Reading> {
     }
     const got = { place: placeOf(x), inLane: inLane(x.s, FAR_LINE) };
     const frames = ((await r.must('close', { call: 'close' })).frames?.list ?? []) as Line[];
-    const costs = frames.filter((f) => Number(f.t) > from).map((f) => f.cpu_ms);
-    return { ...got, wall, cpu: costs.length && costs.every((c) => typeof c === 'number') ? costs.reduce((a, c) => a + Number(c), 0) : null };
+    const costs = frames.filter((f) => f.drawn === true && Number(f.t) >= from && typeof f.cpu_ms === 'number').map((f) => Number(f.cpu_ms));
+    return { ...got, wall, cpu: costs.length ? costs.reduce((a, c) => a + c, 0) : null };
   });
 }
 

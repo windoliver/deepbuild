@@ -3,7 +3,7 @@
 // INCONCLUSIVE, never PASS, and no criterion above reads a picture to judge it.
 //
 // The app's own views as the replica draws them headless at the reference window (1512 × 982 points at 2×), as #3234's:
-// AC1's page with "backoff" walked to its third match. A picture is taken once its state is on the window's tree: the
+// the short page with "backoff" walked to its third match. A picture is taken once its state is on the window's tree: the
 // field open with the word in it, "3 of 3", and the line inside the lane; whether the mark is there is the picture's to
 // show and a person's to judge. Pictures go to $DA1815_SCREENS (a temp folder without it) with run.json, the replica
 // binary's SHA-256. Then TASTE.json: no call, or one on other files, is INCONCLUSIVE; `looks_wrong` fails, quoting its

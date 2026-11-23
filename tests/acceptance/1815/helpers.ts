@@ -141,8 +141,8 @@ export async function look(r: Replica): Promise<Look> {
   const got = await r.must('see', { call: 'see' });
   return { s: got.snapshot as Snapshot, address: (got.address ?? null) as string | null, hub: (got.hub ?? []) as Line[], logPos: typeof got.log_pos === 'number' ? got.log_pos : null };
 }
-/** Lets `ms` of the replica's clock pass with no input, a frame each 50 ms: a debug frame of 4,100 lines is slow. */
-export const rest = (r: Replica, ms: number): Promise<Line> => r.must(`waiting ${ms} ms`, { call: 'wait_for', wait_for: { t: r.t + Math.round((ms * FLICKS) / 1000), step_ms: 50 }, timeout: ms + 2000 });
+/** Lets `ms` of the replica's clock pass with no input, a frame each 250 ms: a debug frame of 4,100 lines is slow. */
+export const rest = (r: Replica, ms: number): Promise<Line> => r.must(`waiting ${ms} ms`, { call: 'wait_for', wait_for: { t: r.t + Math.round((ms * FLICKS) / 1000), step_ms: 250 }, timeout: ms + 2000 });
 /** Waits on the replica's clock, up to `ms`, until `ready` holds of the window; the last look. */
 export async function until(r: Replica, ready: (x: Look) => boolean, ms = 2000): Promise<Look> {
   let x = await look(r);
