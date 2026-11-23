@@ -1,0 +1,101 @@
+#3169's blind redraft of #3016's metal.rs and views.rs, run at the base ccafae68f, 2026-11-22, compiled in place by
+pointing crates/deep-scene3d-render/Cargo.toml's acceptance_3016_metal and acceptance_3016_views entries at this
+folder for the run (reverted before the commit). Rust 1.99.1, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0
+CARGO_PROFILE_TEST_DEBUG=0, the dev profile:
+
+  cargo test --locked [--no-fail-fast] -p deep-scene3d-render --test acceptance_3016_metal --test acceptance_3016_views -- --test-threads=1
+
+The base already holds #3016's implementation (#3046), so views.rs compiles there. What #3169 asks is read here: off
+Metal, the five tests are ignored with a reason naming Metal or the reference Mac and the unit lane reads them
+INCONCLUSIVE (platform); on the Mac every test runs and judges as the first draft does.
+
+== The Spark: Linux aarch64, 20 cores, NVIDIA GB10 through Vulkan; a fresh GitHub clone at ccafae68f, -j 4 ==
+load at the build's start 6.41 5.36 6.16; at the tests' start 10.16 6.80 6.60; at the end 9.90 6.90 6.64
+
+     Running ../../tests/acceptance/3016-redraft-3169/metal.rs (.../deps/acceptance_3016_metal-c15b7675159fbf7c)
+
+running 3 tests
+test ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets ... ignored, INCONCLUSIVE (platform): needs Metal: what the device holds is Metal's currentAllocatedSize, which deep_gpu::memory::allocated reads only on macOS
+test ac5_a_view_insets_frame_hashes_as_on_the_merge_base ... ignored, INCONCLUSIVE (platform): needs Metal on the reference Mac (Mac17,10) that drew the merge base's hash: a same-machine hash can't be compared off it
+test ac7_the_estimate_counts_what_each_view_holds ... ignored, INCONCLUSIVE (platform): needs Metal: the device's peak is Metal's currentAllocatedSize, which deep_gpu::memory::allocated reads only on macOS
+
+test result: ok. 0 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running ../../tests/acceptance/3016-redraft-3169/views.rs (.../deps/acceptance_3016_views-de7a1154427f38c2)
+
+running 8 tests
+test ac2_each_pipeline_is_made_once_and_the_environment_filtered_once ... ok
+test ac2_planted_mirror_compiles_its_own_pipelines_fails_naming_the_pipeline ... ok
+test ac5_a_mirror_draws_what_only_it_sees ... TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+ok
+test ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame ... ignored, INCONCLUSIVE (platform): needs Metal on the reference Mac (Mac17,10) that drew the merge base's hash: a same-machine hash can't be compared off it
+test ac5_planted_mirror_takes_the_views_culled_lists_fails_naming_the_item ... TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+ok
+test ac6_a_mesh_any_view_drew_this_turn_is_kept ... ok
+test ac6_planted_cache_freeing_by_the_last_views_turn_fails_naming_the_mesh ... ok
+test ac7_planted_estimate_counting_the_maps_per_view_fails_naming_the_bytes ... ignored, INCONCLUSIVE (platform): needs Metal: the device's peak is Metal's currentAllocatedSize, which deep_gpu::memory::allocated reads only on macOS
+
+test result: ok. 6 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 13.65s
+(exit 0)
+
+The same output read through scripts/lanes.mjs at the base (node 24.22.0): cargoResults(output, 0, crates(checkout)),
+then readRun(results, 0, checkout, []), and isPlatform on each ignore note:
+
+PASS         cargo -p deep-scene3d-render --test acceptance_3016_views › ac2_each_pipeline_is_made_once_and_the_environment_filtered_once
+PASS         cargo -p deep-scene3d-render --test acceptance_3016_views › ac2_planted_mirror_compiles_its_own_pipelines_fails_naming_the_pipeline
+PASS         cargo -p deep-scene3d-render --test acceptance_3016_views › ac6_a_mesh_any_view_drew_this_turn_is_kept
+PASS         cargo -p deep-scene3d-render --test acceptance_3016_views › ac6_planted_cache_freeing_by_the_last_views_turn_fails_naming_the_mesh
+INCONCLUSIVE skipped cargo -p deep-scene3d-render --test acceptance_3016_metal › ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets
+INCONCLUSIVE skipped cargo -p deep-scene3d-render --test acceptance_3016_metal › ac5_a_view_insets_frame_hashes_as_on_the_merge_base
+INCONCLUSIVE skipped cargo -p deep-scene3d-render --test acceptance_3016_metal › ac7_the_estimate_counts_what_each_view_holds
+INCONCLUSIVE skipped cargo -p deep-scene3d-render --test acceptance_3016_views › ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame
+INCONCLUSIVE skipped cargo -p deep-scene3d-render --test acceptance_3016_views › ac7_planted_estimate_counting_the_maps_per_view_fails_naming_the_bytes
+found: {"state":"INCONCLUSIVE","error":"5 tests proved nothing"}
+the five: 5 read, 0 read FAIL, BLOCKED or PASS
+isPlatform: true for all five notes (none starts BLOCKED; each names Metal), so no skips entry can list them.
+
+Each of the five reads INCONCLUSIVE (platform), none FAIL, BLOCKED or PASS. A seen, not asked-for, finding outside
+these files: in the two ac5 mirror tests Mesa's turnip driver writes "TU: error: …" to stderr between libtest's
+"test … ..." and "ok", so in this combined output their lines don't match cargoResults' pattern and the two read
+nothing (neither PASS nor FAIL). The first draft's lines are the same there: it's the driver and the reader, not these
+tests, and is noted for whoever owns the Spark lane.
+
+== The Mac: a Mac18,1 (Metal), not the Mac17,10 the merge base's inset hash was read on ==
+The redraft, --no-fail-fast; load at the start 114.76 120.74 102.36, at the end 109.08 114.69 107.47:
+
+test ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets ... ok
+test ac5_a_view_insets_frame_hashes_as_on_the_merge_base ... FAILED
+test ac7_the_estimate_counts_what_each_view_holds ... ok
+---- ac5_a_view_insets_frame_hashes_as_on_the_merge_base stdout ----
+AC5 #3016.548510a3: inset-cascades frame 0 on a Mac18,1: 92b801a7aaeeec21
+thread 'ac5_a_view_insets_frame_hashes_as_on_the_merge_base' panicked at crates/deep-scene3d-render/../../tests/acceptance/3016-redraft-3169/../3016/fixture.rs:357:5:
+assertion `left == right` failed: BLOCKED: the merge base's hash was read on a Mac17,10, this machine is a Mac18,1: a same-machine hash can't be compared
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 41.08s
+
+test ac2_each_pipeline_is_made_once_and_the_environment_filtered_once ... ok
+test ac2_planted_mirror_compiles_its_own_pipelines_fails_naming_the_pipeline ... ok
+test ac5_a_mirror_draws_what_only_it_sees ... ok
+test ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame ... FAILED
+test ac5_planted_mirror_takes_the_views_culled_lists_fails_naming_the_item ... ok
+test ac6_a_mesh_any_view_drew_this_turn_is_kept ... ok
+test ac6_planted_cache_freeing_by_the_last_views_turn_fails_naming_the_mesh ... ok
+test ac7_planted_estimate_counting_the_maps_per_view_fails_naming_the_bytes ... ok
+---- ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame stdout ----
+thread 'ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame' panicked at crates/deep-scene3d-render/../../tests/acceptance/3016-redraft-3169/../3016/fixture.rs:357:5:
+assertion `left == right` failed: BLOCKED: the merge base's hash was read on a Mac17,10, this machine is a Mac18,1: a same-machine hash can't be compared
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 99.07s
+(exit 101: both targets failed, each on its ac5 model assert)
+
+The first drafts (tests/acceptance/3016/metal.rs, views.rs, Cargo.toml as at the base), same Mac, right after; load at
+the start 114.59 115.45 107.94, at the end 91.19 117.32 113.31:
+
+metal.rs: ac3 ok, ac5_a_view_insets_frame_hashes_as_on_the_merge_base FAILED (fixture.rs:357, the same BLOCKED
+  message; frame 0 hashed 92b801a7aaeeec21), ac7 ok. 2 passed; 1 failed; 0 ignored.
+views.rs: ac2 ×2 ok, ac5_a_mirror_draws_what_only_it_sees ok, ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame
+  FAILED (fixture.rs:357, the same BLOCKED message), ac5_planted_mirror_… ok, ac6 ×2 ok, ac7_planted_… ok. 7 passed;
+  1 failed; 0 ignored. (exit 101)
+
+So on the Mac each test judges as the first draft does, test by test, the two hash tests' BLOCKED on a Mac other than
+the reference included (the frame's hash, 92b801a7aaeeec21, equals the merge base's; only the model differs). Not run:
+the Mac17,10 itself, where the first draft's README and #3016's closing comment read the hash tests passing; on macOS
+the redraft's five attributes expand to nothing, so the redraft is the first draft there.

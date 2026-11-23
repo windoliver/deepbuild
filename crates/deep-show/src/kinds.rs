@@ -155,6 +155,8 @@ const INSTALLED: &[(&str, &str)] = &[
         "canvas-working-order.md",
         include_str!("../gallery/canvas-working-order.md"),
     ),
+    // #2697: craft@1's checks, which scripts/skill.mjs writes from craft.json.
+    ("craft.md", include_str!("../gallery/craft.md")),
     (
         "familiar-names.md",
         include_str!("../gallery/familiar-names.md"),

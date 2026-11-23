@@ -75,6 +75,8 @@ pub struct Answer {
     pub token: Option<String>,
     /// For a batch approved in part: the asks of the batch the approval runs, by index in the batch.
     pub steps: Option<Vec<usize>>,
+    /// On a taste call (#3234): each picture it judges, whether it was shown, its largest scale and its time drawn.
+    pub pictures: Option<Vec<Value>>,
 }
 
 impl Answer {
@@ -99,6 +101,9 @@ impl Answer {
         }
         if let Some(steps) = &self.steps {
             params.insert("steps".into(), json!(steps));
+        }
+        if let Some(pictures) = &self.pictures {
+            params.insert("pictures".into(), Value::Array(pictures.clone()));
         }
         params
     }

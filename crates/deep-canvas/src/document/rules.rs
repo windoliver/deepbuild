@@ -116,6 +116,7 @@ pub(crate) fn check(
             if status_role_of(id, item, &mut r.roles) {
                 r.scales.push(id.as_str());
             }
+            hidden_view_of(id, item, &mut r.roles);
             numbers_of(doc, &texts, id, item, &mut r.numbers);
         }
         r
@@ -413,6 +414,40 @@ fn status_role_of(id: &String, item: &Value, issues: &mut Vec<Issue>) -> bool {
     true
 }
 
+/// Object: hidden view (#290) over one item: `hidden_view` holds an opacity in 0..1 and a color,
+/// a look role or `base`, never a status role.
+fn hidden_view_of(id: &String, item: &Value, issues: &mut Vec<Issue>) {
+    let Some(view) = member(item, "hidden_view") else {
+        return;
+    };
+    let at = format!("items/{id}/hidden_view");
+    let Some(fields) = view.as_object() else {
+        issues.push(Issue::error(
+            "out_of_range",
+            id,
+            at,
+            view.clone(),
+            "not an object",
+        ));
+        return;
+    };
+    for (name, value) in fields {
+        let (code, what) = match (name.as_str(), value) {
+            ("opacity", v) if v.as_f64().is_some_and(|o| (0.0..=1.0).contains(&o)) => continue,
+            ("opacity", _) => ("out_of_range", "not a number in 0..1"),
+            ("color", Value::String(role)) if role.starts_with(STATUS_ROLE) => (
+                "status_color_unbound",
+                "names a status color itself; a hidden view's color is a look role or `base`",
+            ),
+            ("color", Value::String(_)) => continue,
+            ("color", _) => ("out_of_range", "not a look role or `base`"),
+            _ => ("unknown_field", "not a field of hidden_view"),
+        };
+        let path = format!("{at}/{name}");
+        issues.push(Issue::error(code, id, path, value.clone(), what));
+    }
+}
+
 /// A mark set whose role goes through a scale in `scales`, one naming a status role, takes the
 /// color: name it with the scale.
 fn scaled_status(items: &Map<String, Value>, scales: &BTreeSet<&str>, issues: &mut Vec<Issue>) {
@@ -596,6 +631,31 @@ mod tests {
             codes(&doc("Open")),
             [("bound_typed_over", vec!["n".to_string()])]
         );
+    }
+
+    #[test]
+    fn a_hidden_view_takes_an_opacity_in_range_and_a_color_that_is_no_status_role() {
+        let found = |view: serde_json::Value| -> Vec<(&'static str, String)> {
+            let mut d = doc("");
+            d["items"]["n"]["hidden_view"] = view;
+            let issues = check(&d).issues.into_iter();
+            issues.map(|i| (i.code, i.path)).collect()
+        };
+        let at = |f: &str| format!("items/n/hidden_view{f}");
+        assert_eq!(found(json!({"opacity": 0.4, "color": "base"})), []);
+        assert_eq!(found(json!({"opacity": 0, "color": "ink"})), []);
+        assert_eq!(found(json!({})), []);
+        assert_eq!(
+            found(json!({"opacity": 0.4, "color": "status.fail"})),
+            [("status_color_unbound", at("/color"))]
+        );
+        assert_eq!(
+            found(json!({"opacity": 1.2})),
+            [("out_of_range", at("/opacity"))]
+        );
+        assert_eq!(found(json!({"color": 7})), [("out_of_range", at("/color"))]);
+        assert_eq!(found(json!({"blur": 1})), [("unknown_field", at("/blur"))]);
+        assert_eq!(found(json!(0.4)), [("out_of_range", at(""))]);
     }
 
     #[test]

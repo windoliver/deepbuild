@@ -925,7 +925,7 @@ fn default_of(field: &[String]) -> Option<Value> {
         ["at", "scale", _] => json!(1.0),
         ["at", _, _] => json!(0.0),
         ["adjust", "opacity" | "saturation" | "brightness" | "contrast" | "gamma"] => json!(1.0),
-        ["adjust", "hue" | "exposure"] => json!(0.0),
+        ["adjust", "hue" | "exposure"] | ["hidden_view", "opacity"] => json!(0.0),
         ["params", "reveal", "progress"] => json!(1.0),
         // A group warp's `mix: channel 0..1 = 1` (Frame and group: warp).
         ["params", "warp", "mix"] => json!(1.0),

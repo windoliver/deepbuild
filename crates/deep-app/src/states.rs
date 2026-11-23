@@ -492,6 +492,10 @@ pub struct Table {
     titles: HashMap<String, Option<String>>,
     /// Every ask an event is about, read as the core reads it.
     readings: HashMap<String, Reading>,
+    /// Each taste call raised, by handle: its session and its question (#3234).
+    tastes: HashMap<String, (String, String)>,
+    /// Each session's taste calls answered where none of their pictures was drawn, by question (#3234).
+    unseen: HashMap<String, Vec<String>>,
     /// The ask.created events, in log order, of every ask some event could still leave open.
     asks: Vec<Value>,
     /// Each reading's newest value and the time it is as of, in ms (#1172).
@@ -632,6 +636,29 @@ impl Table {
         let kind = event["kind"].as_str().unwrap_or_default();
         if kind == "ask.created" && !self.readings.get(&handle(event)).is_some_and(Reading::done) {
             self.asks.push(event.clone());
+        }
+        // A taste call answered where none of the pictures it judges was drawn reads so beside it (#3234).
+        if kind == "ask.created" && event["data"]["kind"] == "taste" {
+            if let Some(session) = event["session"].as_str() {
+                let question = event["data"]["question"].as_str().unwrap_or_default();
+                self.tastes
+                    .insert(handle(event), (session.to_owned(), question.to_owned()));
+            }
+        }
+        if kind == "ask.answered" && event["writer"] == "core" {
+            let pictures = event["data"]["pictures"].as_array();
+            let unseen = pictures.is_some_and(|pictures| {
+                !pictures.is_empty() && pictures.iter().all(|picture| picture["shown"] != true)
+            });
+            let taste = event["subject"]
+                .as_str()
+                .and_then(|ask| self.tastes.get(ask));
+            if let (true, Some((session, question))) = (unseen, taste) {
+                self.unseen
+                    .entry(session.clone())
+                    .or_default()
+                    .push(question.clone());
+            }
         }
         if kind == "reading.recorded" {
             let data = &event["data"];
@@ -908,6 +935,11 @@ impl Table {
             ),
             _ => (word, entry),
         }
+    }
+
+    /// The session's taste calls answered where none of their pictures was drawn, by question (#3234).
+    pub fn unseen(&self, session: &str) -> &[String] {
+        self.unseen.get(session).map_or(&[], Vec::as_slice)
     }
 
     /// A session's newest readings, oldest first, at most [`READINGS`].
