@@ -18,9 +18,10 @@ const DECISIONS = {
 // a proof's build reuses: once main holds the lanes, the change runs its own copy of them, so an edit of them is an
 // edit of the checks. So is an edit of a test runner's config (RUNNER_CONFIG), which can stub the code under test
 // only where it finds the change. The x86_64 lane and its image pin decide which replay counts as another machine.
+// lane-remote.mjs decides which tree another machine runs and which tests the Mac must run beside it.
 // main-watch.mjs decides whether landings pause and which landing broke main, and known-failures-check.mjs whether a
 // listed failure may stand.
-const LANES_CODE = /^scripts\/(?:(?:proof[^/]*|lanes|throttle|perf|budget-window|benchmark|affected|bays|shards|lane-x86|main-watch|known-failures-check)\.mjs|lane-x86\.json)$/;
+const LANES_CODE = /^scripts\/(?:(?:proof[^/]*|lanes|throttle|perf|budget-window|benchmark|affected|bays|shards|lane-x86|lane-remote|main-watch|known-failures-check)\.mjs|lane-x86\.json)$/;
 // The skips the lanes let stand are a decision of the same weight, so that key is guarded: any change to it.
 const SKIPS_FILE = 'scripts/known-failures.json';
 const skipsIn = (text) => {
