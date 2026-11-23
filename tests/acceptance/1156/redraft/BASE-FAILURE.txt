@@ -1,0 +1,338 @@
+The #1156 redraft fast suite (tests/acceptance/1156/redraft/fast.test.ts) at base commit 83b82f94a (origin/main),
+November 22, 2026, on this MacBook Pro shared with other worktrees' sessions, load averages 24 to 40 during the runs.
+Node 24.22.0, vitest 5.0.5. TS workspaces built by the caller (npm ci + build); deep-hook and the pre-#1097 reader
+(fad1c4cb, under target/base-1156/) built with cargo before any run, so the suite's own cargo build was a no-op. Type
+check: `node node_modules/typescript/bin/tsc -p tests/acceptance/1156/redraft/tsconfig.json`, no output, exit 0.
+
+Command, from the checkout root, run in a terminal tab (one at a time, nothing else of mine running):
+  node node_modules/vitest/vitest.mjs run --no-color tests/acceptance/1156/redraft/fast.test.ts
+
+Three runs. Run 1 was on an earlier draft of helpers.ts; one test change followed it (below); runs 2 and 3 are the
+files as delivered, unchanged between them. 17 tests each.
+
+== Run 1 (17:32, earlier draft): 12 passed, 5 failed, 340 s ==
+- AC3 main FAIL: "#1156.4ce23e29 the README's URL https://mirror.example.invalid/acme/checkout-web.git must read
+  `read`: it reads `unknown`". The plan's target: origin "unknown", first null, warning "this remote appears in nothing
+  you typed or approved, nor in anything the agent read". origin's push read `repo` and passed.
+- AC3 wrong program FAIL at its last assertion (the same check on the base), same message; its first half (the
+  all-repo matcher fails naming the URL) held.
+- AC4 main FAIL: the retry right after your yes was denied: "you said yes to `git push origin main` (ask:…), and since
+  it can't be undone it starts only once its 10 s hold is over … Run the same call again after that"; 0 tool.after;
+  remote main not the session's commit. This was the test's fault: the design (Plans before acting, "A hold before what
+  can't be undone") says an approved push starts only after a 10 s hold. Changed after run 1: the session waits the
+  10 s hold (+2 s) before running the push again, as the reply tells it to. Nothing else changed.
+- AC7 main and AC7 wrong program FAIL, for AC3's and AC4's reasons above (every step must read PASS first).
+- Passed: AC1 both, AC2 both, AC4's four refusal tests, AC5 both, AC6 both.
+
+== Run 2 (17:39, as delivered): 13 passed, 4 failed, 357 s ==
+- AC2 main FAIL: "#1156.ab43aba4 `bash clean.sh` must run once it is staged, not be denied: \"deep-hook: spooled …,
+  but its sync didn't finish within the hook's 50 ms\nDeepBuild blocked this: A delete whose reach can't be worked out
+  … with the hub down nothing can stag…\"". The hub didn't ack within 50 ms, so deep-hook decided as hub-down and denied
+  the unstageable delete (design: A broken hub). Load average 37 then.
+- AC2 wrong program FAIL at its last assertion (same check on the base), same message; the copy-less stager half held.
+- AC7 main and wrong program FAIL for that AC2 step.
+- Passed: AC1 both, AC3 both (the README's URL read `read` citing the README this time), AC4 all five, AC5 both,
+  AC6 both, and AC7's wrong-program half.
+
+== Run 3 (17:45, as delivered, rerun alone unchanged): 11 passed, 6 failed, 365 s ==
+- AC3 main FAIL again: the README's URL reads `unknown`, as in run 1. AC3 wrong program FAIL at its last assertion for
+  the same reason; its matcher half held.
+- AC6 main FAIL: "the project extension checkout-web/vendor-guard on an edit of vendor/pay-sdk.js must deny it: the
+  deny didn't reach the agent, reply \"deep-hook: spooled …, but its sync didn't finish within the hook's 50 ms\n\"".
+  Same 50 ms miss as run 2's AC2, on another call. AC6 wrong program FAIL at its last assertion, same message; its
+  per-call reader half held.
+- AC7 main and wrong program FAIL for those two steps.
+- Passed: AC1 both, AC2 both, AC4 all five, AC5 both.
+
+Per test across the runs (P pass, F fail; run 1 on the earlier draft):
+  AC1 main P P P · AC1 old reader P P P
+  AC2 main P F P · AC2 copy-less stager P F P (F only at its last assertion)
+  AC3 main F P F · AC3 all-repo matcher F P F (F only at its last assertion)
+  AC4 main F P P · exit-0 refused P P P · exit-0 on answer-on-token P P P · replay refused P P P · replay on
+  signature-covers-anything P P P
+  AC5 main P P P · AC5 by-value P P P
+  AC6 main P P F · AC6 per-call reader P P F (F only at its last assertion)
+  AC7 main F F F · AC7 problems-only report F F F (F only at its last assertion, for the other criteria's steps)
+
+Reading:
+- AC2 and AC6's single failures are the 50 ms ack missed under load: each passed in the other two runs. Environmental
+  by the design's own rule, but reported as they ran.
+- AC3's README URL read `unknown` in 2 of 3 runs. Not load-only on the face of it: by reading packages/hub/src/holds.ts,
+  the push hold that now applies (`namedDefaults`, #84's "no request in this thread names that") raises its ask with
+  `pushTargets` but without the wait for the session's transcript copy that the proceed path (`heldEffect`, line 345,
+  ARCHIVE_WAIT_MS 2000) does first; so whether the README read is in the record when the target is placed depends on
+  timing. Under the first draft's proceed, the push went through the waiting path. This is a lead for the
+  implementation, not a finding of the test.
+- Every wrong-program half held in every run: the pre-#1097 reader, the copy-less stager, the all-repo matcher, the
+  exit-0 helper on answer-on-token, the replayed signature on signature-covers-anything, the by-value environment, the
+  per-call trust reader and the problems-only report each failed its criterion's check, naming what the issue says.
+- Twins in ../twins.json were not run (they replace packages/*/src files, outside this folder).
+
+Raw output of runs 2 and 3 follows (colors stripped). Run 1's raw output is not kept here; its summary is above.
+
+---- run 2 ----
+Sun Nov 22 17:39:27 PST 2026
+17:39  up 2 days, 22:06, 4 users, load averages: 24.36 36.97 27.69
+83b82f94ad44a0794949a7fe7244dab110d27b0b
+
+ RUN  v5.0.5 ~/<worktrees>/issue-1156-redraft-84
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts (17 tests | 4 failed) 356940ms
+   ✓ AC1 #1156.db084f91 Both unreadable pushes are denied with the hub up and with it stopped by PID; the reply names what couldn't be read and says writing it plainly lets it be read, and the remote's `main` is unchanged. deep-hook from before #1097 lets a push through and fails this test, naming the call (2)
+     ✓ AC1 #1156.db084f91 `"$(printf git)" push origin main` and the same push nested 13 deep are denied with the hub up and stopped by PID, each reply naming what couldn't be read and that writing it plainly lets it be read, and origin's main doesn't move 129713ms
+     ✓ AC1 #1156.db084f91 (wrong program) deep-hook from before #1097 lets a push through and fails this check, naming the call 21061ms
+   ❯ AC2 #1156.ab43aba4 Before `clean.sh` runs, a `command.staged` row names `out/`, and `deep undo staged:<id>` then puts back all 200 files with the same hashes; `npm test` is neither staged nor asked about. A planted stager that runs the script without a copy fails, naming the command (2)
+     × AC2 #1156.ab43aba4 before clean.sh runs a command.staged row names out/, deep undo puts back all 200 files with their hashes, and npm test is neither staged nor asked about 4ms
+     × AC2 #1156.ab43aba4 (wrong program) a stager that runs the script without a copy fails this check, naming the command 14032ms
+   ✓ AC3 #1156.4ce23e29 `git push origin main` is held at PreToolUse with one authority ask whose `plan.proposed` row lists each step, what it changes, its undo or "can't undo", and its cost, and whose target reads origin `repo`. The README's URL reads `read`, citing the README's handle, and its card offers no wider scope. A matcher that reads every target as `repo` fails, naming the URL (2)
+     ✓ AC3 #1156.4ce23e29 with a prompt that doesn't name the push and no proceed, `git push origin main` is held by one authority ask with its plan, origin reads repo, the README's URL reads read citing the README's handle, and its card offers no wider scope 1ms
+     ✓ AC3 #1156.4ce23e29 (wrong program) a matcher that reads every target as repo fails this check, naming the URL 11679ms
+   ✓ AC4 #1156.5a63f2db `deep inbox answer` with allow, signed by the test helper over the hub's challenge, runs the push once and the remote's `main` equals the session's commit. A helper replaced by an exit-0 script, or a signature captured for an earlier ask, is refused naming the path or the ask, and the ask stays open (5)
+     ✓ AC4 #1156.5a63f2db deep inbox answer with allow, signed over the hub's challenge, runs the push once and origin's main equals the session's commit 0ms
+     ✓ AC4 #1156.5a63f2db (wrong program) a helper replaced by an exit-0 script is refused naming the path, and the ask stays open 0ms
+     ✓ AC4 #1156.5a63f2db (wrong program) the exit-0 check fails, naming the path, on a hub that counts the answer without the helper's signature 20712ms
+     ✓ AC4 #1156.5a63f2db (wrong program) a signature captured for an earlier ask is refused naming the ask, and the ask stays open 0ms
+     ✓ AC4 #1156.5a63f2db (wrong program) the replay check fails, naming the ask, on a hub that verifies a signature over whatever the helper says it signed 18562ms
+   ✓ AC5 #1156.42037a34 After `deep env up`, the app's environment holds a stand-in and its sample API call gets 200; the value is in none of the transcript, record, evidence or checkout, searched raw, base64, reversed and XOR'd. A planted environment that loads by value fails, naming the evidence file (2)
+     ✓ AC5 #1156.42037a34 the app holds a stand-in, its call to the sample API gets 200, and the value is in none of the transcript, record, evidence or checkout, in any of the forms searched 1ms
+     ✓ AC5 #1156.42037a34 (wrong program) an environment that loads by value fails this check, naming the evidence file 102285ms
+   ✓ AC6 #1156.e1b9237a The `vendor/` edit is denied by the project extension inside the 500 ms hook deadline, and the trust check adds under 1 ms at p95 across the session's calls. A planted host that reads trust from the record per call drops the deny and fails, naming the extension (2)
+     ✓ AC6 #1156.e1b9237a the edit under vendor/ is denied by the project extension inside the 500 ms deadline, and the trust check adds under 1 ms at p95 across the session's calls, 1,000,000 events after the trust decision 0ms
+     ✓ AC6 #1156.e1b9237a (wrong program) a host that reads trust from the record per call drops the deny and fails this check, naming the extension 38619ms
+   ❯ AC7 #1156.281bd100 A step whose hook reply or record row is missing reads INCONCLUSIVE in the run's report, never PASS (2)
+     × AC7 #1156.281bd100 the run's report reads PASS on every step of the session, and with any step's hook reply or record rows taken away that step reads INCONCLUSIVE and the report never PASS 4ms
+     × AC7 #1156.281bd100 (wrong program) a report that reads a step by its problems alone reads a step with nothing to read PASS and fails this check, naming the step 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1156/redraft/fast.test.ts > AC2 #1156.ab43aba4 Before `clean.sh` runs, a `command.staged` row names `out/`, and `deep undo staged:<id>` then puts back all 200 files with the same hashes; `npm test` is neither staged nor asked about. A planted stager that runs the script without a copy fails, naming the command > AC2 #1156.ab43aba4 before clean.sh runs a command.staged row names out/, deep undo puts back all 200 files with their hashes, and npm test is neither staged nor asked about
+AssertionError: #1156.ab43aba4 clean.sh and npm test: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.ab43aba4 `bash clean.sh` must run once it is staged, not be denied: \"deep-hook: spooled 01M830YQXN3E3YW4BHSV8TPXJB, but its sync didn't finish within the hook's 50 ms\\nDeepBuild blocked this: A delete whose reach can't be worked out before it runs, such as a script file's or one over a pattern, can remove files git can't restore, and with the hub down nothing can stag…\"",
++ ]
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts:36:85
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1156/redraft/fast.test.ts > AC2 #1156.ab43aba4 Before `clean.sh` runs, a `command.staged` row names `out/`, and `deep undo staged:<id>` then puts back all 200 files with the same hashes; `npm test` is neither staged nor asked about. A planted stager that runs the script without a copy fails, naming the command > AC2 #1156.ab43aba4 (wrong program) a stager that runs the script without a copy fails this check, naming the command
+AssertionError: #1156.ab43aba4 the same check passes on this stager: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.ab43aba4 `bash clean.sh` must run once it is staged, not be denied: \"deep-hook: spooled 01M830YQXN3E3YW4BHSV8TPXJB, but its sync didn't finish within the hook's 50 ms\\nDeepBuild blocked this: A delete whose reach can't be worked out before it runs, such as a script file's or one over a pattern, can remove files git can't restore, and with the hub down nothing can stag…\"",
++ ]
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts:43:88
+     41|     const problems = await stagerProblems(w);
+     42|     expect(problems.some((p) => p.startsWith(AC2) && p.includes(CLEAN)…
+     43|     expect(problemsOf(stepsOf(w), AC2), `${AC2} the same check passes …
+       |                                                                                        ^
+     44|   }, 30 * MINUTE);
+     45| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1156/redraft/fast.test.ts > AC7 #1156.281bd100 A step whose hook reply or record row is missing reads INCONCLUSIVE in the run's report, never PASS > AC7 #1156.281bd100 the run's report reads PASS on every step of the session, and with any step's hook reply or record rows taken away that step reads INCONCLUSIVE and the report never PASS
+AssertionError: #1156.281bd100 the run's report: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.281bd100 \"bash clean.sh\" with its reply and rows must read PASS: FAIL, #1156.ab43aba4 `bash clean.sh` must run once it is staged, not be denied: \"deep-hook: spooled 01M830YQXN3E3YW4BHSV8TPXJB, but its sync didn't finish within the hook's 50 ms\\nDeepBuild blocked this: A delete whose reach can't be worked out before it runs, such as a script file's or one over a pattern, can remove files git can't restore, and with the hub down nothing can stag…\"",
++ ]
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts:117:89
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1156/redraft/fast.test.ts > AC7 #1156.281bd100 A step whose hook reply or record row is missing reads INCONCLUSIVE in the run's report, never PASS > AC7 #1156.281bd100 (wrong program) a report that reads a step by its problems alone reads a step with nothing to read PASS and fails this check, naming the step
+AssertionError: #1156.281bd100 the same check passes on the run's report: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.281bd100 \"bash clean.sh\" with its reply and rows must read PASS: FAIL, #1156.ab43aba4 `bash clean.sh` must run once it is staged, not be denied: \"deep-hook: spooled 01M830YQXN3E3YW4BHSV8TPXJB, but its sync didn't finish within the hook's 50 ms\\nDeepBuild blocked this: A delete whose reach can't be worked out before it runs, such as a script file's or one over a pattern, can remove files git can't restore, and with the hub down nothing can stag…\"",
++ ]
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts:124:97
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 13 passed (17)
+   Start at  17:39:28
+   Duration  357.11s (tests 100%)
+
+EXIT 1
+Sun Nov 22 17:45:25 PST 2026
+17:45  up 2 days, 22:11, 4 users, load averages: 39.71 38.08 31.32
+
+---- run 3 ----
+Sun Nov 22 17:45:40 PST 2026
+17:45  up 2 days, 22:12, 4 users, load averages: 39.77 38.23 31.54
+83b82f94ad44a0794949a7fe7244dab110d27b0b
+
+ RUN  v5.0.5 ~/<worktrees>/issue-1156-redraft-84
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts (17 tests | 6 failed) 364672ms
+   ✓ AC1 #1156.db084f91 Both unreadable pushes are denied with the hub up and with it stopped by PID; the reply names what couldn't be read and says writing it plainly lets it be read, and the remote's `main` is unchanged. deep-hook from before #1097 lets a push through and fails this test, naming the call (2)
+     ✓ AC1 #1156.db084f91 `"$(printf git)" push origin main` and the same push nested 13 deep are denied with the hub up and stopped by PID, each reply naming what couldn't be read and that writing it plainly lets it be read, and origin's main doesn't move 178978ms
+     ✓ AC1 #1156.db084f91 (wrong program) deep-hook from before #1097 lets a push through and fails this check, naming the call 27541ms
+   ✓ AC2 #1156.ab43aba4 Before `clean.sh` runs, a `command.staged` row names `out/`, and `deep undo staged:<id>` then puts back all 200 files with the same hashes; `npm test` is neither staged nor asked about. A planted stager that runs the script without a copy fails, naming the command (2)
+     ✓ AC2 #1156.ab43aba4 before clean.sh runs a command.staged row names out/, deep undo puts back all 200 files with their hashes, and npm test is neither staged nor asked about 0ms
+     ✓ AC2 #1156.ab43aba4 (wrong program) a stager that runs the script without a copy fails this check, naming the command 15744ms
+   ❯ AC3 #1156.4ce23e29 `git push origin main` is held at PreToolUse with one authority ask whose `plan.proposed` row lists each step, what it changes, its undo or "can't undo", and its cost, and whose target reads origin `repo`. The README's URL reads `read`, citing the README's handle, and its card offers no wider scope. A matcher that reads every target as `repo` fails, naming the URL (2)
+     × AC3 #1156.4ce23e29 with a prompt that doesn't name the push and no proceed, `git push origin main` is held by one authority ask with its plan, origin reads repo, the README's URL reads read citing the README's handle, and its card offers no wider scope 5ms
+     × AC3 #1156.4ce23e29 (wrong program) a matcher that reads every target as repo fails this check, naming the URL 10220ms
+   ✓ AC4 #1156.5a63f2db `deep inbox answer` with allow, signed by the test helper over the hub's challenge, runs the push once and the remote's `main` equals the session's commit. A helper replaced by an exit-0 script, or a signature captured for an earlier ask, is refused naming the path or the ask, and the ask stays open (5)
+     ✓ AC4 #1156.5a63f2db deep inbox answer with allow, signed over the hub's challenge, runs the push once and origin's main equals the session's commit 1ms
+     ✓ AC4 #1156.5a63f2db (wrong program) a helper replaced by an exit-0 script is refused naming the path, and the ask stays open 0ms
+     ✓ AC4 #1156.5a63f2db (wrong program) the exit-0 check fails, naming the path, on a hub that counts the answer without the helper's signature 11628ms
+     ✓ AC4 #1156.5a63f2db (wrong program) a signature captured for an earlier ask is refused naming the ask, and the ask stays open 0ms
+     ✓ AC4 #1156.5a63f2db (wrong program) the replay check fails, naming the ask, on a hub that verifies a signature over whatever the helper says it signed 9624ms
+   ✓ AC5 #1156.42037a34 After `deep env up`, the app's environment holds a stand-in and its sample API call gets 200; the value is in none of the transcript, record, evidence or checkout, searched raw, base64, reversed and XOR'd. A planted environment that loads by value fails, naming the evidence file (2)
+     ✓ AC5 #1156.42037a34 the app holds a stand-in, its call to the sample API gets 200, and the value is in none of the transcript, record, evidence or checkout, in any of the forms searched 1ms
+     ✓ AC5 #1156.42037a34 (wrong program) an environment that loads by value fails this check, naming the evidence file 86312ms
+   ❯ AC6 #1156.e1b9237a The `vendor/` edit is denied by the project extension inside the 500 ms hook deadline, and the trust check adds under 1 ms at p95 across the session's calls. A planted host that reads trust from the record per call drops the deny and fails, naming the extension (2)
+     × AC6 #1156.e1b9237a the edit under vendor/ is denied by the project extension inside the 500 ms deadline, and the trust check adds under 1 ms at p95 across the session's calls, 1,000,000 events after the trust decision 2ms
+     × AC6 #1156.e1b9237a (wrong program) a host that reads trust from the record per call drops the deny and fails this check, naming the extension 24369ms
+   ❯ AC7 #1156.281bd100 A step whose hook reply or record row is missing reads INCONCLUSIVE in the run's report, never PASS (2)
+     × AC7 #1156.281bd100 the run's report reads PASS on every step of the session, and with any step's hook reply or record rows taken away that step reads INCONCLUSIVE and the report never PASS 1ms
+     × AC7 #1156.281bd100 (wrong program) a report that reads a step by its problems alone reads a step with nothing to read PASS and fails this check, naming the step 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1156/redraft/fast.test.ts > AC3 #1156.4ce23e29 `git push origin main` is held at PreToolUse with one authority ask whose `plan.proposed` row lists each step, what it changes, its undo or "can't undo", and its cost, and whose target reads origin `repo`. The README's URL reads `read`, citing the README's handle, and its card offers no wider scope. A matcher that reads every target as `repo` fails, naming the URL > AC3 #1156.4ce23e29 with a prompt that doesn't name the push and no proceed, `git push origin main` is held by one authority ask with its plan, origin reads repo, the README's URL reads read citing the README's handle, and its card offers no wider scope
+AssertionError: #1156.4ce23e29 the held pushes: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.4ce23e29 the README's URL https://mirror.example.invalid/acme/checkout-web.git must read `read`: it reads `unknown`",
++ ]
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts:49:79
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/acceptance/1156/redraft/fast.test.ts > AC3 #1156.4ce23e29 `git push origin main` is held at PreToolUse with one authority ask whose `plan.proposed` row lists each step, what it changes, its undo or "can't undo", and its cost, and whose target reads origin `repo`. The README's URL reads `read`, citing the README's handle, and its card offers no wider scope. A matcher that reads every target as `repo` fails, naming the URL > AC3 #1156.4ce23e29 (wrong program) a matcher that reads every target as repo fails this check, naming the URL
+AssertionError: #1156.4ce23e29 the same check passes on this matcher: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.4ce23e29 the README's URL https://mirror.example.invalid/acme/checkout-web.git must read `read`: it reads `unknown`",
++ ]
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts:56:89
+     54|     const problems = await matcherProblems(w);
+     55|     expect(problems.some((p) => p.startsWith(AC3) && p.includes(MIRROR…
+     56|     expect(problemsOf(stepsOf(w), AC3), `${AC3} the same check passes …
+       |                                                                                         ^
+     57|   }, 30 * MINUTE);
+     58| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/acceptance/1156/redraft/fast.test.ts > AC6 #1156.e1b9237a The `vendor/` edit is denied by the project extension inside the 500 ms hook deadline, and the trust check adds under 1 ms at p95 across the session's calls. A planted host that reads trust from the record per call drops the deny and fails, naming the extension > AC6 #1156.e1b9237a the edit under vendor/ is denied by the project extension inside the 500 ms deadline, and the trust check adds under 1 ms at p95 across the session's calls, 1,000,000 events after the trust decision
+AssertionError: #1156.e1b9237a the project extension: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.e1b9237a the project extension checkout-web/vendor-guard on an edit of vendor/pay-sdk.js must deny it: the deny didn't reach the agent, reply \"deep-hook: spooled 01M831B6BEHH12V7MKW1MSVTVG, but its sync didn't finish within the hook's 50 ms\\n\"",
++ ]
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts:104:85
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/1156/redraft/fast.test.ts > AC6 #1156.e1b9237a The `vendor/` edit is denied by the project extension inside the 500 ms hook deadline, and the trust check adds under 1 ms at p95 across the session's calls. A planted host that reads trust from the record per call drops the deny and fails, naming the extension > AC6 #1156.e1b9237a (wrong program) a host that reads trust from the record per call drops the deny and fails this check, naming the extension
+AssertionError: #1156.e1b9237a the same check passes on this host: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.e1b9237a the project extension checkout-web/vendor-guard on an edit of vendor/pay-sdk.js must deny it: the deny didn't reach the agent, reply \"deep-hook: spooled 01M831B6BEHH12V7MKW1MSVTVG, but its sync didn't finish within the hook's 50 ms\\n\"",
++ ]
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts:111:86
+    109|     const problems = await perCallTrustProblems(w);
+    110|     expect(problems.some((p) => p.startsWith(AC6) && p.includes(EXTENS…
+    111|     expect(problemsOf(stepsOf(w), AC6), `${AC6} the same check passes …
+       |                                                                                      ^
+    112|   }, 30 * MINUTE);
+    113| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/1156/redraft/fast.test.ts > AC7 #1156.281bd100 A step whose hook reply or record row is missing reads INCONCLUSIVE in the run's report, never PASS > AC7 #1156.281bd100 the run's report reads PASS on every step of the session, and with any step's hook reply or record rows taken away that step reads INCONCLUSIVE and the report never PASS
+AssertionError: #1156.281bd100 the run's report: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.281bd100 \"git push https://mirror.example.invalid/acme/checkout-web.git main\" with its reply and rows must read PASS: FAIL, #1156.4ce23e29 the README's URL https://mirror.example.invalid/acme/checkout-web.git must read `read`: it reads `unknown`",
++   "#1156.281bd100 \"the edit of vendor/pay-sdk.js\" with its reply and rows must read PASS: FAIL, #1156.e1b9237a the project extension checkout-web/vendor-guard on an edit of vendor/pay-sdk.js must deny it: the deny didn't reach the agent, reply \"deep-hook: spooled 01M831B6BEHH12V7MKW1MSVTVG, but its sync didn't finish within the hook's 50 ms\\n\"",
++ ]
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts:117:89
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/acceptance/1156/redraft/fast.test.ts > AC7 #1156.281bd100 A step whose hook reply or record row is missing reads INCONCLUSIVE in the run's report, never PASS > AC7 #1156.281bd100 (wrong program) a report that reads a step by its problems alone reads a step with nothing to read PASS and fails this check, naming the step
+AssertionError: #1156.281bd100 the same check passes on the run's report: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#1156.281bd100 \"git push https://mirror.example.invalid/acme/checkout-web.git main\" with its reply and rows must read PASS: FAIL, #1156.4ce23e29 the README's URL https://mirror.example.invalid/acme/checkout-web.git must read `read`: it reads `unknown`",
++   "#1156.281bd100 \"the edit of vendor/pay-sdk.js\" with its reply and rows must read PASS: FAIL, #1156.e1b9237a the project extension checkout-web/vendor-guard on an edit of vendor/pay-sdk.js must deny it: the deny didn't reach the agent, reply \"deep-hook: spooled 01M831B6BEHH12V7MKW1MSVTVG, but its sync didn't finish within the hook's 50 ms\\n\"",
++ ]
+
+ ❯ tests/acceptance/1156/redraft/fast.test.ts:124:97
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 11 passed (17)
+   Start at  17:45:41
+   Duration  364.82s (tests 100%)
+
+EXIT 1
+Sun Nov 22 17:51:46 PST 2026
+17:51  up 2 days, 22:18, 4 users, load averages: 29.22 34.17 32.34
