@@ -74407,7 +74407,7 @@ impl Contract for RunFinishedV4Data {
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
         deep_contracts::check_member(members, at, "findings", &RULE_13)?;
         deep_contracts::check_member(members, at, "environment", &RULE_6)?;
-        deep_contracts::check_member(members, at, "exit", &RULE_293)?;
+        deep_contracts::check_member(members, at, "exit", &RULE_294)?;
         Ok(Self {
             run: deep_contracts::required(members, at, "run")?,
             outcome: deep_contracts::required(members, at, "outcome")?,
