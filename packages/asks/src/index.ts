@@ -71,7 +71,7 @@ const CORE = { writer: 'core' } as const;
  */
 const PAGE = 100;
 /** The kinds `apply` reads, which the core's reads of the log name: an event of any other kind is never decoded (#2646). */
-const APPLIED = ['session.start', 'agent.stop', 'session.continued', 'session.end', 'task.closed', 'ask.created', 'plan.proposed', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'decision.applied', 'ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'default.undone', 'deadline.moved', 'ask.batched', 'ask.later', 'approval.held', 'approval.started', 'approval.withdrawn', 'tool.before', 'user.ask', 'verdict.made', 'claim.made', 'tool.after'];
+const APPLIED = ['session.start', 'agent.stop', 'session.continued', 'session.end', 'task.closed', 'ask.created', 'plan.proposed', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'decision.applied', 'ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'default.undone', 'deadline.moved', 'ask.moved', 'ask.batched', 'ask.later', 'approval.held', 'approval.started', 'approval.withdrawn', 'tool.before', 'user.ask', 'verdict.made', 'claim.made', 'tool.after'];
 /** Time the hub didn't run, down or with the Mac asleep, moves deadlines once it is longer than this (#908). */
 const AWAY = 10_000;
 /** How many ended sessions' closed asks stay in memory; the record keeps them all. */
@@ -313,6 +313,24 @@ class AsksCore implements Asks {
     });
   }
 
+  /**
+   * What the answer records of the pictures a taste call judges (#3234): the card's entries, one per picture its
+   * evidence lists, in that order; from anywhere nothing is drawn, every picture not shown. Undefined when the call
+   * judges no pictures.
+   */
+  private picturesOf(ask: Ask, via: 'card' | 'inbox' | 'channel', given: unknown): JsonValue[] | undefined {
+    const pin = ask.data.pinned_to as { kind?: unknown; ref?: unknown } | undefined;
+    const listed = ask.data.kind === 'taste' && pin?.kind === 'evidence' && typeof pin.ref === 'string' ? this.options.pictures?.(pin.ref) : undefined;
+    if (given === undefined) return listed?.length ? listed.map((sha256) => ({ sha256, shown: false, scale: 0, ms: 0 })) : undefined;
+    if (via !== 'card') throw new AskRefused('only the question card draws pictures: an answer from anywhere else records them not shown', { field: 'pictures' });
+    const entry = (p: unknown): boolean => isObj(p) && Object.keys(p).length === 4 && typeof p.sha256 === 'string' && SHA256.test(p.sha256) && typeof p.shown === 'boolean'
+      && typeof p.scale === 'number' && p.scale >= 0 && p.scale <= 1000 && Number.isInteger(p.ms) && (p.ms as number) >= 0;
+    if (!Array.isArray(given) || !given.every(entry)) throw new AskRefused('pictures are entries of {sha256, shown, scale, ms}', { field: 'pictures' });
+    const shas = (given as { sha256: string }[]).map((p) => p.sha256);
+    if (listed && shas.join() !== listed.join()) throw new AskRefused(`${ask.handle}'s evidence lists ${listed.length} pictures, and the answer's entries name others`, { field: 'pictures' });
+    return given.length ? given as JsonValue[] : undefined;
+  }
+
   async answer(connection: Connection, handle: string, input: unknown): Promise<void> {
     const saved = await this.exclusive(async (): Promise<string | null> => {
       await this.sync();
@@ -333,6 +351,7 @@ class AsksCore implements Asks {
       if (option === undefined && words === undefined && image === undefined) throw new AskRefused('an answer chooses an option or says something', { field: 'option' });
       if (token !== undefined && (typeof token !== 'string' || !token)) throw new AskRefused('the click token is text', { field: 'token' });
       if (steps !== undefined && (!Array.isArray(steps) || !steps.every((i) => Number.isInteger(i) && (i as number) >= 0))) throw new AskRefused('steps are the indices of the batch to run', { field: 'steps' });
+      const pictures = this.picturesOf(ask, via, input.pictures);
       const now = this.options.now();
       if (via === 'channel') {
         if (ask.closed) throw new AskRefused(`${ask.handle} closed as ${ask.closed.outcome}`, { ask: ask.handle, outcome: ask.closed.outcome });
@@ -416,10 +435,11 @@ class AsksCore implements Asks {
       // The same question from other threads, shown through this card, takes the same option.
       const riders = chosen ? this.open().filter((a) => this.rides(a) === ask) : [];
       await this.options.record.append(asCore(connection), {
-        v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
+        v: pictures ? 7 : v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
           answer: option ?? (words as string | undefined) ?? (image as string), option: chosen?.id ?? null, plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
           via, verified: true, on: ask.data.pinned_to!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
+          ...(pictures ? { pictures } : {}),
         },
       });
       await this.sync();
@@ -1511,6 +1531,11 @@ class AsksCore implements Asks {
         if (!target || target.closed || e.writer !== 'core' || typeof d.deadline !== 'number') return;
         target.data = { ...target.data, deadline: d.deadline };
         if (d.because !== 'away') target.due = d.deadline;
+        return;
+      case 'ask.moved':
+        // It shows another revision of what it's pinned to, as a taste call's evidence with a picture replaced (#3234).
+        if (!target || target.closed || e.writer !== 'core' || !isObj(d.pinned_to)) return;
+        target.data = { ...target.data, pinned_to: d.pinned_to };
         return;
       case 'ask.batched':
         this.showing.apply(e, d);
