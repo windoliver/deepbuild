@@ -3,7 +3,7 @@
 // checkout behind in the temp folder (6-7 GB each on a Mac); a stop the pack's synchronous run never read let it finish.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -98,5 +98,38 @@ test('a pack sent SIGTERM alone while its child runs on stops once the child ret
   const { code, sig } = await exited;
   assert.ok(code !== 0 || sig !== null, `a pack stopped by SIGTERM reported success (code ${code})`);
   assert.equal(existsSync(join(out, 'manifest.json')), false, 'a stopped pack wrote its manifest');
+  assert.deepEqual(readdirSync(temp).filter((n) => n.startsWith('release-pack-')), [], 'the stopped pack left its temp folder');
+});
+
+test('a pack stopped while it writes its out folder removes the archive and manifest it wrote there', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'release-pack-temp-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const repo = join(root, 'repo');
+  const temp = join(root, 'temp');
+  const out = join(root, 'out');
+  for (const d of [repo, temp, out]) mkdirSync(d);
+  writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'planted', version: '1.0.0' }));
+  const env = { PATH: process.env.PATH ?? '', HOME: root, TMPDIR: temp, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
+  const git = (...args) => execFileSync('git', args, { cwd: repo, env, encoding: 'utf8' }).trim();
+  git('init', '-q');
+  git('add', '-A');
+  git('commit', '-qm', 'planted');
+  // The manifest's path is a FIFO, so the pack's write of it holds until the test reads it: the stop lands with the
+  // archive already copied to <out> and the manifest being written.
+  const manifest = join(out, 'manifest.json');
+  execFileSync('mkfifo', [manifest]);
+  const child = spawn(process.execPath, [script, '--repo', repo, '--commit', git('rev-parse', 'HEAD'), '--out', out], { env, detached: true, stdio: 'ignore' });
+  t.after(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } });
+  const exited = new Promise((done) => child.on('exit', (code, sig) => done({ code, sig })));
+  // deadline: bounds the wait for the pack to copy its archive to <out>, after which it opens the manifest
+  for (const end = Date.now() + 30_000; !existsSync(join(out, 'planted-1.0.0.tgz')); ) {
+    assert.ok(Date.now() < end, 'the pack never copied its archive to its out folder');
+    await new Promise((r) => setImmediate(r));
+  }
+  process.kill(child.pid, 'SIGTERM');
+  assert.match(readFileSync(manifest, 'utf8'), /"planted"/);
+  const { code, sig } = await exited;
+  assert.ok(code !== 0 || sig !== null, `a pack stopped by SIGTERM reported success (code ${code})`);
+  assert.deepEqual(readdirSync(out), [], 'the stopped pack left what it wrote to its out folder');
   assert.deepEqual(readdirSync(temp).filter((n) => n.startsWith('release-pack-')), [], 'the stopped pack left its temp folder');
 });
