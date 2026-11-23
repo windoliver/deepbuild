@@ -1428,6 +1428,24 @@ alone.push('tests/acceptance/2215/');
 // #2215's AC5 redraft (blind) builds deep-gpu and draws its four-document corpus on the GPU, once under a plant; no timing.
 alone.push('tests/acceptance/2215-redraft-ac5/');
 
+// #3178: these files expect deep_ask to wait on a choice with a recommended option, which goes on at once as
+// provisional (#84; the design's "Work goes on while you decide"), so they stop BLOCKED on main, and
+// 27-redraft-2073/waits.test.ts's stop is never held for its ask, nor 27/outcomes-redraft/outcomes.test.ts's while a
+// subagent runs. Their blind redrafts run in their place
+// (tests/acceptance/667/redraft-3178/DISPUTE.md), and they are kept as written, by hand only. 27/waits.test.ts has been
+// by hand since #2073 (above); its redraft-3178 also stands in for 27-redraft-2073's.
+byHand.push('tests/acceptance/667/fold.test.ts', 'tests/acceptance/667/plants.test.ts', 'tests/acceptance/667/redraft-1463/',
+  'tests/acceptance/27/repeat.test.ts', 'tests/acceptance/27-redraft-2073/waits.test.ts', 'tests/acceptance/27/outcomes-redraft/outcomes.test.ts',
+  'tests/acceptance/111/revive.test.ts');
+// #667's redraft reads `deep inbox` within a second (criteria.test.ts), INCONCLUSIVE under load, as the redrafts it
+// stands beside do;
+// #27's two and #111's run deep-hook from target/, whose 50 ms wait on the hub lets a call through under load, and #27's
+// waits file takes over two minutes, as the file it replaces does; #3178's suite runs those folders.
+timed.push('tests/acceptance/667/redraft-3178/criteria.test.ts');
+alone.push('tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-redraft-3178/', 'tests/acceptance/111/redraft-3178/');
+slow.push('tests/acceptance/3178/suites.test.ts');
+slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
+
 /**
  * Why each `alone` entry is alone (#3066; docs/parallel-proof.md, section 7), one reason an entry: `binary`, a sibling's
  * cargo build rewrites a binary under it (its files start cargo, read target/, or start a hub, which runs deep-hook
@@ -1478,7 +1496,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/907/slots.test.ts', 'tests/acceptance/907/background.test.ts',
     'tests/acceptance/965/', 'packages/hub/test/loop-starters.test.ts', 'packages/hub/test/loop-transcript.test.ts', 'tests/acceptance/1175/', 'tests/acceptance/23/permissions/',
     'tests/acceptance/83/', 'tests/acceptance/352/', 'tests/acceptance/27/wake.test.ts', 'tests/acceptance/27/repeat.test.ts', 'tests/acceptance/27/waits.test.ts',
-    'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts', 'tests/acceptance/990/',
+    'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-redraft-3178/', 'tests/acceptance/111/redraft-3178/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts', 'tests/acceptance/990/',
     'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/874/redraft/', 'tests/acceptance/824/cycles.test.ts', 'tests/acceptance/824/planted.test.ts',
     'tests/acceptance/824/leftovers.test.ts', 'tests/acceptance/824/sessions/readings.test.ts', 'tests/acceptance/824/sessions/planted.test.ts', 'tests/acceptance/1294/',
     'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/', 'tests/acceptance/1868-redraft-ac2/',
