@@ -1418,8 +1418,9 @@ export const checks = [
     // A listed failure must not prevent later targets from reporting unlisted failures.
     ['cargo', 'test', '--workspace', '--locked', '--no-fail-fast'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
-    // tests spend plan usage, and #246's check that change against its own base.
-    [process.execPath, '--test', 'tests/*.test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
+    // tests spend plan usage, and #246's check that change against its own base. So do tests/*.live.test.mjs,
+    // as their headers say: they need release binaries the preflight never builds (#2136).
+    [process.execPath, '--test', 'tests/!(*.live).test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
   ], fix: 'Repair the behavior named by the failing test.' },
   // #139's contract step: every published entry with its history, diffed against every earlier release in
   // contracts/releases/, a break passing only with its reviewed contracts/breaks file.
