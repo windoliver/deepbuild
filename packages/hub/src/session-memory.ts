@@ -220,9 +220,9 @@ export class SessionMemory {
       mine = save;
       waits.push(save);
     }
-    // The reply waits for these saves until an evidence store or sync starts, or one runs now: with none, they commit at
-    // once, and a hook after the reply reads them in the record (#2066); a sync would hold them, and they land behind it,
-    // after the reply (#2539).
+    // The reply waits for these saves unless, or until, a sync of stored evidence runs: with none, they commit at once,
+    // and a hook after the reply reads them in the record (#2066); with one, the reply goes, and they may land behind
+    // it, after the reply (#2539).
     const sync = waits.length ? this.options.services.record.untilSync?.() : undefined;
     if (sync) await Promise.race([Promise.all(waits), sync]);
     return out;

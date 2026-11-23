@@ -84,3 +84,15 @@ it('untilSync stays waiting through a FULL commit whose hash names nothing the s
   await r.append(core(S), verdictOf(claim, T0 + 20, 'ab'.repeat(32)));
   expect(await settled(waiting.then(() => 'started'), 300), 'a commit with no file to sync wakes nothing').toBe('waiting');
 });
+
+it('a store that can\'t read a named hash back leaves the FULL commit as its sync decides it (#2539)', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'deep-record-2539-'));
+  roots.push(root);
+  const store = await openEvidenceStore({ root, now: () => T0 });
+  // A joined copy whose manifest reads back wrong: get refuses it, while its sync finds nothing to sync.
+  const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage(), evidence: { ...store, get: async () => { throw Error('corrupt manifest'); } }, commitEach: true });
+  open.push(r);
+  const { S, claim } = await claimed(r, T0);
+  const verdict = await r.append(core(S), verdictOf(claim, T0 + 20, 'cd'.repeat(32)));
+  expect(verdict.log_pos, 'the verdict is in the log').toBeGreaterThan(0);
+});

@@ -114,8 +114,8 @@ export interface RecordStore {
   /** Waits for every queued append, then commits synchronous=FULL: everything appended so far is durable. */
   sync(): Promise<void>;
   /**
-   * Settles while some append stores a whole text or syncs evidence, at once, or else once one starts: a commit of no
-   * session in line then may wait for its sync (#2539).
+   * Settles at once while a FULL commit syncs evidence the store holds, or else once one starts: a commit of no session
+   * in line then may wait for that sync (#2539).
    */
   untilSync?(): Promise<void>;
   /** One read-only SELECT; each `?` in it takes the next of `params`, bound, never written into the text. */
@@ -580,29 +580,16 @@ class SqliteRecord implements RecordStore {
       this.inFlight--;
     }
   }
-  /** Appends storing a whole text, until they land, and FULL commits syncing the evidence they name (#2539). */
+  /** FULL commits syncing evidence the store holds, until their sync ends (#2539). */
   private syncs = 0;
   /** Wakes what waits for the next of them to start. */
   private syncStarts: (() => void)[] = [];
   untilSync(): Promise<void> {
     return this.syncs > 0 ? Promise.resolve() : new Promise<void>((resolve) => this.syncStarts.push(resolve));
   }
-  private syncStarted(): void {
-    this.syncs++;
-    for (const wake of this.syncStarts.splice(0)) wake();
-  }
   private async appendNow(connection: Connection, input: EventInput, receipt?: Receipt): Promise<Appended> {
     const prepared = this.prepare(connection, input);
     if (receipt) prepared.receipt = receipt;
-    if (prepared.whole === undefined) return this.appendPrepared(connection, input, prepared);
-    this.syncStarted();
-    try {
-      return await this.appendPrepared(connection, input, prepared);
-    } finally {
-      this.syncs--;
-    }
-  }
-  private async appendPrepared(connection: Connection, input: EventInput, prepared: Prepared): Promise<Appended> {
     if (prepared.whole !== undefined) {
       const bytes = Buffer.from(prepared.whole, 'utf8');
       // An event the log already holds needs no store: its retry is the same event, or a conflict.
@@ -759,11 +746,14 @@ class SqliteRecord implements RecordStore {
     return named.length ? this.syncNamed(items, named) : undefined;
   }
   private async syncNamed(items: readonly Prepared[], named: string[]): Promise<void> {
-    let held = false;
+    // A hash the store doesn't hold, such as a decision's key, has no file to sync, so it is no sync to wait for. Asked
+    // only to count it: one the store can't read counts as held, and the sync decides the commit as before.
+    const held = (await Promise.all(named.map((sha) => this.options.evidence!.get(sha).catch(() => true)))).some(Boolean);
+    if (held) {
+      this.syncs++;
+      for (const wake of this.syncStarts.splice(0)) wake();
+    }
     try {
-      // A hash the store doesn't hold, such as a decision's key, has no file to sync, so it is no sync to wait for.
-      held = (await Promise.all(named.map((sha) => this.options.evidence!.get(sha)))).some(Boolean);
-      if (held) this.syncStarted();
       await this.options.evidence!.sync(named);
     } catch (error) {
       // Nothing of the commit is in the log, as when the storage refuses it: its sessions have lost events.
