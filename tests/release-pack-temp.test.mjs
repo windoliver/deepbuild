@@ -63,3 +63,38 @@ test('a pack whose process group is stopped by SIGTERM or SIGINT leaves no relea
     assert.deepEqual(packed(), [], `${signal}: the stopped pack left its temp folder`);
   }
 });
+
+test('a pack sent SIGTERM alone while its child runs on stops once the child returns, writing nothing', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'release-pack-temp-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const repo = join(root, 'repo');
+  const temp = join(root, 'temp');
+  const bin = join(root, 'bin');
+  const out = join(root, 'out');
+  for (const d of [repo, temp, bin]) mkdirSync(d);
+  // A git whose clone, once finished, holds until the test lets it go: the stop goes to the pack's pid alone, so the
+  // child never sees it and returns normally, and the pack must still act on the stop rather than finish the pack.
+  const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+  const [hung, release] = [join(root, 'hung'), join(root, 'release')];
+  writeFileSync(join(bin, 'git'), `#!/bin/sh\nif [ "$1" = clone ]; then "${realGit}" "$@" || exit $?; : > "${hung}"; while [ ! -e "${release}" ]; do sleep 0.05; done; exit 0; fi\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+  writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'planted', version: '1.0.0' }));
+  const env = { PATH: `${bin}:${process.env.PATH ?? ''}`, HOME: root, TMPDIR: temp, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
+  const git = (...args) => execFileSync(realGit, args, { cwd: repo, env, encoding: 'utf8' }).trim();
+  git('init', '-q');
+  git('add', '-A');
+  git('commit', '-qm', 'planted');
+  const child = spawn(process.execPath, [script, '--repo', repo, '--commit', git('rev-parse', 'HEAD'), '--out', out], { env, detached: true, stdio: 'ignore' });
+  t.after(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } });
+  const exited = new Promise((done) => child.on('exit', (code, sig) => done({ code, sig })));
+  // deadline: bounds the wait for the pack's clone to land, which the planted git then holds open
+  for (const end = Date.now() + 30_000; !existsSync(hung); ) {
+    assert.ok(Date.now() < end, 'the pack never cloned into its temp folder');
+    await new Promise((r) => setImmediate(r));
+  }
+  process.kill(child.pid, 'SIGTERM');
+  writeFileSync(release, '');
+  const { code, sig } = await exited;
+  assert.ok(code !== 0 || sig !== null, `a pack stopped by SIGTERM reported success (code ${code})`);
+  assert.equal(existsSync(join(out, 'manifest.json')), false, 'a stopped pack wrote its manifest');
+  assert.deepEqual(readdirSync(temp).filter((n) => n.startsWith('release-pack-')), [], 'the stopped pack left its temp folder');
+});

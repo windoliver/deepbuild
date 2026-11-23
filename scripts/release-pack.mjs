@@ -16,8 +16,10 @@ import { fileURLToPath } from 'node:url';
 import { preflightRefusal } from './preflight-record.mjs';
 import { contentsOf, extract } from './release-artifacts.mjs';
 
-// process.exit and a stop signal both skip the finally below, so each removes the temporary folder itself. A stop
-// that lands during a spawnSync is handled once that child, stopped with the same process group, returns.
+// process.exit and a stop signal both skip the finally below, so each removes the temporary folder itself. A child
+// stopped with the pack's process group fails its step. A listener runs only on an event-loop turn, which this
+// synchronous script would never give before it finished, so it yields one after each step and before writing <out>:
+// a stop that left the child running, or landed between steps, then ends the pack there.
 let work;
 const drop = () => { if (work) rmSync(work, { recursive: true, force: true }); };
 const fail = (message) => {
@@ -26,6 +28,7 @@ const fail = (message) => {
   process.exit(1);
 };
 for (const [signal, number] of [['SIGINT', 2], ['SIGTERM', 15], ['SIGHUP', 1]]) process.once(signal, () => { drop(); process.exit(128 + number); });
+const turn = () => new Promise((settle) => setImmediate(settle));
 const run = (cmd, args, cwd) => {
   const r = spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
   if (r.status !== 0) fail(`${cmd} ${args.join(' ')} failed: ${r.stderr || r.error}`);
@@ -68,6 +71,7 @@ try {
   const clean = join(work, 'checkout');
   run('git', ['clone', '-q', '--no-hardlinks', repo, clean], work);
   run('git', ['checkout', '-q', '--detach', wanted], clean);
+  await turn();
 
   const readJson = (dir) => JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
   const root = readJson(clean);
@@ -93,6 +97,7 @@ try {
       dirs.push(join(stageDir, p.dir));
       if (p.built) builtOf.set(join(stageDir, p.dir), join(stageDir, p.built));
     }
+    await turn();
   }
   for (const dir of dirs) {
     const meta = readJson(dir);
@@ -125,6 +130,7 @@ try {
     const into = join(work, 'holds', filename);
     extract(file, into);
     archives.push({ name: meta.name, file: filename, sha256: createHash('sha256').update(readFileSync(file)).digest('hex'), holds: contentsOf(into) });
+    await turn();
   }
   if (problems.length) fail(`nothing was written or published:\n  ${problems.join('\n  ')}`);
 
@@ -134,6 +140,7 @@ try {
   writeFileSync(join(out, 'manifest.json'), manifest);
   // Ed25519 over exactly the manifest's bytes, as the installer checks it.
   if (key) writeFileSync(join(out, 'manifest.json.sig'), sign(null, manifest, key));
+  await turn();
   console.log(`release-pack: ${archives.length} archives from ${wanted} recorded in ${join(out, 'manifest.json')}`);
 } finally {
   rmSync(work, { recursive: true, force: true });
