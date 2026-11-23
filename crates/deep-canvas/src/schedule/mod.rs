@@ -414,6 +414,12 @@ pub struct Planted {
     /// A seek restores the checkpoint nearest to t by distance, the earlier of two equally
     /// near, instead of the last one at or before t (#488's planted seek).
     pub checkpoint_nearest: bool,
+    /// The checkpoint ring lets go of the checkpoint at the start as if it were every second
+    /// one, and a seek before its earliest checkpoint restores that one (#2693's planted ring).
+    pub ring_drops_start: bool,
+    /// The checkpoint ring holds only its newest checkpoint, so its spacing never doubles
+    /// (#2693's planted ring).
+    pub ring_newest_only: bool,
     /// A session's own frame merges the results of nodes run on several threads in the order
     /// they finished, not the plan's node order (#857's planted merge); a revision's check and
     /// its probe frame still merge in order, so the revision is accepted.
