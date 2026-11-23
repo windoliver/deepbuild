@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { lstatSync } from 'node:fs';
 import { basename, dirname, join, posix } from 'node:path';
 import { LANE_FILE } from './lanes.mjs';
-import { APPROVERS, blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, relativeImports, removedLines, resolveModule, RUNNER_CONFIG, show, signersIn, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
+import { APPROVERS, blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, readAll, relativeImports, removedLines, resolveModule, RUNNER_CONFIG, show, signersIn, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
 
 const FIX = 'Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.';
 // Your decisions: the four invariants in AGENTS.md, and each row of the tables under Decisions.
@@ -543,7 +543,9 @@ function winnable(root, rev, held) {
   const names = [basename(stem), ...(/\.[cm]?tsx?$/.test(held) ? ['.js', '.mjs', '.cjs', '.jsx'].map((extension) => basename(stem) + extension) : []), ...(basename(stem) === 'index' ? [basename(dirname(stem))] : [])];
   const grep = spawnSync('git', ['grep', '-l', '-F', ...names.flatMap((name) => ['-e', name]), rev, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
   const specifier = RegExp(`['"\`/](?:${names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})['"\`]`);
-  return grep.stdout.split('\n').filter(Boolean).some((hit) => specifier.test(show(root, rev, hit.slice(rev.length + 1)) ?? ''));
+  const hits = grep.stdout.split('\n').filter(Boolean).map((hit) => hit.slice(rev.length + 1));
+  readAll(root, rev, hits);
+  return hits.some((file) => specifier.test(show(root, rev, file) ?? ''));
 }
 
 // The tagged tests whose span, or whose file, names the fixture's path, from the repo root or the
@@ -554,8 +556,9 @@ function readersOf(root, rev, path, relevant, seen = new Set([path])) {
   const stem = SCRIPT.test(path) ? path.replace(SCRIPT, '') : null;
   const grep = spawnSync('git', ['grep', '-l', '-F', '-e', basename(stem ?? path), '-e', basename(dirname(path)), rev, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
   const readers = [];
-  for (const hit of grep.stdout.split('\n').filter(Boolean)) {
-    const file = hit.slice(rev.length + 1);
+  const hits = grep.stdout.split('\n').filter(Boolean).map((hit) => hit.slice(rev.length + 1));
+  readAll(root, rev, hits.filter((file) => !seen.has(file) && underTestPaths(file)));
+  for (const file of hits) {
     if (seen.has(file) || !underTestPaths(file)) continue;
     const source = show(root, rev, file);
     const relative = posix.relative(dirname(file), path);

@@ -152,7 +152,7 @@ interface ProductsOptions {
   build(o: { cwd: string; command: string }): Promise<{ code: number | null; tail: string }>;
   /** The processes with a file open under a folder, read by the supervisor. */
   openUnder(dir: string): Promise<{ pid: number; command: string }[]>;
-  /** Installs the store's guard@1 entry, with its planted call and twin, into rules.json. */
+  /** Installs the store's guard@1 entry into rules.json, and its planted call and twin into proofs.json. */
   guard(given: Obj): Promise<{ status: string; reason?: string }>;
 }
 
