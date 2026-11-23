@@ -882,7 +882,9 @@ export class StopJudging {
     if (!row) return;
     const d = JSON.parse(row.data) as Obj;
     const commit = typeof d.commit === 'string' ? d.commit : '0'.repeat(40);
-    await this.runClaim({ claim, session: meta.session, task: String(d.task_ref), commit, base: commit, cwd: meta.cwd, deliverables: [], requirements: [], checks: [], definition: 'pending' });
+    // The spec is read at the folder's HEAD (#1864), never at a commit the agent's deep_claim named.
+    const base = (await headOf(meta.cwd).catch(() => undefined))?.sha ?? '0'.repeat(40);
+    await this.runClaim({ claim, session: meta.session, task: String(d.task_ref), commit, base, cwd: meta.cwd, deliverables: [], requirements: [], checks: [], definition: 'pending' });
   }
 
   /** The turn's task: the one the prompt that opened the turn named, kept at the prompt; after a restart, the newest a person named; else the session's own. */
@@ -1166,16 +1168,17 @@ export class StopJudging {
 
   /**
    * Where a claim's spec is read (#1864): its folder and base commit, as its judging set them, or from the record for a
-   * claim judged before a restart: its definition's base commit, else the commit an early claim made at HEAD.
+   * claim judged before a restart: its task's locked definition's base commit. Never a claim's own commit, which can be
+   * a snapshot of the worktree or one an agent named; with no base the run stays in the sandbox.
    */
   private async claimScope(claim: string): Promise<{ cwd: string; base: string } | undefined> {
     const known = this.claimScopes.get(claim);
     if (known) return known;
-    const [row] = (await this.options.services.raw(`SELECT session_id, json_extract(data, '$.task_ref') AS task, json_extract(data, '$.commit') AS commit FROM events WHERE kind = 'claim.made' AND id = ? LIMIT 1`, [claim.replace(/^claim:/, '')])) as { session_id: string | null; task: string | null; commit: string | null }[];
+    const [row] = (await this.options.services.raw(`SELECT session_id, json_extract(data, '$.task_ref') AS task FROM events WHERE kind = 'claim.made' AND id = ? LIMIT 1`, [claim.replace(/^claim:/, '')])) as { session_id: string | null; task: string | null }[];
     const cwd = row?.session_id ? this.options.state().sessions.get(row.session_id)?.cwd : undefined;
     if (!row || !cwd) return undefined;
     const [definition] = (await this.options.services.raw(`SELECT base_commit FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [row.task ?? ''])) as { base_commit: string | null }[];
-    const base = definition?.base_commit ?? row.commit;
+    const base = definition?.base_commit;
     return base ? { cwd, base } : undefined;
   }
 

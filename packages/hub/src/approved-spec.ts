@@ -26,10 +26,13 @@ async function specAt(folder: string, base: string): Promise<Revision | undefine
   if (read.has(key)) return read.get(key);
   let revision: Revision | undefined;
   try {
-    const oid = /^\d+ blob ([0-9a-f]+)\t/.exec(await git(folder, ['ls-tree', base, '--', `./${SPEC}`]))?.[1];
-    revision = oid ? { text: await git(folder, ['cat-file', 'blob', oid]), oid } : undefined;
-  } catch {
-    throw Error(`${SPEC} couldn't be read at the claim's base commit ${base.slice(0, 12)}, so the revision you approved is unknown`);
+    const entry = /^(\d+) \w+ ([0-9a-f]+)\t/.exec(await git(folder, ['ls-tree', base, '--', `./${SPEC}`]));
+    // A spec is a file: a link or a folder in its place at the base holds no revision you approved, so the claim is BLOCKED.
+    if (entry && !['100644', '100755'].includes(entry[1]!)) throw Error(`mode ${entry[1]}`);
+    revision = entry ? { text: await git(folder, ['cat-file', 'blob', entry[2]!]), oid: entry[2]! } : undefined;
+  } catch (error) {
+    const why = error instanceof Error && /^mode \d+$/.test(error.message) ? `is no file there (${error.message})` : "couldn't be read there";
+    throw Error(`${SPEC} ${why} at the claim's base commit ${base.slice(0, 12)}, so the revision you approved is unknown`);
   }
   if (read.size >= 256) read.delete(read.keys().next().value!);
   read.set(key, revision);
