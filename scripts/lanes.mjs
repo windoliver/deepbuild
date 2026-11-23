@@ -1412,6 +1412,10 @@ byHand.push('tests/acceptance/980/ac09-budget.test.ts');
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
 
+// #2086's blind redraft: AC1 runs whole-workspace clippy; AC2 runs #1732's suite, whose files each build deep-show.
+alone.push('tests/acceptance/2086-redraft-2047/');
+slow.push('tests/acceptance/2086-redraft-2047/ac1-workspace-clippy.test.ts', 'tests/acceptance/2086-redraft-2047/ac2-1732-unchanged.test.ts');
+
 // #1500's files (blind) each build deep-show and play hundreds of frames of a game whose revisions land mid-play;
 // ac08-join-time.test.ts judges a join's time on the reference Mac. The Oracle lane plays upstream's pile.
 alone.push('tests/acceptance/1500/', 'tests/acceptance/1500-oracle/');
@@ -1450,7 +1454,7 @@ alone.push('tests/acceptance/2215-redraft-ac5/');
 export const aloneReasons = {};
 for (const [reason, entries] of Object.entries({
   binary: [
-    'tests/acceptance/2386/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
+    'tests/acceptance/2386/', 'tests/acceptance/2086-redraft-2047/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
     'tests/acceptance/1523/', 'tests/acceptance/84/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/',
     'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/',
     'tests/acceptance/389/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/1487/',
@@ -1643,8 +1647,9 @@ export const checks = [
     // A listed failure must not prevent later targets from reporting unlisted failures.
     ['cargo', 'test', '--workspace', '--locked', '--no-fail-fast'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
-    // tests spend plan usage, and #246's check that change against its own base.
-    [process.execPath, '--test', 'tests/*.test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
+    // tests spend plan usage, and #246's check that change against its own base. So do tests/*.live.test.mjs,
+    // as their headers say: they need release binaries the preflight never builds (#2136).
+    [process.execPath, '--test', 'tests/!(*.live).test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
   ], fix: 'Repair the behavior named by the failing test.' },
   // #139's contract step: every published entry with its history, diffed against every earlier release in
   // contracts/releases/, a break passing only with its reviewed contracts/breaks file.
