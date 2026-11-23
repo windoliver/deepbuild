@@ -1,0 +1,13 @@
+$ node --test tests/acceptance/2700/reached.test.mjs   # 2026-11-23T20:44:39Z, HEAD 3010e4cf3, node v24.22.0, cargo 1.99.1 (5f94df478 2026-08-27), load { 148.20 170.06 163.16 }
+#2700.dad8fae2 `data` differs, reached []: revised; reached [data]: not revised (the whole load)
+#2700.dad8fae2 `assets` differs, reached []: revised; reached [assets]: not revised (the whole load)
+✔ #2700.dad8fae2 a patch whose reached names no member outside items is revised without the whole load, even when another member differs (193863.236875ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 194043.200541
+exit 0
