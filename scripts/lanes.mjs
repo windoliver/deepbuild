@@ -1976,9 +1976,16 @@ function cargoTarget(line, targets) {
 export function cargoResults(output, status, workspace) {
   const targets = rerunTargets(workspace);
   const failures = [], passed = [], skips = [], failed = new Set();
-  let target = null;
+  // A libtest test that panicked saying why it proved nothing (`INCONCLUSIVE: <reason>`) reads that state (#3171). Its
+  // message is the line after the panic's own, as libtest prints a test's captured output; under --nocapture, which
+  // the lanes don't pass, another thread's line could land between them.
+  const panics = new Map();
+  let target = null, panicking = null;
   for (const line of output.split('\n')) {
     target = cargoTarget(line, targets) ?? target;
+    if (panicking) panics.set(panicking, { state: line.match(/^(BLOCKED|INCONCLUSIVE|INVALID): /)?.[1] ?? 'FAIL', message: line }), panicking = null;
+    const thread = line.match(/^thread '(.+?)'(?: \(\d+\))? panicked at \S+:$/)?.[1];
+    if (thread) panicking = `cargo ${target} › ${thread}`;
     const test = line.match(/^test (.+?) \.\.\. (ok|FAILED|BLOCKED|INVALID|INCONCLUSIVE)$/);
     if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
     if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, state: test[2] === 'FAILED' ? 'FAIL' : test[2], message: '' }), failed.add(target);
@@ -1992,6 +1999,10 @@ export function cargoResults(output, status, workspace) {
     if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, state: 'FAIL', message: 'the target failed outside any test it reported' }), failed.add(rerun);
   }
   if (status !== 0 && !failed.size) failures.push({ id: 'cargo test', state: 'FAIL', message: output.split('\n').find((line) => /^error/.test(line)) ?? `exited ${status}` });
+  for (const failure of failures) {
+    const panic = failure.state === 'FAIL' && panics.get(failure.id);
+    if (panic && panic.state !== 'FAIL') Object.assign(failure, panic);
+  }
   return { failures, passed, ...(skips.length && { skips }) };
 }
 
