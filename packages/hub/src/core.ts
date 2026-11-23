@@ -17,7 +17,8 @@ import { openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust, ty
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import type { DecisionsProvider } from './decisions-port.js';
 import type { EnvironmentProvider, ComposeResource } from './environment-port.js';
-import { openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/gate';
+import { memFree, openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/gate';
+import { availableMb } from './admission.js';
 
 import { MEM_KEPT_MB, openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
@@ -775,7 +776,7 @@ export class Core {
       agentOf: (s) => { const x = this.state.sessions.get(s); return x ? { pid: x.pid, start: x.start } : undefined; },
       // The supervisor opens after the queue: a command it can't follow yet records no use, never 0 (#3220).
       supervisor: { follow: (run, pgid) => this.supervisor?.follow(run, pgid), unfollow: async (run) => this.supervisor?.unfollow(run) },
-      entryMemory,
+      entryMemory, memory: { free: () => memFree(leases), available: availableMb },
     });
     await this.heavy.recover(this.raw);
     await this.heavy.tick();

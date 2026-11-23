@@ -124,8 +124,8 @@ export async function admit(table: LeaseTable, holder: string, run: string, lane
     if (fast) fastWaiting.set(table, fastWaiting.get(table)! - 1);
   }
 }
-/** The units of `mem` free on this host now: its n less what its leases take. */
-async function memFree(table: LeaseTable): Promise<number> {
+/** The units of `mem` free on this host now: its n less what its leases take (#3220). */
+export async function memFree(table: LeaseTable): Promise<number> {
   const kind = (await table.kinds()).find((k) => k.name === MEM.kind);
   const n = Number(/^pool\((\d+)\)$/.exec(kind?.match ?? '')?.[1] ?? 0);
   const held = (await table.leases()).filter((v) => v.lease.resource.kind === MEM.kind && v.lease.resource.host === MEM.host).reduce((sum, v) => sum + (v.lease.units ?? 1), 0);

@@ -12,7 +12,7 @@ export { checkSource, ownChanges, ownRead, runnerConfig, type ChangesPlant } fro
 export type { ApprovedCheck } from './own.js';
 export { headTrust, pushRecordKit, runPushRecordKit } from './head.js';
 export type { HeadInput, HeadPlan, HeadResult, ProviderPush, PushKit, PushReading, PushRecordReader } from './head.js';
-export { admit, executeClaim, runHeavy, runTiming, slot, verdictMemory, type MemoryAsk, type MemoryWait } from './exec.js';
+export { admit, memFree, executeClaim, runHeavy, runTiming, slot, verdictMemory, type MemoryAsk, type MemoryWait } from './exec.js';
 export type { ExecCheck, Executed, ExecutedCheck, ExecuteOptions, HeavyOptions, HeavyResult, Load, TimedRun, VerdictMemory } from './exec.js';
 export { baseProof, openCheckouts, OverBudget } from './checkouts.js';
 export type { BaseCheckout, BaseRun, Budget, CheckoutPlant, Checkouts, CheckoutsOptions, ClaimCheckInput, ClaimCheckRun, ClaimInput, ClaimRun, Cited, DeclaredSurface, Snapshot, StandIn, TempCheckout } from './checkouts.js';
