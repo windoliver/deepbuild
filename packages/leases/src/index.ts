@@ -36,6 +36,8 @@ export interface Caller {
   run?: string;
   /** The holder session's agent process, by ID and start time (`ps -o lstart=` under LC_ALL=C). */
   agent?: { pid: number; start: string };
+  /** When the holder asked, in ms since the Unix epoch: its place in the hub's queue, recorded with the grant (#3219). */
+  asked?: number;
 }
 export type LeaseResult =
   | { status: 'granted'; lease: Lease }
@@ -74,9 +76,9 @@ export interface LeaseTable {
    * Ends a lease whose holder is no session, citing the events that prove it over: the supervisor's, for a run, once
    * every process recorded for the run is proven gone. A session's lease ends only on the table's own tick, unless it
    * was taken for one run (the gate runner's `cpu.slot`, #29): that one ends with its run, once no process recorded
-   * for the run still runs.
+   * for the run still runs. Resolves with the time of its `lease.released`, or undefined when it held no such lease.
    */
-  release(lease: string, proof: string[]): Promise<void>;
+  release(lease: string, proof: string[]): Promise<number | undefined>;
   leases(): Promise<LeaseView[]>;
 }
 
@@ -279,8 +281,9 @@ class Table implements LeaseTable {
     // Held before the append's first await, so every later decision sees it.
     this.held.set(lease.id, { lease, ...(caller.run ? { run: caller.run } : {}), ...(caller.agent ? { agent: caller.agent } : {}), stale: false });
     try {
-      await this.append('lease.acquired', 2, lease.id, {
+      await this.append('lease.acquired', 3, lease.id, {
         resource: lease.resource, holder: lease.holder, mode, expires: lease.expires, ...(caller.run ? { run: caller.run } : {}), ...(caller.agent ? { agent: caller.agent } : {}),
+        ...(caller.asked !== undefined ? { asked: caller.asked } : {}),
       }, now, id);
     } catch (error) {
       this.held.delete(lease.id);
@@ -396,24 +399,25 @@ class Table implements LeaseTable {
     const procs = [...(run ? this.procs.get(run) ?? [] : [])];
     return { running: procs.filter(([, ended]) => !ended).map(([pid]) => pid), proof: procs.flatMap(([, ended]) => (ended ? [ended] : [])) };
   }
-  async release(lease: string, proof: string[]): Promise<void> {
+  async release(lease: string, proof: string[]): Promise<number | undefined> {
     await this.sync();
     const h = this.held.get(lease);
-    if (!h) return;
+    if (!h) return undefined;
     if (h.lease.holder.startsWith('session:')) {
       if (!h.run) throw Error(`${lease} is ${h.lease.holder}'s: a session's lease ends only once the table reads it ended`);
       const { running } = this.processes(h.run);
       if (running.length) throw Error(`${lease} is held open by ${h.run}'s processes still running: ${running.join(', ')}`);
     }
-    await this.end(h, proof);
+    return this.end(h, proof);
   }
-  private async end(h: Held, proof: string[]): Promise<void> {
+  private async end(h: Held, proof: string[]): Promise<number | undefined> {
     // A tick and its holder's release can each reach a lease across an await: it ends once.
-    if (!this.held.has(h.lease.id)) return;
+    if (!this.held.has(h.lease.id)) return undefined;
     const now = this.options.now();
     this.held.delete(h.lease.id);
     this.endedAt.set(keyOf(h.lease.resource), now);
-    await this.append('lease.released', 2, h.lease.id, { resource: h.lease.resource, holder: h.lease.holder, mode: h.lease.mode, expires: h.lease.expires, proof });
+    await this.append('lease.released', 2, h.lease.id, { resource: h.lease.resource, holder: h.lease.holder, mode: h.lease.mode, expires: h.lease.expires, proof }, now);
+    return now;
   }
 
   async leases(): Promise<LeaseView[]> {

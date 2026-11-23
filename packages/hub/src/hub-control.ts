@@ -58,7 +58,7 @@ import type { CheckKinds } from './checks-port.js';
 import { Stacks } from './stacks.js';
 import { Starts } from './starts.js';
 import { Drain, drainFor, drainHealth, drainWords } from './drain.js';
-import { argsOf } from './children.js';
+import { ancestorsOf, argsOf } from './children.js';
 
 import { HeavyQueue } from './heavy.js';
 
@@ -309,6 +309,9 @@ export class HubControl {
       case 'lease.wait': return this.options.services.heavy.wait(params, context.peer, () => this.options.state().agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'lease.started': return this.options.services.heavy.started(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'lease.exited': return this.options.services.heavy.exited(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+      // deep-show's GPU lease (#3219): its place in the one queue, read against any `deep lease` above it, and its release.
+      case 'lease.gpu': return this.options.services.heavy.gpu(params, context.peer, () => this.options.state().agentAbove(context.peer), () => ancestorsOf(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+      case 'lease.release': return this.options.services.heavy.release(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'env.up': return this.work.envUp(params, context);
       case 'env.down': return this.work.envDown(params, context);
       // The steps setup took (#1100), each a `setup.step` event, only as its one list names them.
