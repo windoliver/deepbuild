@@ -80,4 +80,22 @@ describe('the hub copies a session from the path its hook named', () => {
       });
     }, { ...HOME_ONLY, DEEP_HUB_TEST_SORTER: sorter }); } finally { rmSync(sorter, { force: true }); }
   }, 60_000);
+
+  it('before a push no typed request names raises its ask (#84), with no proceed', async () => {
+    await withHub(async (root, home) => {
+      writeFileSync(join(root, 'config.json'), JSON.stringify({ asks: { deadline: { authority: '1d' }, default: { authority: 'no' } } }));
+      writeFileSync(join(root, 'rules.json'), JSON.stringify({ v: 1, entries: { 'push-needs-ask': { match: 'effect:push', scope: 'all_repos', mode: 'block', reason: 'Pushing goes ahead only when the thread\'s ask names it.', next_step: 'Wait for the ask.', fail_closed: false } } }));
+      await unlistable(home, async () => {
+        const id = 'aaaaaaaa-2316-4000-8000-000000000003';
+        const s = session(home, id);
+        writeFileSync(s.transcript, line(id, 'm1', s.work, 'user', 'fix the checkout total and commit it'));
+        const sock = join(root, 'hub.sock');
+        await send(sock, hookLine('01K74FKZVK8Q2X5R7M3N9P4T90', 'SessionStart', s.payload('SessionStart', { source: 'startup' }), { ppid: process.pid }));
+        if (copied(root).length) throw Error(`BLOCKED: the transcript was copied before the push: ${copied(root).join(', ')}`);
+        const held = await reply(sock, hookLine('01K74FKZVK8Q2X5R7M3N9P4T91', 'PreToolUse', s.payload('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'git push origin main' }, tool_use_id: 'toolu_01Push2316b' }), { ppid: process.pid, matched: ['push-needs-ask'] }));
+        expect(`${held.exit} ${held.stdout}${held.stderr}`, 'the push is denied by push-needs-ask and waits for its ask').toMatch(/^2 .*push-needs-ask.*waits for ask:/s);
+        expect(copied(root), "the push's ask copied the transcript at its hook's transcript_path before it was raised").toEqual([handle(id)]);
+      });
+    }, HOME_ONLY);
+  }, 60_000);
 });
