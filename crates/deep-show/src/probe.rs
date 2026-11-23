@@ -109,8 +109,6 @@ impl Hub<'_> {
             }
             doc["camera"] = json!(cam);
         }
-        // #493: a shot writes the camera's pose the frame is drawn through.
-        let doc = crate::film::posed(&doc, t).unwrap_or(doc);
         let size = size.unwrap_or_else(|| {
             crate::snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
@@ -118,15 +116,22 @@ impl Hub<'_> {
         if self.gpu3().is_none() {
             return refused("unsupported_platform");
         }
-        let (scene, look) = match self.evaluate3d(&doc, t, size) {
+        // #1722: drawn as presenting draws it (Hub::draw3d): the 3D frame through its shot's pose
+        // (#493) with its visible table, then its 2D items over it with no ground of their own,
+        // their rows in that table.
+        let (mut rgba, mut shown, scene) = match self.shown3d(&doc, t, size) {
             Ok(s) => s,
             Err(u) => return json!({"code": u.code, "path": u.path}),
         };
-        let depth = planted == Some(Planted::ProbeFromDepth);
-        let gpu = self.gpu3().expect("opened above");
-        let Some((rgba, targets)) = gpu.draw_scene(&scene, &look, depth) else {
-            return refused("unsupported_platform");
-        };
+        match self.items2d(&doc, t) {
+            Ok(Some(d)) => {
+                let over = self.renderer.raster(&d, size, None);
+                crate::snapshot::over(&mut rgba, &over);
+                shown.over(d.boxes(), d.scale(size), size);
+            }
+            Ok(None) => {}
+            Err(u) => return json!({"code": u.code, "path": u.path}),
+        }
         let light = self.light3d(&doc, t);
         let png = crate::snapshot::png(rgba, size);
         let Ok(sha) = crate::evidence::put(&self.scenario.evidence, &png) else {
@@ -143,13 +148,16 @@ impl Hub<'_> {
         });
         // #3017: the frame's visible table, from the object-ID pass its probes read.
         if let Some(r) = reply.as_object_mut() {
-            let plant = self.scenario.module_planted.as_deref();
-            targets.shown(scene.boxes(), size, plant).put(r);
+            shown.put(r);
         }
         if probes.at.is_empty() {
             return reply;
         }
         let frame = size.map(u32::from);
+        let depth = planted == Some(Planted::ProbeFromDepth);
+        let Some(targets) = self.gpu3().and_then(|g| g.targets(frame, depth)) else {
+            return refused("unsupported_platform");
+        };
         let centre = |p: [u32; 2]| p.map(|v| f64::from(v) + 0.5);
         let ats: Vec<([f64; 2], bool)> = probes
             .at

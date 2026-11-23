@@ -1470,6 +1470,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "resolver_closes_task" => Planted::ResolverClosesTask,
                 "probe_from_depth" => Planted::ProbeFromDepth,
                 "probe_nearest_item" => Planted::ProbeNearestItem,
+                "render_back_2d_only" => Planted::RenderBack2dOnly,
                 "skips_missing_mesh_asset" => Planted::SkipsMissingMeshAsset,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
