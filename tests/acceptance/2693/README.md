@@ -51,8 +51,8 @@ folder. Nothing is written into this folder. The probe depends only on `crates/d
 sha2, blake3, unicode-normalization), so a cold build takes about two and a half minutes. Release is needed:
 an hour of play is 216,001 frames, about 100 s on a loaded Mac; a run with seeks and a straight play takes
 about twice that. `scripts/lanes.mjs` needs `'tests/acceptance/2693/'` in its `alone` list (the files build
-cargo binaries and count a process's heap, and `unchanged.test.ts` runs two other suites); this README is the
-instruction, and the implementer makes that edit. Node built-ins and vitest only.
+cargo binaries and count a process's heap); this README is the instruction, and the implementer makes that
+edit. Node built-ins and vitest only.
 
 ## The probe
 
@@ -139,7 +139,7 @@ top-level `it()`; every check is on values (bytes, hashes, step counts, times), 
 | `#2693.5e136ab2` | After that hour, a seek to each of 100 seeded times gives the full-state hash playing gives; a planted ring that lets go of the start checkpoint fails on a seek into the first spacing, naming the time | `seek-hash.test.ts`: (1) plain probe, the hour, then 100 seeded seeks (seed 2693, descending, each a jump back; ten in (0, 0.5 s), ninety in [0.5 s, 1 h), any flick) against a straight play: every hash equal. **Base passes it** (it keeps every checkpoint); the planted `ring_drops_start` fails it on the seeks into the first spacing. (2) `ring` probe, `ring_drops_start`: some seek fails, the first failure (in time order) is before 0.5 s and its sentence names the flick, and no seek at or past the reading's spacing fails. **Base: fails** at "the probe builds with its feature `ring`" |
 | `#2693.769d2c70` | A seek steps forward at most one spacing's steps, counted; the spacing after an hour is in the reading; a planted ring keeping only the newest checkpoint fails, naming the steps | `seek-steps.test.ts`: (1) `ring` probe, the hour and the 100 seeks: the reading's spacing is 0.5 s × 2^k, its budget 16 MiB, its bytes ≤ 16 MiB, not over budget, the start held, no two held checkpoints more than a spacing apart, the newest within a spacing of the hour, and every seek's steps ≤ ⌊spacing ÷ 11,760,000⌋. (2) `ring_newest_only`, the hour and the five latest seeded times: the ring holds one checkpoint, each seek earlier than its newest steps more than a spacing's steps, the first among them, and each failure names its steps. **Base: both fail** at "the probe builds with its feature `ring`" (the reading is missing). Other wrong programs (1) fails: a ring that lets go without doubling the spacing (two held checkpoints more than a spacing apart), and a seek that restores an earlier checkpoint than the last at or before its time (more steps than a spacing) |
 | `#2693.302a0e55` | A document whose one checkpoint is larger than the budget keeps the start's and its newest, says so as a reading, never refused, never silently unbounded | `over-budget.test.ts`, `test.tight` (16 KiB budget, 64 KiB checkpoints), a minute: (1) plain probe: no load issue, no frozen frame, 3,601 steps, `heap.held_since_start` ≤ 262,144 (four checkpoints). **Base: fails at that assertion**, naming about 7.9 MB (121 checkpoints held). (2) `ring` probe with seeks at 59.9 s, 30 s and 0.2 s (off-step) and a straight play: budget 16 KiB, `over_budget: true`, two held, at 0 and within a spacing of the minute, each ≥ 65,536 bytes, bytes their sum, every seek's hash equal to playing. **Base: fails** at the build |
-| `#2693.821f46f4` | `tests/acceptance/488/` and `tests/acceptance/532/` pass unchanged | `unchanged.test.ts`: (1) neither folder differs from `git merge-base HEAD origin/main`, nor holds an untracked file. (2) `npx vitest run --root tests/acceptance/488 --no-file-parallelism` exits 0 with no failed or skipped test. (3) the same for 532 with its README's `--testTimeout=600000`, `CARGO_INCREMENTAL=0`, `CARGO_PROFILE_DEV_DEBUG=0`. **Base: not run** (below). A wrong program: a ring that changes what 488's seeks restore, or a budget that refuses 488's `test.tick` boards (it declares 64 bytes, smaller than its one checkpoint, so criterion 4's rule applies to it) |
+| `#2693.821f46f4` | `tests/acceptance/488/` and `tests/acceptance/532/` pass unchanged | **No tagged test; proven by hand**, by the procedure under "Criterion 5 by hand", and again at release, where preflight's `tests` lane runs both folders in its `alone` block. It stays open in the trace lane, so a PR proves it with the hand run's saved output and says `Part of #2693` unless the maintainer accepts that record. In the lanes, criteria 2–4 cover what the change could break in 488: seeks equal playing through the ring (2), a seek steps at most a spacing (3), and a document whose one checkpoint is over its budget (as 488's `test.tick` boards are, at 64 bytes) is never refused (4). Wrong programs the hand run catches: a ring that changes what 488's seeks restore, a budget that refuses 488's `test.tick` boards, an edit to either folder |
 
 ## Readings where the issue and design leave a choice
 
@@ -162,12 +162,45 @@ top-level `it()`; every check is on values (bytes, hashes, step counts, times), 
 - **"Says so as a reading"** is `over_budget` in the ring's reading; **"never refused"** is no load issue and
   no frozen frame, every step run; **"never silently unbounded"** is the heap, counted, within four
   checkpoints after a minute.
-- **488 and 532 "pass unchanged"** is run, not hand-checked, with each README's own command.
+- **488 and 532 "pass unchanged"** is each folder identical to the merge base, and each suite run with its
+  README's own command, exiting 0 with no failed and no skipped test. It is run by hand (Criterion 5 by hand, below).
 
 ## The base run
 
 `BASE-FAILURE.txt` is the base's run of criteria 1–4 (`ring-bytes`, `seek-hash`, `seek-steps`,
-`over-budget`), paths redacted to `<repo>`. Criterion 5 (`unchanged.test.ts`) was not run at the base: it
-builds deep-show three times (488) and deep-logic for macOS and Linux under Docker, with headless Chrome
-(532), which this loaded Mac with little free disk couldn't afford in this job; it is expected to pass there,
-and its first case (no diff from the merge base) holds trivially at the base.
+`over-budget`), paths redacted to `<repo>`. Criterion 5 has no tagged test and was not run at the base:
+both suites landed on main and pass there by their own proof, and its diff check holds trivially at the base.
+
+## Criterion 5 by hand
+
+On the change, from the repository root, with Docker running and 532's image pulled (532's README, Run them);
+save the output of each command with the PR's evidence, paths redacted:
+
+```sh
+base=$(git merge-base HEAD origin/main)
+git diff --name-status "$base" -- tests/acceptance/488 tests/acceptance/532        # prints nothing
+git ls-files --others --exclude-standard -- tests/acceptance/488 tests/acceptance/532  # prints nothing
+NO_COLOR=1 npx vitest run --root tests/acceptance/488 --no-file-parallelism
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/532 --testTimeout=600000 --no-file-parallelism
+rm -rf tests/acceptance/488/node_modules/.vite tests/acceptance/532/node_modules/.vite
+```
+
+It passes when the two listings are empty and each vitest run exits 0 and its summary shows no failed and no
+skipped test file or test. A `BLOCKED:` failure (532 with no Docker or no Chrome) leaves criterion 5
+`BLOCKED`, never passed: rerun on a host that has them. On this Mac 488 took about 25 minutes and 532 about 70.
+
+## Redraft (criterion 5)
+
+The first draft's `unchanged.test.ts` tagged three tests with `#2693.821f46f4`: a diff against the merge
+base, and a run of each suite. A blind redraft removed it, for three measured facts: the before and trace
+lanes (`scripts/proof-runs.mjs`) run every tagged vitest file of the issue in one process capped at 20
+minutes and read every file of a stopped run as BLOCKED, and 488 (about 25 minutes) and 532 (about 70) alone
+pass that cap, so the file made criteria 1–4 BLOCKED too; 532's Linux test needs Docker, so it is BLOCKED on
+a host without it whatever the change does; and the diff test passes on the merge base while no planted wrong
+program may replace files under the test paths, so the before lane could never see it fail. No test that runs
+within the cap proves that the two suites pass, and a narrower tagged stand-in would let the trace lane read
+the criterion as proven when it isn't. So the criterion has no tagged test: what is proven by a lane is
+criteria 2–4's mechanism in this suite, and preflight's run of both suites at release; what is proven by hand
+is the procedure above; what stays open in the trace lane is criterion 5 itself. Criteria 1–4's files, the
+helpers, the probe and `lane.json` are unchanged (`lane.json`'s `why` still names `unchanged.test.ts`; its
+`alone: true` stands for the probe builds).
