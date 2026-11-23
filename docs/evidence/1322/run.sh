@@ -9,7 +9,7 @@ C="$W/clone"
 T="$W/twin"
 trap 'rm -rf "$W"' EXIT
 git clone -q --branch claude/issue-1322-measureonce-04bebe https://github.com/windoliver/deepbuild.git "$C" || exit 1
-git -C "$C" fetch -q origin +refs/heads/main:refs/remotes/origin/main
+git -C "$C" fetch -q origin +refs/heads/main:refs/remotes/origin/main || exit 1
 mkdir -p "$T"
 cp "$C/tests/acceptance/1322/twins/timeout-group-left-running/scripts/benchmark.mjs" "$C/scripts/proof-approvals.mjs" "$T/"
 clear
@@ -18,6 +18,7 @@ echo "#1322 e2e hand run of measureOnce (scripts/benchmark.mjs): fresh GitHub cl
 echo "HEAD $(git -C "$C" log -1 --format='%h %s' | cut -c1-100)"
 FIX=$(git -C "$C" merge-base --is-ancestor 8545c5bee HEAD && echo "in HEAD's history" || echo "MISSING")
 BASE=$(git -C "$C" merge-base HEAD origin/main | cut -c1-9)
+[ -n "$BASE" ] || exit 1
 echo "Fix 8545c5bee (group kill): $FIX. Branch vs merge base $BASE: $(git -C "$C" diff --name-only "$BASE" HEAD | wc -l | tr -d ' ') files, $(git -C "$C" diff --name-only "$BASE" HEAD | grep -vc '^tests/acceptance/1322/') outside tests/acceptance/1322/"
 echo "$(uname -sm), node $(node --version), $(date '+%Y-%m-%d %H:%M %Z')"
 node "$E/e2e.mjs" "$C" "$T"
