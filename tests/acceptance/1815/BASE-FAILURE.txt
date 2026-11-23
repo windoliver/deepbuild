@@ -1,0 +1,13 @@
+#1815's acceptance tests at the base, a5fc47436 (main), 2026-11-23.
+
+NOT RUN at the base yet. The machine's build grant was held with a long queue ahead (load 110 to 430 on 18 cores), so
+`deep-drive` at this base was still building (`nice -n 10 scripts/lease cargo build --locked -q -p deep-replica --bin
+deep-drive --features env-plants,deep-app/test-confirm`) when this was first committed. The base run follows.
+
+What each test fails on there, by its own message:
+- find.test.ts AC1, AC2 and AC3, and their four plants: `⌘F on session/<id> opens no field: the window holds no node
+  find-field (README, Surfaces)`; a plant's run reads the same, so its own message is never found in it.
+- find.test.ts AC1's Scope: `the action table (crates/deep-app/src/actions.json) holds one action on cmd-f`, expected length 1,
+  got 0.
+- budget.test.ts AC4: the same `⌘F on session/<id> opens no field`, on the short page, before the big one is opened.
+- shown.test.ts AC5: `each state is on the window's tree before its picture is taken`, both themes naming the same.
