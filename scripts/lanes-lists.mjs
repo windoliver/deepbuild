@@ -865,6 +865,9 @@ alone.push('tests/acceptance/277/');
 // #552's files each build deep-show (ac5 builds deep-drive with env-plants instead) and play matches in process; ac1,
 // ac2, ac6 and ac7 draw on the GPU, ac7 the app's window, and ac7 waits on your taste call in tests/acceptance/552/TASTE.json.
 alone.push('tests/acceptance/552/');
+// #290's files each build deep-gpu (ac4 and ac5 build deep-show instead, ac8 both) and draw on the GPU; ac4, ac5 and
+// ac8 play matches in process, and ac8 waits on your taste call in tests/acceptance/290/TASTE.json.
+alone.push('tests/acceptance/290/');
 // #553's files each build deep-show and play matches in process, rendering each copy's sound; ac1 runs the network
 // seam's interop part, which builds deep-show and the shipped relay and plays the app against headless Chrome's web
 // player through it, and ac4 reads net.budget's five runs (INCONCLUSIVE off a reference Mac or under load).
