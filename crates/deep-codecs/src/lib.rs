@@ -391,7 +391,7 @@ fn probe(f: &Format, data: &[u8], sha: &str, planted: &Planted) -> Value {
                 "image",
                 vec![
                     json!({"index": 0, "type": "image", "codec": "png", "time_base": [1, 1],
-                    "size": [w, h], "color": c}),
+                    "size": still::png_size(data, [*w, *h], planted.is(still::PLANT)), "color": c}),
                 ],
                 json!({"name": "image png", "version": "0.25"}),
             )
@@ -635,7 +635,7 @@ fn decode(
                                         color["matrix"].as_str().unwrap_or("bt709"),
                                         color["range"].as_str().unwrap_or("limited"),
                                     ),
-                                    false => planes.clone(),
+                                    false => planes.to_vec(),
                                 };
                                 write(&name, &bytes)?;
                                 let mut frame =

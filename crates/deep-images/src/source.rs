@@ -367,12 +367,14 @@ pub(crate) fn decode(bytes: &[u8], ignores_orientation: bool) -> Result<RgbaImag
     limits.max_image_height = Some(SIDE);
     limits.max_alloc = Some(DECODE_CAP);
     let mut reader = reader().map_err(|e| undecodable(ImageError::IoError(e)))?;
-    reader.limits(limits);
+    reader.limits(limits.clone());
     let over = |e| match e {
         ImageError::Limits(_) => refused("over_budget"),
         e => undecodable(e),
     };
     let mut decoder = reader.into_decoder().map_err(over)?;
+    // What it decodes to is held to the cap, as `ImageReader::decode` holds it.
+    limits.reserve(decoder.total_bytes()).map_err(over)?;
     let orientation = match ignores_orientation {
         true => Orientation::NoTransforms,
         false => decoder.orientation().unwrap_or(Orientation::NoTransforms),

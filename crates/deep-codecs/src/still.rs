@@ -105,6 +105,21 @@ pub fn shown(size: [u32; 2], o: Orientation) -> [u32; 2] {
     }
 }
 
+/// A PNG's size as shown: an `eXIf` chunk's orientation turns it as a JPEG's does, as the image
+/// service draws it; as stored for the wrong program that `ignores` the tag.
+pub fn png_size(data: &[u8], stored: [u32; 2], ignores: bool) -> [u32; 2] {
+    let read = || {
+        image::codecs::png::PngDecoder::new(Cursor::new(data))
+            .ok()?
+            .orientation()
+            .ok()
+    };
+    match ignores {
+        true => stored,
+        false => shown(stored, read().unwrap_or(Orientation::NoTransforms)),
+    }
+}
+
 /// A JPEG's header, read without decoding; `None` when it doesn't read.
 pub fn jpeg(data: &[u8]) -> Option<Jpeg> {
     let mut d = JpegDecoder::new(Cursor::new(data)).ok()?;
@@ -147,6 +162,8 @@ pub fn rgba(data: &[u8], ignores: bool) -> Result<RgbaImage, String> {
         .with_guessed_format()
         .map_err(|e| e.to_string())?;
     let mut decoder = reader.into_decoder().map_err(|e| e.to_string())?;
+    // What it decodes to is held to the default cap, as `image::load_from_memory` holds it.
+    (image::Limits::default().reserve(decoder.total_bytes())).map_err(|e| e.to_string())?;
     let o = match ignores {
         true => Orientation::NoTransforms,
         false => decoder.orientation().unwrap_or(Orientation::NoTransforms),
@@ -256,4 +273,45 @@ pub fn platform() -> Value {
     return json!({"name": "ImageIO", "version": crate::apple::os_version()});
     #[cfg(not(target_os = "macos"))]
     json!({"name": "none", "version": "0"})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A 4 × 2 PNG whose eXIf chunk says orientation `o`.
+    fn png_tagged(o: u8) -> Vec<u8> {
+        let exif = [
+            b"II*\0".as_slice(),
+            &[
+                8, 0, 0, 0, 1, 0, 0x12, 1, 3, 0, 1, 0, 0, 0, o, 0, 0, 0, 0, 0, 0, 0,
+            ],
+        ];
+        let mut info = png::Info::with_size(4, 2);
+        info.color_type = png::ColorType::Rgba;
+        info.bit_depth = png::BitDepth::Eight;
+        info.exif_metadata = Some(exif.concat().into());
+        let mut out = Vec::new();
+        let mut w = png::Encoder::with_info(&mut out, info)
+            .unwrap()
+            .write_header()
+            .unwrap();
+        w.write_image_data(&[0; 32]).unwrap();
+        w.finish().unwrap();
+        out
+    }
+
+    /// #1488: a PNG's probe, like a JPEG's, gives the size it shows at: an eXIf orientation of 6
+    /// turns 4 × 2 stored to 2 × 4, as the image service draws it; 1 leaves it as stored.
+    #[test]
+    fn a_png_probe_turns_its_size_by_its_exif_orientation() {
+        let size = |png: &[u8], plant: &str| {
+            let f = crate::format(png).ok().unwrap();
+            let planted = Planted::one(plant);
+            crate::probe(&f, png, "", &planted)["asset"]["probe"]["streams"][0]["size"].clone()
+        };
+        assert_eq!(size(&png_tagged(6), "none"), json!([2, 4]));
+        assert_eq!(size(&png_tagged(1), "none"), json!([4, 2]));
+        assert_eq!(size(&png_tagged(6), PLANT), json!([4, 2]));
+    }
 }

@@ -119,7 +119,7 @@ pub fn serve_live(args: &[String]) -> i32 {
                     last = Some(i);
                 }
                 got.filter(|p| p.len() == size)
-                    .map(|p| turn::nv12(&p, dw, dh, turn))
+                    .map(|p| turn::nv12(p, dw, dh, turn))
             })();
             let ok = picture.is_some();
             let mut reply = k.to_le_bytes().to_vec();
