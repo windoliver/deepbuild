@@ -139,12 +139,71 @@ fn check_by(
     sizes: &Sizes,
     packs: &Packs,
 ) -> CheckResult {
+    let mut lowered = copy_of(doc);
+    let mut head = lower(doc, lowered.get_mut("items"), sealed, kinds, packs);
+    settle(&mut lowered, &head, packs);
+    finish(&lowered, &mut head, sealed, kinds, coefficients, sizes);
+    let Head {
+        mut issues,
+        mut notices,
+        mut draws,
+        expansions,
+        rules_ran,
+        ..
+    } = head;
+    sort_issues(&mut issues);
+    sort_notices(&mut notices);
+    draws.sort();
+    let ok = !issues.iter().any(|i| i.severity == "error");
+    CheckResult {
+        ok,
+        issues,
+        notices,
+        draws,
+        lowered,
+        core: core_name(),
+        set_digest: sealed.set_digest.clone(),
+        expansions,
+        rules_ran,
+    }
+}
+
+/// What a check found in a document's envelope and items, before its checks of the lowered
+/// document.
+struct Head<'a> {
+    issues: Vec<Issue>,
+    notices: Vec<Notice>,
+    draws: Vec<String>,
+    expansions: Vec<Expansion>,
+    rules_ran: BTreeSet<(String, String)>,
+    resolved: packs::Resolved<'a>,
+}
+
+impl Head<'_> {
+    /// Whether [`settle`] writes a member of the lowered document besides its items.
+    fn writes_envelope(&self) -> bool {
+        !self.resolved.is_empty()
+            || self
+                .expansions
+                .iter()
+                .any(|e| !e.channels.is_empty() || !e.sections.is_empty())
+    }
+}
+
+/// The first part of a check: `doc`'s envelope, and `items`, its items to lower in place, each
+/// migrated, expanded and checked on its own. `doc` is read as written.
+fn lower<'a>(
+    doc: &Value,
+    mut items: Option<&mut Value>,
+    sealed: &Sealed,
+    kinds: &Registry,
+    packs: &'a Packs,
+) -> Head<'a> {
     let mut issues = Vec::new();
     let mut notices = Vec::new();
     let mut draws = Vec::new();
-    let mut lowered = copy_of(doc);
     // `fw` and `fh` read the document's design size (Units and axes).
-    if let (Some(size), Some(Value::Object(items))) = (frame_of(doc), lowered.get_mut("items")) {
+    if let (Some(size), Some(Value::Object(items))) = (frame_of(doc), items.as_deref_mut()) {
         for item in items.values_mut() {
             if let Some(params) = item.get_mut("params") {
                 lower_frame_literals(params, size);
@@ -169,7 +228,7 @@ fn check_by(
     let pack_declared: BTreeSet<String> = resolved.modules().cloned().collect();
     let layer_ids = check_layers(doc, &mut issues);
 
-    match lowered.get_mut("items") {
+    match items {
         None => {}
         Some(Value::Object(items)) => {
             // Whether a kind text migrates is looked up once per text, not once per item.
@@ -334,9 +393,21 @@ fn check_by(
             "not an object",
         )),
     }
+    Head {
+        issues,
+        notices,
+        draws,
+        expansions,
+        rules_ran,
+        resolved,
+    }
+}
 
+/// What lowering writes beyond the items: `lowered` is the document with its lowered items.
+fn settle(lowered: &mut Value, head: &Head<'_>, packs: &Packs) {
+    let expansions = &head.expansions;
     // A rename carries every path that names the param it renames (#1960).
-    super::pack_kinds::migrate::carry_paths(&mut lowered, &resolved, packs.planted);
+    super::pack_kinds::migrate::carry_paths(lowered, &head.resolved, packs.planted);
     // A recipe's channels join the document's, targeting the items it derived (#420).
     let recipe_channels: Map<String, Value> =
         expansions.iter().flat_map(|e| e.channels.clone()).collect();
@@ -350,12 +421,23 @@ fn check_by(
             }
         }
     }
-    super::expands::merge(&mut lowered, &expansions);
+    super::expands::merge(lowered, expansions);
+}
 
-    // The module checks, the budget estimate and the document checks read the lowered document
-    // alone: a big document's estimate runs on its own thread, beside the others, and the
-    // findings join in this order.
-    let big = member(&lowered, "items")
+/// The last part of a check, added to `head`: the module checks, the budget estimate and the
+/// document checks, which read the lowered document alone.
+fn finish(
+    lowered: &Value,
+    head: &mut Head<'_>,
+    sealed: &Sealed,
+    kinds: &Registry,
+    coefficients: Option<&Coefficients>,
+    sizes: &Sizes,
+) {
+    let expansions = &head.expansions;
+    // A big document's estimate runs on its own thread, beside the others, and the findings
+    // join in this order.
+    let big = member(lowered, "items")
         .and_then(Value::as_object)
         .is_some_and(|items| items.len() >= SPLIT_FROM);
     let mut tail = [Tail::Modules, Tail::Budget, Tail::Document];
@@ -364,21 +446,21 @@ fn check_by(
         let (mut issues, mut notices) = (Vec::new(), Vec::new());
         for step in part.iter() {
             match step {
-                Tail::Modules => module_checks(&lowered, sealed, &mut issues, &mut notices),
-                Tail::Budget => budget_check(&lowered, sealed, coefficients, sizes, &mut issues),
+                Tail::Modules => module_checks(lowered, sealed, &mut issues, &mut notices),
+                Tail::Budget => budget_check(lowered, sealed, coefficients, sizes, &mut issues),
                 Tail::Document => {
-                    check_id_maps(&lowered, &mut issues);
-                    check_controls(&lowered, sealed, &mut issues);
-                    check_constraints(&lowered, sealed, &mut issues);
-                    check_assemblies(&lowered, &mut issues);
-                    check_viewer_tools(&lowered, &mut issues);
-                    check_card(&lowered, &mut issues);
-                    super::variants::check(&lowered, &mut issues);
-                    check_time_remaps(&lowered, &expansions, &mut issues);
-                    check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
-                    check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
-                    super::reads::check(&lowered, kinds, &mut issues);
-                    super::rules::check(&lowered, &mut issues, |entries, work| {
+                    check_id_maps(lowered, &mut issues);
+                    check_controls(lowered, sealed, &mut issues);
+                    check_constraints(lowered, sealed, &mut issues);
+                    check_assemblies(lowered, &mut issues);
+                    check_viewer_tools(lowered, &mut issues);
+                    check_card(lowered, &mut issues);
+                    super::variants::check(lowered, &mut issues);
+                    check_time_remaps(lowered, expansions, &mut issues);
+                    check_targets(lowered, "channels", false, kinds, sealed, &mut issues);
+                    check_targets(lowered, "bound_values", true, kinds, sealed, &mut issues);
+                    super::reads::check(lowered, kinds, &mut issues);
+                    super::rules::check(lowered, &mut issues, |entries, work| {
                         in_chunks(entries, work)
                     });
                 }
@@ -387,24 +469,8 @@ fn check_by(
         (issues, notices)
     });
     for (i, n) in found {
-        issues.extend(i);
-        notices.extend(n);
-    }
-
-    sort_issues(&mut issues);
-    sort_notices(&mut notices);
-    draws.sort();
-    let ok = !issues.iter().any(|i| i.severity == "error");
-    CheckResult {
-        ok,
-        issues,
-        notices,
-        draws,
-        lowered,
-        core: core_name(),
-        set_digest: sealed.set_digest.clone(),
-        expansions,
-        rules_ran,
+        head.issues.extend(i);
+        head.notices.extend(n);
     }
 }
 
@@ -758,9 +824,11 @@ fn budget_check(
 /// camera); every other item keeps its issues. `None` when a full check is needed: the document
 /// holds entries of other maps keyed by ID, which read items by path. A patch that reached
 /// beyond items (a layer added) takes a full check, which the caller runs. Checked in the build
-/// `sealed` describes, as [`check_in`] checks.
+/// `sealed` describes, as [`check_in`] checks. `doc` is lent for the check, which reads its other
+/// members in place (#2700), copying them only when lowering the items writes one (a module
+/// kind's sections or channels), and is as it was on return.
 pub fn recheck(
-    doc: &Value,
+    doc: &mut Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
     sealed: &Sealed,
@@ -782,7 +850,7 @@ pub fn recheck(
 /// changed is checked again whatever names it. An unknown field is looked up in `packs`'
 /// census, as a full check looks it up (#1493).
 pub fn recheck_with(
-    doc: &Value,
+    doc: &mut Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
     sealed: &Sealed,
@@ -856,7 +924,7 @@ enum Reach<'a> {
 /// [`recheck`]'s planted wrong program (the conformance kit's fifth law): the items the patch
 /// changed are checked again, and those that hang from them or name them are not.
 pub fn recheck_skipping_referrers(
-    doc: &Value,
+    doc: &mut Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
     sealed: &Sealed,
@@ -872,14 +940,14 @@ pub fn recheck_skipping_referrers(
 }
 
 fn recheck_by(
-    doc: &Value,
+    doc: &mut Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
     sealed: &Sealed,
     reach: Reach<'_>,
     packs: &Packs,
 ) -> Option<Vec<Issue>> {
-    let after = doc.as_object()?;
+    doc.as_object()?;
     let maps_empty = ID_MAPS.iter().all(|m| {
         member(doc, m)
             .and_then(Value::as_object)
@@ -989,18 +1057,28 @@ fn recheck_by(
             }
         }
     }
-    let mut reduced = Map::new();
-    for (k, v) in after {
-        if k != "items" {
-            reduced.insert(k.clone(), v.clone());
-        }
-    }
     let subset: Map<String, Value> = context
         .iter()
         .filter_map(|id| Some((id.clone(), items.get(id)?.clone())))
         .collect();
-    reduced.insert("items".into(), Value::Object(subset));
-    let fresh = check_packed(&Value::Object(reduced), sealed, packs).issues;
+    // The document is lent with only those items in it, so its other members are read in place
+    // (#2700).
+    let mut lowered = Value::Object(subset.clone());
+    let mut lent = Lent::of(doc, Value::Object(subset));
+    let kinds = sealed.kinds_ref();
+    let mut head = lower(lent.doc, Some(&mut lowered), sealed, kinds, packs);
+    if head.writes_envelope() {
+        // Lowering writes members besides the items: it writes them on a copy.
+        let mut copy = lent.doc.clone();
+        copy["items"] = lowered;
+        settle(&mut copy, &head, packs);
+        finish(&copy, &mut head, sealed, kinds, None, &Sizes::new());
+    } else {
+        lent.swap(lowered);
+        finish(lent.doc, &mut head, sealed, kinds, None, &Sizes::new());
+    }
+    drop(lent);
+    let fresh = head.issues;
     let touches = |i: &Issue| i.ids.iter().any(|id| affected.contains(id));
     let mut out: Vec<Issue> = prev_issues
         .iter()
@@ -1010,6 +1088,31 @@ fn recheck_by(
         .collect();
     sort_issues(&mut out);
     Some(out)
+}
+
+/// A document holding other items than its own until dropped, which puts its own back where they
+/// were: how a recheck reads the document's other members in place.
+struct Lent<'a> {
+    doc: &'a mut Value,
+    own: Value,
+}
+
+impl<'a> Lent<'a> {
+    fn of(doc: &'a mut Value, items: Value) -> Lent<'a> {
+        let own = std::mem::replace(&mut doc["items"], items);
+        Lent { doc, own }
+    }
+
+    /// Puts `items` in place of the items it holds now.
+    fn swap(&mut self, items: Value) {
+        self.doc["items"] = items;
+    }
+}
+
+impl Drop for Lent<'_> {
+    fn drop(&mut self) {
+        self.doc["items"] = std::mem::take(&mut self.own);
+    }
 }
 
 /// Calls `f` with each string `value` holds, at any depth.

@@ -1669,11 +1669,14 @@ impl Session {
     /// nothing else in the document changes. Those items are rekeyed and stamped by the classes
     /// their changed fields fall in, as `load` would stamp them, without compiling the plan again;
     /// then the revision's check phases run. `None` when the revision reaches further, for `load`.
+    /// `reached` names the members besides `items` its patch reached: only those are compared
+    /// with the revision before, so a patch's cost is not the other members' size (#2700).
     pub fn revise_items(
         &mut self,
         s: &mut Scheduler<'_>,
         doc: &Value,
         ids: &[&str],
+        reached: &[&str],
     ) -> Option<Vec<OpIssue>> {
         self.sync_hash(s);
         let v = s.options.hash;
@@ -1684,11 +1687,15 @@ impl Session {
             if items.len() != l.items.len() {
                 return None;
             }
-            for (k, value) in doc.as_object()? {
-                if k != "items" && l.doc.get(k) != Some(value) {
-                    return None;
-                }
+            if reached.iter().any(|k| l.doc.get(k) != doc.get(k)) {
+                return None;
             }
+            debug_assert!(
+                doc.as_object().is_some_and(|d| d
+                    .iter()
+                    .all(|(k, v)| k == "items" || l.doc.get(k) == Some(v))),
+                "a member the patch did not name as reached changed"
+            );
             // A per-document operator's `applies` reads no item, so it is asked once, not per ID.
             let documents_alike = ids.is_empty()
                 || s.sealed
