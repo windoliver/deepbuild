@@ -324,6 +324,10 @@ export type Plant =
   | 'rubric-holds-every-rule' | 'review-without-caller'
   // #2076's: a hub whose proposal for a rule line an agent's edit removed can't be raised.
   | 'hold-raise-fails'
+  // #2748's: a hub that runs every review pass whatever its scope, one that reads the passes from a file in the claim's
+  // checkout, one that records a pass's findings and sends none back, one that sends back a finding on a line the
+  // change didn't add or alter, and one that replays every PR on every claim, reading nothing as carried.
+  | 'runs-every-pass' | 'passes-from-checkout' | 'pass-findings-sent-nowhere' | 'pass-sends-back-context' | 'replays-every-claim'
   // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
   | 'asks-every-registry-run'
   // #1868's: a hub that builds the asks and readings of the canvas core's world once and reads them so ever after.
@@ -458,6 +462,7 @@ const PLANTS: readonly string[] = [
   'hands-over-socket-chunk',
   'rubric-holds-every-rule', 'review-without-caller',
   'hold-raise-fails',
+  'runs-every-pass', 'passes-from-checkout', 'pass-findings-sent-nowhere', 'pass-sends-back-context', 'replays-every-claim',
   'canvas-world-built-once',
   'reply-cap-64kb', 'pager-drops-edge-row', 'refusal-schema-12000', 'unknown-client-64kb',
   'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',

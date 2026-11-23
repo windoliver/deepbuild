@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@8",
+  "schema": "adapter.facts@9",
   "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
   "agent": "codex",
   "hookTimeouts": {
@@ -842,7 +842,7 @@
   "stop": {
     "readBy": "each agent.stop names its cause from the stop's closed set and carries its usage (#603); the turn is the rollout's entries from the first carrying the payload's turn_id to the first carrying another",
     "conformance": "codex/stop/cause-and-usage",
-    "turn": { "payload": "turn_id", "transcript": "payload.turn_id" },
+    "turn": { "payload": "turn_id", "transcript": "payload.turn_id", "elsewhere": "agent_id" },
     "cause": {
       "readBy": "the first that names a cause, never the agent's text: an error event of the turn by its codex_error_info (codex-rs/protocol CodexErrorInfo), then the turn's last token_count rate_limits: a limit reached (rate_limit_reached_type) is plan_window_spent, resetting when the spent window (used_percent 100) does, resets_at being Unix seconds; one with no reset time is rate_limited; Codex's Stop payload carries no error; anything else is unknown",
       "errors": {
@@ -906,7 +906,7 @@
     "readBy": "a turn no prompt hook started opens with a user.ask whose origin the rollout's opening user message names; goals and heartbeats are continuations, never your asks",
     "conformance": "codex/turnWithoutPrompt/goal",
     "payloadField": "turn_id",
-    "startedBy": ["UserPromptSubmit", "SessionStart"],
+    "startedBy": ["UserPromptSubmit", "SessionStart", "SubagentStart"],
     "turnEntry": "turn_context",
     "turnField": "payload.turn_id",
     "messageRole": { "path": "payload.role", "value": "user" },
@@ -1062,5 +1062,39 @@
         "readBy": "measured Nov 7, 2026 on a running `codex app-server` in a temp HOME: after config.toml gained an [mcp_servers] table and hooks.json a SessionStart entry, the same server's next mcpServerStatus/list and hooks/list named both, with no restart. A session already started keeps the set it loaded; only a new thread reads the new one"
       }
     }
+  },
+  "mcpHandshake": {
+    "readBy": "DeepBuild's MCP servers (deep mcp, deep mcp actions, deep-hook's mcp actions, the reading tools) hold the handshake revisions mcp.handshake@1 lists and answer any other with the newest (#2854); each version's client opens with the revision here, read from its recorded initialize request. Recorded by codex exec under a scratch CODEX_HOME with an invalid API key (no model call), -c mcp_servers naming one stdio server that kept each line it was sent; the client's npm build (@openai/codex), Nov 22, 2026",
+    "conformance": "codex/mcpHandshake/held",
+    "entries": [
+      {
+        "versions": [
+          "0.144.0"
+        ],
+        "revision": "2025-06-18",
+        "request": "adapters/corpus/codex/0.144.0/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "0.160.0"
+        ],
+        "revision": "2025-06-18",
+        "request": "adapters/corpus/codex/0.160.0/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "0.163.0-alpha.10.2"
+        ],
+        "revision": "2025-06-18",
+        "request": "adapters/corpus/codex/0.163.0-alpha.10.2/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "0.166.0-alpha.5.1"
+        ],
+        "revision": "2025-06-18",
+        "request": "adapters/corpus/codex/0.166.0-alpha.5.1/mcp-initialize.json"
+      }
+    ]
   }
 }

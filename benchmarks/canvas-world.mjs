@@ -4,7 +4,8 @@
 // by scripts/benchmark.mjs's judgeLimit, and prints its verdict as one JSON line, exiting 0 whatever the verdict so the
 // budget window can time it. The task names the test file so a change the test can see reaches the task. `judge`
 // reads that line on stdin and prints it as the window's target verdict. #265's budget (eight logic-moved movers with
-// emitters, trails and wakes within the showpiece's 4 ms of frame CPU at p95) is a vitest file, run the same way.
+// emitters, trails and wakes within the showpiece's 4 ms of frame CPU at p95) is a vitest file, run the same way, as is
+// #269's (a 256 × 256 grid image drawn smooth at 512 × 512 px within the data view class's 2 ms of frame GPU at p95).
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +14,7 @@ const TESTS = {
   'tests/acceptance/1868/canvas-cells.test.mjs': '#1868.f34f3f9c',
   'tests/acceptance/1868/status-runs.test.mjs': '#1868.bf84aa8b',
   'tests/acceptance/265/ac6-budgets.test.ts': '#265.e3eb2a00',
+  'tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts': '#269.6ad7e180',
 };
 const CHECKOUT = fileURLToPath(new URL('..', import.meta.url));
 

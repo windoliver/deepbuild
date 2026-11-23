@@ -37,8 +37,10 @@ mod flows2d;
 mod frames;
 mod full_lane;
 mod golden;
+mod grids2d;
 mod guard;
 mod hdr;
+mod hidden;
 mod host;
 use deep_groups_render::indexed;
 mod insets;
@@ -263,6 +265,11 @@ pub enum Planted {
     WaterRingsAtRainHash,
     /// #2760: a ring started when a drawn frame first passes its occurrence, kept as state.
     WaterRingsStartOnDrawnFrame,
+    /// #290's wrong hidden views (tests/acceptance/290/README.md: Planted programs).
+    HiddenViewDrawsWhereVisible,
+    HiddenViewWithoutOwnDepth,
+    HiddenViewWritesIds,
+    HiddenViewAfterStatus,
     /// #971: the local tone map's base brought back up with a range weight of 1 at every tap.
     LocalBaseIgnoresEdges,
     /// #971: the local tone map's pyramid has the look's `levels` at every output size.
@@ -593,6 +600,10 @@ pub enum Planted {
     NormalDotAlone,
     NormalUnturned,
     LightStaleHeight,
+    /// #269's wrong programs (tests/acceptance/269/README.md: Plants): a played frame's grid image
+    /// holds the step before its own; a pixel takes its cell's role before the rebuild.
+    GridKeepsPreviousStep,
+    GridRoleBeforeRebuild,
 }
 
 impl Planted {
@@ -758,6 +769,10 @@ impl Planted {
             "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
             "water_rings_at_rain_hash" => Planted::WaterRingsAtRainHash,
             "water_rings_start_on_drawn_frame" => Planted::WaterRingsStartOnDrawnFrame,
+            "hidden_view_draws_where_visible" => Planted::HiddenViewDrawsWhereVisible,
+            "hidden_view_without_own_depth" => Planted::HiddenViewWithoutOwnDepth,
+            "hidden_view_writes_ids" => Planted::HiddenViewWritesIds,
+            "hidden_view_after_status" => Planted::HiddenViewAfterStatus,
             "local_base_ignores_edges" => Planted::LocalBaseIgnoresEdges,
             "local_pyramid_fixed_levels" => Planted::LocalPyramidFixedLevels,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
@@ -784,6 +799,8 @@ impl Planted {
             "puff_block_copy" => Planted::PuffBlockCopy,
             "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
+            "grid_keeps_previous_step" => Planted::GridKeepsPreviousStep,
+            "grid_role_before_rebuild" => Planted::GridRoleBeforeRebuild,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,

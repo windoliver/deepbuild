@@ -207,6 +207,7 @@ pub(crate) fn layers(dst: &mut Vec<Layer3>, src: &[Layer3], keeps: &Keeps<'_>) {
             puffs,
             fed,
             draw_names,
+            hidden,
         } = s;
         d.id.clone_from(id);
         let item = |id: &String| (keeps.item)(id);
@@ -224,6 +225,7 @@ pub(crate) fn layers(dst: &mut Vec<Layer3>, src: &[Layer3], keeps: &Keeps<'_>) {
         same(&mut d.fades, fades);
         same(&mut d.fed, fed);
         same(&mut d.draw_names, draw_names);
+        same(&mut d.hidden, hidden);
     }
 }
 
