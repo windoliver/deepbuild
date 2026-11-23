@@ -4,6 +4,23 @@
 
 The prototype app is in `app/` on the `public-history-oct15/spike-gpui-app` branch of the private DeepBuildAI/deepbuild repo. It holds the Map's city, the castle builder and the GPU handoff with its measurement; the house, the physics lab and the dial gauge survive only as screenshots. This page covers how version 0 (release R1) is built. Dates start the day building starts: until then the plan gives the order and the dependencies, and R1 takes six weeks from that day: five to build and one of real use. The code, the issues and both design docs live in [windoliver/deepbuild](https://github.com/windoliver/deepbuild), and the docs are edited there by pull request like the code.
 
+<a id="principles"></a>
+
+## Principles
+
+These are the ideas that decide a new question, each with its rule and its check; the first four are AGENTS.md's invariants, word for word.
+
+- An agent's word is never evidence. Only check results are. ([How runs become one of five verdicts](#verdicts); the `verdict proofs` lane)
+- Nothing missing or unrun passes. It's `BLOCKED`, `INVALID` or `INCONCLUSIVE`, never `PASS`. ([How runs become one of five verdicts](#verdicts); the `verdict proofs` lane)
+- Agents can't change checks or decisions. ([The edit guard](#tests); `scripts/proof-guard.mjs`)
+- A person sees only what needs a person, and never the same question twice. ([An ask, and your answer getting back](#an-ask-and-your-answer-getting-back); `unit` lane, `scripts/ask-sources-guard.mjs`)
+- Agents and plug-ins write data, not code, and a piece's logic runs only sandboxed. ([Data, not code](#prim-rules); the `canvas kit` lane)
+- A document is checked before it shows, and each failure comes back as data with its check and a fix. ([Checked before it shows](#prim-rules); the `canvas kit` lane)
+- What a check reads replays the same way on another machine, each random draw seeded or recorded. ([Seeded and replayable](#prim-rules); `scripts/canvas-lint.mjs`)
+- A test counts only if it fails on a wrong program. ([Wrong programs](#tests); the `proof` lane)
+- Every wait ends by its deadline, and a test waits for its event, never for time. ([Every wait ends](#tests), [Repo guards](#built-to-be-hard-to-get-wrong); the `unit` lane, `scripts/wait-ratchet.mjs`)
+- Every hub slot names its interface and the planted wrong fills its kit must fail. ([Hub slots](#composition); `scripts/slots-check.mjs`)
+
 <a id="scope"></a>
 
 ## What version 0 builds, and what waits
