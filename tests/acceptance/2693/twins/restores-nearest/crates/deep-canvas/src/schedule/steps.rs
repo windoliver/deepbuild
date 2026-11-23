@@ -18,9 +18,9 @@
 //! every second checkpoint and the spacing doubles, as often as it takes. The checkpoint at
 //! the timeline's start is always kept, and every multiple of the spacing up to the newest is
 //! held, so a seek to any time at or after the start steps forward at most one spacing's steps.
-//! A ring whose two checkpoints alone pass the budget holds only the start's and the newest
-//! and says so (`over_budget`): never refused, never unbounded, though a seek between them
-//! steps from the start's.
+//! A ring whose start's checkpoint and one more alone pass the budget holds only the start's
+//! and the newest and says so (`over_budget`): never refused, never unbounded, though a seek
+//! between them steps from the start's.
 
 use std::collections::{BTreeMap, BTreeSet};
 

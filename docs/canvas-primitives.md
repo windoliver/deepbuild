@@ -1226,7 +1226,7 @@ For: physics labs and films with sound: checkpoints, processor tails and bakes
 
 **Cost:** Within its byte budget; a restore is O(steps since the checkpoint).
 
-**It can never:** Exceed its budget; be read by another canvas module except through a declared array; hold session history.
+**It can never:** Exceed its budget, but for a scheduler ring whose start's checkpoint and one more alone pass it, which holds just those two and says so; be read by another canvas module except through a declared array; hold session history.
 
 **Lands:** R6
 
