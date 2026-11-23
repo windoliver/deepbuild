@@ -2,15 +2,22 @@
 // way deep-hook sends them: at the session's end, and before a push held in a proceed turn raises its ask (within
 // ARCHIVE_WAIT_MS). The agent's projects folder is made one the archive can pass through but not list before the
 // session's transcript is written, so the walk, the hub's own pass included, can't reach it: only the named path does.
-import { chmodSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { hookLine, reply, send, session, withHub } from './hub.js';
 
 const QUESTION = 'Shall I push the fix to main?';
-/** The hub's archive reads Claude Code's folder under HOME only when CLAUDE_CONFIG_DIR is unset: '' makes it skip that. */
-const HOME_ONLY = { CLAUDE_CONFIG_DIR: '' };
+/**
+ * The hub's archive reads Claude Code's folder under HOME only when CLAUDE_CONFIG_DIR is unset: '' makes it skip that.
+ * PATH loses every folder holding a `claude`: at SessionStart the hub runs `claude auth status` in the session's home
+ * (#1033), which writes `.claude/.claude.json` there and can outlive the hub's stop, racing the home's removal.
+ */
+const HOME_ONLY = {
+  CLAUDE_CONFIG_DIR: '',
+  PATH: (process.env.PATH ?? '').split(delimiter).filter((dir) => dir && !existsSync(join(dir, 'claude'))).join(delimiter),
+};
 const handle = (id: string) => `session:${id.replace(/-/g, '')}`;
 
 /** Runs `body` with `home`'s Claude Code projects folder unlistable, its mode put back after. */
