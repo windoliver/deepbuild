@@ -414,6 +414,12 @@ pub struct Planted {
     /// A seek restores the checkpoint nearest to t by distance, the earlier of two equally
     /// near, instead of the last one at or before t (#488's planted seek).
     pub checkpoint_nearest: bool,
+    /// The checkpoint ring lets go of the checkpoint at the start as if it were every second
+    /// one, and a seek before its earliest checkpoint restores that one (#2693's planted ring).
+    pub ring_drops_start: bool,
+    /// The checkpoint ring holds only its newest checkpoint, so its spacing never doubles
+    /// (#2693's planted ring).
+    pub ring_newest_only: bool,
     /// A session's own frame merges the results of nodes run on several threads in the order
     /// they finished, not the plan's node order (#857's planted merge); a revision's check and
     /// its probe frame still merge in order, so the revision is accepted.
@@ -1663,11 +1669,14 @@ impl Session {
     /// nothing else in the document changes. Those items are rekeyed and stamped by the classes
     /// their changed fields fall in, as `load` would stamp them, without compiling the plan again;
     /// then the revision's check phases run. `None` when the revision reaches further, for `load`.
+    /// `reached` names the members besides `items` its patch reached: only those are compared
+    /// with the revision before, so a patch's cost is not the other members' size (#2700).
     pub fn revise_items(
         &mut self,
         s: &mut Scheduler<'_>,
         doc: &Value,
         ids: &[&str],
+        reached: &[&str],
     ) -> Option<Vec<OpIssue>> {
         self.sync_hash(s);
         let v = s.options.hash;
@@ -1678,11 +1687,15 @@ impl Session {
             if items.len() != l.items.len() {
                 return None;
             }
-            for (k, value) in doc.as_object()? {
-                if k != "items" && l.doc.get(k) != Some(value) {
-                    return None;
-                }
+            if reached.iter().any(|k| l.doc.get(k) != doc.get(k)) {
+                return None;
             }
+            debug_assert!(
+                doc.as_object().is_some_and(|d| d
+                    .iter()
+                    .all(|(k, v)| k == "items" || l.doc.get(k) == Some(v))),
+                "a member the patch did not name as reached changed"
+            );
             // A per-document operator's `applies` reads no item, so it is asked once, not per ID.
             let documents_alike = ids.is_empty()
                 || s.sealed

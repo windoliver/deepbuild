@@ -298,6 +298,18 @@
     "called_by": "deep lease"
   },
   {
+    "method": "lease.gpu",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep-show"
+  },
+  {
+    "method": "lease.release",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep-show"
+  },
+  {
     "method": "extension.install",
     "since": "R1",
     "stability": "stable",

@@ -1,0 +1,7 @@
+    Blocking waiting for file lock on build directory
+stale: changed "~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/copy/crates/deep-app"
+          (vs) "~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/target/debug/build/deep-show-2cc04fdb4cfb4604/output"
+               FileTime { seconds: 1795430208, nanos: 972562310 } < FileTime { seconds: 1795431807, nanos: 835208515 }
+fingerprint dirty for deep-show v0.0.0 (~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/copy/crates/deep-show)/Build/TargetInner { name: "deep-show", doc: true, ..: with_path("~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/copy/crates/deep-show/src/main.rs", Edition2021) }
+   Compiling deep-show v0.0.0 (~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/copy/crates/deep-show)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 30.84s

@@ -510,7 +510,7 @@ impl Hub<'_> {
             }
             let (_, referrers) = shared.referrers.as_ref().expect("made above");
             recheck_with(
-                &shared.doc,
+                &mut shared.doc,
                 &last,
                 &changed,
                 &self.startup.sealed,

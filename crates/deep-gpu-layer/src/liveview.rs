@@ -1284,7 +1284,8 @@ impl View {
             }
         }
         let i = timer.start(GEOMETRY_PASS, session);
-        self.renderer.record_geometry(encoder, timer.writes(i));
+        self.renderer
+            .record_geometry(device, encoder, timer.writes(i));
         timer.end(i);
         #[cfg(feature = "test-meter")]
         self.test.record(

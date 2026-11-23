@@ -67,6 +67,7 @@ pub mod panel_keys;
 pub mod panel_module;
 pub mod panel_tree;
 pub mod panel_values;
+pub mod pictures;
 pub mod plain;
 pub mod question;
 pub mod record;

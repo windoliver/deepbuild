@@ -276,9 +276,77 @@ pub fn compile(
 /// The document's light policy (`light_policy`): its soft shadows, contact shadows and local
 /// shadows, each refused at its field.
 pub fn policy(doc: &Map<String, Value>) -> Result<Shadowing, Refused> {
-    let Some(p) = doc.get("light_policy") else {
-        return Ok(Shadowing::default());
+    let mut out = match doc.get("light_policy") {
+        None => Shadowing::default(),
+        Some(p) => named(doc, p)?,
     };
+    out.tiles = tiles(doc)?;
+    Ok(out)
+}
+
+/// Whether `doc` holds its local shadows in tiles (#2034): `shadowed.local: auto` in a work
+/// product or above, naming no `spots`, `points` or `local_map`, with more than 2 shadowed spots
+/// or any shadowed point or area light among its items. Decided once per document, never per frame.
+fn tiles(doc: &Map<String, Value>) -> Result<bool, Refused> {
+    let p = doc.get("light_policy");
+    let s = p.and_then(|p| p.get("shadowed"));
+    let fixed = match s.and_then(|s| s.get("local")) {
+        None => false,
+        Some(v) => match v.as_str() {
+            Some("auto") => false,
+            Some("fixed") => true,
+            _ => {
+                return Err(Refused {
+                    code: "out_of_range",
+                    path: "light_policy/shadowed/local".into(),
+                })
+            }
+        },
+    };
+    let names = |o: Option<&Value>, k: &str| o.and_then(|o| o.get(k)).is_some();
+    if fixed || names(s, "spots") || names(s, "points") || names(p, "local_map") {
+        return Ok(false);
+    }
+    if !locals_allowed(doc) {
+        return Ok(false);
+    }
+    let (mut spots, mut points) = (0, 0);
+    for item in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .map(|(_, v)| v)
+    {
+        if item.pointer("/params/shadow").and_then(Value::as_bool) != Some(true) {
+            continue;
+        }
+        match item.get("kind").and_then(Value::as_str) {
+            Some("light.spot@1") => spots += 1,
+            Some("light.point@1" | "light.area@1") => points += 1,
+            _ => {}
+        }
+    }
+    Ok(spots > 2 || points > 0)
+}
+
+/// The budget class's word on local maps: from a work product up (Light policy: local shadows).
+fn locals_allowed(doc: &Map<String, Value>) -> bool {
+    !matches!(
+        class(doc),
+        Some(Class::CoreView | Class::DataView | Class::Figure)
+    )
+}
+
+fn class(doc: &Map<String, Value>) -> Option<Class> {
+    doc.get("budget")
+        .and_then(|b| b.get("class"))
+        .and_then(Value::as_str)
+        .and_then(Class::parse)
+}
+
+/// The fields of a `light_policy` `p` the document names.
+fn named(doc: &Map<String, Value>, p: &Value) -> Result<Shadowing, Refused> {
     let mut out = Shadowing::named();
     let bad = |k: &str| Refused {
         code: "out_of_range",
@@ -323,19 +391,11 @@ pub fn policy(doc: &Map<String, Value>) -> Result<Shadowing, Refused> {
     }
     // The classes the Cost lines name: soft shadows from a figure up, local maps from a work
     // product up. A class below them keeps the tent, and its shadows are reported as dropped.
-    let class = doc
-        .get("budget")
-        .and_then(|b| b.get("class"))
-        .and_then(Value::as_str)
-        .and_then(Class::parse);
-    if matches!(class, Some(Class::CoreView | Class::DataView)) {
+    if matches!(class(doc), Some(Class::CoreView | Class::DataView)) {
         out.soft = None;
         out.contact = None;
     }
-    if matches!(
-        class,
-        Some(Class::CoreView | Class::DataView | Class::Figure)
-    ) {
+    if !locals_allowed(doc) {
         out.spots = 0;
         out.points = 0;
     }

@@ -1,6 +1,7 @@
 /** An event of the record, as plain data. `session` has no `session:` prefix. A turn is the id of the user.ask that began it. */
 export interface RecordEvent { id: string; kind: string; v?: number; ts: number; session: string | null; subject?: string | null; data: Record<string, unknown> }
-export type Cost = { basis: 'reported'; usd: number } | { basis: 'estimated'; usd: number; rate_card: string } | { basis: 'unpriced' };
+/** `at_least` marks an estimate that priced a cache write of unknown lifetime at the five-minute rate, the lower of the two. */
+export type Cost = { basis: 'reported'; usd: number } | { basis: 'estimated'; usd: number; rate_card: string; at_least?: true } | { basis: 'unpriced' };
 export interface HeldBy { question: number; slow: number; fast: number; snapshot_start: number; queue_wait: number }
 export interface ClassifierCheck { id: string; n: number; agreement: number | null; yes: number; recall: number | null; precision: number | null; status: 'PASS' | 'FAIL' | 'BLOCKED'; labelled_by: string | null }
 export interface Reading {
