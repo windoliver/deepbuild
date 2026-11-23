@@ -1,0 +1,42 @@
+#!/bin/bash
+# #1119 Mac readings, nested: each perf runs under a build grant its own chain holds, so its timed request is nested
+# (throttle.mjs grantable(): no load gate for a nested request; every grant outside the chain still drains).
+# Run a repeats (at most 3) until its base side compiles nothing; then run b, the second worktree.
+unset GIT_CONFIG_PARAMETERS CARGO_TARGET_DIR DEEP_THROTTLE DEEP_PERF_LOCK
+R=~/deepbuild-runs-1119
+export PATH="$R/shim:$HOME/.nvm/versions/node/v24.22.0/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+freeg() { df -g /System/Volumes/Data | awk 'NR==2{print $4}'; }
+state() { echo "== $1 $(date -u +%FT%TZ)"; uptime; pmset -g therm 2>&1 | grep -v '^$'; pmset -g batt | head -2; df -h /System/Volumes/Data | tail -1; du -sh "$HOME"/Library/Caches/deepbuild-perf/MacBook-Pro-* 2>/dev/null; }
+K="$HOME/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d"
+users() { /usr/sbin/lsof +D "$K/base/copy" +D "$K/without-tests" 2>/dev/null | awk 'NR>1{print $2}' | sort -u; }
+# perf's allowance stops only the measured group; a test that started a group of its own runs on in the kept copy.
+# Wait up to 10 min for such leftovers, then stop each one's group by PGID (this run's own, never another's: the copy
+# is keyed to this clone) and record it.
+leftovers() { local O=$1 i
+  for i in $(seq 20); do [ -z "$(users)" ] && { echo "kept copy idle after $((i-1))x30 s" >> $O/meta.txt; return; }; /bin/sleep 30; done
+  for q in $(users); do g=$(ps -o pgid= -p $q | tr -d ' '); [ -n "$g" ] && echo "leftover pid $q pgid $g: $(ps -o lstart=,command= -p $q | cut -c1-160)"; done | sort -u -k4,4 >> $O/meta.txt
+  for g in $(for q in $(users); do ps -o pgid= -p $q; done | sort -u); do kill -TERM -$g 2>/dev/null; done; /bin/sleep 10
+  for g in $(for q in $(users); do ps -o pgid= -p $q; done | sort -u); do kill -KILL -$g 2>/dev/null; done
+  echo "leftover groups stopped; users now: $(users | wc -l)" >> $O/meta.txt; }
+tree() { local p=$1; echo $p; for c in $(pgrep -P $p); do tree $c; done; }
+attempt() { # $1 worktree, $2 label
+  O=$R/out/$2; mkdir -p $O/cargo
+  cd $R/clone/.claude/worktrees/$1 || exit 9
+  { echo "worktree: $PWD"; echo "head: $(/usr/bin/git rev-parse HEAD)  origin/main: $(/usr/bin/git rev-parse origin/main)"; hostname; sysctl -n hw.model hw.ncpu hw.memsize; sw_vers | tr '\n' ' '; echo; node --version; cargo --version; echo "command: node scripts/throttle.mjs build --wait 720 -- node scripts/perf.mjs '{\"status\":0,\"elapsedMs\":1,\"cpuMs\":1,\"peakBytes\":1}'"; state start; } > $O/meta.txt 2>&1
+  export DEEP_1119_CARGO_LOG=$O/cargo
+  ( /usr/bin/time -l -o $O/time.txt node scripts/throttle.mjs build --wait 720 -- node scripts/perf.mjs '{"status":0,"elapsedMs":1,"cpuMs":1,"peakBytes":1}' 2> $O/perf.stderr & echo $! > $O/pid; wait $!; echo $? > $O/exit ) | while IFS= read -r line; do printf '%s %s\n' "$(date -u +%FT%TZ) $(sysctl -n vm.loadavg)" "$line"; done > $O/perf.stdout &
+  while [ ! -f $O/exit ]; do
+    echo "$(date -u +%FT%TZ) $(sysctl -n vm.loadavg) free=$(freeg)G" >> $O/load.txt
+    if [ "$(freeg)" -lt 15 ] && [ ! -f $O/stopped ]; then touch $O/stopped; echo "DISK LOW ($(freeg)G): stopping this run's own tree from $(cat $O/pid)" >> $O/meta.txt; for q in $(tree $(cat $O/pid)); do kill -TERM $q 2>/dev/null; done; fi
+    for i in $(seq 60); do [ -f $O/exit ] && break; /bin/sleep 1; done
+  done
+  wait
+  { echo "exit: $(cat $O/exit)"; echo "base-copy Compiling lines: $($R/count-base.sh $O)"; echo "cargo calls logged: $(ls $O/cargo | wc -l)"; state end; } >> $O/meta.txt 2>&1
+  leftovers $O
+  grep -E 'granted.*"pid":' ~/.deepbuild/throttle/log | tail -400 > $O/throttle-tail.log
+  echo "ATTEMPT $2 exit $(cat $O/exit) base-compiles $($R/count-base.sh $O)"
+}
+retrying() { local wt=$1 base=$2 n=0; while :; do n=$((n+1)); attempt $wt $base-$n; code=$(cat $R/out/$base-$n/exit); [ -f $R/out/$base-$n/stopped ] && { echo STOPPED; exit 4; }; LAST=$R/out/$base-$n; [ "$code" = 3 ] || [ "$code" = 2 ] || break; [ $n -ge 12 ] && { echo "no grant in 12 attempts"; exit 3; }; done; }
+for k in ${AK-3 4 5}; do retrying a a$k; c=$($R/count-base.sh $LAST); calls=$(ls $LAST/cargo | wc -l | tr -d " "); echo "a$k base compiles: $c (cargo calls $calls)"; [ "$c" = 0 ] && [ "$calls" -gt 20 ] && break; done
+retrying b b
+echo ALL DONE

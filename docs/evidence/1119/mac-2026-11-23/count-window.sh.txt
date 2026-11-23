@@ -1,0 +1,9 @@
+#!/bin/bash
+# Base-copy Compiling/Checking lines, split by whether the cargo call started before perf's verdict line.
+# Usage: count-window.sh <run dir> <verdict as local YYYYmmddTHHMMSS>
+d=$1; cut=$2; in=0; out=0; cin=0; cout=0
+for f in $d/cargo/*.log; do [ -f "$f" ] || continue
+  case "$(sed -n 2p "$f")" in "cwd: "*"/deepbuild-perf/"*"/base/copy"*) ;; *) continue;; esac
+  c=$(/usr/bin/grep -cE '^ *(Compiling|Checking) ' "$f"); t=$(basename "$f" | cut -c1-15)
+  if [[ "$t" < "$cut" ]]; then in=$((in+c)); cin=$((cin+1)); else out=$((out+c)); cout=$((cout+1)); fi
+done; echo "before verdict: $in units in $cin base calls; after: $out units in $cout base calls"

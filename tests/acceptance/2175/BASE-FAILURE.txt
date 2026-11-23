@@ -19,7 +19,7 @@ base b4a2049e8, 2026-11-19, command: node --test tests/acceptance/2175/spike.tes
 test at tests/acceptance/2175/spike.test.mjs:42:1
 ✖ AC1 #2175.4aade462 every symbol `nm -u` prints for the release deep-hook is a table row under docs/spikes/2175/ with code and paths cells (1.787625ms)
   AssertionError [ERR_ASSERTION]: docs/spikes/2175/ holds a markdown file with the table
-      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:44:10)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:44:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.start (node:internal/test_runner/test:1262:17)
@@ -35,8 +35,8 @@ test at tests/acceptance/2175/spike.test.mjs:42:1
 test at tests/acceptance/2175/spike.test.mjs:60:1
 ✖ AC2 #2175.720f6375 the record holds, per cut, --version and forwarded-Read instructions-retired readings, 15 or more a side (0.648ms)
   AssertionError [ERR_ASSERTION]: docs/spikes/2175/ holds a record file (.json)
-      at loadRecord (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:23:10)
-      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:61:15)
+      at loadRecord (file://~/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:23:10)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:61:15)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -54,8 +54,8 @@ test at tests/acceptance/2175/spike.test.mjs:60:1
 test at tests/acceptance/2175/spike.test.mjs:74:1
 ✖ AC2 #2175.720f6375 the base side is the merge base, an ancestor of HEAD, and the runs were interleaved (0.3785ms)
   AssertionError [ERR_ASSERTION]: docs/spikes/2175/ holds a record file (.json)
-      at loadRecord (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:23:10)
-      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:75:31)
+      at loadRecord (file://~/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:23:10)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:75:31)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -73,7 +73,7 @@ test at tests/acceptance/2175/spike.test.mjs:74:1
 test at tests/acceptance/2175/spike.test.mjs:85:1
 ✖ AC2 #2175.720f6375 the measuring script is under docs/spikes/2175/ and the record gives the command that runs it (0.271958ms)
   AssertionError [ERR_ASSERTION]: a measuring script (.mjs or .sh) sits under docs/spikes/2175/
-      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:87:10)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:87:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -91,7 +91,7 @@ test at tests/acceptance/2175/spike.test.mjs:85:1
 test at tests/acceptance/2175/spike.test.mjs:93:1
 ✖ AC3 #2175.247c2609 a recommendation names the cuts worth an issue of their own, or says none is (0.186708ms)
   AssertionError [ERR_ASSERTION]: a markdown file under docs/spikes/2175/ has a Recommendation heading
-      at TestContext.<anonymous> (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:97:10)
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/agent-ab64578232c0f2727/tests/acceptance/2175/spike.test.mjs:97:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)

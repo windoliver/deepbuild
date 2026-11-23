@@ -1,0 +1,11 @@
+--- a/packages/leases/src/index.ts	2026-11-21 22:36:46
++++ b/packages/leases/src/index.ts	2026-11-21 22:36:46
+@@ -316,7 +316,7 @@
+     } else {
+       const conflicts = (held: Mode): boolean => (this.plant === 'ignores-mode' ? true
+         : this.plant === 'checks-held-mode-only' ? held === 'exclusive'
+-          : held === 'exclusive' || mode === 'exclusive');
++          : held === 'exclusive' && mode === 'exclusive');
+       // A holder's own lease blocks it only from another run of its own, whose process may still use the key.
+       const other = (l: Lease): boolean => {
+         const run = this.held.get(l.id)?.run;

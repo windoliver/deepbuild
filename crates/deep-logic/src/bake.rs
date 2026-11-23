@@ -212,6 +212,9 @@ impl Record {
 
     /// Item `id`'s arrays whole at step label `at` (the state before step `at`), once.
     pub(crate) fn whole(&mut self, id: &str, at: i64, arrays: &[u8]) {
+        if self.none {
+            return;
+        }
         self.wholes
             .entry(id.to_string())
             .or_default()

@@ -13,6 +13,9 @@ pub struct Hashed {
     pub track: u64,
 }
 
+/// A step's field hashes, `(module, field, hash)` in canonical order (#550: Net: desync and replay).
+pub(crate) type Fields = Vec<(String, String, u64)>;
+
 /// One player's message for one match step: its entries, a full-state hash it confirmed, how its
 /// copy ended the match when it did, and, once a desync stopped it, what its locator found.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -22,7 +25,7 @@ pub(crate) struct Message {
     pub(crate) end: Option<(String, Value)>,
     /// One part of what its locator found (`Found::parts`).
     pub(crate) found: Option<Value>,
-    pub(crate) fields: Vec<(i64, Vec<(String, String, u64)>)>,
+    pub(crate) fields: Vec<(i64, Fields)>,
     /// #552's planted net module puts its copy's `match.me` here; a message never holds it.
     pub(crate) me: Option<u8>,
 }

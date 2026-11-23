@@ -15,6 +15,7 @@ compile_error!("the env-plants feature is for test builds only, never a release 
 
 pub mod actions;
 pub mod address;
+mod agents;
 pub mod answer;
 pub mod arming;
 pub mod bound;
@@ -69,6 +70,7 @@ pub mod panel_values;
 pub mod plain;
 pub mod question;
 pub mod record;
+mod rows;
 pub mod rules;
 /// #2494: a 3D writer layer in the canvas panel, drawn through a GPU-layer view.
 #[cfg(target_os = "macos")]
