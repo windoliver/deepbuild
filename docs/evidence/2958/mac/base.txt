@@ -1,0 +1,55 @@
+# round 2958a, clone base at 58b4a8cb264a1ce0bd52e495992b87b30378affa, 2026-11-22T10:39:08Z
+# T=$T H=$T/h R=$T/r; every command: env -i HOME=$H PATH=<node 24 dir>:/usr/bin:/bin, cwd $H
+# load: load averages: 51.98 76.43 84.47
+
+## step 1: installed hub
+$ node C/packages/cli/dist/main.js hub run &
+hub 1 pid 31149
+socket exists: $T/h/.deepbuild/hub.sock (after ~0 s)
+
+$ C/target/debug/deep-app --hub-check
+stdout:
+hub ok: contract 1.0
+stderr:
+exit: 0
+
+$ (sleep 5) | C/target/debug/deep-replica-canvas --out $T/c1
+stdout first line:
+{"ready":true}
+stdout lines: 1
+stderr:
+exit: 0
+
+## step 2: second hub at --root $R, config.json points at it
+$ node C/packages/cli/dist/main.js hub run --root $R &
+hub 2 pid 32109
+socket exists: $T/r/hub.sock (after ~0 s)
+$H/.deepbuild/config.json: {"hub":{"address":"unix:$T/r/hub.sock"}}
+
+$ C/target/debug/deep-app --hub-check
+stdout:
+hub ok: contract 1.0
+stderr:
+deep-app: the hub refused a call: Refused(Object {"code": String("credential"), "retryable": Bool(false), "remediation": String("Present the control token this hub wrote to control.token at its launch; an earlier launch's token no longer counts."), "path": String("/token"), "actual": String(""), "evidence": Array []})
+exit: 0
+
+$ (sleep 5) | C/target/debug/deep-replica-canvas --out $T/c2
+stdout first line:
+{"ready":false,"error":"Refused(Object {\"code\": String(\"credential\"), \"retryable\": Bool(false), \"remediation\": String(\"Present the control token this hub wrote to control.token at its launch; an earlier launch's token no longer counts.\"), \"path\": String(\"/token\"), \"actual\": String(\"\"), \"evidence\": Array []})"}
+stdout lines: 1
+stderr:
+exit: 1
+
+## step 3: stop hubs by PID (SIGTERM), remove $T
+SIGTERM -> 31149
+SIGTERM -> 32109
+hub pid 31149 exit status 75
+hub pid 32109 exit status 0
+--- hub1.out (1 lines, first 20):
+{"v":1,"ready":true,"pid":31149,"socket":"$T/h/.deepbuild/hub.sock","start":"01M81DD6WKDHC4N5BPGPS72YPV"}
+--- hub1.err (0 lines, first 20):
+--- hub2.out (1 lines, first 20):
+{"v":1,"ready":true,"pid":32109,"socket":"$T/r/hub.sock","start":"01M81DDCX9TVTJVS9R3PB21S9R"}
+--- hub2.err (0 lines, first 20):
+$T removed
+# load: load averages: 47.85 74.74 83.77

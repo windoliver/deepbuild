@@ -1,0 +1,67 @@
+# round 2958a, clone base at 58b4a8cb264a1ce0bd52e495992b87b30378affa, 2026-11-22T10:36:28Z
+# T=$T H=$T/h R=$T/r; every command: env -i HOME=$H PATH=<node 24 dir>:/usr/bin:/bin, cwd $H
+# load: load averages: 85.86 95.86 91.89
+
+## step 1: installed hub
+$ node C/packages/cli/dist/main.js hub run &
+hub 1 pid 15853
+socket exists: $T/h/.deepbuild/hub.sock (after ~0 s)
+
+$ C/target/debug/deep-app --hub-check
+stdout:
+stderr:
+deep-app: the hub at $T/h/.deepbuild/hub.sock didn't answer: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+exit: 1
+
+$ (sleep 5) | C/target/debug/deep-replica-canvas --out $T/c1
+stdout first line:
+{"ready":false,"error":"Io(Os { code: 2, kind: NotFound, message: \"No such file or directory\" })"}
+stdout lines: 1
+stderr:
+exit: 1
+
+## step 2: second hub at --root $R, config.json points at it
+$ node C/packages/cli/dist/main.js hub run --root $R &
+hub 2 pid 16412
+socket exists: $T/r/hub.sock (after ~0 s)
+$H/.deepbuild/config.json: {"hub":{"address":"unix:$T/r/hub.sock"}}
+
+$ C/target/debug/deep-app --hub-check
+stdout:
+hub ok: contract 1.0
+stderr:
+deep-app: the hub refused a call: Refused(Object {"code": String("credential"), "retryable": Bool(false), "remediation": String("Present the control token this hub wrote to control.token at its launch; an earlier launch's token no longer counts."), "path": String("/token"), "actual": String(""), "evidence": Array []})
+exit: 0
+
+$ (sleep 5) | C/target/debug/deep-replica-canvas --out $T/c2
+stdout first line:
+{"ready":false,"error":"Refused(Object {\"code\": String(\"credential\"), \"retryable\": Bool(false), \"remediation\": String(\"Present the control token this hub wrote to control.token at its launch; an earlier launch's token no longer counts.\"), \"path\": String(\"/token\"), \"actual\": String(\"\"), \"evidence\": Array []})"}
+stdout lines: 1
+stderr:
+exit: 1
+
+## step 3: stop hubs by PID (SIGTERM), remove $T
+pid 15853 already gone
+pid 16412 already gone
+hub pid 15853 exit status 1
+hub pid 16412 exit status 1
+--- hub1.out (0 lines, first 20):
+--- hub1.err (7 lines, first 20):
+deep hub: the core stopped: Error: no deep-hook is built under /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/target; run cargo build -p deep-hook first
+    at deepHook (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/paths.js:230:15)
+    at Object.guard (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/core.js:404:75)
+    at Products.secure (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/products.js:203:36)
+    at Products.open (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/core.js:873:29)
+    at async Core.init (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/core.js:598:9)
+--- hub2.out (0 lines, first 20):
+--- hub2.err (7 lines, first 20):
+deep hub: the core stopped: Error: no deep-hook is built under /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/target; run cargo build -p deep-hook first
+    at deepHook (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/paths.js:230:15)
+    at Object.guard (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/core.js:404:75)
+    at Products.secure (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/products.js:203:36)
+    at Products.open (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/core.js:873:29)
+    at async Core.init (file:///private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-epic-hugle-510c89/26640051-3807-49f2-9c0c-6a19a7c88985/scratchpad/base/packages/hub/dist/core.js:598:9)
+$T removed
+# load: load averages: 72.23 92.34 90.71

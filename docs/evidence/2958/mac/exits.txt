@@ -1,0 +1,23 @@
+base: node v24.22.0, cargo 1.99.1 (5f94df478 2026-08-27)
+head: node v24.22.0, cargo 1.99.1 (5f94df478 2026-08-27)
+head: npm ci -> exit 0
+base: npm ci -> exit 0
+base: npm run build --workspaces -> exit 0
+head: npm run build --workspaces -> exit 0
+head: cargo build --locked -p deep-hook -p deep-app --bin deep-app -p deep-replica --bin deep-replica-canvas -> exit 0
+base: cargo build --locked -p deep-hook -p deep-app --bin deep-app -p deep-replica --bin deep-replica-canvas -> exit 0
+base: step 1 deep-app --hub-check -> exit 1
+base: step 1 deep-replica-canvas --out $T/c1 -> exit 1
+base: step 2 deep-app --hub-check -> exit 0
+base: step 2 deep-replica-canvas --out $T/c2 -> exit 1
+note: the cargo line above built no deep-hook binary (its --bin filters select only deep-app and deep-replica-canvas), so both base hubs stopped with "no deep-hook is built"; the four base step lines above are that attempt (base-attempt1-no-deep-hook.txt). Added, outside the brief:
+base: cargo build --locked -p deep-hook -> exit 0
+head: cargo build --locked -p deep-hook -> exit 0
+base: step 1 deep-app --hub-check -> exit 0
+base: step 1 deep-replica-canvas --out $T/c1 -> exit 0
+base: step 2 deep-app --hub-check -> exit 0
+base: step 2 deep-replica-canvas --out $T/c2 -> exit 1
+head: step 1 deep-app --hub-check -> exit 0
+head: step 1 deep-replica-canvas --out $T/c1 -> exit 0
+head: step 2 deep-app --hub-check -> exit 0
+head: step 2 deep-replica-canvas --out $T/c2 -> exit 0

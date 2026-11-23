@@ -1,0 +1,54 @@
+# round 2958a, clone head at ea7073c63634a0b0f52ca6732ddf41b13dbf7fff, 2026-11-22T10:39:20Z
+# T=$T H=$T/h R=$T/r; every command: env -i HOME=$H PATH=<node 24 dir>:/usr/bin:/bin, cwd $H
+# load: load averages: 47.85 74.74 83.77
+
+## step 1: installed hub
+$ node C/packages/cli/dist/main.js hub run &
+hub 1 pid 32489
+socket exists: $T/h/.deepbuild/hub.sock (after ~0 s)
+
+$ C/target/debug/deep-app --hub-check
+stdout:
+hub ok: contract 1.0
+stderr:
+exit: 0
+
+$ (sleep 5) | C/target/debug/deep-replica-canvas --out $T/c1
+stdout first line:
+{"ready":true}
+stdout lines: 1
+stderr:
+exit: 0
+
+## step 2: second hub at --root $R, config.json points at it
+$ node C/packages/cli/dist/main.js hub run --root $R &
+hub 2 pid 33115
+socket exists: $T/r/hub.sock (after ~0 s)
+$H/.deepbuild/config.json: {"hub":{"address":"unix:$T/r/hub.sock"}}
+
+$ C/target/debug/deep-app --hub-check
+stdout:
+hub ok: contract 1.0
+stderr:
+exit: 0
+
+$ (sleep 5) | C/target/debug/deep-replica-canvas --out $T/c2
+stdout first line:
+{"ready":true}
+stdout lines: 1
+stderr:
+exit: 0
+
+## step 3: stop hubs by PID (SIGTERM), remove $T
+SIGTERM -> 32489
+SIGTERM -> 33115
+hub pid 32489 exit status 75
+hub pid 33115 exit status 0
+--- hub1.out (1 lines, first 20):
+{"v":1,"ready":true,"pid":32489,"socket":"$T/h/.deepbuild/hub.sock","start":"01M81DDJN8XCDV5AS0YE4JFD6Z"}
+--- hub1.err (0 lines, first 20):
+--- hub2.out (1 lines, first 20):
+{"v":1,"ready":true,"pid":33115,"socket":"$T/r/hub.sock","start":"01M81DDVE3ZRZZ3DW5J5FBCHPH"}
+--- hub2.err (0 lines, first 20):
+$T removed
+# load: load averages: 62.68 76.97 84.42
