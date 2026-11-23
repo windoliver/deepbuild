@@ -94,7 +94,7 @@
     "conformance": "claude/usage/counting",
     "cost": "reported",
     "costFrom": "the status line's cost.total_cost_usd in a session, the result event's total_cost_usd in a job",
-    "tokens": "assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens"
+    "tokens": "assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens; the cache writes' split by lifetime is message.usage.cache_creation's ephemeral_5m_input_tokens and ephemeral_1h_input_tokens, and a record without it gives the total alone"
   },
   "questionTools": {
     "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",

@@ -2087,7 +2087,9 @@ export class Core {
     if (meta.agent === 'claude-code') {
       const tail = this.state.tails.get(meta.session) ?? new UsageTail();
       this.state.tails.set(meta.session, tail);
-      const { tokens, cost, model } = await tail.read(meta.transcript);
+      const { tokens, cost: counted, model } = await tail.read(meta.transcript);
+      // turn.usage@1's cost has no place for the count's "at least", so the event carries the amount alone.
+      const cost = counted.basis === 'estimated' ? { basis: counted.basis, usd: counted.usd, rate_card: counted.rate_card } : counted;
       if (model) usage = { turn: this.state.live.get(meta.session)?.turnAsk ?? meta.fields?.prompt_id ?? meta.id, model, covers: 'session', tokens: { input: tokens.input + tokens.cache_write, cached: tokens.cache_read, output: tokens.output, exact: true }, cost };
     } else if (meta.agent === 'codex') {
       const text = await readFile(meta.transcript, 'utf8').catch(() => '');
