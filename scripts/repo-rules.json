@@ -2181,6 +2181,10 @@
           "spec": "^0.25",
           "why": "Issue #498: PNG images decoded in the worker; already in the tree (deep-show, deep-app)."
         },
+        "png": {
+          "spec": "^0.18",
+          "why": "Issue #1488: a still converted at intake is written as a PNG tagged sRGB; already in the tree (image's PNG codec)."
+        },
         "basisu_c_sys": {
           "spec": "^0.9.1",
           "why": "Issue #423: KTX2 maps (Basis Universal ETC1S or UASTC) transcoded to BC in the decode worker."
