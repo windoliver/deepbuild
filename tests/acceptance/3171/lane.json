@@ -1,0 +1,1 @@
+{ "alone": true, "why": "each test runs deep-gpu's span test on the GPU, alone or beside a second process that keeps the GPU busy; another GPU user beside it changes both readings" }

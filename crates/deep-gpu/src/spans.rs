@@ -276,10 +276,15 @@ impl Spans {
     /// its own (#239); `Some(0.0)` with no span, `None` without timestamps, with a span still open,
     /// or when the times didn't map or a span ends before it begins.
     pub fn covered_ms(&self) -> Option<f64> {
+        self.spans_ms().map(|mut spans| union(&mut spans))
+    }
+
+    /// [`Spans::covered_ms`]'s spans, each its start and end in ms, in the order they began.
+    fn spans_ms(&self) -> Option<Vec<[f64; 2]>> {
         let inner = self.lock();
         let q = inner.query.as_ref().filter(|_| inner.held == 0)?;
         if inner.n == 0 {
-            return Some(0.0);
+            return Some(Vec::new());
         }
         let count = 2 * inner.n as u32;
         let bytes = u64::from(count) * 8;
@@ -301,11 +306,11 @@ impl Spans {
                 .collect()
         });
         q.read.unmap();
-        let mut spans = spans?;
+        let spans = spans?;
         if spans.iter().any(|[a, b]| b < a) {
             return None;
         }
-        Some(union(&mut spans))
+        Some(spans)
     }
 }
 
@@ -369,6 +374,17 @@ mod tests {
     /// One submission of a full-screen pass looping `loops` times a pixel, its own begin and end
     /// written into `query` at 0 and 1: the view it draws into.
     fn spin(dev: &Device, loops: u32, query: &wgpu::QuerySet) -> wgpu::TextureView {
+        let (pass, view) = pass(dev, loops, query);
+        dev.queue.submit([pass]);
+        view
+    }
+
+    /// [`spin`]'s pass, not yet submitted.
+    fn pass(
+        dev: &Device,
+        loops: u32,
+        query: &wgpu::QuerySet,
+    ) -> (wgpu::CommandBuffer, wgpu::TextureView) {
         let d = &dev.device;
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
@@ -434,8 +450,7 @@ mod tests {
             pass.set_pipeline(&pipeline);
             pass.draw(0..3, 0..1);
         }
-        dev.queue.submit([encoder.finish()]);
-        view
+        (encoder.finish(), view)
     }
 
     /// A pass's own two timestamps in ms, read once its work is done.
@@ -463,13 +478,26 @@ mod tests {
         [tick(&data[..8]), tick(&data[8..])].map(|t| t * period / 1e6)
     }
 
-    /// Two passes submitted 200 ms apart while the spans are armed, each span ended by what its
-    /// pass drew, in four trials: the spans cover the heavy pass's own timestamps to within 0.1 ms
-    /// (a span's start trails its work's by the GPU's sampling grain at most, at rest), which a span
-    /// end with no dependency on its pass misses by milliseconds (on this GPU it lands beside the
-    /// pass in about half of trials); and the CPU's 200 ms between them counts in neither. A pass on
-    /// a GPU other processes share can wait for their work inside its span, so the bound on what
-    /// the spans add is half the gap.
+    /// Two passes, the second submitted 200 ms after the first's work is done, while the spans are
+    /// armed, each span ended by what its pass drew, in four trials: the spans cover the heavy
+    /// pass's own timestamps to within 0.1 ms (a span's start trails its work's by the GPU's
+    /// sampling grain at most, at rest), which a span end with no dependency on its pass misses by
+    /// milliseconds (on this GPU it lands beside the pass in about half of trials); and the CPU's
+    /// 200 ms between them counts in neither: the spans add less than half the gap to the passes'
+    /// own time. Each trial states its readings.
+    ///
+    /// A span's end is a submission of its own, so on a GPU other processes share it can wait
+    /// behind their work, and the span holds that wait (#3171: on the Spark, a second process's
+    /// passes ran between the heavy pass and its span's end, and the span held each one whole).
+    /// So right after each span's end, a one-pass witness of its own timestamps is submitted past
+    /// the spans: it runs after that end, and it begins later than its pass ended only by the time
+    /// the GPU spent on work this test didn't submit. A span's start goes in its pass's own
+    /// submission, so any time from it to the pass's begin is others' work too. When the spans add
+    /// half the gap, but no more than these waits (and 1 ms for the marks' own time, a fraction of a
+    /// millisecond each at rest), the GPU was shared and the trial says nothing either way:
+    /// INCONCLUSIVE. Any more than they waited is time the GPU wasn't running anyone's work, the
+    /// gap: FAIL. The 200 ms start once the heavy pass's work is done, so others' work holding
+    /// that pass back can't fill the gap and hide a span that counts it.
     #[test]
     fn a_span_holds_its_submission_and_not_the_gap_after_it() {
         let Ok(opened) = Gpu::open(Backend::Gpu) else {
@@ -487,28 +515,65 @@ mod tests {
             })
         };
         let (heavy, light) = (query(), query());
+        let witnesses = [query(), query()];
+        // Past the spans: the device's own queue, which no span times.
+        let witness = |query| (*dev.queue).submit([pass(&dev, 1, query).0]);
         let spans = Spans::new(&dev);
+        let mut shared = None;
         for trial in 0..4 {
             {
                 let _armed = spans.arm();
                 done_with(&spin(&dev, 16384, &heavy));
+                witness(&witnesses[0]);
+                let _ = dev.device.poll(wgpu::PollType::wait_indefinitely());
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 done_with(&spin(&dev, 1, &light));
+                witness(&witnesses[1]);
             }
             let _ = dev.device.poll(wgpu::PollType::wait_indefinitely());
             let covered = spans.covered_ms().expect("the spans resolve");
-            let heavy = own(&dev, &heavy);
+            let (heavy, light) = (own(&dev, &heavy), own(&dev, &light));
             let took = heavy[1] - heavy[0];
+            let own_time = union(&mut [heavy, light]);
+            // Others' work the GPU ran while this test's work waited: after a pass, until the witness
+            // submitted behind its span's end began; and before it, from its span's start, submitted
+            // with it, to its own begin.
+            let ends: f64 = [(heavy, &witnesses[0]), (light, &witnesses[1])]
+                .into_iter()
+                .map(|(pass, witness)| (own(&dev, witness)[0] - pass[1]).max(0.0))
+                .sum();
+            let starts: f64 = spans
+                .spans_ms()
+                .expect("the spans resolve")
+                .iter()
+                .zip([heavy, light])
+                .map(|(span, pass)| (pass[0] - span[0]).max(0.0))
+                .sum();
+            let waited = ends + starts;
+            println!(
+                "trial {trial}: {covered} ms covered, the passes' own {own_time}; the heavy pass's \
+                 own {took}; this test's work waited behind others' for {waited}"
+            );
             assert!(took > 1.0, "the heavy pass takes {took} ms");
             assert!(
                 covered >= took - 0.1,
                 "trial {trial}: {covered} ms covered, the heavy pass's own timestamps span {took}"
             );
-            let own = union(&mut [heavy, own(&dev, &light)]);
+            if covered < own_time + 100.0 {
+                continue;
+            }
             assert!(
-                covered < own + 100.0,
-                "trial {trial}: {covered} ms covered, the passes' own {own}: the gap counted"
+                covered - own_time <= waited + 1.0,
+                "trial {trial}: {covered} ms covered, the passes' own {own_time}: the gap \
+                 counted ({waited} ms of it was the GPU's on other work)"
             );
+            shared.get_or_insert(format!(
+                "trial {trial}: {covered} ms covered, the passes' own {own_time}; the GPU ran \
+                 others' work for {waited} ms while this test's passes and their span ends waited"
+            ));
+        }
+        if let Some(trial) = shared {
+            panic!("INCONCLUSIVE: the GPU was shared, so the gap can't be told apart: {trial}");
         }
     }
 }
