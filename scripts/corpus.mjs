@@ -406,17 +406,26 @@ const CLAUDE_SCENARIOS = [
     return { deepbuild: { type: 'stdio', command: process.execPath, args: [join(root, 'packages/cli/dist/main.js'), 'mcp'], env }, 'deep-actions': { type: 'stdio', command: join(root, 'target/debug/deep-hook'), args: ['mcp', 'actions'], env } };
   }, args: ['--allowedTools', 'mcp__deepbuild__deep_status', 'mcp__deepbuild__deep_search'], steps: [
     { type: 'Call the deep_status tool of the deepbuild MCP server once. Then call its deep_search tool once with the query corpus. Then reply with only the word done.' }] },
+  // A file the session watches changes on disk (#3136): FileChanged's matcher names a file in the session's folder, as
+  // #120's ticker is named, and a shell call appends to it.
+  { name: 'file-changed', watch: 'ticker.txt', steps: [{ type: 'Use the Bash tool to run: echo tick >> ticker.txt' }, { wait: 5000 }] },
 ];
 
-async function recordClaude(out, bin, facts, only) {
-  const hooks = [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
+async function recordClaude(out, bin, facts, only, version) {
+  // A version the facts list is recorded on its own hooks, so a hook its list doesn't name never lands in its set.
+  const listed = Object.keys(facts.events?.versions?.[version] ?? {});
+  const hooks = listed.length ? listed : [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
   const results = [];
   for (const scenario of CLAUDE_SCENARIOS.filter(({ name }) => !only || only.includes(name))) {
     const dir = join(out, scenario.name), work = join(dir, 'work');
     mkdirSync(work, { recursive: true });
     if (scenario.dialog) writeFileSync(join(dir, 'dialog'), '');
+    if (scenario.watch) writeFileSync(join(work, scenario.watch), '');
     const command = [process.execPath, join(root, 'scripts/corpus.mjs'), 'hook', dir].map(quote).join(' ');
-    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ hooks: Object.fromEntries(hooks.map((hook) => [hook, [{ hooks: [{ type: 'command', command }] }]])) }));
+    // Claude Code watches files for FileChanged only where a matcher names them. An older version recorded here never
+    // updates your own install.
+    const entry = (hook) => ({ ...(hook === 'FileChanged' && scenario.watch ? { matcher: scenario.watch } : {}), hooks: [{ type: 'command', command }] });
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ env: { DISABLE_AUTOUPDATER: '1' }, hooks: Object.fromEntries(hooks.map((hook) => [hook, [entry(hook)]])) }));
     if (scenario.mcp) writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: scenario.mcp === true ? { corpus: { type: 'stdio', command: process.execPath, args: [join(root, 'scripts/corpus-elicit.mjs')] } } : scenario.mcp(dir) }));
     const args = ['--model', scenario.model ?? 'haiku', '--setting-sources', 'project', '--strict-mcp-config', ...(scenario.mcp ? ['--mcp-config', join(dir, 'mcp.json')] : []), '--settings', join(dir, 'settings.json'), ...(scenario.args ?? [])];
     const steps = scenario.steps.map((step) => ({ ...step, binary: bin }));
@@ -503,14 +512,15 @@ async function recordCodex(out, bin, facts) {
 
 async function recordCommand(options) {
   const agent = options.agent, out = resolve(options.out);
-  if (agent === 'pi') {
-    await (await import('./corpus-pi.mjs')).recordPi(out, redactor());
-    const scan = spawnSync('gitleaks', ['detect', '--no-git', '--source', join(out, 'pi'), '--config', join(root, 'packages/evidence/gitleaks/gitleaks.toml'), '--redact', '--no-banner', '--exit-code', '3'], { encoding: 'utf8' });
+  if (agent === 'pi' || agent === 'paseo') {
+    if (agent === 'pi') await (await import('./corpus-pi.mjs')).recordPi(out, redactor());
+    else await (await import('./corpus-paseo.mjs')).recordPaseo(out, redactor());
+    const scan = spawnSync('gitleaks', ['detect', '--no-git', '--source', join(out, agent), '--config', join(root, 'packages/evidence/gitleaks/gitleaks.toml'), '--redact', '--no-banner', '--exit-code', '3'], { encoding: 'utf8' });
     const verdict = scan.error ? 'BLOCKED' : scan.status === 0 ? 'PASS' : 'FAIL';
-    say({ type: 'summary', verdict, set: join(out, 'pi'), secretScan: scan.error ? `gitleaks did not run: ${scan.error.message}` : scan.status === 0 ? 'clean' : 'findings; the set must not join the corpus' });
+    say({ type: 'summary', verdict, set: join(out, agent), secretScan: scan.error ? `gitleaks did not run: ${scan.error.message}` : scan.status === 0 ? 'clean' : 'findings; the set must not join the corpus' });
     return verdict === 'PASS' ? 0 : 1;
   }
-  if (!['claude-code', 'codex'].includes(agent)) throw Error('--agent is claude-code, codex or pi');
+  if (!['claude-code', 'codex'].includes(agent)) throw Error('--agent is claude-code, codex, pi or paseo');
   const bin = binaryPath(agent === 'codex' ? 'codex' : 'claude');
   const factsFile = join(root, 'adapters', `${agent}.facts.json`);
   const facts = JSON.parse(readFileSync(factsFile, 'utf8'));
@@ -518,7 +528,7 @@ async function recordCommand(options) {
   const version = spawnSync(bin, ['--version'], { encoding: 'utf8' }).stdout.match(/\d+\.\d+\.\d+(?:[-+][\w.]+)?/)?.[0];
   const scratch = mkdtempSync(process.platform === 'darwin' ? '/private/tmp/deep-corpus-' : '/tmp/deep-corpus-');
   const only = options.scenarios?.split(',');
-  const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts, only);
+  const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts, only, version);
   const redact = redactor();
   for (const { scenario, blocked, payloads } of results) {
     if (!payloads.length) { say({ type: 'session', scenario, blocked: blocked ?? 'no payload was recorded' }); continue; }
@@ -552,7 +562,7 @@ for (let index = 0; index < rest.length; index += 2) {
 }
 const commands = { replay: replayCommand, check: checkCommand, record: recordCommand, hook: () => hookCommand(options.dir) };
 if (!commands[command] || (command === 'record' && !(options.agent && options.out))) {
-  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex|pi --out <dir> [--scenarios <name>,…]');
+  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex|pi|paseo --out <dir> [--scenarios <name>,…]');
   process.exit(2);
 }
 process.exitCode = await commands[command](options);
