@@ -511,6 +511,7 @@ fn decode_all(
     let mut drawn = std::collections::HashSet::new();
     let mut held = 0;
     for d in frame.layers.iter().flat_map(|l| &l.marks) {
+        // #269: a grid image draws its grid, no stored picture.
         let Mark::Image {
             item,
             asset,
@@ -518,6 +519,7 @@ fn decode_all(
             fit,
             crop,
             tile,
+            grid: None,
             ..
         } = &d.mark
         else {
@@ -1075,7 +1077,11 @@ impl Renderer {
                 crop,
                 tile,
                 turn,
+                grid,
             } => {
+                if let Some(g) = grid {
+                    return deep_marks_vello::grid(ctx, item, g, *bounds, scales(at).0);
+                }
                 // #1486: a still picture draws the level the drawing's scale takes, cut as its
                 // request is; a video's frame draws whole, cut by its crop.
                 let still = drawn

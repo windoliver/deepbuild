@@ -559,6 +559,7 @@ pub fn marks(
                 flip: t.flip,
                 hit,
             }),
+            grid: None,
         })
         .collect())
 }
