@@ -1168,6 +1168,12 @@ alone.push(...['cycles', 'planted-answers', 'planted-results', 'planted-jobs', '
 byHand.push('tests/acceptance/2650/budgets.long.test.ts');
 timed.push('tests/acceptance/2650/budgets.long.test.ts');
 
+// #2700's files each build their probe against deep-canvas and run it, so they run one at a time; budgets.long
+// measures two release benchmarks beside the merge base's and runs #896's and #854's suites, by hand.
+alone.push(...['heap', 'equal', 'data-row', 'as-given'].map((f) => `tests/acceptance/2700/${f}.test.mjs`));
+byHand.push('tests/acceptance/2700/budgets.long.test.mjs');
+timed.push('tests/acceptance/2700/budgets.long.test.mjs');
+
 // #1498's files each build deep-drive and run replicas.
 alone.push('tests/acceptance/1498/');
 
