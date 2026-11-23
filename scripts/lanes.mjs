@@ -1415,6 +1415,9 @@ byHand.push('tests/acceptance/980/ac09-budget.test.ts');
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
 
+// #3100's acceptance tests: AC1 builds the whole workspace; AC2 builds and tests it.
+slow.push('tests/acceptance/3100/ac1-build.test.mjs', 'tests/acceptance/3100/ac2-test.test.mjs');
+
 // #2086's blind redraft: AC1 runs whole-workspace clippy; AC2 runs #1732's suite, whose files each build deep-show.
 alone.push('tests/acceptance/2086-redraft-2047/');
 slow.push('tests/acceptance/2086-redraft-2047/ac1-workspace-clippy.test.ts', 'tests/acceptance/2086-redraft-2047/ac2-1732-unchanged.test.ts');
@@ -1983,12 +1986,30 @@ function cargoTarget(line, targets) {
 export function cargoResults(output, status, workspace) {
   const targets = rerunTargets(workspace);
   const failures = [], passed = [], skips = [], failed = new Set();
-  let target = null;
+  // #3100: a failed test reads as the state its own failure message names, so one that panics with INCONCLUSIVE: or
+  // BLOCKED: reads as that. libtest gives the message in the test's block, `---- <test> stdout ----`, as the panic of
+  // the test's own thread there (lines the test printed can look like one, so the last). A custom harness that runs its
+  // cases on the main thread prints a case's panic just before its result line, or its message first in a
+  // `---- <test> ----` block after it.
+  let target = null, block = null, next = null, uncaught = null;
   for (const line of output.split('\n')) {
-    target = cargoTarget(line, targets) ?? target;
     const test = line.match(/^test (.+?) \.\.\. (ok|FAILED|BLOCKED|INVALID|INCONCLUSIVE)$/);
+    if (next === 'panic' || (next === 'block' && line.trim() && !test)) {
+      const failure = block && failures.findLast(({ id }) => id === block.id);
+      if (failure) Object.assign(failure, { state: stateOf(line), message: line });
+      else if (!block) uncaught = line;
+      next = null;
+    }
+    const header = line.match(/^---- (.+?)( stdout)? ----$/);
+    if (header) block = { id: `cargo ${target} › ${header[1]}`, test: header[1], captured: Boolean(header[2]) }, next = header[2] ? null : 'block';
+    else if (test || /^(?:failures:|test result: .*)$/.test(line)) block = null, next = null;
+    const thread = line.match(/^thread '(.+?)'(?: \(\d+\))? panicked at .+:$/)?.[1];
+    if (thread && (block ? block.captured && thread === block.test : thread === 'main')) next = 'panic';
+    const started = cargoTarget(line, targets);
+    if (started !== undefined) target = started;
     if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
-    if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, state: test[2] === 'FAILED' ? 'FAIL' : test[2], message: '' }), failed.add(target);
+    if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, ...test[2] === 'FAILED' ? { state: stateOf(uncaught ?? ''), message: uncaught ?? '' } : { state: test[2], message: '' } }), failed.add(target);
+    if (test || started !== undefined) uncaught = null;
     const ignored = line.match(/^test (.+?) \.\.\. ignored(?:, (.*))?$/);
     if (ignored) skips.push({ id: `cargo ${target} › ${ignored[1]}`, note: ignored[2] ?? '' });
     // Custom harnesses report unrun cases too; a listed target must not turn those into passes.
