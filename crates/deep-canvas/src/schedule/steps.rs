@@ -109,13 +109,13 @@ impl Steps {
             return;
         }
         if self.over_budget {
-            self.keep(|t| t == 0 || t == c);
+            self.keep_ends();
             return;
         }
         while self.total > budget {
             if self.checkpoints.len() <= 2 {
                 self.over_budget = true;
-                self.keep(|t| t == 0 || t == c);
+                self.keep_ends();
                 return;
             }
             let spacing = self.spacing * 2;
@@ -123,6 +123,13 @@ impl Steps {
             self.keep(|t| t.rem_euclid(spacing) == 0 && !(drops_start && t == 0));
             self.spacing = spacing;
         }
+    }
+
+    /// Lets go of every checkpoint but the start's and the newest it holds, which a seek back
+    /// that steps forward again keeps, as it keeps every checkpoint already taken.
+    fn keep_ends(&mut self) {
+        let newest = self.checkpoints.keys().next_back().copied();
+        self.keep(|t| t == 0 || Some(t) == newest);
     }
 
     /// Lets go of every checkpoint but those `held` keeps.
@@ -186,7 +193,7 @@ fn json_bytes(v: &Value) -> u64 {
 }
 
 /// The ring's budget for these stepping modules, whose arrays it holds: what each declares for
-/// its `checkpoint` carried state, or 16 MiB for one that declares none.
+/// its `checkpoint` carried state, or 16 MiB for one that declares none (or 0 bytes).
 fn ring_budget<'a>(sealed: &Sealed, modules: impl Iterator<Item = &'a str>) -> u64 {
     let modules: BTreeSet<&str> = modules.collect();
     (sealed.modules.iter())
@@ -470,6 +477,31 @@ mod tests {
         assert_eq!(
             steps.total, held as u64,
             "each empty checkpoint counts one byte"
+        );
+    }
+
+    /// An over-budget ring holds the start's checkpoint and its newest; a seek back that takes
+    /// earlier checkpoints again as it steps forward keeps that newest (#2693).
+    #[test]
+    fn an_over_budget_ring_keeps_its_newest_through_a_seek_back() {
+        let planted = Planted::default();
+        let mut steps = Steps::default();
+        steps.values.insert("a".into(), Val::typed(7_i64));
+        let minute = 120 * CHECKPOINT_EVERY;
+        steps.checkpoint_through(minute, 4, &planted);
+        let held = |s: &Steps| s.checkpoints.keys().copied().collect::<Vec<_>>();
+        assert!(
+            steps.over_budget,
+            "an 8-byte checkpoint passes a 4-byte budget"
+        );
+        assert_eq!(held(&steps), vec![0, minute]);
+        // A seek to 1 s restores the start's and steps forward, taking 0.5 s and 1 s again.
+        steps.checkpointed = Some(0);
+        steps.checkpoint_through(2 * CHECKPOINT_EVERY, 4, &planted);
+        assert_eq!(
+            held(&steps),
+            vec![0, minute],
+            "the newest outlives the seek back"
         );
     }
 }
