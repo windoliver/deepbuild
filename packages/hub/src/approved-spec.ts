@@ -2,7 +2,7 @@
 // release checks and its `outside` block come from `.deepbuild/done.yaml` as the claim's base commit holds it, never
 // from the file in the folder the agent works in, which a command's child can write with no guard seeing it.
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { gitEnv } from '@deepbuild/gate';
 import { parseYaml } from './yaml.js';
@@ -11,8 +11,11 @@ export const SPEC = '.deepbuild/done.yaml';
 interface Revision { text: string; oid: string }
 /** Each commit's spec, read once: a commit never changes. */
 const read = new Map<string, Revision | undefined>();
-/** Git off the hub's event loop, with none of this process's git location settings. */
-const git = (folder: string, args: string[]): Promise<string> => new Promise((done, fail) => execFile('git', ['-C', folder, ...args], { env: gitEnv(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 20_000 }, (error, out) => (error ? fail(error) : done(out))));
+/**
+ * Git off the hub's event loop, with none of this process's git location settings, and nothing of the repo's that runs a
+ * program or swaps an object: no hooks, fsmonitor or lazy fetch, and no replace refs, as the gate's checkouts read it.
+ */
+const git = (folder: string, args: string[]): Promise<string> => new Promise((done, fail) => execFile('git', ['-C', folder, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { env: { ...gitEnv(), GIT_NO_LAZY_FETCH: '1', GIT_NO_REPLACE_OBJECTS: '1' }, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 20_000 }, (error, out) => (error ? fail(error) : done(out))));
 
 /**
  * The spec as `base` holds it in the repo `folder` is in, with its blob's id: undefined when that commit has none, and
@@ -50,8 +53,13 @@ export async function approvedSpec(folder: string, base: string): Promise<{ text
   try { return { ...revision, spec: parseYaml(revision.text), parsed: true }; } catch { return { ...revision, spec: undefined, parsed: false }; }
 }
 
-/** The blob id git gives the spec in `folder` now, through the repo's own filters; undefined when there is none. */
+/**
+ * The blob id of the spec's bytes in `folder` now, with none of the repo's filters run; undefined when there is none,
+ * and a placeholder for anything there that is no file, which never equals a revision's id.
+ */
 export async function specOnDisk(folder: string): Promise<string | undefined> {
-  if (!existsSync(join(folder, SPEC))) return undefined;
-  return (await git(folder, ['hash-object', '--', `./${SPEC}`])).trim();
+  let file;
+  try { file = lstatSync(join(folder, SPEC)); } catch { return undefined; }
+  if (!file.isFile()) return `not a file`;
+  return (await git(folder, ['hash-object', '--no-filters', '--', `./${SPEC}`])).trim();
 }

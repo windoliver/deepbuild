@@ -1058,7 +1058,7 @@ export class StopJudging {
       // log for the validity gate and the project's trust for its spec checks, none of which waits on another (#82).
       // The spec as you approved it (#1864): the claim's base commit's, never the worktree's; a difference is a proposal.
       const approved = r.joins ? undefined : await approvedSpec(r.cwd, r.base);
-      if (approved) await this.proposeSpecDrift(r, approved.oid).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
+      if (approved) void this.proposeSpecDrift(r, approved.oid).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
       const spec = approved ? this.specChecks(approved) : [];
       const releaseNames = approved && await this.prOf(r.session) ? releaseSpec(approved.spec).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
       const reads = Promise.all([r.definition === 'pending' ? undefined : this.sessionLog(r.session), hasSpec ? this.projectTrusted(r.cwd) : false]);
