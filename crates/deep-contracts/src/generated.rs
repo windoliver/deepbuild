@@ -67727,7 +67727,7 @@ impl Contract for LeaseAcquiredV4Data {
         deep_contracts::check_member(members, at, "holder", &RULE_262)?;
         deep_contracts::check_member(members, at, "expires", &RULE_4)?;
         deep_contracts::check_member(members, at, "units", &RULE_263)?;
-        deep_contracts::check_member(members, at, "run", &RULE_135)?;
+        deep_contracts::check_member(members, at, "run", &RULE_132)?;
         deep_contracts::check_member(members, at, "asked", &RULE_4)?;
         Ok(Self {
             resource: deep_contracts::required(members, at, "resource")?,
