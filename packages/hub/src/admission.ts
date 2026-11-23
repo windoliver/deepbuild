@@ -13,8 +13,8 @@ import { contents, keyId } from './shared-runs.js';
 export const CLEAN_RUNS = 3;
 /** How many of a key's last clean runs its percentile reads. */
 export const PEAKS_READ = 20;
-/** Each class's constant, in MB, for a run with nothing better to go on (drafted): a check's, and an agent's heavy command's. */
-export const CLASS_MB = { check: 1024, heavy: 4096 } as const;
+/** Each class's constant, in MB, for a run with nothing better to go on (drafted): a check's 1 GB, and an agent's heavy command's 4 GB. */
+export const CLASS_MB = { check: 1000, heavy: 4000 } as const;
 
 export type Basis = 'runs' | 'declared' | 'class';
 /** What a run is admitted on: its expected peak in MB, what that came from, what its check declares and the key whose history it read. */
