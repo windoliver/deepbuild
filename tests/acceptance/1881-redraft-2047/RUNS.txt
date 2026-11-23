@@ -1,0 +1,85 @@
+Runs of tests/acceptance/1881-redraft-2047/ on this Mac (Apple M5 Max, macOS 27.2), Node 24.22.0, at the base 8b9f8d6c7,
+November 23, 2026. Each command: node node_modules/vitest/vitest.mjs run --no-file-parallelism <files>. Trimmed to each
+result's reason; temporary folders shortened to <tmp>, the checkout to <repo>.
+
+== Base: the whole suite (load 147 at start), 221 s ==
+
+ ✓ lookup.test.ts › #1881.6ee547f4 with a stand-in forge holding one open pull request ... records that pull request's URL
+ ✓ lookup.test.ts › #1881.5d46b7e2 in a checkout with no remote, the stand-in forge receives no request
+ ✓ suites85.test.ts › #1881.e56f5a3e #85's suites pass unchanged: every test under tests/acceptance/85, as the base holds it, passes
+     (17 #85 files run by the inner vitest; all 40 judged tests passed, none skipped or missing)
+ × suites85.test.ts › #1881.e56f5a3e #85's suites pass unchanged: its criterion 12 budget measurement passes on a reference Mac
+     AssertionError: INCONCLUSIVE: #85's budget measurement skipped by its own rule (readings count only on a reference
+     Mac, Mac15,7 or Mac15,12); this is not a pass
+     (this Mac is not a reference Mac: INCONCLUSIVE here, on the base and on every twin)
+ Tests  1 failed | 3 passed (4)
+
+ An earlier base run of lookup.test.ts alone (load 235): 2 passed, 9.9 s.
+
+== Base, after the second #1881.e56f5a3e test was changed to skip (ctx.skip) instead of fail when #85's
+   measurement reads INCONCLUSIVE: suites85.test.ts --reporter=verbose (load 190 at start), 261 s ==
+
+ ✓ #1881.e56f5a3e #85's suites pass unchanged: every test under tests/acceptance/85, as the base holds it, passes
+     #1881.e56f5a3e: 40 of 40 judged tests passed in 260 s
+ ↓ #1881.e56f5a3e #85's suites pass unchanged: its criterion 12 budget measurement passes on a reference Mac
+     [INCONCLUSIVE (not a reference Mac): #85's budget measurement skipped by its own rule (readings count only on a
+     reference Mac, Mac15,7 or Mac15,12)]
+ Tests  1 passed | 1 skipped (2)
+
+ (The base and twin runs above and below predate that change: there, the second test failed with the INCONCLUSIVE
+ message; it now skips with it. Nothing else changed.)
+
+== Twin scope-id-lookup (#1881.6ee547f4), laid over packages/hub/src/answer-delivery.ts, hub rebuilt; lookup.test.ts (load 25), 5.7 s ==
+
+ × #1881.6ee547f4 ... records that pull request's URL
+   AssertionError: the cut-off turn records https://github.com/acme/cart/pull/1; the forge received:
+   GET /repos/cartworke9f7874e/pulls?state=all&head=cartworke9f7874e%3Afix-cart-total&per_page=10; the session's readings:
+   ["This session's Claude Code home (<tmp>/.claude) loads mods DeepBuild couldn't read ...",
+    "DeepBuild: the turn that was cut off started this call with no recorded end, so its outcome is unknown; ... (outcome unknown)."]:
+   expected [] to have a length of 1 but got +0
+   ❯ lookup.test.ts:79:185
+ × #1881.5d46b7e2 ... receives no request
+   AssertionError: in a checkout with no remote, the stand-in forge receives no request: expected [ Array(1) ] to deeply equal []
+   + "GET /repos/cartwork3ecc013d/pulls?state=all&head=cartwork3ecc013d%3Afix-cart-total&per_page=10"
+   ❯ lookup.test.ts:85:99
+ (This twin is the merge base's lookup: the request goes to /repos/<scope ID>/pulls and finds none, as the criterion says.)
+ Tests  2 failed (2)
+
+== Twin no-remote-asks-by-scope-id (#1881.5d46b7e2); lookup.test.ts (load 14), 4.5 s ==
+
+ ✓ #1881.6ee547f4 ... records that pull request's URL
+ × #1881.5d46b7e2 ... receives no request
+   AssertionError: in a checkout with no remote, the stand-in forge receives no request: expected [ Array(1) ] to deeply equal []
+   + "GET /repos/cartworka5371fad/pulls?state=all&head=cartworka5371fad%3Afix-cart-total&per_page=10"
+   ❯ lookup.test.ts:85:99
+ Tests  1 failed | 1 passed (2)
+
+== Twin no-remote-reads-as-none (#1881.e56f5a3e); the whole suite (load 24), 475 s ==
+
+ × suites85.test.ts › #1881.e56f5a3e ... every test under tests/acceptance/85, as the base holds it, passes
+   (#1881.e56f5a3e: 38 of 40 judged tests passed in 468 s)
+   AssertionError: #85's suites, run unchanged:
+     tests/acceptance/85/hub/cutoff.test.ts › ... #85.d3d3e12b continues with the gh pr create call named as outcome unknown; ... fails:
+       AssertionError: the forge receives one PR: a continue that lets the identical gh pr create run opens a second
+       (the hub's reply to it: {"v":1,"exit":0,"stdout":"","stderr":""}): expected 2 to be 1
+       at <repo>/tests/acceptance/85/hub/cutoff.test.ts:61:183
+     tests/acceptance/85/hub/cutoff.test.ts › ... #85.d3d3e12b fails on a continue that omits the call, ... fails: (the same)
+   ❯ suites85.test.ts:66:82
+ × suites85.test.ts › #1881.e56f5a3e ... budget measurement passes on a reference Mac
+   AssertionError: INCONCLUSIVE: ... this is not a pass   (as on the base)
+ ✓ lookup.test.ts › #1881.6ee547f4
+ × lookup.test.ts › #1881.5d46b7e2
+   AssertionError: precondition: the identical gh pr create reached the hub's resend check and was denied:
+   {"v":1,"exit":0,"stdout":"","stderr":""}: expected false to be true   ❯ lookup.test.ts:87:153
+   (the forge got no request; the twin lets the cut-off send run again, which the precondition catches)
+ Tests  3 failed | 1 passed (4)
+
+== Restores ==
+
+After each twin: git restore packages/hub/src/answer-delivery.ts, git diff --stat empty, npm run build --workspaces
+--if-present exit 0.
+
+== Type check ==
+
+node node_modules/typescript/bin/tsc -p tests/acceptance/1881-redraft-2047/tsconfig.json: exit 0.
+Each twin built with npm run build --workspaces --if-present: exit 0.
