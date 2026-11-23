@@ -403,6 +403,9 @@ pub fn tick(now: u64, cx: &mut App) {
     });
 }
 
+/// The pictures a frame laid out beside the card, each by its hash with its bounds (#3234).
+type Laid = std::rc::Rc<RefCell<Vec<(String, Bounds<Pixels>)>>>;
+
 pub struct Card {
     question: SharedString,
     options: Vec<SharedString>,
@@ -426,7 +429,7 @@ pub struct Card {
     /// What its taste calls judge (#3234): the pictures beside it, which scroll, each as the frame drew it, the view
     /// they scroll in, the ones opened at their size, and the record's place when it last looked for one replaced.
     evidence: ScrollHandle,
-    pictures: std::rc::Rc<RefCell<Vec<(String, Bounds<Pixels>)>>>,
+    pictures: Laid,
     view: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     opened: std::collections::HashSet<String>,
     moved_at: u64,
