@@ -16,16 +16,19 @@ mod chunks;
 pub mod color;
 mod export;
 mod flac;
+mod live;
 pub mod maps;
 mod mkv;
 pub mod mov;
 pub mod mp4;
 mod ogg;
 mod pipe;
+mod still;
 mod stream;
 #[cfg(target_os = "macos")]
 pub mod surface;
 pub mod table;
+mod turn;
 mod wav;
 
 use std::collections::BTreeSet;
@@ -33,6 +36,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
+pub use live::{serve_live, LIVE_MAGIC};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -120,6 +124,10 @@ enum Format<'a> {
     /// #154: a score's stem, decoded whole, with its loop points.
     Flac(flac::Flac),
     Png(u32, u32, bool),
+    /// #1488: a JPEG, probed and decoded here, its EXIF orientation applied.
+    Jpeg(still::Jpeg),
+    /// #1488: a still in another format, read by the platform's decoder and converted at intake.
+    Other(still::Other),
     Playlist(&'a str),
     Movie(mp4::Movie),
     /// #503: an audio file in another container (audio.rs).
@@ -153,6 +161,17 @@ fn format(data: &[u8]) -> Result<Format<'_>, Value> {
             mp4::be32(&data[20..]),
             srgb,
         ));
+    }
+    if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return still::jpeg(data).map(Format::Jpeg).ok_or_else(|| {
+            refused(
+                "unreadable",
+                json!({"why": "a JPEG whose header doesn't read"}),
+            )
+        });
+    }
+    if still::is_other(data) {
+        return still::other(data).map(Format::Other);
     }
     if let Ok(text) = std::str::from_utf8(data) {
         if text.trim_start().starts_with("#EXTM3U") {
@@ -245,6 +264,8 @@ fn over_caps(f: &Format, caps: &Caps) -> Option<Value> {
             0u64,
         ),
         Format::Png(w, h, _) => (false, *w as u64 * *h as u64),
+        Format::Jpeg(j) => (false, j.stored[0] as u64 * j.stored[1] as u64),
+        Format::Other(o) => (false, o.size[0] as u64 * o.size[1] as u64),
         Format::Movie(m) => (
             m.tracks
                 .iter()
@@ -370,11 +391,13 @@ fn probe(f: &Format, data: &[u8], sha: &str, planted: &Planted) -> Value {
                 "image",
                 vec![
                     json!({"index": 0, "type": "image", "codec": "png", "time_base": [1, 1],
-                    "size": [w, h], "color": c}),
+                    "size": still::png_size(data, [*w, *h], planted.is(still::PLANT)), "color": c}),
                 ],
                 json!({"name": "image png", "version": "0.25"}),
             )
         }
+        Format::Jpeg(j) => still::probe_jpeg(j, planted.is(still::PLANT)),
+        Format::Other(o) => still::probe_other(o, planted.is(still::PLANT)),
         Format::Movie(m) => {
             let edits = !planted.is("ignores_edit_lists");
             let mut streams = (m.tracks.iter().enumerate())
@@ -409,7 +432,12 @@ fn probe(f: &Format, data: &[u8], sha: &str, planted: &Planted) -> Value {
                     };
                     s["type"] = json!("video");
                     s["frame_rate"] = rate;
-                    s["size"] = json!([t.entry.width, t.entry.height]);
+                    // #1488: the size it shows at, its track header's turn applied, and the turn.
+                    let (w, h) = (t.entry.width as usize, t.entry.height as usize);
+                    s["size"] = json!(turn::size(w, h, t.rotation));
+                    if t.rotation != 0 {
+                        s["rotation"] = json!(t.rotation);
+                    }
                     s["color"] = track_color(t, planted);
                     // #157: ProRes 4444's alpha is full range, its colour limited.
                     if &t.entry.fourcc == b"ap4h" {
@@ -500,7 +528,7 @@ fn decode(
     data: &[u8],
     job: &Job,
     planted: &Planted,
-    probe_v: &Value,
+    (probe_v, caps): (&Value, &Caps),
 ) -> Result<Value, String> {
     let out = PathBuf::from(job.s("out").ok_or("a decode names its out folder")?);
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
@@ -537,10 +565,15 @@ fn decode(
                 "loop": fl.loop_region.map(|(s, e)| json!([s, e]))}),
             );
         }
-        Format::Png(..) => {
-            let img = image::load_from_memory(data)
-                .map_err(|e| e.to_string())?
-                .into_rgba8();
+        Format::Png(..) | Format::Jpeg(_) | Format::Other(_) => {
+            let ignores = planted.is(still::PLANT);
+            let img = match f {
+                Format::Other(o) => {
+                    let png = o.png(ignores)?;
+                    still::rgba(&png, false)?
+                }
+                _ => still::rgba(data, ignores)?,
+            };
             let (w, h) = img.dimensions();
             let mut px = img.into_raw();
             if bgra {
@@ -570,36 +603,45 @@ fn decode(
                         let (chosen, feed) =
                             video_plan(t, m.timescale, edits, want, pick.as_deref());
                         let mut frames = Vec::new();
-                        let mut size = [t.entry.width as usize, t.entry.height as usize];
+                        let (w, h) = (t.entry.width as usize, t.entry.height as usize);
+                        let (w, h) = turn::size(w, h, t.rotation);
+                        let mut size = [w, h];
                         if !chosen.is_empty() {
                             let pictures = video_frames(t, data, &feed)?;
+                            let over = caps.max_pixels;
+                            if pictures.iter().any(|p| (p.width * p.height) as u64 > over) {
+                                return Err(OVER_PIXELS.into());
+                            }
                             for (k, (sample, pts)) in chosen.iter().enumerate() {
                                 let p = pictures
                                     .iter()
                                     .find(|p| p.sample == *sample)
                                     .ok_or_else(|| format!("sample {sample} didn't decode"))?;
-                                size = [p.width, p.height];
+                                // #1488: the planes turned as the track header shows them.
+                                let prores = &t.entry.fourcc == b"ap4h";
+                                let turn = if prores { 0 } else { t.rotation };
+                                let planes = turn::i420(&p.planes, p.width, p.height, turn);
+                                let (w, h) = turn::size(p.width, p.height, turn);
+                                size = [w, h];
                                 let name = format!("{i}-{k}.{}", if bgra { "bgra" } else { "yuv" });
                                 let matrix = color["matrix"].as_str().unwrap_or("bt709");
                                 let bytes = match bgra {
                                     // #157: ProRes 4444's 12-bit planes, its alpha straight.
-                                    true if &t.entry.fourcc == b"ap4h" => {
-                                        color::yuva12_to_bgra(&p.planes, p.width, p.height, matrix)
-                                    }
+                                    true if prores => color::yuva12_to_bgra(&planes, w, h, matrix),
                                     true => color::i420_to_bgra(
-                                        &p.planes,
-                                        p.width,
-                                        p.height,
+                                        &planes,
+                                        w,
+                                        h,
                                         color["matrix"].as_str().unwrap_or("bt709"),
                                         color["range"].as_str().unwrap_or("limited"),
                                     ),
-                                    false => p.planes.clone(),
+                                    false => planes.to_vec(),
                                 };
                                 write(&name, &bytes)?;
                                 let mut frame =
                                     json!({"pts": time(*pts, t.timescale, planted), "file": name});
                                 if pick.is_some() {
-                                    frame["planes"] = json!(sha256(&p.planes));
+                                    frame["planes"] = json!(sha256(&planes));
                                 }
                                 frames.push(frame);
                             }
@@ -1049,13 +1091,34 @@ pub fn run(job: &Map<String, Value>, caps: &Caps, planted: &Planted) -> (Value, 
         }
     }
     let probed = probe(&f, &opened.data, &opened.sha, planted);
+    // #1488: a decode or conversion that fails on the file's own bytes is refused, naming why.
+    let error = |e: String| json!({"error": e});
     let reply = match op {
         "probe" => Ok(probed),
-        "decode" => decode(&f, &opened.data, &job, planted, &probed).map(|d| json!({"decoded": d})),
-        "proxy" => proxy(&f, &opened.data, &job),
-        _ => Err(format!("no job {op}")),
+        "convert" | "decode" if job.s("out").is_none() => Err(error(format!("a {op} names out"))),
+        "convert" => still::convert(&f, &opened, &job, planted, probed).map_err(|e| bad(e, caps)),
+        "decode" => decode(&f, &opened.data, &job, planted, (&probed, caps))
+            .map(|d| json!({"decoded": d}))
+            .map_err(|e| bad(e, caps)),
+        "proxy" => proxy(&f, &opened.data, &job).map_err(error),
+        _ => Err(error(format!("no job {op}"))),
     };
-    (reply.unwrap_or_else(|e| json!({"error": e})), sha)
+    (reply.unwrap_or_else(|e| e), sha)
+}
+
+/// A decode that found a picture past the pixel cap the header didn't show.
+const OVER_PIXELS: &str = "a decoded picture is over the pixel cap";
+
+/// #1488: a decode that failed on the file's own bytes: refused at the pixel cap when it decoded
+/// past it, else refused as undecodable, naming why.
+fn bad(why: String, caps: &Caps) -> Value {
+    match why == OVER_PIXELS {
+        true => refused(
+            "over_cap",
+            json!({"cap": "max_pixels", "limit": caps.max_pixels}),
+        ),
+        false => refused("undecodable", json!({"why": why})),
+    }
 }
 
 /// A `transcode` job: `role` (base_color, emission, normal, occlusion or data) and `bc` (the
@@ -1153,136 +1216,14 @@ pub fn serve(role: &str, args: &[String]) -> i32 {
         let (reply, sha) = if allowed {
             // #503: a decoder that panics on a file answers an error for that job alone.
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&job, &caps, &planted)))
-                .unwrap_or_else(|_| (json!({"error": "the decoder failed on the file"}), None))
+                .unwrap_or_else(|_| {
+                    let why = json!({"why": "the decoder failed on the file"});
+                    (refused("undecodable", why), None)
+                })
         } else {
             (json!({"error": format!("a {role} never runs {op}")}), None)
         };
         pipe.reply(&reply, sha.as_deref());
-    }
-    0
-}
-
-/// The live decode worker's header magic (#499).
-pub const LIVE_MAGIC: &[u8; 4] = b"DVL1";
-
-/// #499: the live view's decode worker for one video: sandboxed, it opens `path` and decodes the
-/// frames the view asks for, one session kept open so playing forward decodes each frame once, as
-/// NV12 at `out_w × out_h` (0 for the source's size) in the range the stream is tagged with.
-///
-/// On start it writes `DVL1`, then u32 LE source width, height, output width, height, matrix
-/// (0 BT.709, 1 BT.601, 2 BT.2020), full range (0 or 1), i64 timescale, u32 frame count and
-/// each frame's presentation time (i64 ticks, presentation order). Each request is a u32 frame
-/// index (u32::MAX ends it); each answer is u32 index, u32 ok, then the Y plane and the CbCr
-/// plane, rows top-down without padding.
-pub fn serve_live(args: &[String]) -> i32 {
-    let arg = |i: usize| args.get(i).cloned().unwrap_or_default();
-    let (path, out_w, out_h) = (
-        arg(0),
-        arg(1).parse().unwrap_or(0usize),
-        arg(2).parse().unwrap_or(0usize),
-    );
-    #[cfg(target_os = "macos")]
-    if let Err(e) = apple::sandbox() {
-        eprintln!("decode worker: {e}");
-        return 1;
-    }
-    let Ok(data) = std::fs::read(&path) else {
-        return 1;
-    };
-    let Some(m) = mp4::parse(&data) else { return 1 };
-    let Some(t) = m.tracks.iter().find(|t| t.kind == mp4::Kind::Video) else {
-        return 1;
-    };
-    let shown = t.presented(m.timescale, true);
-    let color = track_color(t, &Planted::default());
-    let matrix: u32 = match color["matrix"].as_str() {
-        Some(m) if m.contains("601") || m.contains("470") || m.contains("smpte170") => 1,
-        Some(m) if m.contains("2020") => 2,
-        _ => 0,
-    };
-    let full = color["range"] == "full";
-    let (sw, sh) = (t.entry.width as usize, t.entry.height as usize);
-    let (ow, oh) = if out_w == 0 || out_h == 0 {
-        (sw, sh)
-    } else {
-        (out_w & !1, out_h & !1)
-    };
-    let mut out = std::io::stdout().lock();
-    let mut head = LIVE_MAGIC.to_vec();
-    for v in [
-        sw as u32,
-        sh as u32,
-        ow as u32,
-        oh as u32,
-        matrix,
-        u32::from(full),
-    ] {
-        head.extend(v.to_le_bytes());
-    }
-    head.extend(i64::from(t.timescale).to_le_bytes());
-    head.extend((shown.len() as u32).to_le_bytes());
-    for (_, p) in &shown {
-        head.extend(p.to_le_bytes());
-    }
-    if out.write_all(&head).and_then(|()| out.flush()).is_err() {
-        return 1;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let Some(config) = t.entry.config.as_ref() else {
-            return 1;
-        };
-        let Ok(mut dec) = apple::LiveDecoder::new(
-            t.entry.fourcc,
-            config,
-            (t.entry.width, t.entry.height),
-            (ow, oh),
-            full,
-        ) else {
-            return 1;
-        };
-        let size = ow * oh * 3 / 2;
-        let blank = vec![0u8; size];
-        let mut last: Option<usize> = None;
-        let mut stdin = std::io::stdin().lock();
-        let mut req = [0u8; 4];
-        while stdin.read_exact(&mut req).is_ok() {
-            let k = u32::from_le_bytes(req);
-            if k == u32::MAX {
-                break;
-            }
-            let picture = (|| {
-                let s = shown.get(k as usize)?.0;
-                let from = match last {
-                    Some(l) if l < s => l + 1,
-                    _ => (0..=s).rev().find(|i| t.samples[*i].key).unwrap_or(0),
-                };
-                let mut got = None;
-                for i in from..=s {
-                    let smp = &t.samples[i];
-                    let bytes =
-                        data.get(smp.offset as usize..smp.offset as usize + smp.size as usize)?;
-                    for p in dec.decode(i, bytes).ok()? {
-                        if p.sample == s {
-                            got = Some(p.planes);
-                        }
-                    }
-                    last = Some(i);
-                }
-                got.filter(|p| p.len() == size)
-            })();
-            let ok = picture.is_some();
-            let mut reply = k.to_le_bytes().to_vec();
-            reply.extend(u32::from(ok).to_le_bytes());
-            if out
-                .write_all(&reply)
-                .and_then(|()| out.write_all(picture.as_deref().unwrap_or(&blank)))
-                .and_then(|()| out.flush())
-                .is_err()
-            {
-                break;
-            }
-        }
     }
     0
 }
@@ -1382,6 +1323,7 @@ mod tests {
     fn track_past_the_end() -> mp4::Track {
         mp4::Track {
             kind: mp4::Kind::Audio,
+            rotation: 0,
             timescale: 1,
             duration: 0,
             edits: Vec::new(),
@@ -1418,6 +1360,7 @@ mod tests {
                 .collect();
             let track = mp4::Track {
                 kind: mp4::Kind::Audio,
+                rotation: 0,
                 timescale: 48_000,
                 duration: 3,
                 edits: Vec::new(),

@@ -47,6 +47,33 @@ export function show(root, rev, path) {
   return text;
 }
 
+/**
+ * Reads the files of `rev` among `paths` that `show` would read with a process of its own, all in one git process,
+ * so `show` then answers each from what it read (#3179): the guard reads every hit of a `git grep`, which can be a
+ * thousand files. A path `show` asks git about anyway, or one a batch line can't hold, is left to `show`.
+ */
+export function readAll(root, rev, paths) {
+  const tree = treeOf(root, rev, '');
+  if (!tree) return;
+  const wanted = [...new Set(paths)].filter((path) => tree.names.has(path) && !tree.read.has(path) && !NON_ASCII.test(path) && !/^\.\.?\//.test(path) && !/[\n\r]/.test(path));
+  if (wanted.length < 2) return;
+  const result = spawnSync('git', ['cat-file', '--batch'], { cwd: root, input: wanted.map((path) => `${rev}:${path}\n`).join(''), maxBuffer: 1 << 30 });
+  if (result.status !== 0) return;
+  // Each answer is `<oid> blob <size>\n<bytes>\n`, or `<name> missing\n`, in the order asked.
+  const out = result.stdout;
+  let at = 0;
+  for (const path of wanted) {
+    const end = out.indexOf(10, at);
+    if (end < 0) return;
+    const found = /^[0-9a-f]{40,64} (\w+) (\d+)$/.exec(out.toString('latin1', at, end));
+    at = end + 1;
+    if (!found) continue;
+    const size = Number(found[2]);
+    if (found[1] === 'blob') tree.read.set(path, out.toString('utf8', at, at + size));
+    at += size + 1;
+  }
+}
+
 /** The people whose signature approves (#1326): one list in the repo, an SSH allowed-signers file, read at the merge base only. */
 export const APPROVERS = '.deepbuild/approvers';
 // The key types whose every signature carries its authenticator's flags: a security key's, or a platform
