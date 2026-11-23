@@ -2,6 +2,18 @@
 
 use super::*;
 
+/// `doc` with `layer`'s items alone, where other writers hold layers of it too (#1721).
+pub(crate) fn only_layer<'d>(doc: &'d Value, layer: &str) -> Cow<'d, Value> {
+    if doc["layers"].as_object().is_none_or(|l| l.len() < 2) {
+        return Cow::Borrowed(doc);
+    }
+    let mut own = shared::drawable(doc);
+    if let Some(Value::Object(items)) = own.get_mut("items") {
+        items.retain(|_, i| i["layer"].as_str() == Some(layer));
+    }
+    Cow::Owned(own)
+}
+
 impl Hub<'_> {
     /// #806: a document's current revision as the hub records it once presented: its writer, the
     /// layer the connection stamped and its canonical document, kept in the evidence store by the
@@ -18,6 +30,7 @@ impl Hub<'_> {
         let rect = self.slot(panel)?;
         let size = snapshot::px([rect[2], rect[3]]);
         let record = self.record();
+        let mut framed = BTreeSet::new();
         let layers: Vec<Value> = self
             .bands()
             .iter()
@@ -29,21 +42,27 @@ impl Hub<'_> {
             .map(|b| {
                 let mut out = b.to_json();
                 let current = b.doc.as_deref().and_then(|d| self.current(d));
+                // What this writer's layer holds of its document (#1721).
+                let own = current.map(|r| only_layer(&r.doc, &b.layer));
                 // The presented document's items this layer draws; another document's layer on the
                 // panel draws none of them.
-                let drawn: Vec<String> = current
+                let drawn: Vec<String> = own
+                    .as_ref()
                     .filter(|_| b.doc.as_deref() == Some(doc))
-                    .and_then(|r| r.doc["items"].as_object())
+                    .and_then(|d| d["items"].as_object())
                     .map(|m| m.keys().cloned().collect())
                     .unwrap_or_default();
-                let scene = current
-                    .filter(|r| deep_canvas_scene3d::scene::has_3d(&r.doc))
+                // A 3D document is one frame, its writers' layers together: the first one names it.
+                let three = current.filter(|r| deep_canvas_scene3d::scene::has_3d(&r.doc));
+                let first = three.is_some() && framed.insert(b.doc.clone());
+                let scene = three
+                    .filter(|_| first)
                     .and_then(|r| canonical_in(&r.doc, &kinds).ok())
                     .and_then(|c| evidence::put(&self.scenario.evidence, c.bytes.as_bytes()).ok());
                 // The layer's picture in its panel, with no ground, as the compositor rasterizes it:
                 // kept in the evidence store for the app to draw, by its hash.
-                let picture = current.filter(|_| scene.is_none()).and_then(|r| {
-                    let doc = r.doc.as_object()?;
+                let picture = own.as_ref().filter(|_| three.is_none()).and_then(|d| {
+                    let doc = d.as_object()?;
                     let mut renderer = Renderer::new();
                     let d = renderer
                         .prepare(
@@ -72,6 +91,7 @@ impl Hub<'_> {
             "rev": row.rev,
             "hash": hash,
             "writer": row.writer.to_json(),
+            "patch": row.patch,
             "layer": row.writer.layer_id(),
             "items": items,
             "panel": panel,

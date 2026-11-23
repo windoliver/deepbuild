@@ -43,6 +43,14 @@ impl Hub<'_> {
         resolved(doc, &self.look_def_of(doc)?).ok()
     }
 
+    /// The look `doc` names, where the evidence store holds it.
+    pub(crate) fn take_look(&mut self, doc: &Value) {
+        if let Some(look) = self.look_of(doc) {
+            self.look = look;
+            self.look_def = self.look_def_of(doc);
+        }
+    }
+
     /// The look@1 a document names by asset, as the evidence store holds it.
     pub(crate) fn look_def_of(&self, doc: &Value) -> Option<Value> {
         serde_json::from_slice(&self.look_file(doc)?.1).ok()
