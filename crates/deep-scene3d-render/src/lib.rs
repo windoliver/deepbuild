@@ -21,6 +21,7 @@ pub mod flare;
 mod glass;
 pub mod hdr;
 pub mod held;
+pub mod hidden;
 pub mod history;
 pub mod inset;
 mod kept;
@@ -101,6 +102,7 @@ pub const FORWARD_FAR: f64 = 10_000.0;
 const SHADER: &str = concat!(
     include_str!("scene3d.wgsl"),
     include_str!("scene3d_labels_sky.wgsl"),
+    include_str!("tiles.wgsl"),
     include_str!("fog.wgsl"),
     include_str!("ao_shade.wgsl"),
     include_str!("ambient.wgsl"),
@@ -427,7 +429,7 @@ struct LightsUniform {
     local_size: [f32; 4],
     /// x: 1 with a light grid; y: its far plane (#446).
     grid: [f32; 4],
-    locals: [LocalUniform; local::SLOTS],
+    locals: [LocalUniform; local::MAPS],
     items: [[[f32; 4]; 6]; SHADED],
     /// Each shaded light's weight near the cut and a hash of its ID (u32 bits), which a light
     /// response takes (#485).
@@ -1323,6 +1325,8 @@ struct Batch {
     clear_draws: Vec<((Shape, u32), u8)>,
     /// Each see-through draw's material operator key (#431), 0 for none, as `clear_draws`.
     clear_ops: Vec<u64>,
+    /// #290: its solids' hidden views, drawn after the resolve where nearer surfaces hide them.
+    hidden: hidden::Records,
     /// #1636: each draw of a mesh its bundle records, with the instances it draws.
     calls: Vec<(Call, u32)>,
     /// The resources and draws the bundle binds and records, as it was encoded, and this
@@ -2727,6 +2731,7 @@ impl Renderer {
             filter_taps: 8,
             clear_pipelines: [None, None, None, None, None, None],
             late_pipelines: [None, None],
+            hidden: None,
             adjust_buffer,
             adjusts: Vec::new(),
             lobe_buffer,
@@ -3331,7 +3336,11 @@ impl Renderer {
             .filter(|&(i, _)| scene.lights[i].kind != LightKind::Sun)
             .collect();
         let planted = self.planted.local;
-        let fresh = self.locals.prepare(scene, &wanted, casters, planted);
+        let tiled = self.shadowing(scene).tiles;
+        let fresh = self.locals.prepare(scene, &wanted, casters, planted, tiled);
+        if tiled {
+            self.locals.clear(&device.device);
+        }
         if fresh {
             let device_size = (self.locals.size, self.locals.layers);
             self.locals.ensure(device, device_size, &self.frame_layout);
@@ -3340,10 +3349,11 @@ impl Renderer {
             // A frame with no shadowed local light lets go of their maps.
             self.rebind_lights(device);
         }
+        self.locals.grow_frames(device, &self.frame_layout);
         for slot in self.locals.stale.clone() {
             let (first, faces) = {
                 let m = &self.locals.list[slot];
-                (m.first, m.map.faces.clone())
+                (m.frame, m.map.faces.clone())
             };
             for (offset, clip) in faces {
                 let mut f = *frame;
@@ -3361,6 +3371,15 @@ impl Renderer {
             }
         }
         self.counts.local_maps = self.locals.reports();
+    }
+
+    /// The scene's shadow fields, or under #2034's planted twin the fixed rule's 2 spots.
+    fn shadowing(&self, scene: &Scene) -> light::Shadowing {
+        let mut s = scene.shadowing;
+        if self.planted.local.tile_keeps_fixed_caps && s.tiles {
+            (s.tiles, s.spots, s.points) = (false, 2, 0);
+        }
+        s
     }
 
     /// A light frame's cut (#424): the view's, unless removed geometry still casts
@@ -3691,9 +3710,15 @@ impl Renderer {
                 f32::from(scene.sample_turn.is_some()),
                 scene.sample_turn.unwrap_or(0.0) as f32,
             ],
-            local_size: [self.locals.size as f32; 4],
+            local_size: match self.locals.list.first() {
+                // Shadow tiles' filter side and their atlas's (#2034).
+                Some(m) if m.size > 0 => {
+                    [local::FILTER_SIDE as f32, self.locals.size as f32, 0.0, 0.0]
+                }
+                _ => [self.locals.size as f32; 4],
+            },
             grid: [0.0; 4],
-            locals: [LocalUniform::zeroed(); local::SLOTS],
+            locals: [LocalUniform::zeroed(); local::MAPS],
             items: [[[0.0; 4]; 6]; SHADED],
             answers: [[0.0; 4]; SHADED],
             fill: [[0.0; 4]; 2],
@@ -3727,7 +3752,12 @@ impl Renderer {
                     m.map.tan as f32,
                     f32::from(m.map.cube),
                 ],
-                size: [local::radius(l) as f32, m.share as f32, 0.0, 0.0],
+                size: [
+                    local::radius(l) as f32,
+                    m.share as f32,
+                    m.size as f32,
+                    f32::from(self.planted.local.tile_filter_in_texels && m.size > 0),
+                ],
             };
             local_of.insert(m.light, slot as u32 + 1);
         }
@@ -4904,6 +4934,7 @@ impl Renderer {
             || leveled(scene)
             || self.order.len() != scene.layers.len()
             || self.batches.values().any(|b| !b.clear_draws.is_empty())
+            || self.batches.values().any(|b| !b.hidden.is_empty())
             || !self.adjusts.is_empty()
             || scene.mirror.is_some()
             || scene.water.is_some()
@@ -5579,7 +5610,7 @@ impl Renderer {
             .unwrap_or_else(|| light::policy(&scene.lights, &scene.camera));
         let scores = light::scores(&scene.lights, &scene.camera);
         self.counts.scoring_ms = scoring.elapsed().as_secs_f64() * 1e3;
-        let shadowed = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores);
+        let shadowed = light::shadowed(&scene.lights, &policy, &self.shadowing(scene), &scores);
         // The frame's one pass over its casters (#2657), for the key sun's cascades and, with
         // their culled elements, the shadowed local lights' maps.
         let locals = (shadowed.kept.iter()).any(|&(i, _)| scene.lights[i].kind != LightKind::Sun);
@@ -5770,6 +5801,9 @@ impl Renderer {
     fn prepare_batch(&mut self, device: &Device, layer: &Layer3, scene: &Scene) {
         let cam = &scene.camera;
         self.compiled += self.families.ensure(&device.device, layer, &mut self.names);
+        if !layer.hidden.is_empty() {
+            self.ensure_hidden(device, layer.hidden.keys().cloned());
+        }
         let clear = |s: &Solid| {
             s.per_pixel
                 || faded(s)
@@ -6051,8 +6085,8 @@ impl Renderer {
         let winding = !self.planted.winding_ignores_determinant;
         let by_position = self.planted.ids_by_draw_position;
         let adjusts = &mut self.adjusts;
-        let mut adjust_of = |s: &Solid| -> u32 {
-            let Some(a) = s.adjust.filter(Adjust3::colors) else {
+        let mut adjust_of = |a: Option<Adjust3>| -> u32 {
+            let Some(a) = a.filter(Adjust3::colors) else {
                 return 0;
             };
             let e = AdjustEntry::of(&a);
@@ -6104,8 +6138,9 @@ impl Renderer {
         // See-through parts and shadow catchers draw after the opaque ones, back to front by
         // view depth plus their sort_bias, ties by ID.
         let mut see_through = Vec::new();
+        batch.hidden.begin();
         for (s, slot) in order {
-            let adjust = adjust_of(s) | lobes_of(s);
+            let adjust = adjust_of(s.adjust) | lobes_of(s);
             let mut record = solid_record(
                 s,
                 slot.2,
@@ -6114,6 +6149,14 @@ impl Renderer {
                 slot.0 .1 & MAPS_INDEX != 0,
                 adjust,
             );
+            // #290: its item's hidden view draws it again, tinted, where something hides it.
+            let view = layer.hidden.get(created::item_of(&s.id));
+            // A cast-only level draws no hidden view; the planted row no pass draws does.
+            if let Some(v) = view.filter(|_| !s.cast_only || !s.cast_shadow) {
+                let mut again = record;
+                again.op[3] = adjust_of(hidden::adjust(s, v)) | lobes_of(s);
+                batch.hidden.push(s, slot.0 .1, again, v);
+            }
             if clear(s) {
                 let c = [s.model[0][3], s.model[1][3], s.model[2][3]];
                 let depth = (0..3)
@@ -6173,6 +6216,7 @@ impl Renderer {
             batch.clear_ops.push(*op);
         }
         batch.clear.finish(device, &mut next, &mut written);
+        batch.hidden.finish(device, &mut next, &mut written);
         batch.solid_slots = slots;
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
             if let Some(&n) = layer.fed.get(&key.3) {
@@ -7165,10 +7209,11 @@ impl Renderer {
         self.shadow.clip?;
         let view = self.shadow_view(device);
         let bind = self.shadow.bind.clone();
-        Some(self.depth_job(SHADOW_PASS, view, bind, None, Some(cull::KEY_MAP)))
+        Some(self.depth_job(SHADOW_PASS, view, bind, None, Some(cull::KEY_MAP), None))
     }
 
-    /// The casters drawn depth-only into `view` under the light frame `bind` holds.
+    /// The casters drawn depth-only into `view` under the light frame `bind` holds; with `tile`,
+    /// into a shadow tile's place and side in an atlas, cleared first by its pipeline (#2034).
     fn depth_job(
         &self,
         label: &'static str,
@@ -7176,6 +7221,7 @@ impl Renderer {
         bind: wgpu::BindGroup,
         only: Option<&BTreeSet<String>>,
         cull_view: Option<usize>,
+        tile: Option<([u32; 3], wgpu::RenderPipeline)>,
     ) -> Job {
         // A cull's list holds no owners, so a caster set picks its elements from the instances;
         // a local map has no cull of its own and draws all it holds.
@@ -7194,7 +7240,10 @@ impl Renderer {
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                         view: &view,
                         depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
+                            load: match tile {
+                                Some(_) => wgpu::LoadOp::Load,
+                                None => wgpu::LoadOp::Clear(1.0),
+                            },
                             store: wgpu::StoreOp::Store,
                         }),
                         stencil_ops: None,
@@ -7202,6 +7251,13 @@ impl Renderer {
                     timestamp_writes,
                     ..Default::default()
                 });
+                if let Some(([x, y, side], clear)) = &tile {
+                    let (fx, fy, fs) = (*x as f32, *y as f32, *side as f32);
+                    pass.set_viewport(fx, fy, fs, fs, 0.0, 1.0);
+                    pass.set_scissor_rect(*x, *y, *side, *side);
+                    pass.set_pipeline(clear);
+                    pass.draw(0..3, 0..1);
+                }
                 pass.set_bind_group(0, &bind, &[]);
                 for d in &draws {
                     match (&d.cuts, &pipeline, &mask_pipeline, d.mask) {
@@ -7247,25 +7303,22 @@ impl Renderer {
                     c.frames[i].1.clone(),
                     c.casters.as_ref(),
                     Some(cull::CASCADES + i),
+                    None,
                 );
                 (CASCADE_PASS.to_string(), job)
             }));
         }
-        // One depth pass per face of each stale local map (#446).
-        if let Some((_, layers)) = &self.locals.texture {
-            for &slot in &self.locals.stale {
-                let m = &self.locals.list[slot];
-                for &(offset, _) in &m.map.faces {
-                    let layer = (m.first + offset) as usize;
-                    let job = self.depth_job(
-                        local::PASS,
-                        layers[layer].clone(),
-                        self.locals.frames[layer].1.clone(),
-                        Some(&m.casters),
-                        None,
-                    );
-                    jobs.push((local::PASS.to_string(), job));
-                }
+        // One depth pass per face of each stale local map (#446), or of each stale tile (#2034).
+        for &slot in &self.locals.stale {
+            let m = &self.locals.list[slot];
+            for &(offset, _) in &m.map.faces {
+                let Some((view, tile)) = self.locals.target(m, offset) else {
+                    continue;
+                };
+                let frame = self.locals.frames[(m.frame + offset) as usize].1.clone();
+                let tile = tile.zip(self.locals.clearing());
+                let job = self.depth_job(local::PASS, view, frame, Some(&m.casters), None, tile);
+                jobs.push((local::PASS.to_string(), job));
             }
         }
         jobs
@@ -7290,6 +7343,11 @@ impl Renderer {
             }
         };
         let cascades = self.cascade_jobs();
+        // #290: the hidden views; the planted hidden_view_after_status draws them last.
+        let (hidden_last, hidden) = match self.hidden_frame(device) {
+            h if self.planted.hidden.after_status => (h, None),
+            h => (None, h),
+        };
         let Some(t) = self.targets.as_ref() else {
             return Vec::new();
         };
@@ -7513,6 +7571,10 @@ impl Renderer {
                         timestamps,
                     );
                 });
+            }
+            // #290: the hidden views, over what the opaque and see-through parts left.
+            if let Some(h) = &hidden {
+                h.record(encoder, [&linear, &ids], clear_depth, crop, &profiler);
             }
             // Motion blur by velocity resolves the finished geometry, glass included, before the
             // effects (#419).
@@ -7891,6 +7953,20 @@ impl Renderer {
             ));
         }
         jobs.extend(colors);
+        if let (Some(h), Some(t)) = (hidden_last, self.targets.as_ref()) {
+            let (slot, ids, clear, profiler) = (
+                slot.clone(),
+                t.drawn.ids.clone(),
+                self.clear_depth(),
+                self.profiler.clone(),
+            );
+            let job: Job = Box::new(move |e| h.record(e, [&slot, &ids], clear, None, &profiler));
+            // Under the last pass's name, so the view's plan keeps it after that pass.
+            let last = jobs
+                .last()
+                .map_or(OUTPUT_PASS.to_string(), |(n, _)| n.clone());
+            jobs.push((last, job));
+        }
         if let Some(job) = self.hdr_job(device, slot) {
             jobs.push((hdr::HDR_PASS.into(), job));
         }
@@ -8289,6 +8365,7 @@ impl Renderer {
     /// #379), with its timestamp writes when given.
     pub fn record_geometry(
         &mut self,
+        device: &Device,
         encoder: &mut wgpu::CommandEncoder,
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
@@ -8298,6 +8375,8 @@ impl Renderer {
         if let Some(job) = self.occlusion_job() {
             job(encoder);
         }
+        // #290: the hidden views, which the live path draws as a snapshot does.
+        let hidden = self.hidden_frame(device);
         let Some(t) = self.targets.as_ref() else {
             return;
         };
@@ -8324,6 +8403,11 @@ impl Renderer {
         );
         if let Some(core) = self.core_draws() {
             core.record(encoder);
+        }
+        if let Some(h) = &hidden {
+            let crop = self.crop.map(|c| crop_px(c, t.size));
+            let over = [&t.linear_view, &t.drawn.ids];
+            h.record(encoder, over, self.clear_depth(), crop, &self.profiler);
         }
     }
 

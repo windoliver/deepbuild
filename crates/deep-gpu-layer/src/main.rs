@@ -37,8 +37,10 @@ mod flows2d;
 mod frames;
 mod full_lane;
 mod golden;
+mod grids2d;
 mod guard;
 mod hdr;
+mod hidden;
 mod host;
 use deep_groups_render::indexed;
 mod insets;
@@ -269,6 +271,11 @@ pub enum Planted {
     WaterBelowTintByDepth,
     /// #3034: the water's surface from below showing what is above it at every angle.
     WaterBelowSkyAtEveryAngle,
+    /// #290's wrong hidden views (tests/acceptance/290/README.md: Planted programs).
+    HiddenViewDrawsWhereVisible,
+    HiddenViewWithoutOwnDepth,
+    HiddenViewWritesIds,
+    HiddenViewAfterStatus,
     /// #971: the local tone map's base brought back up with a range weight of 1 at every tap.
     LocalBaseIgnoresEdges,
     /// #971: the local tone map's pyramid has the look's `levels` at every output size.
@@ -410,6 +417,13 @@ pub enum Planted {
     CutsColorOnly,
     SoftNoiseFromFrame,
     LocalMapStale,
+    /// #2034's twins: slots in arrival order, the fixed caps kept, hysteresis, a filter in the
+    /// tile's texels, a tile's key without its size.
+    TileArrivalOrder,
+    TileKeepsFixedCaps,
+    TileHysteresis,
+    TileFilterInTexels,
+    TileKeyWithoutSize,
     IesPeakNormalized,
     CascadeUnsnapped,
     CascadeFilterInTexels,
@@ -599,6 +613,10 @@ pub enum Planted {
     NormalDotAlone,
     NormalUnturned,
     LightStaleHeight,
+    /// #269's wrong programs (tests/acceptance/269/README.md: Plants): a played frame's grid image
+    /// holds the step before its own; a pixel takes its cell's role before the rebuild.
+    GridKeepsPreviousStep,
+    GridRoleBeforeRebuild,
 }
 
 impl Planted {
@@ -767,6 +785,10 @@ impl Planted {
             "water_below_ior_one" => Planted::WaterBelowIorOne,
             "water_below_tint_by_depth" => Planted::WaterBelowTintByDepth,
             "water_below_sky_at_every_angle" => Planted::WaterBelowSkyAtEveryAngle,
+            "hidden_view_draws_where_visible" => Planted::HiddenViewDrawsWhereVisible,
+            "hidden_view_without_own_depth" => Planted::HiddenViewWithoutOwnDepth,
+            "hidden_view_writes_ids" => Planted::HiddenViewWritesIds,
+            "hidden_view_after_status" => Planted::HiddenViewAfterStatus,
             "local_base_ignores_edges" => Planted::LocalBaseIgnoresEdges,
             "local_pyramid_fixed_levels" => Planted::LocalPyramidFixedLevels,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
@@ -793,6 +815,8 @@ impl Planted {
             "puff_block_copy" => Planted::PuffBlockCopy,
             "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
+            "grid_keeps_previous_step" => Planted::GridKeepsPreviousStep,
+            "grid_role_before_rebuild" => Planted::GridRoleBeforeRebuild,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
@@ -882,6 +906,11 @@ impl Planted {
             "cut_color_only" => Planted::CutsColorOnly,
             "soft_noise_from_frame" => Planted::SoftNoiseFromFrame,
             "local_map_stale" => Planted::LocalMapStale,
+            "tile_arrival_order" => Planted::TileArrivalOrder,
+            "tile_keeps_fixed_caps" => Planted::TileKeepsFixedCaps,
+            "tile_hysteresis" => Planted::TileHysteresis,
+            "tile_filter_in_texels" => Planted::TileFilterInTexels,
+            "tile_key_without_size" => Planted::TileKeyWithoutSize,
             "ies_peak_normalized" => Planted::IesPeakNormalized,
             "cascade_unsnapped" => Planted::CascadeUnsnapped,
             "cascade_filter_in_texels" => Planted::CascadeFilterInTexels,

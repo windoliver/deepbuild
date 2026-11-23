@@ -1,6 +1,6 @@
 ---
 name: deepbuild-canvas
-description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set dd0a33efb45744f740f926febd7941ede0b9b7510da11e6973cf56cf4868a945; never edit by hand.
+description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set 46ce7e0f35472549cc8fb8914d52391a28651b34c89c0a5da4290b3a3d3fb11f; never edit by hand.
 version: 0.0.0
 ---
 
@@ -43,7 +43,7 @@ A document is one JSON object. The keys to write first:
 
 Every key the core reads: format, id, profile, title, description, seed, transport, size, safe, aspect, look, camera, locale, light_policy, budget, requires, packs, data, assets, items, collections, assemblies, channels, drivers, constraints, clips, placements, time_remaps, transitions, shots, markers, controls, inputs, bound_values, status_bindings, variants, card, audit, script, record, source, worlds, brief, checks, strips, emitters, buses, processors, spawns, ducking, bakes, tempo_map, sounds, foley_materials, tour, rewind, ports, viewer_tools. Leave out layers and each item's layer: the hub stamps them from your connection.
 
-An item is {"id": "<its key in items>", "kind": "name@major", "name": "a readable name", "order": "a0", "params": {…}, "at": {"pos": [x, y, z]}}. id, kind, name and order are required; order is a sort key, "a0", "a1" and so on, unique in the document. parent names an item or an assembly. Its keys: id, kind, parent, name, role, params, at, adjust, visible, pickable, order, broken_out, modifiers, materials, material, constraints, cast_shadow, receive_shadow, lod, tone, halo, relations. Its role is one of part, control, label, data, decoration.
+An item is {"id": "<its key in items>", "kind": "name@major", "name": "a readable name", "order": "a0", "params": {…}, "at": {"pos": [x, y, z]}}. id, kind, name and order are required; order is a sort key, "a0", "a1" and so on, unique in the document. parent names an item or an assembly. Its keys: id, kind, parent, name, role, params, at, adjust, visible, pickable, order, broken_out, modifiers, materials, material, constraints, cast_shadow, receive_shadow, lod, tone, halo, relations, hidden_view. Its role is one of part, control, label, data, decoration.
 
 Profiles: figure, film, scene, world, view, board, sheet, chart, cells. In 3D, units are metres with +Y up and at.pos is the item's centre; in 2D, px with y down. Times are strings such as "1.5s". A paint is {"fill": {"role": "accent"}}, a look role and never a raw color: accent, ink, muted, raised.
 
@@ -119,7 +119,7 @@ A film's brief names the checks it wants; each runs only when named and never pa
 }
 ```
 
-## Kinds (module set dd0a33efb45744f740f926febd7941ede0b9b7510da11e6973cf56cf4868a945)
+## Kinds (module set 46ce7e0f35472549cc8fb8914d52391a28651b34c89c0a5da4290b3a3d3fb11f)
 
 Each entry as name@major, with its origin when not first party and its stability when not stable; then its fields as name: type, unit, [min, max] and = default, each left out when it has none. Entries with no fields share one line.
 
@@ -192,7 +192,7 @@ Each entry as name@major, with its origin when not first party and its stability
 - text@1: text.copy: string; text.args: [path | {path, widest: string} | {copy: text (<table>[<array path>])}] ≤ 4; data.copy.<locale>.<table>.<key>: string | {zero, one, two, few, many, other: string} (key an i32; other required in a plural entry); data.copy.<locale>.<table>.missing: string = ""
 - marks@1: columns.<name>.array: string; columns.<name>.as: string; columns.<name>.part: string; columns.<name>.range: [min, max] (a row outside it hides); alive.array: string; grid.shape: string = "square"; grid.hex.orient: string = "pointy"; grid.hex.offset: string = "odd"; recipe.rules: string; recipe.precedence: [<terrain>] (edges_6: an edge takes the neighbour's terrain where it comes first); columns.<name>.copy: string; columns.<name>.key: string; columns.<name>.args: [column] ≤ 4
 - group@1: flip.keys: [{t: time, show: child ID | none}]; flip.from: string; flip.array: string; flip.map: {value → child ID} (an unmapped value shows none)
-- rect@1, path@1, image@1, axis@1, scale@1, mask@1, star@1, frame@1, matte@1, axes3d@1, vector_field@1, overlay.frame@1
+- rect@1, path@1, image@1, axis@1, scale@1, mask@1, star@1, frame@1, matte@1, axes3d@1, vector_field@1, grid_image@1, overlay.frame@1
 
 ### check.kind.doc@1
 

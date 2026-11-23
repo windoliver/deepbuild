@@ -1,0 +1,72 @@
+# #2955 acceptance suite at base 58b4a8cb2 (origin/main), both after npm ci and npm run build --workspaces, Node 24.22.0; checkout path shown as <checkout>, home as <home>
+# Run: node node_modules/vitest/vitest.mjs run tests/acceptance/2955 --reporter=verbose (and tsc -p tests/acceptance/2955/tsconfig.json)
+# Expected on Linux: the Linux test fails at its first assertion with makeWorld's error, /bin/cp -cR refused by GNU cp: invalid option -- 'c'; the macOS test skips naming the platform.
+# Expected on macOS: the Linux test skips naming the platform; the macOS test passes. The criterion's macOS half is "unchanged", which can't fail on the base, so it stays green here by design.
+
+## 1. Linux (Spark: aarch64 Ubuntu 24.04, GNU coreutils cp)
+
+uname: Linux 7.0.0-1025-nvidia aarch64; Ubuntu 24.04.5 LTS; node v24.22.0; cp (GNU coreutils) 9.4
+uptime:  23:52:59 up 2 days,  3:28,  9 users,  load average: 68.03, 69.17, 46.39
+command: node node_modules/vitest/vitest.mjs run tests/acceptance/2955 --reporter=verbose
+
+
+ RUN  v5.0.5 <checkout>
+
+/bin/cp: invalid option -- 'c'
+Try '/bin/cp --help' for more information.
+ × tests/acceptance/2955/installs.test.ts > makeWorld copies a case's installs into its world's repo > #2955.a3f66150 on Linux, makeWorld copies a case's installs into its world's repo byte for byte 13ms
+   → makeWorld copies the installs without an error: expected 'Command failed: /bin/cp -cR /tmp/blin…' to be '' // Object.is equality
+ ↓ tests/acceptance/2955/installs.test.ts > makeWorld copies a case's installs into its world's repo > #2955.a3f66150 on macOS, makeWorld still copies a case's installs into its world's repo byte for byte (the /bin/cp -cR call, unchanged) 0ms [macOS only (this is linux)]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2955/installs.test.ts > makeWorld copies a case's installs into its world's repo > #2955.a3f66150 on Linux, makeWorld copies a case's installs into its world's repo byte for byte
+AssertionError: makeWorld copies the installs without an error: expected 'Command failed: /bin/cp -cR /tmp/blin…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ Command failed: /bin/cp -cR <checkout>/node_modules/@jridgewell/resolve-uri /tmp/gk-uYEmOh/repo/node_modules/@jridgewell/resolve-uri
++ /bin/cp: invalid option -- 'c'
++ Try '/bin/cp --help' for more information.
++  /bin/cp: invalid option -- 'c'
++ Try '/bin/cp --help' for more information.
+
+ ❯ tests/acceptance/2955/installs.test.ts:73:69
+     71|     if (process.platform !== 'linux') ctx.skip(`Linux only (this is ${…
+     72|     const { w, error } = play(owned);
+     73|     expect(error, 'makeWorld copies the installs without an error').to…
+       |                                                                     ^
+     74|     expectCopied(w!);
+     75|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  23:53:00
+   Duration  252ms (tests 56%, transform 23%, import 11%, setup 7%, worker 3%)
+
+exit 1
+tsc exit 0
+
+## 2. macOS (arm64)
+
+uname: Darwin 27.2.0 arm64; macOS 27.2.1; node v24.22.0
+uptime: 23:52  up 2 days,  4:19, 4 users, load averages: 174.12 142.00 109.79
+command: node node_modules/vitest/vitest.mjs run tests/acceptance/2955 --reporter=verbose
+
+
+ RUN  v5.0.5 <checkout>
+
+ ↓ tests/acceptance/2955/installs.test.ts > makeWorld copies a case's installs into its world's repo > #2955.a3f66150 on Linux, makeWorld copies a case's installs into its world's repo byte for byte 1ms [Linux only (this is darwin)]
+ ✓ tests/acceptance/2955/installs.test.ts > makeWorld copies a case's installs into its world's repo > #2955.a3f66150 on macOS, makeWorld still copies a case's installs into its world's repo byte for byte (the /bin/cp -cR call, unchanged) 490ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 1 skipped (2)
+   Start at  23:52:48
+   Duration  753ms (tests 95%, import 2%, transform 1%, setup 1%, worker 1%)
+
+exit 0
+tsc exit 0

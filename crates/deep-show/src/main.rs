@@ -1138,10 +1138,6 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     .into_iter()
     .filter_map(|(d, f)| Some((d, f?)))
     .collect();
-    let seeds = entries(input, "docs", |d| Some(d.get("document").cloned()))?
-        .into_iter()
-        .filter_map(|(id, seed)| Some((id, seed?)))
-        .collect();
     let quotas = entries(input, "quotas", |q| {
         let cap = |k: &str| match q.get(k) {
             None => Some(None),
@@ -1331,7 +1327,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
-                || deep_canvas_marks::arrays::PLANTED.contains(p) || deep_canvas_marks::atlas::PLANTED.contains(p) || *p == spatial::HIT_READS_QUADS
+                || deep_canvas_marks::arrays::PLANTED.contains(p) || deep_canvas_marks::atlas::PLANTED.contains(p) || *p == spatial::HIT_READS_QUADS || deep_canvas_marks::grid_image::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
                 || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
@@ -1364,7 +1360,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
-                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p)
+                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1470,6 +1466,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "resolver_closes_task" => Planted::ResolverClosesTask,
                 "probe_from_depth" => Planted::ProbeFromDepth,
                 "probe_nearest_item" => Planted::ProbeNearestItem,
+                "render_back_2d_only" => Planted::RenderBack2dOnly,
                 "skips_missing_mesh_asset" => Planted::SkipsMissingMeshAsset,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
@@ -1809,7 +1806,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         logic_planted,
         calls,
         at,
-        seeds,
+        seeds: shared::seeds(input)?,
+        recorded: Default::default(),
         state: optional(input.get("state"), |s| Some(PathBuf::from(s.as_str()?)))?,
         quotas,
         clock,

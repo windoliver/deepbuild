@@ -11,12 +11,13 @@
     "cargo -p deep-replica --test tree_state › a_state_is_read_as_its_status_map_entry": "fails on main b6317234f: the sidebar has session rows: at 1512 × 982 #1461's 32-tall rows show 29 of the fixture's 40 asks and no session row. A later issue's criterion changed what it checks, so it waits on an owner's ruling (#3149, added 2026-11-22)",
     "cargo -p deep-replica --test acceptance_326_surfaces › ac2_only_one_device_plays_a_sound": "fails on main b6317234f: 0 devices played a sound for ask:…030, the second of two asks 1.5 s apart: #994 sounds once for asks due within 2 s. A later issue's criterion changed what it checks, so it waits on an owner's ruling (#3149, added 2026-11-22)",
     "cargo -p deep-replica --test acceptance_327_card › ac6_each_kind_renders_from_its_fixture_with_question_options_deadline_default_and_its_fields": "fails on main b6317234f: the card says when its default applies as a moment (\"at 23:50\", #1458's one form) where #327's judge wants the time left (\"23 h\"). A later issue's criterion changed what it checks, so it waits on an owner's ruling (#3149, added 2026-11-22)",
-    "cargo -p deep-replica --test headless › replica_equals_live_tree": "fails on main b6317234f: the replica differs from the live tree at Needs you, the sidebar and the session: the stored live trees date from Nov 10 (e08ebb167), before #1592's hidden pop-out control and #1808's rows and card; they are retaken on the reference Mac (#1620, added 2026-11-22)",
     "cargo -p deep-replica --test acceptance_1454_panel_redraft › the_fixture_loads_and_paints_its_words_in_the_sidebar_slot": "fails on main b6317234f: the redraft's fixture imports \"gpui-kit\", which #1425's loader refuses, so it never mounts; a blind redraft against \"@deepbuild/panel\" is #1454's (#1454, added 2026-11-22)",
     "cargo -p deep-replica --test acceptance_1454_panel_redraft › wrong_fixture_with_no_words_paints_no_ink": "fails on main b6317234f: the redraft's fixture imports \"gpui-kit\", which #1425's loader refuses, so its panel draws nothing in the slot; a blind redraft against \"@deepbuild/panel\" is #1454's (#1454, added 2026-11-22)",
     "cargo -p deep-replica --test acceptance_1454_panel_redraft › wrong_fixture_dialog_from_gpui_base_is_refused_and_never_loads": "fails on main b6317234f: the load fails on the fixture's \"gpui-kit\" import, which #1425's loader refuses, before it reaches the Dialog; a blind redraft against \"@deepbuild/panel\" is #1454's (#1454, added 2026-11-22)",
     "cargo -p deep-show --bin deep-show › kinds::tests::every_structured_field_prints_forms_that_take_its_own_values": "fails on main b6317234f: cut.words@1 declares recording as `asset name` and keep as `[word index | [first, last]]`, words the form language doesn't read; the fix moves media@1's digest (#3150, added 2026-11-22)",
-    "cargo -p deep-show --test render_back_pipeline › render_back_draws_the_sprite_as_the_base_commit_did": "fails on main b6317234f: 216 pixels off #674's base draw of its sprite, first (3, 2) drawn (255, 255, 255) against (248, 248, 253); the image path changed with #1486 and #1489 (#3151, added 2026-11-22)"
+    "cargo -p deep-show --test render_back_pipeline › render_back_draws_the_sprite_as_the_base_commit_did": "fails on main b6317234f: 216 pixels off #674's base draw of its sprite, first (3, 2) drawn (255, 255, 255) against (248, 248, 253); the image path changed with #1486 and #1489 (#3151, added 2026-11-22)",
+    "tests/acceptance/490/redraft-2047/opening.test.ts › #490.ac6f64d6 opening the eases as ease@1 leaves the shipped fixtures byte for byte the same, and deep://registries lists it › #490.ac6f64d6 deep://registries lists ease@1 with since, digest, fill, each entry's origin and kit result; every content key, golden and corpus snapshot of the shipped fixtures and of a channel keyed with in_out_cubic is the merge base's; and a planted opening that renumbers the entries changes that channel's key and fails, naming the ease and the item": "fails on main ccafae68f: parity/logic/readers.board (#2363, 432dc15b8) gives logic.step|- and the nodes it feeds a new content key on every run of the same build, so its 27 keys differ from the merge base's at 0, 0.5 and 1.5 s; every other shipped fixture compares equal (#3278, added 2026-11-23)",
+    "tests/acceptance/490-redraft-2/opening.test.ts › #490 AC2 (redraft) opening the eases as ease@1 leaves the shipped fixtures byte for byte the same › AC2 every content key, golden and corpus snapshot of the shipped fixtures, and of a channel keyed with in_out_cubic, is the merge base's after the opening": "fails on main ccafae68f: parity/logic/readers.board (#2363, 432dc15b8) gives logic.step|- and the nodes it feeds a new content key on every run of the same build, so its 27 keys differ from the merge base's at 0, 0.5 and 1.5 s; every other shipped fixture compares equal (#3278, added 2026-11-23)"
   },
   "lint": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": 1,
@@ -124,8 +125,7 @@
     "canvas-lint: crates/deep-text/src/lib.rs a target predicate (target_arch), code that computes differently per platform": 1,
     "canvas-lint: crates/deep-text/src/vertical.rs a static item, state a check could carry between runs": 1,
     "canvas-lint: deep-canvas-test-modules compiles ../../tests/acceptance/3023/seal.rs as a target's root, which the scan never reads: outside the crate, or under its target/ directory": 1,
-    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": 1,
-    "clippy: tests/acceptance/3016/fixture.rs manual implementation of `.is_multiple_of()`": 2
+    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": 1
   },
   "lintIssues": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": "#1967's unit test reading the crate's oracle recordings (#2381, added 2026-11-12)",
@@ -233,8 +233,7 @@
     "canvas-lint: crates/deep-text/src/lib.rs a target predicate (target_arch), code that computes differently per platform": "#172's web player: a face's bytes compiled in, or none in the player, whose bundle gives them by hash (#2381, added 2026-11-22)",
     "canvas-lint: crates/deep-text/src/vertical.rs a static item, state a check could carry between runs": "#1215's planted vertical shaper, the switch deep-show's line sets for that line alone (#2381, added 2026-11-22)",
     "canvas-lint: deep-canvas-test-modules compiles ../../tests/acceptance/3023/seal.rs as a target's root, which the scan never reads: outside the crate, or under its target/ directory": "#3023's blind acceptance test, wired as this crate's test target by its blind job; a test never ships in a check (#2381, added 2026-11-22)",
-    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": "two versions, through deep-typeset's typst in the whole-workspace resolve (#2381, added 2026-11-12)",
-    "clippy: tests/acceptance/3016/fixture.rs manual implementation of `.is_multiple_of()`": "two lines of #3016's blind fixture that clippy denies and no agent may edit: a proposal for the owner, or a blind redraft (#3194, added 2026-11-23)"
+    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": "two versions, through deep-typeset's typst in the whole-workspace resolve (#2381, added 2026-11-12)"
   },
   "timing": [],
   "skips": [
@@ -466,6 +465,48 @@
       "note": "",
       "reason": "retired by #2551, which keeps the two rules #1296 added, so the design names twelve: 313-redraft-2551/fakes.test.ts is AC12's test",
       "approval": "#2551, the owner's decision of 2026-11-14 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the twelve rules in the design's order, each with an id (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list that lacks a rule in the middle fails this test (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with a thirteenth rule the design doesn't name fails this test (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with the last two rules swapped fails this test, naming rule 11 and the design's phrase (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with two of the first ten rules swapped fails this test, naming the first of them (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list whose twelfth rule says something else fails this test, naming rule 12 and the design's phrase (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with one id used twice, or an id out of form, fails this test (redraft 2551)",
+      "note": "",
+      "reason": "retired by #2551, whose owner's choice of 2026-11-22 has the design name all thirteen rules, #1801's reads-count-as-read among them: this redraft holds twelve phrases, and its wrong programs are twelve-rule lists, so 2551/rules.test.ts, which reads the design's list and x-rules both, is AC12's test",
+      "approval": "#2551, the owner's choice of 2026-11-22 (the owner's touch-key tag on this commit)"
     },
     {
       "id": "tests/acceptance/313/generator.test.ts › AC15 a generator draws valid instances and four mutations for every schema, at 1,000 cases from the recorded seed › AC15 each mutation names its kind, its code (required, enum, range, unlisted_field) and a JSON Pointer; every kind the schema affords is drawn",
