@@ -626,6 +626,11 @@ timed.push('tests/acceptance/1700/budgets.test.ts');
 alone.push('tests/acceptance/1781/');
 // #409's files each build deep-show and export films through the GPU; 409-oracle also runs the outside film gate.
 alone.push('tests/acceptance/409/', 'tests/acceptance/409-oracle/');
+// #2697 moved the craft checks' text from the skill to the guide deep_kinds serves: #409's skill test, kept as written,
+// runs by hand only, and its blind redraft, which reads the guide, runs in its place. Both build deep-show; #2697's own
+// files also build it in a copy of the checkout when the guide isn't in the copy's gallery, and run #26's drift test.
+byHand.push('tests/acceptance/409/skill.test.ts');
+alone.push('tests/acceptance/409-redraft-2697/', 'tests/acceptance/2697/');
 // #1163's files each build deep-show; exports.test.ts exports the 600-frame 1080p film six times.
 alone.push('tests/acceptance/1163/');
 // #1164's files build deep-show, deep-sandbox and a Rust program for wasm32, and play a game through the hub.
@@ -1156,6 +1161,12 @@ alone.push('tests/acceptance/1928/');
 alone.push(...['cycles', 'planted-answers', 'planted-results', 'planted-jobs', 'planted-names', 'retries', 'jobs', 'replay'].map((f) => `tests/acceptance/2650/${f}.test.ts`));
 byHand.push('tests/acceptance/2650/budgets.long.test.ts');
 timed.push('tests/acceptance/2650/budgets.long.test.ts');
+
+// #2700's files each build their probe against deep-canvas and run it, so they run one at a time; budgets.long
+// measures two release benchmarks beside the merge base's and runs #896's and #854's suites, by hand.
+alone.push(...['heap', 'equal', 'data-row', 'as-given'].map((f) => `tests/acceptance/2700/${f}.test.mjs`));
+byHand.push('tests/acceptance/2700/budgets.long.test.mjs');
+timed.push('tests/acceptance/2700/budgets.long.test.mjs');
 
 // #1498's files each build deep-drive and run replicas.
 alone.push('tests/acceptance/1498/');

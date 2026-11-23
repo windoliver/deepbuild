@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@8",
+  "schema": "adapter.facts@9",
   "versions": ["2.1.299", "2.1.304", "2.1.308"],
   "agent": "claude",
   "hookTimeouts": {
@@ -94,7 +94,7 @@
     "conformance": "claude/usage/counting",
     "cost": "reported",
     "costFrom": "the status line's cost.total_cost_usd in a session, the result event's total_cost_usd in a job",
-    "tokens": "assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens"
+    "tokens": "assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens; the cache writes' split by lifetime is message.usage.cache_creation's ephemeral_5m_input_tokens and ephemeral_1h_input_tokens, and a record without it gives the total alone"
   },
   "questionTools": {
     "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",
@@ -1193,5 +1193,32 @@
       "write": "~/.claude/skills",
       "readFrom": ["~/.claude/skills"]
     }
+  },
+  "mcpHandshake": {
+    "readBy": "DeepBuild's MCP servers (deep mcp, deep mcp actions, deep-hook's mcp actions, the reading tools) hold the handshake revisions mcp.handshake@1 lists and answer any other with the newest (#2854); each version's client opens with the revision here, read from its recorded initialize request. Recorded by claude -p under a scratch HOME with an invalid OAuth token (no model call), --strict-mcp-config naming one stdio server that kept each line it was sent; the client's npm build (@anthropic-ai/claude-code), Nov 22, 2026",
+    "conformance": "claude/mcpHandshake/held",
+    "entries": [
+      {
+        "versions": [
+          "2.1.299"
+        ],
+        "revision": "2025-11-25",
+        "request": "adapters/corpus/claude-code/2.1.299/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "2.1.304"
+        ],
+        "revision": "2025-11-25",
+        "request": "adapters/corpus/claude-code/2.1.304/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "2.1.308"
+        ],
+        "revision": "2025-11-25",
+        "request": "adapters/corpus/claude-code/2.1.308/mcp-initialize.json"
+      }
+    ]
   }
 }

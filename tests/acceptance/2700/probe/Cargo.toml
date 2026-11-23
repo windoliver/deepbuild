@@ -1,0 +1,36 @@
+# The #2700 acceptance suite's probe: one small program that calls the canvas core's public entry
+# (`deep_canvas::document::{apply_ops, check_in, recheck, recheck_with, Referrers}`, and
+# `deep_canvas::registry` to seal the core with one test module) and prints what it saw as one JSON
+# line, for the node:test files beside it to judge. Test tooling only, outside the workspace (the
+# empty [workspace] table), with a lockfile of its own that pins every crate it builds. lib.mjs lays a copy of this
+# folder at target/acceptance-2700/probe (the path below rewritten to reach the canvas core from there) and runs
+#   cargo build --release --manifest-path target/acceptance-2700/probe/Cargo.toml --target-dir target/acceptance-2700
+# from the checkout root, so each checkout (the change, the merge base's copy, a twin's copy) builds its own canvas
+# core, and cargo's notes of the checkout's unused [patch] entries land in the copy's lockfile, never in this one.
+[package]
+name = "acceptance-2700-probe"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "acceptance-2700-probe"
+path = "src/main.rs"
+
+[dependencies]
+deep-canvas = { path = "../../../../crates/deep-canvas" }
+# The canvas core's own serde_json, with its feature: a document's members keep their order.
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[profile.release]
+opt-level = 2
+debug = 0
+debug-assertions = true
+overflow-checks = true
+panic = "unwind"
+strip = false
+lto = false
+incremental = false
+
+[workspace]
