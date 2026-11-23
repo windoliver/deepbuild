@@ -1234,6 +1234,54 @@ fn solves(
     Value::Object(out)
 }
 
+/// #194's wrong program: a piece that does work per frame because it names a catalog.
+pub const VALIDATED_PER_FRAME: &str = "catalog_validated_per_frame";
+
+impl Hub<'_> {
+    /// Planted (#194): at each frame of `doc`, each catalog asset a logic item names validated
+    /// again under its layout, as if no verdict were kept, so the sandbox runs once more a frame.
+    fn catalogs_validated_again(&mut self, doc: &str) {
+        if self.scenario.module_planted.as_deref() != Some(VALIDATED_PER_FRAME) {
+            return;
+        }
+        let Some(form) = self.forms.get(doc) else {
+            return;
+        };
+        let items = form["items"].as_object().into_iter().flatten();
+        let named: Vec<&str> = items
+            .filter(|(_, i)| i["kind"] == "logic@1")
+            .flat_map(|(_, i)| {
+                i.pointer("/params/assets")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+            })
+            .filter_map(Value::as_str)
+            .collect();
+        let catalogs: Vec<(String, String)> = form["assets"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(_, a)| a["kind"] == "catalog")
+            .filter_map(|(_, a)| {
+                Some((
+                    a["sha256"].as_str()?.to_string(),
+                    a["layout"].as_str()?.to_string(),
+                ))
+            })
+            .filter(|(sha, _)| named.contains(&sha.as_str()))
+            .collect();
+        for (sha, layout) in catalogs {
+            if let Some(bytes) = crate::evidence::read(&self.scenario.evidence, &sha) {
+                self.sandbox.forget(&sha);
+                let _ = self
+                    .sandbox
+                    .validate_bytes(&self.startup.sealed, &layout, &bytes);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod story_tests {
     use deep_canvas::registry::{BuildSet, Registry};
@@ -1356,54 +1404,6 @@ mod story_tests {
             assert_eq!(shown("q"), head, "a counter on #head at {t}");
             assert_eq!(shown("r"), count, "a counter on a driver at {t}");
             assert_eq!(at_dot, Some(dot), "an item on #head at {t}");
-        }
-    }
-}
-
-/// #194's wrong program: a piece that does work per frame because it names a catalog.
-pub const VALIDATED_PER_FRAME: &str = "catalog_validated_per_frame";
-
-impl Hub<'_> {
-    /// Planted (#194): at each frame of `doc`, each catalog asset a logic item names validated
-    /// again under its layout, as if no verdict were kept, so the sandbox runs once more a frame.
-    fn catalogs_validated_again(&mut self, doc: &str) {
-        if self.scenario.module_planted.as_deref() != Some(VALIDATED_PER_FRAME) {
-            return;
-        }
-        let Some(form) = self.forms.get(doc) else {
-            return;
-        };
-        let items = form["items"].as_object().into_iter().flatten();
-        let named: Vec<&str> = items
-            .filter(|(_, i)| i["kind"] == "logic@1")
-            .flat_map(|(_, i)| {
-                i.pointer("/params/assets")
-                    .and_then(Value::as_array)
-                    .into_iter()
-                    .flatten()
-            })
-            .filter_map(Value::as_str)
-            .collect();
-        let catalogs: Vec<(String, String)> = form["assets"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .filter(|(_, a)| a["kind"] == "catalog")
-            .filter_map(|(_, a)| {
-                Some((
-                    a["sha256"].as_str()?.to_string(),
-                    a["layout"].as_str()?.to_string(),
-                ))
-            })
-            .filter(|(sha, _)| named.contains(&sha.as_str()))
-            .collect();
-        for (sha, layout) in catalogs {
-            if let Some(bytes) = crate::evidence::read(&self.scenario.evidence, &sha) {
-                self.sandbox.forget(&sha);
-                let _ = self
-                    .sandbox
-                    .validate_bytes(&self.startup.sealed, &layout, &bytes);
-            }
         }
     }
 }

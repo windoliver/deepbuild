@@ -87,7 +87,8 @@ pub fn piece_of(form: &Value) -> Option<Value> {
         .into_iter()
         .flatten();
     if let Some(n) = net
-        .filter_map(|(_, i)| (i["kind"] == "net@1").then(|| i.pointer("/params/players")))
+        .filter(|(_, i)| i["kind"] == "net@1")
+        .map(|(_, i)| i.pointer("/params/players"))
         .next()
     {
         piece["players"] = n.cloned().unwrap_or(json!(2));

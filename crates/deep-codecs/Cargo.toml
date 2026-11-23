@@ -15,6 +15,8 @@ publish = false
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# #1488: a still converted at intake is written as a PNG tagged sRGB.
+png = "0.18"
 # Issue #423: KTX2 maps (Basis Universal ETC1S or UASTC) transcoded to BC in the decode worker.
 basisu_c_sys = { version = "0.9.1", features = ["extra"] }
 # Issue #503: our own audio decoders, pure Rust so the web player builds the same ones for
