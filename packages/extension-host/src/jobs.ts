@@ -1,7 +1,7 @@
 // A plug-in's model jobs (#366): `deep.runner.run` goes to the runner R1 built, on your own agent, headless on your
 // plan. Here are the job's shape as the plug-in gives it, the prompt the agent reads and what its run answered. The
 // host checks each handle against the plug-in's grant before any of this, and filters what the answer cites after.
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
@@ -263,7 +263,9 @@ export class JobTools {
     // A tool of the canvas core (#518) takes its input while an export draws: only an export runs it.
     if ('core' in tool.run) throw Error(`${tool.tool} runs in the canvas core while an export draws, so no job runs it on its own`);
     const { supervisor } = this.options;
-    const dir = join(folder, tool.run.dir);
+    // By its real path (#3005): node gives a tool its own real path as import.meta.url but argv[1] as spelled, so a
+    // tool under a symlinked hub home that checks it is the main module would see two paths and never run.
+    const dir = realpathSync(join(folder, tool.run.dir));
     const run = `run:${ulid(this.options.now())}`;
     const out: Buffer[] = [];
     let size = 0;
@@ -311,7 +313,8 @@ export class JobTools {
   private async coreQualifies(call: string, kind: string, tool: string, descriptor: JobTool, folder: string): Promise<string | undefined> {
     if (!this.options.canvas) return 'this hub has no canvas core to qualify it on';
     const d = descriptor as JobTool & { codecs?: unknown; containers?: unknown; hardware?: unknown; input?: unknown; frame_delay?: unknown };
-    const program = 'dir' in d.run ? [{ kind, tool, codecs: d.codecs, containers: d.containers, hardware: d.hardware, input: d.input, frame_delay: d.frame_delay, argv: [process.execPath, join(folder, d.run.dir, d.run.entry)], cwd: join(folder, d.run.dir) }] : [];
+    const dir = 'dir' in d.run ? realpathSync(join(folder, d.run.dir)) : ''; // as runTool spawns it (#3005)
+    const program = 'dir' in d.run ? [{ kind, tool, codecs: d.codecs, containers: d.containers, hardware: d.hardware, input: d.input, frame_delay: d.frame_delay, argv: [process.execPath, join(dir, d.run.entry)], cwd: dir }] : [];
     let reply: Record<string, unknown>;
     try { reply = await this.options.canvas({ call, tool, job_tools: program }); } catch (e) { return message(e); }
     if (reply.outcome === 'qualified') return undefined;

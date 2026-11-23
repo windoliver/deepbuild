@@ -147,6 +147,14 @@ pub(crate) fn bake(
         let rows = rows.as_array().into_iter().flatten().map(flat).collect();
         doc["occurrences"][format!("{id}.occurrences")] = Value::Array(rows);
     }
+    // #552: the occurrences this copy's player doesn't see leave every gated list.
+    let (items, me) = (doc["items"].clone(), doc["match.me"].clone());
+    if let Some(lists) = doc.get_mut("occurrences").and_then(Value::as_object_mut) {
+        let fogged = deep_logic::fog::gate(&items, &arrays, lists, &me);
+        if !fogged.is_empty() {
+            doc["fogged"] = Value::Object(fogged);
+        }
+    }
     Ok(Baked {
         arrays,
         rows: BTreeMap::new(),
@@ -154,6 +162,11 @@ pub(crate) fn bake(
 }
 
 impl Baked {
+    /// #269: the arrays the bake left out of the document.
+    pub(crate) fn into_arrays(self) -> Map<String, Value> {
+        self.arrays
+    }
+
     /// Writes into `doc`'s `arrays` each baked array as a frame at `t` reads it: one step holding
     /// every row as the steps through t's left it, so scene3d's readers fold it at t as they
     /// would the whole bake. From the rows a frame at an earlier t of this session settled, only
@@ -274,7 +287,7 @@ fn transforms(doc: &Value, t: i64, paths: &[String]) -> Map<String, Value> {
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
     let map = doc.as_object().expect("compiled above");
-    let written = eval::written_with(map, &program, &state, &asked);
+    let written = eval::written_with(map, &program, &state, asked);
     written.into_iter().filter(|(id, _)| asked(id)).collect()
 }
 

@@ -1,10 +1,12 @@
-//! The build's first-party packs (#416, #981, #953, #980, #1255; canvas primitives: Logic: library
+//! The build's first-party packs (#416, #981, #953, #980, #1255, #959, #1181; canvas primitives: Logic: library
 //! interfaces): `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1,
 //! `packs/lanes-1.0.0`, which declares lanes@1 with its reference library,
 //! `packs/modslib-1.0.0`, which declares mods.lib@1 with its reference library mods.tree,
-//! `packs/process-1.0.0`, which declares process@1 with its reference library (#980), and
-//! `packs/separation-1.0.0`, which declares separation@1 with its reference library, held in the
-//! binary so every piece's links resolve against them, as the release's packs are installed for
+//! `packs/process-1.0.0`, which declares process@1 with its reference library (#980),
+//! `packs/separation-1.0.0`, which declares separation@1 with its reference library,
+//! `packs/circuit-1.0.0`, which declares circuit@1 with its reference library (#1181), and
+//! `packs/sense-1.0.0`, which declares sense.lib@1 with its reference library sense.sight, held in
+//! the binary so every piece's links resolve against them, as the release's packs are installed for
 //! every document.
 
 use std::sync::OnceLock;
@@ -112,6 +114,49 @@ const PACKS: &[(&str, Files)] = &[
             pack_file!("separation-1.0.0", "fixtures/narrow.json"),
             pack_file!("separation-1.0.0", "objects/approach_own.wasm"),
             pack_file!("separation-1.0.0", "fixtures/approach_own.json"),
+        ],
+    ),
+    (
+        include_str!("../../../packs/circuit-1.0.0/pack.json"),
+        &[
+            pack_file!("circuit-1.0.0", "objects/circuit_ref.wasm"),
+            pack_file!("circuit-1.0.0", "objects/kept_current.wasm"),
+            pack_file!("circuit-1.0.0", "objects/rated_meter.wasm"),
+            pack_file!("circuit-1.0.0", "objects/late_fuse.wasm"),
+            pack_file!("circuit-1.0.0", "objects/plug.wasm"),
+            pack_file!("circuit-1.0.0", "fixtures/plug.json"),
+            pack_file!("circuit-1.0.0", "objects/kettle.wasm"),
+            pack_file!("circuit-1.0.0", "fixtures/kettle.json"),
+            pack_file!("circuit-1.0.0", "objects/fault.wasm"),
+            pack_file!("circuit-1.0.0", "fixtures/fault.json"),
+            pack_file!("circuit-1.0.0", "objects/battery.wasm"),
+            pack_file!("circuit-1.0.0", "fixtures/battery.json"),
+            pack_file!("circuit-1.0.0", "objects/phase.wasm"),
+            pack_file!("circuit-1.0.0", "fixtures/phase.json"),
+            pack_file!("circuit-1.0.0", "objects/lamp_own.wasm"),
+            pack_file!("circuit-1.0.0", "fixtures/lamp_own.json"),
+        ],
+    ),
+    (
+        include_str!("../../../packs/sense-1.0.0/pack.json"),
+        &[
+            pack_file!("sense-1.0.0", "objects/sense_sight.wasm"),
+            pack_file!("sense-1.0.0", "objects/sense_flat.wasm"),
+            pack_file!("sense-1.0.0", "objects/driver.wasm"),
+            pack_file!("sense-1.0.0", "data/ridge.bin"),
+            pack_file!("sense-1.0.0", "data/ridged.f32"),
+            pack_file!("sense-1.0.0", "fixtures/ridge.json"),
+            pack_file!("sense-1.0.0", "data/radar.bin"),
+            pack_file!("sense-1.0.0", "data/flat.f32"),
+            pack_file!("sense-1.0.0", "fixtures/radar.json"),
+            pack_file!("sense-1.0.0", "data/ghost.bin"),
+            pack_file!("sense-1.0.0", "fixtures/ghost.json"),
+            pack_file!("sense-1.0.0", "data/spread.bin"),
+            pack_file!("sense-1.0.0", "fixtures/spread.json"),
+            pack_file!("sense-1.0.0", "objects/driver_own.wasm"),
+            pack_file!("sense-1.0.0", "data/sight_own.bin"),
+            pack_file!("sense-1.0.0", "data/small.f32"),
+            pack_file!("sense-1.0.0", "fixtures/sight_own.json"),
         ],
     ),
 ];

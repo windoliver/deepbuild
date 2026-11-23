@@ -1,0 +1,33 @@
+#172 criteria 2 (the secrets) and 3 (no shared memory), the blind redraft after #2892: how each test meets the base
+5f5791e2d ("Merge pull request #3068").
+
+Read, not run. The Mac stood at a one-minute load of 120 to 200 and the brief said not to run the browser legs, so
+neither file was run: each needs deep-show (full) and deep-logic built, and shared-memory.test.ts headless Chrome.
+What ran: the type check (node node_modules/typescript/bin/tsc -p tests/acceptance/172-redraft-2892/tsconfig.json,
+exit 0), `vitest list` (2 tests collected), and a scratch probe of helpers.ts (not committed) on a folder made by
+hand: figure's player stored gzip is read back to its SHA-256 and found WebAssembly with one defined memory, not
+shared; a plug-in ID inside a gzip-stored JSON file is found at its inflated offset and not in its stored bytes; the
+leak twin plants into the smallest gzip-stored file, or into the smallest file of a folder with none, and both needles
+are then found there inflated; the shared twin's player reads back stored gzip with its memory shared; a file that
+starts 1f 8b and doesn't inflate fails the leak search, naming it.
+
+At the base: the base already meets both criteria, and stores every bundle file as it is.
+- crates/deep-show/src/export/web.rs writes each file under `<sha256 of its bytes>.<ext>`, unchanged, and none starts
+  1f 8b: the player and logic programs (\0asm), the page glue and element (JavaScript), the document, track and
+  manifests (JSON), the fonts, the license texts, the fallback page's files. So the reader reads every file as stored
+  and the tests read what the first draft read.
+- secrets.test.ts: expected to pass. deep-show's `run` ignores the scenario's top-level `secrets` and `hub` keys
+  (the first draft's BASE-FAILURE.txt says so; no deep-show source reads `secrets` at the base), so no file holds
+  them. The leak twin then gzips the smallest file but the index page with the three planted inside; the search must
+  name it three times, which it does by inflating it (as the probe above shows of the same function).
+- shared-memory.test.ts: expected to pass. The receipt's player hash is the SHA-256 of the raw player
+  (`player.hash: wasm_sha`), which the receipt lists as `<sha>.wasm`; read as stored it is WebAssembly with one
+  defined memory (flags 0). The lab's logic program is the other WebAssembly; neither is shared. The shared twin sets
+  the player's memory flag bit 1 and stores it gzip; the scan names the player's file. The browser leg is the first
+  draft's, which passed on #172's PR (its closing comment).
+
+Under #2892, the first drafts these replace (read):
+- ../172/hashes.test.ts, second test: the player stored gzip begins 1f 8b, so `isWasm` is false for it and for the
+  logic program, and it fails at "the bundle holds WebAssembly: the player" (0 modules) on a right program.
+- ../172/refusals.test.ts, first test: a secret inside the gzip-stored document or track is not in the stored bytes,
+  so the search passes a leaking bundle; the leak twin is that bundle.

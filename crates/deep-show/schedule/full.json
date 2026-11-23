@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "6cd68647aa53d2023cafc7d7415eb46a2fd236e4c98190ffd3015f105f6cbfdd",
+  "set_digest": "46ce7e0f35472549cc8fb8914d52391a28651b34c89c0a5da4290b3a3d3fb11f",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -64,7 +64,7 @@
       }
     },
     "data@1": {
-      "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
+      "digest": "2142cd1c512dd10e5b453dab41ba1e5ef47ce50d06b00be35d1009ef26d0fb29",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "e08d57d3d2446dcc425a45416b16a30834f71efba76855591075dc00172b25a7",
+      "digest": "00525830ddf183ebfdad91a9c82de67864ddcc1a9f1d0cc9e6e30382243bf930",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -393,7 +393,7 @@
       }
     },
     "net@1": {
-      "digest": "6c59b2fcbfa3cb44e28b3d8aad1f7fcd983adb8be6b78981625c5bd5050892bd",
+      "digest": "d22991713cedfb0899fe331b7b00c6c075a2676ed020864b09573bdf69e7b1ec",
       "reference": "net",
       "kit": [
         "fixtures",
@@ -605,7 +605,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "0c1e57af9c54f4fc73d968195f0c9ec6e0e8f333a9e71b1a5e5670b0df427e0a",
+      "digest": "683377360bf94ea1a0bf34a1047052495d2fd83f0f1a72eb00eb6fce21e8fab7",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -881,6 +881,21 @@
         ],
         "writes": [
           "data.follow"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.grid_image",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t",
+          "refs"
+        ],
+        "writes": [
+          "data.grid",
+          "data.grid_mapped"
         ],
         "per": "item"
       },
@@ -1408,6 +1423,7 @@
   "contributions": {
     "core.fields": [
       "data.columns",
+      "data.grid",
       "data.vector_field",
       "marks2d.warp",
       "motion.fields",

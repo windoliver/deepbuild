@@ -322,7 +322,11 @@ pub fn tick(now: u64, cx: &mut App) {
         return;
     };
     // A yes the hub holds (#1101): the record says when its steps start, that they did, or that it was withdrawn.
-    let holding = shown.read(cx).controller.as_ref().is_some_and(Controller::counting_down);
+    let holding = shown
+        .read(cx)
+        .controller
+        .as_ref()
+        .is_some_and(Controller::counting_down);
     if holding {
         let events = crate::record::history();
         shown.update(cx, |card, _| {
@@ -333,7 +337,11 @@ pub fn tick(now: u64, cx: &mut App) {
     }
     let open = crate::record::with_view(|view| view.table().is_open(&ask)).unwrap_or(true);
     // Its receipt counts the hold down with Undo while the hub holds its steps, though the ask is answered (#1101).
-    let counting = shown.read(cx).controller.as_ref().is_some_and(Controller::counting_down);
+    let counting = shown
+        .read(cx)
+        .controller
+        .as_ref()
+        .is_some_and(Controller::counting_down);
     if !open && !counting {
         // Answered here or anywhere: while its page shows, the next ask's page opens, and no row moves (#1461).
         leave(cx);

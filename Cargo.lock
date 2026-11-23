@@ -2434,6 +2434,7 @@ dependencies = [
  "libc",
  "libm",
  "opus-rs",
+ "png 0.18.1",
  "rusty_aac",
  "serde_json",
  "sha2 0.10.9",
@@ -2861,6 +2862,7 @@ name = "deep-show"
 version = "0.0.0"
 dependencies = [
  "blake3",
+ "crc32fast",
  "deep-canvas",
  "deep-canvas-cells",
  "deep-canvas-effects",
@@ -2904,6 +2906,7 @@ dependencies = [
  "gpui-pre-macos",
  "image",
  "libc",
+ "miniz_oxide 0.9.1",
  "objc2 0.6.5",
  "objc2-foundation 0.3.2",
  "png 0.18.1",

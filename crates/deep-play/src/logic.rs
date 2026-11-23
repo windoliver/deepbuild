@@ -133,6 +133,8 @@ pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
         issues.extend(grid_glyphs(form));
     }
     issues.extend(readers(form, entries));
+    // #269: each grid image's grid, and every cell of it past its roles.
+    issues.extend(deep_canvas_marks::grid_image::check(form, entries));
     // #297: entry texts' controls and players, and their fit.
     if let Some(map) = form.as_object() {
         issues.extend(deep_canvas_marks::entries::check_issues(map));
@@ -295,7 +297,27 @@ pub fn inline_logic(
     {
         all.extend(arrays);
     }
+    gate_fog(doc);
     Ok(())
+}
+
+/// #552: the occurrences this copy's player doesn't see (its `match.me`, 1 for a piece played
+/// alone), taken out of every gated list; the planted burst that ignores the gate still reads
+/// them, from `fogged`.
+#[cfg(feature = "logic")]
+fn gate_fog(doc: &mut serde_json::Map<String, Value>) {
+    let (items, me) = (doc.get("items").cloned(), doc.get("match.me").cloned());
+    let arrays = doc.get("arrays").and_then(Value::as_object).cloned();
+    let (Some(items), Some(arrays)) = (items, arrays) else {
+        return;
+    };
+    let Some(Value::Object(lists)) = doc.get_mut("occurrences") else {
+        return;
+    };
+    let fogged = deep_logic::fog::gate(&items, &arrays, lists, &me.unwrap_or(Value::Null));
+    if !fogged.is_empty() {
+        doc.insert("fogged".into(), Value::Object(fogged));
+    }
 }
 
 /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,
@@ -455,6 +477,9 @@ pub fn raised_at(form: &Value, t: Option<i64>, locale: &str) -> Vec<Issue> {
     });
     #[cfg(not(feature = "cells"))]
     let mut out = Vec::new();
+    if let Some(t) = t {
+        out.extend(deep_canvas_marks::grid_image::raised_at(form, t));
+    }
     out.extend(deep_canvas_motion::held::unmapped(form, t));
     out.extend(deep_canvas_marks::copy::raised_at(map, t, locale));
     out.extend(deep_canvas_marks::copy::column_missing(map, t, locale));
