@@ -900,6 +900,10 @@ impl Run {
                     if !t.vehicles.is_empty() {
                         reply["vehicles"] = Value::Object(t.vehicles);
                     }
+                    // #2288: the frame of each moved or turned instancer an output writes.
+                    if let Some(s) = scene.as_ref().filter(|s| !s.frames.is_empty()) {
+                        reply["frames"] = Value::Object(s.frames.clone());
+                    }
                     reply
                 }))
             }

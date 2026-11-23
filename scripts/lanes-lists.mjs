@@ -1312,6 +1312,9 @@ alone.push('tests/acceptance/981/');
 timed.push('tests/acceptance/981/ac8-budget.test.ts');
 // #1255's folder (blind) runs alone by its lane.json; ac5-budget.test.ts times conflicts over forty movers with judgeLimit.
 timed.push('tests/acceptance/1255/ac5-budget.test.ts');
+// #1181's folder (blind) runs alone by its lane.json; ac09-budget.test.ts times a 64-node, 128-part circuit's step with
+// judgeLimit.
+timed.push('tests/acceptance/1181/ac09-budget.test.ts');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');
@@ -1400,6 +1403,9 @@ byHand.push('tests/acceptance/980/ac09-budget.test.ts');
 
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
+
+// #3100's acceptance tests: AC1 builds the whole workspace; AC2 builds and tests it.
+slow.push('tests/acceptance/3100/ac1-build.test.mjs', 'tests/acceptance/3100/ac2-test.test.mjs');
 
 // #2086's blind redraft: AC1 runs whole-workspace clippy; AC2 runs #1732's suite, whose files each build deep-show.
 alone.push('tests/acceptance/2086-redraft-2047/');

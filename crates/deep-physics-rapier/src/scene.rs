@@ -4,16 +4,19 @@
 //! `medium` and a spring's `point`) is an item path the scene's channels and drivers write,
 //! evaluated by the motion module at each step's own time, inside the step (Phase). A read that
 //! depends on a physics pose, through a driver reading what the world's outputs write or its
-//! lists and readings, is a cycle, refused at check.
+//! lists and readings, is a cycle, refused at check. #2288: an instancer a world's `<body>#*`
+//! output writes takes its columns in its own frame, its world transform at t = 0; one that motion
+//! moves (it or an item it's parented to), or one that is scattered, is refused at check.
 
 use std::collections::BTreeSet;
 
-use deep_canvas_motion::doc::DriverInput;
+use deep_canvas_motion::doc::{DriverInput, Kind, Target};
 use deep_canvas_motion::eval::Validity;
-use deep_canvas_motion::program::Program;
+use deep_canvas_motion::program::{Program, TRANSFORM};
 use deep_canvas_physics::backend::Targets;
+use deep_canvas_physics::check::{MOVED_INSTANCER, SCATTERED_INSTANCER};
 use deep_canvas_physics::doc::{ForceKind, Refusal, World};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 /// What a read sets.
 enum Sets {
@@ -35,6 +38,9 @@ pub struct Scene {
     reads: Vec<Read>,
     /// The world's step, flicks.
     step: i64,
+    /// #2288: each instancer a `<body>#*` output writes that is moved or turned, with its world
+    /// `pos` and `rot` (a quaternion) at t = 0: the frame its columns hold each body's pose in.
+    pub frames: Map<String, Value>,
 }
 
 fn refusal(code: &'static str, path: String, actual: Value, what: String) -> Refusal {
@@ -105,6 +111,7 @@ impl Scene {
         }
         let outputs: Vec<&str> = w.outputs.values().filter_map(|o| o.to.as_deref()).collect();
         let mut out = Vec::new();
+        let frames = frames(&program, w, scene, &mut out);
         let mut reads = Vec::new();
         for (sets, path, field, width) in wanted {
             let slots = slots(&program, &path, width);
@@ -129,6 +136,7 @@ impl Scene {
             program,
             reads,
             step,
+            frames,
         })
     }
 
@@ -175,6 +183,134 @@ impl Scene {
         let values: Vec<Vec<Vec<f64>>> = (0..=steps).map(|k| self.values(k)).collect();
         json!({"paths": paths, "values": values})
     }
+}
+
+/// #2288: each entry of `program` that moves the transform of an item in `placed` (an instancer and
+/// the items it's parented to), by scene3d's rule for what moves an item: a channel, a follow or a
+/// driver on its `at`, a placement whose clip moves the slot it binds, a stagger that takes it
+/// apart, or a constraint on it other than a rest solved at check; with its kind and what it moves.
+fn movers(program: &Program, placed: &[&str]) -> Vec<(&'static str, String, String)> {
+    let m = &program.motion;
+    let on = |t: &Target| {
+        placed.contains(&t.owner.as_str()) && t.field.first().is_some_and(|f| f == "at")
+    };
+    let path = |t: &Target| format!("items/{}/{}", t.owner, t.field.join("/"));
+    let mut out: Vec<(&'static str, String, String)> = Vec::new();
+    out.extend(
+        m.channels
+            .iter()
+            .filter(|c| on(&c.target))
+            .map(|c| ("channel", c.id.clone(), path(&c.target))),
+    );
+    out.extend(
+        m.follows
+            .iter()
+            .filter(|f| on(&f.target))
+            .map(|f| ("follow", f.id.clone(), path(&f.target))),
+    );
+    out.extend(
+        m.drivers
+            .iter()
+            .filter(|d| on(&d.target))
+            .map(|d| ("driver", d.id.clone(), path(&d.target))),
+    );
+    for p in &m.placements {
+        let clip = m.clips.iter().find(|c| c.id == p.clip);
+        for b in p
+            .bindings
+            .iter()
+            .filter(|b| placed.contains(&b.item.as_str()))
+        {
+            let moves = clip.into_iter().flat_map(|c| &c.channels).any(|c| {
+                c.target.owner == b.slot && c.target.field.first().is_some_and(|f| f == "at")
+            });
+            if moves {
+                out.push(("placement", p.id.clone(), format!("items/{}/at", b.item)));
+            }
+        }
+    }
+    for s in &m.staggers {
+        for (t, _) in s
+            .targets
+            .iter()
+            .filter(|(t, _)| placed.contains(&t.as_str()))
+        {
+            out.push(("stagger", s.id.clone(), format!("items/{t}/at")));
+        }
+    }
+    let solved = |k: &Kind| matches!(k, Kind::RestOn { on: Some(_), .. });
+    for c in m
+        .constraints
+        .iter()
+        .filter(|c| placed.contains(&c.owner.as_str()) && !solved(&c.kind))
+    {
+        out.push(("constraint", c.id.clone(), format!("items/{}/at", c.owner)));
+    }
+    out
+}
+
+/// #2288: each instancer world `w`'s `<body>#*` outputs write in `scene`, moved or turned at t = 0,
+/// with its world `pos` and `rot`; into `out`, the refusal of each entry that moves one of them (on
+/// it or on an item it's parented to, naming the instancer and the entry), and of an output whose
+/// instancer is scattered, which takes its rows from its scatter and never from written columns.
+fn frames(
+    program: &Program,
+    w: &World,
+    scene: &Map<String, Value>,
+    out: &mut Vec<Refusal>,
+) -> Map<String, Value> {
+    let mut state = program.state();
+    program.evaluate(0, Validity::Full, &mut state);
+    let mut frames = Map::new();
+    for (oid, o) in &w.outputs {
+        let item = o.to.as_deref().and_then(|t| t.strip_prefix("items/"));
+        let (Some(_), Some(item)) = (o.from.strip_suffix("#*"), item) else {
+            continue;
+        };
+        let from = scene
+            .get("items")
+            .and_then(|i| i.get(item)?.pointer("/params/from"));
+        if from.is_some_and(|f| !f.is_null()) {
+            let what = format!("output {oid} writes {item}'s columns, and {item} is scattered (from: distribute(…)): an instancer takes its rows from its scatter or from written columns, never both");
+            out.push(refusal(
+                SCATTERED_INSTANCER,
+                format!("outputs/{oid}/to"),
+                json!(item),
+                what,
+            ));
+            continue;
+        }
+        let mut placed = vec![item];
+        while let Some((_, up)) = program
+            .motion
+            .parents
+            .iter()
+            .find(|(c, _)| placed.last() == Some(&c.as_str()))
+        {
+            if placed.contains(&up.as_str()) {
+                break;
+            }
+            placed.push(up);
+        }
+        for (kind, entry, path) in movers(program, &placed) {
+            let what = format!("output {oid} writes {item}'s columns in {item}'s frame at t = 0, and {kind} {entry} moves it ({path}); a world can't write the columns of an instancer that moves");
+            out.push(refusal(
+                MOVED_INSTANCER,
+                format!("outputs/{oid}/to"),
+                json!(entry),
+                what,
+            ));
+        }
+        let Some(i) = program.items.iter().position(|x| x == item) else {
+            continue;
+        };
+        let t = &state.slots[i * TRANSFORM..i * TRANSFORM + 6];
+        if t.iter().any(|x| *x != 0.0) {
+            let frame = json!({"pos": t[0..3], "rot": crate::bound::quat(&t[3..6])});
+            frames.insert(item.to_string(), frame);
+        }
+    }
+    frames
 }
 
 /// The slots of an item field `items/<id>/<field…>` that is `width` numbers wide: a vector field
@@ -233,4 +369,113 @@ fn cycle(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{json, Value};
+
+    /// A world in a 3D scene whose `tile#*` output writes the columns of `tiles` (two elements, or
+    /// a scatter over the plate `slab`), with `extra` merged into the scene.
+    fn check(tiles: Value, extra: Value) -> Vec<Value> {
+        let world = json!({
+            "kind": "physics.world@1", "dimensions": 3, "step_rate": 120, "substeps": 4, "gravity": [0, -9.81, 0],
+            "seed": 2288, "mode": "dynamic", "capacity": {"bodies": 8, "shapes": 8, "joints": 0, "contacts": 32, "particles": 0},
+            "backend": {"name": "rapier3d", "version": "=0.36.1"},
+            "contact_materials": {"m": {"friction": 0.5, "restitution": 0, "density": 500}},
+            "shapes": {"chip": {"kind": "box", "half": [0.15, 0.15, 0.15]}},
+            "bodies": {"tile": {"kind": "dynamic", "each": "tiles", "shapes": [{"shape": "chip", "contact_material": "m"}]}},
+            "outputs": {"written": {"from": "tile#*", "read": "pose", "to": "items/tiles"}}});
+        let item = |id: &str, v: Value| {
+            let mut v = v;
+            v["id"] = json!(id);
+            v["name"] = json!(id);
+            v["order"] = json!(format!("a{id}"));
+            v
+        };
+        let mut scene = json!({"format": 1, "profile": "scene", "title": "t", "size": [64, 36],
+            "transport": {"span": "1s", "frame_rate": [60, 1]}, "requires": {"modules": {"scene3d": "^1"}},
+            "items": {"chip": item("chip", json!({"kind": "mark.box@1", "params": {"size": [0.3, 0.3, 0.3]}, "visible": false})),
+                      "rig": item("rig", json!({"kind": "group@1", "params": {}})),
+                      "slab": item("slab", json!({"kind": "plate@1", "params": {"grid": [1, 1], "size": [4, 4]}, "at": {"pos": [0, 2, 0]}})),
+                      "tiles": item("tiles", tiles)},
+            "worlds": {"lab": world}});
+        for (k, v) in extra.as_object().into_iter().flatten() {
+            scene[k] = v.clone();
+        }
+        let run = crate::runner::Run::new(None).expect("the unplanted runner");
+        let reply = run
+            .answer(&json!({"call": "check", "scene": scene, "world": "lab"}))
+            .expect("a reply");
+        let issues = reply["issues"].as_array().cloned().unwrap_or_default();
+        issues
+            .into_iter()
+            .filter(|i| i["severity"] == "error")
+            .collect()
+    }
+
+    /// #2288: an instancer a world's `<body>#*` output writes is refused at check when anything
+    /// moves it, not only a channel on its own `at`: a driver on it, or a channel on the item it's
+    /// parented to, each named; one that nothing moves checks; and a scattered instancer can't
+    /// take written columns, so an output into one is refused, naming it.
+    #[test]
+    fn written_instancers_that_move_or_scatter_are_refused() {
+        let rows = json!({"kind": "instance@1", "at": {"pos": [5, 0, 0], "rot": [0, 90, 0]},
+            "params": {"of": ["chip"], "ids": [0, 1], "pos": [[0, 1, 0], [1, 1, 0]]}});
+        assert_eq!(
+            check(rows.clone(), json!({})),
+            Vec::<Value>::new(),
+            "a still, turned instancer checks"
+        );
+        let driver = json!({"drivers": {"sway": {"target": "items/tiles/at/pos/0", "expr": "t * 0.5", "vars": {"t": "time"}}}});
+        let parented = {
+            let mut r = rows.clone();
+            r["parent"] = json!("rig");
+            r
+        };
+        let lift = json!({"channels": {"lift": {"target": "items/rig/at/pos", "type": "vec3",
+            "keys": {"k0": {"t": "0s", "value": [0, 0, 0], "interp": "linear"}, "k1": {"t": "1s", "value": [0, 1, 0], "interp": "linear"}}}}});
+        let scattered = json!({"kind": "instance@1", "params": {"of": ["chip"],
+            "from": {"distribute": {"on": "slab", "mode": "poisson", "min_distance": 1, "seed": 2288, "max": 4}}}});
+        let mut missing = Vec::new();
+        for (what, tiles, extra, code, entry) in [
+            (
+                "a driver on its at",
+                rows,
+                driver,
+                "physics.moved_instancer",
+                "sway",
+            ),
+            (
+                "a channel on its parent",
+                parented,
+                lift,
+                "physics.moved_instancer",
+                "lift",
+            ),
+            (
+                "its scatter",
+                scattered,
+                json!({}),
+                "physics.scattered_instancer",
+                "tiles",
+            ),
+        ] {
+            let errors = check(tiles, extra);
+            let named = errors.iter().any(|e| {
+                e["code"] == code
+                    && e["path"] == "outputs/written/to"
+                    && e["actual"] == entry
+                    && e["what"]
+                        .as_str()
+                        .is_some_and(|w| w.contains("tiles") && w.contains(entry))
+            });
+            if !named {
+                missing.push(format!(
+                    "{what}: {code} naming tiles and {entry}; got {errors:?}"
+                ));
+            }
+        }
+        assert!(missing.is_empty(), "{missing:#?}");
+    }
 }

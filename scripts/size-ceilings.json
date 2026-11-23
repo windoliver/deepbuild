@@ -1,5 +1,5 @@
 {
-  "crates/deep-app/src/views.rs": 3579,
+  "crates/deep-app/src/views.rs": 3586,
   "crates/deep-canvas-effects/src/check.rs": 1660,
   "crates/deep-canvas-effects/src/emit.rs": 1610,
   "crates/deep-canvas-effects/src/interp.rs": 1501,
@@ -28,11 +28,11 @@
   "crates/deep-hook/src/shell.rs": 2529,
   "crates/deep-marks-render/src/macos.rs": 2803,
   "crates/deep-marks-render/src/raster.rs": 1696,
-  "crates/deep-replica/src/drive/mod.rs": 2279,
+  "crates/deep-replica/src/drive/mod.rs": 2290,
   "crates/deep-scene3d-render/src/lib.rs": 8967,
   "crates/deep-scene3d-render/src/scene3d.wgsl": 3102,
   "crates/deep-show/src/hub.rs": 2653,
-  "crates/deep-show/src/main.rs": 2943,
+  "crates/deep-show/src/main.rs": 2944,
   "packages/asks/src/index.ts": 2050,
   "packages/extension-host/src/host.ts": 3150,
   "packages/hub/src/core.ts": 2636

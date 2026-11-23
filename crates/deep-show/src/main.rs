@@ -1610,6 +1610,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             }),
         },
     };
+    media::plant_images(planted);
     let u32_field = |k: &str| match input.get(k) {
         None => Some(None),
         Some(n) => n.as_u64().and_then(|n| u32::try_from(n).ok()).map(Some),
