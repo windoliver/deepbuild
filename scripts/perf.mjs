@@ -12,6 +12,9 @@ const throttle = beside('./throttle.mjs') ? await import('./throttle.mjs') : nul
 const bays = beside('./bays.mjs') ? await import('./bays.mjs') : null;
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+// Every cargo perf starts runs bare by perf's own setting, never by the machine's: an empty RUSTC_WRAPPER is no wrapper
+// over any cargo config, so a machine's compile cache never reaches a budget (docs/parallel-proof.md, section 4).
+process.env.RUSTC_WRAPPER = '';
 const manifest = 'benchmarks/budgets.json';
 const run = (command, args, cwd = root, options = {}) => execFileSync(command, args, { cwd, encoding: 'utf8', timeout: 120_000, maxBuffer: 128 * 1024 * 1024, ...options });
 const files = (args) => run('git', [...args, '-z']).split('\0').filter(Boolean);
