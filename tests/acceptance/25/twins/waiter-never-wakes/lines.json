@@ -1,0 +1,14 @@
+{
+  "packages/hub/src/plant.ts": [
+    {
+      "find": [
+        "export function plantOf(value: string | undefined): Plant | undefined {",
+        "  if (!value) return undefined;"
+      ],
+      "wrong": [
+        "export function plantOf(value: string | undefined): Plant | undefined {",
+        "  if (!value) return 'waiter-never-wakes';"
+      ]
+    }
+  ]
+}

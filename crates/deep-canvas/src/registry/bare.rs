@@ -37,6 +37,8 @@ pub(super) const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("axes3d", "data"),
     // #225: a vector field is the data module's, beside its scales and 3D axes.
     ("vector_field", "data"),
+    // #269: a grid image is the data module's, which maps its grid as it maps logic columns.
+    ("grid_image", "data"),
     ("puff", "scene3d"),
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),

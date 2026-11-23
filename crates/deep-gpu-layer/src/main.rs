@@ -23,6 +23,7 @@ mod columns;
 mod compare;
 mod compile;
 mod conformance;
+mod counting;
 mod effects;
 mod envelope;
 #[cfg(feature = "test-faults")]
@@ -36,8 +37,10 @@ mod flows2d;
 mod frames;
 mod full_lane;
 mod golden;
+mod grids2d;
 mod guard;
 mod hdr;
+mod hidden;
 mod host;
 use deep_groups_render::indexed;
 mod insets;
@@ -263,6 +266,11 @@ pub enum Planted {
     WaterRingsAtRainHash,
     /// #2760: a ring started when a drawn frame first passes its occurrence, kept as state.
     WaterRingsStartOnDrawnFrame,
+    /// #290's wrong hidden views (tests/acceptance/290/README.md: Planted programs).
+    HiddenViewDrawsWhereVisible,
+    HiddenViewWithoutOwnDepth,
+    HiddenViewWritesIds,
+    HiddenViewAfterStatus,
     /// #3033's wrong seas (tests/acceptance/3033/README.md: Planted programs): every amplitude
     /// of the table halved; every row at the longest wave's speed; only its four longest kept.
     WaterSeaAmplitudesHalved,
@@ -409,6 +417,13 @@ pub enum Planted {
     CutsColorOnly,
     SoftNoiseFromFrame,
     LocalMapStale,
+    /// #2034's twins: slots in arrival order, the fixed caps kept, hysteresis, a filter in the
+    /// tile's texels, a tile's key without its size.
+    TileArrivalOrder,
+    TileKeepsFixedCaps,
+    TileHysteresis,
+    TileFilterInTexels,
+    TileKeyWithoutSize,
     IesPeakNormalized,
     CascadeUnsnapped,
     CascadeFilterInTexels,
@@ -598,6 +613,10 @@ pub enum Planted {
     NormalDotAlone,
     NormalUnturned,
     LightStaleHeight,
+    /// #269's wrong programs (tests/acceptance/269/README.md: Plants): a played frame's grid image
+    /// holds the step before its own; a pixel takes its cell's role before the rebuild.
+    GridKeepsPreviousStep,
+    GridRoleBeforeRebuild,
 }
 
 impl Planted {
@@ -763,6 +782,10 @@ impl Planted {
             "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
             "water_rings_at_rain_hash" => Planted::WaterRingsAtRainHash,
             "water_rings_start_on_drawn_frame" => Planted::WaterRingsStartOnDrawnFrame,
+            "hidden_view_draws_where_visible" => Planted::HiddenViewDrawsWhereVisible,
+            "hidden_view_without_own_depth" => Planted::HiddenViewWithoutOwnDepth,
+            "hidden_view_writes_ids" => Planted::HiddenViewWritesIds,
+            "hidden_view_after_status" => Planted::HiddenViewAfterStatus,
             "water_sea_amplitudes_halved" => Planted::WaterSeaAmplitudesHalved,
             "water_sea_speed_of_longest" => Planted::WaterSeaSpeedOfLongest,
             "water_sea_draws_four_longest" => Planted::WaterSeaDrawsFourLongest,
@@ -792,6 +815,8 @@ impl Planted {
             "puff_block_copy" => Planted::PuffBlockCopy,
             "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
+            "grid_keeps_previous_step" => Planted::GridKeepsPreviousStep,
+            "grid_role_before_rebuild" => Planted::GridRoleBeforeRebuild,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
             "sectors_source_over" => Planted::SectorsSourceOver,
@@ -881,6 +906,11 @@ impl Planted {
             "cut_color_only" => Planted::CutsColorOnly,
             "soft_noise_from_frame" => Planted::SoftNoiseFromFrame,
             "local_map_stale" => Planted::LocalMapStale,
+            "tile_arrival_order" => Planted::TileArrivalOrder,
+            "tile_keeps_fixed_caps" => Planted::TileKeepsFixedCaps,
+            "tile_hysteresis" => Planted::TileHysteresis,
+            "tile_filter_in_texels" => Planted::TileFilterInTexels,
+            "tile_key_without_size" => Planted::TileKeyWithoutSize,
             "ies_peak_normalized" => Planted::IesPeakNormalized,
             "cascade_unsnapped" => Planted::CascadeUnsnapped,
             "cascade_filter_in_texels" => Planted::CascadeFilterInTexels,
@@ -1284,38 +1314,6 @@ impl App {
         }
     }
 }
-
-/// The counting allocator (issue #379, `test-meter` builds only): every allocation is offered to
-/// the core's count, which keeps only the frame path's own.
-#[cfg(feature = "test-meter")]
-struct Counting;
-
-#[cfg(feature = "test-meter")]
-// SAFETY: every call passes straight to the system allocator.
-unsafe impl std::alloc::GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.alloc(layout) }
-    }
-
-    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.alloc_zeroed(layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
-        deep_gpu::alloc::note();
-        unsafe { std::alloc::System.realloc(ptr, layout, size) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-        unsafe { std::alloc::System.dealloc(ptr, layout) }
-    }
-}
-
-#[cfg(feature = "test-meter")]
-#[global_allocator]
-static COUNTING: Counting = Counting;
 
 fn bad_input() -> ! {
     println!("{}", json!({"ok": false, "code": "bad_input"}));

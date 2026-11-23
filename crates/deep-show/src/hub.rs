@@ -195,6 +195,8 @@ pub enum Planted {
     ProbeFromDepth,
     /// #1401: a probe that meets nothing answers the item drawn nearest its pixel.
     ProbeNearestItem,
+    /// #1722: a render-back of a 3D revision drops its 3D writer layers and draws its 2D marks.
+    RenderBack2dOnly,
     /// #1729: a 3D frame skips a `mesh.asset@1` whose file isn't in the store, with no issue.
     SkipsMissingMeshAsset,
     /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
@@ -711,8 +713,11 @@ pub enum Body {
 }
 
 mod call;
+mod planted;
 mod presented;
 pub use call::*;
+use planted::read_programs;
+pub(crate) use planted::{clock_noise, export_noise};
 
 /// A background job (#857): a playtest batch's replicas of a document's session, or a bake of
 /// one, each evaluated frame after frame at the background priority.
@@ -904,6 +909,8 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         steps_by_name: startup.steps_by_name,
         key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
         checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
+        ring_drops_start: false,
+        ring_newest_only: false,
         merge_by_finish: scenario.planted == Some(Planted::MergesInFinishOrder),
         admits_frame_json: startup.admits_frame_json,
         runs_every_node: scenario.planted == Some(Planted::RunsEveryNode),
@@ -1209,7 +1216,7 @@ impl<'a> Hub<'a> {
         // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs);
         // #3017: its visible table from the object-ID pass it drew.
         self.shown3d(doc, t, size)
-            .map(|(rgba, shown)| (rgba, size, shown))
+            .map(|(rgba, shown, _)| (rgba, size, shown))
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.
@@ -2557,59 +2564,6 @@ impl<'a> Hub<'a> {
                 Some(claim) if claim.deliverables.contains(&show.doc) => "PASS",
                 Some(_) => "INCONCLUSIVE",
             },
-        }
-    }
-}
-
-/// The planted renderer's grain: a few pixels' red nudged by a xorshift seeded from the clock's
-/// nanoseconds, what an honest render-back never reads (Channel and key: it can never read the
-/// clock), so two runs draw two pictures (#670).
-pub(crate) fn clock_noise(rgba: &mut [u8]) {
-    seeded_noise(rgba, now_nanos());
-}
-
-/// #1163's [`clock_noise`] in an export, seeded from the clock once per process and by the
-/// frame's time: another process draws another picture, and a frame drawn again in the same
-/// export draws the same one, as #157's redraw holds every frame to.
-pub(crate) fn export_noise(rgba: &mut [u8], t: i64) {
-    static SEED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
-    seeded_noise(rgba, *SEED.get_or_init(now_nanos) ^ t as u64);
-}
-
-fn now_nanos() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos() as u64)
-}
-
-fn seeded_noise(rgba: &mut [u8], seed: u64) {
-    let mut x = seed | 1;
-    let pixels = (rgba.len() / 4) as u64;
-    for _ in 0..64 {
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        let i = (x % pixels) as usize * 4;
-        rgba[i] = rgba[i].wrapping_add((x >> 56) as u8 | 1);
-    }
-}
-
-/// The planted check that opens a logic program's bytes from the evidence store by its hash
-/// before the document is refused: what the honest check never does (#305).
-fn read_programs(doc: &Value, evidence: &std::path::Path) {
-    let Some(items) = doc.get("items").and_then(Value::as_object) else {
-        return;
-    };
-    for item in items.values() {
-        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-        let program = item
-            .get("params")
-            .and_then(|p| p.get("program"))
-            .and_then(Value::as_str);
-        if let (true, Some(sha)) = (kind.starts_with("logic@"), program) {
-            if sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()) {
-                let _ = std::fs::read(evidence.join(&sha[..2]).join(&sha[2..]));
-            }
         }
     }
 }

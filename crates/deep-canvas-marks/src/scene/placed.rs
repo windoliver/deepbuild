@@ -288,6 +288,8 @@ pub(super) fn placed(
                 ctx.paints.shapes(id, &built, place, paint, &paint_path)?
             }
         }
+        // #269: a grid image draws its logic grid as one image.
+        "grid_image@1" => crate::grid_image::marks(id, params, ctx.palette, pos)?,
         "marks@1" if crate::atlas::is_atlas(params) => {
             let rows = data::rows(
                 id,
@@ -380,6 +382,7 @@ pub(super) fn placed(
                 adjust: Adjust::default(),
                 tile: None,
                 turn,
+                grid: None,
             }]
         }
         "text@1" => {

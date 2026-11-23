@@ -1,0 +1,330 @@
+{
+  "name": "circuit",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "circuit@1 (#1181): nodes and the parts between them (DC and AC sources, resistors, loads given by rated power at a rated voltage, switches and connectors closed while an input says so, fuses on a melt curve, earth faults, meters and wires), solved each step by nodal analysis, AC as rms phasors with each instant in closed form at the step's time. Its fixtures' expected values are worked by hand from Ohm's law and the closed forms. Its planted libraries keep a lamp lit with the plug out, meter a load's rating, and open a fuse at ten times its curve's time; each fails a fixture and is its kind kit's twin for circuit.kcl, circuit.power and circuit.fuse. Written by scripts/circuit-pack.mjs; the library is src/circuit.rs, its layouts are LAYOUT.md, and each program's text is in src/.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "logic": ">=0.0.0",
+      "sandbox": ">=0.0.0"
+    }
+  },
+  "interfaces": {
+    "circuit@1": {
+      "exports": [
+        {
+          "name": "node",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "source_dc",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "source_ac",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "resistor",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "load",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "switch",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "connector",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "fuse",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "meter",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "wire",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "fault",
+          "params": [
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "solve",
+          "params": [
+            "i32",
+            "i32",
+            "i64",
+            "i64"
+          ],
+          "results": [
+            "i32"
+          ]
+        }
+      ],
+      "layout": "circuit.state@1",
+      "fixtures": [
+        "af022f77adf6811719314f280771d7c541af1936bdb7e48633591341d271679b",
+        "cdc8d1904a4ec8b6dc241310dc497ee60046b7b5f0295e048a7f3d6dc5c7c99a",
+        "5ef57dca6a9c85f7f6a6f47950d4b1bb91c041cf1c93d14e76ef1033cdcf1d45",
+        "166ab2cd998e3098ede8f4b96994e8ba88944001de756412b17340e8d309b50b",
+        "fa2e0b3a753a5d8aa3b2a47190e10b22f6ac07d6be323fd35851b7e0c31124ce"
+      ],
+      "planted": [
+        "aa7ce6e8bb932546be4d197e2230b918d45b85aeae9b7f1f93bbde2e14f4c398",
+        "a61257fa2607893235435956223c55ecb3a414c17d9465828303125f11eca6f2",
+        "ab59695dd7690c5d58723283b9207a8f93f501d9302b096ec2bd25bc4d22c5b2"
+      ],
+      "digest": "25acb6db5e38d740af85e4db5f25534335c8323cc92107faf85c6ec700b2f441",
+      "rules": {
+        "circuit.kcl": {
+          "tolerance": 1e-9
+        },
+        "circuit.power": {
+          "tolerance": 0.000001
+        },
+        "circuit.fuse": {}
+      },
+      "twins": [
+        {
+          "planted": "aa7ce6e8bb932546be4d197e2230b918d45b85aeae9b7f1f93bbde2e14f4c398",
+          "example": "af022f77adf6811719314f280771d7c541af1936bdb7e48633591341d271679b",
+          "expect": "circuit.kcl"
+        },
+        {
+          "planted": "a61257fa2607893235435956223c55ecb3a414c17d9465828303125f11eca6f2",
+          "example": "cdc8d1904a4ec8b6dc241310dc497ee60046b7b5f0295e048a7f3d6dc5c7c99a",
+          "expect": "circuit.power"
+        },
+        {
+          "planted": "ab59695dd7690c5d58723283b9207a8f93f501d9302b096ec2bd25bc4d22c5b2",
+          "example": "5ef57dca6a9c85f7f6a6f47950d4b1bb91c041cf1c93d14e76ef1033cdcf1d45",
+          "expect": "circuit.fuse"
+        }
+      ],
+      "constants": {
+        "carriers": {
+          "copper": {
+            "value": 8.5e+28,
+            "unit": "m^-3",
+            "source": "one conduction electron an atom: 8.96 g/cm^3 / 63.546 g/mol x N_A = 8.49e28 m^-3 (the issue's 8.5 x 10^28)"
+          },
+          "aluminium": {
+            "value": 1.8e+29,
+            "unit": "m^-3",
+            "source": "three conduction electrons an atom: 2.70 g/cm^3 / 26.98 g/mol x N_A x 3 = 1.81e29 m^-3 (the issue's 1.8 x 10^29)"
+          }
+        },
+        "curves": {
+          "fast": {
+            "tau": 1,
+            "unit": "s",
+            "source": "a fuse element heated by i^2 and cooling in proportion to its rise melts after tau ln(I^2 / (I^2 - In^2)); tau 1 s puts 2.1, 2.75, 4 and 10 x In at 257 ms, 142 ms, 64.5 ms and 10.05 ms, inside the quick-acting band of IEC 60127-2"
+          },
+          "slow": {
+            "tau": 10,
+            "unit": "s",
+            "source": "the same heat balance with tau 10 s: 2.57 s, 1.42 s, 645 ms and 100.5 ms at 2.1, 2.75, 4 and 10 x In, inside the time-lag band of IEC 60127-2"
+          }
+        },
+        "charge": {
+          "value": 1.602176634e-19,
+          "unit": "C",
+          "source": "the elementary charge, exact in the SI since 2019"
+        }
+      }
+    }
+  },
+  "libs": {
+    "circuit_ref@1.0.0": {
+      "asset": "eb0d2e910874a5ab415a8f797742724603f0b9452a8b66381c018e03a4cb5a18",
+      "exports": [
+        "node",
+        "source_dc",
+        "source_ac",
+        "resistor",
+        "load",
+        "switch",
+        "connector",
+        "fuse",
+        "meter",
+        "wire",
+        "fault",
+        "solve"
+      ],
+      "fixtures": [
+        "2840e1a5af9c1663bfde32d80d5592d5bc17dbe1073ae73f582043a1c6adb698"
+      ],
+      "implements": [
+        "circuit@1"
+      ]
+    }
+  },
+  "assets": [
+    {
+      "path": "objects/circuit_ref.wasm",
+      "sha256": "eb0d2e910874a5ab415a8f797742724603f0b9452a8b66381c018e03a4cb5a18",
+      "size": 14967
+    },
+    {
+      "path": "objects/kept_current.wasm",
+      "sha256": "aa7ce6e8bb932546be4d197e2230b918d45b85aeae9b7f1f93bbde2e14f4c398",
+      "size": 15200
+    },
+    {
+      "path": "objects/rated_meter.wasm",
+      "sha256": "a61257fa2607893235435956223c55ecb3a414c17d9465828303125f11eca6f2",
+      "size": 14994
+    },
+    {
+      "path": "objects/late_fuse.wasm",
+      "sha256": "ab59695dd7690c5d58723283b9207a8f93f501d9302b096ec2bd25bc4d22c5b2",
+      "size": 14977
+    },
+    {
+      "path": "objects/plug.wasm",
+      "sha256": "c28220fdc04178d9fc195c7e45112a47ed960c124570fd9d4bfa7a72c92d8a4e",
+      "size": 563
+    },
+    {
+      "path": "fixtures/plug.json",
+      "sha256": "af022f77adf6811719314f280771d7c541af1936bdb7e48633591341d271679b",
+      "size": 4345
+    },
+    {
+      "path": "objects/kettle.wasm",
+      "sha256": "240fab6fbde89571ac7ed7e0e20ebdfc7635f836c19cd8c5a2f006b4cbc2e2e6",
+      "size": 560
+    },
+    {
+      "path": "fixtures/kettle.json",
+      "sha256": "cdc8d1904a4ec8b6dc241310dc497ee60046b7b5f0295e048a7f3d6dc5c7c99a",
+      "size": 3586
+    },
+    {
+      "path": "objects/fault.wasm",
+      "sha256": "d8572a8301e5fc00f76a3a2fb67d48788d706c4eae1377d46295446879cb4304",
+      "size": 631
+    },
+    {
+      "path": "fixtures/fault.json",
+      "sha256": "5ef57dca6a9c85f7f6a6f47950d4b1bb91c041cf1c93d14e76ef1033cdcf1d45",
+      "size": 4179
+    },
+    {
+      "path": "objects/battery.wasm",
+      "sha256": "a67da8f6bd67e44a901a10964af25abb8ebdd3ca36bf45e7ebd7b24630efd64c",
+      "size": 607
+    },
+    {
+      "path": "fixtures/battery.json",
+      "sha256": "166ab2cd998e3098ede8f4b96994e8ba88944001de756412b17340e8d309b50b",
+      "size": 5817
+    },
+    {
+      "path": "objects/phase.wasm",
+      "sha256": "b84a892352bc5aeb6ae76c01b96bd247bbab4258f06198d0316ea4a69b774a05",
+      "size": 446
+    },
+    {
+      "path": "fixtures/phase.json",
+      "sha256": "fa2e0b3a753a5d8aa3b2a47190e10b22f6ac07d6be323fd35851b7e0c31124ce",
+      "size": 2693
+    },
+    {
+      "path": "objects/lamp_own.wasm",
+      "sha256": "eb1213d078e43c4c64675cafbd6d838575e94302000261f4c1544e507858f59e",
+      "size": 450
+    },
+    {
+      "path": "fixtures/lamp_own.json",
+      "sha256": "2840e1a5af9c1663bfde32d80d5592d5bc17dbe1073ae73f582043a1c6adb698",
+      "size": 2194
+    }
+  ]
+}

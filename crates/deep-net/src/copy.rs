@@ -21,7 +21,7 @@ use crate::draw::{self, Draws};
 use crate::kind::{self, Config, FLICKS};
 use crate::locate::{self, entries_hash, track_after, Found, FNV_START};
 pub use crate::message::Hashed;
-use crate::message::{hex, Message};
+use crate::message::{hex, Fields, Message};
 
 mod draws;
 mod feel;
@@ -343,8 +343,8 @@ struct Locating {
     theirs: BTreeMap<u8, Found>,
     partial: BTreeMap<u8, Found>,
     /// The field hashes it sent and those its peers sent, by step.
-    my_fields: BTreeMap<i64, Vec<(String, String, u64)>>,
-    their_fields: BTreeMap<(u8, i64), Vec<(String, String, u64)>>,
+    my_fields: BTreeMap<i64, Fields>,
+    their_fields: BTreeMap<(u8, i64), Fields>,
     /// net.desync, once located.
     report: Option<Value>,
 }
@@ -359,6 +359,9 @@ fn seen_by(made: &[Scoped], player: u8) -> Vec<(String, Value)> {
         .map(|(c, v, _)| (c.clone(), v.clone()))
         .collect()
 }
+
+/// What every player's message held at a step, by player: its entries.
+type Held = Vec<(u8, Vec<(String, Value)>)>;
 
 pub struct Copy<S> {
     pub cfg: Config,
@@ -401,7 +404,7 @@ pub struct Copy<S> {
     /// The merged input track, as applied, and what every player's messages held at each step
     /// it ran, by step and player: what the locator steps again with and hashes.
     track: Vec<Value>,
-    log: BTreeMap<i64, Vec<(u8, Vec<(String, Value)>)>>,
+    log: BTreeMap<i64, Held>,
     /// #276: the profile record entry its player brought to step 0.
     brought: Option<Value>,
     /// The merged track's hash over the steps it ran (#550: entries first).
@@ -1014,11 +1017,7 @@ impl<S: Stepper> Copy<S> {
     /// that matched, through `at`, with the entries it held, as the run did: its full-state hash
     /// at every match step, each player's entries' hash at each step since the last match, and,
     /// at `fields_at`, a hash for each field of its state.
-    fn run_again(
-        &self,
-        at: i64,
-        fields_at: Option<i64>,
-    ) -> Result<(Found, Vec<(String, String, u64)>), Value> {
+    fn run_again(&self, at: i64, fields_at: Option<i64>) -> Result<(Found, Fields), Value> {
         let mut sim = self.sim.again()?;
         let (len, since) = (self.cfg.step(), (at - self.cfg.hash_every + 1).max(0));
         let mut found = Found {

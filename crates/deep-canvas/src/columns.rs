@@ -563,6 +563,15 @@ fn excursions_of(column: &Value) -> Vec<(i64, usize, f64)> {
 /// #537: every step at which a row of `array` (baked), as `read` takes it, begins to hide, by
 /// the rule alone, with the value that hides it: `(step, row, value)`.
 pub fn excursions(read: &Read, array: &Value) -> Vec<(i64, usize, f64)> {
+    excursions_by(array, |e| read.hiding(e))
+}
+
+/// #538, #269: [`excursions`] by a reader's own rule, `hiding`: a row's element's value where it
+/// hides, else `None`.
+pub fn excursions_by(
+    array: &Value,
+    hiding: impl Fn(&[f64]) -> Option<f64>,
+) -> Vec<(i64, usize, f64)> {
     let (Some(n), Some(w)) = (
         array["count"].as_u64(),
         array["type"].as_str().and_then(width),
@@ -602,7 +611,7 @@ pub fn excursions(read: &Read, array: &Value) -> Vec<(i64, usize, f64)> {
             touched.into_iter().collect()
         };
         for row in rows {
-            let hiding = read.hiding(&raw[row * w..(row + 1) * w]);
+            let hiding = hiding(&raw[row * w..(row + 1) * w]);
             if let Some(value) = hiding.filter(|_| !hidden[row]) {
                 out.push((step, row, value));
             }
