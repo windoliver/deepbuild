@@ -587,6 +587,9 @@ export function cargoResults(output, status, workspace) {
   // the test's own thread there (lines the test printed can look like one, so the last). A custom harness that runs its
   // cases on the main thread prints a case's panic just before its result line, or its message first in a
   // `---- <test> ----` block after it.
+  // #3172: a custom harness that runs nothing says why in its last line, of its own name, as
+  // `card_size: INCONCLUSIVE; <reason>`.
+  const said = new Map(), reported = new Set();
   let target = null, block = null, next = null, uncaught = null;
   for (const line of output.split('\n')) {
     const test = line.match(/^test (.+?) \.\.\. (ok|FAILED|BLOCKED|INVALID|INCONCLUSIVE)$/);
@@ -603,6 +606,12 @@ export function cargoResults(output, status, workspace) {
     if (thread && (block ? block.captured && thread === block.test : thread === 'main')) next = 'panic';
     const started = cargoTarget(line, targets);
     if (started !== undefined) target = started;
+    if (/^test /.test(line)) reported.add(target);
+    // cargo names each failed target by the arguments that rerun it.
+    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
+    const own = line.match(/^(\w+): (INCONCLUSIVE|BLOCKED); (.+)$/);
+    if (own && target?.split(' ').at(-1) === own[1]) said.set(target, { state: own[2], message: own[3] });
+    else if (line.trim() && !rerun) said.delete(target);
     if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
     if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, ...test[2] === 'FAILED' ? { state: stateOf(uncaught ?? ''), message: uncaught ?? '' } : { state: test[2], message: '' } }), failed.add(target);
     if (test || started !== undefined) uncaught = null;
@@ -611,9 +620,7 @@ export function cargoResults(output, status, workspace) {
     // Custom harnesses report unrun cases too; a listed target must not turn those into passes.
     const unproven = line.match(/^test result: (BLOCKED|INVALID|INCONCLUSIVE)\b/)?.[1];
     if (unproven) failures.push({ id: `cargo ${target}`, state: unproven, message: line.slice(13) }), failed.add(target);
-    // cargo names each failed target by the arguments that rerun it.
-    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
-    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, state: 'FAIL', message: 'the target failed outside any test it reported' }), failed.add(rerun);
+    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, ...((!reported.has(rerun) && said.get(rerun)) || { state: 'FAIL', message: 'the target failed outside any test it reported' }) }), failed.add(rerun);
   }
   if (status !== 0 && !failed.size) failures.push({ id: 'cargo test', state: 'FAIL', message: output.split('\n').find((line) => /^error/.test(line)) ?? `exited ${status}` });
   return { failures, passed, ...(skips.length && { skips }) };
