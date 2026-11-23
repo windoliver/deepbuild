@@ -1,0 +1,72 @@
+Base 4aa543da7 (origin/main), macOS, Node 24, 2026-11-22. deep-show built once beforehand with
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-show --no-default-features --features full
+(18 min on the loaded machine), so each file's own useBuilds build was a no-op. Type check:
+  $ node node_modules/typescript/bin/tsc -p tests/acceptance/409-redraft-2697/tsconfig.json   (exit 0)
+
+== The redraft, run once
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/409-redraft-2697 --reporter=verbose --testTimeout=600000
+(load at start: 30.17 80.25 63.94)
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/objective-wilbur-0d809e/tests/acceptance/409-redraft-2697
+
+ × skill.test.ts > AC3 #409.b866029a the text an agent reads for every craft@1 check is the check's own (redraft 2697: the guide) > AC3 #409.b866029a every craft@1 check states its description, threshold and fix, the guide the skill names holds each, and a drift either way is reported (redraft 2697) 5412ms
+   → the guide the skill's craft line names, read through deep_kinds:
+  the guide is missing: no word of the skill's craft line(s) is a guide deep_kinds serves (op: read, guide: <word> answered no text for each of 26 words: Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: ["## Craft checks a film brief names","A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own."]: expected [ Array(1) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  skill.test.ts > AC3 #409.b866029a the text an agent reads for every craft@1 check is the check's own (redraft 2697: the guide) > AC3 #409.b866029a every craft@1 check states its description, threshold and fix, the guide the skill names holds each, and a drift either way is reported (redraft 2697)
+AssertionError: the guide the skill's craft line names, read through deep_kinds:
+  the guide is missing: no word of the skill's craft line(s) is a guide deep_kinds serves (op: read, guide: <word> answered no text for each of 26 words: Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: ["## Craft checks a film brief names","A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own."]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the guide is missing: no word of the skill's craft line(s) is a guide deep_kinds serves (op: read, guide: <word> answered no text for each of 26 words: Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]",
++ ]
+
+ ❯ skill.test.ts:154:130
+    152|     const skill = readFileSync(SKILL, 'utf8');
+    153|     const guide = guideNamed(skill);
+    154|     expect(guide.failures, `the guide the skill's craft line names, re…
+       |                                                                                                                                  ^
+    155|     const drifted = drift(guide.text, found);
+    156|     expect(drifted, `the guide (${guide.names.join(', ')}) against the…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:36:38
+   Duration  8.73s (tests 98%, transform 2%)
+
+exit 1
+
+== The frozen original, run once the same way
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/409 skill.test.ts --reporter=verbose --testTimeout=600000
+(load at start: 27.07 77.94 63.31)
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/objective-wilbur-0d809e/tests/acceptance/409
+
+ ✓ skill.test.ts > AC3 #409.b866029a the skill's text for every craft@1 check is the check's own > AC3 #409.b866029a every craft@1 check states its description, threshold and fix, the skill holds each, and a drift either way is reported 5008ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:36:48
+   Duration  7.28s (tests 98%, transform 2%)
+
+exit 0
+
+== Seen once, not kept: a scratch copy of the redraft on the same base binary
+A scratch copy of skill.test.ts (deleted after) read a scratch skill, the base's with its craft section replaced by one
+line ("... read them in the guide craft-checks with deep_kinds before your first render."), and passed the scenario's
+`gallery` a scratch folder whose gallery.json lists one guide, craft-checks, holding the base skill's craft section:
+  good guide (the section as the base generates it):      Tests  1 passed (1)
+  the same guide with shot_length's line dropped:          Tests  1 failed (1)
+    AssertionError: the guide (craft-checks) against the checks' own statements:
+      shot_length: the guide doesn't name it
+So the guide-name convention finds a guide the craft line names, the guide's text is read through op: read, and a
+guide that drops a check fails naming it. No implementation of #2697 was run; none exists here.
