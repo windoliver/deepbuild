@@ -1,6 +1,6 @@
 # #3179 blind suite on the base: sha ab84620ff34d00a78eb8ac2483fbadd00c006471; node v24.22.0; 2026-11-23T03:37:23Z; load at launch { 129.67 115.77 88.50 }; 8 cores
 # command: node --test tests/acceptance/3179/guard.test.mjs
-[3179] program under test: /private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-issue-1873-listed-failures-end-e755e5/c9d62289-670b-4ea1-bc59-e9a0d141d254/scratchpad/clone; node v24.22.0; load (1/5/15 min) at suite start 129.67 115.77 88.50
+[3179] program under test: /private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-issue-1873-listed-failures-end-e755e5/c9d62289-670b-4ea1-bc59-e9a0d141d254/scratchpad/clone; node v24.22.0; load (1/5/15 min) at suite start 129.67 115.77 88.50
 [3179 guard] exit 0
 wall 267.8 s; git processes started 1972 (1912 git cat-file blob; 51 git -c core.quotePath=false; 5 git ls-tree -r; 3 git grep -l; 1 git remote get-url); load (1/5/15 min) at start 60.06 99.10 86.38, at end 60.35 79.72 81.10
 stdout:
@@ -34,7 +34,7 @@ test at tests/acceptance/3179/guard.test.mjs:113:1
   AssertionError [ERR_ASSERTION]: the guard took 267.8 s wall (limit under 60 s) and started 1972 git processes (limit 200)
   exit 0
   wall 267.8 s; git processes started 1972 (1912 git cat-file blob; 51 git -c core.quotePath=false; 5 git ls-tree -r; 3 git grep -l; 1 git remote get-url); load (1/5/15 min) at start 60.06 99.10 86.38, at end 60.35 79.72 81.10
-      at TestContext.<anonymous> (file:///private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-issue-1873-listed-failures-end-e755e5/c9d62289-670b-4ea1-bc59-e9a0d141d254/scratchpad/clone/tests/acceptance/3179/guard.test.mjs:116:10)
+      at TestContext.<anonymous> (file:///private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-issue-1873-listed-failures-end-e755e5/c9d62289-670b-4ea1-bc59-e9a0d141d254/scratchpad/clone/tests/acceptance/3179/guard.test.mjs:116:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

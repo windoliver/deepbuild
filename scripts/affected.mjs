@@ -51,8 +51,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const BASELINE = 'scripts/known-failures.json';
 const CODE = /\.(?:[cm]?[jt]s|tsx)$/;
 // Files every suite reads, so a change to one is verified by the full preflight; so are those a runner config names, as
-// its setup files (select, below).
-const EVERY = ['package.json', 'package-lock.json', 'tsconfig.json', 'vitest.config.ts', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml'];
+// its setup files (select, below). .cargo/config.toml's [patch] tables reach every crate under the checkout, the
+// standalone test crates' locks among them (#2469).
+const EVERY = ['package.json', 'package-lock.json', 'tsconfig.json', 'vitest.config.ts', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/config.toml'];
 // A folder holding more files than this, as tests/acceptance, is named as a pattern, not as what a file reads.
 const WIDE = 400;
 // Repository paths in a literal: relative ones, and those from the root, as `${root}/packages/hub/dist/main.js`.

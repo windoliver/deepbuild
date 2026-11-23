@@ -9,7 +9,7 @@ Command, from the worktree root:
 
 Output, whole:
 
- RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/silly-forging-russell/agent-a932fa070a1e8bd76/tests/acceptance/2456
+ RUN  v5.0.5 ~/dev/claude-worktrees/silly-forging-russell/agent-a932fa070a1e8bd76/tests/acceptance/2456
 
 
  Test Files  2 passed (2)

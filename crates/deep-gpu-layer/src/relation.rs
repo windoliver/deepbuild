@@ -295,7 +295,8 @@ fn first_off(
             for c in 0..3 {
                 let Some(w) = want(x, y, c) else { continue };
                 let g = f64::from(got[((y * size[0] + x) * 4) as usize + c]);
-                if !((g - w).abs() <= tol * g.abs().max(w.abs())) {
+                let within = (g - w).abs().partial_cmp(&(tol * g.abs().max(w.abs())));
+                if !within.is_some_and(std::cmp::Ordering::is_le) {
                     return Some(([x, y], g, w));
                 }
             }
@@ -367,7 +368,8 @@ fn judge(
                 for x in 0..size[0] {
                     for c in 0..3 {
                         let (w, g) = (at(&without, x, y, c), at(&with, x, y, c));
-                        if !(g <= w + STEP16 * w.abs()) {
+                        let under = g.partial_cmp(&(w + STEP16 * w.abs()));
+                        if !under.is_some_and(std::cmp::Ordering::is_le) {
                             return Some(Break {
                                 target: "lighting",
                                 pixel: [x, y],
