@@ -2,7 +2,7 @@
   "wasm_bindgen": "0.2.129",
   "set": "full",
   "files": {
-    "player.js": "a6487755c2bd646b569756a60ec1afcfc6a5092dcfa5f7eb8650322640e9a320",
+    "player.js": "b32769cbaf71487c44fac068633856c818c12cb152d610d7a8fb072d6774fd39",
     "player_bg.wasm": "09c4fa7caefa19248458726365c3b253d943ebeb47f3ba338697eb8e98129b13"
   },
   "core_version": "0.0.0",
