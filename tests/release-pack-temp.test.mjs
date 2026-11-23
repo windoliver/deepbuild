@@ -37,9 +37,12 @@ test('a pack whose process group is stopped by SIGTERM or SIGINT leaves no relea
     const temp = join(root, 'temp');
     const bin = join(root, 'bin');
     for (const d of [repo, temp, bin]) mkdirSync(d);
-    // A git whose clone hangs after it finishes, so the stop lands while the pack's temp folder holds a checkout.
+    // A git whose clone hangs after it finishes, so the stop lands while the pack's temp folder holds a checkout. The
+    // marker is written once git has exited, so the stop never lands on a git that may finish anyway: a shell waiting on
+    // a child that outlives SIGINT goes on to the hang, and the pack then completes with the signal unread.
     const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
-    writeFileSync(join(bin, 'git'), `#!/bin/sh\nif [ "$1" = clone ]; then "${realGit}" "$@" && exec sleep 60; fi\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+    const hung = join(root, 'hung');
+    writeFileSync(join(bin, 'git'), `#!/bin/sh\nif [ "$1" = clone ]; then "${realGit}" "$@" || exit $?; : > "${hung}"; exec sleep 60; fi\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
     writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'planted', version: '1.0.0' }));
     const env = { PATH: `${bin}:${process.env.PATH ?? ''}`, HOME: root, TMPDIR: temp, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
     const git = (...args) => execFileSync(realGit, args, { cwd: repo, env, encoding: 'utf8' }).trim();
@@ -50,7 +53,7 @@ test('a pack whose process group is stopped by SIGTERM or SIGINT leaves no relea
     const exited = new Promise((done) => child.on('exit', (code, sig) => done({ code, sig })));
     const packed = () => readdirSync(temp).filter((n) => n.startsWith('release-pack-'));
     // deadline: bounds the wait for the pack's clone to land, which the planted git then holds open
-    for (const end = Date.now() + 30_000; !packed().some((n) => existsSync(join(temp, n, 'checkout', 'package.json'))); ) {
+    for (const end = Date.now() + 30_000; !existsSync(hung); ) {
       assert.ok(Date.now() < end, `${signal}: the pack never cloned into its temp folder`);
       await new Promise((r) => setImmediate(r));
     }
