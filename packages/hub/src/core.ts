@@ -2248,6 +2248,8 @@ export class Core {
       await this.promptItems.replying.get(meta.id);
       return await this.buildReply(meta, until);
     } finally {
+      // A reply deep-hook gave up on while it was built: what it carried waits for the next prompt again (#3305).
+      if (this.abandoned.has(meta.id)) this.delivery.promptReplyGone(meta.id);
       this.replying.delete(meta.id);
       this.abandoned.delete(meta.id);
     }
@@ -2366,6 +2368,8 @@ export class Core {
         const later = r.later.splice(0).filter((text) => !prompt.includes(text)).map((text) => ({ name: 'continues', text }));
         // A notice waiting for the session goes with this prompt, once: one its own task told, or one a status question left waiting (#2669).
         const notices = (r.notices ?? []).splice(0).map((text) => ({ name: 'notices', text }));
+        // Both wait again if deep-hook lets the prompt through without reading this reply (#3305).
+        this.delivery.inPromptReply(meta.id, meta.session, later.map((p) => p.text), notices.map((p) => p.text));
         const context = await this.fitted(meta, [{ name: 'rules', ...(rules ? { pieces: rules } : {}) }, { name: 'answers', text: answers, keep: true }, { name: 'promised checks', text: promised }, { name: 'notes', text: notes ? this.delivery.noteText(notes) : undefined }, ...later, ...notices, { name: 'verdict', text: landed ? `DeepBuild: ${landed}` : undefined }, { name: 'slow verdicts', text: slow }, { name: 'acknowledgement', text: ack.context, keep: true }, { name: 'taste', text: taste }, { name: 'sibling sessions', text: siblings }]);
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
@@ -2453,8 +2457,9 @@ export class Core {
     for (const wake of this.delivery.waiting.get(session) ?? []) wake();
     // What its reply carried never reached the agent (#906): stalled, unless a turn shows it, and it goes by the next route.
     for (const [ask, handed] of this.delivery.handed) if (handed.hook === id) void this.queue(() => this.delivery.unwoken(handed.session, ask)).catch(() => undefined);
-    // The notices it carried wait for the session's next hook (#352).
+    // The notices it carried wait for the session's next hook (#352), its continues and workspace notices for the next prompt (#3305).
     this.siblings.gone(id);
+    this.delivery.promptReplyGone(id);
   }
   /**
    * A deep mcp call cancelled, or its connection `closed` (#1923): it leaves the job it waits on. A cancel stops the job
