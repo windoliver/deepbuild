@@ -133,7 +133,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/29/budgets.test.ts', 'tests/acceptance/23/match/budgets.test.ts', 'tests/acceptance/120/budgets.test.ts', 'tests/acceptance/120/budgets-idle-redraft.test.ts',
     'tests/acceptance/27/budgets.test.ts', 'tests/acceptance/1868/', 'tests/acceptance/2573/', 'tests/acceptance/194-redraft-ac11/', 'tests/acceptance/1477/',
     'tests/acceptance/2569/', 'tests/acceptance/408-redraft-ac5/', 'tests/acceptance/405-redraft-ac4/', 'tests/acceptance/1405/', 'tests/acceptance/724-redraft-1405/',
-    'tests/acceptance/1575-redraft-ac1/', 'tests/acceptance/2026-redraft-ac3/', 'tests/acceptance/518-redraft-ac10/', 'tests/acceptance/538-redraft-ac8/',
+    'tests/acceptance/1575-redraft-ac1/', 'tests/acceptance/2026-redraft-ac3/', 'tests/acceptance/518-redraft-ac10/', 'tests/acceptance/538-redraft-ac8/', 'tests/acceptance/269-redraft-ac6/',
     'tests/acceptance/525-device/', 'tests/acceptance/222-redraft-ac7/', 'tests/acceptance/280/', 'tests/acceptance/277/', 'tests/acceptance/556-redraft-ac5/',
     'tests/acceptance/2032-redraft-ac8/', 'tests/acceptance/1017/budgets.test.ts', 'tests/acceptance/1097/budgets.test.ts', 'tests/acceptance/111/budgets.test.ts',
     'tests/acceptance/304/budgets.test.ts', 'tests/acceptance/308/budgets.test.ts', 'tests/acceptance/31/budgets.test.ts', 'tests/acceptance/40/budgets.test.ts',
