@@ -484,3 +484,55 @@ export async function captureMenu(tree: Tree, path: string): Promise<void> {
   const box = tree.menuFrames[0] ?? blocked('the app has no menu-bar item to capture');
   await run('/usr/sbin/screencapture', ['-x', `-R${box.map(Math.round).join(',')}`, path]);
 }
+
+// ---- A list row on the pixels (REDRAFT.md, Third redraft). Added beside the judges above, which stay as they were:
+// other issues' tests read this file, so a changed reading lands only as a new one.
+
+/** Letters and digits of a question's start that a list row cut short must still draw, and whose drawing counts as the row drawn. */
+export const ROW_START = 10;
+/**
+ * A list row draws its ask's question: one pixel line holds the whole question, or its start, at least ROW_START letters
+ * and digits, cut there by an ellipsis. The design's row is one line of fixed slots (mark, title, then state word and time
+ * at the right edge), and "text cut from the screen stays in the accessible name", so a title past the row's width ends in
+ * an ellipsis and only the tree holds it whole.
+ */
+export function drawsRow(lines: readonly Line[], question: string): boolean {
+  if (reads(lines, question)) return true;
+  const q = squash(question);
+  return lines.some((l) => [...l.text.matchAll(/…|\.{2,}/g)].some((m) => {
+    const before = squash(l.text.slice(0, m.index));
+    for (let k = q.length - 1; k >= ROW_START; k--) if (before.endsWith(q.slice(0, k))) return true;
+    return false;
+  }));
+}
+
+/**
+ * `shellFailures`, with each Needs you row judged on the pixels by `drawsRow` instead of its whole question on one line:
+ * a wanted row is drawn whole or cut by an ellipsis, an unwanted one neither. Everything else is `shellFailures`' own.
+ */
+export async function shellFailuresCut(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
+  const out: string[] = [];
+  const tree = await app.tree();
+  const main = tree.windows.flatMap((w) => nodes(w.tree));
+  const named = main.filter((n) => n.name);
+  const lines = await ocr(await app.capture(`shell-${want.count}`));
+  const spike = [...named.map((n) => n.name), ...lines.map((l) => l.text)].find((text) => /\bSession \d{4}\b|waiting on you/.test(text));
+  if (spike) out.push(`the window is the spike window: it draws "${spike}"`);
+  if (!named.some((n) => n.name === 'Tasks')) out.push(`the window has no registered sidebar: no node is named "Tasks"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
+  for (const s of world.sessions) {
+    const rows = named.filter((n) => n.role === 'AXButton' && n.name.includes(s.task));
+    if (rows.length !== 1) out.push(`the sidebar should show session "${s.task}" once, as a row; it has ${rows.length}`);
+  }
+  if (!named.some((n) => n.name === 'Needs you')) out.push('the window has no Needs you view: no node is named "Needs you"');
+  for (const ask of world.asks) {
+    const rows = tree.windows.flatMap((w) => outermost(w.tree, ask.question));
+    const wanted = want.rows.includes(ask) ? 1 : 0;
+    if (rows.length !== wanted) out.push(`Needs you should show ${wanted} row for ${ask.handle} ("${ask.question}"); it has ${rows.length}`);
+    if (drawsRow(lines, ask.question) !== (wanted === 1)) out.push(`the window's pixels ${wanted ? 'lack' : 'still draw'} ${ask.handle}'s row with its question, whole or cut by an ellipsis after its first ${ROW_START} letters and digits: they read ${sees(lines)}`);
+  }
+  const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
+  for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
+  const menu = menuCount(tree);
+  if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
+  return out;
+}
