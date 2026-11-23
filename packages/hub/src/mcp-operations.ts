@@ -51,6 +51,8 @@ import { refuse, Refused, refusal, ulid, type CoreOptions, type Refusal } from '
 import type { CallContext, Stamp } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 import { docCommand, docSpec } from './doc-checks.js';
+import { checksIn, docChecksIn } from './spec-checks.js';
+import { approvedSpec } from './approved-spec.js';
 
 import { sql, letters, noWake, unseenTools, type Obj, isObj, isUnder, asRefused } from "./hub-shared.js";
 
@@ -94,7 +96,7 @@ export interface McpOperationsOptions {
   };
   control: () => Pick<HubControlPort, "attach" | "job">;
   state: () => Pick<SessionStatePort, "live" | "rows" | "sessions">;
-  judging: () => Pick<StopJudgingPort, "claimed" | "reachOfSession" | "projectTrusted" | "runApproved">;
+  judging: () => Pick<StopJudgingPort, "claimed" | "claimBase" | "reachOfSession" | "projectTrusted" | "runApproved">;
   delivery: () => Pick<AnswerDeliveryPort, "askWaits" | "deliver" | "routes" | "settling" | "answers" | "binds">;
   events: Pick<HubEvents, "connection" | "appendReading" | "append">;
 kernel: Pick<HubRuntime, "blocked" | "stopping">;
@@ -476,13 +478,7 @@ export class McpOperations {
 
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline, run count and test count as the spec writes them, where it gives one. */
   checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown }> {
-    const spec = this.options.doneSpec(worktree);
-    const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
-    return new Map(Object.entries(checks).flatMap(([name, c]) => {
-      if (!isObj(c) || typeof c.run !== 'string') return [];
-      const written = Object.fromEntries((['deadline', 'runs', 'accept', 'min_tests'] as const).flatMap((key) => (c[key] !== undefined ? [[key, c[key]]] : [])));
-      return [[name, { run: c.run, ...written, ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
-    }));
+    return checksIn(this.options.doneSpec(worktree));
   }
 
   private checkNames(worktree: string): string[] {
@@ -711,16 +707,18 @@ export class McpOperations {
   /** deep_run: a check the session's spec names, run for one of its claims (its newest by default) at that claim's commit, answered with its outcome. */
   private async runCheck(session: string, args: Obj): Promise<Obj> {
     const cwd = this.options.state().sessions.get(session)!.cwd;
-    const check = this.checksOf(cwd).get(String(args.check));
-    const doc = check ? undefined : this.options.services.canvasSide.docChecksOf(cwd).get(String(args.check));
+    const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
+    const [claim] = (await this.options.services.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
+    // The check as the revision you approved writes it (#1864), never the worktree's file a command's child can write.
+    const approved = (await approvedSpec(cwd, await this.options.judging().claimBase(claim ? `claim:${claim.id}` : '', cwd))).spec;
+    const check = checksIn(approved).get(String(args.check));
+    const doc = check ? undefined : docChecksIn(approved).get(String(args.check));
     if (check === undefined && doc === undefined) throw this.unknownCheck(cwd, args.check);
     // A deadline the hub can't read is refused before the run starts, never taken as none (#822).
     const deadline = check?.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
     if (check?.deadline !== undefined && !deadline) {
       throw refuse('pattern', `/checks/${String(args.check)}/deadline`, `Give the check's deadline in .deepbuild/done.yaml as a whole number above 0 of m, h or d, such as 30m, not ${String(check.deadline)}.`, String(check.deadline));
     }
-    const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
-    const [claim] = (await this.options.services.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
     if (!await this.options.judging().projectTrusted(cwd)) {
       throw refuse('unconfirmed', '/params/arguments/check', `${cwd} isn't a project you trust, so ${String(args.check)} didn't run: its spec checks run only once you trust it, by your answer in the app or by Claude Code's or Codex's own trust of it.`, args.check);

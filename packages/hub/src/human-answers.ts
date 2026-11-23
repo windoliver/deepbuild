@@ -26,6 +26,9 @@ import { type ChannelAsk } from './channels.js';
 
 import { OpenItems } from './open-items.js';
 import { Runs } from './runs.js';
+import { approvedSpec } from './approved-spec.js';
+import { checksIn } from './spec-checks.js';
+import { headOf } from './session-facts.js';
 
 import { cursorAt, cursorOf, refuse, Refused, refusal, SETTLED_PAGE, ulid, type CoreOptions, type HookMeta } from './wire.js';
 import type { CallContext } from './session-types.js';
@@ -265,7 +268,8 @@ export class HumanAnswers {
     let findings: string[] = [];
     try {
       const cwd = resource?.cwd ?? this.options.state().sessions.get(session)!.cwd;
-      const check = this.options.mcp().checksOf(cwd).get(name);
+      // The check as the revision you approved writes it (#1864): the folder's HEAD spec, never the worktree's file.
+      const check = checksIn((await approvedSpec(cwd, (await headOf(cwd))?.sha ?? '')).spec).get(name);
       if (!check) throw Error(`${name} is no check of ${cwd}'s spec any more`);
       // Run on a snapshot of the session's folder, in a temporary checkout of it, as a claim's checks are (#29).
       const commit = (await this.options.services.checkouts.snapshot(cwd)).commit;

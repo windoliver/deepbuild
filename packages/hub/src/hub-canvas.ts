@@ -1,7 +1,8 @@
 
 import { readFileSync } from 'node:fs';
 import type { CheckResult } from '@deepbuild/conformance';
-import { canvasClaim, docCheckOf, docResult, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
+import { docChecksIn } from './spec-checks.js';
+import { canvasClaim, docResult, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
 
 import { join } from 'node:path';
 
@@ -405,9 +406,7 @@ export class HubCanvas {
 
   /** The document checks a worktree's spec names (#1723). */
   docChecksOf(worktree: string): Map<string, DocCheck> {
-    const spec = this.options.doneSpec(worktree);
-    const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
-    return new Map(Object.entries(checks).flatMap(([name, c]) => { const d = docCheckOf(c); return d ? [[name, d] as const] : []; }));
+    return docChecksIn(this.options.doneSpec(worktree));
   }
   /** A document's newest recorded revision. */
   async docRevision(doc: string): Promise<Revision | undefined> {
