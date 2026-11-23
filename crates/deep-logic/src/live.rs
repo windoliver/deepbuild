@@ -375,7 +375,8 @@ fn logic(line: Value, planted: Planted, inbox: Receiver<Latched>, up: Sender<Up>
             continue;
         }
         let Some(k) = world.at() else { return };
-        world.run(k + 1, &mut Record::default(), &mut |_, _| {});
+        // Nothing reads a pipelined view's steps' record (#2662).
+        world.run(k + 1, &mut Record::none(), &mut |_, _| {});
         if up
             .send(Up::Ended(k, world.deep_hashes(), world.shown()))
             .is_err()
