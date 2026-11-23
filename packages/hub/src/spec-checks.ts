@@ -6,13 +6,13 @@ import { isAlias, isMap, isScalar, LineCounter, parseDocument } from 'yaml';
 import { duration } from '@deepbuild/asks';
 import type { JsonValue } from '@deepbuild/contracts';
 import { runsNeeded } from '@deepbuild/verdicts';
-import { docCheckOf, docCommand, type DocCheck } from './doc-checks.js';
+import { docCommand, type DocCheck } from './doc-checks.js';
 import type { ClaimCheck } from './gate-runner.js';
 import type { McpOperationsPort } from './hub-ports.js';
 import { isObj } from './hub-shared.js';
 import { blocked, cantRun, specEntries } from './release.js';
+import { SPEC } from './approved-spec.js';
 
-const SPEC = '.deepbuild/done.yaml';
 /** The top-level keys a reader takes: the gate's own, teardowns' `resources`, the stack's `environment`, the `asks` settings and deep-hook's `heavy_commands`. */
 const TOP = new Set(['claims', 'checks', 'outside', 'release', 'switches', 'resources', 'environment', 'asks', 'heavy_commands']);
 /** The keys a reader takes on a check entry: a command's, and a document check's (#1723). */
@@ -30,21 +30,6 @@ export function unreadKeys(text: string): { key: string; line: number; check?: s
     ...(TOP.has(top.key) ? [] : [{ key: top.key, line: top.line }]),
     ...(top.key === 'checks' ? keysOf(top.value).flatMap((entry) => keysOf(entry.value).filter((k) => !ON_CHECK.has(k.key)).map((k) => ({ key: k.key, line: k.line, check: entry.key }))) : []),
   ]);
-}
-
-/** The command checks a spec names, by name, with the command each runs and the counts and deadline it writes. */
-export function checksIn(spec: unknown): ReturnType<McpOperationsPort['checksOf']> {
-  const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
-  return new Map(Object.entries(checks).flatMap(([name, c]) => {
-    if (!isObj(c) || typeof c.run !== 'string') return [];
-    const written = Object.fromEntries((['deadline', 'runs', 'accept', 'min_tests'] as const).flatMap((key) => (c[key] !== undefined ? [[key, c[key]]] : [])));
-    return [[name, { run: c.run, ...written, ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
-  }));
-}
-/** The document checks a spec names (#1723). */
-export function docChecksIn(spec: unknown): Map<string, DocCheck> {
-  const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
-  return new Map(Object.entries(checks).flatMap(([name, c]) => { const d = docCheckOf(c); return d ? [[name, d] as const] : []; }));
 }
 
 /**

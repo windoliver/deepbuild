@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { parseYaml } from './yaml.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
 import type { ClaimCheck } from './gate-runner.js';
+import { SPEC } from './approved-spec.js';
 
 type Obj = Record<string, unknown>;
 
@@ -22,7 +23,6 @@ export function releaseSpec(spec: unknown): ReleaseSpec {
   return { checks, switches };
 }
 
-const SPEC = '.deepbuild/done.yaml';
 /** A spec check the gate can't run (#2205): it stands on the claim missing its cause, yours to clear, never left out. */
 export const blocked = (check: string, cause: string): ClaimCheck => ({ check, approved: null, command: '', covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', prerequisite: { outcome: 'missing', cause }, holds: false });
 /** The names of the spec's `checks` entries, whatever each one holds. */
@@ -31,10 +31,9 @@ export const specEntries = (spec: unknown): string[] => (isObj(spec) && isObj(sp
 export const cantRun = (spec: unknown, name: string): ClaimCheck => blocked(name, specEntries(spec).includes(name) ? `nothing can run spec check ${name}: its entry has no run line and no check kind takes it` : `spec check ${name} is not defined in checks`);
 /**
  * A done.yaml that is there and can't be read as a spec (#2205), as the one check its claim gets: the file, missing
- * where the parser stopped. None for a repo with no done.yaml (`text` undefined), which alone reads as a repo with no spec.
+ * where the parser stopped, read from the spec's text.
  */
-export function unreadSpec(text: string | undefined): ClaimCheck[] {
-  if (text === undefined) return [];
+export function unreadSpec(text: string): ClaimCheck[] {
   try { parseYaml(text); return []; } catch (error) {
     return [blocked(SPEC, `${SPEC} can't be read: ${String((error as Error).message).split('\n')[0]!.replace(/:$/, '')}`)];
   }

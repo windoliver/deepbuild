@@ -1,5 +1,5 @@
 import type { HubEvents } from './hub-capabilities.js';
-import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, SessionStatePort, McpOperationsPort } from './hub-ports.js';
+import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, SessionStatePort } from './hub-ports.js';
 import { execFile } from 'node:child_process';
 
 
@@ -27,7 +27,7 @@ import { type ChannelAsk } from './channels.js';
 import { OpenItems } from './open-items.js';
 import { Runs } from './runs.js';
 import { approvedSpec } from './approved-spec.js';
-import { checksIn } from './spec-checks.js';
+import { checksIn } from './spec-entries.js';
 import { headOf } from './session-facts.js';
 
 import { cursorAt, cursorOf, refuse, Refused, refusal, SETTLED_PAGE, ulid, type CoreOptions, type HookMeta } from './wire.js';
@@ -60,7 +60,6 @@ readonly canvasSide: Pick<HubCanvas, "explainsOf">;
 delivery: () => Pick<AnswerDeliveryPort, "openOffers" | "switches">;
  control: () => Pick<HumanControlPort, "trusted">;
 judging: () => Pick<StopJudgingPort, "reachOfSession" | "runEnded" | "turnTaskOf">;
-mcp: () => Pick<McpOperationsPort, "checksOf">;
 state: () => Pick<SessionStatePort, "liveOf" | "sessions">;
 memory: () => Pick<SessionMemoryPort, "syncStanding">;
 }
@@ -206,7 +205,7 @@ export class HumanAnswers {
     if (data.provisional === true && chosen && chosen.id !== data.recommended && row.session && this.options.settings.plant !== 'records-switch-only') await this.provisionalSwitched(handle, row.session, data).catch(() => undefined);
     await answered();
     // "I did it" to a task proved by a spec check runs that check again at once (#323): a claim never passes on it alone.
-    if (data.kind === 'unblock' && chosen?.id === 'done' && row.session && typeof data.proves === 'string' && this.options.mcp().checksOf((await this.options.services.teardowns.of(data))?.cwd ?? this.options.state().sessions.get(row.session)?.cwd ?? '').has(data.proves)) {
+    if (data.kind === 'unblock' && chosen?.id === 'done' && row.session && typeof data.proves === 'string' && await this.proves((await this.options.services.teardowns.of(data))?.cwd ?? this.options.state().sessions.get(row.session)?.cwd ?? '', data.proves)) {
       void this.didIt(handle, row.session, data).catch((error: unknown) => process.stderr.write(`deep hub: ${handle}'s check did not run again: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     // Your waiver of an open item closes it (#323).
@@ -253,6 +252,11 @@ export class HumanAnswers {
     return tree === switched[2] ? `your answer to ${switched[1]} switched the option the agent went on with, and no check has run on a commit after it` : undefined;
   }
 
+  /** A folder's spec checks as the revision you approved writes them (#1864): its HEAD's spec, never the worktree's file. */
+  private async approvedChecks(cwd: string): Promise<ReturnType<typeof checksIn>> {
+    return checksIn((await approvedSpec(cwd, (await headOf(cwd).catch(() => undefined))?.sha ?? '')).spec);
+  }
+  private async proves(cwd: string, check: string): Promise<boolean> { return (await this.approvedChecks(cwd).catch(() => new Map())).has(check); }
   /**
    * Your "I did it" to a task (#323; design: Tasks only you can do): its check runs again at once, as your claim on the
    * session's task, on a snapshot of the session's folder. One that still fails returns the task to you, raised again
@@ -268,8 +272,7 @@ export class HumanAnswers {
     let findings: string[] = [];
     try {
       const cwd = resource?.cwd ?? this.options.state().sessions.get(session)!.cwd;
-      // The check as the revision you approved writes it (#1864): the folder's HEAD spec, never the worktree's file.
-      const check = checksIn((await approvedSpec(cwd, (await headOf(cwd))?.sha ?? '')).spec).get(name);
+      const check = (await this.approvedChecks(cwd)).get(name);
       if (!check) throw Error(`${name} is no check of ${cwd}'s spec any more`);
       // Run on a snapshot of the session's folder, in a temporary checkout of it, as a claim's checks are (#29).
       const commit = (await this.options.services.checkouts.snapshot(cwd)).commit;

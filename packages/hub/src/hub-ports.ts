@@ -157,7 +157,6 @@ export interface StopJudgingPort {
   buildProduct(b: { cwd: string; command: string }): Promise<{ code: number | null; tail: string }>;
   runEnded(run: string): Promise<string>;
   judged(claim: string): Promise<void>;
-  claimBase(claim: string, cwd: string): Promise<string>;
   runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; key?: RunKey; stack?: StackWant }): Promise<string>;
   invalid(claim: string, commit: string, reason: string, outcome?: 'INVALID' | 'INCONCLUSIVE'): Promise<void>;
   stopRule(count: Counter): boolean;

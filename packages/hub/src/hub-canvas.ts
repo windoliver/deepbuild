@@ -1,7 +1,7 @@
 
 import { readFileSync } from 'node:fs';
 import type { CheckResult } from '@deepbuild/conformance';
-import { docChecksIn } from './spec-checks.js';
+import { docChecksIn } from './spec-entries.js';
 import { canvasClaim, docResult, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
 
 import { join } from 'node:path';

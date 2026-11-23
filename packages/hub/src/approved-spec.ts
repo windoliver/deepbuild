@@ -25,6 +25,7 @@ export async function specAt(folder: string, base: string): Promise<string | und
   } catch {
     throw Error(`${SPEC} couldn't be read at the claim's base commit ${base.slice(0, 12)}, so the revision you approved is unknown`);
   }
+  if (read.size >= 256) read.delete(read.keys().next().value!);
   read.set(key, text);
   return text;
 }

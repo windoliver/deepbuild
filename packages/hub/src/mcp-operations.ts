@@ -51,8 +51,9 @@ import { refuse, Refused, refusal, ulid, type CoreOptions, type Refusal } from '
 import type { CallContext, Stamp } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 import { docCommand, docSpec } from './doc-checks.js';
-import { checksIn, docChecksIn } from './spec-checks.js';
+import { checksIn } from './spec-entries.js';
 import { approvedSpec } from './approved-spec.js';
+import { headOf } from './session-facts.js';
 
 import { sql, letters, noWake, unseenTools, type Obj, isObj, isUnder, asRefused } from "./hub-shared.js";
 
@@ -96,7 +97,7 @@ export interface McpOperationsOptions {
   };
   control: () => Pick<HubControlPort, "attach" | "job">;
   state: () => Pick<SessionStatePort, "live" | "rows" | "sessions">;
-  judging: () => Pick<StopJudgingPort, "claimed" | "claimBase" | "reachOfSession" | "projectTrusted" | "runApproved">;
+  judging: () => Pick<StopJudgingPort, "claimed" | "reachOfSession" | "projectTrusted" | "runApproved">;
   delivery: () => Pick<AnswerDeliveryPort, "askWaits" | "deliver" | "routes" | "settling" | "answers" | "binds">;
   events: Pick<HubEvents, "connection" | "appendReading" | "append">;
 kernel: Pick<HubRuntime, "blocked" | "stopping">;
@@ -485,8 +486,7 @@ export class McpOperations {
     return [...this.checksOf(worktree).keys(), ...this.options.services.canvasSide.docChecksOf(worktree).keys()];
   }
 
-  private unknownCheck(worktree: string, check: unknown): Refused {
-    const names = this.checkNames(worktree);
+  private unknownCheck(names: string[], check: unknown): Refused {
     const near = typeof check === 'string' ? nearest(check, names) : undefined;
     return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
@@ -505,7 +505,8 @@ export class McpOperations {
         if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your Slack user ID in the hub\'s slack.json as {"you": "U…"}, mode 0600, and enter your bot token with deep secret add slack token, to read this thread.', null);
       } else {
         need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
-        if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
+        const approved = (await approvedSpec(s.cwd, (await headOf(s.cwd).catch(() => undefined))?.sha ?? '')).spec;
+        if (!checksIn(approved).has(String(args.check))) throw this.unknownCheck([...checksIn(approved).keys()], args.check);
       }
       need('steps', 'List the task\'s steps, in order.');
       need('where', 'Say where the person does the task.');
@@ -707,18 +708,16 @@ export class McpOperations {
   /** deep_run: a check the session's spec names, run for one of its claims (its newest by default) at that claim's commit, answered with its outcome. */
   private async runCheck(session: string, args: Obj): Promise<Obj> {
     const cwd = this.options.state().sessions.get(session)!.cwd;
-    const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
-    const [claim] = (await this.options.services.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
-    // The check as the revision you approved writes it (#1864), never the worktree's file a command's child can write.
-    const approved = (await approvedSpec(cwd, await this.options.judging().claimBase(claim ? `claim:${claim.id}` : '', cwd))).spec;
-    const check = checksIn(approved).get(String(args.check));
-    const doc = check ? undefined : docChecksIn(approved).get(String(args.check));
-    if (check === undefined && doc === undefined) throw this.unknownCheck(cwd, args.check);
+    const check = this.checksOf(cwd).get(String(args.check));
+    const doc = check ? undefined : this.options.services.canvasSide.docChecksOf(cwd).get(String(args.check));
+    if (check === undefined && doc === undefined) throw this.unknownCheck(this.checkNames(cwd), args.check);
     // A deadline the hub can't read is refused before the run starts, never taken as none (#822).
     const deadline = check?.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
     if (check?.deadline !== undefined && !deadline) {
       throw refuse('pattern', `/checks/${String(args.check)}/deadline`, `Give the check's deadline in .deepbuild/done.yaml as a whole number above 0 of m, h or d, such as 30m, not ${String(check.deadline)}.`, String(check.deadline));
     }
+    const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
+    const [claim] = (await this.options.services.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
     if (!await this.options.judging().projectTrusted(cwd)) {
       throw refuse('unconfirmed', '/params/arguments/check', `${cwd} isn't a project you trust, so ${String(args.check)} didn't run: its spec checks run only once you trust it, by your answer in the app or by Claude Code's or Codex's own trust of it.`, args.check);
