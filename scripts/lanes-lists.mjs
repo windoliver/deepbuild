@@ -1298,6 +1298,9 @@ timed.push('tests/acceptance/1489/ui-thread.test.ts');
 
 // #2777's files each build deep-show (full, and with the test.tone module), and its preflight file times the lane.
 alone.push('tests/acceptance/2777/');
+// The alone block's files that call a timing helper and weren't timed (#3137): run in shards, they would run beside
+// other shards, so they run last, one at a time, under a timed grant, as #1114's list holds.
+timed.push('tests/acceptance/2777/preflight.test.ts', 'tests/acceptance/194/ac11-budgets.test.ts', 'tests/acceptance/2402/budget.test.ts', 'tests/acceptance/277/ac4-budgets.test.ts', 'tests/acceptance/278/ac5-budgets.test.ts', 'tests/acceptance/518/handoff.test.ts', 'tests/acceptance/518/planes.test.ts');
 // #211's files build deep-logic and deep-show, start Chrome and hold page stores of hundreds of MiB;
 // ac8-budgets times release builds.
 alone.push('tests/acceptance/211/');
