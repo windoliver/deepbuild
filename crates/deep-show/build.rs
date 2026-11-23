@@ -8,6 +8,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use sha2::{Digest, Sha256};
 
 #[path = "src/export/gzip.rs"]
@@ -82,9 +83,11 @@ fn stored_players(manifest_dir: &Path, out_dir: &Path) {
 
 /// Issue #1901: the build the machine fingerprint names: SHA-256 over the sources of the canvas
 /// core, its modules and every other workspace crate this binary is built from (this crate and
-/// its path dependencies, transitively, each folder whole but `target`, `node_modules` and
-/// hidden entries), and the workspace's `Cargo.lock`, each file by its path and its bytes. A
-/// rebuild from changed sources is another build; one from the same sources is the same build.
+/// its path dependencies, transitively, each folder whole but hidden entries and what the
+/// workspace's `.gitignore` names), and the workspace's `Cargo.lock`, each file by its path and
+/// its bytes. A rebuild from changed sources is another build; one from the same sources is the
+/// same build. Issue #3299: the script reruns when one of those files changes, never for a file
+/// it doesn't read, so the typings gpui-shell writes into a panel folder rebuild nothing.
 fn source_digest(manifest_dir: &Path) -> String {
     let crates = manifest_dir.parent().expect("a crate sits in crates/");
     let root = crates.parent().expect("crates/ sits in the workspace");
@@ -97,18 +100,20 @@ fn source_digest(manifest_dir: &Path) -> String {
         let toml = std::fs::read_to_string(crates.join(&name).join("Cargo.toml"));
         stack.extend(path_dependencies(&toml.unwrap_or_default()).map(Into::into));
     }
-    let mut files = Vec::new();
-    for name in &seen {
-        let folder = crates.join(name);
-        println!("cargo:rerun-if-changed={}", folder.display());
-        walk(&folder, &mut files);
+    let rules = root.join(".gitignore");
+    let mut ignore = GitignoreBuilder::new(root);
+    if let Some(error) = ignore.add(&rules) {
+        panic!("the workspace's .gitignore is read: {error}");
     }
-    let lock = root.join("Cargo.lock");
-    println!("cargo:rerun-if-changed={}", lock.display());
-    files.push(lock);
+    let ignore = ignore.build().expect("the workspace's .gitignore parses");
+    let mut files = vec![rules, root.join("Cargo.lock")];
+    for name in &seen {
+        walk(&crates.join(name), &ignore, &mut files);
+    }
     files.sort();
     let mut hash = Sha256::new();
     for file in &files {
+        println!("cargo:rerun-if-changed={}", file.display());
         let at = file.strip_prefix(root).unwrap_or(file).to_string_lossy();
         let bytes = std::fs::read(file).unwrap_or_default();
         for part in [at.as_bytes(), &bytes] {
@@ -128,19 +133,20 @@ fn path_dependencies(toml: &str) -> impl Iterator<Item = &str> {
     })
 }
 
-fn walk(folder: &Path, out: &mut Vec<PathBuf>) {
+fn walk(folder: &Path, ignore: &Gitignore, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(folder) else {
         return;
     };
     for entry in entries.flatten() {
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with('.') || name == "target" || name == "node_modules" {
+        let path = entry.path();
+        let dir = path.is_dir();
+        if entry.file_name().to_string_lossy().starts_with('.')
+            || ignore.matched(&path, dir).is_ignore()
+        {
             continue;
         }
-        let path = entry.path();
-        if path.is_dir() {
-            walk(&path, out);
+        if dir {
+            walk(&path, ignore, out);
         } else {
             out.push(path);
         }
