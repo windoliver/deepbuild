@@ -1420,9 +1420,6 @@ timed.push('tests/acceptance/980/ac09-budget.test.ts');
 alone.push('tests/acceptance/980-redraft-ac9/');
 timed.push('tests/acceptance/980-redraft-ac9/ac9-budget.test.ts');
 byHand.push('tests/acceptance/980/ac09-budget.test.ts');
-// #1841's first draft fails the next page's read only when that read binds two values; since #1576 it also binds the
-// page's byte cap, so the failure is never injected and the test reads BLOCKED. Its blind redraft runs in its place.
-byHand.push('tests/acceptance/1841/events-read.test.ts');
 
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
