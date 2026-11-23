@@ -5,7 +5,7 @@ import { EvidenceAccess } from './evidence-access.js';
 import { HubReadings } from './hub-readings.js';
 import { WorkspaceActions } from './workspace-actions.js';
 import type { HumanControlPort } from './human-control-port.js';
-import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, TranscriptsPort, SessionStatePort, McpOperationsPort } from './hub-ports.js';
+import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, TranscriptsPort, SessionStatePort } from './hub-ports.js';
 
 import { realpathSync } from 'node:fs';
 
@@ -127,7 +127,6 @@ export interface HubControlOptions {
   judging: () => Pick<StopJudgingPort, "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
   state: () => Pick<SessionStatePort, "agentAbove" | "entered" | "liveOf" | "notAnAgent" | "renameSession" | "whySeen" | "rowsSeen" | "seeRow" | "seenBy" | "sessionRows" | "sessionWindow" | "sessions" | "startOf" | "states" | "statesSettled" | "statusSeen">;
   memory: () => Pick<SessionMemoryPort, "lessons" | "memoryAct" | "sessionRules" | "syncRules" | "syncStanding">;
-  mcp: () => Pick<McpOperationsPort, "checksOf">;
   transcripts: () => Pick<TranscriptsPort, "backfill">;
   events: Pick<HubEvents, "append" | "appendCore" | "appendReading" | "connection">;
 kernel: Pick<HubRuntime, "blocked" | "jobs" | "ready">;
@@ -145,7 +144,7 @@ export class HubControl {
 
   constructor(private readonly options: HubControlOptions) {
     const control: HumanControlPort = { trusted: (method, params, context, what, handle, revision) => this.authority.trusted(method, params, context, what, handle, revision), revisionOf: (handle, ask) => this.human.revisionOf(handle, ask) };
-    this.human = new HumanAnswers({ settings: options.settings, services: options.services, events: options.events,   delivery: options.delivery, control: () => control, judging: options.judging, mcp: options.mcp, state: options.state, memory: options.memory });
+    this.human = new HumanAnswers({ settings: options.settings, services: options.services, events: options.events,   delivery: options.delivery, control: () => control, judging: options.judging, state: options.state, memory: options.memory });
     this.authority = new TrustedActions({ settings: options.settings, services: options.services, events: options.events,   state: options.state, control: () => control });
     this.evidence = new EvidenceAccess({ settings: options.settings, services: options.services, events: options.events,   state: options.state });
     this.readings = new HubReadings({ settings: options.settings, services: options.services, events: options.events, kernel: options.kernel,  judging: options.judging, transcripts: options.transcripts });

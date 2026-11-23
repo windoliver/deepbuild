@@ -1459,6 +1459,7 @@ mod counting;
 mod formulas;
 pub mod gpu;
 mod graphs;
+pub mod grid_gpu;
 pub mod layer;
 #[cfg(target_os = "macos")]
 mod macos;

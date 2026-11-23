@@ -1076,8 +1076,7 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
     })
 }
 
-/// A mark set's rows as marks, each named `<id>#<key>`. `bound` holds the readings bound to its
-/// cells.
+/// A mark set's rows as marks, each named `<id>#<key>`; `bound` holds its cells' bound readings.
 pub fn mark_set(
     id: &str,
     item: &Value,
@@ -1304,6 +1303,7 @@ pub fn mark_set(
                     adjust: crate::paint::Adjust::default(),
                     tile: None,
                     turn: 0.0,
+                    grid: None,
                 });
             }
             "text" => out.push(Mark::Text {

@@ -19,7 +19,7 @@ use crate::hub::Hub;
 use crate::snapshot::{self, Drawn, Unfit};
 
 /// `doc` with only the 2D items `keep` says: what the 2D raster draws over the 3D frame.
-fn only(doc: &Value, keep: impl Fn(&str) -> bool) -> Value {
+pub(crate) fn only(doc: &Value, keep: impl Fn(&str) -> bool) -> Value {
     let mut out = doc.clone();
     if let Some(items) = out.get_mut("items").and_then(Value::as_object_mut) {
         items.retain(|id, item| {
@@ -153,7 +153,7 @@ impl Hub<'_> {
         doc: &Value,
         t: i64,
         size: [u16; 2],
-    ) -> Result<(Vec<u8>, crate::scene3d::Shown), Unfit> {
+    ) -> Result<(Vec<u8>, crate::scene3d::Shown, Scene), Unfit> {
         use crate::scene3d::{Shown, AS_BOXES, BEFORE_CUTAWAY};
         let edged = edged(doc, t, size)?;
         let doc = edged.as_ref().unwrap_or(doc);
@@ -161,7 +161,8 @@ impl Hub<'_> {
         let plant = self.scenario.module_planted.clone();
         let plant = plant.as_deref();
         if plant == Some(AS_BOXES) {
-            return Ok((rgba, Shown::of_boxes(scene.boxes(), size)));
+            let shown = Shown::of_boxes(scene.boxes(), size);
+            return Ok((rgba, shown, scene));
         }
         let unfit = || Unfit {
             code: "unsupported_platform",
@@ -178,7 +179,31 @@ impl Hub<'_> {
             let gpu = self.gpu3().ok_or_else(unfit)?;
             gpu.targets(size.map(u32::from), false).ok_or_else(unfit)?
         };
-        Ok((rgba, targets.shown(scene.boxes(), size, plant)))
+        let shown = targets.shown(scene.boxes(), size, plant);
+        Ok((rgba, shown, scene))
+    }
+
+    /// #1722: `doc`'s 2D items as render-back, and a shared document's presenting, draw them over
+    /// its 3D frame, prepared from the revision itself (a sole writer's presenting draws its
+    /// session's drawing of the same items); `None` when it has none.
+    pub(crate) fn items2d(&mut self, doc: &Value, t: i64) -> Result<Option<Drawn>, Unfit> {
+        let flat = only(&crate::shared::drawable(doc), |_| true);
+        let items = flat.get("items").and_then(Value::as_object);
+        if items.is_none_or(Map::is_empty) {
+            return Ok(None);
+        }
+        let record = self.record();
+        let look = &self.look;
+        self.renderer
+            .prepare(
+                flat.as_object().expect("a document is an object"),
+                t,
+                &look.light,
+                look.status.as_ref(),
+                &record,
+                &self.scenario.evidence,
+            )
+            .map(Some)
     }
 
     /// `doc`'s frame at `t` and `size` with what #506 sets in and over it (see the module's note).

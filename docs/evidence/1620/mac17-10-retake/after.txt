@@ -1,0 +1,28 @@
+# With the fix: the whole headless suite, the Mac in America/New_York (no TZ set; the suite pins its replica runs to UTC)
+test replica_launch_under_two_seconds ... ok
+test needs_you_view_snapshot ... ok
+test sidebar_view_snapshot ... ok
+test session_view_snapshot ... ok
+test session_readout_in_pixels ... ok
+test fixture_panel_rows_match_projection ... ok
+test fixture_panel_passes_needs_you_kit ... ok
+test planted_cap20_fails_kit ... ok
+test planted_drop_folded_fails_kit ... ok
+test planted_list_superseded_fails_kit ... ok
+test planted_hide_newest_fails_kit ... ok
+test replica_equals_live_tree ... ok
+test scale1_replica_differs_at_first_node ... ok
+test slot_sidebar_from_registry ... ok
+test slot_home_from_registry ... ok
+test slot_tab_from_registry ... ok
+test slot_line_from_registry ... ok
+test slot_replace_needs_you_from_registry ... ok
+test canvas_component_in_registry ... ok
+test result: ok. 19 passed; 0 failed
+
+# replica_equals_live_tree again with TZ=America/Los_Angeles
+test replica_equals_live_tree ... ok
+test result: ok. 1 passed; 0 failed
+
+# The replica's own snapshot in the Mac's zone (EST, no pin) against the UTC tree: only the moments differ
+190 vs 190 nodes; only in first: 59; only in second: 59

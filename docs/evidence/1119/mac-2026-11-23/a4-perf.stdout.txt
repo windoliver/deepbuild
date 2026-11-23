@@ -1,0 +1,4 @@
+2026-11-23T10:30:18Z { 110.47 96.22 69.87 } RUN perf
+2026-11-23T10:30:51Z { 94.72 94.10 70.17 } perf: base copy ~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/copy: wrote 3 files, deleted 69; rewrote what the last run left with other bytes: docs/evidence/1941/contrast-muted-after.png, docs/evidence/1941/contrast-muted-before.png, tests/acceptance/1470/fixtures/menu/gpui-kit.d.ts
+2026-11-23T10:56:34Z { 120.73 129.48 121.71 } BLOCKED perf: spawnSync /usr/bin/time ETIMEDOUT
+2026-11-23T10:56:34Z { 120.73 129.48 121.71 }   Fix: Resolve the named cause; budgets in benchmarks/budgets.json are frozen once they reach main.
