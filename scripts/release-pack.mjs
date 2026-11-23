@@ -16,8 +16,11 @@ import { fileURLToPath } from 'node:url';
 import { preflightRefusal } from './preflight-record.mjs';
 import { contentsOf, extract } from './release-artifacts.mjs';
 
+// process.exit skips the finally below, so a refusal removes the temporary folder itself.
+let work;
 const fail = (message) => {
   console.error(`release-pack: ${message}`);
+  if (work) rmSync(work, { recursive: true, force: true });
   process.exit(1);
 };
 const run = (cmd, args, cwd) => {
@@ -57,7 +60,7 @@ if (keyArg) {
   }
 }
 
-const work = mkdtempSync(join(tmpdir(), 'release-pack-'));
+work = mkdtempSync(join(tmpdir(), 'release-pack-'));
 try {
   const clean = join(work, 'checkout');
   run('git', ['clone', '-q', '--no-hardlinks', repo, clean], work);
