@@ -11,12 +11,35 @@ export function git(root, args, options = {}) {
   return execFileSync('git', ['-c', 'core.quotePath=false', ...args], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 30, stdio: ['ignore', 'pipe', 'pipe'], ...options });
 }
 
+// The blob paths of each commit `show` has read by its full ID, which never changes what it holds (#3163): the guard
+// probes tens of thousands of paths a commit lacks, each a git process of its own, where one listing answers them all.
+// A replace ref added after the listing would go unseen; no script here makes one.
+const blobPaths = new Map();
+const NON_ASCII = /[^\x00-\x7f]/;
+function lacks(root, rev, path) {
+  // git reads `rev:./path` and `rev:../path` from the working folder, so those still ask git, and a NUL in a path
+  // still throws there, as no git argument can hold one.
+  if (!/^[0-9a-f]{40}$/.test(rev) || /^\.\.?\//.test(path) || path.includes('\0')) return false;
+  const key = `${root}\0${rev}`;
+  if (!blobPaths.has(key)) {
+    const listed = spawnSync('git', ['ls-tree', '-r', '-z', '--full-tree', rev], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 30 });
+    const names = listed.status === 0 ? new Set(listed.stdout.split('\0').filter((entry) => / blob [0-9a-f]+\t/.test(entry)).map((entry) => entry.slice(entry.indexOf('\t') + 1))) : null;
+    blobPaths.set(key, names && { names, ascii: [...names].every((name) => !NON_ASCII.test(name)) });
+  }
+  const tree = blobPaths.get(key);
+  if (!tree) return false;
+  // On macOS git composes a decomposed name before it looks, so a name beyond ASCII may find a file listed under
+  // another spelling: it asks git, unless the tree has no such name at all, since composing keeps a name beyond ASCII.
+  return NON_ASCII.test(path) ? tree.ascii : !tree.names.has(path);
+}
+
 /** A file as `rev` holds it, or null when it doesn't. `rev` null reads the worktree. */
 export function show(root, rev, path) {
   if (rev === null) {
     const file = join(root, path);
     return existsSync(file) && statSync(file).isFile() ? readFileSync(file, 'utf8') : null;
   }
+  if (lacks(root, rev, path)) return null;
   const result = spawnSync('git', ['cat-file', 'blob', `${rev}:${path}`], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 30 });
   return result.status === 0 ? result.stdout : null;
 }
