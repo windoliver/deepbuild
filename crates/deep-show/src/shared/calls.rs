@@ -1,5 +1,9 @@
 use super::*;
 use crate::states::{keys_unchanged, taken_for_creates};
+pub use paths::paths_of;
+use paths::{merge_paths, written_paths};
+
+mod paths;
 
 impl Hub<'_> {
     /// Opens every shared document: from the state folder's record when it has one (a restart),
@@ -1030,9 +1034,16 @@ impl Hub<'_> {
         let unreadable = unreadable_handles(&doc, |h| self.can_read(&writer, h));
         issues.extend(unreadable.into_iter().filter(|i| i.ids.iter().any(mine)));
         let mut drawn = None;
-        // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does.
+        // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does,
+        // with its 2D items over its 3D frame (#1722).
         let three = deep_canvas_scene3d::scene::has_3d(&doc);
-        if !three && !issues.iter().any(|i| i.severity == "error" && !i.carried) {
+        let fit = !issues.iter().any(|i| i.severity == "error" && !i.carried);
+        if three && fit {
+            match self.items2d(&doc, show.t) {
+                Ok(d) => drawn = d,
+                Err(Unfit { code, path }) => issues.push(unfit_issue(code, path)),
+            }
+        } else if fit {
             // Each recipe instance's derived items draw in its place (#306).
             let shown = drawable(&crate::packs::drawn(&doc, &result.expansions));
             // #499: a video image item draws its frame at the revision's time.
@@ -1409,53 +1420,6 @@ fn planted_fix(planted: Option<Planted>, issues: &mut [Value]) {
     }
 }
 
-/// The `(ID, path)` pairs a patch's ops write, the path below the item; `None` when an op writes
-/// a whole item (a create, delete, move or reorder).
-fn written_paths(patch: &Value) -> Option<Paths> {
-    let mut out = Paths::new();
-    for op in patch["ops"].as_array()? {
-        let (Some("set" | "unset"), Some(id), Some(path)) =
-            (op["op"].as_str(), op["id"].as_str(), op["path"].as_str())
-        else {
-            return None;
-        };
-        let rest = path.strip_prefix(&format!("items/{id}/"))?;
-        out.insert((id.to_string(), rest.to_string()));
-    }
-    Some(out)
-}
-
-/// The planted path-granular rebase's merge: each path the patch wrote on its base, set to what
-/// it holds there in the current document.
-fn merge_paths(doc: &mut Value, on_base: &Value, patch: &Value) -> Patched {
-    let mut done = Patched::default();
-    for (id, path) in written_paths(patch).unwrap_or_default() {
-        let before = doc["items"].get(&id).cloned();
-        done.before.entry(id.clone()).or_insert(before);
-        let parts: Vec<&str> = path.split('/').collect();
-        let mut from = &on_base["items"][&id];
-        for p in &parts {
-            from = &from[*p];
-        }
-        let value = from.clone();
-        let Some((last, head)) = parts.split_last() else {
-            continue;
-        };
-        let mut at = &mut doc["items"][&id];
-        for p in head {
-            at = &mut at[*p];
-        }
-        match (value.is_null(), at.as_object_mut()) {
-            (true, Some(map)) => {
-                map.shift_remove(*last);
-            }
-            (false, _) => at[*last] = value,
-            _ => {}
-        }
-    }
-    done
-}
-
 /// A patch's coalesce key.
 fn coalesce_key(call: &PatchCall) -> Option<&str> {
     match &call.body {
@@ -1493,40 +1457,6 @@ impl Hub<'_> {
             "current": null,
         })
     }
-}
-
-/// The paths a revision wrote, as `(ID, path)`: `""` for an item it created or deleted, else
-/// each field of the item it changed, and each member of `params` and `at` (Patch: an undo is
-/// refused if another writer has touched those paths since).
-pub fn paths_of(before: &BTreeMap<String, Option<Value>>, doc: &Value) -> Paths {
-    let mut out = Paths::new();
-    for (id, was) in before {
-        match (was, doc["items"].get(id)) {
-            (Some(Value::Object(a)), Some(Value::Object(b))) => {
-                let keys: BTreeSet<&String> = a.keys().chain(b.keys()).collect();
-                for k in keys.into_iter().filter(|k| a.get(*k) != b.get(*k)) {
-                    match (a.get(k), b.get(k)) {
-                        (Some(Value::Object(x)), Some(Value::Object(y)))
-                            if k == "params" || k == "at" =>
-                        {
-                            let members: BTreeSet<&String> = x.keys().chain(y.keys()).collect();
-                            for m in members.into_iter().filter(|m| x.get(*m) != y.get(*m)) {
-                                out.insert((id.clone(), format!("{k}/{m}")));
-                            }
-                        }
-                        _ => {
-                            out.insert((id.clone(), k.clone()));
-                        }
-                    }
-                }
-            }
-            (a, b) if a.as_ref() != b => {
-                out.insert((id.clone(), String::new()));
-            }
-            _ => {}
-        }
-    }
-    out
 }
 
 /// #1801: the patch less its `delete` ops that name no item but an entry of another map keyed

@@ -1,0 +1,259 @@
+Acceptance tests for #3139 on the base c52dc3e73 (origin/main when this suite was written; the lints unchanged), run
+on 2026-11-23 with Node v24.22.2 in this worktree, with the suite uncommitted, each file once, at a load of about 380:
+
+  sh scripts/lease nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3139/<file>
+
+The lease found no deep CLI and ran each command unleased; that stderr line is left out. Trimmed to each test's result,
+each failure's message and its first frame. The checkout's path is made relative, a home folder is written ~ and a
+temporary folder <tmp>; none is left. 8 of the 12 tests fail, each at an assertion in its own file. 4 pass on the base,
+each an Unchanged hold (README: AC2, planted): the planted fixed wait, over-long file, unlisted dependency and home
+paths outside tests/acceptance/, and the secrets rule's hold on tests/acceptance/, all of which the base already fails.
+
+== sh scripts/lease nice -n 10 node --test --test-concurrency=1 tests/acceptance/3139/ac1-design.test.mjs
+
+✖ #3139.b841908f AC1: the Repo guards bullet states how the wait ratchet, the size ratchet and the repo rules each treat tests/acceptance/, as the owner decided
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ #3139.b841908f AC1: the Repo guards bullet states how the wait ratchet, the size ratchet and the repo rules each treat tests/acceptance/, as the owner decided
+  AssertionError [ERR_ASSERTION]: the Repo guards bullet doesn't state 9 of the decision's 9 facts:
+  - the wait ratchet: how it treats tests/acceptance/
+  - the size ratchet: how it treats tests/acceptance/
+  - the repo rules: how they treat tests/acceptance/
+  - the ratchets: a planted twin, a file under a twins/ folder, is out
+  - the ratchets: a suite's own file is judged only in the change that adds it, and once the merge base holds it a file with no ceiling is out
+  - the deps rule: twins' manifests are out
+  - the deps rule: a suite's own tooling crate gets its row like any dependency
+  - the secrets rule: it keeps judging all of tests/acceptance/ for home paths
+  - run records: written with home paths redacted, as ~
+      at TestContext.<anonymous> (tests/acceptance/3139/ac1-design.test.mjs:46:10)
+
+== sh scripts/lease nice -n 10 node --test --test-concurrency=1 tests/acceptance/3139/ac2-checkout.test.mjs
+
+✖ #3139.9aeafe77 AC2: on this checkout the wait ratchet prints no finding the decision excuses, none naming a twin or a suite's own file the merge base holds with no ceiling, and no twin keeps a ceiling
+✖ #3139.9aeafe77 AC2: on this checkout the size ratchet prints no finding the decision excuses, none naming a twin or a suite's own file the merge base holds with no ceiling, and no twin keeps a ceiling
+✖ #3139.9aeafe77 AC2: on this checkout the repo rules print no finding the decision excuses: no deps line names a twin's manifest or a suite's own tooling crate given its row, and no secrets line names #2651's made-up tokens
+ℹ tests 3
+ℹ pass 0
+ℹ fail 3
+
+✖ #3139.9aeafe77 AC2: on this checkout the wait ratchet prints no finding the decision excuses, none naming a twin or a suite's own file the merge base holds with no ceiling, and no twin keeps a ceiling
+  AssertionError [ERR_ASSERTION]: the wait ratchet prints findings under tests/acceptance/ that the decision excuses: 794 lines, the first 30:
+  FAIL waits: tests/acceptance/1101/batch.test.ts:35:106: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1101/helpers.ts:289:11: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1101/helpers.ts:425:29: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1101/helpers.ts:430:54: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1101/helpers.ts:545:21: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1101/helpers.ts:588:51: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1120/helpers.mjs:199:40: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:90:69: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:109:11: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:131:59: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:184:19: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:433:19: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:467:80: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:522:21: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:921:50: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:992:22: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:1193:11: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1156/redraft/helpers.ts:1205:11: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1217/ac7-taste.test.ts:99:11: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1217/helpers.ts:565:75: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1217/helpers.ts:590:21: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1217/helpers.ts:619:13: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1217/helpers.ts:635:51: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1217/helpers.ts:658:11: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1217/helpers.ts:679:13: sleep(…) is a fixed wait
+  FAIL waits: tests/acceptance/1334-redraft-1865/fixtures/launcher.mjs:17:23: Atomics.wait is a fixed wait
+  FAIL waits: tests/acceptance/1334-redraft-1865/fixtures/launcher.mjs:87:29: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1334-redraft-1865/fixtures/launcher.mjs:96:1: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1334-redraft-1865/helpers.mjs:37:51: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  FAIL waits: tests/acceptance/1334-redraft-1865/helpers.mjs:121:16: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+  
+      at TestContext.<anonymous> (tests/acceptance/3139/ac2-checkout.test.mjs:40:10)
+
+✖ #3139.9aeafe77 AC2: on this checkout the size ratchet prints no finding the decision excuses, none naming a twin or a suite's own file the merge base holds with no ceiling, and no twin keeps a ceiling
+  AssertionError [ERR_ASSERTION]: the size ratchet prints findings under tests/acceptance/ that the decision excuses: 40 lines, the first 30:
+  FAIL size: tests/acceptance/1327/twins/lanes-replace-alone/scripts/lanes.mjs: 1774 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/1856/twins/missing-rules-always-unreadable/crates/deep-hook/src/main.rs: 2004 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/1865/twins/confirmed-stop-exits-nonzero/packages/hub/src/server.ts: 1526 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/1865/twins/confirms-only-with-peer/packages/hub/src/server.ts: 1527 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/1865/twins/refuses-every-stop/packages/hub/src/server.ts: 1526 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/1865/twins/restart-exits-zero/packages/hub/src/server.ts: 1527 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2042/twins/denies-every-unread-payload/crates/deep-hook/src/main.rs: 1985 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2042/twins/reads-1-mib-at-most/crates/deep-hook/src/main.rs: 1985 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2134/twins/owner-from-the-lines-first-profile/crates/deep-hook/src/main.rs: 2077 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2136/twins/alone-excludes-nothing/scripts/lanes.mjs: 2016 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2204-redraft-ac3/twins/away-denial-dropped/crates/deep-hook/src/main.rs: 1974 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2204-redraft-ac3/twins/away-denial-unnamed/crates/deep-hook/src/main.rs: 1978 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2204/twins/rules-read-on-every-event/crates/deep-hook/src/main.rs: 2007 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2219/twins/mode-read-as-any/crates/deep-hook/src/main.rs: 1978 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2219/twins/skips-unreadable-entry/crates/deep-hook/src/main.rs: 1978 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2312/twins/refusal-dropped/packages/extension-host/src/host.ts: 3337 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2492/twins/active-handle-left-running/packages/extension-host/src/host.ts: 3424 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2492/twins/late-handle-left-running/packages/extension-host/src/host.ts: 3423 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2647/twins/reuses-first-diff/packages/asks/src/index.ts: 2286 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2694/twins/drops_kept_write/crates/deep-show/src/main.rs: 3087 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2694/twins/reads_hold_the_clock/crates/deep-show/src/main.rs: 3093 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2695/twins/guards-off-without-proofs/crates/deep-hook/src/main.rs: 2078 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2695/twins/old-rules-refused/crates/deep-hook/src/main.rs: 2078 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2732/twins/keeps-pipe/packages/hub/src/core.ts: 2636 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2973/twins/bad-file-reads-empty/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2973/twins/crash-spends/packages/hub/src/server.ts: 1540 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2973/twins/promote-checks-after-drain/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2973/twins/promote-needs-three/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2973/twins/promote-room-for-one/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  FAIL size: tests/acceptance/2973/twins/rollback-without-restart/packages/hub/src/server.ts: 1538 lines, over 1500 with no ceiling
+  
+      at TestContext.<anonymous> (tests/acceptance/3139/ac2-checkout.test.mjs:50:10)
+
+✖ #3139.9aeafe77 AC2: on this checkout the repo rules print no finding the decision excuses: no deps line names a twin's manifest or a suite's own tooling crate given its row, and no secrets line names #2651's made-up tokens
+  AssertionError [ERR_ASSERTION]: the repo rules print findings under tests/acceptance/ that the decision excuses (twins' manifests 41, tooling crates 18, #2651's tokens 2): 61 lines, the first 30:
+  FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/conformance 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/contracts 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/evidence 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/hub 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/otlp 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/1898/twins/cli-type-error/packages/cli/package.json dependencies @deepbuild/reading 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/conformance 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/contracts 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/evidence 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/hub 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/otlp 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/cli/package.json dependencies @deepbuild/reading 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/adapters 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/archive 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/asks 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/briefs 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/budget 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-command 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-numbers 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-review 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/checks-work 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/config-eval 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/conformance 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/contracts 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/env-local 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/evidence 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/extension-host 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/gate 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/github 0.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/2227/twins/cause-without-limit/packages/hub/package.json dependencies @deepbuild/leases 0.0.0 is not in scripts/repo-rules.json
+  
+      at TestContext.<anonymous> (tests/acceptance/3139/ac2-checkout.test.mjs:81:10)
+
+== sh scripts/lease nice -n 10 node --test --test-concurrency=1 tests/acceptance/3139/ac2-waits.test.mjs
+
+✖ #3139.9aeafe77 AC2: the wait ratchet leaves out a suite's own file the merge base holds with no ceiling, and a twin the change adds, and still fails the suite file the change adds beside it
+✔ #3139.9aeafe77 AC2: the wait ratchet still fails a fixed wait planted outside tests/acceptance/, in a file the merge base holds and in a new file under a twins/ folder there, and an acceptance file over the ceiling it keeps
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+
+✖ #3139.9aeafe77 AC2: the wait ratchet leaves out a suite's own file the merge base holds with no ceiling, and a twin the change adds, and still fails the suite file the change adds beside it
+  AssertionError [ERR_ASSERTION]: a line names tests/acceptance/3139-plant/held.test.mjs, a suite's own file the merge base holds with no ceiling, which the decision leaves out
+  exit 1; 1 lines:
+  FAIL waits: tests/acceptance/3139-plant/held.test.mjs:8:34: a timer is a fixed wait unless it only bounds one, marked // deadline: <why>
+      at TestContext.<anonymous> (tests/acceptance/3139/ac2-waits.test.mjs:66:10)
+
+== sh scripts/lease nice -n 10 node --test --test-concurrency=1 tests/acceptance/3139/ac2-size.test.mjs
+
+✖ #3139.9aeafe77 AC2: the size ratchet leaves out a suite's own file the merge base holds over 1,500 lines with no ceiling, and a twin the change adds, and still fails a suite file the change adds over 1,500 lines
+✔ #3139.9aeafe77 AC2: the size ratchet still fails an over-long file planted outside tests/acceptance/, in a file the merge base holds and in a new file under a twins/ folder there
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+
+✖ #3139.9aeafe77 AC2: the size ratchet leaves out a suite's own file the merge base holds over 1,500 lines with no ceiling, and a twin the change adds, and still fails a suite file the change adds over 1,500 lines
+  AssertionError [ERR_ASSERTION]: a line names tests/acceptance/3139-plant/catalog.test.mjs, a suite's own file the merge base holds with no ceiling, which the decision leaves out
+  exit 1; 1 lines:
+  FAIL size: tests/acceptance/3139-plant/catalog.test.mjs: 1600 lines, over 1500 with no ceiling
+      at TestContext.<anonymous> (tests/acceptance/3139/ac2-size.test.mjs:28:10)
+
+== sh scripts/lease nice -n 10 node --test --test-concurrency=1 tests/acceptance/3139/ac2-repo-rules.test.mjs
+
+✖ #3139.9aeafe77 AC2: the deps rule leaves out twins' manifests, a package.json and a Cargo.toml with an unlisted dependency, and still judges a suite's own tooling crate, which passes once it has its row
+✔ #3139.9aeafe77 AC2: the deps rule still fails an unlisted dependency planted outside tests/acceptance/, in a package.json and in a Cargo.toml under a twins/ folder there
+✔ #3139.9aeafe77 AC2: the secrets rule keeps judging all of tests/acceptance/, a run record the merge base holds, one the change adds and a twin's file, and still fails a home path planted outside tests/acceptance/
+ℹ tests 3
+ℹ pass 2
+ℹ fail 1
+
+✖ #3139.9aeafe77 AC2: the deps rule leaves out twins' manifests, a package.json and a Cargo.toml with an unlisted dependency, and still judges a suite's own tooling crate, which passes once it has its row
+  AssertionError [ERR_ASSERTION]: a deps line names a twin's manifest, which the decision leaves out
+  exit 1; 4 lines of deps and secrets:
+  FAIL deps: tests/acceptance/3139-plant/twins/copies-a-package/packages/fixture/package.json dependencies fixture-unlisted 1.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/3139-plant/tool/Cargo.toml dependencies fixture-unlisted =1.0.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/3139-plant/twins/copies-a-crate/crates/fixture/Cargo.toml dependencies fixture-unlisted =1.0.0 is not in scripts/repo-rules.json
+  PASS secrets: 7 files scanned, 0 lockfiles and 0 binary files skipped, 0 allowed
+      at TestContext.<anonymous> (tests/acceptance/3139/ac2-repo-rules.test.mjs:40:10)
+
+== sh scripts/lease nice -n 10 node --test --test-concurrency=1 tests/acceptance/3139/ac3-records.test.mjs
+
+✖ #3139.0cf32f1a AC3: no base-failure or run record under tests/acceptance/ holds a home path
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ #3139.0cf32f1a AC3: no base-failure or run record under tests/acceptance/ holds a home path
+  AssertionError [ERR_ASSERTION]: 96 home paths in 17 of the 1162 records, the first 40:
+  tests/acceptance/1527/BASE-FAILURE.txt:9: home path
+  tests/acceptance/1946/BASE-FAILURE.txt:115: home path
+  tests/acceptance/1946/BASE-FAILURE.txt:116: home path
+  tests/acceptance/1946/BASE-FAILURE.txt:117: home path
+  tests/acceptance/2175/BASE-FAILURE.txt:22: home path
+  tests/acceptance/2175/BASE-FAILURE.txt:38: home path
+  tests/acceptance/2175/BASE-FAILURE.txt:39: home path
+  tests/acceptance/2175/BASE-FAILURE.txt:57: home path
+  tests/acceptance/2175/BASE-FAILURE.txt:58: home path
+  tests/acceptance/2175/BASE-FAILURE.txt:76: home path
+  tests/acceptance/2175/BASE-FAILURE.txt:94: home path
+  tests/acceptance/238/BASE-FAILURE.txt:10: home folder spelled with dashes
+  tests/acceptance/2456/BASE-RUN.txt:12: home path
+  tests/acceptance/2649/BASE-FAILURE.txt:29: home path
+  tests/acceptance/2649/BASE-FAILURE.txt:30: home path
+  tests/acceptance/2649/BASE-FAILURE.txt:54: home path
+  tests/acceptance/2649/BASE-FAILURE.txt:55: home path
+  tests/acceptance/2649/BASE-FAILURE.txt:81: home path
+  tests/acceptance/2649/BASE-FAILURE.txt:82: home path
+  tests/acceptance/2649/BASE-FAILURE.txt:108: home path
+  tests/acceptance/2649/BASE-FAILURE.txt:109: home path
+  tests/acceptance/2649/BASE-FAILURE.txt:135: home path
+  tests/acceptance/2649/BASE-FAILURE.txt:136: home path
+  tests/acceptance/2742/BASE-FAILURE.txt:21: home path
+  tests/acceptance/276/match/BASE-FAILURE.txt:13: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:9: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:10: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:13: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:14: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:18: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:19: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:22: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:23: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:26: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:27: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:30: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:31: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:35: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:36: home path
+  tests/acceptance/2817/BASE-FAILURE.txt:39: home path
+  
+      at TestContext.<anonymous> (tests/acceptance/3139/ac3-records.test.mjs:52:10)
+
+== Checked after the base run: a stand-in fix and six wrong ones
+
+In a throwaway copy of scripts/ and this folder under the session's scratch folder, never in the checkout, the three
+lints were edited to follow the decision: the wait and size ratchets skip a file under a twins/ folder in
+tests/acceptance/, and a file under tests/acceptance/ with no ceiling that the merge base's tree holds; the deps rule
+drops twins' manifests from the files it reads. The 7 scratch-repository tests (ac2-waits, ac2-size, ac2-repo-rules)
+all pass on it. Each wrong stand-in fails the tests that name its fault:
+
+  all of tests/acceptance/ out of both ratchets         ac2-waits (both tests) and ac2-size (the added suite file)
+  any twins/ folder out, in tests/acceptance/ or not    the outside plants of ac2-waits and ac2-size
+  any held file with no ceiling out, anywhere           the outside plants of ac2-waits and ac2-size
+  "held" read from the index at HEAD, not the merge base    the added suite file of ac2-waits and ac2-size
+  all of tests/acceptance/ out of deps                  the suite's own tooling crate in ac2-repo-rules
+  twins out of secrets as well                          the secrets test in ac2-repo-rules
+
+Not run: ac1-design, ac2-checkout and ac3-records on a fixed checkout; no fix exists here to run them on.
