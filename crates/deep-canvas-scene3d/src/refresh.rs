@@ -262,6 +262,7 @@ pub(crate) fn shared(dst: &mut Scene, src: &Scene) {
         optics,
         exposure,
         water,
+        under: _,
         read_reflection: _,
         read_foam: _,
         read_normal: _,

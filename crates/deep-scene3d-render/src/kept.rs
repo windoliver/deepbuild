@@ -255,6 +255,7 @@ fn same_but_layers(a: &Scene, b: &Scene) -> bool {
         optics,
         exposure,
         water,
+        under,
         read_reflection,
         read_foam,
         read_normal,
@@ -298,6 +299,7 @@ fn same_but_layers(a: &Scene, b: &Scene) -> bool {
         && *optics == b.optics
         && *exposure == b.exposure
         && arc(water, &b.water)
+        && *under == b.under
         && *read_reflection == b.read_reflection
         && *read_foam == b.read_foam
         && *read_normal == b.read_normal

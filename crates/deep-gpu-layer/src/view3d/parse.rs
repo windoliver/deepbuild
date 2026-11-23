@@ -173,25 +173,6 @@ pub(super) fn layers_report(doc: &Value, hidden: &BTreeSet<String>) -> Value {
         .collect::<Vec<_>>())
 }
 
-/// #3034: the check's refusal of a camera whose eye goes below a water part during the
-/// document's span, before anything draws: `{"code": "refused", "issues": [issue]}`, the issue
-/// naming the camera, the part and the first frame time the eye is below. Each time's scene is
-/// read as the view draws it.
-pub(super) fn dry(
-    args: &Args,
-    labels: &mut Labels,
-    assets: deep_canvas_scene3d::scene::Assets<'_>,
-    planted: Option<Planted>,
-) -> Result<(), Value> {
-    let plant = crate::axes::plant_name(planted);
-    let fills = deep_canvas_scene3d::contributed::Fills::of(pack_sealed()?, plant);
-    let at = |t| evaluate_sourced(&args.doc, t, &args.look, labels, assets, fills).ok();
-    match deep_canvas_scene3d::water::submerged(&args.doc, at) {
-        Some(issue) => Err(json!({"code": "refused", "issues": [issue]})),
-        None => Ok(()),
-    }
-}
-
 /// The modules a view3d document and its packs' recipes may name: the shipped ones and the
 /// building module (#422).
 pub(super) fn pack_sealed() -> Result<&'static deep_canvas::registry::Sealed, Value> {

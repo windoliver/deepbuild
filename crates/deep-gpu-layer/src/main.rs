@@ -248,6 +248,12 @@ pub enum Planted {
     WaterRingsAtRainHash,
     /// #2760: a ring started when a drawn frame first passes its occurrence, kept as state.
     WaterRingsStartOnDrawnFrame,
+    /// #3034: the water's surface from below drawn with an index of 1: no cone.
+    WaterBelowIorOne,
+    /// #3034: under water, a color dimmed by its point's depth below the surface.
+    WaterBelowTintByDepth,
+    /// #3034: the water's surface from below showing what is above it at every angle.
+    WaterBelowSkyAtEveryAngle,
     /// #971: the local tone map's base brought back up with a range weight of 1 at every tap.
     LocalBaseIgnoresEdges,
     /// #971: the local tone map's pyramid has the look's `levels` at every output size.
@@ -707,6 +713,9 @@ impl Planted {
             "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
             "water_rings_at_rain_hash" => Planted::WaterRingsAtRainHash,
             "water_rings_start_on_drawn_frame" => Planted::WaterRingsStartOnDrawnFrame,
+            "water_below_ior_one" => Planted::WaterBelowIorOne,
+            "water_below_tint_by_depth" => Planted::WaterBelowTintByDepth,
+            "water_below_sky_at_every_angle" => Planted::WaterBelowSkyAtEveryAngle,
             "local_base_ignores_edges" => Planted::LocalBaseIgnoresEdges,
             "local_pyramid_fixed_levels" => Planted::LocalPyramidFixedLevels,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,

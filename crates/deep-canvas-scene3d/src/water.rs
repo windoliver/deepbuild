@@ -10,6 +10,7 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use serde_json::{json, Value};
 
@@ -310,6 +311,9 @@ pub struct Water {
     pub depth: f64,
     /// How far the mirror's lookup moves along the bent normal, in frame px.
     pub distort: f64,
+    /// #3034: its index of refraction: from below, the surface shows what is above it inside
+    /// a cone of asin(1 ÷ ior) about its normal and mirrors what is below it outside.
+    pub ior: f64,
     /// Foam's steepness threshold; 1 is off.
     pub foam: f64,
     /// #968: the flow faster than which foam covers the water, m/s, or none.
@@ -347,15 +351,23 @@ impl Water {
         (cell, slot, (RING_LIFE / slot - 1e-9).ceil() as u32)
     }
 
-    /// #3034: the part whose surface at rest `eye` lies below: inside its extent in x and z,
-    /// and lower than the water's level.
-    pub fn over(&self, eye: [f64; 3]) -> Option<&str> {
-        let covers = |[x0, z0, x1, z1]: &[f64; 4]| {
+    /// #3034: the water's level where `eye` lies below a part's surface at rest, inside its
+    /// extent in x and z and lower than its plane: a frame from there is under water.
+    pub fn under(&self, eye: [f64; 3]) -> Option<f64> {
+        let covers = |(_, [x0, z0, x1, z1]): &(String, [f64; 4])| {
             eye[0] >= *x0 && eye[0] <= *x1 && eye[2] >= *z0 && eye[2] <= *z1
         };
-        (self.plates.iter())
-            .find(|(_, plate)| eye[1] < self.level && covers(plate))
-            .map(|(part, _)| part.as_str())
+        (eye[1] < self.level && self.plates.iter().any(covers)).then_some(self.level)
+    }
+
+    /// The water as `scene`'s: its own mirror unless a material names one (#166), and whether
+    /// the frame is under it (#3034).
+    pub(crate) fn seen_in(self, scene: &mut Scene) {
+        if scene.mirror.is_none() {
+            scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &self);
+        }
+        scene.under = self.under(scene.camera.eye);
+        scene.water = Some(Arc::new(self));
     }
 }
 
@@ -483,6 +495,7 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         [1e-3, 1e5],
     )?;
     let distort = num(spec.get("distort"), "distort", 16.0, [0.0, 256.0])?;
+    let ior = num(spec.get("ior"), "ior", 1.33, [1.0, f64::INFINITY])?;
     let foam = num(
         spec.get("foam").and_then(|f| f.get("threshold")),
         "foam/threshold",
@@ -543,6 +556,7 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         absorption: color,
         depth,
         distort,
+        ior,
         foam,
         foam_speed,
         flow: crate::flow::parse(material, spec.get("flow"))?,
@@ -813,31 +827,6 @@ pub fn dragged(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
     Ok(())
 }
 
-/// #3034: water is drawn for an eye above it, so a camera whose eye goes below a water part
-/// during the document's span is refused at check: the issue, naming the camera, the part and
-/// the first frame time the eye is below, or `None`. `at` is the scene at a time as the host
-/// draws it; a document with no water reads none.
-pub fn submerged(doc: &Value, mut at: impl FnMut(i64) -> Option<Scene>) -> Option<Value> {
-    let map = doc.as_object()?;
-    let wet = |i: &Value| i.pointer("/params/water").is_some_and(Value::is_object);
-    if !map.get("items")?.as_object()?.values().any(wet) {
-        return None;
-    }
-    let camera = map.get("camera")?.as_str()?;
-    let span = doc.pointer("/transport/span").cloned().unwrap_or(json!(0));
-    let span = deep_canvas::document::duration(doc, &span).unwrap_or(0);
-    let step = crate::scene::frame_interval(map).max(1);
-    (0..=span.max(0) / step).map(|k| k * step).find_map(|t| {
-        let scene = at(t)?;
-        let part = scene.water.as_ref()?.over(scene.camera.eye)?;
-        let s = t as f64 / FLICKS;
-        Some(json!({"code": "out_of_range", "severity": "error", "path": format!("items/{camera}/params"),
-            "ids": [camera, part], "actual": {"camera": camera, "part": part, "t": t},
-            "what": format!("the eye of {camera} is below the water of {part} at {s} s: water is drawn for an eye above it"),
-            "fix": "Keep the camera's eye above the water's surface through the document's span."}))
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use deep_canvas_motion::occurrence::Occurrence;
@@ -987,11 +976,10 @@ mod tests {
         assert!(read(within(65, F / 32, |_| 1.0)).is_ok());
     }
 
-    /// #3034: a 20 m lake at y = 0 seen from `eye`, over a span of 4 s.
+    /// #3034: a 20 m lake at y = 0 seen from `eye`.
     fn lake(eye: [f64; 3]) -> Value {
         json!({
             "format": 1, "profile": "scene", "title": "T", "size": [320, 180], "camera": "cam",
-            "transport": {"span": "4s"},
             "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
             "items": {
                 "cam": {"id": "cam", "kind": "camera@1", "name": "C", "order": "a0", "layer": "main", "params": {"projection": "perspective", "position": eye, "target": [0, 0, 0], "fov": 40}},
@@ -1006,26 +994,43 @@ mod tests {
             .unwrap()
     }
 
-    /// #3034: a camera keyed through the surface is refused, naming the camera, the part and the
-    /// first frame time its eye is below; one that stays above the water is not.
+    /// #3034: a frame is under water where its eye lies below a part's surface at rest, inside
+    /// its extent and lower than its plane; the view its mirror draws then takes the whole ray.
     #[test]
-    fn a_camera_keyed_below_the_water_is_refused_at_its_first_frame_below() {
+    fn a_frame_is_under_water_where_its_eye_lies_below_a_part() {
         let look = look();
-        let at = |doc: &Value, t: i64| {
-            crate::scene::evaluate(doc, t, &look, &mut crate::label::Labels::new()).ok()
+        let at = |eye: [f64; 3]| {
+            crate::scene::evaluate(&lake(eye), 0, &look, &mut crate::label::Labels::new()).unwrap()
         };
-        let mut doc = lake([0.0, 2.0, 3.0]);
-        assert_eq!(submerged(&doc, |t| at(&doc, t)), None);
-        doc["channels"] = json!({"dive": {"target": "items/cam/params/position/1", "type": "f32",
-            "keys": {"k0": {"t": "0s", "value": 2.0078125, "interp": "linear"},
-                     "k1": {"t": "4s", "value": -1.9921875, "interp": "linear"}}}});
-        let issue = submerged(&doc, |t| at(&doc, t)).expect("the dive is refused");
-        // The eye meets the surface between the frames at 2 s and a sixtieth of a second later.
-        assert_eq!(
-            issue["actual"],
-            json!({"camera": "cam", "part": "lake", "t": 2 * F + F / 60})
+        let below = at([0.0, -2.0, 3.0]);
+        let level = below.water.as_ref().expect("the lake is water").level;
+        assert!(level.abs() < 1e-9, "{level}");
+        assert_eq!(below.under, Some(level));
+        let mirrored = |scene: &Scene| {
+            let m = scene.mirror.clone().expect("the water mirrors");
+            crate::mirror::view(scene, &m, [160, 90]).under
+        };
+        assert_eq!(mirrored(&below), Some(f64::INFINITY));
+        // A camera aimed past the surface: a point 2 m under it shows in the mirrored view
+        // where its image 2 m over it shows in the frame, flipped about the centre.
+        let mut doc = lake([0.0, -2.0, 0.0]);
+        doc["items"]["cam"]["params"]["target"] = json!([0.5, 2.3, -6.9]);
+        let aimed = crate::scene::evaluate(&doc, 0, &look, &mut crate::label::Labels::new());
+        let aimed = aimed.unwrap();
+        let m = aimed.mirror.clone().expect("the water mirrors");
+        let view = crate::mirror::view(&aimed, &m, [320, 180]);
+        let seen = aimed.camera.project([0.0, 2.0, -6.9]).unwrap();
+        let drawn = view.camera.project([0.0, -2.0, -6.9]).unwrap();
+        let flipped = 2.0 * aimed.camera.centre[0] - seen[0];
+        assert!(
+            (drawn[0] - flipped).abs() < 1e-6 && (drawn[1] - seen[1]).abs() < 1e-6,
+            "{drawn:?} {seen:?}"
         );
-        assert_eq!(issue["ids"], json!(["cam", "lake"]));
+        // Above its plane, and lower than it but beside the part.
+        for eye in [[0.0, 2.0, 3.0], [14.0, -2.0, 3.0]] {
+            let dry = at(eye);
+            assert_eq!((dry.under, mirrored(&dry)), (None, None), "{eye:?}");
+        }
     }
 
     /// #2760: a list none of whose kinds carries a point is refused, naming the list.

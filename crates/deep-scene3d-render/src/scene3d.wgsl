@@ -222,6 +222,12 @@ struct Env {
     sun_color: vec4<f32>,
     // The linear fog curve's near and far (m); z: what the background draws, as a scale (#1992).
     range: vec4<f32>,
+    // #3034: a frame under water. x: the water's surface at rest (m); y: 1 ÷ the absorption's
+    // depth (1/m); z: 0 in any other frame, 1 where a ray is in the water up to the surface, 2 in
+    // the view the water's mirror draws, where all of it is.
+    under: vec4<f32>,
+    // The color deep water takes; w: 1 for the planted tint by the depth below the surface.
+    under_color: vec4<f32>,
 };
 
 @group(1) @binding(3) var env_cube: texture_cube<f32>;
@@ -3281,43 +3287,7 @@ fn background(d: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn sky_fs(@builtin(position) pos: vec4<f32>) -> Targets {
-    return targets(vec4<f32>(background(view_ray(pos.xy)), 1.0), 0u);
-}
-
-// Fog on a lit surface or a mark at `world` (#422, #1992; Sky `sky@1` and its height fog): the
-// distance fog by its curve, over the distance from the eye whatever the curve, and the mist
-// below the height fog's top along the ray's length beneath it, mixed toward the fog's color or
-// what the background shows along the ray.
-fn fogged(c: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
-    let ramp = env.fog.y > 1.5;
-    if env.low.w < 0.5 || (env.fog.x <= 0.0 && env.fog.w <= 0.0 && !ramp) {
-        return c;
-    }
-    let ray = world - env.eye.xyz;
-    let dist = length(ray);
-    let a = env.fog.x * dist;
-    var keep = select(exp(-a), exp(-a * a), env.fog.y > 0.5);
-    if ramp {
-        keep = 1.0 - clamp((dist - env.range.x) / (env.range.y - env.range.x), 0.0, 1.0);
-    }
-    if env.fog.w > 0.0 {
-        // The share of the ray below the top, from the eye to the surface.
-        let y0 = env.eye.y;
-        let y1 = world.y;
-        var below = 0.0;
-        if y0 <= env.fog.z && y1 <= env.fog.z {
-            below = 1.0;
-        } else if y0 <= env.fog.z || y1 <= env.fog.z {
-            let cross = (env.fog.z - y0) / (y1 - y0);
-            below = select(1.0 - cross, cross, y0 <= env.fog.z);
-        }
-        keep *= exp(-env.fog.w * dist * below);
-    }
-    var tint = env.fog_color.rgb;
-    if env.fog_color.w > 0.5 {
-        tint = background(ray / max(dist, 1e-6));
-    }
-    return mix(tint, c, keep);
+    return targets(vec4<f32>(drowned_far(view_ray(pos.xy)), 1.0), 0u);
 }
 
 // ---- puffs (#422; Puff `puff@1`): soft cloud sprites, back to front after the solids

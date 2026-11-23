@@ -60,6 +60,11 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             foam_keeps_state: p == Some(Planted::WaterFoamKeepsState),
             calm_ignores_shore: p == Some(Planted::ShoreCalmIgnoresField),
             flow_single_phase: p == Some(Planted::WaterFlowSinglePhase),
+            no_cone: matches!(
+                p,
+                Some(Planted::WaterBelowIorOne | Planted::WaterBelowSkyAtEveryAngle)
+            ),
+            tint_by_depth: p == Some(Planted::WaterBelowTintByDepth),
         },
         flare: deep_scene3d_render::flare::Planted {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
