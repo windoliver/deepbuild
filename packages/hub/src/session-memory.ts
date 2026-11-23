@@ -10,7 +10,7 @@ import { type Asks } from '@deepbuild/asks';
 import { sha256Hex } from '@deepbuild/contracts';
 import { type EvidenceStore } from '@deepbuild/evidence';
 
-import { openRecordReader, TEXT_CUT, type RecordStore } from '@deepbuild/record';
+import { openRecordReader, type RecordStore } from '@deepbuild/record';
 import type { Runner } from '@deepbuild/runner';
 import type { DecisionsProvider } from './decisions-port.js';
 
@@ -171,11 +171,11 @@ export class SessionMemory {
     void this.options.events.append(this.options.events.connection('core', { session }), { v: 1, id: ulid(ts), kind: 'session.rules_delivered', ts, subject: `session:${letters(session)}`, data: { via, pos: Number(row?.pos ?? 0), rules } })
       .catch((error: unknown) => process.stderr.write(`deep hub: the rules given to ${session} were not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
   }
-  /** The rules you typed on their way to the record, by target, and their saving, one after another (#2539). */
+  /** The rules you typed on their way to the record, by target, and each one's save (#2539). */
   private readonly typing = new Map<string, string>();
-  private saving: Promise<void> = Promise.resolve();
+  private readonly saving = new Map<string, Promise<void>>();
   /** Settles once every rule typed so far is saved or failed. */
-  saved(): Promise<void> { return this.saving; }
+  async saved(): Promise<void> { await Promise.all([...this.saving.values()]); }
 
   /** At a session's start: its rules, first; after a compaction or a resume its next prompt carries every rule you typed, and a scoped rule is heard once more. */
   async startRules(meta: HookMeta): Promise<Piece[] | undefined> {
@@ -190,31 +190,41 @@ export class SessionMemory {
   private async saveTyped(prompt: string): Promise<Set<string>> {
     const out = new Set<string>();
     if (prompt.includes('<task-notification>')) return out;
-    let queued = false;
-    const have = new Set([...(await this.typedRules()).map((t) => t.target), ...this.typing.keys()]);
+    // This prompt's rules, saved one after another in the order typed, and any it repeats that are still on their way.
+    let mine: Promise<void> = Promise.resolve();
+    const waits: Promise<void>[] = [];
+    // The rules on their way, read before the record: one whose save lands meanwhile is in one or the other.
+    const onTheirWay = [...this.typing.keys()];
+    const have = new Set([...(await this.typedRules()).map((t) => t.target), ...onTheirWay]);
     for (const m of prompt.matchAll(TYPED_RULE)) {
       const text = m[1]!.trim();
       if (!text) continue;
       const target = `rule:typed${ruleId('you', text)}`;
       out.add(target);
-      if (have.has(target)) continue;
+      if (have.has(target)) {
+        const pending = this.saving.get(target);
+        if (pending) waits.push(pending);
+        continue;
+      }
       have.add(target);
       this.typing.set(target, text);
-      queued = true;
-      // Saved behind the prompt's reply, after the rules typed before it: its evidence's event and the change commit
-      // behind any evidence sync, which the reply never waits for (#2539). The rule's own words are its evidence, never
-      // the rest of the prompt.
-      this.saving = this.saving.then(async () => {
+      // Its evidence's event and the change commit as no session's do, behind every commit before them, so behind any
+      // evidence sync (#2539). The rule's own words are its evidence, never the rest of the prompt.
+      const save: Promise<void> = mine.then(async () => {
         const at = await this.options.services.record.keep(this.options.events.connection('core'), { bytes: new TextEncoder().encode(`rule: ${text}.`), kind: 'user.rule', source: 'prompt' });
         const ts = this.options.services.now();
         await this.options.events.append(this.options.events.connection('cli'), { v: 1, id: ulid(ts), kind: 'learn.applied', ts, data: { layer: 'base', target, diff: `+ ${text}`, evidence: [{ at, quote: text }], scope: 'all', replay: null, applied_by: 'you', supersedes: null } });
       }).catch((error: unknown) => { process.stderr.write(`deep hub: your rule ${target} was not saved: ${error instanceof Error ? error.message : String(error)}\n`); })
-        .finally(() => this.typing.delete(target));
+        .finally(() => { this.typing.delete(target); this.saving.delete(target); });
+      this.saving.set(target, save);
+      mine = save;
+      waits.push(save);
     }
-    // A prompt within the record's cut names no evidence, so its commit syncs none: its reply waits for its rules' save,
-    // and a hook after it reads them in the record (#2066). A longer one's whole text is evidence its commit syncs
-    // first, and the save lands behind that commit, so its reply doesn't wait (#2539).
-    if (queued && prompt.length <= TEXT_CUT) await this.saving;
+    // The reply waits for these saves until an evidence store or sync starts, or one runs now: with none, they commit at
+    // once, and a hook after the reply reads them in the record (#2066); a sync would hold them, and they land behind it,
+    // after the reply (#2539).
+    const sync = waits.length ? this.options.services.record.untilSync?.() : undefined;
+    if (sync) await Promise.race([Promise.all(waits), sync]);
     return out;
   }
 
