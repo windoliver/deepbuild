@@ -1441,3 +1441,8 @@ timed.push('tests/acceptance/269/ac6-budgets.test.ts', 'tests/acceptance/269-red
 // #269's first AC6 draft is kept by hand until the owner swaps it: its budget program runs out of the default fuel at
 // step 0, so its grid never changes; its blind redraft, 269-redraft-ac6/, runs in its place.
 byHand.push('tests/acceptance/269/ac6-budgets.test.ts');
+
+// #2848's first draft and its fuser test are kept by hand until the owner swaps them: they test the jobserver each run
+// made for itself, which #3221 replaces with job pipes lent from one pool; the blind redraft, 2848-redraft-3221/, runs
+// in their place (tests/acceptance/2848/DISPUTE-3221.md).
+byHand.push('tests/acceptance/2848/', 'tests/jobserver-blind.test.mjs');
