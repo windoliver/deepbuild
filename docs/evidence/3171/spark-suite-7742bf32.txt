@@ -1,0 +1,196 @@
+######## change
+== change (head 7742bf320, 2026-11-23T04:35:32Z, load: 84.35 40.66 21.25)
+✔ AC1 #3171.952eea5a alone, the span test states each trial's covered time and the passes' own (40336.091172ms)
+✔ AC1 #3171.952eea5a beside a second process that keeps the GPU busy, the span test states each trial's covered time and the passes' own (9450.429611ms)
+✔ AC2 #3171.52591b24 beside a second process that keeps the GPU busy, the span test passes or reads INCONCLUSIVE saying the GPU was shared, never FAIL (10585.450865ms)
+✔ AC2 #3171.52591b24 alone, the span test reads PASS within its bound (2335.033684ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 63435.961109
+== exit 0
+######## twin-silent-pass
+== twin silent-pass (head 7742bf320, 2026-11-23T04:36:36Z, load: 104.22 53.97 27.02)
+✖ AC1 #3171.952eea5a alone, the span test states each trial's covered time and the passes' own (11376.11998ms)
+✖ AC1 #3171.952eea5a beside a second process that keeps the GPU busy, the span test states each trial's covered time and the passes' own (4763.503199ms)
+✔ AC2 #3171.52591b24 beside a second process that keeps the GPU busy, the span test passes or reads INCONCLUSIVE saying the GPU was shared, never FAIL (4571.325809ms)
+✔ AC2 #3171.52591b24 alone, the span test reads PASS within its bound (1975.288998ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23374.729464
+
+✖ failing tests:
+
+test at tests/acceptance/3171/ac1-readings.test.mjs:30:1
+✖ AC1 #3171.952eea5a alone, the span test states each trial's covered time and the passes' own (11376.11998ms)
+  AssertionError [ERR_ASSERTION]: alone: the span test reads PASS and states no trial's covered time and passes' own ("trial <k>: <covered> ms covered, the passes' own <own>"):
+  test spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it ... ok
+      spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 53 filtered out; finished in 1.46s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+      at stated (file://<clone>/tests/acceptance/3171/ac1-readings.test.mjs:22:10)
+      at TestContext.<anonymous> (file://<clone>/tests/acceptance/3171/ac1-readings.test.mjs:31:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3171/ac1-readings.test.mjs:34:1
+✖ AC1 #3171.952eea5a beside a second process that keeps the GPU busy, the span test states each trial's covered time and the passes' own (4763.503199ms)
+  AssertionError [ERR_ASSERTION]: beside a load of 199 ms passes: the span test reads PASS and states no trial's covered time and passes' own ("trial <k>: <covered> ms covered, the passes' own <own>"):
+  test spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it ... ok
+      spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 53 filtered out; finished in 2.30s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+      at stated (file://<clone>/tests/acceptance/3171/ac1-readings.test.mjs:22:10)
+      at TestContext.<anonymous> (file://<clone>/tests/acceptance/3171/ac1-readings.test.mjs:36:3)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+== exit 1
+######## twin-gap-counted
+== twin gap-counted (head 7742bf320, 2026-11-23T04:36:59Z, load: 103.48 57.84 29.02)
+✔ AC1 #3171.952eea5a alone, the span test states each trial's covered time and the passes' own (13263.004995ms)
+✔ AC1 #3171.952eea5a beside a second process that keeps the GPU busy, the span test states each trial's covered time and the passes' own (3503.223992ms)
+✖ AC2 #3171.52591b24 beside a second process that keeps the GPU busy, the span test passes or reads INCONCLUSIVE saying the GPU was shared, never FAIL (5636.930058ms)
+✖ AC2 #3171.52591b24 alone, the span test reads PASS within its bound (1319.860273ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 24341.254035
+
+✖ failing tests:
+
+test at tests/acceptance/3171/ac2-shared.test.mjs:25:1
+✖ AC2 #3171.52591b24 beside a second process that keeps the GPU busy, the span test passes or reads INCONCLUSIVE saying the GPU was shared, never FAIL (5636.930058ms)
+  AssertionError [ERR_ASSERTION]: beside a load of 215 ms passes: the span test reads FAIL for another process's work:
+  test spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it ... FAILED
+  ---- spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it stdout ----
+  thread 'spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it' (<tid>) panicked at crates/deep-gpu/src/spans.rs:510:13:
+  trial 0: 230.31369599699974 ms covered, the passes' own 14.534943997859955: the gap counted
+      spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 53 filtered out; finished in 3.04s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+      at TestContext.<anonymous> (file://<clone>/tests/acceptance/3171/ac2-shared.test.mjs:29:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL',
+    expected: 'FAIL',
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3171/ac2-shared.test.mjs:35:1
+✖ AC2 #3171.52591b24 alone, the span test reads PASS within its bound (1319.860273ms)
+  AssertionError [ERR_ASSERTION]: alone: the span test reads FAIL:
+  test spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it ... FAILED
+  ---- spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it stdout ----
+  thread 'spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it' (<tid>) panicked at crates/deep-gpu/src/spans.rs:510:13:
+  trial 0: 207.82668802142143 ms covered, the passes' own 13.67468798160553: the gap counted
+      spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 53 filtered out; finished in 0.70s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  'FAIL' !== 'PASS'
+  
+      at TestContext.<anonymous> (file://<clone>/tests/acceptance/3171/ac2-shared.test.mjs:37:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL',
+    expected: 'PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+== exit 1
+######## twin-bound-loosened
+== twin bound-loosened (head 7742bf320, 2026-11-23T04:37:24Z, load: 101.98 61.16 30.88)
+✔ AC1 #3171.952eea5a alone, the span test states each trial's covered time and the passes' own (11861.90825ms)
+✔ AC1 #3171.952eea5a beside a second process that keeps the GPU busy, the span test states each trial's covered time and the passes' own (5730.58964ms)
+✖ AC2 #3171.52591b24 beside a second process that keeps the GPU busy, the span test passes or reads INCONCLUSIVE saying the GPU was shared, never FAIL (6489.129473ms)
+✔ AC2 #3171.52591b24 alone, the span test reads PASS within its bound (2179.119483ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26752.909052
+
+✖ failing tests:
+
+test at tests/acceptance/3171/ac2-shared.test.mjs:25:1
+✖ AC2 #3171.52591b24 beside a second process that keeps the GPU busy, the span test passes or reads INCONCLUSIVE saying the GPU was shared, never FAIL (6489.129473ms)
+  AssertionError [ERR_ASSERTION]: beside a load of 202 ms passes: the span test reads PASS with trial 0 at 217.6808640062809 ms covered, the passes' own 14.695807993412018: past the 100 ms bound, so the gap would pass
+      at withinBound (file://<clone>/tests/acceptance/3171/ac2-shared.test.mjs:22:12)
+      at TestContext.<anonymous> (file://<clone>/tests/acceptance/3171/ac2-shared.test.mjs:32:8)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+== exit 1
+######## panic-state
+✔ a libtest panic starting INCONCLUSIVE:, BLOCKED: or INVALID: reads that state, with its reason (2.650017ms)
+✔ any other libtest panic still reads FAIL: the word later in its message, or with no colon after it (0.182981ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 109.796282
+exit 0
