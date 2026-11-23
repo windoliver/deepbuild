@@ -69,7 +69,8 @@ pub fn inline_programs(form: &mut Value, read: &dyn Fn(&str) -> Option<Vec<u8>>)
         }
     }
     // #192: each logic item's data assets and linked libraries by their hash, with the pinned
-    // packs' libraries the hub listed, which the logic module's steps read as a piece's assets.
+    // packs' libraries the hub listed, which the logic module's steps read as a piece's assets;
+    // #211: and its world's init pages, an asset or a provider's output by hash.
     let shas: Vec<String> = items
         .values()
         .filter(|i| i["kind"] == deep_logic::module::INTERFACE)
@@ -83,10 +84,17 @@ pub fn inline_programs(form: &mut Value, read: &dyn Fn(&str) -> Option<Vec<u8>>)
                 .and_then(Value::as_array)
                 .cloned();
             let links = links.into_iter().flatten().map(|l| l["asset"].clone());
+            let init = i
+                .pointer("/params/pages/init")
+                .map(|v| match v.get("asset") {
+                    Some(a) => a.clone(),
+                    None => v.clone(),
+                });
             assets
                 .into_iter()
                 .flatten()
                 .chain(links)
+                .chain(init)
                 .collect::<Vec<_>>()
         })
         .filter_map(|v| v.as_str().map(str::to_string))
@@ -125,6 +133,12 @@ pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
         issues.extend(grid_glyphs(form));
     }
     issues.extend(readers(form, entries));
+    // #269: each grid image's grid, and every cell of it past its roles.
+    issues.extend(deep_canvas_marks::grid_image::check(form, entries));
+    // #297: entry texts' controls and players, and their fit.
+    if let Some(map) = form.as_object() {
+        issues.extend(deep_canvas_marks::entries::check_issues(map));
+    }
     if issues.iter().all(|i| i.code != "module_missing") {
         let locale = form
             .get("locale")
@@ -283,7 +297,27 @@ pub fn inline_logic(
     {
         all.extend(arrays);
     }
+    gate_fog(doc);
     Ok(())
+}
+
+/// #552: the occurrences this copy's player doesn't see (its `match.me`, 1 for a piece played
+/// alone), taken out of every gated list; the planted burst that ignores the gate still reads
+/// them, from `fogged`.
+#[cfg(feature = "logic")]
+fn gate_fog(doc: &mut serde_json::Map<String, Value>) {
+    let (items, me) = (doc.get("items").cloned(), doc.get("match.me").cloned());
+    let arrays = doc.get("arrays").and_then(Value::as_object).cloned();
+    let (Some(items), Some(arrays)) = (items, arrays) else {
+        return;
+    };
+    let Some(Value::Object(lists)) = doc.get_mut("occurrences") else {
+        return;
+    };
+    let fogged = deep_logic::fog::gate(&items, &arrays, lists, &me.unwrap_or(Value::Null));
+    if !fogged.is_empty() {
+        doc.insert("fogged".into(), Value::Object(fogged));
+    }
 }
 
 /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,
@@ -298,12 +332,27 @@ pub fn logic_piece(
     read: &dyn Fn(&str) -> Option<Vec<u8>>,
     cast_late: bool,
 ) -> Result<Option<Piece>, Box<Issue>> {
-    let Some(piece) = piece_json(form) else {
+    logic_piece_with(sealed, form, track, read, cast_late, &Default::default())
+}
+
+/// As `logic_piece`, checked with `planted`'s twins (#551: a page tracker a match's ring plants).
+#[cfg(feature = "logic")]
+pub fn logic_piece_with(
+    sealed: &Sealed,
+    form: &Value,
+    track: &[Value],
+    read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    cast_late: bool,
+    planted: &deep_logic::Planted,
+) -> Result<Option<Piece>, Box<Issue>> {
+    let Some(mut piece) = piece_json(form) else {
         return Ok(None);
     };
+    // #194: each fired input's number fields, from the world that declares it.
+    crate::fires::expand(form, &mut piece)?;
     let piece = check_in(
         &piece,
-        &Default::default(),
+        planted,
         &mut History::new(),
         read,
         &crate::cast::services(sealed, form, track, cast_late),
@@ -339,6 +388,16 @@ fn readers(form: &Value, entries: &[deep_canvas::registry::lists::SealedEntry]) 
         let mut paths: Vec<(String, String)> = Vec::new();
         if let Some(a) = item.pointer("/params/flip/array").and_then(Value::as_str) {
             paths.push(("flip/array".into(), a.into()));
+        }
+        // #297: an entry text's player read from a logic array.
+        if let Some(Ok(e)) = item
+            .pointer("/params/text")
+            .filter(|t| deep_canvas_marks::entries::is_entry(t))
+            .map(deep_canvas_marks::entries::spec)
+        {
+            if let deep_canvas_marks::entries::Player::Path(p) = e.player {
+                paths.push(("text/player".into(), p.into()));
+            }
         }
         for (field, v) in deep_canvas_marks::copy::lookups_of(item) {
             let Ok(l) = deep_canvas_marks::copy::lookup(&v) else {
@@ -418,8 +477,12 @@ pub fn raised_at(form: &Value, t: Option<i64>, locale: &str) -> Vec<Issue> {
     });
     #[cfg(not(feature = "cells"))]
     let mut out = Vec::new();
+    if let Some(t) = t {
+        out.extend(deep_canvas_marks::grid_image::raised_at(form, t));
+    }
     out.extend(deep_canvas_motion::held::unmapped(form, t));
     out.extend(deep_canvas_marks::copy::raised_at(map, t, locale));
     out.extend(deep_canvas_marks::copy::column_missing(map, t, locale));
+    out.extend(deep_canvas_marks::entries::raised_at(map, t));
     out
 }

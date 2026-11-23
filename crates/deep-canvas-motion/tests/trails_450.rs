@@ -94,14 +94,16 @@ fn a_trails_frame_counts_each_evaluation_of_its_sources_chain() {
 }
 
 #[test]
-fn a_trail_whose_source_a_logic_array_moves_is_refused_at_check_naming_it() {
+fn a_trail_whose_source_a_live_drag_moves_is_refused_at_check_naming_it() {
     let mut d = doc(json!({"of": "dot"}));
+    d["controls"] = json!({"slide": {"kind": "drag_along", "class": "document", "range": [0, 1],
+        "handle": {"item": "g", "along": {"polyline": [[0, 0], [100, 0]]}, "drag": "along"}}});
+    let raised = deep_canvas_motion::trail::rule(&d, "tr", &d["items"]["tr"]);
+    assert_eq!(raised.len(), 1, "the dot's parent g is dragged live");
+    assert_eq!(raised[0].path, "items/g");
+    // #265: a chain a logic array moves reads the bake's earlier steps, so it isn't refused.
+    d["controls"] = json!({});
     d["items"]["brain"] = json!({"kind": "logic@1", "layer": "main", "params": {}});
     d["drivers"] = json!({"y": {"target": "items/g/at/pos/1", "expr": "v", "vars": {"v": "brain.y"}, "fallback": 0}});
-    let raised = deep_canvas_motion::trail::rule(&d, "tr", &d["items"]["tr"]);
-    assert_eq!(raised.len(), 1, "the dot's parent g reads a logic array");
-    assert_eq!(raised[0].path, "items/g");
-    // A driver that reads no logic item leaves the trail alone.
-    d["drivers"]["y"]["vars"] = json!({"v": "time"});
     assert!(deep_canvas_motion::trail::rule(&d, "tr", &d["items"]["tr"]).is_empty());
 }

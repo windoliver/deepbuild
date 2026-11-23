@@ -1,6 +1,6 @@
 //! Wrong-program switches used only by the proof binary. Public entry remains the crate root.
 
-use crate::{ao, cull, dof, fill, flare, local, local_tone, surface, water};
+use crate::{ao, cull, dof, fill, flare, local, local_tone, mirror, surface, water};
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -18,6 +18,10 @@ pub struct Planted {
     pub emission_thresholds_color: bool,
     /// #458: the core velocity target leaves out an instancer's elements.
     pub instanced_skips_velocity: bool,
+    /// #2657: `ensure_casters` makes nothing once either caster kind's pipeline exists.
+    pub casters_once_any: bool,
+    /// #2657: once the sway pass has run, no later frame records or submits it.
+    pub sway_first_frame_only: bool,
     /// #458: the normal target leaves out an instancer's elements.
     pub instances_skip_normal: bool,
     /// #458: the output pass applies exposure after the tone map.
@@ -55,6 +59,8 @@ pub struct Planted {
     pub winding_ignores_determinant: bool,
     /// #465: the flare's wrong programs.
     pub flare: flare::Planted,
+    /// #2691: the mirror's wrong programs.
+    pub mirror: mirror::Planted,
     /// #468: the depth of field's wrong programs.
     pub dof: dof::Planted,
     /// #971: the local tone map's wrong programs.
@@ -139,4 +145,18 @@ pub struct Planted {
     pub horizon_unbaked: bool,
     /// #1381: a terrain plate's sky occlusion from its slope alone, (1 + n.y) ÷ 2.
     pub occlusion_from_slope: bool,
+    /// #290: the hidden view's wrong programs.
+    pub hidden: crate::hidden::Planted,
+    /// #3016: the mirror's view compiles its own pipelines, listed in a log of its own, as each
+    /// renderer did before a scene's views shared them.
+    pub mirror_compiles_own: bool,
+    /// #3016: the mirror's view culls its lists by the view's camera, not its own.
+    pub mirror_takes_view_cull: bool,
+    /// #3016: a view inset's cascades are fitted to the view's camera, not its own.
+    pub inset_takes_view_cascades: bool,
+    /// #3016: each view starts and ends a turn of the shared caches at its own prepare, so past a
+    /// bound what an earlier view drew this frame is freed when the last view didn't draw it.
+    pub frees_by_last_turn: bool,
+    /// #3016: the estimate counts the scene's maps once for each view that draws them.
+    pub estimate_maps_per_view: bool,
 }

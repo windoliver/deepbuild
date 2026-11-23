@@ -29,6 +29,12 @@ pub enum MediaCall {
         from: TableFrom,
         key: String,
     },
+    /// #194: a catalog's table files, each by its path, packed under its schema in the decode
+    /// worker into table.layout@1.
+    Catalog {
+        tables: Vec<(String, String)>,
+        schema: Value,
+    },
 }
 
 pub enum TableFrom {
@@ -67,6 +73,15 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MediaCall> {
                 _ => return None,
             },
             key: s("key")?,
+        },
+        "catalog_import" => MediaCall::Catalog {
+            tables: c
+                .get("tables")?
+                .as_object()?
+                .iter()
+                .map(|(name, t)| Some((name.clone(), t.get("path")?.as_str()?.to_string())))
+                .collect::<Option<_>>()?,
+            schema: c.get("schema")?.clone(),
         },
         _ => return None,
     })
@@ -128,7 +143,7 @@ fn hoist(mut reply: Value) -> Value {
 }
 
 /// The worker-side name of a planted wrong program, if it is one the decode worker runs.
-fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
+pub(crate) fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
     Some(match p? {
         Planted::SkipsCaps => "skips_caps",
         Planted::FollowsUrls => "follows_urls",
@@ -143,6 +158,15 @@ fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
         Planted::VideoDropsFrame300 => "video_drops_frame_300",
         _ => return None,
     })
+}
+
+/// #1488: the run's image service, which every snapshot draws a still through, runs the planted
+/// decoder that ignores a photo's EXIF orientation when the run plants it in the worker too.
+pub(crate) fn plant_images(planted: Option<Planted>) {
+    if worker_planted(planted) == Some("decoder_ignores_orientation") {
+        let plant = deep_images::Plant::IgnoresOrientation;
+        deep_images::shared().configure(deep_images::BUDGET, deep_images::ENTRIES, plant);
+    }
 }
 
 impl Hub<'_> {
@@ -240,9 +264,12 @@ impl Hub<'_> {
         };
         if slot.is_none() {
             let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-show"));
-            // #1967's planted import lives in the cells module's conversion, in the worker.
+            // #1967's planted import lives in the cells module's conversion, in the worker, and
+            // #194's planted packers in its catalog job.
             let module = self.scenario.module_planted.as_deref();
-            let import = module.filter(|p| *p == "cells_patch_times_whole_seconds");
+            let import = module.filter(|p| {
+                *p == "cells_patch_times_whole_seconds" || deep_codecs::catalog::PLANTED.contains(p)
+            });
             match Helper::start(
                 &exe,
                 role,
@@ -257,6 +284,30 @@ impl Hub<'_> {
         }
         let h = slot.as_mut().expect("started");
         (h.ask(&job), h.pid)
+    }
+
+    /// #1488: the still at `path` converted at intake by the decode worker: the PNG it wrote and
+    /// the source are put in the evidence store, and the reply is the PNG's asset.
+    fn convert(&mut self, path: &str) -> Result<Value, String> {
+        let n = self.media.exports;
+        self.media.exports += 1;
+        let out = std::env::temp_dir().join(format!("deep-still-{}-{n}.png", std::process::id()));
+        let job = json!({"op": "convert", "path": path, "out": out.to_string_lossy()});
+        let (reply, _) = self.media_job(DECODE_WORKER, job);
+        let png = std::fs::read(&out);
+        let _ = std::fs::remove_file(&out);
+        let Some(sha) = reply.pointer("/asset/sha256").and_then(Value::as_str) else {
+            return Ok(reply);
+        };
+        let png = png.map_err(|e| e.to_string())?;
+        let source = std::fs::read(path).map_err(|e| e.to_string())?;
+        let evidence = &self.scenario.evidence;
+        let kept = evidence::put(evidence, &png).map_err(|e| e.to_string())?;
+        let input = evidence::put(evidence, &source).map_err(|e| e.to_string())?;
+        if kept != sha || reply.pointer("/asset/made_by/input") != Some(&json!(input)) {
+            return Err("the converted picture or its source changed on the way".into());
+        }
+        Ok(reply)
     }
 
     /// #518: ends the encode tool's process when a job it was asked to open was dropped
@@ -293,6 +344,11 @@ impl Hub<'_> {
             MediaCall::Import(path) => {
                 let (mut reply, pid) =
                     self.media_job(DECODE_WORKER, json!({"op": "probe", "path": path}));
+                // #1488: a still in a format draw code doesn't read converts to a PNG in the
+                // worker; the PNG and its source are kept by their hashes, the PNG the asset.
+                if reply.pointer("/asset/probe/streams/0/convert") == Some(&json!("png")) {
+                    reply = self.convert(path).unwrap_or_else(|e| json!({"error": e}));
+                }
                 reply["worker"] = json!({"pid": pid});
                 hoist(reply)
             }
@@ -337,6 +393,7 @@ impl Hub<'_> {
             }
             MediaCall::Export { source, out } => self.export(source, out),
             MediaCall::Table { from, key } => self.table_import(from, key),
+            MediaCall::Catalog { tables, schema } => self.catalog_import(tables, schema),
             MediaCall::Workers => {
                 let list: Vec<Value> = [&self.media.decoder, &self.media.encoder]
                     .into_iter()
@@ -446,6 +503,64 @@ impl Hub<'_> {
             return json!({"code": "evidence_unwritable", "path": "tables"});
         }
         json!({"asset": asset})
+    }
+
+    /// #194 (canvas primitives: Asset: tables: catalogs `table.layout@1`): each table file kept
+    /// in the evidence store by hash, the catalog packed from those copies in the decode worker,
+    /// its bytes kept by their hash and its record beside them as `catalogs/<sha256>.json`, which
+    /// the catalog checks and logic.tuning read. A file's format is its path's extension's.
+    fn catalog_import(&mut self, tables: &[(String, String)], schema: &Value) -> Value {
+        let root = self.scenario.evidence.clone();
+        let mut files = Map::new();
+        let mut job_tables = Map::new();
+        for (name, path) in tables {
+            let Some(format) = [".csv", ".jsonl"]
+                .into_iter()
+                .find(|e| path.to_ascii_lowercase().ends_with(e))
+            else {
+                return json!({"code": "bad_input", "path": path, "what": "a catalog file is .csv or .jsonl"});
+            };
+            let Ok(bytes) = std::fs::read(path) else {
+                return json!({"code": "unreadable", "path": path});
+            };
+            let Ok(sha) = evidence::put(&root, &bytes) else {
+                return json!({"code": "evidence_unwritable", "path": "evidence"});
+            };
+            let file = root.join(&sha[..2]).join(&sha[2..]);
+            job_tables.insert(
+                name.clone(),
+                json!({"path": file.to_string_lossy(), "format": &format[1..]}),
+            );
+            files.insert(name.clone(), json!(sha));
+        }
+        let n = self.media.exports;
+        self.media.exports += 1;
+        let out = std::env::temp_dir().join(format!("deep-catalog-{}-{n}", std::process::id()));
+        let job = json!({"op": "catalog", "tables": job_tables, "schema": schema,
+                         "out": out.to_string_lossy()});
+        let (reply, _) = self.media_job(DECODE_WORKER, job);
+        let packed = std::fs::read(&out);
+        let _ = std::fs::remove_file(&out);
+        let Some(catalog) = reply.get("catalog") else {
+            return reply;
+        };
+        let Ok(bytes) = packed else {
+            return json!({"code": "unreadable", "path": "the packed catalog"});
+        };
+        let sha = match evidence::put(&root, &bytes) {
+            Ok(sha) if Some(sha.as_str()) == catalog["sha256"].as_str() => sha,
+            _ => return json!({"code": "evidence_unwritable", "path": "evidence"}),
+        };
+        let record = catalog["record"].clone();
+        let dir = root.join("catalogs");
+        let written = std::fs::create_dir_all(&dir)
+            .and_then(|_| std::fs::write(dir.join(format!("{sha}.json")), record.to_string()));
+        if written.is_err() {
+            return json!({"code": "evidence_unwritable", "path": "catalogs"});
+        }
+        json!({"asset": {"sha256": sha, "kind": "catalog", "layout": "table.layout@1",
+                          "catalog": {"tables": files, "schema": schema}},
+               "record": record})
     }
 
     /// An export of a film whose one strip is `source`: its frames decoded in the decode worker,

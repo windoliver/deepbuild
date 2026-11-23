@@ -139,12 +139,71 @@ fn check_by(
     sizes: &Sizes,
     packs: &Packs,
 ) -> CheckResult {
+    let mut lowered = copy_of(doc);
+    let mut head = lower(doc, lowered.get_mut("items"), sealed, kinds, packs);
+    settle(&mut lowered, &head, packs);
+    finish(&lowered, &mut head, sealed, kinds, coefficients, sizes);
+    let Head {
+        mut issues,
+        mut notices,
+        mut draws,
+        expansions,
+        rules_ran,
+        ..
+    } = head;
+    sort_issues(&mut issues);
+    sort_notices(&mut notices);
+    draws.sort();
+    let ok = !issues.iter().any(|i| i.severity == "error");
+    CheckResult {
+        ok,
+        issues,
+        notices,
+        draws,
+        lowered,
+        core: core_name(),
+        set_digest: sealed.set_digest.clone(),
+        expansions,
+        rules_ran,
+    }
+}
+
+/// What a check found in a document's envelope and items, before its checks of the lowered
+/// document.
+struct Head<'a> {
+    issues: Vec<Issue>,
+    notices: Vec<Notice>,
+    draws: Vec<String>,
+    expansions: Vec<Expansion>,
+    rules_ran: BTreeSet<(String, String)>,
+    resolved: packs::Resolved<'a>,
+}
+
+impl Head<'_> {
+    /// Whether [`settle`] writes a member of the lowered document besides its items.
+    fn writes_envelope(&self) -> bool {
+        !self.resolved.is_empty()
+            || self
+                .expansions
+                .iter()
+                .any(|e| !e.channels.is_empty() || !e.sections.is_empty())
+    }
+}
+
+/// The first part of a check: `doc`'s envelope, and `items`, its items to lower in place, each
+/// migrated, expanded and checked on its own. `doc` is read as written.
+fn lower<'a>(
+    doc: &Value,
+    mut items: Option<&mut Value>,
+    sealed: &Sealed,
+    kinds: &Registry,
+    packs: &'a Packs,
+) -> Head<'a> {
     let mut issues = Vec::new();
     let mut notices = Vec::new();
     let mut draws = Vec::new();
-    let mut lowered = copy_of(doc);
     // `fw` and `fh` read the document's design size (Units and axes).
-    if let (Some(size), Some(Value::Object(items))) = (frame_of(doc), lowered.get_mut("items")) {
+    if let (Some(size), Some(Value::Object(items))) = (frame_of(doc), items.as_deref_mut()) {
         for item in items.values_mut() {
             if let Some(params) = item.get_mut("params") {
                 lower_frame_literals(params, size);
@@ -169,7 +228,7 @@ fn check_by(
     let pack_declared: BTreeSet<String> = resolved.modules().cloned().collect();
     let layer_ids = check_layers(doc, &mut issues);
 
-    match lowered.get_mut("items") {
+    match items {
         None => {}
         Some(Value::Object(items)) => {
             // Whether a kind text migrates is looked up once per text, not once per item.
@@ -210,13 +269,12 @@ fn check_by(
                 }
             }
             super::pack_kinds::migrate::at_load(items, &resolved, packs.planted, &mut notices);
+            issues.extend(packs::removals(items, &resolved));
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
             issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
-            // A canvas module's own kinds expanded at check, after recipes (#222).
-            let planted = packs.planted.expander;
             // A film recipe's markers and shots are there for the module's expansions (#142).
             let with_sections;
             let seen = if expansions.iter().any(|e| !e.sections.is_empty()) {
@@ -227,7 +285,8 @@ fn check_by(
             } else {
                 doc
             };
-            let module = super::expands::run(seen, items, sealed, &resolved, planted, &mut issues);
+            // A canvas module's own kinds expanded at check, after recipes (#222).
+            let module = super::expands::run(seen, items, sealed, &resolved, packs, &mut issues);
             expansions.extend(module);
             // A film recipe's shots and transitions timed on its cue list's markers (#142).
             super::expands::resolve_times(doc, &mut expansions, &mut issues);
@@ -334,9 +393,21 @@ fn check_by(
             "not an object",
         )),
     }
+    Head {
+        issues,
+        notices,
+        draws,
+        expansions,
+        rules_ran,
+        resolved,
+    }
+}
 
+/// What lowering writes beyond the items: `lowered` is the document with its lowered items.
+fn settle(lowered: &mut Value, head: &Head<'_>, packs: &Packs) {
+    let expansions = &head.expansions;
     // A rename carries every path that names the param it renames (#1960).
-    super::pack_kinds::migrate::carry_paths(&mut lowered, &resolved, packs.planted);
+    super::pack_kinds::migrate::carry_paths(lowered, &head.resolved, packs.planted);
     // A recipe's channels join the document's, targeting the items it derived (#420).
     let recipe_channels: Map<String, Value> =
         expansions.iter().flat_map(|e| e.channels.clone()).collect();
@@ -350,12 +421,23 @@ fn check_by(
             }
         }
     }
-    super::expands::merge(&mut lowered, &expansions);
+    super::expands::merge(lowered, expansions);
+}
 
-    // The module checks, the budget estimate and the document checks read the lowered document
-    // alone: a big document's estimate runs on its own thread, beside the others, and the
-    // findings join in this order.
-    let big = member(&lowered, "items")
+/// The last part of a check, added to `head`: the module checks, the budget estimate and the
+/// document checks, which read the lowered document alone.
+fn finish(
+    lowered: &Value,
+    head: &mut Head<'_>,
+    sealed: &Sealed,
+    kinds: &Registry,
+    coefficients: Option<&Coefficients>,
+    sizes: &Sizes,
+) {
+    let expansions = &head.expansions;
+    // A big document's estimate runs on its own thread, beside the others, and the findings
+    // join in this order.
+    let big = member(lowered, "items")
         .and_then(Value::as_object)
         .is_some_and(|items| items.len() >= SPLIT_FROM);
     let mut tail = [Tail::Modules, Tail::Budget, Tail::Document];
@@ -364,20 +446,21 @@ fn check_by(
         let (mut issues, mut notices) = (Vec::new(), Vec::new());
         for step in part.iter() {
             match step {
-                Tail::Modules => module_checks(&lowered, sealed, &mut issues, &mut notices),
-                Tail::Budget => budget_check(&lowered, sealed, coefficients, sizes, &mut issues),
+                Tail::Modules => module_checks(lowered, sealed, &mut issues, &mut notices),
+                Tail::Budget => budget_check(lowered, sealed, coefficients, sizes, &mut issues),
                 Tail::Document => {
-                    check_id_maps(&lowered, &mut issues);
-                    check_controls(&lowered, sealed, &mut issues);
-                    check_constraints(&lowered, sealed, &mut issues);
-                    check_assemblies(&lowered, &mut issues);
-                    check_card(&lowered, &mut issues);
-                    super::variants::check(&lowered, &mut issues);
-                    check_time_remaps(&lowered, &expansions, &mut issues);
-                    check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
-                    check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
-                    super::reads::check(&lowered, kinds, &mut issues);
-                    super::rules::check(&lowered, &mut issues, |entries, work| {
+                    check_id_maps(lowered, &mut issues);
+                    check_controls(lowered, sealed, &mut issues);
+                    check_constraints(lowered, sealed, &mut issues);
+                    check_assemblies(lowered, &mut issues);
+                    check_viewer_tools(lowered, &mut issues);
+                    check_card(lowered, &mut issues);
+                    super::variants::check(lowered, &mut issues);
+                    check_time_remaps(lowered, expansions, &mut issues);
+                    check_targets(lowered, "channels", false, kinds, sealed, &mut issues);
+                    check_targets(lowered, "bound_values", true, kinds, sealed, &mut issues);
+                    super::reads::check(lowered, kinds, &mut issues);
+                    super::rules::check(lowered, &mut issues, |entries, work| {
                         in_chunks(entries, work)
                     });
                 }
@@ -386,24 +469,8 @@ fn check_by(
         (issues, notices)
     });
     for (i, n) in found {
-        issues.extend(i);
-        notices.extend(n);
-    }
-
-    sort_issues(&mut issues);
-    sort_notices(&mut notices);
-    draws.sort();
-    let ok = !issues.iter().any(|i| i.severity == "error");
-    CheckResult {
-        ok,
-        issues,
-        notices,
-        draws,
-        lowered,
-        core: core_name(),
-        set_digest: sealed.set_digest.clone(),
-        expansions,
-        rules_ran,
+        head.issues.extend(i);
+        head.notices.extend(n);
     }
 }
 
@@ -757,9 +824,11 @@ fn budget_check(
 /// camera); every other item keeps its issues. `None` when a full check is needed: the document
 /// holds entries of other maps keyed by ID, which read items by path. A patch that reached
 /// beyond items (a layer added) takes a full check, which the caller runs. Checked in the build
-/// `sealed` describes, as [`check_in`] checks.
+/// `sealed` describes, as [`check_in`] checks. `doc` is lent for the check, which reads its other
+/// members in place (#2700), copying them only when lowering the items writes one (a module
+/// kind's sections or channels), and is as it was on return.
 pub fn recheck(
-    doc: &Value,
+    doc: &mut Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
     sealed: &Sealed,
@@ -781,7 +850,7 @@ pub fn recheck(
 /// changed is checked again whatever names it. An unknown field is looked up in `packs`'
 /// census, as a full check looks it up (#1493).
 pub fn recheck_with(
-    doc: &Value,
+    doc: &mut Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
     sealed: &Sealed,
@@ -855,7 +924,7 @@ enum Reach<'a> {
 /// [`recheck`]'s planted wrong program (the conformance kit's fifth law): the items the patch
 /// changed are checked again, and those that hang from them or name them are not.
 pub fn recheck_skipping_referrers(
-    doc: &Value,
+    doc: &mut Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
     sealed: &Sealed,
@@ -871,14 +940,14 @@ pub fn recheck_skipping_referrers(
 }
 
 fn recheck_by(
-    doc: &Value,
+    doc: &mut Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
     sealed: &Sealed,
     reach: Reach<'_>,
     packs: &Packs,
 ) -> Option<Vec<Issue>> {
-    let after = doc.as_object()?;
+    doc.as_object()?;
     let maps_empty = ID_MAPS.iter().all(|m| {
         member(doc, m)
             .and_then(Value::as_object)
@@ -988,18 +1057,28 @@ fn recheck_by(
             }
         }
     }
-    let mut reduced = Map::new();
-    for (k, v) in after {
-        if k != "items" {
-            reduced.insert(k.clone(), v.clone());
-        }
-    }
     let subset: Map<String, Value> = context
         .iter()
         .filter_map(|id| Some((id.clone(), items.get(id)?.clone())))
         .collect();
-    reduced.insert("items".into(), Value::Object(subset));
-    let fresh = check_packed(&Value::Object(reduced), sealed, packs).issues;
+    // The document is lent with only those items in it, so its other members are read in place
+    // (#2700).
+    let mut lowered = Value::Object(subset.clone());
+    let mut lent = Lent::of(doc, Value::Object(subset));
+    let kinds = sealed.kinds_ref();
+    let mut head = lower(lent.doc, Some(&mut lowered), sealed, kinds, packs);
+    if head.writes_envelope() {
+        // Lowering writes members besides the items: it writes them on a copy.
+        let mut copy = lent.doc.clone();
+        copy["items"] = lowered;
+        settle(&mut copy, &head, packs);
+        finish(&copy, &mut head, sealed, kinds, None, &Sizes::new());
+    } else {
+        lent.swap(lowered);
+        finish(lent.doc, &mut head, sealed, kinds, None, &Sizes::new());
+    }
+    drop(lent);
+    let fresh = head.issues;
     let touches = |i: &Issue| i.ids.iter().any(|id| affected.contains(id));
     let mut out: Vec<Issue> = prev_issues
         .iter()
@@ -1009,6 +1088,31 @@ fn recheck_by(
         .collect();
     sort_issues(&mut out);
     Some(out)
+}
+
+/// A document holding other items than its own until dropped, which puts its own back where they
+/// were: how a recheck reads the document's other members in place.
+struct Lent<'a> {
+    doc: &'a mut Value,
+    own: Value,
+}
+
+impl<'a> Lent<'a> {
+    fn of(doc: &'a mut Value, items: Value) -> Lent<'a> {
+        let own = std::mem::replace(&mut doc["items"], items);
+        Lent { doc, own }
+    }
+
+    /// Puts `items` in place of the items it holds now.
+    fn swap(&mut self, items: Value) {
+        self.doc["items"] = items;
+    }
+}
+
+impl Drop for Lent<'_> {
+    fn drop(&mut self) {
+        self.doc["items"] = std::mem::take(&mut self.own);
+    }
 }
 
 /// Calls `f` with each string `value` holds, at any depth.
@@ -1461,8 +1565,8 @@ struct KindFacts<'a> {
     deprecation: Option<&'a (String, String)>,
     /// The close names an unknown kind's notice names (#412).
     close: Vec<Value>,
-    /// Of a pack the document names and this build lacks: kept as written, skipped (#1958).
-    pack_missing: bool,
+    /// Of a pack this build lacks (#1958) or a kind its version removed (#1962): kept, skipped.
+    skipped: bool,
 }
 
 impl<'a> KindFacts<'a> {
@@ -1492,7 +1596,7 @@ impl<'a> KindFacts<'a> {
                 }
                 _ => Vec::new(),
             },
-            pack_missing: packs::retired::skipped(text, resolved),
+            skipped: packs::retired::skipped(text, resolved) || packs::removed(text, resolved),
         }
     }
 }
@@ -1540,9 +1644,9 @@ fn check_item(
     let Some(facts) = ctx.facts.get(text) else {
         return false;
     };
-    // An instance of a pack this build lacks: its pack's notice names it, and nothing of it is
-    // read past its kind (#1958).
-    if facts.pack_missing {
+    // An instance of a pack this build lacks, or of a kind its version removed: its pack's notice
+    // or the removal's error names it, and nothing of it is read past its kind (#1958, #1962).
+    if facts.skipped {
         return false;
     }
     let instance = facts.instance;
@@ -1799,223 +1903,6 @@ fn has_cycle(start: &str, parents: &BTreeMap<String, String>) -> bool {
         }
     }
     false
-}
-
-fn check_at(key: &str, at_value: &Value, issues: &mut Vec<Issue>) {
-    let Some(members) = at_value.as_object() else {
-        issues.push(Issue::error(
-            "out_of_range",
-            key,
-            format!("items/{key}/at"),
-            at_value.clone(),
-            "not an object",
-        ));
-        return;
-    };
-    for (name, value) in members {
-        let path = format!("items/{key}/at/{name}");
-        if name == "pivot" && value.is_string() {
-            if !value.as_str().is_some_and(|p| BOX_POINTS.contains(&p)) {
-                issues.push(Issue::error(
-                    "out_of_range",
-                    key,
-                    path,
-                    value.clone(),
-                    "not a box point (n ne e se s sw w nw c)",
-                ));
-            }
-        } else if name == "place" {
-            check_place(key, value, issues);
-        } else if name == "align" {
-            check_align(key, value, issues);
-        } else if AT_VECTORS.contains(&name.as_str()) {
-            if !is_vector(value, 3) {
-                issues.push(Issue::error(
-                    "out_of_range",
-                    key,
-                    path,
-                    value.clone(),
-                    "not three numbers finite at f32",
-                ));
-            }
-        } else if name == "shear" {
-            if !fits_f32(value) {
-                issues.push(Issue::error(
-                    "out_of_range",
-                    key,
-                    path,
-                    value.clone(),
-                    "not a number finite at f32",
-                ));
-            }
-        } else if name == "anchor" {
-            // `ID#anchor`: a mark set's `#head`, drawn at the revealed end (Item and kind).
-            if !value.as_str().is_some_and(|a| a.contains('#')) {
-                issues.push(Issue::error(
-                    "out_of_range",
-                    key,
-                    path,
-                    value.clone(),
-                    "not `ID#anchor`",
-                ));
-            }
-        } else {
-            issues.push(Issue::error(
-                "unknown_field",
-                key,
-                path,
-                value.clone(),
-                "not a member of at in this slice",
-            ));
-        }
-    }
-}
-
-/// A relation's target: an item ID with an optional `#part`, or a point `[u, u]`; `frame` too
-/// where `frame` is allowed.
-fn relation_target(value: &Value, frame: bool) -> bool {
-    match value {
-        Value::String(s) => (frame && s == "frame") || !s.is_empty(),
-        v => is_vector(v, 2),
-    }
-}
-
-/// `at.place` (Item and kind: relations): exactly one of `beside`, `edge` and `onto`, with the
-/// members its form takes, sides and points from the box points.
-fn check_place(key: &str, value: &Value, issues: &mut Vec<Issue>) {
-    let base = format!("items/{key}/at/place");
-    let mut fault = |path: String, v: &Value, why: &str, code: &'static str| {
-        issues.push(Issue::error(code, key, path, v.clone(), why));
-    };
-    let Some(place) = value.as_object() else {
-        return fault(base, value, "not an object", "out_of_range");
-    };
-    let forms: Vec<&str> = ["beside", "edge", "onto"]
-        .into_iter()
-        .filter(|f| place.contains_key(*f))
-        .collect();
-    let members: &[&str] = match forms.as_slice() {
-        ["beside"] => &["beside", "side", "gap", "align", "own"],
-        ["edge"] => &["edge", "margin"],
-        ["onto"] => &["onto", "point"],
-        _ => {
-            return fault(
-                base,
-                value,
-                "not exactly one of beside, edge and onto",
-                "out_of_range",
-            )
-        }
-    };
-    let side = |v: &Value| {
-        v.as_str()
-            .is_some_and(|s| s != "c" && BOX_POINTS.contains(&s))
-    };
-    for (name, v) in place {
-        let path = format!("{base}/{name}");
-        let ok = match name.as_str() {
-            n if !members.contains(&n) => {
-                fault(path, v, "not a member of this placement", "unknown_field");
-                continue;
-            }
-            "beside" | "onto" => relation_target(v, false),
-            "edge" | "side" => side(v),
-            "point" => v.as_str().is_some_and(|s| BOX_POINTS.contains(&s)),
-            "gap" | "margin" => fits_f32(v),
-            "align" => v
-                .as_str()
-                .is_some_and(|s| ["start", "center", "end", "baseline"].contains(&s)),
-            _ => v.as_str().is_some_and(|s| !s.is_empty()),
-        };
-        if !ok {
-            fault(path, v, "not a value this member takes", "out_of_range");
-        }
-    }
-}
-
-/// `at.align`: at most two `{to, side}`, each moving the item along one axis.
-fn check_align(key: &str, value: &Value, issues: &mut Vec<Issue>) {
-    let base = format!("items/{key}/at/align");
-    let list = match value.as_array() {
-        Some(list) if list.len() <= 2 => list,
-        _ => {
-            issues.push(Issue::error(
-                "out_of_range",
-                key,
-                base,
-                value.clone(),
-                "not a list of at most two",
-            ));
-            return;
-        }
-    };
-    for (i, a) in list.iter().enumerate() {
-        let to = a.get("to").is_some_and(|t| relation_target(t, true));
-        let side = a
-            .get("side")
-            .and_then(Value::as_str)
-            .is_some_and(|s| ["n", "s", "e", "w", "cx", "cy"].contains(&s));
-        let only = a
-            .as_object()
-            .is_some_and(|o| o.keys().all(|k| k == "to" || k == "side"));
-        if !(to && side && only) {
-            issues.push(Issue::error(
-                "out_of_range",
-                key,
-                format!("{base}/{i}"),
-                a.clone(),
-                "not {to, side}",
-            ));
-        }
-    }
-}
-
-/// An item's `adjust`: its known channels, each a number in range (`tint` a look role, `invert` a
-/// bool); opacity in 0..1, gamma above 0 and the rest that scale never below 0.
-fn check_adjust(key: &str, adjust: &Value, issues: &mut Vec<Issue>) {
-    let Some(members) = adjust.as_object() else {
-        issues.push(Issue::error(
-            "out_of_range",
-            key,
-            format!("items/{key}/adjust"),
-            adjust.clone(),
-            "not an object",
-        ));
-        return;
-    };
-    for (name, value) in members {
-        let path = format!("items/{key}/adjust/{name}");
-        if !ADJUST_FIELDS.contains(&name.as_str()) {
-            issues.push(Issue::error(
-                "unknown_field",
-                key,
-                path,
-                value.clone(),
-                "not a channel of adjust",
-            ));
-            continue;
-        }
-        let (fits, what) = match name.as_str() {
-            "invert" => (value.is_boolean(), "not a boolean"),
-            "tint" => (value.is_string(), "not a look role"),
-            "opacity" => (
-                value.as_f64().is_some_and(|v| (0.0..=1.0).contains(&v)),
-                "not a number in 0..1",
-            ),
-            "gamma" => (
-                fits_f32(value) && value.as_f64().is_some_and(|v| v > 0.0),
-                "not a number above 0",
-            ),
-            "hue" | "exposure" => (fits_f32(value), "not a number finite at f32"),
-            _ => (
-                fits_f32(value) && value.as_f64().is_some_and(|v| v >= 0.0),
-                "not a number at or above 0",
-            ),
-        };
-        if !fits {
-            issues.push(Issue::error("out_of_range", key, path, value.clone(), what));
-        }
-    }
 }
 
 /// A number an f32 field holds: finite at that width, as the canonical form requires, so a
@@ -2300,6 +2187,8 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
 
 mod check_assemblies;
 use check_assemblies::*;
+mod item_fields;
+use item_fields::{check_adjust, check_at};
 
 /// A bound value's fields (Bound value).
 const BOUND_VALUE_FIELDS: &[&str] = &[
@@ -2373,12 +2262,16 @@ fn check_transport(doc: &Value, issues: &mut Vec<Issue>) {
 
 /// A duration field's flicks: a time span (`"2s"`, `"120f"` at the transport's rate), above 0.
 pub fn duration(doc: &Value, value: &Value) -> Result<i64, String> {
+    duration_in(member(doc, "transport"), value)
+}
+
+/// [`duration`] read with the document's `transport` alone, so a caller holding the document's
+/// members needn't build a document to read one (#2660).
+pub fn duration_in(transport: Option<&Value>, value: &Value) -> Result<i64, String> {
     let Value::String(text) = value else {
         return Err("not a time literal".into());
     };
-    let rate = member(doc, "transport")
-        .and_then(frame_rate_of)
-        .unwrap_or((60, 1));
+    let rate = transport.and_then(frame_rate_of).unwrap_or((60, 1));
     let ctx = TimeContext {
         frame_rate: rate,
         ..TimeContext::default()
@@ -2630,7 +2523,7 @@ pub(crate) fn resolve(
                 unreachable()
             }
         }
-        ["adjust", name] if ADJUST_FIELDS.contains(name) => Ok(()),
+        [group, name] if super::item_channel(group, name) => Ok(()),
         [field] if ITEM_OWN_FIELDS.contains(field) => Ok(()),
         // A part of a module's kind, such as a vector's SVG ids (#398): its role, opacity and
         // offset. The parts come from the module's import, so the module resolves the part.

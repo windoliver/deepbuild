@@ -27,9 +27,10 @@ pub use deep_canvas_marks::finish;
 pub mod geom;
 pub mod gltf;
 pub mod gpu;
+pub mod hidden;
 pub mod history;
-pub mod horizon;
 pub mod hit;
+pub mod horizon;
 pub mod hull;
 pub mod ies;
 pub mod inset;
@@ -38,6 +39,7 @@ pub mod lens;
 pub mod light;
 pub mod lod;
 pub mod look;
+pub mod measure;
 pub mod measures;
 pub mod mirror;
 pub mod modifiers;
@@ -47,6 +49,7 @@ pub mod pointer;
 pub mod points;
 pub mod poly;
 pub mod probe;
+mod refresh;
 pub mod rest;
 pub mod samples;
 pub mod scene;
@@ -56,6 +59,7 @@ pub mod shore;
 pub mod skin;
 pub mod sky;
 pub mod slots;
+pub mod spans;
 pub mod spatial;
 pub mod spec;
 pub mod stack;
@@ -63,6 +67,7 @@ pub mod strokes;
 pub mod surface;
 pub mod sweep;
 pub mod terrain;
+pub mod tiles;
 pub mod tints;
 pub mod trail;
 pub mod tree;
@@ -73,7 +78,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 54] = [
+pub const PLANTED: [&str; 60] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -123,6 +128,12 @@ pub const PLANTED: [&str; 54] = [
     "subdivide_drops_edge_attrs",
     "store_ignores_on",
     "store_nonfinite_keeps_earlier",
+    // #552: a `seen` column and a fog overlay that read player 1's bits on every copy.
+    slots::SEEN_PLAYER_ONE,
+    tints::PLAYER_ONE,
+    // #290: a hidden view that ignores a `seen` column, and one whose opacity ignores `match.me`.
+    hidden::IGNORES_SEEN,
+    hidden::IGNORES_ME,
     // #1928: the offsets and dissolves its criteria plant.
     faces::PLANTED[0],
     faces::PLANTED[1],
@@ -144,4 +155,7 @@ pub const PLANTED: [&str; 54] = [
     bind::PLANTS[5],
     bind::PLANTS[6],
     bind::PLANTS[7],
+    // #1217: the measure tool that ignores `shown_at`, and the one that writes an input entry.
+    measure::PLANTED[0],
+    measure::PLANTED[1],
 ];

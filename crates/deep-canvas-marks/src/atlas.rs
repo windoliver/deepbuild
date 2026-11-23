@@ -29,8 +29,30 @@ pub struct AtlasCell {
     pub margin: [f64; 2],
     pub separation: [f64; 2],
     pub flip: u8,
-    /// #536: a hex grid row's hit area in place of its quad.
-    pub hit: Option<HexArea>,
+    /// #536, #2386: a grid row's hit area in place of its quad: its cell.
+    pub hit: Option<CellArea>,
+}
+
+/// #2386: a grid cell's own outline, the hit area of the row on it: a square cell's square, an
+/// isometric cell's diamond or a hex cell's hexagon, its points as fractions of the row's quad's
+/// width and height from its top-left corner, outside 0 to 1 where the quad doesn't hold the
+/// cell. Edge i runs from point i to point i + 1, and the cell owns the edges it shares with a
+/// neighbour whose (cy, cx) is larger, so a point on an edge or a vertex hits exactly one cell.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CellArea {
+    points: [[f64; 2]; 6],
+    owns: [bool; 6],
+    sides: usize,
+}
+
+impl CellArea {
+    pub fn outline(&self) -> &[[f64; 2]] {
+        &self.points[..self.sides]
+    }
+
+    pub fn owns(&self) -> &[bool] {
+        &self.owns[..self.sides]
+    }
 }
 
 /// #536: the hexagon a hex cell's w × h quad holds, its hit area: edge i runs from vertex i to
@@ -91,6 +113,24 @@ impl AtlasCell {
 
 /// Flicks a second.
 const FLICKS: i64 = 705_600_000;
+
+/// #2386's planted draws, each reachable only through a proof surface: one that fills the
+/// grid's cell, and one that anchors every quad at its centre.
+pub const PLANTED: [&str; 2] = ["draw_fills_grid_cell", "draw_anchors_at_center"];
+
+/// `items` as the planted draw `name` reads them: each atlas set without its `draw` and its
+/// `anchor`, or without its `anchor`.
+pub fn planted(name: Option<&str>, items: &mut Map<String, Value>) -> Planted {
+    let drops = PLANTED.iter().position(|p| Some(*p) == name);
+    let sets = items.values_mut().filter(|_| drops.is_some());
+    for atlas in sets.filter_map(|i| i.pointer_mut("/params/atlas")?.as_object_mut()) {
+        atlas.remove("anchor");
+        if drops == Some(0) {
+            atlas.remove("draw");
+        }
+    }
+    Planted::None
+}
 
 /// Whether a set draws atlas tiles: `mark: image` with an `atlas`.
 pub fn is_atlas(params: &Map<String, Value>) -> bool {
@@ -264,6 +304,26 @@ impl Grid {
             .map(|[nx, ny]| (cell[1], cell[0]) < (ny, nx));
         Some(HexArea { flat, owns })
     }
+
+    /// #2386: cell `cell`'s outline as fractions of its own w × h box from its top-left corner,
+    /// with the edges it owns: a square's and a diamond's two lower ones, which their
+    /// neighbours of the larger (cy, cx) share.
+    fn area(&self, cell: [i64; 2]) -> CellArea {
+        let four = |p: [[f64; 2]; 4]| CellArea {
+            points: [p[0], p[1], p[2], p[3], [0.0; 2], [0.0; 2]],
+            owns: [false, false, true, true, false, false],
+            sides: 4,
+        };
+        match (self.shape, self.hit_area(cell)) {
+            (_, Some(hex)) => CellArea {
+                points: hex.outline(),
+                owns: hex.owns,
+                sides: 6,
+            },
+            (Shape::Isometric, _) => four([[1.0, 0.5], [0.5, 0.0], [0.0, 0.5], [0.5, 1.0]]),
+            _ => four([[1.0, 0.0], [0.0, 0.0], [0.0, 1.0], [1.0, 1.0]]),
+        }
+    }
 }
 
 fn odd_of(shape: Shape) -> bool {
@@ -407,7 +467,8 @@ pub fn tiles(
 }
 
 /// The set's marks: each tile's atlas cell as a w × h quad centred on its cell, named
-/// `<id>#<key>`, at `pos`.
+/// `<id>#<key>`, at `pos`. #2386: with `atlas.draw` the quad is that size, and with
+/// `atlas.anchor` that point of it sits on the cell's centre.
 pub fn marks(
     id: &str,
     params: &Map<String, Value>,
@@ -435,17 +496,52 @@ pub fn marks(
         &format!("{path}/separation"),
     )?;
     let grid = Grid::read(params, &format!("items/{id}/params"))?;
-    let [w, h] = grid.cell;
-    // A free row isn't a grid cell, and a turned one hits its turned quad.
+    // #2386: the size one atlas cell draws at, the grid's cell without one, and the point of
+    // that quad, as a fraction of its size from its top left, that sits on the cell's centre.
+    let two = |name: &str| match atlas.get(name).map(|v| (num(v.get(0)), num(v.get(1)), v)) {
+        None => Ok(None),
+        Some((Some(a), Some(b), Value::Array(l))) if l.len() == 2 => Ok(Some([a, b])),
+        Some(_) => Err(refused("bad_doc", format!("{path}/{name}"))),
+    };
+    let draw = two("draw")?;
+    if draw.is_some_and(|d| d.iter().any(|v| *v <= 0.0)) {
+        return Err(refused("out_of_range", format!("{path}/draw")));
+    }
+    // A set with `slice` gives each row its own size (#2039).
+    if draw.is_some() && params.contains_key("slice") {
+        return Err(refused("bad_doc", format!("{path}/draw")));
+    }
+    let (draw, anchor) = (
+        draw.unwrap_or(grid.cell),
+        two("anchor")?.unwrap_or([0.5, 0.5]),
+    );
+    // A free row isn't a grid cell, and hits its quad, turned as it is.
     let free = params.get("place").and_then(Value::as_str) == Some("free");
     Ok(tiles(id, params, rows, planted)?
         .into_iter()
         .map(|t| {
-            let [w, h] = [w * t.scale, h * t.scale];
-            let centre = [pos[0] + t.centre[0], pos[1] + t.centre[1]];
-            (t, [centre[0] - w / 2.0, centre[1] - h / 2.0, w, h])
+            let size = [draw[0] * t.scale, draw[1] * t.scale];
+            let on = [pos[0] + t.centre[0], pos[1] + t.centre[1]];
+            let quad = [on[0] - anchor[0] * size[0], on[1] - anchor[1] * size[1]];
+            // The quad turns about the point its anchor sits on.
+            let bounds = match t.angle != 0.0 && anchor != [0.5, 0.5] {
+                true => crate::turn::about([quad[0], quad[1], size[0], size[1]], on, t.angle),
+                false => [quad[0], quad[1], size[0], size[1]],
+            };
+            // A grid row is hit through its cell, whatever its quad covers.
+            let hit = (!free).then(|| {
+                let mut area = grid.area(t.cell.map(|c| c as i64));
+                for p in &mut area.points {
+                    for k in 0..2 {
+                        p[k] = anchor[k] + (p[k] - 0.5) * grid.cell[k] / size[k]
+                            - (bounds[k] - quad[k]) / size[k];
+                    }
+                }
+                area
+            });
+            (t, bounds, hit)
         })
-        .map(|(t, bounds)| Mark::Image {
+        .map(|(t, bounds, hit)| Mark::Image {
             item: format!("{id}#{}", t.key),
             asset: asset.to_ascii_lowercase(),
             bounds,
@@ -461,10 +557,9 @@ pub fn marks(
                 margin,
                 separation,
                 flip: t.flip,
-                hit: (!free && t.angle == 0.0)
-                    .then(|| grid.hit_area(t.cell.map(|c| c as i64)))
-                    .flatten(),
+                hit,
             }),
+            grid: None,
         })
         .collect())
 }
@@ -730,5 +825,156 @@ mod tests {
             (refused.code, refused.path.as_str()),
             ("out_of_range", "items/s/params/columns/scale")
         );
+    }
+
+    /// A hit area's outline in the set's u, with the edges it owns.
+    type Outline = Option<(Vec<[f64; 2]>, Vec<bool>)>;
+
+    /// #2386: a set of `grid` and `atlas` fields with one row a value of each column, as its
+    /// rows draw in order: each row's key, quad, turn and hit area.
+    fn drawn(
+        grid: Value,
+        atlas: Value,
+        columns: &[(&str, &[f64])],
+    ) -> Vec<(String, [f64; 4], f64, Outline)> {
+        let mut params = json!({"mark": "image", "grid": grid, "atlas": {"asset": "a".repeat(64), "cell": [16, 32]}});
+        for (field, value) in atlas.as_object().expect("an object") {
+            params["atlas"][field] = value.clone();
+        }
+        if columns.iter().any(|(name, _)| *name == "x") {
+            params["place"] = json!("free");
+        }
+        let rows = Rows {
+            keys: (0..columns[0].1.len()).map(|i| i.to_string()).collect(),
+            columns: (columns.iter())
+                .map(|(k, v)| (k.to_string(), Column::Numbers(v.to_vec())))
+                .collect(),
+            ..Rows::default()
+        };
+        let params = params.as_object().expect("an object");
+        (marks("s", params, &rows, [0.0, 0.0], Planted::None)
+            .expect("drawn")
+            .iter())
+        .map(|m| match m {
+            Mark::Image {
+                item,
+                bounds: b,
+                turn,
+                tile,
+                ..
+            } => {
+                let hit = tile.and_then(|t| t.hit).map(|a| {
+                    let at = |[u, v]: &[f64; 2]| [b[0] + u * b[2], b[1] + v * b[3]];
+                    (a.outline().iter().map(at).collect(), a.owns().to_vec())
+                });
+                (item.clone(), *b, *turn, hit)
+            }
+            _ => unreachable!("an image"),
+        })
+        .collect()
+    }
+
+    /// #2386: a row's quad is `draw` times its `scale` with its anchor on its cell's centre, and
+    /// a grid row's hit area stays its cell, its two lower edges its own: a square's (so the
+    /// vertex four cells share goes to the one above and left of it), an isometric cell's
+    /// diamond and a hex cell's hexagon, unscaled and unturned whatever its quad does.
+    #[test]
+    fn a_tile_draws_from_its_anchor_and_is_hit_through_its_cell() {
+        let tall = json!({"draw": [16, 32], "anchor": [0.5, 0.75]});
+        let lower = vec![false, false, true, true];
+        let square = json!({"shape": "square", "cell": [16, 16]});
+        let cell = vec![[40.0, 40.0], [24.0, 40.0], [24.0, 56.0], [40.0, 56.0]];
+        let tree = drawn(
+            square.clone(),
+            tall.clone(),
+            &[("cx", &[2.0]), ("cy", &[3.0])],
+        );
+        assert_eq!(tree[0].1, [24.0, 24.0, 16.0, 32.0]);
+        assert_eq!(tree[0].3, Some((cell.clone(), lower.clone())));
+        // Turned a quarter about its foot, (32, 48), the quad lies to the right of it.
+        let foot = json!({"draw": [16, 32], "anchor": [0.5, 1]});
+        let turned = drawn(
+            square,
+            foot,
+            &[("cx", &[2.0]), ("cy", &[3.0]), ("angle", &[90.0])],
+        );
+        assert_eq!((turned[0].1, turned[0].2), ([40.0, 32.0, 16.0, 32.0], 90.0));
+        assert_eq!(turned[0].3, Some((cell, lower.clone())));
+        // On an isometric grid at scale 2, cell (1, 0) centres on (32, 16).
+        let iso = json!({"shape": "isometric", "cell": [64, 32]});
+        let wall = json!({"draw": [64, 64], "anchor": [0.5, 0.75]});
+        let block = drawn(
+            iso,
+            wall,
+            &[("cx", &[1.0]), ("cy", &[0.0]), ("scale", &[2.0])],
+        );
+        assert_eq!(block[0].1, [-32.0, -80.0, 128.0, 128.0]);
+        let diamond = vec![[64.0, 16.0], [32.0, 0.0], [0.0, 16.0], [32.0, 32.0]];
+        assert_eq!(block[0].3, Some((diamond, lower)));
+        // On a pointy odd hex grid, cell (1, 1) centres on (48, 21).
+        let hex = json!({"shape": "hex", "cell": [32, 28]});
+        let pillar = json!({"draw": [32, 56], "anchor": [0.5, 0.75]});
+        let post = drawn(hex, pillar, &[("cx", &[1.0]), ("cy", &[1.0])]);
+        assert_eq!(post[0].1, [32.0, -21.0, 32.0, 56.0]);
+        let hexagon = vec![
+            [64.0, 28.0],
+            [64.0, 14.0],
+            [48.0, 7.0],
+            [32.0, 14.0],
+            [32.0, 28.0],
+            [48.0, 35.0],
+        ];
+        let owned = vec![true, false, false, false, true, true];
+        assert_eq!(post[0].3, Some((hexagon, owned)));
+    }
+
+    /// #2386: a free row is hit through its quad, and rows draw in order of their cells' centres
+    /// though their quads lie the other way: (0, 0), ten times the size and hung a quad's height
+    /// below its cell, draws before (0, 1), whose whole quad lies above it.
+    #[test]
+    fn a_free_row_has_no_cell_and_rows_draw_by_their_cells_never_their_quads() {
+        let square = json!({"shape": "square", "cell": [16, 16]});
+        let foot = json!({"draw": [16, 32], "anchor": [0.5, 1]});
+        let free = drawn(square.clone(), foot, &[("x", &[100.0]), ("y", &[50.0])]);
+        assert_eq!((free[0].1, &free[0].3), ([92.0, 18.0, 16.0, 32.0], &None));
+        let hung = json!({"draw": [16, 32], "anchor": [0.5, -1]});
+        let columns: [(&str, &[f64]); 3] = [
+            ("cx", &[0.0, 0.0]),
+            ("cy", &[1.0, 0.0]),
+            ("scale", &[1.0, 10.0]),
+        ];
+        let two = drawn(square, hung, &columns);
+        assert_eq!(
+            (two[0].0.as_str(), two[0].1),
+            ("s#1", [-80.0, 320.0, 160.0, 320.0])
+        );
+        assert_eq!(
+            (two[1].0.as_str(), two[1].1),
+            ("s#0", [-8.0, 48.0, 16.0, 32.0])
+        );
+    }
+
+    /// #2386: a `draw` that isn't two numbers above 0 and an `anchor` that isn't two numbers are
+    /// refused, naming the field.
+    #[test]
+    fn a_draw_or_an_anchor_that_isnt_two_numbers_is_refused_naming_it() {
+        for (field, value, code) in [
+            ("draw", json!("wide"), "bad_doc"),
+            ("draw", json!([16, 32, 1]), "bad_doc"),
+            ("draw", json!([16, -32]), "out_of_range"),
+            ("anchor", json!(0.5), "bad_doc"),
+            ("anchor", json!([0.5, "top"]), "bad_doc"),
+        ] {
+            let params = json!({"mark": "image", "grid": {"cell": [16, 16]},
+                "atlas": {"asset": "a".repeat(64), "cell": [16, 32], field: value}});
+            let params = params.as_object().expect("an object");
+            let refused = marks("s", params, &Rows::default(), [0.0, 0.0], Planted::None)
+                .expect_err("refused");
+            assert_eq!(
+                (refused.code, refused.path),
+                (code, format!("items/s/params/atlas/{field}")),
+                "{params:?}"
+            );
+        }
     }
 }

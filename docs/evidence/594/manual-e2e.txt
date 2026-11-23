@@ -1,0 +1,185 @@
+#594 manual e2e: the perf lane, run end to end by hand twice, on 2026-11-19 on a Mac15,12 (a reference Mac model; thermal
+"fair", load 8 to 59 from other sessions' builds, mains power).
+The fixture box is written <sandbox>, and the home folder inside it <sandbox-home>.
+
+1. Full repository (not finished: the disk filled)
+---------------------------------------------------
+A fresh GitHub clone of this branch at 221bcdd68 (same scripts/ as origin/main b4a2049e8), driven through preflight's own
+order: timed grant, warm(root), the measured check workload, then scripts/lease node scripts/perf.mjs <observation>
+(the harness budgets and release lanes left out: they spend plan usage). Run 1's cold warm-up of the working tree alone
+took 1877 s and wrote 1950 dependency artifacts (29 GB of target/); the measured run then died on ENOSPC with 150 MiB
+left on the disk, which other sessions' builds shared. Perf's two kept build trees need about 29 GB more each, so the
+full-repository run can't fit on this Mac today. The clone was deleted to give the space back.
+
+[e2e run1] root <scratch>/e2e-clone, kept ~/Library/Caches/deepbuild-perf/<host>-b0235f540fca, exists before: false
+[e2e run1] before: model Mac15,12, power ac, lowPower false, thermal fair, load 26.80 18.46 11.43; dep artifacts working tree 0, base 0, without-tests 0
+[e2e run1] warm(root) took 1877.4 s; working-tree dep artifacts written: 1950
+Error: ENOSPC: no space left on device, mkdtemp '<tmp>/deep-benchmark-time-XXXXXX'
+
+2. The 594 suite's real Cargo fixture, with this checkout's real scripts/preflight.mjs and scripts/perf.mjs
+------------------------------------------------------------------------------------------------------------
+The fixture (tests/acceptance/594/helpers.mjs): a Cargo workspace whose registry is a vendored directory source, a
+heavy dependency dep-b, and probe-macro, which logs every rustc compile of dep-a, dep-b and app with its --emit and
+out-dir. The change adds dep-b and a test file of its own, as the #337 branch did. A dependency compile with
+--emit=dep-info,metadata inside a measured run is clippy's check charged to the measured workload; #594 found exactly
+that on the base before #595 (BASE-FAILURE.txt). Two preflights back to back. The first preflight's 2955 s wall is
+almost all the wait for the machine's timed grant (granted only while the 1-minute load is under the 8 cores); its
+own elapsed line says 21.02 s.
+
+Read it as:
+- First run: each side builds its own dependencies in its warm-up, into its own kept directory under the cache
+  (<sandbox-home>/.cache/deepbuild-perf/<host>-<clone>/<side>/target), never the working tree's target/; no measured
+  run compiles a dependency, so no clippy check is charged to the measured workload; perf PASS, cpuMs 350 vs base
+  320 (ratio 1.094, margin 1.5).
+- Second run: the kept copies are written 0 files, and no side compiles any dependency in warm-up or measured run;
+  perf PASS, cpuMs 330 vs base 350 (ratio 0.943); the preflight takes 5.40 s.
+
+The driver (<scratch>/e2e-fixture.mjs):
+
+// #594 manual e2e on a real Cargo workspace: the 594 suite's fixture repository (a vendored registry, a heavy
+// dependency, probe-macro logging each rustc compile with its --emit and out-dir), with this checkout's real
+// scripts/preflight.mjs and scripts/perf.mjs. The change adds dep-b and a test file of its own. Two preflights back to
+// back; for each, the full preflight output and every compile by side, split into warm-up and measured run. A
+// dependency compile with --emit=dep-info,metadata in a measured run is clippy charged to the measured workload.
+//   node e2e-fixture.mjs <checkout>
+import { loadavg } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+
+const checkout = process.argv[2];
+const { fixture, side, describe, isDependency, verdict, segments } = await import(join(checkout, 'tests/acceptance/594/helpers.mjs'));
+const { fingerprint } = await import(join(checkout, 'scripts/benchmark.mjs'));
+const cleanups = [];
+const t = { after: (fn) => cleanups.push(fn), diagnostic: () => {} };
+const machine = () => { const f = fingerprint(); return `${f.model}, power ${f.power}, lowPower ${f.lowPowerMode}, thermal ${f.thermalState}, load ${loadavg().map((n) => n.toFixed(2)).join(' ')}`; };
+try {
+  const repo = fixture(t);
+  repo.change({ addDependency: true, addTest: true });
+  console.log(`fixture repo: <sandbox>/repo; machine: ${machine()}`);
+  for (const label of ['first', 'second']) {
+    const started = Date.now();
+    // repo.preflight() as helpers.mjs runs it, with a 60-minute timeout in place of 15, so the run can wait for the
+    // machine's timed grant (granted only while the 1-minute load is under the core count) on a busy machine.
+    writeFileSync(repo.log, '');
+    const result = spawnSync(process.execPath, ['scripts/preflight.mjs'], { cwd: repo.repo, env: repo.env, encoding: 'utf8', timeout: 3_600_000, maxBuffer: 256 * 1024 * 1024 });
+    const run = { status: result.status, output: `${result.stdout ?? ''}${result.stderr ?? ''}${result.error ? `\n${result.error.message}` : ''}`, segments: segments(readFileSync(repo.log, 'utf8'), repo.repo) };
+    const seconds = ((Date.now() - started) / 1000).toFixed(1);
+    console.log(`\n===== ${label} preflight: exit ${run.status}, ${seconds} s wall; machine after: ${machine()} =====`);
+    console.log(run.output.replaceAll(repo.box, '<sandbox>'));
+    console.log(`----- compiles by side (${label}) -----`);
+    for (const name of ['working tree', 'merge base', 'without own tests']) {
+      const s = side(run.segments, name);
+      const deps = (list) => list.filter(isDependency);
+      const clippyCharged = deps(s.measured).filter(({ emit }) => /^--emit=dep-info,metadata$/.test(emit));
+      console.log(`${name}:\n  warm-up dependency compiles: ${deps(s.warm).length} (${describe(deps(s.warm))})\n  measured dependency compiles: ${deps(s.measured).length} (${describe(deps(s.measured))})\n  of which clippy checks charged to the measured run: ${clippyCharged.length}\n  all measured compiles: ${describe(s.measured)}`);
+    }
+    const v = verdict(run.output);
+    console.log(`verdict: status ${v?.status}, current.cpuMs ${v?.current?.cpuMs}, base.cpuMs ${v?.base?.cpuMs}, ratio ${v ? (v.current.cpuMs / v.base.cpuMs).toFixed(3) : 'n/a'} (margin 1.5)`);
+  }
+} finally {
+  for (const fn of cleanups.reverse()) await fn();
+}
+
+The output ($ bash e2e-fixture.sh, paths redacted):
+
+$ node e2e-fixture.mjs <checkout>   # checkout at 3994a0baa (scripts/ = origin/main 4bf2fc7ad), Thu Nov 19 23:07:35 PST 2026, node v24.22.0, cargo 1.99.1 (5f94df478 2026-08-27), clippy 0.1.99 (58cf8f9c35 2026-10-13)
+/dev/disk3s5   460Gi   409Gi    23Gi    95%    5.2M  239M    2%   /System/Volumes/Data
+fixture repo: <sandbox>/repo; machine: Mac15,12, power ac, lowPower false, thermal fair, load 22.24 19.92 25.48
+
+===== first preflight: exit 0, 2955.1 s wall; machine after: Mac15,12, power ac, lowPower false, thermal fair, load 7.87 29.74 47.04 =====
+Warming builds (not timed)
+RUN perf
+perf: base copy <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/base/copy: wrote 142 files, deleted 0; rewrote what the last run left with other bytes: nothing
+perf: without-tests copy <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/copy: wrote 142 files, deleted 0; rewrote what the last run left with other bytes: nothing
+perf: the change's own tests (tests/added.test.mjs) account for 10 ms of CPU; the checks without them are compared with the merge base
+{"task":"preflight","baseCommit":"b1ccd2faab2c92707792b2cf1a55f7b521c8b1c3","status":"PASS","samples":1,"current":{"elapsedMs":504.70395800000006,"cpuMs":350,"peakBytes":50642944,"instructions":327116772},"base":{"elapsedMs":466.55837500000007,"cpuMs":320,"peakBytes":50298880,"instructions":322691810},"full":{"elapsedMs":516.6655830000527,"cpuMs":360,"peakBytes":50315264,"instructions":323122639},"ownTests":["tests/added.test.mjs"],"ownTestsCpuMs":10,"counter":"/usr/bin/time -l and scripts/count-children.c: instructions retired, children included","fingerprint":{"model":"Mac15,12","chip":"Apple M3","memoryBytes":17179869184,"power":"ac","lowPowerMode":false,"thermalState":"fair","macosBuild":"26B131"}}
+PASS perf (11.62 s)
+SKIP copy: it spends plan usage, so only the release preflight runs it
+SKIP closed issues: it spends plan usage, so only the release preflight runs it
+SKIP release budgets: it spends plan usage, so only the release preflight runs it
+SKIP hub churn: it spends plan usage, so only the release preflight runs it
+SKIP hub sessions: it spends plan usage, so only the release preflight runs it
+SKIP ecosystem corpus: it spends plan usage, so only the release preflight runs it
+SKIP operator calibration: it spends plan usage, so only the release preflight runs it
+SKIP spine checkpoint: it spends plan usage, so only the release preflight runs it
+SKIP setup checkpoint: it spends plan usage, so only the release preflight runs it
+SKIP done gate checkpoint: it spends plan usage, so only the release preflight runs it
+SKIP risky calls checkpoint: it spends plan usage, so only the release preflight runs it
+SKIP spine exit: it spends plan usage, so only the release preflight runs it
+SKIP claude code adapter live: it spends plan usage, so only the release preflight runs it
+SKIP parity suite release: it spends plan usage, so only the release preflight runs it
+SKIP gpu validation: it spends plan usage, so only the release preflight runs it
+Checks elapsed: 9.19 s (budget: <300 s); preflight elapsed: 21.02 s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+  Executable unittests src/main.rs (target/debug/deps/app-2ebd73eb18ff0c2b)
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `~/.nvm/versions/node/v24.22.0/bin/node scripts/perf.mjs {"elapsedMs":516.6655830000527,"cpuMs":360,"peakBytes":50315264,"instructions":323122639,"status":0}` runs unleased
+
+----- compiles by side (first) -----
+working tree:
+  warm-up dependency compiles: 4 (dep_b --emit=dep-info,metadata,link -> <sandbox>/repo/target/debug/deps; dep_a --emit=dep-info,metadata,link -> <sandbox>/repo/target/debug/deps; dep_a --emit=dep-info,metadata -> <sandbox>/repo/target/debug/deps; dep_b --emit=dep-info,metadata -> <sandbox>/repo/target/debug/deps)
+  measured dependency compiles: 0 (none)
+  of which clippy checks charged to the measured run: 0
+  all measured compiles: none
+merge base:
+  warm-up dependency compiles: 2 (dep_a --emit=dep-info,metadata,link -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/base/target/debug/deps; dep_a --emit=dep-info,metadata -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/base/target/debug/deps)
+  measured dependency compiles: 0 (none)
+  of which clippy checks charged to the measured run: 0
+  all measured compiles: none
+without own tests:
+  warm-up dependency compiles: 4 (dep_a --emit=dep-info,metadata,link -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps; dep_b --emit=dep-info,metadata,link -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps; dep_a --emit=dep-info,metadata -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps; dep_b --emit=dep-info,metadata -> <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/target/debug/deps)
+  measured dependency compiles: 0 (none)
+  of which clippy checks charged to the measured run: 0
+  all measured compiles: none
+verdict: status PASS, current.cpuMs 350, base.cpuMs 320, ratio 1.094 (margin 1.5)
+
+===== second preflight: exit 0, 5.5 s wall; machine after: Mac15,12, power ac, lowPower false, thermal fair, load 8.36 29.48 46.85 =====
+Warming builds (not timed)
+RUN perf
+perf: base copy <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/base/copy: wrote 0 files, deleted 0; rewrote what the last run left with other bytes: nothing
+perf: without-tests copy <sandbox-home>/.cache/deepbuild-perf/<host>-459959f82bcd/without-tests/copy: wrote 0 files, deleted 0; rewrote what the last run left with other bytes: nothing
+perf: the change's own tests (tests/added.test.mjs) account for -10 ms of CPU; the checks without them are compared with the merge base
+{"task":"preflight","baseCommit":"b1ccd2faab2c92707792b2cf1a55f7b521c8b1c3","status":"PASS","samples":1,"current":{"elapsedMs":425.2938340000005,"cpuMs":330,"peakBytes":50692096,"instructions":322062133},"base":{"elapsedMs":454.5696250000001,"cpuMs":350,"peakBytes":50626560,"instructions":320996412},"full":{"elapsedMs":401.4157500000001,"cpuMs":320,"peakBytes":50511872,"instructions":321649600},"ownTests":["tests/added.test.mjs"],"ownTestsCpuMs":-10,"counter":"/usr/bin/time -l and scripts/count-children.c: instructions retired, children included","fingerprint":{"model":"Mac15,12","chip":"Apple M3","memoryBytes":17179869184,"power":"ac","lowPowerMode":false,"thermalState":"fair","macosBuild":"26B131"}}
+PASS perf (4.32 s)
+SKIP copy: it spends plan usage, so only the release preflight runs it
+SKIP closed issues: it spends plan usage, so only the release preflight runs it
+SKIP release budgets: it spends plan usage, so only the release preflight runs it
+SKIP hub churn: it spends plan usage, so only the release preflight runs it
+SKIP hub sessions: it spends plan usage, so only the release preflight runs it
+SKIP ecosystem corpus: it spends plan usage, so only the release preflight runs it
+SKIP operator calibration: it spends plan usage, so only the release preflight runs it
+SKIP spine checkpoint: it spends plan usage, so only the release preflight runs it
+SKIP setup checkpoint: it spends plan usage, so only the release preflight runs it
+SKIP done gate checkpoint: it spends plan usage, so only the release preflight runs it
+SKIP risky calls checkpoint: it spends plan usage, so only the release preflight runs it
+SKIP spine exit: it spends plan usage, so only the release preflight runs it
+SKIP claude code adapter live: it spends plan usage, so only the release preflight runs it
+SKIP parity suite release: it spends plan usage, so only the release preflight runs it
+SKIP gpu validation: it spends plan usage, so only the release preflight runs it
+Checks elapsed: 0.97 s (budget: <300 s); preflight elapsed: 5.40 s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+  Executable unittests src/main.rs (target/debug/deps/app-2ebd73eb18ff0c2b)
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `~/.nvm/versions/node/v24.22.0/bin/node scripts/perf.mjs {"elapsedMs":401.4157500000001,"cpuMs":320,"peakBytes":50511872,"instructions":321649600,"status":0}` runs unleased
+
+----- compiles by side (second) -----
+working tree:
+  warm-up dependency compiles: 0 (none)
+  measured dependency compiles: 0 (none)
+  of which clippy checks charged to the measured run: 0
+  all measured compiles: none
+merge base:
+  warm-up dependency compiles: 0 (none)
+  measured dependency compiles: 0 (none)
+  of which clippy checks charged to the measured run: 0
+  all measured compiles: none
+without own tests:
+  warm-up dependency compiles: 0 (none)
+  measured dependency compiles: 0 (none)
+  of which clippy checks charged to the measured run: 0
+  all measured compiles: none
+verdict: status PASS, current.cpuMs 330, base.cpuMs 350, ratio 0.943 (margin 1.5)
+exit=0
+Thu Nov 19 23:56:58 PST 2026
+E2E-DONE

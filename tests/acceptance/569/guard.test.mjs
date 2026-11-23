@@ -149,7 +149,7 @@ for (const [how, signer] of [['unsigned', null], ['signed by a key the approvers
   });
 }
 
-// Criterion 3: only added tests, or edits to tests no criterion of the issue tags, pass.
+// Criterion 3: only added tests, or edits to tests no criterion of any issue tags, pass.
 
 test('#569.fe787486 a change that only adds tests, to a tagged file and in a new file, passes the guard', (t) => {
   const added = `\nit('${c3} prints one line per item', () => {\n  assert.equal(receipt([['tea', 3]]), 'tea 3\\n');\n});\n`;
@@ -163,12 +163,11 @@ test('#569.fe787486 a change that only adds tests, to a tagged file and in a new
   assertPasses(result, 'guard');
 });
 
-test('#569.fe787486 edits to tests no criterion of the issue tags pass the guard: an untagged test beside tagged ones, another issue\'s test and an untagged file', (t) => {
+test('#569.fe787486 edits to tests no criterion tags pass the guard: an untagged test beside tagged ones and an untagged file', (t) => {
   const result = proof(scene(t, [{
     files: {
       'src/cart.mjs': CODE.replace('`${n}`', () => '`$${n}`'),
       [FILE]: cart({ untaggedBody: "assert.equal(price(3), '$3');" }),
-      [OTHER_FILE]: otherTest('0 + 0'),
       [UNIT_FILE]: unitTest("'$1'"),
     },
     message: `Dollar prices\n\nCloses #${ISSUE}`,

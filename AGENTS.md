@@ -1,6 +1,6 @@
 # Rules for agents working in this repo
 
-Read [docs/technical-design.md](docs/technical-design.md) before edits. Keep this file under one page. Delegates follow these rules. Before delivery, review requirement → change → proof mappings; disclose deviations and unrun checks.
+Read the design sections your issue links before edits. `node scripts/design-section.mjs --issue <n>` prints them. Keep this file under one page. Delegates follow these rules. Before delivery, review requirement → change → proof mappings; disclose deviations and unrun checks.
 
 ## The four invariants
 
@@ -28,7 +28,7 @@ These hold in the core and every extension:
 - Never kill processes by name or port. Stop only processes you started, by PID.
 - Never write hooks into a repo's settings; this project installs hooks at user level only.
 - No CI on push or pull request. Checks run locally; everything runs once at release through preflight.
-- No secrets or personal data in code, fixtures, logs or evidence. Redact.
+- No secrets or personal data in code, fixtures, logs, run records or evidence. Redact; write every home folder, a test's own HOME too, as `~`, and check with `node scripts/repo-rules.mjs`.
 - Ported code keeps its license notice in the receiving file. Never port GPL code.
 
 ## Scope and simplicity

@@ -34,9 +34,21 @@ pub struct Interface {
     pub fixtures: Vec<String>,
     pub planted: Vec<String>,
     pub digest: String,
+    /// Its kind kit's planted twins (#1255): each a planted library, the fixture it runs and the
+    /// kind rule it must raise there.
+    pub twins: Vec<Twin>,
     /// The pack that declares it, `<name>@<version>`, and where that pack came from.
     pub pack: String,
     pub origin: Origin,
+}
+
+/// A planted twin of an interface's kind kit: one of its planted libraries, a fixture its pack
+/// carries, and the code of the rule the library must fail on it.
+#[derive(Clone, Debug)]
+pub struct Twin {
+    pub planted: String,
+    pub example: String,
+    pub expect: String,
 }
 
 /// Where a pack came from: a first-party pack's interfaces bind every claim; an outside pack's
@@ -93,6 +105,21 @@ impl Interface {
             fixtures: strings(v.get("fixtures"))?,
             planted: strings(v.get("planted"))?,
             digest: v.get("digest")?.as_str()?.to_string(),
+            twins: match v.get("twins") {
+                None => Vec::new(),
+                Some(t) => t
+                    .as_array()?
+                    .iter()
+                    .map(|t| {
+                        let text = |k: &str| Some(t.get(k)?.as_str()?.to_string());
+                        Some(Twin {
+                            planted: text("planted")?,
+                            example: text("example")?,
+                            expect: text("expect")?,
+                        })
+                    })
+                    .collect::<Option<_>>()?,
+            },
             pack: pack.to_string(),
             origin,
         })
@@ -172,14 +199,19 @@ impl Tolerance {
     }
 
     /// Whether `actual` stands for `expected`: numbers within the tolerance (exact: the same
-    /// value), anything else equal.
+    /// value), a vector's numbers each so (#981), anything else equal.
     pub fn holds(&self, expected: &Value, actual: &Value) -> bool {
-        match (expected.as_f64(), actual.as_f64()) {
-            (Some(e), Some(a)) => match self {
-                Tolerance::Exact => e == a,
-                Tolerance::Within { abs, rel } => (a - e).abs() <= abs.max(rel * e.abs()),
+        match (expected, actual) {
+            (Value::Array(e), Value::Array(a)) => {
+                e.len() == a.len() && e.iter().zip(a).all(|(e, a)| self.holds(e, a))
+            }
+            _ => match (expected.as_f64(), actual.as_f64()) {
+                (Some(e), Some(a)) => match self {
+                    Tolerance::Exact => e == a,
+                    Tolerance::Within { abs, rel } => (a - e).abs() <= abs.max(rel * e.abs()),
+                },
+                _ => expected == actual,
             },
-            _ => expected == actual,
         }
     }
 }
@@ -380,6 +412,78 @@ impl crate::Logic {
         Ok(Value::Array(judged))
     }
 
+    /// An interface's kind kit at its pack's check (#1255; Pack: kind rules and the kind kit): each
+    /// planted twin's library run on its example, a fixture the pack carries, and read by the
+    /// interface's kind rules as `judge` reads a run, each rule's params the example's `rules`.
+    /// The verdicts are `[{planted, example, expect, raised}]`, `raised` the rules that failed; a
+    /// twin that doesn't raise the rule it names refuses the pack, naming the interface, the twin
+    /// and what it raised.
+    pub(crate) fn kit(
+        &mut self,
+        piece_v: &Value,
+        iface: &Interface,
+        agent: bool,
+    ) -> Result<Value, Vec<Value>> {
+        let mut ran = Vec::new();
+        for t in &iface.twins {
+            let refuse = |what: String, raised: Value| {
+                vec![
+                    json!({"rule": "interface", "interface": iface.name, "planted": t.planted, "example": t.example,
+                    "expect": t.expect, "raised": raised, "what": what}),
+                ]
+            };
+            if !iface.planted.contains(&t.planted) {
+                return Err(refuse(
+                    format!(
+                        "{}'s twin for {} names {}, which isn't one of its planted libraries",
+                        iface.name, t.expect, t.planted
+                    ),
+                    json!([]),
+                ));
+            }
+            let label = format!("planted.{}@0", &t.planted[..t.planted.len().min(16)]);
+            let under = UnderTest {
+                label: &label,
+                hash: &t.planted,
+                agent,
+                exports: iface.export_names(),
+                fixtures: &[],
+                needs: &[],
+            };
+            let (fixture, mut line) = Self::fixture_call(piece_v, iface, &under, &t.example)?;
+            line["call"] = json!("judge");
+            line["rules"] = fixture.get("rules").cloned().unwrap_or(json!({}));
+            let outer = self.under_test.replace(t.planted.clone());
+            let judged = self.judge(&line);
+            self.under_test = outer;
+            let judged = judged.map_err(|r| {
+                r["refusals"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_else(|| vec![r.clone()])
+            })?;
+            let mut raised: Vec<&String> = judged["items"]
+                .as_object()
+                .into_iter()
+                .flat_map(|items| items.values())
+                .filter_map(|i| i["rules"].as_object())
+                .flatten()
+                .filter(|(_, r)| r["verdict"] == json!("FAIL"))
+                .map(|(code, _)| code)
+                .collect();
+            raised.sort();
+            raised.dedup();
+            if !raised.contains(&&t.expect) {
+                return Err(refuse(
+                    format!("{}'s planted twin {} raises {raised:?} on {}, not {}: each rule's planted twin fails with that rule's code", iface.name, t.planted, t.example, t.expect),
+                    json!(raised),
+                ));
+            }
+            ran.push(json!({"planted": t.planted, "example": t.example, "expect": t.expect, "raised": raised}));
+        }
+        Ok(Value::Array(ran))
+    }
+
     /// `iface`'s fixtures run on `under`, once per library hash and interface digest in this
     /// process: `ran` is true only at the run.
     fn interface_fixtures(
@@ -423,16 +527,14 @@ impl crate::Logic {
         Ok(records)
     }
 
-    /// One fixture of `iface` run on `under`: its item, linking `under`, with its controls, baked on
-    /// its track and held to logic.determinism, its arrays compared with the expected values within
-    /// its tolerance. A refusal is `true` when the run itself failed.
-    fn interface_fixture(
-        &mut self,
+    /// A fixture of `iface` as a call on `under`: the fixture, and the `bake` of its item, linking
+    /// `under`, with its controls, on its track for its steps.
+    fn fixture_call(
         piece_v: &Value,
         iface: &Interface,
         under: &UnderTest,
         id: &str,
-    ) -> Result<Value, (Vec<Value>, bool)> {
+    ) -> Result<(Value, Value), Vec<Value>> {
         // The piece's assets, and the first-party packs' it doesn't carry.
         let mut assets = crate::first_party::assets().clone();
         assets.extend(
@@ -453,24 +555,11 @@ impl crate::Logic {
         let fixture: Value = decoded(id)
             .and_then(|b| serde_json::from_slice(&b).ok())
             .ok_or_else(|| {
-                (
-                    refuse(format!(
-                        "{}'s fixture {id} isn't a fixture the piece carries",
-                        iface.name
-                    )),
-                    false,
-                )
-            })?;
-        let expect = fixture.get("expect").cloned().unwrap_or(Value::Null);
-        let tolerance = Tolerance::parse(expect.get("tolerance")).ok_or_else(|| {
-            (
                 refuse(format!(
-                    "{}'s fixture {id} has a tolerance that is neither exact nor {{abs, rel}}",
+                    "{}'s fixture {id} isn't a fixture the piece carries",
                     iface.name
-                )),
-                false,
-            )
-        })?;
+                ))
+            })?;
         let mut item = fixture.get("item").cloned().unwrap_or(Value::Null);
         let program = item["params"]["program"]
             .as_str()
@@ -491,13 +580,42 @@ impl crate::Logic {
         ];
         packs.extend(piece_v["packs"].as_array().cloned().unwrap_or_default());
         item["params"]["links"] = json!([{"name": under.label, "asset": under.hash}]);
-        let mut piece =
-            json!({"seed": 0, "packs": packs, "items": {"fixture": item}, "assets": assets});
+        // The fixture's other items beside its own, such as a lane graph's floor paths (#981).
+        let mut items = fixture
+            .get("items")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        items.insert("fixture".into(), item);
+        let mut piece = json!({"seed": 0, "packs": packs, "items": items, "assets": assets});
         if let Some(c) = fixture.get("controls") {
             piece["controls"] = c.clone();
         }
         let line = json!({"call": "bake", "piece": piece, "track": fixture.get("track").cloned().unwrap_or(json!([])),
             "steps": fixture.get("steps").cloned().unwrap_or(json!(1))});
+        Ok((fixture, line))
+    }
+
+    /// One fixture of `iface` run on `under`: its item, linking `under`, with its controls, baked on
+    /// its track and held to logic.determinism, its arrays compared with the expected values within
+    /// its tolerance. A refusal is `true` when the run itself failed.
+    fn interface_fixture(
+        &mut self,
+        piece_v: &Value,
+        iface: &Interface,
+        under: &UnderTest,
+        id: &str,
+    ) -> Result<Value, (Vec<Value>, bool)> {
+        let (fixture, line) =
+            Self::fixture_call(piece_v, iface, under, id).map_err(|r| (r, false))?;
+        let expect = fixture.get("expect").cloned().unwrap_or(Value::Null);
+        let tolerance = Tolerance::parse(expect.get("tolerance")).ok_or_else(|| {
+            (
+                vec![json!({"rule": "interface", "interface": iface.name, "fixture": id,
+                    "what": format!("{}'s fixture {id} has a tolerance that is neither exact nor {{abs, rel}}", iface.name)})],
+                false,
+            )
+        })?;
         let started = std::time::Instant::now();
         let outer = self.under_test.replace(under.hash.to_string());
         let bake = self.bake(&line);

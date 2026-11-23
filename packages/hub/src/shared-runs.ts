@@ -97,10 +97,10 @@ const retried = (attempts: RecordedRun['attempts']): boolean => attempts.some((a
 /**
  * Whether a run's record is whole in run.finished, so a restarted hub may read it again (KeyFacts.plain): no test both
  * failed and passed on its attempts, no stand-in seeded, every failure on an assertion and read back from its finding as
- * it was, no contract, nothing uncounted.
+ * it was, no contract, nothing uncounted, and no run that no test tool counted, which run.finished can't tell from one it did (#1861).
  */
 export const plain = (r: RecordedRun): boolean =>
-  !retried(r.attempts) && !r.seeded.some((s) => s.standIn) && r.failures.length <= FINDINGS && r.failures.every((f) => f.assertion && survives(f)) && r.contract === null && r.mask === null;
+  r.tested !== false && !retried(r.attempts) && !r.seeded.some((s) => s.standIn) && r.failures.length <= FINDINGS && r.failures.every((f) => f.assertion && survives(f)) && r.contract === null && r.mask === null;
 
 export class SharedRuns {
   private readonly groups = new Map<string, Group>();

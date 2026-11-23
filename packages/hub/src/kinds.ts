@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { NumbersSpec, StatedNumber } from '@deepbuild/checks-numbers';
-import type { ChangeSession, ReviewerAnswer, ReviewSpec } from '@deepbuild/checks-review';
+import type { ChangeSession, PassFinding, PostClosePass, PostCloseReport, ReviewerAnswer, ReviewSpec, Site } from '@deepbuild/checks-review';
 import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec } from '@deepbuild/conformance';
 import { admitKind } from '@deepbuild/gate';
 import type { JobRecord } from '@deepbuild/runner';
@@ -15,8 +15,11 @@ import { checkHost } from '@deepbuild/supervisor';
 import type { TimingReport } from '@deepbuild/verdicts';
 import type { ClaimCheck } from './gate-runner.js';
 import { uncitedSpeeds } from './speed.js';
-import type { KindsOptions, RepoOf, ReviewOf, ReviewRound } from './checks-port.js';
+import type { KindsOptions, PassRan, RepoOf, ReviewOf, ReviewRound } from './checks-port.js';
 export type { RepoOf, ReviewOf, ReviewRound } from './checks-port.js';
+
+/** A review pass's run on a claim (#2748): the review's spec with the pass as your wiki holds it, and the IDs of the passes whose scope left them out of this claim's diff. */
+interface PassSpec extends ReviewSpec { pass: PostClosePass; out: string[] }
 
 /** Each route a gate run names a kind by. */
 const ROUTES = {
@@ -32,7 +35,29 @@ interface Held { fill: CheckRunnerFill; routes: Route[] }
  * The check kinds a first-party plug-in holds, by the plug-in (#184): a definition reaches each through the extension
  * host, and with its plug-in off the check is BLOCKED, naming the plug-in, never run as a command.
  */
-const PLUGIN_KINDS: Record<string, string> = { playtest: 'deepbuild/playtest' };
+const PLUGIN_KINDS: Record<string, string> = {
+  playtest: 'deepbuild/playtest',
+  ...Object.fromEntries(['catalog.refs', 'catalog.reach', 'catalog.economy', 'catalog.bounds', 'catalog.copy', 'scenario.reach', 'catalog.dominance'].map((k) => [k, 'deepbuild/catalog'])),
+};
+/** #194: the spec field each catalog kind's input sits in, which names its catalog by asset ID (#832: dominance too). */
+const CATALOG_FIELDS = ['refs', 'reach', 'economy', 'bounds', 'copy', 'scenario', 'dominance'] as const;
+/**
+ * #194: `spec` with every catalog its kind's input names carried in `catalogs`, the bytes in base64 and the probe's
+ * record kept beside them (`catalogs/<sha256>.json`), from the evidence root `evidence`; one it doesn't hold is left
+ * out, and the plug-in refuses the check, naming it.
+ */
+function withCatalogs(spec: CheckSpec, evidence: string | undefined): CheckSpec {
+  if (!evidence || PLUGIN_KINDS[spec.kind] !== 'deepbuild/catalog') return spec;
+  const named = CATALOG_FIELDS.map((f) => (spec as unknown as Record<string, unknown>)[f] as { catalog?: unknown } | undefined).map((i) => i?.catalog).filter((c): c is string => typeof c === 'string' && /^[0-9a-f]{64}$/.test(c));
+  const catalogs: Record<string, { bytes: string; record: unknown }> = {};
+  for (const sha of named) {
+    try {
+      const bytes = readFileSync(join(evidence, sha.slice(0, 2), sha.slice(2)));
+      catalogs[sha] = { bytes: bytes.toString('base64'), record: JSON.parse(readFileSync(join(evidence, 'catalogs', `${sha}.json`), 'utf8')) };
+    } catch { /* not held: the plug-in names it */ }
+  }
+  return { ...spec, catalogs } as CheckSpec;
+}
 /** A plug-in kind's deadline when its check names none. */
 const PLUGIN_MS = 3_600_000;
 
@@ -49,6 +74,12 @@ const RUBRIC = `# Review rubric
 const prompt = (request: { diff: string; rubric: string[] }): string => [
   'Review this diff against the rubric. Answer with one JSON object and nothing else: {"findings": [{"file": "<path>", "line": <line in the new file>, "rule": "<a rule of the rubric>", "quote": "<the text at that line>"}]}. List only findings on lines the diff adds or changes; an empty list when there are none.',
   '', 'Rubric:', ...request.rubric.map((r) => `- ${r}`), '', 'Diff:', request.diff,
+].join('\n');
+/** A review pass's job prompt (#2748): the pass's own prompt, as your wiki holds it, and the diff alone. */
+const passPrompt = (pass: string, diff: string): string => [
+  pass,
+  'Answer with one JSON object and nothing else: {"findings": [{"file": "<path>", "line": <line in the new file>, "rule": "<what is wrong, in a few words>", "quote": "<the text at that line>"}]}. An empty list when there are none.',
+  '', 'Diff:', diff,
 ].join('\n');
 /** The answer's JSON object, from the job's final text: the whole text, or the outermost braces in it. */
 const answerOf = (text: string): unknown => {
@@ -143,12 +174,54 @@ class Kinds {
     finally { await scope.close(); }
   }
 
+  /**
+   * One run of a review pass (#2748): the pass on the claim's diff, what it finds judged as a review finding is, then
+   * its replay on each PR it found bugs in, read as carried where the record keeps one. Its output names what it sent
+   * back, the pre-existing findings, the passes whose scope left them out of this diff, and each replay.
+   */
+  private async passRun(s: PassSpec, checkout: string, ask: (text: string) => Promise<ReviewerAnswer>, kept: (key: string) => Promise<number | undefined>): Promise<CheckResult & { pass?: Omit<PassRan, 'model'> }> {
+    const { reviewBeforeCloses } = await import('@deepbuild/checks-review');
+    let report: PostCloseReport;
+    try {
+      report = await reviewBeforeCloses({
+        repo: checkout, base: s.base, head: s.head, passes: [s.pass], carried: kept,
+        reviewer: async (j) => {
+          const answer = await ask(passPrompt(j.prompt, j.diff));
+          if (!Array.isArray(answer.findings)) throw Error('the second model\'s answer holds no list of findings');
+          return answer.findings as PassFinding[];
+        },
+      });
+    } catch (e) {
+      return result('failed', `review pass: ${s.pass.id}`, '', `the review pass stopped before its findings: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    const mine = report.claim[0]!;
+    const site = ({ file, line, quote }: Site): Site => ({ file, line, quote });
+    const at = (x: Site): string => `${x.file}:${x.line}`;
+    // #2748's planted hubs: one sends back a finding on a line the change didn't add or alter as it does one on an
+    // added line; the other records what a pass finds on the claim and sends none of it back.
+    const context = this.o.plant === 'pass-sends-back-context' ? mine.followUps.map(site) : [];
+    const found = [...mine.sendBack?.sites ?? [], ...context];
+    const sites = this.o.plant === 'pass-findings-sent-nowhere' ? [] : found;
+    const followUps = context.length ? [] : mine.followUps.map(site);
+    const evidence = [
+      `review pass ${s.pass.id}: ${sites.length ? `sent back ${sites.map(at).join(', ')}` : `nothing sent back${found.length ? ` of ${found.map(at).join(', ')}` : ''}`}${mine.dropped.length ? `; ${mine.dropped.length} dropped` : ''}`,
+      ...(followUps.length ? [`pre-existing, a follow-up: ${s.pass.id} at ${followUps.map(at).join(', ')}`] : []),
+      ...(s.out.length ? [`passes out of scope of this diff, not run: ${s.out.join(', ')}`] : []),
+      ...(report.replays.length ? [`replays, a reading: ${report.replays.map((r) => `PR ${r.pr} (${r.head.slice(0, 12)}) found ${r.found} of ${r.of}${r.carried ? ', carried' : ''}`).join('; ')}`] : []),
+    ].map((line) => line.slice(0, 8000));
+    return {
+      outcome: sites.length ? 'failed' : 'passed', testsRun: 1, evidence, read: [], mask: null,
+      failures: sites.length ? [{ test: `review pass: ${s.pass.id}`, file: sites[0]!.file, line: sites[0]!.line, stack: null, assertion: true, message: `${s.pass.id} at ${sites.map(at).join(', ')}` }] : [],
+      pass: { pass: s.pass.id, sent: sites.length ? [{ rule: s.pass.id, sites }] : [], follow_ups: followUps, replays: report.replays.map(({ pass: _pass, ...r }) => r) },
+    };
+  }
+
   /** One run of a held kind on `spec` in `ctx`; a review asks its second model through the runner, for `of`'s claim; a speed or added terms read the hub's store for `repo`'s run (#1863). */
-  async run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport }> {
+  async run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport; pass?: PassRan }> {
     const held = this.held.get(spec.kind);
     const plugin = PLUGIN_KINDS[spec.kind];
     if (!held && plugin) {
-      const ran = await this.o.extensions()?.runCheck(spec.kind, spec, ctx);
+      const ran = await this.o.extensions()?.runCheck(spec.kind, withCatalogs(spec, this.o.evidence), ctx);
       if (ran && ran.outcome !== 'missing') return ran;
       return result('missing', `${spec.kind}: run`, '', `BLOCKED: the check kind ${spec.kind} is the ${plugin} plug-in's, which isn't loaded`);
     }
@@ -167,8 +240,12 @@ class Kinds {
     if (spec.kind !== 'review') return this.probe(held.fill, spec, ctx);
     let job: JobRecord | undefined;
     let waiting: string | undefined;
-    const reviewer = async (request: { diff: string; rubric: string[] }): Promise<ReviewerAnswer> => {
-      job = await this.o.submit({ kind: 'review', agent: of.agent === 'codex' ? 'codex' : 'claude-code', prompt: prompt(request), task: of.task, claim: of.claim, deadline_ms: ctx.deadline });
+    const pass = 'pass' in spec ? spec as PassSpec : undefined;
+    // The model that answered a review pass on the claim's own diff (#2748), its first ask: what its replays are kept and read by.
+    let answered: string | undefined;
+    const ask = async (text: string): Promise<ReviewerAnswer> => {
+      // A review pass's job names its task as the issue whose budget covers it (#325).
+      job = await this.o.submit({ kind: 'review', agent: of.agent === 'codex' ? 'codex' : 'claude-code', prompt: text, task: of.task, claim: of.claim, ...(pass && of.task ? { issue: of.task } : {}), deadline_ms: ctx.deadline });
       // At your reserve the job waits, and the review with it: its check is BLOCKED with the job's cause (#87).
       if (job.state === 'waiting' && job.blocked) {
         waiting = `${job.blocked.cause}${job.blocked.why ? `: ${job.blocked.why}` : ''}`;
@@ -177,19 +254,22 @@ class Kinds {
       }
       if (job.state !== 'finished') job = await this.o.wait(job.job);
       if (job.state !== 'finished') throw Error(`the second model's job ended ${job.state}${job.stop ? ` (${job.stop.cause})` : ''}${job.refused ? `: ${job.refused}` : ''}`);
+      answered ??= job.model ?? 'unknown';
       const answer = answerOf(job.result ?? '');
       return (typeof answer === 'object' && answer !== null ? answer : {}) as ReviewerAnswer;
     };
     const { reviewFill, independence } = await import('@deepbuild/checks-review');
-    const ran = await reviewFill(reviewer).run(spec as ReviewSpec, ctx);
+    const ran: CheckResult & { round?: ReviewRound; pass?: Omit<PassRan, 'model'> } = pass
+      ? await this.passRun(pass, ctx.checkout, ask, async (key) => of.kept?.(key, answered!))
+      : await reviewFill((request) => ask(prompt(request))).run(spec as ReviewSpec, ctx).then((r) => ({ ...r, ...(r.testsRun ? { round: { sent: r.sendBack?.items ?? [], open: r.open } } : {}) }));
     if (waiting) return result('missing', 'review: second model', '', `BLOCKED: no second model is free to review the diff (${waiting})`);
     if (!job || job.state !== 'finished') return { outcome: ran.outcome, testsRun: ran.testsRun, failures: ran.failures, evidence: ran.evidence, read: ran.read, mask: ran.mask };
     // A review answered by the change's own model, or by one its output doesn't name, counts neither way (#87).
     const change: ChangeSession = { agent: of.agent, transcript: of.transcript ? readTranscript(of.transcript) : '', route: {} };
-    const counted = independence(job.model ?? 'unknown', change);
+    const counted = independence(answered ?? 'unknown', change);
     if (!counted.counted) return { ...result('uncounted', 'review: second model', '', `the review is uncounted: ${counted.reason!}`, counted.reason), read: ran.read };
     const note = counted.note ? [`${counted.note} (${counted.answered})`] : [];
-    return { outcome: ran.outcome, testsRun: ran.testsRun, failures: ran.failures, evidence: [...ran.evidence, ...note], read: ran.read, mask: null, ...(ran.testsRun ? { round: { sent: ran.sendBack?.items ?? [], open: ran.open } } : {}) };
+    return { outcome: ran.outcome, testsRun: ran.testsRun, failures: ran.failures, evidence: [...ran.evidence, ...note], read: ran.read, mask: null, ...(ran.round ? { round: ran.round } : {}), ...(ran.pass && answered ? { pass: { ...ran.pass, model: answered } } : {}) };
   }
 }
 const readTranscript = (path: string): string => { try { return readFileSync(path, 'utf8'); } catch { return ''; } };

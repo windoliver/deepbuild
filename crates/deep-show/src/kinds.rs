@@ -22,12 +22,15 @@ use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
 
-/// No reply passes this many bytes of JSON without a cursor.
-pub const REPLY_CAP: usize = 65_536;
-/// What a page's own content may take, leaving room for the fields every reply carries.
-const PAGE_BUDGET: usize = REPLY_CAP - 8_192;
-/// A page of a guide, in bytes of its text, so its reply stays under the cap.
-const GUIDE_PAGE: usize = 32_768;
+/// What a page's own content may take: the reply's cap (the call's room, #2896), leaving room for
+/// the fields every reply carries.
+fn page_budget() -> usize {
+    crate::query::reply_cap() - crate::query::margin()
+}
+/// A page of a guide or of the sheet, in bytes of its text, so its reply stays under the cap.
+fn text_page() -> usize {
+    page_budget().min(32_768)
+}
 /// The sheet's cap.
 pub const SHEET_CAP: usize = 32_768;
 
@@ -72,6 +75,7 @@ pub enum Planted {
     DefaultsSkipJson,
     /// #548: the bindings generator orders each region's fields by name before laying them out.
     BindingsByName,
+    VehicleReaderOtherDefaults, // #2717: the world reader takes other defaults for a vehicle body.
 }
 
 impl Planted {
@@ -97,7 +101,7 @@ impl Planted {
             "defaults_compared_with_dump_only" => Planted::DefaultsComparedWithDumpOnly,
             "defaults_skip_json" => Planted::DefaultsSkipJson,
             "bindings_fields_by_name" => Planted::BindingsByName,
-            _ => return None,
+            _ => return crate::physics::defaults::planted(name),
         })
     }
 }
@@ -151,6 +155,8 @@ const INSTALLED: &[(&str, &str)] = &[
         "canvas-working-order.md",
         include_str!("../gallery/canvas-working-order.md"),
     ),
+    // #2697: craft@1's checks, which scripts/skill.mjs writes from craft.json.
+    ("craft.md", include_str!("../gallery/craft.md")),
     (
         "familiar-names.md",
         include_str!("../gallery/familiar-names.md"),
@@ -165,6 +171,9 @@ const INSTALLED: &[(&str, &str)] = &[
         "logic-counter.wat",
         include_str!("../gallery/logic-counter.wat"),
     ),
+    // #550: net@1's example, a two-player piece, and its program's source.
+    ("net-rally.json", include_str!("../gallery/net-rally.json")),
+    ("net-rally.wat", include_str!("../gallery/net-rally.wat")),
     // #508: the figure the canvas skill embeds, its example of a 3D figure.
     ("figure.json", include_str!("../gallery/figure.json")),
 ];
@@ -818,6 +827,26 @@ pub(crate) fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRo
             row.example = text;
         }
     }
+    // #550: net@1 with its check kinds and its gallery example, a two-player piece; listed
+    // unavailable, naming why, in a build without the net module.
+    let net_text = INSTALLED.iter().find(|(f, _)| *f == "net-rally.json");
+    let net_text = net_text.map(|(_, t)| t.to_string());
+    let checks = deep_net::feel::check_kinds();
+    if let Some(row) = out.iter_mut().find(|r| r.entry["name"] == json!("net@1")) {
+        row.entry["check_kinds"] = checks;
+        row.entry["example"] = json!(net_text.as_deref().map(|t| sha256_hex(t.as_bytes())));
+        row.example = net_text;
+    } else if !named.iter().any(|n| n == "net@1") {
+        named.push("net@1".into());
+        push("net@1".into(), "net".into(), None, &mut out);
+        if let Some(e) = out.last_mut().map(|r| &mut r.entry) {
+            e["available"] = json!(false);
+            e["code"] = json!("module_missing");
+            e["check_kinds"] = checks;
+            e["kit"] =
+                json!({"verdict": "BLOCKED", "rules": [{"rule": "sealed", "verdict": "BLOCKED"}]});
+        }
+    }
     if drawn_by("scene3d") {
         let more = deep_canvas_scene3d::scene::KINDS
             .iter()
@@ -1012,7 +1041,7 @@ fn paged(all: &[Value], cursor: Option<&str>) -> (Vec<Value>, Option<String>) {
     let mut page = Vec::new();
     for (i, v) in all.iter().enumerate().skip(from) {
         let n = v.to_string().len() + 1;
-        if size + n > PAGE_BUDGET && !page.is_empty() {
+        if size + n > page_budget() && !page.is_empty() {
             return (page, Some(i.to_string()));
         }
         size += n;
@@ -1376,101 +1405,4 @@ pub fn command(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// #1973: every structured field of the full build declares forms the form language reads,
-    /// its line prints at least one, and its own default is one of them; so does every scene3d
-    /// spec param for its default, both its sweep values and its fixture's, which its reader
-    /// takes.
-    #[test]
-    fn every_structured_field_prints_forms_that_take_its_own_values() {
-        let full = crate::BuildSet::Full;
-        let sealed = crate::assemble(full, crate::modules(full))
-            .seal()
-            .expect("the shipped set seals");
-        let mut bad = Vec::new();
-        let mut held =
-            |name: String, declared: &str, values: &[&Value]| match deep_canvas::form::parse(
-                declared,
-            ) {
-                Err(u) => bad.push(format!("{name}: `{declared}` doesn't read: {}", u.why)),
-                Ok(f) => {
-                    for v in values {
-                        if let Some(got) = f.miss(v) {
-                            bad.push(format!("{name}: `{}` refuses {v}: got {got}", f.print()));
-                        }
-                    }
-                }
-            };
-        for entry in sealed.kinds().entries() {
-            for v in &entry.versions {
-                for p in &v.params {
-                    if let Some(declared) = p.ty.form() {
-                        let name = format!("{}@{}.{}", entry.full_name(), v.major, p.name);
-                        held(name, declared, &[&p.default]);
-                    }
-                }
-            }
-        }
-        for spec in deep_canvas_scene3d::spec::all() {
-            // The params its fixture's items of its kind set.
-            let fixture: Vec<&Map<String, Value>> = spec
-                .fixture
-                .as_object()
-                .into_iter()
-                .flat_map(Map::values)
-                .filter(|i| i["kind"] == spec.kind)
-                .filter_map(|i| i["params"].as_object())
-                .collect();
-            for q in &spec.params {
-                let name = format!("{}.{} (spec)", spec.kind, q.name);
-                let mut values = vec![&q.default, &q.sweep.0, &q.sweep.1];
-                values.extend(fixture.iter().filter_map(|p| p.get(q.name)));
-                held(name, q.declared(), &values);
-            }
-        }
-        for row in kind_rows(&sealed, None) {
-            for f in row.entry["fields"].as_array().into_iter().flatten() {
-                let printed = f["forms"].as_array().map_or(0, Vec::len);
-                if f["type"] == "json" && printed == 0 {
-                    bad.push(format!(
-                        "{}.{}: prints no form",
-                        row.entry["name"], f["name"]
-                    ));
-                }
-            }
-        }
-        assert!(bad.is_empty(), "{}", bad.join("\n"));
-    }
-
-    /// #182: deep_kinds lists the character body with its fields and defaults, through the physics
-    /// module's tool entries; the defaults are the issue's.
-    #[test]
-    fn lists_the_character_body_from_the_physics_module() {
-        let full = crate::BuildSet::Full;
-        let sealed = crate::assemble(full, crate::modules(full))
-            .seal()
-            .expect("the shipped set seals");
-        let header = listing(&sealed, None, json!({"registries": []}), &[]).header;
-        let mut physics = header["modules"].as_array().into_iter().flatten();
-        let physics = physics
-            .find(|m| m["name"] == "physics")
-            .expect("physics is listed");
-        let mut lists = physics["lists"].as_array().into_iter().flatten();
-        let body = lists.find(|e| e["name"] == "body@1.character");
-        let body = body.expect("physics lists body@1.character");
-        let want = [
-            ("slope_limit", "deg = 45"),
-            ("step.height", "m = 0.3"),
-            ("step.width", "m = the capsule's radius"),
-            ("snap", "m = 0.2"),
-            ("offset", "m = 0.01"),
-            ("jump.height", "m = 1"),
-        ];
-        for (field, default) in want {
-            let got = &body["fields"][format!("character.{field}")];
-            assert_eq!(got, default, "character.{field} in {body}");
-        }
-    }
-}
+mod tests;

@@ -1,7 +1,8 @@
 // The verdict in the chat and status from the record (#83; design: The verdict in the chat). A claim's line is read
 // from the record's claims, verdicts and runs tables, never from the agent's words; a status question typed into a
 // session is answered from the same tables and the session's row, with no model call.
-import { verdictLine, type LineRequirement, type LineState, type Outcome, type Result } from '@deepbuild/verdicts';
+import { LINE_WIDTH, verdictLine, type LineRequirement, type LineState, type Outcome, type Result } from '@deepbuild/verdicts';
+import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
 import { watched, watchWords } from './watch.js';
 
@@ -74,6 +75,8 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
     const passed = new Set(checks.filter((c) => c.outcome === 'passed' && !unproved.has(c.check)).map((c) => c.check));
     state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running, ...(held.length ? { held } : {}), ...(tests ? { tests } : {}) };
   }
+  // A person's call answered where none of the pictures it judges was drawn reads so beside it (#3234).
+  if (verdict) state.unseen = await unseenCalls(query, JSON.parse(verdict.requirements) as Obj[]);
   // The receipt is the address of the claim's page, its session's page at the claim, the session's ID cut to its first
   // 8 as the app shortens it, so it fits the line (#1460); deep open takes it.
   if (claim.session_id) state.receipt = `session/${claim.session_id.slice(0, 8)}/${claim.id.replace(/^claim:/, '')}`;
@@ -88,6 +91,22 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
     }
   }
   return { task: claim.subject_ref, session: claim.session_id, created: claim.created, state, checks, verdictAt: verdict?.created ?? null };
+}
+
+/**
+ * The requirements whose call was answered unseen (#3234): its answer's record lists the pictures the call judges, and
+ * none of them was shown. The planted line reads as an answer from the card does.
+ */
+async function unseenCalls(query: Query, requirements: Obj[]): Promise<string[]> {
+  if (activePlant() === 'unseen-reads-as-card') return [];
+  const unseen: string[] = [];
+  for (const r of requirements) {
+    if (typeof r.ask !== 'string') continue;
+    const [answered] = (await query(`SELECT json_extract(data, '$.pictures') AS pictures FROM events WHERE kind = 'ask.answered' AND subject = '${sql(r.ask)}' ORDER BY log_pos DESC LIMIT 1`)) as { pictures: string | null }[];
+    const pictures = JSON.parse(answered?.pictures ?? '[]') as { shown?: unknown }[];
+    if (pictures.length && pictures.every((p) => p.shown !== true)) unseen.push(String(r.req));
+  }
+  return unseen;
 }
 
 /** The ID of a session's newest claim, or undefined. */
@@ -109,10 +128,20 @@ interface StatusFacts { session: string; agent: string; worktree: string; needsY
 export function statusAnswer(claim: ClaimState | undefined, f: StatusFacts): string {
   const at = claim ? (claim.verdictAt ?? Math.max(claim.created, f.lastStop ?? 0)) : (f.lastStop ?? f.now);
   const state = f.state ?? 'working';
-  const first = claim ? verdictLine(claim.state) : `${state} · next: ${state === 'working' || state === 'unknown' || state === 'failed' ? 'agent' : 'you'}`;
+  // The time in the state and the count are part of the line #83's width fits (#1810), so the line gives way, never them.
+  const tail = ` (for ${elapsed(f.now - at)}) · needs you: ${f.needsYou}`;
+  const room = LINE_WIDTH - [...tail].length;
+  let first = claim ? verdictLine(claim.state, room) : `${state} · next: ${state === 'working' || state === 'unknown' || state === 'failed' ? 'agent' : 'you'}`;
+  // Still too wide once the verdict line gave what it gives: the held checks' and the watch's reasons give way to
+  // their counts, if that fits. What wasn't verified and the outcome never do (#83).
+  if (claim && [...first].length > room) {
+    const s = claim.state;
+    const short = verdictLine({ ...s, ...(s.held ? { held: s.held.map((h) => ({ ...h, reason: '' })) } : {}), ...(s.watch ? { watch: { ...s.watch, why: '' } } : {}) }, room);
+    if ([...short].length <= room) first = short;
+  }
   const resume = f.agent === 'codex' ? `codex resume ${f.session}` : `claude --resume ${f.session}`;
   return [
-    `${first} (for ${elapsed(f.now - at)}) · needs you: ${f.needsYou}`,
+    `${first}${tail}`,
     `work: ${f.worktree} · session ${f.session.slice(0, 8)} (${f.agent}) · resume: ${resume} · deep://sessions/${f.session}`,
   ].join('\n');
 }

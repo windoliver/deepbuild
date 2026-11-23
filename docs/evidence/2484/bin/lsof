@@ -1,0 +1,9 @@
+#!/bin/sh
+# The real lsof, plus the warning a machine with a mount lsof can't stat makes it print on every call, unless -w.
+echo "$*" >> "${LSOF_LOG:-/dev/null}"
+quiet=0
+for a in "$@"; do case "$a" in -[a-zA-Z]*) case "$a" in *w*) quiet=1;; esac;; esac; done
+if [ "$quiet" = 0 ]; then
+  printf '%s\n' "lsof: WARNING: can't stat() tracefs file system /sys/kernel/debug/tracing" '      Output information may be incomplete.' "lsof: WARNING: can't stat() nsfs file system /run/docker/netns/default" '      Output information may be incomplete.' >&2
+fi
+for real in /usr/sbin/lsof /usr/bin/lsof; do [ -x "$real" ] && exec "$real" "$@"; done; exit 127

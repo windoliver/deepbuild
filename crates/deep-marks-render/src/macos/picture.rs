@@ -10,9 +10,11 @@ pub(crate) fn picture(
     marks: &[&Drawn],
     size: [u32; 2],
     planted: crate::layer::Planted,
+    store: Option<&std::path::Path>,
 ) -> Result<image::RgbaImage, Value> {
     gpui_draws(marks.iter().copied())?;
     let mut session = Renderer::new_session();
+    session.store = store.map(std::path::Path::to_path_buf);
     let mut list = Renderer::draws(
         &mut session,
         marks,

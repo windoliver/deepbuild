@@ -1,0 +1,436 @@
+{
+  "title": "relay@2",
+  "description": "The relay protocol's second shape (#277; canvas primitives: Net: relay protocol relay@1, Net `net@1`): relay@1's members and frame, beside which a copy whose piece hands a changed seat to its bot asks for relay@2 by the WebSocket subprotocol `relay.2` (a subprotocol is an HTTP token, which holds no `@`), and the relay that speaks it answers so in its hello. It adds three control messages, each handed on to the match's other copies naming its sender: `holds` (the last step a copy holds a leaving player's message for), `seat` (a copy's own seat absent or back after a step) and `catch_up` (a returning copy asks for every message from a step, which the relay or a peer answers with frames). A room (#278) adds, on the same subprotocol: a join's `min`, `seated`, `begin`, `knock`, `admit` and `finished`, and a start that names its seats and its match ID. A new shape is relay@3, never a change here.",
+  "x-since": "R6",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "hello": {
+      "description": "The relay's first message: the protocol, its digest and the limits per connection.",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "const": "relay@2"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^d1:[0-9a-f]{64}$"
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "frames_per_s": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "frame_bytes": {
+              "type": "integer",
+              "minimum": 27,
+              "maximum": 4294967295
+            }
+          },
+          "required": [
+            "frames_per_s",
+            "frame_bytes"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "protocol",
+        "digest",
+        "limits"
+      ],
+      "additionalProperties": false
+    },
+    "join": {
+      "description": "A copy joins a match by its ID; open is true only from the copy that drew the ID, and a second opening join of a held match joins it. A room's join names min, the copies its match needs before it starts: the room starts on its first player's begin, or, where min is players, when every seat is taken.",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "players": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 8
+        },
+        "open": {
+          "type": "boolean"
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        }
+      },
+      "required": [
+        "match",
+        "players",
+        "open"
+      ],
+      "additionalProperties": false
+    },
+    "joined": {
+      "description": "The relay's answer to a join it seated.",
+      "type": "object",
+      "properties": {
+        "player": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        }
+      },
+      "required": [
+        "player"
+      ],
+      "additionalProperties": false
+    },
+    "refused": {
+      "description": "The relay's answer to a join it refused: no open match by that ID, every seat taken before the match's first frame, or after it.",
+      "type": "string",
+      "enum": [
+        "unknown",
+        "full",
+        "started"
+      ]
+    },
+    "start": {
+      "description": "To every copy of a match once its last seat is taken; no copy sends a frame before it. A room's start comes on its first player's begin, and names the seats taken and the ID its frames carry; a copy seated in a running match is handed that match's start with late true and at, the step the copy that let it in was about to run.",
+      "type": "object",
+      "properties": {
+        "players": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 8
+        },
+        "seats": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "maxItems": 8
+        },
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "late": {
+          "type": "boolean"
+        },
+        "at": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "players"
+      ],
+      "additionalProperties": false
+    },
+    "closed": {
+      "description": "To a match's other copies when a copy's connection ends: it left, or the relay closed it for passing frames_per_s in each of 3 seconds running or for one frame past frame_bytes.",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "player": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "left",
+            "rate",
+            "size"
+          ]
+        }
+      },
+      "required": [
+        "match",
+        "player",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "signal": {
+      "description": "Only to set up a direct path: a copy names the player it is for (to) and the relay hands it on naming the sender (from).",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "offer": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "match"
+      ],
+      "additionalProperties": false
+    },
+    "holds": {
+      "description": "A copy tells the match's other copies the last step it holds a leaving player's message for (-1 for none), so every copy stamps the leave at the step after the highest; the relay names the sender.",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "player": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "last": {
+          "type": "integer",
+          "minimum": -1
+        },
+        "sender": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        }
+      },
+      "required": [
+        "match",
+        "player",
+        "last"
+      ],
+      "additionalProperties": false
+    },
+    "seat": {
+      "description": "A copy's own seat: absent from the step after `after`, as it is about to be hidden or paused, back from the step after `after`, or joined from it, for a copy that joined a running match; the relay names the sender.",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "player": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "absent",
+            "back",
+            "joined"
+          ]
+        },
+        "after": {
+          "type": "integer",
+          "minimum": -1
+        },
+        "sender": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        }
+      },
+      "required": [
+        "match",
+        "player",
+        "state",
+        "after"
+      ],
+      "additionalProperties": false
+    },
+    "catch_up": {
+      "description": "A returning copy asks for every message from step `from` on; the relay or the match's other copies answer with frames, and the relay names the sender.",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sender": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        }
+      },
+      "required": [
+        "match",
+        "from"
+      ],
+      "additionalProperties": false
+    },
+    "seated": {
+      "description": "To every copy of a room while no match runs in it, on each join and leave and once its match finished: the seats taken.",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "seats": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "match",
+        "seats"
+      ],
+      "additionalProperties": false
+    },
+    "begin": {
+      "description": "A room's first player, the lowest seat taken, pressed Start: the relay starts the match with the seats taken once at least min are, under the match ID next names, which that copy drew.",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "next": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        }
+      },
+      "required": [
+        "match"
+      ],
+      "additionalProperties": false
+    },
+    "knock": {
+      "description": "To every copy of a room's running match when a join comes after its start: the seat the join would take. The relay seats it only on a copy's admit.",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "player": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        }
+      },
+      "required": [
+        "match",
+        "player"
+      ],
+      "additionalProperties": false
+    },
+    "admit": {
+      "description": "A copy's word on a knock: open is whether the piece's lobby is open at its last confirmed step, and at the step it runs next. Open, the relay seats the join and hands it the running match's start; else it refuses it started.",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "player": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "open": {
+          "type": "boolean"
+        },
+        "at": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "match",
+        "player",
+        "open"
+      ],
+      "additionalProperties": false
+    },
+    "finished": {
+      "description": "A copy's match ended as finished. Once every seated copy says so, the room holds no running match: it forwards no more of that match's frames, tells its copies who is seated, and its first player's begin starts the next on the same connections.",
+      "type": "object",
+      "properties": {
+        "match": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        }
+      },
+      "required": [
+        "match"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "x-frame": {
+    "endian": "little",
+    "header": [
+      {
+        "field": "match",
+        "bytes": 16
+      },
+      {
+        "field": "player",
+        "type": "u8"
+      },
+      {
+        "field": "confirmed",
+        "type": "u32"
+      },
+      {
+        "field": "first",
+        "type": "u32"
+      },
+      {
+        "field": "count",
+        "type": "u16"
+      }
+    ],
+    "steps": {
+      "repeat": "count",
+      "fields": [
+        {
+          "field": "bytes",
+          "type": "u16"
+        },
+        {
+          "field": "entries",
+          "bytes": "bytes"
+        }
+      ]
+    },
+    "confirmed": "the lowest step this copy holds every player's entries for",
+    "first": "the frame's first step; each frame repeats its copy's steps after the lowest step every peer confirmed"
+  }
+}

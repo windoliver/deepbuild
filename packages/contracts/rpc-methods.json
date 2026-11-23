@@ -78,6 +78,15 @@
     "decide_by": "R4"
   },
   {
+    "method": "session.page",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#1594",
+    "preview_since": "R2",
+    "decide_by": "R5",
+    "called_by": "a session's page on a phone"
+  },
+  {
     "method": "changes.read",
     "since": "R1",
     "stability": "preview",
@@ -287,6 +296,18 @@
     "since": "R1",
     "stability": "stable",
     "called_by": "deep lease"
+  },
+  {
+    "method": "lease.gpu",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep-show"
+  },
+  {
+    "method": "lease.release",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep-show"
   },
   {
     "method": "extension.install",
@@ -658,6 +679,15 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#1334",
+    "preview_since": "R1",
+    "decide_by": "R4",
+    "called_by": "deep hub promote"
+  },
+  {
+    "method": "hub.restart",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1865",
     "preview_since": "R1",
     "decide_by": "R4",
     "called_by": "deep hub promote"

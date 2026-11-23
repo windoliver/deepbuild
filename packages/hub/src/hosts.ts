@@ -29,7 +29,7 @@ import { homedir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
 import type { PlanInput } from '@deepbuild/asks';
 import { call, notAnswered, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl } from './paths.js';
 import { activePlant, refusal, Refused, ulid, type Plant } from './wire.js';
 import { shellQuote as q } from './shell.js';
 
@@ -631,8 +631,8 @@ export class Hosts {
 
 /** `deep run follow <run>`: the run's stdout from its start, then as it comes, until it has ended. */
 export async function followCommand(run: string): Promise<number> {
-  let token: string | undefined;
-  const output = async (from: number) => call(hubAddress().path, token ??= readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'run.output', { run, from });
+  let hub: { path: string; token: string } | undefined;
+  const output = async (from: number) => { hub ??= hubControl(); return call(hub.path, hub.token, 'run.output', { run, from }); };
   for (let from = 0; ;) {
     let reply: Reply;
     try {
@@ -665,7 +665,8 @@ export async function hostCommand(args: string[]): Promise<number> {
   type Answer = { result?: Obj; error?: { remediation: string }; exit?: number };
   const hub = async (method: string, params: Obj): Promise<Answer> => {
     try {
-      return await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), method, params) as Answer;
+      const { path: socket, token } = hubControl();
+      return await call(socket, token, method, params) as Answer;
     } catch (error) {
       return { exit: await notAnswered(error) };
     }
@@ -677,7 +678,7 @@ export async function hostCommand(args: string[]): Promise<number> {
     await say(reply.error?.remediation ?? 'no reply', process.stderr);
     return 1;
   };
-  if (args[0] === 'changes' && args.length === 2) {
+  if (args[0] === 'changes' && args.length === 2 && !args[1]!.startsWith('-')) {
     const reply = await hub('host.changes', { host: args[1] });
     if (!reply.result) return failed(reply);
     const changes = reply.result.changes as { ts: number; change: string; undo: string | null; grant: string; ask: string | null }[];
@@ -715,7 +716,7 @@ export async function hostCommand(args: string[]): Promise<number> {
     await say(JSON.stringify(reply.result));
     return 0;
   }
-  if (args[0] !== 'run' || args.length !== 2) {
+  if (args[0] !== 'run' || args.length !== 2 || args[1]!.startsWith('-')) {
     await say('Usage: deep host run <ask>\n       deep host changes <host>\n       deep host remove <host>\n       deep host list\n       deep host facts <host> [--refresh]', process.stderr);
     return 2;
   }

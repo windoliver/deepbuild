@@ -12,7 +12,7 @@ use deep_play::derive::Fired;
 use serde_json::{Map, Value};
 
 /// The entries the build's canvas modules fire in `form`, each module's in the order it writes
-/// them (#1834 adds logic's).
+/// them; a logic item's come from the form's `logic_fires` (deep_play::derive, #1834).
 pub(crate) fn fired(form: &Value) -> Vec<Fired> {
     #[allow(unused_mut)]
     let mut out = Vec::new();
@@ -24,6 +24,7 @@ pub(crate) fn fired(form: &Value) -> Vec<Fired> {
             step: e["step"].as_u64().unwrap_or(0),
             kind: e["kind"].as_str().unwrap_or_default().into(),
             data: e["data"].clone(),
+            input: None,
         });
     }
     let _ = form;
@@ -36,8 +37,13 @@ pub(crate) const MODULES_FIRST: bool = cfg!(feature = "test-launch-module-first"
 
 /// World `w`'s entries from the core's input track `track` and from what `form`'s canvas modules
 /// fire, each as the bake keeps it, in the order they apply (the shared rule, #172).
-pub(crate) fn kept(form: &Value, w: &World, track: &[Value]) -> Result<Vec<Value>, Box<Refusal>> {
-    deep_play::derive::kept(form, w, track, &fired(form), MODULES_FIRST)
+pub(crate) fn kept(
+    form: &Value,
+    id: &str,
+    w: &World,
+    track: &[Value],
+) -> Result<Vec<Value>, Box<Refusal>> {
+    deep_play::derive::kept(form, id, w, track, &fired(form), MODULES_FIRST)
 }
 
 pub(crate) use deep_play::derive::{missing, track_of};

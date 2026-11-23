@@ -174,7 +174,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     })),
   }),
   deep_kinds: object({
-    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'closure', 'bindings', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind or of a patch, by path; closure for one list of words a document sets, by name: its words and its closure, a registry, open, or closed with its reason, what would reopen it and what to write instead; bindings for a logic item\'s typed bindings in Rust, each read, write and emit entry a field at its region map offset, with its layout digest as regions_digest; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
+    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'closure', 'bindings', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name, on one page when it fits what your client keeps of a reply and else in pages by next; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind or of a patch, by path; closure for one list of words a document sets, by name: its words and its closure, a registry, open, or closed with its reason, what would reopen it and what to write instead; bindings for a logic item\'s typed bindings in Rust, each read, write and emit entry a field at its region map offset, with its layout digest as regions_digest; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
     registry: maybe(str('list: one registry or hub slot, name@major; null for all.')),
     cursor: maybe(str('The next an earlier page gave; null for the first page.')),
     word: maybe(str('word: the word, as the other tool spells it.')),
@@ -189,7 +189,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     asset: maybe(str('fetch: one path in the pinned pack\'s assets list.')),
     example: maybe(str('read: an example, by the hash a listing or a hit gave.', '^[0-9a-f]{64}$')),
     guide: maybe(str('read: a guide, by the name a hit gave.')),
-    offset: maybe({ type: 'integer', description: 'read of a guide: the next a page gave; null for its start.' }),
+    offset: maybe({ type: 'integer', description: 'read of a guide, or sheet: the next a page gave; null for its start.' }),
     path: maybe(str('field: kind@major.field for one field, kind@major for every field of that kind, or patch or patch.<op> for a patch\'s fields.')),
     list: maybe(str('closure: a field list\'s name, such as camera@1.projection, as a refusal or the listing\'s field_lists names it.')),
     doc: maybe(str('bindings: the document whose logic item they are.')),
@@ -243,15 +243,29 @@ const ACTION_DESCRIPTIONS: Readonly<Record<string, string>> = {
   find_actions: 'Finds the actions the installed plug-ins offer agents, each with its plug-in, whether it reads, changes your data or sends, and its input schema. A listed action proves nothing about what calling it will do.',
   call_action: 'Calls a plug-in action by name with a request ID. A read runs; a change needs your standing rule or an ask, and a send always asks: until you answer, it returns held with the ask, and you call again with the same request ID. A change or send returns the plug-in\'s report and what the hub recorded it changed; the report is the plug-in\'s statement, never a check result.',
 };
+/** A tool as an MCP server lists it: its name, description and input schema, then its title and four hints (#2898). */
+type Listed = { name: string; description: string; inputSchema: Schema; annotations: Obj };
+
 /** The tools as deep mcp actions lists them. */
-export function actionToolList(): { name: string; description: string; inputSchema: Schema }[] {
-  return Object.entries(ACTION_SCHEMAS).map(([name, inputSchema]) => ({ name, description: ACTION_DESCRIPTIONS[name]!, inputSchema }));
+export function actionToolList(): Listed[] {
+  return Object.entries(ACTION_SCHEMAS).map(([name, inputSchema]) => ({ name, description: ACTION_DESCRIPTIONS[name]!, inputSchema, annotations: annotations(name) }));
 }
 
 let described: Record<string, string> | undefined;
 /** Each tool's description, as scripts/skill.mjs generated it from the Building blocks table. */
 function descriptions(): Record<string, string> {
   return (described ??= JSON.parse(readFileSync(new URL('../tools.json', import.meta.url), 'utf8')) as Record<string, string>);
+}
+let annotated: Record<string, Obj> | undefined;
+/**
+ * A tool's title and hints, as scripts/skill.mjs generated them: the server's word to a client, never read by the hub.
+ * A tool the table misses is an error, never a listing left to the protocol's cautious defaults.
+ */
+function annotations(name: string): Obj {
+  annotated ??= JSON.parse(readFileSync(new URL('../annotations.json', import.meta.url), 'utf8')) as Record<string, Obj>;
+  const hints = annotated[name];
+  if (!hints) throw Error(`packages/hub/annotations.json gives ${name} no title or hints; add it to HINTS in scripts/skill.mjs and run it`);
+  return hints;
 }
 
 /** The schemas this hub publishes and holds calls to: #1415's planted hub marks deep_kinds's op optional though its handler needs one. */
@@ -262,13 +276,24 @@ function published(): Readonly<Record<string, Schema>> {
   return { ...SCHEMAS, deep_kinds: { ...kinds, properties: { ...(kinds.properties as Obj), op: { ...op, type: ['string', 'null'], enum: [...(op.enum as string[]), null] } } } };
 }
 
+let given: { upFront: string[]; servers: Record<string, string> } | undefined;
+/** Each server's instructions and the tools that load up front, as scripts/skill.mjs generated them (#2897). */
+function generated(): { upFront: string[]; servers: Record<string, string> } {
+  return (given ??= JSON.parse(readFileSync(new URL('../instructions.json', import.meta.url), 'utf8')) as { upFront: string[]; servers: Record<string, string> });
+}
+/** The `instructions` a server answers initialize with: the same bytes at every start. */
+export const instructionsFor = (server: 'deep' | 'deep-actions'): string => generated().servers[server]!;
+
 /**
  * The tools as deep mcp lists them. A tool tools.json doesn't describe isn't listed: only what the table generates
- * reaches an agent.
+ * reaches an agent. The tool a task starts with carries Claude Code's mark to load up front (#2897); every other stays
+ * behind a client's search.
  */
-export function toolList(): { name: string; description: string; inputSchema: Schema }[] {
+export function toolList(): (Listed & { _meta?: Obj })[] {
   const text = descriptions();
-  return Object.entries(published()).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema }));
+  const upFront = new Set(generated().upFront);
+  return Object.entries(published()).filter(([name]) => text[name])
+    .map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema, annotations: annotations(name), ...(upFront.has(name) ? { _meta: { 'anthropic/alwaysLoad': true } } : {}) }));
 }
 
 /**

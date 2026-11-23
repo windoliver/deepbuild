@@ -12,7 +12,7 @@ pub fn opens(app: &mut App, call: &Value) -> Value {
         return bad("envelope_opens is {look, writer, doc, pixels}");
     };
     let look = match Look3::read(&call["look"]) {
-        Ok(l) => l,
+        Ok(l) => crate::flat::CallLook::of(l, call),
         Err(e) => return bad(&format!("look: {e}")),
     };
     let looks = match crate::regions::looks_of(call, None) {

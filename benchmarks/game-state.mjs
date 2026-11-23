@@ -46,14 +46,14 @@ function assemble(root, dir) {
   if (run.status !== 0) throw Error(`the assembler refused a program: ${run.stderr}`);
   return Object.fromEntries(Object.keys(PROGRAMS).map((name) => { const bytes = readFileSync(join(dir, `${name}.wasm`)); return [name, { bytes, sha: sha256(bytes), path: join(dir, `${name}.wasm`) }]; }));
 }
-function store(evidence, bytes) {
+export function store(evidence, bytes) {
   const h = sha256(bytes);
   mkdirSync(join(evidence, h.slice(0, 2)), { recursive: true });
   writeFileSync(join(evidence, h.slice(0, 2), h.slice(2)), bytes);
   return h;
 }
 /** An RGBA PNG of `width` × `height` whose pixel is `color(x, y)`. */
-function png(width, height, color) {
+export function png(width, height, color) {
   const crc = (b) => { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); } return ~c >>> 0; };
   const chunk = (type, data) => { const t = Buffer.concat([Buffer.from(type), data]); const out = Buffer.alloc(8 + data.length + 4); out.writeUInt32BE(data.length, 0); t.copy(out, 4); out.writeUInt32BE(crc(t), 8 + data.length); return out; };
   const raw = Buffer.alloc((4 * width + 1) * height);

@@ -4,14 +4,14 @@
 // option you passed over when you answered a choice, stop an agent's proposal, citing the decision; what you said yourself
 // stops its tool calls too, through deep-hook. Your past taste decisions: the ones for the screen a session starts on.
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { EvidenceStore } from '@deepbuild/evidence';
 import type { Connection, Message, RecordStore } from '@deepbuild/record';
 import { ulid } from '@deepbuild/record/ids';
 import { startOf } from './wire.js';
 import { call, notAnswered, withPrompt, type Reply } from './client.js';
-import { hubAddress, installedRoot, repoOf, rootOf } from './paths.js';
+import { hubControl, repoOf } from './paths.js';
 import { dropEntries, writeRejected } from './guards.js';
 
 type LessonKind = 'guard' | 'shared-rule' | 'removal';
@@ -222,22 +222,24 @@ export const tasteBlock = (tastes: readonly Taste[]): string | undefined =>
 
 const USAGE = 'Usage: deep memory [--json]\n       deep memory keep <lesson>\n       deep memory remove <lesson>\n       deep memory overrule <decision>';
 /** `deep memory`: the ranked list and your rejections; keep, remove or overrule one once the OS confirms you. Exit 0 done, 1 refused, 2 usage, 3 not decided. */
-export async function memoryCommand(args: readonly string[]): Promise<number> {
+export async function memoryCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
   const overruling = args[0] === 'overrule';
   const acting = args[0] === 'keep' || args[0] === 'remove' || overruling;
-  if (acting ? args.length !== 2 : args.length > 1 || (args.length === 1 && args[0] !== '--json')) {
+  if (acting ? args.length !== 2 || args[1]!.startsWith('-') : args.length > 1 || (args.length === 1 && args[0] !== '--json')) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   let reply: Reply;
   try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+    const { path: socket, token } = hubControl();
     const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
     reply = overruling
-      ? await withPrompt(() => call(hubAddress().path, token, 'decision.overrule', { decision: args[1] }, peer))
+      ? await withPrompt(() => call(socket, token, 'decision.overrule', { decision: args[1] }, peer))
       : acting
-      ? await withPrompt(() => call(hubAddress().path, token, 'memory.act', { verb: args[0], lesson: args[1] }, peer))
-      : await call(hubAddress().path, token, 'memory.list', {});
+      ? await withPrompt(() => call(socket, token, 'memory.act', { verb: args[0], lesson: args[1] }, peer))
+      : await call(socket, token, 'memory.list', {});
   } catch (error) {
     return notAnswered(error);
   }

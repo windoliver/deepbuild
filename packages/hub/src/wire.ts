@@ -10,6 +10,8 @@ export const VERSION = 1;
 export const FEATURES: readonly string[] = [
   // Every method the app calls (#41): crates/deep-app/src/hub.rs NEEDS checks this hello against them.
   'inbox.read', 'stream.subscribe', 'events.read', 'notifications.report', 'views.shown', 'views.hidden', 'row.read', 'canvas.drawn', 'canvas.user',
+  // A hub that restarts on the token alone and asks the OS inside itself before a stop (#1865): the CLI's stop reads it.
+  'hub.restart',
 ];
 /** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
 export const CONTRACT = '1.0';
@@ -40,6 +42,19 @@ export class Refused extends Error {
 /** A refusal that keeps the whole refused value beside the cut one. */
 export const refuse = (code: string, path: string, remediation: string, actual: unknown = '', retryable = false): Refused =>
   new Refused(refusal(code, path, remediation, actual, retryable), actualText(actual));
+
+/** The settled asks or sessions one page of a list read holds, newest first, after every open one (#1576). */
+export const SETTLED_PAGE = 25;
+/**
+ * A read's `next` (#1576): where the last item its page held stands (when it settled, or its log_pos) and its ID; the
+ * read's `page` takes it back.
+ */
+export const cursorOf = (at: number, id: string): string => `${at}:${id}`;
+export function cursorAt(page: unknown): { at: number; id: string } {
+  const m = typeof page === 'string' ? /^(\d+):(.+)$/.exec(page) : null;
+  if (!m) throw new Refused(refusal('pattern', '/params/page', 'Read the next page with the `next` the read before gave.', page));
+  return { at: Number(m[1]), id: m[2]! };
+}
 
 /** One socket line: the object with the protocol version first; a bigint (a seq) is written as its decimal string. */
 export const line = (o: object): string => `${JSON.stringify({ v: VERSION, ...o }, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v))}\n`;

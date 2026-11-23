@@ -126,6 +126,8 @@ impl Selection {
             &mut choices,
             deep_scene3d_render::shadow_texels(scene, side),
         );
+        deep_scene3d_render::proxy::made(scene);
+        drawn_triangles(scene, &mut choices);
         lod::resolve(scene, &choices);
         (choices, policy)
     }
@@ -170,6 +172,37 @@ impl Selection {
             .collect();
         scene.light_cut = Some(policy.clone());
         policy
+    }
+}
+
+/// #2738: a choice of an item drawn from a mesh without levels counts the triangles its bands
+/// draw in the color pass, as a leveled one does: the full mesh, the proxy the renderer made (the
+/// full mesh where it made none), a box's 12. Choices are in `select`'s order.
+fn drawn_triangles(scene: &Scene, choices: &mut [Choice]) {
+    let leveled = scene
+        .layers
+        .iter()
+        .flat_map(|l| &l.solids)
+        .filter(|s| s.lod.is_some());
+    for (c, s) in choices.iter_mut().zip(leveled) {
+        let (None, Some(lod), Some(mesh)) = (c.triangles, &s.lod, &s.mesh) else {
+            continue;
+        };
+        let full = mesh.triangles() as u64;
+        c.triangles = Some(
+            c.bands
+                .iter()
+                .map(|b| match b {
+                    Show::Full => full,
+                    Show::Proxy => lod
+                        .proxy_mesh
+                        .as_ref()
+                        .map_or(full, |l| l.mesh.triangles() as u64),
+                    Show::Box => 12,
+                    _ => 0,
+                })
+                .sum(),
+        );
     }
 }
 
@@ -292,7 +325,9 @@ impl Light<'_> {
     ) -> (Value, f64) {
         let table = mesh.horizon.as_deref().filter(|_| !self.unbaked);
         let cam = &self.scene.camera;
-        let depth = (0..3).map(|k| (p[k] - cam.eye[k]) * cam.forward[k]).sum::<f64>();
+        let depth = (0..3)
+            .map(|k| (p[k] - cam.eye[k]) * cam.forward[k])
+            .sum::<f64>();
         let sun = self.scene.sun.as_ref().filter(|s| s.shadow);
         let toward = sun.map_or([0.0, 1.0, 0.0], |s| s.toward);
         let [lit, sky] = table.map_or([1.0, 1.0], |h| {
@@ -305,7 +340,9 @@ impl Light<'_> {
         };
         let sky = match table {
             Some(h) if self.by_slope => {
-                0.5 + 0.5 * deep_canvas_scene3d::horizon::full_normal(h, mesh, model, p).map_or(1.0, |n| n[1])
+                0.5 + 0.5
+                    * deep_canvas_scene3d::horizon::full_normal(h, mesh, model, p)
+                        .map_or(1.0, |n| n[1])
             }
             _ => sky,
         };
@@ -317,7 +354,13 @@ impl Light<'_> {
 /// `item` that holds it, the level this frame draws that tile at, and the height of the surface
 /// it draws there, from the level's own triangles as the vertex stage places them; and there the
 /// key sun's visibility and the sky's occlusion the plate reads (#1381).
-pub fn ground_points(item: &str, at: &[[f64; 2]], tiles: &Tiles, choices: &[Choice], light: &Light<'_>) -> Value {
+pub fn ground_points(
+    item: &str,
+    at: &[[f64; 2]],
+    tiles: &Tiles,
+    choices: &[Choice],
+    light: &Light<'_>,
+) -> Value {
     json!(at
         .iter()
         .map(|&[x, z]| {

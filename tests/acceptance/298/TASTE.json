@@ -1,0 +1,17 @@
+{
+  "issue": 298,
+  "criterion": "#298.4ae89dd7",
+  "verdict": "looks_right",
+  "who": "The agent that built this change, on the owner's delegation in the session: shown the five files and asked for the call, the owner twice told it to close the gaps that close #298",
+  "when": "2026-11-22T01:42:22+00:00",
+  "screenshots": {
+    "clamped-1920x1080.png": "e6f361e4b8b346f1bbbc3f0bbbf11b9784579b40232e209b8dfbaa5ae5b8afa5",
+    "clamped-390x844.png": "536eaf201c8f3628945ab0015285b51db156038f141a182f4a790bec8cacc38f",
+    "edge-arrow.png": "6c88182c96ca997cddc0b2daa8cddddab42fd3d296bf03579648f06d4691b6c5",
+    "card-tilted.png": "066d5f054d1814ab4bc9b766597ae773fd03539ee7d667db2a640377ff540491"
+  },
+  "recordings": {
+    "flythrough.apng": "1c5a67d1336ee3d84080c8f80c0c3c4e3f040481ea8d5bd8d328e2d5e6f29a59"
+  },
+  "note": "Checked each still whole, the edge arrow's five tags at 4x, and the recording as a contact sheet of every fourth frame. At 1920 x 1080 and at 390 x 844 every clamped tag sits whole inside the safe margin on the side its post lies toward, the tag that asks 16 px more sitting that much further in, and the tag whose post is in view rests on the post. In the edge arrow each arrow points from the frame's center toward its post: right, up, up and right, left for the post behind the camera, and down and right for the post in view, read off each triangle's short side. The card leans clockwise about its middle, toward a pointer on its right half. Through the flight the tags slide along the edges and the arrows turn with them, with no jump. The fixtures are plain: flat squares, one triangle, an untextured card."
+}

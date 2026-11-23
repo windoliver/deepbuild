@@ -5,7 +5,7 @@ import { EvidenceAccess } from './evidence-access.js';
 import { HubReadings } from './hub-readings.js';
 import { WorkspaceActions } from './workspace-actions.js';
 import type { HumanControlPort } from './human-control-port.js';
-import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, TranscriptsPort, SessionStatePort, McpOperationsPort } from './hub-ports.js';
+import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, TranscriptsPort, SessionStatePort } from './hub-ports.js';
 
 import { realpathSync } from 'node:fs';
 
@@ -57,6 +57,8 @@ import type { CheckKinds } from './checks-port.js';
 
 import { Stacks } from './stacks.js';
 import { Starts } from './starts.js';
+import { Drain, drainFor, drainHealth, drainWords } from './drain.js';
+import { ancestorsOf, argsOf } from './children.js';
 
 import { HeavyQueue } from './heavy.js';
 
@@ -73,7 +75,7 @@ import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 import { Writes } from './receipts.js';
 
-import { ghToken, type Obj, isObj } from "./hub-shared.js";
+import { ghToken, type Obj, isObj, counting } from "./hub-shared.js";
 import type { Delivery } from '@deepbuild/asks';
 import type { IntakeService } from './intake-port.js';
 
@@ -125,7 +127,6 @@ export interface HubControlOptions {
   judging: () => Pick<StopJudgingPort, "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
   state: () => Pick<SessionStatePort, "agentAbove" | "entered" | "liveOf" | "notAnAgent" | "renameSession" | "whySeen" | "rowsSeen" | "seeRow" | "seenBy" | "sessionRows" | "sessionWindow" | "sessions" | "startOf" | "states" | "statesSettled" | "statusSeen">;
   memory: () => Pick<SessionMemoryPort, "lessons" | "memoryAct" | "sessionRules" | "syncRules" | "syncStanding">;
-  mcp: () => Pick<McpOperationsPort, "checksOf">;
   transcripts: () => Pick<TranscriptsPort, "backfill">;
   events: Pick<HubEvents, "append" | "appendCore" | "appendReading" | "connection">;
 kernel: Pick<HubRuntime, "blocked" | "jobs" | "ready">;
@@ -143,15 +144,15 @@ export class HubControl {
 
   constructor(private readonly options: HubControlOptions) {
     const control: HumanControlPort = { trusted: (method, params, context, what, handle, revision) => this.authority.trusted(method, params, context, what, handle, revision), revisionOf: (handle, ask) => this.human.revisionOf(handle, ask) };
-    this.human = new HumanAnswers({ settings: options.settings, services: options.services, events: options.events,   delivery: options.delivery, control: () => control, judging: options.judging, mcp: options.mcp, state: options.state, memory: options.memory });
+    this.human = new HumanAnswers({ settings: options.settings, services: options.services, events: options.events,   delivery: options.delivery, control: () => control, judging: options.judging, state: options.state, memory: options.memory });
     this.authority = new TrustedActions({ settings: options.settings, services: options.services, events: options.events,   state: options.state, control: () => control });
     this.evidence = new EvidenceAccess({ settings: options.settings, services: options.services, events: options.events,   state: options.state });
     this.readings = new HubReadings({ settings: options.settings, services: options.services, events: options.events, kernel: options.kernel,  judging: options.judging, transcripts: options.transcripts });
     this.work = new WorkspaceActions({ settings: options.settings, services: options.services, events: options.events,   state: options.state });
   }
 
-  /** A promotion's drain (#1334): no session starts until the hub restarts on the new build. */
-  private draining = false;
+  /** A promotion's drain (#1334), held only while renewed (#2974): no session starts while it holds. */
+  private readonly drain = new Drain(() => this.options.services.now(), argsOf);
 
   /** Every app or CLI write with an effect runs once per request ID, and its reply names its log position (#1577). */
   private readonly writes = new Writes({ record: () => this.options.services.record, plant: () => this.options.settings.plant });
@@ -172,9 +173,12 @@ export class HubControl {
       case 'test.verdict': return this.options.judging().testVerdict(params);
       case 'test.clock': return this.options.schedule.testClock(params);
       case 'events.read': return this.options.services.log.read(params, this.options.state().seenBy(context.role));
+      // A session's page reads a window of it, older ones by page (#1576).
+      case 'session.page': return this.options.services.log.reflecting(() => this.options.services.log.window(params, this.options.state().seenBy(context.role)));
       // Behind the state pass under way, so the rows it holds are the asks as they stand (#1463).
-      case 'inbox.read': return this.options.state().statesSettled().then(() => this.options.services.log.reflecting(() => this.human.inbox()));
-      case 'sessions.read': return this.options.services.log.reflecting(async () => ({ sessions: await this.options.state().sessionRows(this.options.state().seenBy(context.role)) }));
+      // Each list read pages what settled and counts the queries it ran (#1576).
+      case 'inbox.read': return counting(() => this.options.state().statesSettled().then(() => this.options.services.log.reflecting(() => this.human.inbox(params))));
+      case 'sessions.read': return counting(() => this.options.services.log.reflecting(() => this.options.state().sessionRows(this.options.state().seenBy(context.role), params)));
       case 'person.add': return this.authority.addPerson(params, context);
       case 'library.on': case 'library.off': case 'library.rule': return this.authority.library(method, params, context);
       case 'pack.rule': return this.authority.packRule(params, context);
@@ -265,7 +269,11 @@ export class HubControl {
       // The list's rows (#1463), as status.read waits for them: behind every hook received and the state pass under way.
       case 'rows.read':
         this.options.schedule.replayLate();
-        return (this.options.schedule.replaying ?? Promise.resolve()).then(() => this.options.schedule.queue(async () => undefined)).then(() => this.options.state().statesSettled()).then(() => this.options.services.log.reflecting(() => this.options.state().rowsSeen(context.role, params.detail === true)));
+        return (this.options.schedule.replaying ?? Promise.resolve()).then(() => this.options.schedule.queue(async () => undefined)).then(() => this.options.state().statesSettled()).then(() => this.options.services.log.reflecting(async () => {
+          const read = await this.options.state().rowsSeen(context.role, params.detail === true);
+          const held = this.drain.read();
+          return held ? { ...read, paused: drainWords(drainFor(held, context.role)) } : read;
+        }));
       // A row's page was open a second while you were present (#1461): the row reads as read in every reader.
       case 'row.read':
         if (context.role !== 'app') throw refuse('role', '/method', 'Only the app says a row was seen.', method);
@@ -284,12 +292,12 @@ export class HubControl {
       case 'host.remove': return this.options.services.hosts.remove(params.host);
       case 'start.approve': return this.options.services.sessionStarts.approve(params, context);
       case 'start.session':
-        if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
+        { const held = this.drain.read(); if (held) throw refuse('unavailable', '/method', `${drainWords(drainFor(held, context.role))} Start it again then.`, method, true); }
         return this.options.services.sessionStarts.startSession(params, context);
       // A promotion (#1334): the run pauses and its running turns are counted until none is left; the fixture claim
       // judged by this build's own verdict engine; and, on the build that came back, the rollback's one notice.
       case 'hub.drain':
-        this.draining = params.on !== false;
+        if (params.on === false) this.drain.lift(); else await this.drain.take(context.peer);
         // A turn runs while its session reads working, or waits on a permission prompt, as session.state records it.
         await this.options.state().statesSettled();
         return { turns: [...this.options.state().states.values()].filter((s) => s.startsWith('working/') || s === 'needs you/waiting').length };
@@ -300,6 +308,9 @@ export class HubControl {
       case 'lease.wait': return this.options.services.heavy.wait(params, context.peer, () => this.options.state().agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'lease.started': return this.options.services.heavy.started(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'lease.exited': return this.options.services.heavy.exited(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+      // deep-show's GPU lease (#3219): its place in the one queue, read against any `deep lease` above it, and its release.
+      case 'lease.gpu': return this.options.services.heavy.gpu(params, context.peer, () => this.options.state().agentAbove(context.peer), () => ancestorsOf(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+      case 'lease.release': return this.options.services.heavy.release(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'env.up': return this.work.envUp(params, context);
       case 'env.down': return this.work.envDown(params, context);
       // The steps setup took (#1100), each a `setup.step` event, only as its one list names them.
@@ -331,7 +342,11 @@ export class HubControl {
       case 'work.show': return this.options.services.work.show(params);
       case 'work.pause': return this.options.services.work.pause(params);
       case 'work.once': return this.work.workspaceCall(() => this.options.services.landing.workOnce(String(params.repo ?? ''), Array.isArray(params.issues) ? params.issues.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : []));
-      case 'job.submit': return this.options.services.runner.submit(params.spec as JobSpec);
+      case 'job.submit': {
+        // A work job writes a job's workspace, so it runs only under that job's approval (#1527), never over RPC.
+        if ((params.spec as { kind?: unknown } | undefined)?.kind === 'work') throw Error('a work job runs only under an approved job that repeats, never on request');
+        return this.options.services.runner.submit(params.spec as JobSpec);
+      }
       case 'job.status': return this.options.services.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.options.services.runner.list() };
       case 'checks.kinds': return { kinds: (await this.options.services.checkKinds()).list() };
@@ -419,7 +434,11 @@ export class HubControl {
 
   async notifierGone(): Promise<void> { return this.readings.notifierGone(); }
 
-  async health(role: string): Promise<Obj> { return this.readings.health(role.startsWith('person:') ? this.options.state().seenBy(role) : undefined); }
+  async health(role: string): Promise<Obj> {
+    const health = await this.readings.health(role.startsWith('person:') ? this.options.state().seenBy(role) : undefined);
+    const held = this.drain.read();
+    return held ? { ...health, drain: drainHealth(drainFor(held, role)) } : health;
+  }
 
   async forgeRepos(): Promise<string[]> { return this.readings.forgeRepos(); }
 

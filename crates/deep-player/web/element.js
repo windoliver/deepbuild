@@ -14,28 +14,89 @@
 // origin's storage persistent, and the player says once when it isn't. The player's own controls open a slot's save,
 // export it to a file and import one, which opens only as any save does.
 //
+// Carry records (issue #189; canvas primitives: Logic: carry records) keep to the same storage as saves do, whole or
+// not at all, by their SHA-256. A piece whose logic gives one exports its newest to a file; a piece whose logic takes
+// one imports a file, held to the SHA-256 its name gives and to the shape and layouts the piece takes, and is then
+// made again with the record's entry at step 0, held from its start. A record it refuses is named, and nothing changes.
+//
+// A profile record (issue #276; canvas primitives: Logic: saves) keeps to the same storage, whole or not at all, by its
+// SHA-256, with the newest and the one before it kept. It is the one record the player reopens by itself: when the piece
+// starts, its newest record that reads back whole enters the track at step 0, held to the shape the piece's profile
+// declares; a newer one that fails its hash is named, and one of another shape is named with its first array that
+// differs, the piece then starting with zeros and the record kept. The piece's menu names the profile, with start
+// fresh (this run only, the record kept), delete, export to a file and import from one.
+//
 // Beside its canvas it keeps the document's accessibility tree as DOM (issue #1045): the tree the app gives its
 // accessibility seam, read through the core (`tree()`), never written by the piece or a host page. The document's node
 // carries the title and the description; each part, label and readout is one element marked data-deep-id with its
 // name and role, in reading order, and each control is a Tab stop. A readout whose text changes in a frame is
 // announced once through a polite live region, as the app's `see` announces it.
+//
+// It says why it stopped (issue #2856): a throw from the core while a piece plays stops the play where it is, paused
+// with the canvas's last frame, and one notice names the step it held and the failure's first line. The index page's
+// line that the player hasn't started, with its link to the fallback page, is for a page whose script never ran:
+// removing it is the element's first act.
+//
+// A bundle weighs the same on any host (issue #2892): a file whose format doesn't compress its own data is stored as
+// gzip under the SHA-256 of its stored bytes, and the index gives what it inflates to. The player checks every file's
+// stored bytes against its name first, and only then inflates each with the browser's own stream inflater, into
+// exactly the size the index gives, stopping past it, and checks the result against the SHA-256 the document names it
+// by. So a changed file stops the player before it inflates anything, and no file can grow past its listed size.
+//
+// A piece that offers it has the viewer's measure tool (issue #1217; canvas primitives: Selection, viewer_tools.measure):
+// `measure` turns it on, a click on the canvas places a point where its ray meets the surface under it (A, then B, a
+// third A again), Esc clears both, and Tab and Enter place points at the parts' anchors. The core holds the points and
+// reads them, as the app does; the page draws the line, the points and the readout over the canvas, where nothing can
+// be clicked. All of it is the viewer's session state: no entry, value or patch reaches the piece.
 
 const bundle = JSON.parse(document.getElementById('deep-bundle').textContent);
 const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
 const sha256 = async (bytes) => hex(await crypto.subtle.digest('SHA-256', bytes));
 
+/** #2892: a stored file's bytes inflated by the browser's gzip stream inflater into the size the index gives (`f.inflated`),
+ * stopping as soon as they would pass it, and checked against the SHA-256 the document names the file by. */
+async function inflate(f, stored) {
+  const { bytes: size, sha256: want } = f.inflated;
+  const stop = (why) => Error(`the file ${f.path} ${why}; the player doesn't start`);
+  const out = new Uint8Array(size);
+  let at = 0;
+  const reader = new Blob([stored]).stream().pipeThrough(new DecompressionStream('gzip')).getReader();
+  for (;;) {
+    const { done, value } = await reader.read().catch((e) => { throw stop(`doesn't inflate (${e?.message ?? e})`); });
+    if (done) break;
+    if (value.length > size - at) {
+      reader.cancel().catch(() => {});
+      throw stop(`inflates past the ${size} bytes the index gives it`);
+    }
+    out.set(value, at);
+    at += value.length;
+  }
+  if (at !== size) throw stop(`inflates to ${at} bytes, not the ${size} the index gives it`);
+  const got = await sha256(out);
+  if (got !== want) throw stop(`inflates to bytes that don't match its SHA-256 ${want} (they hash to ${got})`);
+  return out;
+}
+
 /** The origin's store of saves in the browser's storage: one row a save, `{piece, slot, seq, hash, step, ended,
- * deep_hash, bytes}`, keyed by the piece, its slot and the save's number in it. */
+ * deep_hash, bytes}`, keyed by the piece, its slot and the save's number in it; of carry records, one row a record,
+ * `{hash, piece, step, layout, at, bytes}`, keyed by its SHA-256; and of profile records, one row a record, `{piece,
+ * seq, hash, step, bytes}`, keyed by the piece and the record's number in it (#276). */
 const openStore = () => new Promise((done, fail) => {
-  const open = indexedDB.open('deep-player', 1);
-  open.onupgradeneeded = () => open.result.createObjectStore('saves', { keyPath: ['piece', 'slot', 'seq'] });
+  const open = indexedDB.open('deep-player', 3);
+  open.onupgradeneeded = () => {
+    const names = open.result.objectStoreNames;
+    if (!names.contains('saves')) open.result.createObjectStore('saves', { keyPath: ['piece', 'slot', 'seq'] });
+    if (!names.contains('records')) open.result.createObjectStore('records', { keyPath: 'hash' });
+    if (!names.contains('profiles')) open.result.createObjectStore('profiles', { keyPath: ['piece', 'seq'] });
+  };
   open.onsuccess = () => done(open.result);
   open.onerror = () => fail(open.error);
 });
-/** One transaction on the saves, whole or not at all: what `work`'s request read, once it is committed. */
-const inStore = (db, mode, work) => new Promise((done, fail) => {
-  const t = db.transaction('saves', mode);
-  const asked = work(t.objectStore('saves'));
+/** One transaction on a store, the saves unless named, whole or not at all: what `work`'s request read, once it is
+ * committed. */
+const inStore = (db, mode, work, store = 'saves') => new Promise((done, fail) => {
+  const t = db.transaction(store, mode);
+  const asked = work(t.objectStore(store));
   t.oncomplete = () => done(asked?.result);
   t.onabort = () => fail(t.error);
 });
@@ -50,6 +111,23 @@ function refusal(e) {
   if (r.code === 'save_damaged') return `The save ${save} fails its hash, so it isn't opened.`;
   const differs = (r.differs ?? []).map((d) => (d.what === 'play' ? `the state this piece's recorded play holds at step ${d.step}` : `this piece's ${d.what}`));
   return `The save ${save} isn't opened: it doesn't match ${differs.join(', ') || 'this piece'}.`;
+}
+/** Why the player didn't take the carry record `hash`, in words naming it. */
+function recordRefusal(e, hash) {
+  let r;
+  try { r = JSON.parse(String(e)); } catch { r = {}; }
+  const said = (r?.differs ?? []).map((d) => (d.what === 'hash' ? 'its bytes fail the SHA-256 that names it'
+    : d.what === 'array' ? `its ${d.array} isn't the ${d.piece ? `${d.piece.count} ${d.piece.type}` : 'nothing'} this piece takes`
+    : d.what === 'layout' ? `its layout ${d.record} isn't one this piece takes (${(d.accepts ?? []).join(', ')})`
+    : `it doesn't fit this piece's ${d.what}`));
+  return `The record ${hash} isn't taken: ${said.join('; ') || String(e)}.`;
+}
+/** Why the player didn't reopen the profile record `hash`, in words naming it and the first array that differs. */
+function profileRefusal(e, hash) {
+  let r;
+  try { r = JSON.parse(String(e)); } catch { r = {}; }
+  return r?.notice ?? (r?.code === 'profile_damaged' ? `The profile record ${hash} fails the SHA-256 that names it, so it isn't opened.`
+    : `The profile record ${hash} isn't opened: ${r?.what ?? String(e)}.`);
 }
 
 // Issue #1040: whether this browser can run the bundle, asked before anything loads. It needs WebGPU, an adapter,
@@ -83,12 +161,15 @@ class DeepPlayer extends HTMLElement {
   #ready = false;
   #paused = true;
   #t = 0;
+  #step = 0;
   #duration = NaN;
   #stages = [];
   #markers = [];
   #stage = null;
   #frames = 0;
   #firstFrameMs = null;
+  // #2892: the time the load spent inflating the bundle's stored files, in ms.
+  #inflateMs = null;
   #decoded = {};
   #last = 0;
   #canvas = null;
@@ -101,21 +182,111 @@ class DeepPlayer extends HTMLElement {
   #slot = 1;
   #seq = new Map();
   #writes = Promise.resolve();
+  /** #276: the profile record the run reads, by hash, and the menu's line naming it. */
+  #profile = null;
+  #named = null;
   #asked = false;
   #live = null;
   #said = new Map();
   #join = null;
+  #start = null;
   #socket = null;
   #waiting = null;
+  // #2856: where a failure the player can't recover from stopped the play, `{step, message}`, or null.
+  #stopped = null;
+  // #1217: the measure's drawing over the canvas, and where a press that may be its click went down.
+  #measured = null;
+  #down = null;
 
   connectedCallback() {
+    // #2856: the index page's line saying the player hasn't started goes first, so only a page whose script never ran
+    // shows it.
+    this.querySelector('[data-deep-unstarted]')?.remove();
     if (this.#started) return;
     this.#started = true;
     this.#canvas = document.createElement('canvas');
     this.#canvas.width = bundle.size[0];
     this.#canvas.height = bundle.size[1];
     this.appendChild(this.#canvas);
+    this.#canvas.addEventListener('pointerdown', (e) => { this.#down = e.button === 0 && this.measure ? [e.clientX, e.clientY] : null; });
+    this.#canvas.addEventListener('pointerup', (e) => {
+      const down = this.#down;
+      this.#down = null;
+      if (down && e.button === 0 && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 3) this.#place(down);
+    });
+    this.#canvas.addEventListener('keydown', (e) => {
+      if (!this.measure || e.metaKey || e.ctrlKey || e.altKey) return;
+      const took = e.key === 'Escape' ? this.#player.measure_clear() : !e.shiftKey && this.#player.measure_key(e.key);
+      if (!took) return;
+      e.preventDefault();
+      this.#draw();
+    });
     this.#load().catch((e) => this.#notice(String((e && e.message) || e)));
+  }
+
+  /** The viewer's measure tool: whether it is on. Setting it turns it on in a piece that offers it, or off. */
+  get measure() { return !!this.#player?.measure_on?.(); }
+  set measure(on) {
+    if (!this.#ready || !this.#player.measure_set) return;
+    this.#player.measure_set(!!on);
+    // The canvas takes the tool's keys only while it is on.
+    if (this.measure) this.#canvas.tabIndex = 0; else this.#canvas.removeAttribute('tabindex');
+    this.#draw();
+  }
+
+  /** The frame's part of the canvas's box, in client px: the box, less the bars its fit leaves. */
+  #frameBox() {
+    const r = this.#canvas.getBoundingClientRect();
+    const k = Math.min(r.width / this.#canvas.width, r.height / this.#canvas.height);
+    const [w, h] = [this.#canvas.width * k, this.#canvas.height * k];
+    return { left: r.left + (r.width - w) / 2, top: r.top + (r.height - h) / 2, k };
+  }
+
+  /** A click at client point `at` with the tool on: a point where its ray meets what the frame shows there. */
+  async #place(at) {
+    const box = this.#frameBox();
+    if (!this.#player.measure_press()) return;
+    // The frame's object-ID target reads back once this thread yields.
+    for (;;) {
+      const placed = this.#player.measure_click((at[0] - box.left) / box.k, (at[1] - box.top) / box.k);
+      if (placed === 1) this.#draw();
+      if (placed !== 0) return;
+      await new Promise((next) => setTimeout(next, 4));
+    }
+  }
+
+  /** The measure over the canvas, as the core gives it for the frame drawn: its line, its points and its readout,
+   * in the frame's px, where no pointer reaches them. */
+  #overlay() {
+    const shown = this.#player.measure_shown ? JSON.parse(this.#player.measure_shown()) : null;
+    this.#measured?.remove();
+    this.#measured = null;
+    if (!shown) return;
+    const el = (tag, attrs, text) => {
+      const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+      if (text !== undefined) e.textContent = text;
+      return e;
+    };
+    const [w, h] = [this.#canvas.width, this.#canvas.height];
+    const svg = el('svg', { 'data-deep-measure': '', 'aria-hidden': 'true', viewBox: `0 0 ${w} ${h}`,
+      style: `position:absolute;left:${this.#canvas.offsetLeft}px;top:${this.#canvas.offsetTop}px;width:${this.#canvas.offsetWidth}px;height:${this.#canvas.offsetHeight}px;pointer-events:none` });
+    const { a, b, text, color, ground } = shown;
+    if (a && b) svg.append(el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: color, 'stroke-width': 2, 'stroke-linecap': 'round' }));
+    for (const p of [a, b]) if (p) svg.append(el('circle', { cx: p[0], cy: p[1], r: 4, fill: color }));
+    if (a && b && text) {
+      // A plate beside the line's middle, kept inside the frame.
+      const [pw, ph] = [text.length * 7.3 + 16, 24];
+      const x = Math.min(Math.max((a[0] + b[0]) / 2 + 12, 0), Math.max(w - pw, 0));
+      const y = Math.min(Math.max((a[1] + b[1]) / 2 - ph / 2, 0), Math.max(h - ph, 0));
+      svg.append(el('rect', { x: x + 0.5, y: y + 0.5, width: pw - 1, height: ph - 1, fill: ground, stroke: color }));
+      svg.append(el('text', { x: x + 8, y: y + 16, fill: color, style: 'font:12px ui-monospace,SFMono-Regular,Menlo,monospace' }, text));
+    }
+    this.appendChild(svg);
+    this.#measured = svg;
+    // The readout is said once when it changes, as a readout of the piece is.
+    if (this.#live && text && this.#said.get('\0measure') !== text) this.#live.textContent = text;
+    this.#said.set('\0measure', text ?? '');
   }
 
   get ready() { return this.#ready; }
@@ -130,7 +301,7 @@ class DeepPlayer extends HTMLElement {
   }
 
   play() {
-    if (!this.#ready) return;
+    if (!this.#ready || this.#stopped) return;
     if (this.#t >= this.#duration) this.#seek(0);
     this.#paused = false;
     this.#last = performance.now();
@@ -155,13 +326,26 @@ class DeepPlayer extends HTMLElement {
   /** What the player holds: its step, step and full-state hashes, backend, adapter and evaluated data. It reads only. */
   async probe() {
     if (!this.#player) return null;
-    const p = JSON.parse(this.#player.probe());
+    let p;
+    try {
+      p = JSON.parse(this.#player.probe());
+    } catch (e) {
+      // #2856: a core that failed while the piece played may answer nothing more; the player still says where it stopped.
+      if (!this.#stopped) throw e;
+      p = { step: this.#stopped.step };
+    }
+    p.stopped = this.#stopped;
     p.backend = this.#backend;
     p.adapter = this.#adapter;
     p.frames = this.#frames;
     p.first_frame_ms = this.#firstFrameMs;
+    p.load = { inflate_ms: this.#inflateMs };
     p.decoded = { ...this.#decoded };
     p.saves = (await this.#kept()).map(({ slot, step, deep_hash }) => ({ slot, step, deep_hash }));
+    p.records = (await this.#records()).map(({ hash, step, layout }) => ({ hash, step, layout }));
+    // #276: the profile record the store holds, its newest that reads back whole, and the one this run read.
+    const stored = await this.#stored();
+    p.profile = stored ? { hash: stored.hash, step: stored.step, read: this.#profile } : null;
     // The first player's link carries the match in its fragment, which the host serving the piece never sees.
     p.match ??= null;
     if (p.match?.fragment) p.match.link = `${location.href.split('#')[0]}#${p.match.fragment}`;
@@ -177,8 +361,9 @@ class DeepPlayer extends HTMLElement {
     this.appendChild(n);
   }
 
-  /** The piece's saves: the origin's store, each slot's last save number there, and the player's own controls. */
-  async #saves({ piece, slots }) {
+  /** The piece's saves and carry records: the origin's store, each slot's last save number there, and the player's
+   * own controls. */
+  async #saves({ piece, slots, gives, takes, profile }) {
     this.#piece = piece;
     try {
       this.#db = await openStore();
@@ -201,19 +386,45 @@ class DeepPlayer extends HTMLElement {
       pick.addEventListener('change', () => { this.#slot = Number(pick.value); });
       bar.append(pick);
     }
+    const chooser = (act) => {
+      const file = document.createElement('input');
+      file.type = 'file';
+      file.hidden = true;
+      file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; if (f) act(f); });
+      bar.append(file);
+      return () => file.click();
+    };
+    const controls = [];
+    if (slots) controls.push(['Open save', () => this.#open()], ['Export save', () => this.#export()], ['Import save', chooser((f) => this.#import(f))]);
+    if (gives) controls.push(['Export record', () => this.#exportRecord()]);
+    if (takes) controls.push(['Import record', chooser((f) => this.#importRecord(f))]);
+    const buttons = (group, list) => {
+      for (const [name, act] of list) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = name;
+        b.addEventListener('click', act);
+        group.append(b);
+      }
+    };
+    buttons(bar, controls);
+    if (slots || gives || takes) this.append(bar);
+    if (!profile) return;
+    // #276: the piece's menu for its profile record: the record it names, start fresh, delete, export and import.
+    const menu = document.createElement('div');
+    menu.setAttribute('data-deep-profile', '');
+    menu.setAttribute('role', 'group');
+    menu.setAttribute('aria-label', 'Profile');
+    this.#named = document.createElement('span');
+    menu.append(this.#named);
     const file = document.createElement('input');
     file.type = 'file';
     file.hidden = true;
-    file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; if (f) this.#import(f); });
-    for (const [name, act] of [['Open save', () => this.#open()], ['Export save', () => this.#export()], ['Import save', () => file.click()]]) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = name;
-      b.addEventListener('click', act);
-      bar.append(b);
-    }
-    bar.append(file);
-    this.append(bar);
+    file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; if (f) this.#importProfile(f); });
+    menu.append(file);
+    buttons(menu, [['Start fresh', () => this.#fresh()], ['Delete profile', () => this.#deleteProfile()],
+      ['Export profile', () => this.#exportProfile()], ['Import profile', () => file.click()]]);
+    this.append(menu);
   }
 
   /** The piece's saves in the browser's storage, of `slot` or of every slot, newest first in each. */
@@ -229,9 +440,193 @@ class DeepPlayer extends HTMLElement {
     return [...kept.values()].sort((a, b) => a.slot - b.slot);
   }
 
-  /** The saves the steps the clock just reached asked for, each queued for the store as its slot's next save. */
+  /** The saves the steps the clock just reached asked for, each queued for the store as its slot's next save, and the
+   * carry records they wrote. */
   #due() {
     for (const s of JSON.parse(this.#player.saves_due())) this.#queue(s, (seq) => this.#player.save_bytes(s.at, seq));
+    for (const r of JSON.parse(this.#player.records_due())) {
+      const bytes = this.#player.record_bytes(r.at);
+      this.#writes = this.#writes.then(() => this.#keepRecord(r, bytes));
+    }
+    for (const r of JSON.parse(this.#player.profiles_due())) {
+      const bytes = this.#player.profile_bytes(r.at);
+      this.#writes = this.#writes.then(() => this.#keepProfile(r, bytes));
+    }
+  }
+
+  /** The piece's profile records in the origin's storage, newest first, whole or not. */
+  async #profiles() {
+    if (!this.#db) return [];
+    const from = [this.#piece];
+    return (await inStore(this.#db, 'readonly', (rows) => rows.getAll(IDBKeyRange.bound(from, [...from, Infinity])), 'profiles')).reverse();
+  }
+
+  /** The piece's newest profile record in the store that reads back whole, or null. */
+  async #stored() {
+    for (const row of await this.#profiles()) if (await whole(row)) return row;
+    return null;
+  }
+
+  /** The menu's line naming the profile record the store holds, and whether this run reads it. */
+  async #name() {
+    if (!this.#named) return;
+    const row = await this.#stored();
+    this.#named.textContent = !row ? 'No profile in this browser.'
+      : `Profile ${row.hash} (step ${row.step})${this.#profile === row.hash ? '' : ', not read by this run'}.`;
+  }
+
+  /** When the piece starts: its newest profile record that reads back whole enters at step 0, held to the shape the piece
+   * declares. A newer one that fails its hash is named; one of another shape is named with its first array that differs,
+   * and the piece starts with zeros, the record kept. */
+  async #reopen() {
+    this.#profile = null;
+    for (const row of await this.#profiles()) {
+      if (!(await whole(row))) {
+        this.#notice(`The profile record ${row.hash} fails the SHA-256 that names it, so it isn't opened.`, 'profile_damaged');
+        continue;
+      }
+      try {
+        JSON.parse(this.#player.open_profile(row.hash, row.bytes));
+        this.#profile = row.hash;
+      } catch (e) {
+        this.#notice(profileRefusal(e, row.hash), 'profile_refused');
+      }
+      break;
+    }
+    await this.#name();
+  }
+
+  /** One profile record into the store as the piece's newest, whole or not at all: written, read back against its
+   * SHA-256, and only then the piece's older records but its last good one let go. A write the browser refuses leaves
+   * the store as it was. */
+  async #keepProfile({ hash, step }, bytes) {
+    try {
+      if (!this.#asked) await this.#persist();
+      if ((await sha256(bytes)) !== hash) throw Error(`its bytes don't hash to ${hash}`);
+      const before = await this.#profiles();
+      const seq = (before[0]?.seq ?? 0) + 1;
+      const key = [this.#piece, seq];
+      await inStore(this.#db, 'readwrite', (rows) => rows.put({ piece: this.#piece, seq, hash, step, bytes }), 'profiles');
+      const back = await inStore(this.#db, 'readonly', (rows) => rows.get(key), 'profiles');
+      if (!back || !(await whole(back))) {
+        await inStore(this.#db, 'readwrite', (rows) => rows.delete(key), 'profiles');
+        throw Error("it didn't read back whole");
+      }
+      let good = null;
+      for (const row of before) if (!good && await whole(row)) good = row;
+      await inStore(this.#db, 'readwrite', (rows) => { for (const row of before) if (row !== good) rows.delete([row.piece, row.seq]); }, 'profiles');
+      await this.#name();
+    } catch (e) {
+      this.#notice(`The profile record of step ${step} wasn't kept: the browser refused it (${[e?.name, e?.message].filter(Boolean).join(': ') || e}). The last good one stays.`, 'profile_failed');
+    }
+  }
+
+  /** Start fresh, this run only: the piece from its start reading zeros; the stored record stays. */
+  async #fresh() {
+    this.#player.start_fresh();
+    this.#profile = null;
+    this.#paused = true;
+    this.#seek(0);
+    await this.#name();
+  }
+
+  /** The viewer deletes the piece's profile records from this browser. */
+  async #deleteProfile() {
+    await this.#writes;
+    const rows = await this.#profiles();
+    await inStore(this.#db, 'readwrite', (store) => { for (const row of rows) store.delete([row.piece, row.seq]); }, 'profiles');
+    await this.#name();
+    this.#notice('This piece\'s profile is deleted from this browser.', 'profile_deleted');
+  }
+
+  /** The piece's newest whole profile record handed to the browser as a file, named by its SHA-256. */
+  async #exportProfile() {
+    await this.#writes;
+    for (const row of await this.#profiles()) {
+      if (!(await whole(row))) continue;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([row.bytes]));
+      a.download = `${row.hash}.profile`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+      return;
+    }
+    this.#notice('This piece keeps no profile record in this browser.', 'no_profile');
+  }
+
+  /** A profile record from a file, held to the SHA-256 its name gives and to the piece's shape; taken, it is kept as the
+   * piece's newest and the piece is made again with its entry at step 0, held from its start. Refused, nothing changes. */
+  async #importProfile(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const hash = /^([0-9a-f]{64})\.profile$/.exec(file.name)?.[1] ?? await sha256(bytes);
+    try {
+      JSON.parse(this.#player.open_profile(hash, bytes));
+    } catch (e) {
+      this.#notice(profileRefusal(e, hash), 'profile_refused');
+      return;
+    }
+    const r = JSON.parse(new TextDecoder().decode(bytes));
+    await (this.#writes = this.#writes.then(() => this.#keepProfile({ hash, step: r.step }, bytes)));
+    this.#profile = hash;
+    this.#paused = true;
+    this.#seek(0);
+    await this.#name();
+  }
+
+  /** The carry records the origin's storage holds that read back whole, in the order they were kept. */
+  async #records() {
+    const rows = this.#db ? await inStore(this.#db, 'readonly', (rows) => rows.getAll(), 'records') : [];
+    const out = [];
+    for (const row of rows) if (await whole(row)) out.push(row);
+    return out.sort((a, b) => a.at - b.at);
+  }
+
+  /** One carry record into the store, whole or not at all: written under its SHA-256 and read back against it. A write
+   * the browser refuses leaves the store as it was. */
+  async #keepRecord({ hash, step, layout }, bytes) {
+    try {
+      if (!this.#asked) await this.#persist();
+      if ((await sha256(bytes)) !== hash) throw Error(`its bytes don't hash to ${hash}`);
+      await inStore(this.#db, 'readwrite', (rows) => rows.put({ hash, piece: this.#piece, step, layout, at: Date.now(), bytes }), 'records');
+      const back = await inStore(this.#db, 'readonly', (rows) => rows.get(hash), 'records');
+      if (!back || !(await whole(back))) {
+        await inStore(this.#db, 'readwrite', (rows) => rows.delete(hash), 'records');
+        throw Error("it didn't read back whole");
+      }
+    } catch (e) {
+      this.#notice(`The record ${hash} of step ${step} wasn't kept: the browser refused it (${[e?.name, e?.message].filter(Boolean).join(': ') || e}).`, 'carry_failed');
+    }
+  }
+
+  /** The piece's newest carry record handed to the browser as a file, named by its SHA-256 as the app names one. */
+  async #exportRecord() {
+    const row = (await this.#records()).filter((r) => r.piece === this.#piece).pop();
+    if (!row) {
+      this.#notice('This piece has written no carry record in this browser.', 'no_record');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([row.bytes]));
+    a.download = `${row.hash}.carry`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+  }
+
+  /** A carry record from a file, held to the SHA-256 its name gives and to the shape and layouts this piece takes; taken,
+   * it is kept and the piece is made again with its entry at step 0, held from its start. Refused, nothing changes. */
+  async #importRecord(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const hash = /^([0-9a-f]{64})\.carry$/.exec(file.name)?.[1] ?? await sha256(bytes);
+    try {
+      JSON.parse(this.#player.open_record(hash, bytes));
+    } catch (e) {
+      this.#notice(recordRefusal(e, hash), 'carry_refused');
+      return;
+    }
+    const r = JSON.parse(new TextDecoder().decode(bytes));
+    await (this.#writes = this.#writes.then(() => this.#keepRecord({ hash, step: r.step, layout: r.from?.layout }, bytes)));
+    this.#paused = true;
+    this.#seek(0);
   }
 
   /** A save queued for the store as its slot's next number, with the bytes it has under that number. */
@@ -374,8 +769,17 @@ class DeepPlayer extends HTMLElement {
       location.replace(`./${bundle.fallback.index}`);
       return;
     }
+    // Every file's stored bytes are checked against its name before any is inflated (#2892).
+    const stored = [];
+    for (const f of bundle.files) stored.push([f, await this.#fetch(f.path, f.sha256)]);
     const files = new Map();
-    for (const f of bundle.files) files.set(f.sha256, await this.#fetch(f.path, f.sha256));
+    const inflating = performance.now();
+    for (let i = 0; i < stored.length; i++) {
+      const [f, bytes] = stored[i];
+      stored[i] = null;
+      files.set(f.inflated ? f.inflated.sha256 : f.sha256, f.inflated ? await inflate(f, bytes) : bytes);
+    }
+    this.#inflateMs = performance.now() - inflating;
     const glue = await import('deep-player-glue');
     await glue.default({ module_or_path: files.get(bundle.player.wasm) });
     for (const f of bundle.fonts) glue.provide_font(f.file, files.get(f.sha256));
@@ -390,10 +794,12 @@ class DeepPlayer extends HTMLElement {
     this.#player = player;
     this.#keepTree();
     this.#duration = player.duration();
+    this.#step = player.step();
     this.#stages = JSON.parse(player.stages());
     this.#markers = JSON.parse(player.markers());
     const saves = JSON.parse(player.saves());
-    if (saves.slots) await this.#saves(saves);
+    if (saves.slots || saves.gives || saves.takes || saves.profile) await this.#saves(saves);
+    if (saves.profile && this.#db) await this.#reopen();
     this.#seek(0);
     this.#decoded = JSON.parse(player.decoded());
     this.#ready = true;
@@ -442,6 +848,37 @@ class DeepPlayer extends HTMLElement {
     this.#join.setAttribute('data-deep-join', p.state);
     this.#join.firstChild.textContent = p.text;
     this.#join.lastChild.hidden = p.state !== 'open';
+    this.#startPrompt();
+  }
+
+  /** #278: the player's own Start, for the first player of a room once enough copies have joined, and again after a
+   * match finished: drawn by the player, never the piece, and pressed only by a person's click. */
+  #startPrompt() {
+    const p = this.#player.start_prompt ? JSON.parse(this.#player.start_prompt()) : null;
+    if (!p) { this.#start?.remove(); this.#start = null; if (this.#join) this.#join.hidden = false; return; }
+    if (!this.#start) {
+      this.#start = document.createElement('div');
+      this.#start.setAttribute('role', 'group');
+      this.#start.setAttribute('style', 'position:fixed;left:12px;bottom:12px;max-width:560px;padding:10px 12px;background:#1b1b20;color:#e8e8ec;border:1px solid #55555f;border-radius:6px');
+      const text = document.createElement('p');
+      text.setAttribute('style', 'margin:0 0 8px');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Start';
+      // Only a person's click starts the match: an event a script dispatched carries no user activation.
+      button.addEventListener('click', (e) => {
+        if (!e.isTrusted || navigator.userActivation?.isActive === false) return;
+        const begin = this.#player.press_start(crypto.getRandomValues(new Uint8Array(16)));
+        if (begin && this.#socket?.readyState === WebSocket.OPEN) this.#socket.send(begin);
+        this.#startPrompt();
+      });
+      this.#start.append(text, button);
+      this.appendChild(this.#start);
+    }
+    this.#join.hidden = true;
+    this.#start.setAttribute('data-deep-start', p.state);
+    this.#start.firstChild.textContent = p.text;
+    this.#start.lastChild.hidden = p.state !== 'open';
   }
 
   /** A person clicked Join: the one connection the piece declares, the viewer's browser's own, with no credential. */
@@ -450,16 +887,33 @@ class DeepPlayer extends HTMLElement {
     const opened = JSON.parse(this.#player.join(location.href, crypto.getRandomValues(new Uint8Array(16))));
     this.#prompt();
     if (!opened.url) return;
-    const ws = new WebSocket(opened.url);
+    // #277: a piece whose rules play a changed seat asks for relay@2 by the subprotocol.
+    const ws = new WebSocket(opened.url, opened.protocols ?? []);
     ws.binaryType = 'arraybuffer';
     this.#socket = ws;
     let timer = 0;
+    // #277: relay@2's messages and the frames of other players' messages the copy forwards.
+    const sends = () => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const s = JSON.parse(this.#player.net_sends());
+      for (const c of s.controls) ws.send(c);
+      for (const f of s.frames) ws.send(new Uint8Array(f.match(/../g).map((h) => parseInt(h, 16))));
+    };
     const tick = () => {
       const now = performance.now();
       const frame = this.#player.net_tick(now);
       if (frame.length && ws.readyState === WebSocket.OPEN) ws.send(frame);
+      sends();
       this.#notify(this.#player.net_waiting(now));
+      // #278: a room's match that finished leaves the connection open, and the first player's Start shows again.
+      if (this.#start === null && this.#player.start_prompt && this.#player.start_prompt() !== 'null') this.#prompt();
       if (this.#player.net_ended()) { clearInterval(timer); ws.close(); this.#notify(0); this.#prompt(); }
+    };
+    // #277: a page about to be hidden says its copy is absent, at once; shown again, it catches up.
+    const shown = () => {
+      const frame = this.#player.net_visible(document.visibilityState === 'hidden', performance.now());
+      if (frame.length && ws.readyState === WebSocket.OPEN) ws.send(frame);
+      sends();
     };
     ws.addEventListener('message', (e) => {
       const now = performance.now();
@@ -473,9 +927,13 @@ class DeepPlayer extends HTMLElement {
         this.#player.net_receive(new Uint8Array(e.data), now);
         tick();
       }
+      sends();
     });
-    ws.addEventListener('open', () => { timer = setInterval(tick, 8); });
-    ws.addEventListener('close', () => { clearInterval(timer); this.#player.net_disconnected(); this.#notify(0); this.#prompt(); });
+    // #551: a person's keys while the match plays are entries of this copy's player, on each control whose keys name
+    // them; a key a script dispatched is left alone.
+    const keys = (e) => { if (e.isTrusted && this.#player.net_key(e.key)) e.preventDefault(); };
+    ws.addEventListener('open', () => { timer = setInterval(tick, 8); window.addEventListener('keydown', keys); document.addEventListener('visibilitychange', shown); });
+    ws.addEventListener('close', () => { clearInterval(timer); window.removeEventListener('keydown', keys); document.removeEventListener('visibilitychange', shown); this.#player.net_disconnected(); this.#notify(0); this.#prompt(); });
   }
 
   /** The waiting notice, the player's own: shown once this copy has waited 0.25 s for a player's message. */
@@ -506,6 +964,7 @@ class DeepPlayer extends HTMLElement {
       if (this.#firstFrameMs === null) this.#firstFrameMs = performance.now();
     }
     this.#announce();
+    this.#overlay();
     const now = this.#stages.filter((s) => s.t <= this.#t).pop()?.id ?? null;
     if (now !== this.#stage) {
       this.#stage = now;
@@ -518,7 +977,12 @@ class DeepPlayer extends HTMLElement {
     const dt = (now - this.#last) / 1000;
     this.#last = now;
     this.#t = Math.min(this.#t + dt, this.#duration);
-    this.#draw();
+    try {
+      this.#draw();
+    } catch (e) {
+      this.#stop(e);
+      return;
+    }
     this.dispatchEvent(new Event('timeupdate'));
     if (this.#t >= this.#duration) {
       this.#paused = true;
@@ -526,6 +990,25 @@ class DeepPlayer extends HTMLElement {
       return;
     }
     requestAnimationFrame((n) => this.#tick(n));
+  }
+
+  /** A throw from the core while the piece plays (#2856), which the player can't recover from: the play stops there,
+   * paused, asking for no further frame and firing no `ended`, and the canvas keeps its last frame. One notice names
+   * the step the player held and the failure's first line, and probe() reads them as `stopped`. */
+  #stop(e) {
+    this.#paused = true;
+    this.#stopped = { step: this.#held(), message: String(e?.message ?? e).split('\n')[0] };
+    this.#notice(`The piece stopped at step ${this.#stopped.step}: ${this.#stopped.message}`, 'stopped');
+  }
+
+  /** The step the player holds: the core's own count, or, from a core that no longer answers, the step of the time
+   * the player last asked it for. */
+  #held() {
+    try {
+      return JSON.parse(this.#player.probe()).step;
+    } catch {
+      return Math.floor(this.#t / this.#step + 1e-9);
+    }
   }
 }
 

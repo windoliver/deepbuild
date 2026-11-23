@@ -1,10 +1,11 @@
 // The alone block's folders run side by side, each in a shard of its own, and the folders lanes.mjs names exclusive one
 // at a time with nothing beside them; the files it names slow wait for --slow unless the change touches them. Reached
 // by running `node scripts/affected.mjs` in a scratch repository holding this checkout's scripts, with a sandboxed HOME
-// (so the throttle table and the shards are the sandbox's) and a cargo stub. The merge base's scripts are the wrong
-// program: they run the alone block one file at a time, so its folders never overlap.
+// (so the throttle table and the shards are the sandbox's) and a cargo stub. The scripts of the commit before the shards
+// (BEFORE_SHARDS) are the wrong program: they run the alone block one file at a time, so its folders never overlap. The
+// merge base's were once, and stopped being it the day the shards landed on main (#2709).
 import assert from 'node:assert/strict';
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
@@ -18,6 +19,8 @@ const [A, B] = lanes.alone.filter((entry) => entry.endsWith('/') && !lanes.liste
 const EXCLUSIVE = lanes.exclusive[0];
 // One under tests/, so a change beside it builds no package.
 const SLOW = lanes.slow.find((file) => file.startsWith('tests/acceptance/'));
+// The parent of 4e5a7cae3, which brought the shards: the last scripts to run the alone block one file at a time.
+const BEFORE_SHARDS = '00f19ab22876008acc67811447644571d7ab088f';
 
 // A probe notes when it ran, where, and under which grant, and holds its place for `ms`.
 const probe = (name, ms) => `import { appendFileSync } from 'node:fs';
@@ -26,7 +29,7 @@ const note = (event) => appendFileSync(process.env.T_SHARDS_EVENTS, JSON.stringi
 test(${JSON.stringify(name)}, async () => { note('start'); await new Promise((done) => setTimeout(done, ${ms})); note('end'); });
 `;
 
-function scene(t, scripts = join(CHECKOUT, 'scripts'), extra = {}) {
+function scene(t, scripts = join(CHECKOUT, 'scripts'), extra = {}, [a, b] = [A, B]) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-shards-')));
   const home = join(dir, 'home'), tree = join(dir, 'tree'), bin = join(dir, 'bin');
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -36,7 +39,7 @@ function scene(t, scripts = join(CHECKOUT, 'scripts'), extra = {}) {
   for (const script of lint) writeFileSync(join(tree, script), '// a lint stub\n');
   writeFileSync(join(tree, 'scripts/known-failures.json'), `${JSON.stringify({ failures: {}, lint: {}, timing: [] })}\n`);
   symlinkSync(join(CHECKOUT, 'node_modules'), join(tree, 'node_modules'));
-  const files = { [`${A}shard-a.test.mjs`]: probe('a', 1500), [`${B}shard-b.test.mjs`]: probe('b', 1500), [`${EXCLUSIVE}shard-x.test.mjs`]: probe('x', 300) };
+  const files = { [`${a}shard-a.test.mjs`]: probe('a', 1500), [`${b}shard-b.test.mjs`]: probe('b', 1500), [`${EXCLUSIVE}shard-x.test.mjs`]: probe('x', 300) };
   if (SLOW) files[SLOW] = probe('slow', 0);
   for (const [path, text] of Object.entries({ '.gitignore': 'node_modules\n', ...files })) {
     mkdirSync(dirname(join(tree, path)), { recursive: true });
@@ -121,17 +124,20 @@ test('a slow file is left INCONCLUSIVE, never PASS, unless --slow runs it or the
   assert.match(touched.out, /^PASS affected: /m, touched.out);
 });
 
-test('the merge base\'s scripts, the wrong program, run the two alone folders one after the other', async (t) => {
-  const base = spawnSync('git', ['merge-base', 'HEAD', 'origin/main'], { cwd: CHECKOUT, encoding: 'utf8' }).stdout.trim();
+test('the scripts from before the shards, the wrong program, run the two alone folders one after the other', async (t) => {
   const folder = mkdtempSync(join(tmpdir(), 'deep-shards-base-'));
   t.after(() => rmSync(folder, { recursive: true, force: true }));
-  execFileSync('sh', ['-c', 'git -C "$1" archive "$2" scripts | tar -xf - -C "$3"', 'sh', CHECKOUT, base, folder]);
-  const s = scene(t, join(folder, 'scripts'));
-  await s.affected([`${A}shard-a.test.mjs`, `${B}shard-b.test.mjs`]);
-  const all = JSON.stringify(s.events(), null, 1);
-  assert.ok(s.at('a', 'start') && s.at('b', 'start'), `the merge base ran no probe\n${all}`);
+  execFileSync('sh', ['-c', 'git -C "$1" archive "$2" scripts | tar -xf - -C "$3"', 'sh', CHECKOUT, BEFORE_SHARDS, folder]);
+  // Two folders both programs name alone: one only this checkout's list names, the old scripts run beside the rest.
+  const old = await import(join(folder, 'scripts/lanes.mjs'));
+  const [a, b] = lanes.alone.filter((entry) => entry.endsWith('/') && old.alone.includes(entry) && !lanes.listed(lanes.timed, `${entry}x.test.mjs`) && !old.listed(old.timed, `${entry}x.test.mjs`));
+  assert.ok(a && b, 'no two folders are alone both in lanes.mjs and before the shards');
+  const s = scene(t, join(folder, 'scripts'), {}, [a, b]);
+  const run = await s.affected([`${a}shard-a.test.mjs`, `${b}shard-b.test.mjs`]);
+  const all = `${run.out}\n${JSON.stringify(s.events(), null, 1)}`;
+  assert.ok(s.at('a', 'end') && s.at('b', 'end'), `the scripts from before the shards did not run both probes\n${all}`);
   const overlap = s.at('a', 'start').t < s.at('b', 'end').t && s.at('b', 'start').t < s.at('a', 'end').t;
-  assert.equal(overlap, false, `the merge base ran the alone folders at once, so this test can't tell it from the change\n${all}`);
+  assert.equal(overlap, false, `the scripts from before the shards ran the alone folders at once, so this test can't tell them from the change\n${all}`);
 });
 
 // From the main checkout, whose ignored .claude/worktrees/ holds every other worktree with its own target/, a new

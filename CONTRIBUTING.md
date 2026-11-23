@@ -10,7 +10,7 @@ DeepBuild is in its design phase. The [issues](https://github.com/windoliver/dee
 ## Work in parallel
 
 - Pick an open issue whose "Depends on" issues are closed, and say in a comment that you're taking it.
-- The issue is the spec: its design links, fields and acceptance criteria. Read the linked sections of [docs/](docs/) first. If the docs and the issue disagree, stop and say so in the issue rather than picking one.
+- The issue is the spec: its design links, fields and acceptance criteria. Read the design sections your issue links before edits. `node scripts/design-section.mjs --issue <n>` prints them, and `node scripts/design-section.mjs docs/<doc>.md#<anchor>` prints one. If the docs and the issue disagree, stop and say so in the issue rather than picking one. <!-- reading rule -->
 - Keep to one issue per branch, worktree and pull request, as AGENTS.md says.
 - The design docs are the source of the design: `docs/technical-design.md` and `docs/canvas-primitives.md`, edited in this repo like code. An issue's live body is the source of that task. Nothing generates either, and research notes stay private and feed neither.
 - Change the design by pull request, in the change that needs it or on its own. It lands on the doc lanes like any other change: design links and names, catalogue drift and public text. A person is asked only when it changes one of the four invariants in [AGENTS.md](AGENTS.md) or a row under [Decided](docs/technical-design.md#decided).
@@ -24,6 +24,10 @@ DeepBuild is in its design phase. The [issues](https://github.com/windoliver/dee
 - Show the check failing before your change and passing after: the command and its output, or a link to the evidence.
 - Add screenshots or a video for anything a user sees.
 - List anything still open.
+
+## Security reports
+
+A report that fits the private list in SECURITY.md and isn't public yet is handled in the private advisory, and its public issue is filed when its fix has merged, naming the fix. An agent that finds such a fault tells the person it works for and files nothing public. Issues already open stay as they are. <!-- security rule -->
 
 ## Agents
 

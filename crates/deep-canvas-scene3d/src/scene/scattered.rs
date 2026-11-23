@@ -30,8 +30,9 @@ pub fn evaluate_any(
     // the core's draw reads it), such as a card its close button closed.
     let unbound = bound_hidden(map);
     let map = unbound.as_ref().unwrap_or(map);
-    // #166: a wake behind an item a logic array moves, refused at check before anything else.
-    crate::water::logic_moved(map)?;
+    // #265: a wake or a trail behind an item a live drag moves, refused at check before anything
+    // else.
+    crate::water::dragged(map)?;
     // #268: a shore item that anything moves or reshapes, refused at check.
     crate::shore::static_items(map)?;
     let program = Program::compile(map).map_err(|r| Refused {
@@ -505,7 +506,7 @@ pub(super) fn lod_of(
     item: &Value,
     path: &str,
     bounds: [Vec3; 2],
-    mesh: Option<(&crate::geom::Mesh, u64)>,
+    mesh: Option<(&Arc<crate::geom::Mesh>, u64)>,
     doc: &Map<String, Value>,
 ) -> Result<Option<Arc<crate::lod::Lod>>, Refused> {
     let bands = crate::lod::bands_of(item, path.trim_end_matches("/params"))?;
@@ -523,12 +524,12 @@ pub(super) fn lod_of(
         proxy: None,
     });
     let (levels, extent) = match leveled {
-        Some((m, h)) => (crate::lod::levels(&Arc::new(m.clone()), h), m.lod_extent),
+        Some((m, h)) => (crate::lod::levels(m, h), m.lod_extent),
         None => (Vec::new(), 0.0),
     };
-    // A mesh without levels takes its proxy from the simplify step, once per content key.
-    let proxy_mesh = match (proxy, mesh) {
-        (Some(p), Some((m, h))) if levels.is_empty() => crate::lod::proxy_of(m, h, p),
+    // A mesh without levels draws a proxy band as the proxy the renderer makes of it (#2738).
+    let proxy_source = match (proxy, mesh) {
+        (Some(_), Some((m, h))) if levels.is_empty() => Some((m.clone(), h)),
         _ => None,
     };
     Ok(Some(Arc::new(crate::lod::Lod {
@@ -539,7 +540,8 @@ pub(super) fn lod_of(
         extent,
         lod_px: crate::lod::lod_px(doc),
         proxy,
-        proxy_mesh,
+        proxy_source,
+        proxy_mesh: None,
         tile: None,
     })))
 }
@@ -577,31 +579,25 @@ pub(super) fn by_material(
     let Some(named) = named.as_object() else {
         return refused("out_of_range", format!("items/{id}/materials"));
     };
-    // Each triangle's material: the first part naming it, else the item's own.
     let own = item.get("material").and_then(Value::as_str);
-    let mut of: Vec<Option<Option<&str>>> = vec![None; mesh.triangles()];
     for (part, m) in named {
         let unresolved = || Refused {
             code: "ref_unresolved",
             path: format!("items/{id}/materials/{part}"),
         };
-        let tris = (mesh.parts.get(part))
-            .or_else(|| mesh.closed.get(part).map(|c| &c.0))
-            .ok_or_else(unresolved)?;
+        if !mesh.parts.contains_key(part) && !mesh.closed.contains_key(part) {
+            return Err(unresolved());
+        }
         let material = |m: &&str| {
             let kind = items.get(m).and_then(|i| i.get("kind"));
             kind.and_then(Value::as_str) == Some("material@1")
         };
-        let m = m.as_str().filter(material).ok_or_else(unresolved)?;
-        for &t in tris {
-            if let Some(slot) = of.get_mut(t as usize).filter(|s| s.is_none()) {
-                *slot = Some(Some(m));
-            }
-        }
+        m.as_str().filter(material).ok_or_else(unresolved)?;
     }
+    // Each triangle's material: the first part naming it, else the item's own.
     let mut groups: BTreeMap<Option<&str>, Vec<u32>> = BTreeMap::new();
-    for (t, m) in of.iter().enumerate() {
-        groups.entry(m.unwrap_or(own)).or_default().push(t as u32);
+    for (t, m) in mesh.materials(named, own).into_iter().enumerate() {
+        groups.entry(m).or_default().push(t as u32);
     }
     let holder = |m: Option<&str>| {
         let mut h = item.clone();

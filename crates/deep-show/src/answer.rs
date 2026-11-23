@@ -30,9 +30,16 @@ pub(super) fn answer(command: &str, startup: &Startup, line: &str) -> Value {
         "run" => {
             // #2363: a fixture the `fixtures` call lists carries its assets, so its document
             // opens in a reader's fresh store; one left unwritten is the show's own refusal.
+            // #3014: only a run that lists or opens fixtures writes their assets: the `fixtures`
+            // call, the kit (it paints each fixture from this store), or a document naming an
+            // asset by its hash as a fixture's does. Any other run leaves its store as it was.
+            let opens = |c: &Call| matches!(c, Call::Fixtures | Call::Kit(_));
+            let lists = scenario.calls.iter().any(opens);
             let listed = startup.sealed.fixtures.iter().filter(|(_, f)| !f.planted);
             for bytes in listed.flat_map(|(_, f)| &f.assets) {
-                let _ = evidence::put(&scenario.evidence, bytes);
+                if lists || line.contains(&evidence::sha256_hex(bytes)) {
+                    let _ = evidence::put(&scenario.evidence, bytes);
+                }
             }
             let replies = jobs::around(&scenario, startup, |background| {
                 let mut hub = hub::Hub::new(&scenario, startup);

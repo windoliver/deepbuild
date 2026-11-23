@@ -3,7 +3,7 @@
 // Results come from the runner's report, never from its output. The copies are a bay pair's (#1118)
 // when the proof gets one, else temporary.
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -15,6 +15,7 @@ import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CON
 const REPORTER = pathToFileURL(fileURLToPath(new URL('./proof-reporter.mjs', import.meta.url))).href;
 const VITEST_REPORTER = fileURLToPath(new URL('./proof-vitest-reporter.mjs', import.meta.url));
 const BEFORE_FIX = 'Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.';
+const STALE_FIX = "Write the twin's lines.json again against the file as the change holds it, by a blind redraft of its suite's twin.";
 const MUTATION_FIX = 'Assert what the criterion names so a mutant of the added lines fails its tests, or name a planted wrong program in tests/acceptance/<issue>/twins.json; install the tool a BLOCKED line names.';
 
 // Every temporary folder of a run lies in one folder of its own. A run stopped by a signal can't
@@ -170,6 +171,36 @@ function prepare(root, change, directory) {
 const workspaces = (directory) => existsSync(join(directory, 'package.json')) && Boolean(JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')).workspaces);
 
 /**
+ * The workspace packages a mutant of `paths` reaches through a build (#1120): the packages holding them and every
+ * package that depends on one of those, directly or through others, read from the reverse workspace graph of the
+ * packages/* folders in `directory`. A dependent comes after what it depends on, as its build reads their output.
+ */
+function mutantScope(directory, paths) {
+  const folders = readdirSync(join(directory, 'packages')).filter((folder) => existsSync(join(directory, 'packages', folder, 'package.json')));
+  const manifests = new Map(folders.map((folder) => [folder, JSON.parse(readFileSync(join(directory, 'packages', folder, 'package.json'), 'utf8'))]));
+  const folderOf = new Map([...manifests].map(([folder, { name }]) => [name, folder]));
+  const needs = new Map([...manifests].map(([folder, manifest]) => [folder, new Set(['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].flatMap((field) => Object.keys(manifest[field] ?? {})).map((name) => folderOf.get(name)).filter((other) => other && other !== folder))]));
+  const scope = new Set(paths.map((path) => path.split('/')[1]).filter((folder) => manifests.has(folder)));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [folder, wants] of needs) {
+      if (scope.has(folder) || ![...wants].some((other) => scope.has(other))) continue;
+      scope.add(folder);
+      grew = true;
+    }
+  }
+  const ordered = [], seen = new Set();
+  const visit = (folder) => {
+    if (seen.has(folder)) return; // also ends a cycle in the graph
+    seen.add(folder);
+    for (const other of needs.get(folder)) if (scope.has(other)) visit(other);
+    ordered.push(folder);
+  };
+  for (const folder of [...scope].sort()) visit(folder);
+  return ordered;
+}
+
+/**
  * The change in a prepared copy: its directory, where its packages are installed, and why it can't
  * run there, or null. Its packages are what its own lock installs, as the merge base's are, not the
  * worktree's, which an install from inputs the lock doesn't hold may have re-pointed.
@@ -277,7 +308,8 @@ function inBay(root, role, use, overlay, early = false) {
       return { directory: null, modules: null, refused: `cannot be laid over the change: ${firstLine(error.message)}` };
     }
   }
-  const blocked = failed ?? build(bay);
+  // A build of the same key kept from an earlier use is laid back instead (#3019).
+  const blocked = failed ?? pair.build(role, () => build(bay));
   if (role === 'change') undoBuild(root, bay, early ? [...overlay.keys()] : [], bay);
   if (early) lay(bay, overlay);
   return { directory: bay, modules: bay, blocked };
@@ -301,9 +333,18 @@ function build(directory) {
 }
 
 /** The paths of a stack's frames outside the runtime and the installed packages, innermost first; a
- * path may hold spaces. */
-function frames(stack, directory) {
-  return [...String(stack).matchAll(/^\s*at (?:.*? \()?((?:file:\/\/)?\/.*?):\d+:\d+\)?\s*$/gm)]
+ * path may hold spaces. Given the failure's message, the frames are the stack's last lines, each `at …`, after that
+ * message, so a line of the message shaped like a frame is none (#1838); without it, every such line counts. */
+function frames(stack, directory, message = null) {
+  let text = String(stack);
+  if (message !== null) {
+    const after = message ? text.indexOf(message) : -1;
+    const lines = (after < 0 ? text : text.slice(after + message.length)).trimEnd().split('\n');
+    let first = lines.length;
+    while (first > 0 && /^\s*at /.test(lines[first - 1])) first -= 1;
+    text = lines.slice(first).join('\n');
+  }
+  return [...text.matchAll(/^\s*at (?:.*? \()?((?:file:\/\/)?\/.*?):\d+:\d+\)?\s*$/gm)]
     .map(([, location]) => relative(directory, location.startsWith('file:') ? fileURLToPath(location) : location))
     .filter((path) => !path.split('/').includes('node_modules'));
 }
@@ -323,13 +364,13 @@ const asserted = (name = '', code = '', message = '', stack = '') => code === 'E
 function atAssertion(directory, { name = 'Error', code, message = '', stack = '', thrown }) {
   const caught = thrown ?? (/ but got '.*'$| but '.*' was thrown$/.test(firstLine(message)) ? { stack: '' } : null);
   if (caught && !frames(caught.stack, directory).some((path) => !path.startsWith('..') && !underTestPaths(path))) return false;
-  return asserted(name, code, message, stack) && underTestPaths(frames(stack, directory)[0] ?? '..');
+  return asserted(name, code, message, stack) && underTestPaths(frames(stack, directory, message)[0] ?? '..');
 }
 
 function failure(directory, error) {
   const { name = 'Error', code, message = '' } = error;
   const cause = `${name}${code && !name.includes(code) ? ` [${code}]` : ''}: ${firstLine(message)}`.split(`${directory}/`).join('');
-  return { atAssertion: atAssertion(directory, error), cause };
+  return { atAssertion: atAssertion(directory, error), bySubtests: error.failureType === 'subtestsFailed', cause };
 }
 
 // A run that outlasts this is stopped, and its files count as not run, never as passed or failed.
@@ -494,6 +535,75 @@ function twinsOf(root, path) {
   return shaped ? { folder, twins } : { folder, twins: {}, error: `${folder}/twins.json must map each criterion tag to a list of twin folder names` };
 }
 
+/** The first key a JSON text names twice in one object, or null; the text parses. */
+function duplicateKey(text) {
+  const objects = [];
+  let key = null;
+  for (const [token] of text.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\]:,]/g)) {
+    if (token === '{' || token === '[') objects.push(token === '{' ? new Set() : null);
+    else if (token === '}' || token === ']') objects.pop();
+    else if (token === ':' && key !== null && objects.at(-1)) {
+      if (objects.at(-1).has(key)) return key;
+      objects.at(-1).add(key);
+    }
+    key = token.startsWith('"') ? JSON.parse(token) : null;
+  }
+  return null;
+}
+
+/**
+ * What a twin lays over the change (#1832), path to source: each file of its folder whole, and for each file its
+ * lines.json names, the change's file with each edit's `find` lines, matched at exactly one place, replaced by its
+ * `wrong` lines. `paths` are the paths it names; `stale` is why its lines don't apply, when they don't: then nothing of
+ * it is laid, as laid in part it could fail a test where its wrong program never ran.
+ */
+function twinOverlay(root, folder, own, all) {
+  const file = `${folder}/lines.json`;
+  const overlay = new Map(own.filter((path) => path !== file).map((path) => [path.slice(folder.length + 1), join(root, path)]));
+  const paths = [...overlay.keys()], whole = paths.length;
+  if (!own.includes(file)) return { overlay, paths };
+  if (lstatSync(join(root, file)).isSymbolicLink()) return { overlay, paths, stale: `${file} is a link, not the twin's own file` };
+  let edits, text;
+  try {
+    text = readFileSync(join(root, file), 'utf8');
+    edits = JSON.parse(text);
+  } catch (error) {
+    return { overlay, paths, stale: `${file} is not JSON: ${firstLine(error.message)}` };
+  }
+  // JSON.parse keeps the last of two equal keys, which would lay a twin in part.
+  const twice = duplicateKey(text);
+  if (twice !== null) return { overlay, paths, stale: `${file} names the key ${twice} twice in one object` };
+  const lines = (list, least) => Array.isArray(list) && list.length >= least && list.every((line) => typeof line === 'string' && !/[\r\n]/.test(line));
+  const shaped = edits && typeof edits === 'object' && !Array.isArray(edits) && Object.keys(edits).length && Object.entries(edits).every(([path, list]) => /^[^/]/.test(path) && !path.split('/').some((part) => ['', '.', '..'].includes(part))
+    && Array.isArray(list) && list.length && list.every((edit) => edit && typeof edit === 'object' && Object.keys(edit).sort().join() === 'find,wrong' && lines(edit.find, 1) && lines(edit.wrong, 0)));
+  if (!shaped) return { overlay, paths, stale: `${file} must map each repo path to a list of edits, each { find: [lines], wrong: [lines] }` };
+  paths.push(...Object.keys(edits));
+  const written = temporary('deep-proof-twin-');
+  for (const [path, list] of Object.entries(edits)) {
+    // Folded as a disk that ignores case folds it, so a whole file and an edit never land on one file.
+    if (paths.slice(0, whole).some((held) => held.toLowerCase() === path.toLowerCase())) return { overlay, paths, stale: `${path} is both held whole and edited by its lines.json` };
+    if (!all.includes(path) || lstatSync(join(root, path)).isSymbolicLink()) return { overlay, paths, stale: `${path}, which its lines.json edits, is no file of the change` };
+    const bytes = readFileSync(join(root, path));
+    const text = bytes.toString('utf8');
+    if (!Buffer.from(text, 'utf8').equals(bytes)) return { overlay, paths, stale: `${path}, which its lines.json edits, is not UTF-8 text` };
+    const held = text.split('\n');
+    const count = held.length - (text.endsWith('\n') ? 1 : 0);
+    const places = list.map(({ find }) => [...Array(Math.max(0, count - find.length + 1)).keys()].filter((at) => find.every((line, index) => held[at + index] === line)));
+    const missed = places.findIndex((found) => found.length !== 1);
+    if (missed >= 0) return { overlay, paths, stale: `${path}: the lines of its edit ${missed + 1} match ${places[missed].length ? `at ${places[missed].length} places (lines ${places[missed].map((at) => at + 1).join(', ')})` : 'nowhere'}` };
+    const placed = list.map(({ find, wrong }, index) => ({ at: places[index][0], find, wrong })).sort((a, b) => a.at - b.at);
+    const overlap = placed.findIndex((edit, index) => index && edit.at < placed[index - 1].at + placed[index - 1].find.length);
+    if (overlap > 0) return { overlay, paths, stale: `${path}: two of its edits overlap at line ${placed[overlap].at + 1}` };
+    for (const { at, find, wrong } of placed.reverse()) held.splice(at, find.length, ...wrong);
+    const target = join(written, path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, held.join('\n'));
+    chmodSync(target, lstatSync(join(root, path)).mode & 0o777);
+    overlay.set(path, target);
+  }
+  return { overlay, paths };
+}
+
 /**
  * Every run the before, trace and mutation lanes read: the tagged tests (those of the change's issue,
  * and with no issue those in files the change touches), on the change, on the merge base, and on the
@@ -593,25 +703,30 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
     // A twin is a wrong program: it replaces code under test, never a test's own files, or a test
     // that asserts nothing could fail on a twin that rewrites what it compares.
     // Nor installed packages, whose frames a failure's origin passes over.
-    const tests = own.map((path) => path.slice(folder.length + 1)).filter((path) => underTestPaths(path) || path.split('/').includes('node_modules'));
+    const { overlay, paths, stale } = twinOverlay(root, folder, own, all);
+    const tests = paths.filter((path) => underTestPaths(path) || path.split('/').includes('node_modules'));
     if (!own.length || tests.length) {
       runs.twins.set(folder, { refused: own.length ? `replaces files under the test paths or node_modules (${tests.join(', ')})` : 'has no files', ...empty() });
       continue;
     }
+    if (stale) {
+      runs.twins.set(folder, { stale, ...empty() });
+      continue;
+    }
     // In the change bay, the twin is a use of its own, laid before the build as in a temporary copy.
     let directory, failed, refused;
-    if (runs.bay) ({ directory, blocked: failed, refused } = inBay(root, 'change', `twin ${folder}`, new Map(own.map((path) => [path.slice(folder.length + 1), join(root, path)])), true));
+    if (runs.bay) ({ directory, blocked: failed, refused } = inBay(root, 'change', `twin ${folder}`, overlay, true));
     else {
       directory = copyChange(root, 'deep-proof-checkout-', runs.modules);
       try {
-        for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
+        lay(directory, overlay);
       } catch (error) {
         refused = `cannot be laid over the change: ${firstLine(error.message)}`;
       }
       if (!refused) {
         failed = prepare(root, change, directory);
         undoBuild(root, directory, [], runs.modules);
-        for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
+        lay(directory, overlay);
       }
     }
     if (refused) {
@@ -623,11 +738,21 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   return runs;
 }
 
+/** The twins of a test laid for it whose lines didn't apply (#1832); none for a test that failed on the merge base at its assertion, which needs none. */
+const staleOf = (runs, test) => (failedAtAssertion(runs.base.results.get(test.key)) ? [] : (test.twins ?? []).filter(({ key }) => runs.twins.get(key)?.stale));
+
 /** How a test failed on a wrong program without a mutant, or null. */
 function wrongProgram(runs, test) {
   if (failedAtAssertion(runs.base.results.get(test.key))) return 'failed on the merge base at its assertion';
+  if (staleOf(runs, test).length) return null;
   const twin = (test.twins ?? []).find(({ key }) => failedAtAssertion(runs.twins.get(key)?.results.get(test.key)));
-  return twin ? `failed on ${twin.twin} at its assertion` : null;
+  if (twin) return `failed on ${twin.twin} at its assertion`;
+  // A parent test fails where its subtests do, as their failure, never at an assertion of its own. It is proven when it
+  // failed only by its subtests on the merge base or a twin, and each of its subtests is proven (#1838).
+  const subtests = runs.tests.filter(({ path, key }) => path === test.path && key.startsWith(`${test.key} › `) && !key.slice(test.key.length + 3).includes(' › '));
+  const bySubtests = (result) => result?.status === 'fail' && result.failure.bySubtests;
+  const failed = bySubtests(runs.base.results.get(test.key)) || (test.twins ?? []).some(({ key }) => bySubtests(runs.twins.get(key)?.results.get(test.key)));
+  return failed && subtests.length && subtests.every((subtest) => subtest.status === 'pass' && wrongProgram(runs, subtest)) ? `each of its ${subtests.length} subtests is proven` : null;
 }
 
 /** The before lane's lines; returns the tests that failed on a wrong program. */
@@ -640,6 +765,10 @@ export function before(runs, kills, say, print) {
   for (const key of runs.unrun ?? []) say('FAIL', 'before', `${key}: declared and not skipped, but the runner never reported it on the change`, BEFORE_FIX);
   for (const path of runs.only ?? []) say('FAIL', 'before', `${path}: a .only in the file keeps its other tagged tests from running`, BEFORE_FIX);
   for (const test of runs.tests) {
+    // A twin whose lines no longer apply was laid nowhere: its proof is missing, whatever else the test shows, so the
+    // test is proven by nothing else in this run, a mutant or another twin included.
+    const stale = staleOf(runs, test);
+    for (const { key } of stale) say('BLOCKED', 'before', `${test.key}: its planted wrong program ${key} does not apply: ${runs.twins.get(key).stale}`, STALE_FIX);
     if (quiet(test.status)) {
       // The trace lane counts it as no test. One the source declares unskipped that ran on the merge
       // base, where the test paths are the change's, was skipped by the change's code, such as a hook
@@ -656,11 +785,13 @@ export function before(runs, kills, say, print) {
       continue;
     }
     const how = wrongProgram(runs, test) ?? (kills.get(test.key) ? `killed ${kills.get(test.key)} mutant${kills.get(test.key) === 1 ? '' : 's'}` : null);
-    if (how) {
+    if (how && !stale.length) {
       proven.add(test.key);
       say('PASS', 'before', `${test.key}: ${how}`);
       continue;
     }
+    // Proven but for its stale twins, as listed above: a twin that applied failed it at its assertion, or a mutant did.
+    if (how || (stale.length && test.twins.some(({ key }) => failedAtAssertion(runs.twins.get(key)?.results.get(test.key))))) continue;
     const base = runs.base.results.get(test.key);
     const refused = test.twins.filter(({ key }) => runs.twins.get(key)?.refused);
     const unrun = test.twins.filter(({ key }) => runs.twins.get(key)?.unrunnable.has(test.path));
@@ -670,6 +801,8 @@ export function before(runs, kills, say, print) {
     else if (runs.base.unrunnable.has(test.path)) say(unrunState(runs.base.unrunnable.get(test.path)), 'before', `${test.key}: cannot run on the merge base: ${runs.base.unrunnable.get(test.path)}`, BEFORE_FIX);
     else if (unrun.length) say(unrun.every(({ key }) => unrunState(runs.twins.get(key).unrunnable.get(test.path)) === 'INCONCLUSIVE') ? 'INCONCLUSIVE' : 'BLOCKED', 'before', `${test.key}: cannot run on its planted wrong program ${unrun.map(({ twin, key }) => `${twin}: ${runs.twins.get(key).unrunnable.get(test.path)}`).join('; ')}`, BEFORE_FIX);
     // A test that no longer fails on its planted wrong program checks nothing now, edited or not.
+    // With a stale twin, its own or a subtest's, which might have proven it, only the BLOCKED lines stand.
+    else if (stale.length || runs.tests.some((subtest) => subtest.key.startsWith(`${test.key} › `) && staleOf(runs, subtest).length)) continue;
     else if (test.twins.length) say('FAIL', 'before', `${test.key}: ${[...new Set(test.twins.map(({ tag }) => tag))].join(', ')}: fails on neither the merge base nor its planted wrong program`, BEFORE_FIX);
     // A tagged test this change leaves alone, such as one an earlier change of the issue landed with
     // its fix, isn't this change's proof to fail; it proves its criterion only through a wrong program.
@@ -806,6 +939,7 @@ export function mutation({ root, change }, runs, say, print) {
       say('BLOCKED', 'mutation', `${outside.map(({ path }) => path).join(', ')}: links out of the checkout or to nothing, so the lines added there were not mutated`, MUTATION_FIX);
       return kills;
     }
+    const scope = workspaces(directory) ? mutantScope(directory, typescript.map(({ path }) => path)) : [];
     // A test alone: each runner matches a pattern against its full name, its suites' names and its
     // own joined by a space for node --test and by " > " for vitest.
     // A test alone kills a mutant only by failing at an assertion, judged from its runner's report: a
@@ -819,16 +953,41 @@ export function mutation({ root, change }, runs, say, print) {
         vitest.length && [...test ? ['DEEP_PROOF_VITEST_REPORT="$R"'] : [], quote(process.execPath), 'node_modules/vitest/vitest.mjs', 'run', ...test ? [`--reporter=${quote(VITEST_REPORTER)}`, '-t', pattern(' > ')] : [], ...vitest.map(quote)].join(' ') + (test ? judge : ''),
       ].filter(Boolean).map((run) => (test ? `R=$(mktemp ${quote(reports)}/report.XXXXXX) && { ${run}; }` : run));
       // Mutants reach a package that tests read through its build only once it is rebuilt, and the
-      // rebuild is undone as the first build was, keeping the mutants.
+      // rebuild is undone as the first build was, keeping the mutants. Only the mutated packages and
+      // their dependents are rebuilt: a package's build reads only what it declares it depends on (#1120).
       const undo = `import { undoBuild } from ${JSON.stringify(import.meta.url)}; undoBuild(${JSON.stringify(root)}, process.cwd(), ${JSON.stringify(typescript.map(({ path }) => path))}, ${JSON.stringify(runs.modules ?? root)});`;
-      return [...workspaces(directory) ? ['npm run build --workspaces --if-present >/dev/null', `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
+      const builds = scope.map((folder) => `npm run build --if-present --workspace=${quote(`packages/${folder}`)} >/dev/null`);
+      return [...workspaces(directory) ? [...builds, `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
     };
     const reports = temporary('deep-proof-report-');
-    const groups = unproven.map((test) => [test, command([test.path], test)]);
-    if (unproven.length < tests.length) groups.push([null, command([...new Set(tests.filter((test) => !unproven.includes(test)).map(({ path }) => path))])]);
+    const groups = unproven.map((test) => [test, [test.path]]);
+    const proven = [...new Set(tests.filter((test) => !unproven.includes(test)).map(({ path }) => path))];
+    // A test that can start the copy's hub runs it from the copy's own target/, which a fresh copy lacks and a bay
+    // keeps from an earlier use, a twin's, say: each StrykerJS run gets this copy's own hub binaries, or none (#2835).
+    let hub, bin;
+    try {
+      // The proven tests run together, but those that start the hub apart from those that name neither package, so
+      // these never find the hub's binaries.
+      const starts = proven.length ? selectBinaries(directory, proven).hub : [];
+      for (const files of [proven.filter((path) => !starts.includes(path)), proven.filter((path) => starts.includes(path))]) if (files.length) groups.push([null, files]);
+      hub = groups.map(([, files]) => selectBinaries(directory, files).target);
+      bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set(hub.flat())], (command, args, options) => spawnIn(directory, command, args, options), { timeout: 0 });
+    } catch (error) {
+      // buildBinaries and selectBinaries name their verdict first: `BLOCKED test binaries: …`, `INCONCLUSIVE no grant: …`.
+      const [, level, why] = /^(BLOCKED|INCONCLUSIVE) (.*)$/s.exec(error.message) ?? [, 'BLOCKED', error.message];
+      say(level, 'mutation', `cannot build the hub's binaries for the mutants' copy, so the lines added to ${typescript.map(({ path }) => path).join(', ')} were not mutated: ${why}`, MUTATION_FIX);
+      return kills;
+    }
     const killed = new Set(), seen = new Map();
-    for (const [test, line] of groups) {
-      const run = strykerRun(root, directory, mutate, line);
+    for (const [index, [test, files]] of groups.entries()) {
+      try {
+        placeHubBinaries(directory, bin, hub[index]);
+      } catch (error) {
+        blocked = true;
+        say('BLOCKED', 'mutation', `cannot put the hub's binaries in the mutants' copy for ${test ? test.key : 'the tagged tests'}: ${error.message}`, MUTATION_FIX);
+        break;
+      }
+      const run = strykerRun(root, directory, mutate, command(files, test));
       if (run.error) {
         blocked = true;
         say('BLOCKED', 'mutation', `StrykerJS could not run ${test ? test.key : 'the tagged tests'}: ${run.error}`, MUTATION_FIX);

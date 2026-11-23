@@ -2,11 +2,11 @@
 // (`rows.read`) or, with it down, from its database read-only. `deep` prints the list and the one count; `deep status`
 // adds each row's detail and ends on the count, so what needs you is the last thing on screen however long the detail
 // is; `--json` prints the rows. Every clock time is in your time zone.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { call, clock, notAnswering, notAnsweringSince, Unanswered } from './client.js';
 import { StaleHub } from './generations.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { controlToken, hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
 import type { Row, Why } from './rows.js';
@@ -16,7 +16,7 @@ import { visible } from './visible.js';
 /** What deep status shows under a session's row (status.ts: StatusRow, less what the row holds). */
 export interface Detail { note?: string; verdict?: string; readings?: string[]; calls?: string[]; commits?: string[]; turn?: { calls: number; failed: number } }
 /** A read of the list: its rows at a log_pos, each session's detail when asked, and when the hub stopped answering if it did. */
-interface Read { log_pos: number; rows: Row[]; detail?: Record<string, Detail>; down?: number; explained?: Why }
+interface Read { log_pos: number; rows: Row[]; detail?: Record<string, Detail>; down?: number; explained?: Why; /** A drain holding session starts (#2974), in the hub's words. */ paused?: string }
 
 /** The one count sentence, as the app says it (crates/deep-app/src/views.rs: asks_need_you). */
 export const asksNeedYou = (n: number): string => (n === 1 ? '1 ask needs you' : `${n} asks need you`);
@@ -53,9 +53,9 @@ function planted(rows: Row[]): Row[] {
  * then how many sessions and the count sentence. With `detail`, each session's detail under its row; a finished
  * session's is one line, how many calls, how many failed, its commits, and the handle `deep read` takes for the rest.
  */
-export function listText(rows: readonly Row[], o: { detail?: Record<string, Detail>; down?: string; now?: number } = {}): string {
+export function listText(rows: readonly Row[], o: { detail?: Record<string, Detail>; down?: string; paused?: string; now?: number } = {}): string {
   const now = o.now ?? Date.now();
-  const out: string[] = o.down ? [o.down] : [];
+  const out: string[] = [o.down, o.paused].filter((line): line is string => !!line);
   const sessions = rows.filter((r) => r.id.startsWith('session:'));
   const asks = rows.filter((r) => r.id.startsWith('ask:'));
   const age = (r: Row) => (r.since === null ? '' : `, ${elapsed(Math.max(0, now - r.since))}`);
@@ -138,11 +138,15 @@ async function staleBeforeAsk(rows: Row[], ledger: string | undefined): Promise<
   }
 }
 
-/** The hub's socket and its token, beside the socket or the installed hub's. */
+/** The hub's socket and the token that belongs to it; none where no hub wrote one, so its database is still read. */
 function hub(): { socket: string; token: string } {
   const socket = hubAddress().path;
-  const token = [join(dirname(socket), 'control.token'), rootOf(installedRoot()).token].find((p) => existsSync(p));
-  return { socket, token: token ? readFileSync(token, 'utf8').trim() : '' };
+  try {
+    return { socket, token: controlToken(socket) };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return { socket, token: '' };
+  }
 }
 
 /** What a list read from the hub's database says first: the one sentence, since when and its fix (#1812), and what follows. */
@@ -190,14 +194,16 @@ async function fromDatabase(ledger: string, detail: boolean, why?: string): Prom
  * `deep` (`detail` false) and `deep status` (true), each with `--json`: 0 read from the hub, 3 from its database or not
  * at all. `deep status <session> --why` prints why that session reads as it does (#2018), 2 when no session has that ID.
  */
-export async function listCommand(args: readonly string[], detail: boolean): Promise<number> {
+export async function listCommand(args: readonly string[], detail: boolean, setUp: () => Promise<number> = async () => 0): Promise<number> {
   const name = detail ? 'deep status' : 'deep';
-  const named = args.filter((a) => !a.startsWith('--'));
+  const named = args.filter((a) => !a.startsWith('-'));
   const asked = args.includes('--why');
-  if (args.some((a) => a.startsWith('--') && a !== '--json' && !(detail && a === '--why')) || named.length !== (asked ? 1 : 0)) {
+  if (args.some((a) => a.startsWith('-') && a !== '--json' && !(detail && a === '--why')) || named.length !== (asked ? 1 : 0)) {
     process.stderr.write(detail ? 'Usage: deep status [--json] | deep status <session> --why [--json]\n' : `Usage: ${name} [--json]\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   const session = asked ? named[0]! : undefined;
   const [method, params] = session === undefined ? ['rows.read', { detail }] as const : ['row.why', { session }] as const;
   const json = args.includes('--json');
@@ -215,8 +221,8 @@ export async function listCommand(args: readonly string[], detail: boolean): Pro
       return;
     }
     const rows = planted(read.rows);
-    if (json) process.stdout.write(`${JSON.stringify({ log_pos: read.log_pos, rows })}\n`);
-    else process.stdout.write(listText(rows, { ...(read.detail ? { detail: read.detail } : {}), ...(read.down !== undefined ? { down: hubDown(read.down) } : {}) }));
+    if (json) process.stdout.write(`${JSON.stringify({ log_pos: read.log_pos, rows, ...(read.paused ? { paused: read.paused } : {}) })}\n`);
+    else process.stdout.write(listText(rows, { ...(read.detail ? { detail: read.detail } : {}), ...(read.paused ? { paused: read.paused } : {}), ...(read.down !== undefined ? { down: hubDown(read.down) } : {}) }));
   };
   // A clone of a project this machine joined reads that project's hub over the network (#1338), as its person.
   const { joinedFor, remoteCall } = await import('./remote.js');

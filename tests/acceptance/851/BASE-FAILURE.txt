@@ -1,0 +1,279 @@
+# #851 acceptance suite at the base: 00c1c0841 ("design(#851): the game shell, shell@1, and its journeys, published
+# first; ..."), clean but for tests/acceptance/851 added, on an Apple-silicon Mac (macOS 27.2, 18 cores, load average
+# about 220 from other sessions), Node 24.22.2, rustup's cargo. Paths redacted to <worktree>.
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run
+#          --root tests/acceptance/851 --testTimeout=600000 --hookTimeout=180000 --no-file-parallelism
+# Also: node node_modules/typescript/bin/tsc -p tests/acceptance/851/tsconfig.json exits 0.
+# Result: 19 of 19 tests fail (10 of 10 files), each at its first assertion, before any build: the base's playtest
+# plug-in declares no check kind shell.journeys (its manifest's checks are playtest, rules.legal, logic.edges and
+# grid.reach). So no test reached deep-drive's build, a hub, a replica play, a planted replica (the base's
+# Plant::parse knows none of pause-runs-level-clock, focus-stays-on-disabled, prompts-keep-key-glyphs) or a shell
+# document (the base's play mode answers a document with no logic@1 item "the document has no logic item to play").
+# The fixture was checked first against the base's deep-logic in a scratch test (not committed), with the assembler
+# (wat/, built in place with --locked) and deep-logic built: the region maps are collect_key reads at 0 (392 B),
+# finish_key at 392 and seed at 784 for level 1; collect_key at 0, seed at 392 and carry_in at 400 (24 B) for level 2;
+# writes score 0, inventory 8, done 24, lost 32, then carry_req 40 and clock 48 (level 1) or clock 40. On a track with
+# collects stamped at steps 600, 1,800 and 3,000 and a finish at 3,700, level 1's score is 10, 30 and 60 and its
+# inventory [1,0,0,0], [1,2,0,0] and [1,2,3,0] after each collect, done is 0 at 3,699 and 1 at 3,700, lost 0; with no
+# presses lost is 0 at 3,899 and 1 at 3,900. Level 2 opened (open_carry, then a bake with the record's entry at step 0)
+# from a record of layout sha256(LAYOUT1_TEXT) holding score [60] and inventory [1,2,3,0] reads them at step 0 and,
+# after a collect at 600, is done with score 70 and inventory [2,2,3,0]; with no record it starts at score 0. Level 3
+# is done at 600 with score 10. The planted level 2 alone is refused by the base's logic check as logic_refused,
+# "l1.score names no control or logic item of this piece" (the shell's check is to name it shell.reads). Each planted
+# document builds.
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/851
+
+ ❯ ac01-unlock.test.ts (2 tests | 2 failed) 120ms
+   ❯ #851.9ac2fbcf the fixture shell plays in a replica, and a shell that unlocks every level at start fails the unlock journey (2)
+     × #851.9ac2fbcf the title's Start enters level 1, and completing level 1 unlocks level 2 in the level select 85ms
+     × #851.9ac2fbcf a planted shell that unlocks every level at start fails the unlock journey with shell.unlock, naming level 3 0ms
+ ❯ ac07-prompts.test.ts (2 tests | 2 failed) 135ms
+   ❯ #851.ad15698c every prompt shows the glyph of the device that wrote the last entry (2)
+     × #851.ad15698c with keys, a pad and touches, every prompt shows that device's glyph by the step after its first entry 131ms
+     × #851.ad15698c a planted shell that keeps key labels after a pad entry fails prompt.agree, naming the prompt 2ms
+ ❯ ac09-layout.test.ts (2 tests | 2 failed) 321ms
+   ❯ #851.27357504 every shell screen fits at the reference window and at 2400 × 1080, from evaluated boxes (2)
+     × #851.27357504 the layout journey passes on every screen at both sizes, from the boxes evaluated in the view's pixels 282ms
+     × #851.27357504 a planted settings screen whose Back button covers half of the volume slider fails ui.layout, naming settings_back and volume_slider 0ms
+ ❯ ac08-shown.test.ts (1 test | 1 failed) 569ms
+   ❯ #851.651a914b shown to you: the six screens and a scene change from level 1 to level 2, from the canvas's own frames (1)
+     × #851.651a914b the check run keeps a frame of each of the six screens and a recording of level 1 to level 2 as evidence by hash; whether they look right is your taste call, so this stays INCONCLUSIVE 349ms
+ ❯ ac05-back.test.ts (2 tests | 2 failed) 10ms
+   ❯ #851.938e41a6 back reaches the title from every screen within 3 presses, through pause from a level (2)
+     × #851.938e41a6 from every screen back reaches the title within 3 presses, and from a level shows pause first, with keys, a pad and touches 8ms
+     × #851.938e41a6 a planted credits screen with no way back fails shell.back, naming credits 0ms
+ ❯ ac10-wired.test.ts (2 tests | 2 failed) 10ms
+   ❯ #851.5b5156e7 every enabled control does something once activated, and a button bound to nothing fails wired (2)
+     × #851.5b5156e7 with keys, a pad and touches, every enabled control changes the full-state hash or the screen within 30 steps once activated 8ms
+     × #851.5b5156e7 a planted Credits button bound to nothing fails wired, naming credits_button, though a check of only its visibility passes it 0ms
+ ❯ ac02-carry.test.ts (2 tests | 2 failed) 51ms
+   ❯ #851.d9bf3012 level 2 starts from level 1's carry record, and a level 2 that reads level 1's arrays is refused (2)
+     × #851.d9bf3012 entering level 2 carries score 60 and inventory [1, 2, 3, 0] from level 1's carry record 5ms
+     × #851.d9bf3012 a planted level 2 that reads level 1's arrays directly is refused at check with shell.reads, naming l1.score 0ms
+ ❯ ac04-devices.test.ts (2 tests | 2 failed) 189ms
+   ❯ #851.4125ce58 the play journeys pass with keys, a pad or touches alone and end on one hash, and a slider a pad can't move fails the pad run (2)
+     × #851.4125ce58 title_to_level, unlock, pause and credits each pass with keys only, a pad only and touches only, and a journey's three runs end on the same full-state hash 187ms
+     × #851.4125ce58 a planted settings screen whose volume slider takes only a pointer drag fails the pad run with shell.device, naming settings and volume_slider 0ms
+ ❯ ac06-focus.test.ts (2 tests | 2 failed) 8ms
+   ❯ #851.2badf2f3 one enabled control holds focus at every step, and a disabled one hands focus on at its step (2)
+     × #851.2badf2f3 with keys and with a pad, at both sizes, exactly one enabled control holds focus after the first entry, and a focused control disabled at step k hands focus to the next enabled one at step k 6ms
+     × #851.2badf2f3 a planted screen that leaves focus on a disabled control fails shell.focus, naming the control and the step 1ms
+ ❯ ac03-pause.test.ts (2 tests | 2 failed) 13ms
+   ❯ #851.b6cf2eb0 a run paused at step 1,200 for 30 s reaches the same full-state hash at step 3,600 as one never paused (2)
+     × #851.b6cf2eb0 paused at level step 1,200 for 30 s and resumed, level 1 reaches the never-paused run's full-state hash at level step 3,600 9ms
+     × #851.b6cf2eb0 a planted pause that lets the level clock run fails shell.pause, naming the first level step whose hashes differ 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 19 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac01-unlock.test.ts > #851.9ac2fbcf the fixture shell plays in a replica, and a shell that unlocks every level at start fails the unlock journey > #851.9ac2fbcf the title's Start enters level 1, and completing level 1 unlocks level 2 in the level select
+ FAIL  ac01-unlock.test.ts > #851.9ac2fbcf the fixture shell plays in a replica, and a shell that unlocks every level at start fails the unlock journey > #851.9ac2fbcf a planted shell that unlocks every level at start fails the unlock journey with shell.unlock, naming level 3
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac01-unlock.test.ts:26:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/19]⎯
+
+ FAIL  ac02-carry.test.ts > #851.d9bf3012 level 2 starts from level 1's carry record, and a level 2 that reads level 1's arrays is refused > #851.d9bf3012 entering level 2 carries score 60 and inventory [1, 2, 3, 0] from level 1's carry record
+ FAIL  ac02-carry.test.ts > #851.d9bf3012 level 2 starts from level 1's carry record, and a level 2 that reads level 1's arrays is refused > #851.d9bf3012 a planted level 2 that reads level 1's arrays directly is refused at check with shell.reads, naming l1.score
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac02-carry.test.ts:25:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/19]⎯
+
+ FAIL  ac03-pause.test.ts > #851.b6cf2eb0 a run paused at step 1,200 for 30 s reaches the same full-state hash at step 3,600 as one never paused > #851.b6cf2eb0 paused at level step 1,200 for 30 s and resumed, level 1 reaches the never-paused run's full-state hash at level step 3,600
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac03-pause.test.ts:45:61
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/19]⎯
+
+ FAIL  ac03-pause.test.ts > #851.b6cf2eb0 a run paused at step 1,200 for 30 s reaches the same full-state hash at step 3,600 as one never paused > #851.b6cf2eb0 a planted pause that lets the level clock run fails shell.pause, naming the first level step whose hashes differ
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac03-pause.test.ts:57:61
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/19]⎯
+
+ FAIL  ac04-devices.test.ts > #851.4125ce58 the play journeys pass with keys, a pad or touches alone and end on one hash, and a slider a pad can't move fails the pad run > #851.4125ce58 title_to_level, unlock, pause and credits each pass with keys only, a pad only and touches only, and a journey's three runs end on the same full-state hash
+ FAIL  ac04-devices.test.ts > #851.4125ce58 the play journeys pass with keys, a pad or touches alone and end on one hash, and a slider a pad can't move fails the pad run > #851.4125ce58 a planted settings screen whose volume slider takes only a pointer drag fails the pad run with shell.device, naming settings and volume_slider
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac04-devices.test.ts:27:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/19]⎯
+
+ FAIL  ac05-back.test.ts > #851.938e41a6 back reaches the title from every screen within 3 presses, through pause from a level > #851.938e41a6 from every screen back reaches the title within 3 presses, and from a level shows pause first, with keys, a pad and touches
+ FAIL  ac05-back.test.ts > #851.938e41a6 back reaches the title from every screen within 3 presses, through pause from a level > #851.938e41a6 a planted credits screen with no way back fails shell.back, naming credits
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac05-back.test.ts:23:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/19]⎯
+
+ FAIL  ac06-focus.test.ts > #851.2badf2f3 one enabled control holds focus at every step, and a disabled one hands focus on at its step > #851.2badf2f3 with keys and with a pad, at both sizes, exactly one enabled control holds focus after the first entry, and a focused control disabled at step k hands focus to the next enabled one at step k
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac06-focus.test.ts:79:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/19]⎯
+
+ FAIL  ac06-focus.test.ts > #851.2badf2f3 one enabled control holds focus at every step, and a disabled one hands focus on at its step > #851.2badf2f3 a planted screen that leaves focus on a disabled control fails shell.focus, naming the control and the step
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac06-focus.test.ts:95:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/19]⎯
+
+ FAIL  ac07-prompts.test.ts > #851.ad15698c every prompt shows the glyph of the device that wrote the last entry > #851.ad15698c with keys, a pad and touches, every prompt shows that device's glyph by the step after its first entry
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac07-prompts.test.ts:35:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/19]⎯
+
+ FAIL  ac07-prompts.test.ts > #851.ad15698c every prompt shows the glyph of the device that wrote the last entry > #851.ad15698c a planted shell that keeps key labels after a pad entry fails prompt.agree, naming the prompt
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac07-prompts.test.ts:55:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/19]⎯
+
+ FAIL  ac08-shown.test.ts > #851.651a914b shown to you: the six screens and a scene change from level 1 to level 2, from the canvas's own frames > #851.651a914b the check run keeps a frame of each of the six screens and a recording of level 1 to level 2 as evidence by hash; whether they look right is your taste call, so this stays INCONCLUSIVE
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac08-shown.test.ts:28:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/19]⎯
+
+ FAIL  ac09-layout.test.ts > #851.27357504 every shell screen fits at the reference window and at 2400 × 1080, from evaluated boxes > #851.27357504 the layout journey passes on every screen at both sizes, from the boxes evaluated in the view's pixels
+ FAIL  ac09-layout.test.ts > #851.27357504 every shell screen fits at the reference window and at 2400 × 1080, from evaluated boxes > #851.27357504 a planted settings screen whose Back button covers half of the volume slider fails ui.layout, naming settings_back and volume_slider
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac09-layout.test.ts:31:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/19]⎯
+
+ FAIL  ac10-wired.test.ts > #851.5b5156e7 every enabled control does something once activated, and a button bound to nothing fails wired > #851.5b5156e7 with keys, a pad and touches, every enabled control changes the full-state hash or the screen within 30 steps once activated
+ FAIL  ac10-wired.test.ts > #851.5b5156e7 every enabled control does something once activated, and a button bound to nothing fails wired > #851.5b5156e7 a planted Credits button bound to nothing fails wired, naming credits_button, though a check of only its visibility passes it
+AssertionError: the playtest plug-in's manifest declares the check kind shell.journeys beside playtest: expected [ 'playtest', 'rules.legal', …(2) ] to include 'shell.journeys'
+ ❯ journeysDeclared helpers.ts:313:115
+    311|   expect(existsSync(join(PLAYTEST_DIR, 'deepbuild.json')), 'the playte…
+    312|   const m = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json…
+    313|   expect(m['checks'], `the playtest plug-in's manifest declares the ch…
+       |                                                                                                                   ^
+    314| }
+    315|
+ ❯ openHub helpers.ts:323:3
+ ❯ helpers.ts:354:28
+ ❯ ac10-wired.test.ts:25:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/19]⎯
+
+
+ Test Files  10 failed (10)
+      Tests  19 failed (19)
+   Start at  08:31:58
+   Duration  9.75s (tests 36%, import 34%, transform 20%, worker 10%)
+
+    Isolate  10 workers spawned · ~383ms startup each (spawn + environment, per file)
+             at least ~3.45s faster with isolate: false — reuses workers across files instead of one per file
+

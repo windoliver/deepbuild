@@ -170,7 +170,16 @@ impl Logic {
     /// Runs `lib`'s fixtures, or refuses: with `true` when a fixture's own run failed, `false`
     /// when the piece didn't let it run.
     fn run_fixtures(&mut self, piece_v: &Value, lib: &Lib) -> Result<Value, (Vec<Value>, bool)> {
-        let assets = piece_v.get("assets").cloned().unwrap_or(json!({}));
+        // The piece's assets, and the first-party packs' it doesn't carry (#416, #981).
+        let mut assets = crate::first_party::assets().clone();
+        assets.extend(
+            piece_v
+                .get("assets")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default(),
+        );
+        let assets = Value::Object(assets);
         let mut records = Vec::new();
         for id in &lib.fixtures {
             let missing = || {
@@ -185,8 +194,18 @@ impl Logic {
                 .filter(|b| deep_canvas_sandbox::rewrite::hash(b) == *id)
                 .and_then(|b| serde_json::from_slice(&b).ok())
                 .ok_or_else(|| (missing(), false))?;
+            // The fixture's other items beside its own, such as a lane graph's floor paths (#981).
+            let mut items = fixture
+                .get("items")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            items.insert(
+                "fixture".into(),
+                fixture.get("item").cloned().unwrap_or(Value::Null),
+            );
             let piece = json!({"seed": 0, "packs": piece_v.get("packs").cloned().unwrap_or(json!([])),
-                "items": {"fixture": fixture.get("item").cloned().unwrap_or(Value::Null)}, "assets": assets});
+                "items": items, "assets": assets});
             let started = std::time::Instant::now();
             let line = json!({"call": "bake", "piece": piece, "track": fixture.get("track").cloned().unwrap_or(json!([])),
                 "steps": fixture.get("steps").cloned().unwrap_or(json!(1))});
@@ -300,7 +319,12 @@ impl Logic {
             let judged = self
                 .judge_interface(&piece_v, iface, pack.agent)
                 .map_err(refused)?;
-            interfaces.push(json!({"name": iface.name, "label": iface.label, "digest": iface.digest, "judged": judged}));
+            let mut entry = json!({"name": iface.name, "label": iface.label, "digest": iface.digest, "judged": judged});
+            // #1255: its kind kit, each planted twin raising the rule it names.
+            if !iface.twins.is_empty() {
+                entry["kit"] = self.kit(&piece_v, iface, pack.agent).map_err(refused)?;
+            }
+            interfaces.push(entry);
         }
         let mut libraries = Vec::new();
         for (label, e) in &pack.libs {

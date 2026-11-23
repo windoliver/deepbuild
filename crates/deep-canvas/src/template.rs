@@ -3,7 +3,7 @@
 //! its path's source. This build's slots read data constants (`{data/<name>}`); the check and the
 //! text module read templates through this one parser.
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 /// A piece of a template: words as written, or a slot's path.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -57,12 +57,12 @@ fn number(n: f64) -> String {
 
 /// Each slot of `template` that shows a story's own number (a number whose constant's source is
 /// `story`, Honest numbers): its path and what it shows. Empty for a template that doesn't parse.
-pub fn story_numbers<'t>(doc: &Value, template: &'t str) -> Vec<(&'t str, String)> {
+pub fn story_numbers<'t>(doc: &Map<String, Value>, template: &'t str) -> Vec<(&'t str, String)> {
     parts(template)
         .unwrap_or_default()
         .into_iter()
         .filter_map(|part| match part {
-            Part::Slot(slot) => value(doc, slot)
+            Part::Slot(slot) => value_of(doc, slot)
                 .filter(|s| s.number && s.source.as_deref() == Some("story"))
                 .map(|s| (slot, s.text)),
             Part::Words(_) => None,
@@ -73,6 +73,12 @@ pub fn story_numbers<'t>(doc: &Value, template: &'t str) -> Vec<(&'t str, String
 /// The value at `path` in `doc`: a data constant `data/<name>`, a number or a string, bare or as
 /// `{value, source}` (Document envelope). `None` when the path names nothing this build shows.
 pub fn value(doc: &Value, path: &str) -> Option<Shown> {
+    value_of(doc.as_object()?, path)
+}
+
+/// [`value`] in a document's members as they are (#2660: a caller holding them builds no
+/// document to read one).
+fn value_of(doc: &Map<String, Value>, path: &str) -> Option<Shown> {
     // #504: a figure's readout also reads what moves its parts: an assembly's value (0 when
     // unwritten) and a control's (its value at t where the caller wrote one, else its default),
     // so every number on the card comes from the model that moves the parts.
@@ -124,9 +130,19 @@ pub fn value(doc: &Value, path: &str) -> Option<Shown> {
 }
 
 /// The value at `path` as `item`'s template reads it: in an overlay that discloses an
-/// exaggeration, a bare `factor` or `shown_at` is that exaggeration's (#1183); else [`value`].
+/// exaggeration, a bare `factor` or `shown_at` is that exaggeration's (#1183); in a readout a
+/// world's output writes, `value` is what it writes at the frame and `value/<i>` its part i
+/// (#2248); else [`value`].
 pub fn value_in(doc: &Value, item: &str, path: &str) -> Option<Shown> {
-    match crate::lengths::slot(doc, item, path) {
+    let written = || {
+        let part = path.strip_prefix("value")?;
+        let v = doc.get("items")?.get(item)?.get("params")?.get("value")?;
+        match part.strip_prefix('/') {
+            Some(i) => v.get(i.parse::<usize>().ok()?)?.as_f64(),
+            None => v.as_f64().filter(|_| part.is_empty()),
+        }
+    };
+    match crate::lengths::slot(doc, item, path).or_else(written) {
         Some(v) => Some(Shown {
             text: number(v),
             source: None,
@@ -134,6 +150,25 @@ pub fn value_in(doc: &Value, item: &str, path: &str) -> Option<Shown> {
         }),
         None => value(doc, path),
     }
+}
+
+/// #2248: whether `path` is a slot of a readout a world's output writes: `value` or `value/<i>`
+/// in an item some world's output names as its `to`, whose value the frame gives at t (Physics
+/// output).
+pub fn reads_output(doc: &Value, item: &str, path: &str) -> bool {
+    let part = path.strip_prefix("value").unwrap_or("-");
+    let slot = part.is_empty()
+        || part
+            .strip_prefix('/')
+            .is_some_and(|i| i.parse::<usize>().is_ok());
+    let worlds = doc.get("worlds").and_then(Value::as_object);
+    slot && worlds.into_iter().flatten().any(|(_, w)| {
+        let outputs = w.get("outputs").and_then(Value::as_object);
+        outputs
+            .into_iter()
+            .flatten()
+            .any(|(_, o)| o.get("to").and_then(Value::as_str) == Some(item))
+    })
 }
 
 /// Whether `path` reads a mark set's read-only anchor, `items/<set>#period/by` or
@@ -242,5 +277,41 @@ mod tests {
             expand(&doc, "{items/a/params/x}"),
             Err(Some("items/a/params/x".into()))
         );
+    }
+
+    /// #2248: in a readout a world's output names, `{value}` shows what the frame wrote there
+    /// and `{value/i}` its part i; in any other item, or before a frame writes it, neither is a
+    /// value, and only the named readout's slot is one the frame gives.
+    #[test]
+    fn a_readouts_value_slot_shows_what_its_output_writes_at_the_frame() {
+        let mut doc = json!({
+            "worlds": {"rig": {"outputs": {"fall": {"from": "ball", "read": "velocity", "to": "vy"}}}},
+            "items": {"vy": {"params": {"template": "{value/1} m/s"}}, "other": {"params": {}}},
+        });
+        assert!(reads_output(&doc, "vy", "value/1") && reads_output(&doc, "vy", "value"));
+        assert!(
+            !reads_output(&doc, "other", "value/1"),
+            "no output names it"
+        );
+        assert!(!reads_output(&doc, "vy", "value/y") && !reads_output(&doc, "vy", "values"));
+        assert_eq!(
+            expand_in(&doc, "vy", "{value/1} m/s"),
+            Err(Some("value/1".into()))
+        );
+        doc["items"]["vy"]["params"]["value"] = json!([0.0, -4.905, 0.0]);
+        assert_eq!(
+            expand_in(&doc, "vy", "{value/1} m/s"),
+            Ok("-4.905 m/s".into())
+        );
+        assert_eq!(
+            expand_in(&doc, "vy", "{value/3}"),
+            Err(Some("value/3".into()))
+        );
+        assert_eq!(
+            expand_in(&doc, "other", "{value/1}"),
+            Err(Some("value/1".into()))
+        );
+        doc["items"]["vy"]["params"]["value"] = json!(45.5);
+        assert_eq!(expand_in(&doc, "vy", "{value}°"), Ok("45.5°".into()));
     }
 }

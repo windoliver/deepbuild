@@ -117,7 +117,8 @@
           "description": "The complete current copy, in order. Earlier generations remain immutable.",
           "items": {
             "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
+            "pattern": "^[0-9a-f]{64}$",
+            "maxLength": 8192
           }
         }
       },

@@ -1,23 +1,144 @@
 //! The one shaper. A text is shaped once per run by parley (HarfRust shaping, UAX #14 line
 //! breaks, UAX #9 bidi), from the bundled fonts alone; the shaped run is the only source for
-//! layout, the fit check and drawing (canvas primitives: Text `text@1`, Semantics).
+//! layout, the fit check and drawing (canvas primitives: Text `text@1`, Semantics). Issue #1430:
+//! a text is shaped per paragraph and its lines broken from the shaped paragraphs, so a new width
+//! shapes nothing and a typed character shapes only its paragraph.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
+use icu_properties::props::BidiClass;
 use parley::fontique::{Collection, CollectionOptions, SourceCache};
 use parley::setting::Tag;
 use parley::{
-    Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontStyle,
-    FontVariation, FontVariations, FontWeight, Language, Layout, LayoutContext, LineHeight,
-    PositionedLayoutItem, StyleProperty, VerticalAlign,
+    Alignment, AlignmentOptions, BaseDirection, FontContext, FontData, FontFamily, FontFamilyName,
+    FontStyle, FontVariation, FontVariations, FontWeight, Language, Layout, LayoutContext,
+    LineHeight, PositionedLayoutItem, StyleProperty, VerticalAlign,
 };
+use parley_data::Properties;
 use skrifa::raw::TableProvider;
 
-use crate::cache::{self, Key, Planted};
+use crate::cache::{self, Key, Planted, ShapeKey};
 use crate::fonts::{self, Role, FACES};
 use crate::unicode::is_default_ignorable;
 use crate::unicode::{grapheme_starts, LineBreaks};
 use crate::vertical::{Flow, Stand};
+
+/// The bytes a shaped paragraph counts as in the shape cache, a character: parley's layout of it
+/// (54, measured on a 500-character paragraph once broken into lines) and a glyph of the lines it
+/// keeps (80). Fixed, as the entry's own below, so every platform counts alike; measured on the
+/// reference Macs.
+const BYTES_PER_CHAR: usize = 54 + 80;
+
+/// An entry's own bytes: the paragraph (488), its key (64) and the caches' hold on them.
+const BYTES_PER_PARAGRAPH: usize = 640;
+
+/// #1430: a paragraph shaped once and not yet broken into lines: parley's layout of it, which
+/// each width breaks again, the lines it was last broken into, and its graphemes' first bytes and
+/// its `\n`s.
+pub(crate) struct Paragraph {
+    layout: Mutex<Held>,
+    starts: Vec<usize>,
+    ends: Vec<usize>,
+    chars: usize,
+}
+
+/// A paragraph's layout, with the lines it was last broken into and what they depend on.
+type Held = (Layout<()>, Option<(Lines, Arc<Piece>)>);
+
+impl Paragraph {
+    fn lock(&self) -> MutexGuard<'_, Held> {
+        self.layout.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The bytes it counts as in the shape cache, with its key's text: its layout, its lines'
+    /// glyphs at about one a character, and its graphemes' and `\n`s' offsets.
+    pub(crate) fn bytes(&self, text: &str) -> usize {
+        BYTES_PER_PARAGRAPH
+            + text.len()
+            + self.chars * BYTES_PER_CHAR
+            + (self.starts.len() + self.ends.len()) * 8
+    }
+}
+
+/// #1430: what a paragraph's lines depend on beyond its shape key: the width they break at, the
+/// width they align in, the alignment, the indent, the first line's top in the text, and whether
+/// the paragraph ends the text.
+#[derive(Clone, Copy, PartialEq)]
+struct Lines {
+    width: Option<u32>,
+    within: Option<u32>,
+    align: Align,
+    indent: u32,
+    y: u64,
+    last: bool,
+}
+
+/// #1430: a paragraph's lines as one layout of the whole text draws them, except that graphemes
+/// count from the paragraph's first and no gap moves them down yet (#1966): its glyphs and
+/// decorations, and each line's height, advance with the indent, `\n`s before it in the paragraph,
+/// and the glyphs and decorations up to its end.
+struct Piece {
+    glyphs: Vec<Glyph>,
+    decorations: Vec<Decoration>,
+    lines: Vec<(f32, f32, usize, usize, usize)>,
+}
+
+/// Where the next paragraph of a text goes: its first line's top, the gaps above it, and the
+/// graphemes and `\n`s before it.
+#[derive(Default)]
+struct At {
+    y: f64,
+    down: f32,
+    graphemes: usize,
+    newlines: usize,
+}
+
+/// #1430: whether a text's base direction is right to left as parley finds it for a whole text
+/// (UAX #9 P2 and P3: its first strong character outside isolates). Each of its paragraphs is
+/// shaped in it, so splitting a text into paragraphs turns none of them around.
+pub(crate) fn rtl(text: &str) -> bool {
+    let mut isolates = 0u32;
+    for c in text.chars() {
+        match Properties::get(c).bidi_class() {
+            BidiClass::RightToLeftIsolate
+            | BidiClass::LeftToRightIsolate
+            | BidiClass::FirstStrongIsolate => isolates += 1,
+            BidiClass::PopDirectionalIsolate if isolates > 0 => isolates -= 1,
+            BidiClass::LeftToRight if isolates == 0 => return false,
+            BidiClass::RightToLeft | BidiClass::ArabicLetter if isolates == 0 => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// The parley alignment of a text's `align`.
+fn alignment(align: Align) -> Alignment {
+    match align {
+        Align::Start => Alignment::Start,
+        Align::Center => Alignment::Center,
+        Align::End => Alignment::End,
+    }
+}
+
+/// #1430: breaks a paragraph's lines at `width` (none: only where they must), its first line's top
+/// at `y`, so its lines land where one layout of the whole text puts them; `within` is the width
+/// each line aligns in, which with no width is otherwise the paragraph's widest line.
+fn break_lines(layout: &mut Layout<()>, width: Option<f32>, y: f64, within: Option<f32>) {
+    let max = width.unwrap_or(f32::MAX);
+    let mut lines = layout.break_lines();
+    let state = lines.state_mut();
+    state.set_layout_max_advance(max);
+    state.set_line_max_advance(max);
+    state.set_line_y(y);
+    // The shaper adds no inline boxes, so each step yields a line.
+    while lines.break_next().is_some() {
+        if let Some(within) = within {
+            lines.set_prior_line_width(within);
+        }
+    }
+    lines.finish();
+}
 
 /// Text's horizontal alignment within its box (`align: start | center | end = start`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -231,6 +352,16 @@ pub struct Decoration {
     pub grapheme: usize,
 }
 
+/// #297: one grapheme of a text as its faces draw it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Drawn {
+    pub grapheme: String,
+    /// A face lacks one of its glyphs, and it isn't white space or default-ignorable alone.
+    pub missing: bool,
+    /// One of its glyphs draws ink.
+    pub ink: bool,
+}
+
 /// A shaped text: its glyphs and the box they take.
 #[derive(Clone, Debug, Default)]
 pub struct Shaped {
@@ -335,13 +466,10 @@ impl Shaper {
             .collect()
     }
 
-    fn layout(&mut self, spec: &Spec<'_>, text: &str, optical: bool) -> Layout<()> {
-        self.layout_with(spec, text, optical, &[], true)
-    }
-
     /// The layout of `text` in the spec's style, `vert` applied to the byte ranges `vert` names
     /// (#1215: the graphemes of a vertical run that stand upright), its lines broken at the
-    /// spec's width when `wrap`, else only at hard breaks.
+    /// spec's width when `wrap`, else only at hard breaks: one layout of the whole text, which a
+    /// vertical run reads.
     pub(crate) fn layout_with(
         &mut self,
         spec: &Spec<'_>,
@@ -350,10 +478,39 @@ impl Shaper {
         vert: &[std::ops::Range<usize>],
         wrap: bool,
     ) -> Layout<()> {
+        let starts = grapheme_starts(text);
+        let mut layout = self.build(spec, text, spec.spans, rtl(text), &starts, (optical, vert));
+        // A bound value is never wrapped: it stays on one line, past its box if it must.
+        let width = spec
+            .width
+            .filter(|_| wrap && !spec.bound)
+            .map(|w| (w - spec.indent).max(0.));
+        layout.break_all_lines(width);
+        layout.align(alignment(spec.align), AlignmentOptions::default());
+        layout
+    }
+
+    /// #1430: `text`, one paragraph, shaped in the spec's style with its own `spans` and the
+    /// whole text's base direction, not yet broken into lines. #1484: `optical` false leaves the
+    /// optical size at the face's default; #1215: `vert` as `layout_with` takes it.
+    fn build(
+        &mut self,
+        spec: &Spec<'_>,
+        text: &str,
+        spans: &[Span],
+        rtl: bool,
+        starts: &[usize],
+        (optical, vert): (bool, &[std::ops::Range<usize>]),
+    ) -> Layout<()> {
         let decide = LineBreaks::new(text).into_override();
         let mut builder = self
             .layout
             .ranged_builder(&mut self.fonts, text, 1.0, false);
+        builder.set_base_direction(if rtl {
+            BaseDirection::Rtl
+        } else {
+            BaseDirection::Ltr
+        });
         // Lines break at UAX #14's opportunities at the pinned Unicode version (17.0.0).
         builder.set_line_break_override(Some(&*decide));
         // The family first, then the fallback families in order: parley sets each cluster in the
@@ -388,9 +545,8 @@ impl Shaper {
         // #1964: each span restyles its graphemes' byte range of the one run, so the layout shapes
         // and breaks it with the rest. A span's box adds no height: the item's line height alone
         // spaces the lines, so a shift or a size never moves a baseline.
-        let starts = grapheme_starts(text);
         let byte = |g: usize| starts.get(g).copied().unwrap_or(text.len());
-        for span in spec.spans {
+        for span in spans {
             let range = byte(span.from)..byte(span.to);
             if range.is_empty() {
                 continue;
@@ -450,50 +606,205 @@ impl Shaper {
                 builder.push(StyleProperty::Strikethrough(true), range);
             }
         }
-        let mut layout = builder.build(text);
-        // A bound value is never wrapped: it stays on one line, past its box if it must.
-        let width = spec.width.map(|w| (w - spec.indent).max(0.));
-        layout.break_all_lines(if spec.bound || !wrap { None } else { width });
-        let alignment = match spec.align {
-            Align::Start => Alignment::Start,
-            Align::Center => Alignment::Center,
-            Align::End => Alignment::End,
-        };
-        layout.align(alignment, AlignmentOptions::default());
-        layout
+        builder.build(text)
     }
 
-    fn collect(
-        layout: &Layout<()>,
+    /// #1430: `text`, a paragraph of a text with `first` graphemes before it, shaped in the spec's
+    /// style: from the shape cache, or shaped now and kept there (`fresh`: shaped now, past it,
+    /// `optical` as `build` takes it). Its shape key comes back with it when it was shaped now.
+    fn paragraph(
+        &mut self,
         spec: &Spec<'_>,
-        max_lines: Option<u16>,
-        shown: &str,
-    ) -> Shaped {
-        let mut shaped = Shaped {
-            shown: shown.to_owned(),
+        text: &str,
+        first: usize,
+        rtl: bool,
+        (fresh, optical): (bool, bool),
+    ) -> (Arc<Paragraph>, Option<ShapeKey>) {
+        let mut starts = None;
+        // #1964: the parts of the spans in this paragraph, counted from its first grapheme.
+        let spans: Vec<Span> = if spec.spans.is_empty() {
+            Vec::new()
+        } else {
+            let end = first + starts.insert(grapheme_starts(text)).len();
+            spec.spans
+                .iter()
+                .filter_map(|s| {
+                    let (from, to) = (s.from.max(first), s.to.min(end));
+                    (from < to).then(|| Span {
+                        from: from - first,
+                        to: to - first,
+                        ..s.clone()
+                    })
+                })
+                .collect()
+        };
+        let key = ShapeKey::of(spec, text, &spans, rtl);
+        if !fresh {
+            if let Some(paragraph) = cache::paragraph(&key) {
+                return (paragraph, None);
+            }
+        }
+        let starts = starts.unwrap_or_else(|| grapheme_starts(text));
+        let paragraph = Paragraph {
+            layout: Mutex::new((
+                self.build(spec, text, &spans, rtl, &starts, (optical, &[])),
+                None,
+            )),
+            starts,
+            ends: text.match_indices('\n').map(|(i, _)| i).collect(),
+            chars: text.chars().count(),
+        };
+        let paragraph = if fresh {
+            Arc::new(paragraph)
+        } else {
+            cache::keep(key.clone(), paragraph)
+        };
+        (paragraph, Some(key))
+    }
+
+    /// #1430: `text` laid out in the spec's style as one layout of the whole text lays it out:
+    /// each paragraph (a `\n` ends one) from the shape cache or shaped now, its lines broken at the
+    /// spec's width under the lines before it, and with no width aligned within the whole text's
+    /// widest line. `shaping`: `(fresh, optical)` as `paragraph` takes it, `fresh` shaping every
+    /// paragraph again, past the shape cache.
+    fn lay_out(&mut self, spec: &Spec<'_>, text: &str, shaping: (bool, bool)) -> Shaped {
+        let rtl = rtl(text);
+        let parts: Vec<&str> = if text.is_empty() || cache::planted() == Some(Planted::WholeText) {
+            vec![text]
+        } else {
+            text.split_inclusive('\n').collect()
+        };
+        let mut paragraphs = Vec::with_capacity(parts.len());
+        let mut first = 0;
+        for part in parts {
+            let paragraph = self.paragraph(spec, part, first, rtl, shaping);
+            first += paragraph.0.starts.len();
+            paragraphs.push(paragraph);
+        }
+        // A bound value is never wrapped: it stays on one line, past its box if it must.
+        let width = spec
+            .width
+            .filter(|_| !spec.bound)
+            .map(|w| (w - spec.indent).max(0.));
+        // With no width a line aligns within the widest line, here the whole text's, which only
+        // breaking every paragraph finds; start-aligned lines left to right don't move.
+        let within = (width.is_none()
+            && paragraphs.len() > 1
+            && (spec.align != Align::Start || rtl))
+            .then(|| {
+                paragraphs.iter().fold(0f32, |widest, (paragraph, _)| {
+                    let layout = &mut paragraph.lock().0;
+                    break_lines(layout, None, 0., None);
+                    widest.max(layout.width())
+                })
+            });
+        let alignment = alignment(spec.align);
+        let mut out = Shaped {
+            shown: text.to_owned(),
             line_height: spec.line_height(),
             gap: spec.gap,
             ..Shaped::default()
         };
-        let starts = grapheme_starts(shown);
-        let grapheme = |byte: usize| starts.partition_point(|&s| s <= byte).saturating_sub(1);
-        // #1966: the paragraphs before each line's start, each moving it down by the gap.
-        let ends: Vec<usize> = shown.match_indices('\n').map(|(i, _)| i).collect();
-        let mut down = 0.;
+        out.glyphs
+            .reserve(paragraphs.iter().map(|(p, _)| p.chars).sum());
+        let mut at = At::default();
+        let last = paragraphs.len() - 1;
+        for (i, (paragraph, key)) in paragraphs.iter().enumerate() {
+            let lines = Lines {
+                width: width.map(f32::to_bits),
+                within: within.map(f32::to_bits),
+                align: spec.align,
+                indent: spec.indent.to_bits(),
+                y: at.y.to_bits(),
+                last: i == last,
+            };
+            // A paragraph broken under the same conditions as last time keeps its lines: one
+            // typed character breaks only the paragraph it changed.
+            let piece = {
+                let mut held = paragraph.lock();
+                match &held.1 {
+                    Some((was, piece)) if *was == lines => piece.clone(),
+                    _ => {
+                        break_lines(&mut held.0, width, at.y, within);
+                        held.0.align(alignment, AlignmentOptions::default());
+                        let piece = Arc::new(Self::piece(&held.0, paragraph, spec, i == last));
+                        held.1 = Some((lines, piece.clone()));
+                        piece
+                    }
+                }
+            };
+            if let Some(key) = key {
+                cache::shaped(key, piece.glyphs.len());
+            }
+            Self::place(&piece, spec, &mut at, &mut out);
+            at.graphemes += paragraph.starts.len();
+            at.newlines += paragraph.ends.len();
+        }
+        out
+    }
+
+    /// Appends a paragraph's lines to `out` below the paragraphs `at` counts: its graphemes after
+    /// theirs, its lines moved down by the gap after each paragraph before them (#1966).
+    fn place(piece: &Piece, spec: &Spec<'_>, at: &mut At, out: &mut Shaped) {
+        let (mut glyphs, mut decorations) = (0, 0);
+        for &(height, advance, ends, to_glyph, to_decoration) in &piece.lines {
+            if spec.gap > 0. {
+                let gap = (at.newlines + ends) as f32 * spec.gap;
+                out.height += gap - at.down;
+                at.down = gap;
+            }
+            out.lines += 1;
+            out.width = out.width.max(advance);
+            out.height += height;
+            at.y += f64::from(height);
+            let (down, first) = (at.down, at.graphemes);
+            out.glyphs
+                .extend(piece.glyphs[glyphs..to_glyph].iter().map(|g| Glyph {
+                    y: g.y + down,
+                    origin: [g.origin[0], g.origin[1] + down],
+                    grapheme: g.grapheme + first,
+                    ..g.clone()
+                }));
+            out.decorations.extend(
+                piece.decorations[decorations..to_decoration]
+                    .iter()
+                    .map(|d| Decoration {
+                        rect: [d.rect[0], d.rect[1] + down, d.rect[2], d.rect[3]],
+                        grapheme: d.grapheme + first,
+                    }),
+            );
+            (glyphs, decorations) = (to_glyph, to_decoration);
+        }
+    }
+
+    /// A paragraph's lines as `layout` broke them: graphemes from its first, no gap applied. A
+    /// paragraph that isn't the text's last ends with the empty line parley adds after its `\n`,
+    /// which one layout of the whole text doesn't have: it is left out.
+    fn piece(layout: &Layout<()>, paragraph: &Paragraph, spec: &Spec<'_>, last: bool) -> Piece {
+        let starts = &paragraph.starts;
+        // Each glyph's grapheme, read from where the last one was: a run's clusters come in order.
+        let mut at = 0;
+        let mut grapheme = |byte: usize| {
+            while at + 1 < starts.len() && starts[at + 1] <= byte {
+                at += 1;
+            }
+            while at > 0 && starts[at] > byte {
+                at -= 1;
+            }
+            at
+        };
+        let mut out = Piece {
+            glyphs: Vec::with_capacity(paragraph.chars),
+            decorations: Vec::new(),
+            lines: Vec::with_capacity(layout.len()),
+        };
+        let count = layout.len();
         for (index, line) in layout.lines().enumerate() {
-            if max_lines.is_some_and(|max| index >= usize::from(max)) {
+            if !last && index > 0 && index + 1 == count && line.text_range().is_empty() {
                 break;
             }
             let metrics = line.metrics();
-            if spec.gap > 0. {
-                let before = ends.partition_point(|&i| i < line.text_range().start);
-                let gap = before as f32 * spec.gap;
-                shaped.height += gap - down;
-                down = gap;
-            }
-            shaped.lines += 1;
-            shaped.width = shaped.width.max(metrics.advance + spec.indent);
-            shaped.height += metrics.line_height;
+            let start = line.text_range().start;
             for item in line.items() {
                 let PositionedLayoutItem::GlyphRun(run) = item else {
                     continue;
@@ -522,10 +833,10 @@ impl Shaper {
                     }),
                 ];
                 for (offset, thickness) in lines.into_iter().flatten() {
-                    shaped.decorations.push(Decoration {
+                    out.decorations.push(Decoration {
                         rect: [
                             run.offset() + spec.indent,
-                            run.baseline() - offset + down,
+                            run.baseline() - offset,
                             run.advance(),
                             thickness,
                         ],
@@ -538,57 +849,71 @@ impl Shaper {
                     c.glyphs().map(move |_| first)
                 });
                 for (glyph, byte) in run.positioned_glyphs().zip(clusters) {
-                    shaped.glyphs.push(Glyph {
+                    out.glyphs.push(Glyph {
                         font: font.clone(),
                         size,
                         id: glyph.id,
                         x: glyph.x + spec.indent,
-                        y: glyph.y + down,
+                        y: glyph.y,
                         advance: glyph.advance,
                         grapheme: grapheme(byte),
                         coords: coords.clone(),
                         skew,
                         stand: None,
                         turn: false,
-                        origin: [glyph.x + spec.indent, glyph.y + down],
+                        origin: [glyph.x + spec.indent, glyph.y],
                         along: glyph.advance,
                     });
                 }
             }
+            let ends = paragraph.ends.partition_point(|&i| i < start);
+            out.lines.push((
+                metrics.line_height,
+                metrics.advance + spec.indent,
+                ends,
+                out.glyphs.len(),
+                out.decorations.len(),
+            ));
         }
-        shaped
+        out
     }
 
-    /// `text` shaped in the spec's style, whole (no line limit applied): from the shaped-run
-    /// cache, or shaped now and kept there.
+    /// `text` laid out in the spec's style, whole (no line limit applied): from the run cache, or
+    /// laid out now and kept there: from its paragraphs, or (#1215) set in columns.
     fn run(&mut self, spec: &Spec<'_>, text: &str) -> Arc<Shaped> {
-        let key = Key::of(spec, text, false);
+        self.run_keyed(spec, text, Key::of(spec, text, false))
+    }
+
+    /// [`Self::run`] under `key`, the run's key already built.
+    fn run_keyed(&mut self, spec: &Spec<'_>, text: &str, key: Key) -> Arc<Shaped> {
         if let Some(run) = cache::get(&key) {
             return run;
         }
-        let run = self.shape_now(spec, text, &key);
+        let run = match spec.flow {
+            Flow::Vertical(_) => self.shape_again(spec, text),
+            Flow::Horizontal => self.lay_out(spec, text, (false, true)),
+        };
         cache::put(key, run)
     }
 
-    /// `text` shaped in the spec's style, past the cache, the shaping recorded.
-    fn shape_now(&mut self, spec: &Spec<'_>, text: &str, key: &Key) -> Shaped {
-        let run = match spec.flow {
-            Flow::Vertical(cols) => self.columns(spec, text, cols),
-            Flow::Horizontal => {
-                let layout = self.layout(spec, text, true);
-                Self::collect(&layout, spec, None, text)
+    /// `text` shaped in the spec's style past the caches, the shaping recorded: each paragraph,
+    /// or (#1215) the whole text set in columns.
+    fn shape_again(&mut self, spec: &Spec<'_>, text: &str) -> Shaped {
+        match spec.flow {
+            Flow::Vertical(cols) => {
+                let run = self.columns(spec, text, cols);
+                cache::shaped(Key::of(spec, text, false).shape(), run.glyphs.len());
+                run
             }
-        };
-        cache::shaped(key, run.glyphs.len());
-        run
+            Flow::Horizontal => self.lay_out(spec, text, (true, true)),
+        }
     }
 
     /// #1484 AC1's wrong program, the proof binary's planted `shaper_ignores_opsz`: `spec`'s text
     /// shaped with its weight set and its optical size left at the face's default, as before
     /// #1484, past the shaped-run cache so no run it shapes is kept or shared.
     pub fn shape_ignoring_opsz(&mut self, spec: &Spec<'_>) -> Shaped {
-        let layout = self.layout(spec, spec.text, false);
-        Self::collect(&layout, spec, None, spec.text)
+        self.lay_out(spec, spec.text, (true, false))
     }
 
     /// Whether `spec`'s run is in the shaped-run cache, so shaping it now costs a lookup.
@@ -601,28 +926,30 @@ impl Shaper {
     /// again. Text that overflows its box or line limit is cut to fit with an ellipsis; a bound
     /// value or masked text never is, and is drawn whole.
     pub fn shape(&mut self, spec: &Spec<'_>) -> Arc<Shaped> {
-        let fitted = Key::of(spec, spec.text, true);
-        if let Some(run) = cache::get(&fitted) {
+        let key = Key::of(spec, spec.text, true);
+        if let Some(run) = cache::get(&key) {
             return run;
         }
-        let whole = self.run(spec, spec.text);
+        // The whole run's key is the fitted one's, so a text that fits builds one (#2660).
+        let whole = self.run_keyed(spec, spec.text, key.whole());
         if fits(spec, &whole) || spec.bound || spec.mask {
             return whole;
         }
+        let fitted = Key::of(spec, spec.text, true);
         let reshaping = cache::planted() == Some(Planted::ReshapingFit);
-        // The longest prefix, by character, whose run with an ellipsis fits. Each candidate's
-        // run comes through the cache, so no prefix is shaped twice; a candidate that fits its
-        // line limit has no line past it, so its whole run is the one drawn.
-        let chars: Vec<(usize, char)> = spec.text.char_indices().collect();
+        // The longest prefix, by grapheme (#297: a cut never splits one), whose run with an
+        // ellipsis fits. Each candidate's run comes through the cache, so no prefix is shaped
+        // twice; a candidate that fits its line limit has no line past it, so its whole run is
+        // the one drawn.
+        let chars: Vec<usize> = grapheme_starts(spec.text);
         let (mut low, mut high) = (0usize, chars.len());
         let mut best: Option<Arc<Shaped>> = None;
         while low < high {
             if reshaping {
-                let key = Key::of(spec, spec.text, false);
-                self.shape_now(spec, spec.text, &key);
+                self.shape_again(spec, spec.text);
             }
             let mid = (low + high).div_ceil(2);
-            let end = chars.get(mid).map_or(spec.text.len(), |(i, _)| *i);
+            let end = chars.get(mid).copied().unwrap_or(spec.text.len());
             let candidate = format!("{}…", spec.text[..end].trim_end());
             let shaped = self.run(spec, &candidate);
             if fits(spec, &shaped) {
@@ -672,6 +999,43 @@ impl Shaper {
                 .any(|c| !c.is_whitespace() && !is_default_ignorable(c));
             if needs_glyph && seen.insert(grapheme) {
                 out.push(grapheme.to_string());
+            }
+        }
+        out
+    }
+
+    /// #297: each grapheme of `text` as the spec's family and fallbacks draw it, in order:
+    /// whether a face lacks one of its glyphs (as [`Shaper::missing`] finds), and whether any of
+    /// its glyphs draws ink (an outline with a command, or a glyph its face holds no outline for,
+    /// which only the atlas draws).
+    pub fn drawn(&mut self, spec: &Spec<'_>, text: &str) -> Vec<Drawn> {
+        let run = self.run(spec, text);
+        let starts = grapheme_starts(text);
+        let mut out: Vec<Drawn> = starts
+            .iter()
+            .enumerate()
+            .map(|(k, &a)| {
+                let b = starts.get(k + 1).copied().unwrap_or(text.len());
+                Drawn {
+                    grapheme: text[a..b].to_string(),
+                    missing: false,
+                    ink: false,
+                }
+            })
+            .collect();
+        for g in &run.glyphs {
+            let Some(d) = out.get_mut(g.grapheme) else {
+                continue;
+            };
+            if g.id == 0 {
+                d.missing |= d
+                    .grapheme
+                    .chars()
+                    .any(|c| !c.is_whitespace() && !is_default_ignorable(c));
+                continue;
+            }
+            if !d.ink {
+                d.ink = crate::outlines::outline_of(g).is_none_or(|cmds| !cmds.is_empty());
             }
         }
         out

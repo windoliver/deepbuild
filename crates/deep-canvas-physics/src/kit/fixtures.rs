@@ -52,6 +52,7 @@ pub fn fixture(
         steps,
         track: json!([]),
         moves: Vec::new(),
+        ramps: Vec::new(),
         measure,
         answer,
         tolerance,
@@ -577,9 +578,33 @@ pub fn all() -> Vec<Fixture> {
         belt_carries("belt_reversed", -1.0, [0.0; 3], [1.0, 0.0, 0.0]),
         belt_tilted(),
     ]);
+    out.extend(super::small::all());
+    out.push(super::turns::turntable());
     out.extend(super::sensors::all());
     out.extend(super::walks::all());
     out.extend(super::vehicles::all());
     out.extend(super::centres::all());
+    // #2310: the loaded chain and the swing, and the pendulum, here its ball of 1 kg, the hinge
+    // limit and the hinge motor a second time, each on articulated joints.
+    out.extend(super::chains::all());
+    let mut swings = articulated(pendulum());
+    swings.world["bodies"]["bob"]["mass"] = json!(1);
+    out.extend([
+        swings,
+        articulated(hinge_limit()),
+        articulated(hinge_motor()),
+    ]);
+    out.extend(super::laws::all());
     out
+}
+
+/// #2310: `f` a second time, every joint of its world articulated, for a backend that claims
+/// articulations.
+fn articulated(mut f: Fixture) -> Fixture {
+    f.name = format!("articulated/{}", f.name);
+    for (_, j) in f.world["joints"].as_object_mut().into_iter().flatten() {
+        j["articulated"] = json!(true);
+    }
+    f.caps.push("articulations");
+    f
 }

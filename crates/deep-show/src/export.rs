@@ -15,6 +15,7 @@ mod fidelity;
 mod frames;
 mod gltf;
 mod guards;
+mod gzip;
 mod lottie;
 mod page;
 mod paths;
@@ -28,7 +29,10 @@ mod test_guards;
 #[cfg(feature = "test-encode-tools")]
 pub(crate) mod test_tools;
 pub(crate) mod tools;
+// #2892: `ship.bytes` and the ship checks' test server.
+pub(crate) mod ship;
 mod web;
+pub(crate) use web::full_player;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -50,7 +54,7 @@ use crate::frames::drawing_of;
 use crate::hub::{EvalTime, Hub, Planted};
 use crate::snapshot::Unfit;
 use crate::time::{context_of, sample_rate_of};
-use frames::{Lease, Run, Sink};
+use frames::{Run, Sink};
 
 /// The export guards' wrong programs (#157), each only to prove its acceptance test fails on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,6 +115,8 @@ pub enum Guard {
     WebSavesKeyedByOrigin,
     /// #1041: the web player never asks the browser to keep the origin's storage persistent.
     WebSavesNeverAskPersistence,
+    /// #189: the web player's Import record takes a record without holding it to its name's hash.
+    WebCarryImportSkipsHash,
     /// #1040: the web export leaves out one font it names.
     WebLeavesOutFont,
     /// #1040: the page keys each logic item by its step hash alone.
@@ -131,6 +137,20 @@ pub enum Guard {
     WebAnnouncesEveryFrame,
     /// #2776: the web export reads no refused web answer, so it carries an entry its answer refuses.
     WebCarriesRefused,
+    /// #2856: the web player catches a throw from the core while a piece plays and plays on.
+    WebPlaysOnFailure,
+    /// #2856: the web player leaves the index page's line that it hasn't started in place.
+    WebElementLeavesLine,
+    /// #2892: the web export stores the player's WebAssembly as it is.
+    WebStoresPlayerAsIs,
+    /// #2892: the web player inflates each stored file whole as it arrives, then checks it.
+    WebInflatesBeforeCheck,
+    /// #2892: the web export writes its time into each stored file's gzip header.
+    WebGzipHeaderTime,
+    /// #2892: the web export pads the player with 13,000,000 seeded pseudo-random bytes.
+    WebPlayerOver12mb,
+    /// #2892: the `ship` call's `bytes` sums each file's inflated bytes, not its stored bytes.
+    ShipBytesSumsInflated,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -140,7 +160,7 @@ pub enum Guard {
 pub(crate) const READS_ALL_FIRST: Guard = Guard::Codec("encode_reads_all_frames_first");
 
 /// The helper processes' wrong programs (#157), by the names they answer to.
-const CODEC_PLANTS: [&str; 19] = [
+const CODEC_PLANTS: [&str; 20] = [
     "encode_reads_all_frames_first",
     "encode_full_range_bt601",
     "h264_full_range_under_limited_tags",
@@ -160,6 +180,8 @@ const CODEC_PLANTS: [&str; 19] = [
     "muxer_timescale_1000",
     "muxer_drops_video_edit_list",
     "reader_pads_last_packet",
+    // #1488: every still decoder ignores a photo's EXIF orientation (media::plant_images).
+    "decoder_ignores_orientation",
 ];
 
 /// #501's wrong programs, #1897's and #157's, by the names their acceptance suites give them.
@@ -184,6 +206,13 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         // #525's, reached by `--planted`: a golden verifier and a receipt writer.
         "golden_compares_across_digests" => Planted::GoldenComparesAcrossDigests,
         "receipt_omits_runtime_digest" => Planted::ReceiptOmitsRuntimeDigest,
+        // #189's, reached by `--planted`: a restore and a save's binding.
+        "restore_loads_old_world" => {
+            Planted::Physics(crate::physics::Planted::RestoreLoadsOldWorld)
+        }
+        "content_leaves_out_worlds" => {
+            Planted::Physics(crate::physics::Planted::ContentLeavesOutWorlds)
+        }
         "limiter_without_codec_margin" => Planted::Export(G::NoCodecMargin),
         "shard_rounds_first_sample" => Planted::Export(G::ShardStartRounds),
         "export_without_disk_gate" => Planted::Export(G::NoDiskGate),
@@ -212,6 +241,7 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
         "web_saves_keyed_by_origin" => Planted::Export(G::WebSavesKeyedByOrigin),
         "web_saves_never_ask_persistence" => Planted::Export(G::WebSavesNeverAskPersistence),
+        "web_carry_import_skips_hash" => Planted::Export(G::WebCarryImportSkipsHash),
         "web_leaves_out_font" => Planted::Export(G::WebLeavesOutFont),
         "page_keys_logic_by_step_hash" => Planted::Export(G::PageKeysLogicByStepHash),
         "page_keys_by_picture_and_logic" => Planted::Export(G::PageKeysByPictureAndLogic),
@@ -222,6 +252,13 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_no_tree" => Planted::Export(G::WebNoTree),
         "web_announces_every_frame" => Planted::Export(G::WebAnnouncesEveryFrame),
         "web_export_carries_refused" => Planted::Export(G::WebCarriesRefused),
+        "web_plays_on_failure" => Planted::Export(G::WebPlaysOnFailure),
+        "web_element_leaves_line" => Planted::Export(G::WebElementLeavesLine),
+        "web_stores_player_as_is" => Planted::Export(G::WebStoresPlayerAsIs),
+        "web_inflates_before_check" => Planted::Export(G::WebInflatesBeforeCheck),
+        "web_gzip_header_time" => Planted::Export(G::WebGzipHeaderTime),
+        "web_player_over_12mb" => Planted::Export(G::WebPlayerOver12mb),
+        "ship_bytes_sums_inflated" => Planted::Export(G::ShipBytesSumsInflated),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
@@ -254,7 +291,7 @@ impl Hub<'_> {
         session.frame(sched, t, &default_view(doc));
         let (block, pictures) = self.videos_at(doc, t, true);
         // #157: a video the decode worker couldn't decode at this frame stops the frame.
-        if let Some(id) = undecoded(doc, &block) {
+        if let Some(id) = undecoded(doc, &block, t) {
             return Err(Unfit {
                 code: "decode_error",
                 path: format!("items/{id}"),
@@ -403,6 +440,9 @@ pub struct Job {
     pub readback: bool,
     /// #544: the input track the document's logic items read.
     pub track: Vec<Value>,
+    /// #552: the side the export draws, `match.me` (1 to 8, or "none" for every side): a recorded
+    /// match's own player unless the call names another, and a piece played alone's 1.
+    pub me: Value,
     /// #502: `captions: {profile, files, mode}` and `loudness_profile`.
     pub captions: Captions,
     pub loudness_profile: Option<String>,
@@ -431,6 +471,8 @@ pub struct Job {
     /// one for the codec, and `brief: {tools}`, the tools the brief pins.
     pub tool: Option<String>,
     pub pins: Vec<String>,
+    /// #1250: `gif: {scale}` (or `video.gif`), an indexed look's GIF's options.
+    pub gif: Value,
 }
 
 impl Default for Job {
@@ -451,6 +493,7 @@ impl Default for Job {
             software: false,
             readback: false,
             track: Vec::new(),
+            me: Value::Null,
             captions: Captions::default(),
             loudness_profile: None,
             quality: "standard".into(),
@@ -465,6 +508,7 @@ impl Default for Job {
             srgb: false,
             tool: None,
             pins: Vec::new(),
+            gif: Value::Null,
         }
     }
 }
@@ -573,9 +617,19 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             Some(a) => a.as_str()? == "software",
         },
         readback: c.get("readback").and_then(Value::as_bool).unwrap_or(false),
-        track: c
-            .get("track")
-            .map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
+        // #552: a recorded match's merged track, which the export draws in place of the
+        // document's.
+        track: match (c.get("track"), c.get("record")) {
+            (Some(t), _) => t.as_array().cloned()?,
+            (None, Some(r)) => r.get("track")?.as_array().cloned()?,
+            (None, None) => Vec::new(),
+        },
+        me: match (c.get("me"), c.get("record")) {
+            (Some(Value::String(s)), _) if s == "none" => json!("none"),
+            (Some(m), _) => json!(m.as_u64().filter(|p| (1..=8).contains(p))?),
+            (None, Some(r)) => r.get("player").cloned().unwrap_or(Value::Null),
+            (None, None) => Value::Null,
+        },
         captions: {
             let cap = c.get("captions");
             Captions {
@@ -636,6 +690,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .flatten()
             .filter_map(|t| t.as_str().map(str::to_string))
             .collect(),
+        gif: c
+            .get("gif")
+            .or_else(|| video.and_then(|v| v.get("gif")))
+            .cloned()
+            .unwrap_or(Value::Null),
     })
 }
 
@@ -986,8 +1045,8 @@ fn round_start(k: i64, frame: i64, hz: u32) -> i64 {
     ((x + f / 2) / f) as i64
 }
 
-/// The first video item at a frame whose picture the decode worker couldn't give.
-fn undecoded(doc: &Value, block: &Map<String, Value>) -> Option<String> {
+/// The first video item shown at a frame whose picture the decode worker couldn't give.
+fn undecoded(doc: &Value, block: &Map<String, Value>, t: i64) -> Option<String> {
     doc["items"]
         .as_object()?
         .iter()
@@ -997,6 +1056,6 @@ fn undecoded(doc: &Value, block: &Map<String, Value>) -> Option<String> {
                 && i["params"]["asset"].is_string()
         })
         .map(|(id, _)| id)
-        .find(|id| !block.contains_key(*id))
+        .find(|id| !block.contains_key(*id) && !crate::video::hidden_at(doc, id, t))
         .cloned()
 }

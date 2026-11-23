@@ -97,6 +97,9 @@ export type Plant =
   | 'reap-session-volumes' | 'teardown-closes-on-word' | 'pool-asks-which-stack' | 'reap-on-kill'
   // #1023's: an adapter that leaves a Codex session open when its process ends with no SessionEnd.
   | 'leaves-codex-session-open'
+  // #3234's: an answer given where nothing is drawn reads on the verdict line as one from the card does, and Numbers
+  // counting every accepted taste call as seen, or giving a run's whole median for both its halves.
+  | 'unseen-reads-as-card' | 'folds-seen-unseen' | 'one-median-per-run'
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
@@ -116,6 +119,8 @@ export type Plant =
   // counting the open asks a second time itself; deep inbox leaving out each ask's default; and the hub leaking every
   // session's asks into an agent's deep_status.
   | 'status-second-order' | 'status-own-word' | 'status-unread-flipped' | 'deep-second-count' | 'inbox-no-default' | 'inbox-adds-unread' | 'status-row-leak'
+  // #1810's: a status answer that counts an ask that took its default, which can still be undone, as open.
+  | 'needs-you-counts-defaulted'
   // #2018's: a `--why` built from a reading of its own, a BLOCKED row that names no one and no evidence, and a
   // reading that tries the stale row before needs you.
   | 'why-second-reading' | 'blocked-bare' | 'stale-before-ask'
@@ -169,6 +174,10 @@ export type Plant =
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
   // #2402's: a host that counts a hook handler's failures and never clears them.
   | 'failures-never-cleared'
+  // #2651's: a hub that answers whose a hook is from the sessions of running jobs alone, no folder and no ended job.
+  | 'whose-running-sessions-only'
+  // #2648's: a hub that reads gates.json, notices.json and the agents' settings once, at its start.
+  | 'reads-files-at-start-only'
   // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
   // a platform that reads no process's memory.
   | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
@@ -210,6 +219,8 @@ export type Plant =
   // parent's exit, memory pressure ignored, an exclusive GPU lease beside shared ones, and scripts/lease run directly.
   | 'runs-matched-as-written' | 'denies-every-retry' | 'leases-every-cargo' | 'releases-on-parent-exit' | 'ignores-memory-pressure'
   | 'exclusive-beside-shared' | 'lease-script-runs-directly'
+  // #3219's: a later shared GPU request granted past a waiting exclusive one, and GPU waiters served in no order.
+  | 'shared-passes-waiting-exclusive' | 'serves-most-asks'
   // #1017's: a store that links its folders in, a manifest that knows only Cargo and npm, the nearest key cloned, a clone
   // placed whatever the worktree's sources, a store sessions can write, and a reclaim that ignores open files.
   | 'product-symlinks' | 'product-hard-links' | 'products-cargo-npm-only' | 'nearest-key' | 'places-stale' | 'store-writable' | 'reclaims-open-worktree'
@@ -304,6 +315,10 @@ export type Plant =
   | 'status-lists-every-ask'
   // #1577's: a request ID marked in progress where the mark outlives the hub, and an undo applied past a newer change.
   | 'pending-across-restart' | 'applies-stale-undo'
+  // #1101's, which the asks core plays: a yes that starts its step at the click, an Undo that lets the step run anyway or
+  // closes the ask as declined, a hub that runs held steps when it starts again, a batch that holds every step, and an
+  // Undo that withdraws a step that already ran.
+  | 'hold-starts-at-click' | 'undo-runs-anyway' | 'undo-closes-declined' | 'restart-runs-held' | 'batch-holds-all' | 'undo-withdraws-ran'
   // #2646's: a state pass that leaves out each session whose promise fell due, and an asks core whose reads of the log
   // leave tool.before out of their kinds.
   | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before'
@@ -312,10 +327,20 @@ export type Plant =
   // #1512's: a review whose rubric holds every rule the hub knows, whatever its scope, how it was known or what enforces
   // it, with no size bound; and a hub that holds the review kind but adds the review to no claim that opens a PR.
   | 'rubric-holds-every-rule' | 'review-without-caller'
+  // #2748's: a hub that runs every review pass whatever its scope, one that reads the passes from a file in the claim's
+  // checkout, one that records a pass's findings and sends none back, one that sends back a finding on a line the
+  // change didn't add or alter, and one that replays every PR on every claim, reading nothing as carried.
+  | 'runs-every-pass' | 'passes-from-checkout' | 'pass-findings-sent-nowhere' | 'pass-sends-back-context' | 'replays-every-claim'
   // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
   | 'asks-every-registry-run'
   // #1868's: a hub that builds the asks and readings of the canvas core's world once and reads them so ever after.
-  | 'canvas-world-built-once';
+  | 'canvas-world-built-once'
+  // #2896's: every client's reply cap left at 64 KB, a pager that drops the row at a page's edge, a refusal that
+  // carries a 12,000-character schema, and an unknown client given 64 KB.
+  | 'reply-cap-64kb' | 'pager-drops-edge-row' | 'refusal-schema-12000' | 'unknown-client-64kb'
+  // #1576's: a sessions.read that returns every row, a page sent a frame more for each event, and an inbox.read that
+  // reads each ask with a query of its own.
+  | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row';
 const PLANTS: readonly string[] = [
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
@@ -348,7 +373,7 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
-  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak', 'inbox-labels-only',
+  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak', 'inbox-labels-only', 'needs-you-counts-defaulted',
   'why-second-reading', 'blocked-bare', 'stale-before-ask',
   'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
@@ -369,6 +394,8 @@ const PLANTS: readonly string[] = [
   'churn-no-full-collection', 'churn-no-resident-read',
   'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
   'failures-never-cleared',
+  'whose-running-sessions-only',
+  'reads-files-at-start-only',
   'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
@@ -385,7 +412,7 @@ const PLANTS: readonly string[] = [
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
   'runs-matched-as-written', 'denies-every-retry', 'leases-every-cargo', 'releases-on-parent-exit', 'ignores-memory-pressure',
-  'exclusive-beside-shared', 'lease-script-runs-directly',
+  'exclusive-beside-shared', 'lease-script-runs-directly', 'shared-passes-waiting-exclusive', 'serves-most-asks',
   'product-symlinks', 'product-hard-links', 'products-cargo-npm-only', 'nearest-key', 'places-stale', 'store-writable', 'reclaims-open-worktree',
   'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
@@ -433,10 +460,15 @@ const PLANTS: readonly string[] = [
   'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
   'status-lists-every-ask',
   'pending-across-restart', 'applies-stale-undo',
+  'hold-starts-at-click', 'undo-runs-anyway', 'undo-closes-declined', 'restart-runs-held', 'batch-holds-all', 'undo-withdraws-ran',
   'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
   'hands-over-socket-chunk',
   'rubric-holds-every-rule', 'review-without-caller',
+  'runs-every-pass', 'passes-from-checkout', 'pass-findings-sent-nowhere', 'pass-sends-back-context', 'replays-every-claim',
   'canvas-world-built-once',
+  'reply-cap-64kb', 'pager-drops-edge-row', 'refusal-schema-12000', 'unknown-client-64kb',
+  'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',
+  'unseen-reads-as-card', 'folds-seen-unseen', 'one-median-per-run',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
