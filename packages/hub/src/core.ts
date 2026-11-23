@@ -80,6 +80,7 @@ import { signInCheck } from './sign-in.js';
 import { Answers } from './answers.js';
 import { Runs } from './runs.js';
 import type { ChecksProvider, CheckKinds, ReviewOf } from './checks-port.js';
+import { ReviewPasses } from './review-passes.js';
 import { ReviewRounds } from './review-rounds.js';
 import type { CheckSpec } from '@deepbuild/conformance';
 import type { DocSpec } from './doc-checks.js';
@@ -281,6 +282,7 @@ export class Core {
   private runs!: Runs;
   private checkKinds!: () => Promise<CheckKinds>;
   private reviewRounds!: ReviewRounds;
+  private reviewPasses!: ReviewPasses;
   /** Each worktree's stack and every stack run a check started (#331, #332). */
   private stacks!: Stacks;
   /** Each outside resource a session created, and its teardown task (#342). */
@@ -581,11 +583,14 @@ export class Core {
         // On a pull request it reads from the commit the last round read, and its own run on the snapshot is the next round (#1862).
         if (spec.kind === 'review') {
           const head = this.gate.snapshotOf(run.claim) ?? run.commit;
-          const since = of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
+          // A review pass (#2748) reads the claim's whole diff with its own prompt: no round before it, and no rubric.
+          const passes = 'pass' in spec;
+          const since = !passes && of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
           // The rules page's text-only rules in scope of the diff go in the run's request from the hub (#1512).
-          const rules = await this.memory.reviewRules(join(this.root.dir, 'objects'), this.judging.claimFolder(run.claim), spec as unknown as { base: string }, since?.commit, head, (cwd) => this.judging.projectTrusted(cwd));
-          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since, rules } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+          const rules = passes ? [] : await this.memory.reviewRules(join(this.root.dir, 'objects'), this.judging.claimFolder(run.claim), spec as unknown as { base: string }, since?.commit, head, (cwd) => this.judging.projectTrusted(cwd));
+          const { round, pass, ...result } = await (await this.checkKinds()).run({ ...spec, head, since, rules } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, { ...of, kept: (key, model) => this.reviewPasses.kept(key, model) });
           if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
+          if (pass && run.commit === head) await this.reviewPasses.ran(run.claim, head, pass);
           return result;
         }
         return (await this.checkKinds()).run(spec, { checkout, deadline, now: this.now }, of, { run: run.run, worktree: this.judging.claimFolder(run.claim) ?? checkout, stop });
@@ -593,6 +598,7 @@ export class Core {
     });
     // Check implementations load for a claim or a kinds listing, never for the first session or tool hook.
     this.reviewRounds = new ReviewRounds({ outcomes: this.providers.checks.reviewOutcomes, raw: this.raw, appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
+    this.reviewPasses = new ReviewPasses({ plant: options.plant, raw: this.raw, appendCore: (kind, data, extra) => this.appendCore(kind, data, extra) });
     this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => (spec.kind === 'work' ? Promise.reject(Error('a work job runs only under an approved job that repeats (#1527), never for a check')) : this.runner.submit(spec)), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions, evidence: this.root.evidence });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
