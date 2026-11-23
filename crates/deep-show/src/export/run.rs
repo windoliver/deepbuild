@@ -882,6 +882,7 @@ impl Hub<'_> {
                 },
                 |r| r.writer.clone(),
             ),
+            patch: None,
             hash,
             state: "current",
             doc: baked,
