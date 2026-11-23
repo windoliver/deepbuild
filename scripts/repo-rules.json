@@ -3114,6 +3114,114 @@
           "why": "Issue #194: names a packed catalog by the SHA-256 of its table.layout@1 bytes, as the evidence store does. Already in the workspace tree."
         }
       }
+    },
+    "tests/acceptance/189/carry/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #189's carry suite: its own assembler for the fixtures, #534's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #189's carry suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/189/saves/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #189's saves suite: its own assembler for the fixtures, #531's, cut down, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #189's saves suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/192/dungeon/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #192's dungeon suite: its own assembler for the fixtures, a copy of #190's, which also writes relocatable objects, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #192's dungeon suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/276/match/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #276's match suite: its own assembler for the fixtures, #189's carry suite's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #276's match suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/276/record/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #276's record suite: its own assembler for the fixtures, #189's carry suite's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #276's record suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/276/web/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #276's web suite: its own assembler for the fixtures, #189's carry suite's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #276's web suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/416/interfaces/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #416's interfaces suite: its own assembler for the fixtures, #190's source, built with this lockfile, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #416's interfaces suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/416/layouts/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #416's layouts suite: its own assembler for the fixtures, #531's, cut down, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #416's layouts suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/851/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #851's blind suite: its own assembler for the fixtures, #189's carry suite's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #851's blind suite: validates each fixture module before it is written."
+        }
+      }
     }
   },
   "allowedFindings": [
