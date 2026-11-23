@@ -106,8 +106,9 @@ export function readApprovals(root, change, issue) {
       const message = tag.slice(0, at).split('\n\n').slice(1).join('\n\n');
       for (const [, line] of message.matchAll(/^Approves: (.+?)\s*$/gm)) {
         // One tag for the commits before it too (#3166): the signature on a commit commits to each commit it descends from.
-        const [, item, sha] = (presence && /^(.+?) @([0-9a-f]{40})$/.exec(line)) || [null, line, target];
-        if (!keep(item) || !shas.has(sha) || (sha !== target && spawnSync('git', ['merge-base', '--is-ancestor', sha, target], { cwd: root }).status !== 0)) continue;
+        // A line ending in any other @ ID approves nothing, rather than its whole text for the tagged commit.
+        const [, item, sha] = (presence && /^(.+?) @([0-9a-f]{40})$/.exec(line)) || (/\s@\S*$/.test(line) ? [] : [null, line, target]);
+        if (!item || !keep(item) ||!shas.has(sha) || (sha !== target && spawnSync('git', ['merge-base', '--is-ancestor', sha, target], { cwd: root }).status !== 0)) continue;
         approvals.set(sha, [...(approvals.get(sha) ?? []), item]);
       }
     }
