@@ -436,8 +436,9 @@ class LocalSupervisor implements Supervisor {
         if (!m || !this.runs.has(m[3]!)) continue;
         const [, operation, said, run] = m as unknown as [string, string, string, string];
         const whole = said || '(none)';
-        if (!this.admit(run, `${run} ${operation} ${sha256(whole)}`)) continue;
-        void this.recordDenial(run, operation, cut(whole)).catch(() => undefined);
+        const seen = `${run} ${operation} ${sha256(whole)}`;
+        if (!this.admit(run, seen)) continue;
+        void this.recordDenial(run, operation, cut(whole)).catch(() => this.unadmit(run, seen));
       }
     });
     return s;
@@ -502,6 +503,23 @@ class LocalSupervisor implements Supervisor {
   }
 
   /**
+   * A run past the ceiling says how many it was refused that the record leaves out, once its processes are gone
+   * (#2420). A Linux run's sandbox parent goes with them, and what it reported is counted first: bounded, so a pipe
+   * some unrecorded holder keeps open never holds the cleanup.
+   */
+  private async closeRefusals(r: Run): Promise<void> {
+    if (r.refusing) {
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([r.refusing, new Promise<void>((done) => { timer = setTimeout(done, SYNC_MS); })]);
+      clearTimeout(timer);
+    }
+    const tally = this.refusals.get(r.run);
+    if (!tally?.left || tally.closed) return;
+    await this.append('sandbox.denied', { run: r.run, operation: 'more', target: String(tally.left) }, r.run);
+    tally.closed = true;
+  }
+
+  /**
    * What a Linux run's sandbox parent writes, one JSON line each: a refusal, recorded as a sandbox.denied for the run
    * once, or the program's own end, given to `exited` once every refusal before it is on the record. Resolves once
    * the parent is gone, the pipe with it, and what it refused is recorded.
@@ -527,8 +545,9 @@ class LocalSupervisor implements Supervisor {
           if (typeof said.operation !== 'string' || typeof said.target !== 'string') continue;
           const { operation } = said;
           const whole = said.target || '(none)';
-          if (!this.admit(run, `${run} ${operation} ${sha256(whole)}`)) continue;
-          recorded = recorded.then(() => this.recordDenial(run, operation, cut(whole))).catch(() => undefined);
+          const seen = `${run} ${operation} ${sha256(whole)}`;
+          if (!this.admit(run, seen)) continue;
+          recorded = recorded.then(() => this.recordDenial(run, operation, cut(whole))).catch(() => this.unadmit(run, seen));
         }
       }).on('error', () => undefined).on('close', () => void recorded.then(resolve));
     });
@@ -1098,15 +1117,8 @@ class LocalSupervisor implements Supervisor {
     const outcome = left.length ? 'unfinished' : 'clean';
     await r.egress?.close();
     delete r.egress;
-    // A Linux run's sandbox parent is gone with its processes: what it reported is counted before the closing event.
-    // Bounded, so a pipe some unrecorded holder keeps open never holds the cleanup.
-    if (!left.length && r.refusing) await Promise.race([r.refusing, sleep(SYNC_MS)]);
-    // A run past the ceiling says how many it was refused that the record leaves out, once (#2420).
-    const tally = this.refusals.get(run);
-    if (tally?.left && !tally.closed) {
-      await this.append('sandbox.denied', { run, operation: 'more', target: String(tally.left) }, run);
-      tally.closed = true;
-    }
+    // A run that left a process still refuses: its closing event waits for the recheck that finds them gone.
+    if (!left.length) await this.closeRefusals(r);
     if (r.watched !== undefined && this.watchedRuns.get(r.watched) === r) this.watchedRuns.delete(r.watched);
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';
@@ -1193,7 +1205,11 @@ class LocalSupervisor implements Supervisor {
     // A run its cleanup left running is checked again: each of its processes found gone gets its end recorded, which
     // is what ends a lease the lease table holds for the run. Its sandbox is scanned once they are found gone and
     // before their ends are recorded, so what they forked is recorded first: a gone process forks nothing more.
-    for (const r of this.closed ? [] : [...this.lingering]) if (!(await this.leftovers(r, this.recheck)).length) this.lingering.delete(r);
+    for (const r of this.closed ? [] : [...this.lingering]) {
+      if ((await this.leftovers(r, this.recheck)).length) continue;
+      this.lingering.delete(r);
+      await this.closeRefusals(r).catch(() => undefined);
+    }
     // Nothing to read for until an unblock ask is open, a key is out of its pool or a run waits: a tick then costs nothing.
     if (!this.asked.size && !this.waiters.length && ![...this.keys.values()].some((k) => k.retired)) return;
     if (this.asked.size) await this.options.asks.tick();
