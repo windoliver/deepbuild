@@ -2365,7 +2365,7 @@ export class Core {
         const siblings = await this.siblings.deliver(meta, until);
         const later = r.later.splice(0).filter((text) => !prompt.includes(text)).map((text) => ({ name: 'continues', text }));
         // A notice a status question left waiting goes with this prompt, once (#2669).
-        const notices = (r.notices ?? []).splice(0).filter((text) => !prompt.includes(text)).map((text) => ({ name: 'notices', text }));
+        const notices = (r.notices ?? []).splice(0).map((text) => ({ name: 'notices', text }));
         const context = await this.fitted(meta, [{ name: 'rules', ...(rules ? { pieces: rules } : {}) }, { name: 'answers', text: answers, keep: true }, { name: 'promised checks', text: promised }, { name: 'notes', text: notes ? this.delivery.noteText(notes) : undefined }, ...later, ...notices, { name: 'verdict', text: landed ? `DeepBuild: ${landed}` : undefined }, { name: 'slow verdicts', text: slow }, { name: 'acknowledgement', text: ack.context, keep: true }, { name: 'taste', text: taste }, { name: 'sibling sessions', text: siblings }]);
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
