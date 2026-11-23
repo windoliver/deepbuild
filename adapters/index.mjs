@@ -240,9 +240,10 @@ export function mapHook({ facts, version, payload, transcript = [], turns = new 
   const schemas = facts?.events?.versions?.[version];
   const hook = payload?.hook_event_name;
   if (!schemas) return { events: [], verified: false, readings: [{ code: 'version_not_covered', field: 'version', version }] };
-  if (typeof hook !== 'string' || !Object.hasOwn(schemas, hook) || !Object.hasOwn(facts.mapping, hook)) return { events: [], verified: false, readings: [{ code: 'unknown_event', field: 'hook_event_name', version }] };
+  if (typeof hook !== 'string' || !Object.hasOwn(schemas, hook)) return { events: [], verified: false, readings: [{ code: 'unknown_event', field: 'hook_event_name', version }] };
   const { verified, readings } = verify(schemas[hook], payload, version);
-  const events = map(facts, payload, transcript);
+  // A hook the version lists that no mapping entry names, such as Claude Code's FileChanged (#120), maps to no event.
+  const events = Object.hasOwn(facts.mapping, hook) ? map(facts, payload, transcript) : [];
   const turnRule = facts.turnWithoutPrompt;
   const turn = turnRule && payload[turnRule.payloadField];
   if (turnRule && turn !== undefined && !turns.has(turn)) {
