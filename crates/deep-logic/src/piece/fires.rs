@@ -110,7 +110,7 @@ pub(crate) fn fired(item: &Item, memory: &[u8]) -> Vec<Value> {
 
 /// Keeps a step's fires in its row as `<item ID>.fires`, beside its arrays' hashes.
 pub(crate) fn record(rec: &mut Record, item: &Item, k: i64, fires: Vec<Value>) {
-    if !fires.is_empty() {
+    if !fires.is_empty() && !rec.none {
         let (_, arrays) = rec.steps.entry(k).or_default();
         arrays.insert(format!("{}.fires", item.id), Value::Array(fires));
     }

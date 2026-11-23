@@ -1153,6 +1153,8 @@ pub fn check_in(
             id: id.clone(),
             program: d.program.clone(),
             bytes,
+            #[cfg(not(target_arch = "wasm32"))]
+            compiled: Default::default(),
             hash,
             given,
             step: d.step,

@@ -92,6 +92,8 @@ pub struct Planted {
     /// #1250: a piece that reads the wall clock: after every step of the first item, the wall
     /// clock's nanoseconds join the first value of its first array, in a play and its replica alike.
     pub reads_wall_clock: bool,
+    /// #2662: a runner that shares one store between a world's forks of an item.
+    pub forks_share_store: bool,
 }
 
 impl Planted {
