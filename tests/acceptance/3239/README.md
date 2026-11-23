@@ -2,8 +2,13 @@
 
 I drafted these tests blind from these sources only:
 
-- issue #3239 (`gh issue view 3239` showed the body this job was given), and the owner's decision on it: option (a), the
-  four scripts set `RUSTC_WRAPPER` empty for every cargo they start
+- issue #3239 (`gh issue view 3239` showed the body this job was given). It asks for an owner decision and recommends
+  option (a), the four scripts set `RUSTC_WRAPPER` empty for every cargo they start. Its body records no answer. Its
+  criteria are written for (a), and these tests rest on those criteria, not on a decision. This job's brief said the
+  owner had decided (a); the session that wrote the brief has withdrawn that. I read the issue's one comment
+  (2026-11-23T09:19:47Z) only for this correction, after the tests were written: posted through the owner's account and
+  signed as written by an agent, it is headed as the owner's decision, takes a general instruction it quotes as (a), and
+  says itself that this is no separate, explicit answer to the question. I haven't verified the quote.
 - `docs/parallel-proof.md`, section 4 (Build reuse; in particular "Dependencies shared across worktrees: sccache, per
   machine" and "Off where a build must be bare"), section 6 (the throttle's timed grant and the window) and section 12a
   (Budget windows); `docs/technical-design.md` (Dogfooding; How we know version 0 works). `node
@@ -202,8 +207,10 @@ node --test tests/acceptance/3239/ac3-unit-lane.test.mjs     # about a minute: f
 
 They need the pinned toolchain (`rust-toolchain.toml`) installed with clippy, `cc` and `/usr/bin/time`, and no
 `node_modules`. On a shared machine, through its throttle: `node scripts/throttle.mjs test --wait 30 -- scripts/lease
-node --test tests/acceptance/3239/`. The tests run on macOS, where the issue runs. Nothing in them is specific to the
-reference Mac.
+node --test 'tests/acceptance/3239/*.test.mjs'`. The folder alone (`node --test tests/acceptance/3239/`) runs no test on
+Node v24.22.2: it ends in `MODULE_NOT_FOUND`. I checked the quoted glob with `node --test` itself, where it finds the
+four files, and not through the throttle. The tests run on macOS, where the issue runs. Nothing in them is specific to
+the reference Mac.
 
 **Lanes.** By `scripts/lanes.mjs`'s own reasons the suite belongs on none of its lists. AC1's and AC2's cargo builds
 write only into their sandboxes' target folders, never the checkout's `target/`, so no sibling file's binary goes
