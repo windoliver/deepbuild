@@ -235,6 +235,7 @@ Each step is one issue and one PR, following AGENTS.md:
 - **Failures on main stay as they are.** A step that changes how a lane reads results lists the FAIL IDs on main before and after, and they match.
 - **No option, flag or fallback** beyond what a step names; rollback is reverting its PR.
 
+<a id="10a-open-owner-decision-gates-t9"></a>
 ### 10a. Owner decision (gates T9)
 
 Two questions for the owner, asked once, gate T9b. Before T9b lands, a run of the unit lane on main lists every pass the new skip rule turns INCONCLUSIVE, with its skip site, and that list goes to the owner with these questions.
