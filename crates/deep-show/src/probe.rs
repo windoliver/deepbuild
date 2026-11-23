@@ -122,6 +122,13 @@ impl Hub<'_> {
         if self.gpu3().is_none() {
             return refused("unsupported_platform");
         }
+        // #3219: it draws on the GPU under the machine's GPU lease, shared, until it returns.
+        let _lease = crate::kit::lease::GpuLease::take(
+            crate::kit::lease::Mode::Shared,
+            "deep-show render-back",
+            None,
+            self.scenario.module_planted.as_deref(),
+        );
         // #1722: drawn as presenting draws it (Hub::draw3d): the 3D frame through its shot's pose
         // (#493) with its visible table, then its 2D items over it with no ground of their own,
         // their rows in that table.

@@ -1,0 +1,69 @@
+# #3240 acceptance tests on the base 618ab3ab4 (macOS, M5 Max, 18 cores, 1-minute load about 30 to 70), each run once.
+# Run: node --test --test-reporter=spec 'tests/acceptance/3240/*.test.mjs'
+# Digest: each verdict, the diagnostics, and each failure's message and actual/expected lines; the dumps of load.log
+# (which list the machine's own processes) and the stacks are left out. Paths: home as ~, temp folders as <tmp>.
+#
+# Verdicts: 6 tests, 6 fail, 0 pass, 0 skipped, in 62 s. Every failure is at an assertion and for the expected reason:
+# the base's sampler (#3067) has none of the new fields and runs no ioreg.
+#   #3240.6f5727c7 gpu.test.mjs        FAIL  the second sample has no gpu for the stub grant ("the grant's gpu is undefined s")
+#   #3240.2d406576 gpu-unread.test.mjs FAIL  the sample has no gpuUnread; the base never ran the stub ioreg (0 calls)
+#   #3240.f0d5ecc3 line.test.mjs       FAIL  the sample has no waiting (actual undefined)
+#   #3240.7baf5908 report.test.mjs     FAIL  load --report prints no line of minutes with a request waiting beside idle cores
+#   #3240.a54f81e0 cost.test.mjs       FAIL  the first sample holds no GPU read, so its cost isn't the cost with one (fails at once, not after 10 min)
+#   #3240.712a690c log.test.mjs        FAIL  at its precondition, the sample has no gpuTop; twins/gpu-arguments fails it at the
+#                                            criterion's own assertion (TWINS-RUN.txt)
+
+✖ #3240.a54f81e0 the sampler's own cost, with the ps listings and the GPU read it makes, is under 1% of one core over 10 minutes of sampling each minute (525.866167ms)
+✖ #3240.2d406576 with the GPU read made to fail, the sample says the GPU wasn't read (gpuUnread, no gpu and no gpuTop, never a zero), and load --report counts it in no share (652.950375ms)
+✖ #3240.6f5727c7 one stub grant whose child draws on the GPU for 10 s and one ungranted process of the same name that does the same: the sample gives each its GPU time within a fifth, to the grant's ID and to outside (61724.833041ms)
+ℹ the test's own ioreg, from its reading after the first sample to its reading after the second: the grant's child 1.396 s, the ungranted process 1.418 s, every client 14.548 s; Metal's own timestamps gave the stubs 9.883 s and 9.834 s; the sample: grant undefined, outside undefined
+✖ #3240.f0d5ecc3 one build grant held whose child spins 2 cores and one build request waiting: the sample records 1 request waiting, of class build, and idle and busy cores that sum to the machine's (10586.667708ms)
+✖ #3240.712a690c the log still holds PIDs, grant IDs, classes and command names only: gpuTop, waiting, idle and busy add no argument, path, environment value or reason text (5222.888083ms)
+✖ #3240.7baf5908 load --report over a fixture log prints GPU seconds by class and outside, over the samples whose GPU was read, above the cores or not, and the share of minutes with a request waiting beside two or more idle cores (261.785375ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 0
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 61778.843875
+
+✖ failing tests:
+
+test at tests/acceptance/3240/cost.test.mjs:15:1
+✖ #3240.a54f81e0 the sampler's own cost, with the ps listings and the GPU read it makes, is under 1% of one core over 10 minutes of sampling each minute (525.866167ms)
+  AssertionError [ERR_ASSERTION]: the first sample holds no GPU read, so its cost isn't the cost with the GPU read
+    actual: false,
+    expected: true,
+
+test at tests/acceptance/3240/gpu-unread.test.mjs:13:1
+✖ #3240.2d406576 with the GPU read made to fail, the sample says the GPU wasn't read (gpuUnread, no gpu and no gpuTop, never a zero), and load --report counts it in no share (652.950375ms)
+  AssertionError [ERR_ASSERTION]: the sample taken while ioreg failed doesn't say the GPU wasn't read, in gpuUnread, a short reason
+  the stub ioreg was called 0 times
+    actual: false,
+    expected: true,
+
+test at tests/acceptance/3240/gpu.test.mjs:15:1
+✖ #3240.6f5727c7 one stub grant whose child draws on the GPU for 10 s and one ungranted process of the same name that does the same: the sample gives each its GPU time within a fifth, to the grant's ID and to outside (61724.833041ms)
+  AssertionError [ERR_ASSERTION]: the grant's gpu is undefined s; the test's own ioreg read 1.396 s, so it must be within a fifth of that (1.117 to 1.675)
+    actual: false,
+    expected: true,
+
+test at tests/acceptance/3240/line.test.mjs:14:1
+✖ #3240.f0d5ecc3 one build grant held whose child spins 2 cores and one build request waiting: the sample records 1 request waiting, of class build, and idle and busy cores that sum to the machine's (10586.667708ms)
+  AssertionError [ERR_ASSERTION]: waiting holds 1 request of class build and none of the others
+    actual: undefined,
+    expected: { build: 1, 'bay-pair': 0, test: 0, timed: 0 },
+
+test at tests/acceptance/3240/log.test.mjs:10:1
+✖ #3240.712a690c the log still holds PIDs, grant IDs, classes and command names only: gpuTop, waiting, idle and busy add no argument, path, environment value or reason text (5222.888083ms)
+  AssertionError [ERR_ASSERTION]: the sample holds no gpuTop, the processes that used the GPU
+    actual: false,
+    expected: true,
+
+test at tests/acceptance/3240/report.test.mjs:10:1
+✖ #3240.7baf5908 load --report over a fixture log prints GPU seconds by class and outside, over the samples whose GPU was read, above the cores or not, and the share of minutes with a request waiting beside two or more idle cores (261.785375ms)
+  AssertionError [ERR_ASSERTION]: the share of minutes with a request waiting beside two or more idle cores
+    actual: '83.3% of minutes above the cores (5 of 6)\nbuild 3.2%\ntest 12.7%\ntimed 3.2%\noutside 80.9% (compile 52.4%, node 0.0%, other 28.5%)\nmean CPU read 7.88 of 18.00 cores, at a mean load of 28.75\ntop commands under no grant, mean cores: rustc 3.50, WindowServer 0.25\n1 of 6 samples failed and count in no share\n',
+    expected: /^60(\.0+)?% of minutes with a request waiting beside two or more idle cores \(3 of 5\)$/m,

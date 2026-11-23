@@ -1466,3 +1466,19 @@ byHand.push('tests/acceptance/269/ac6-budgets.test.ts');
 // made for itself, which #3221 replaces with job pipes lent from one pool; the blind redraft, 2848-redraft-3221/, runs
 // in their place (tests/acceptance/2848/DISPUTE-3221.md).
 byHand.push('tests/acceptance/2848/', 'tests/jobserver-blind.test.mjs');
+
+// #3234's folder (blind) runs alone by its lane.json: its files build deep-drive with test-confirm, plain and planted,
+// start real hubs and draw taste calls' pictures. budgets.test.ts times a frame of 20 pictures against the merge base on
+// the reference Mac; shown.test.ts takes AC11's pictures for a person's call.
+timed.push('tests/acceptance/3234/budgets.test.ts');
+byHand.push('tests/acceptance/3234/shown.test.ts');
+// #3234's AC3 and AC4 run as their blind redraft, 3234-redraft-ac3/, on the owner's ruling ("Yes, swap it", Nov 23): the
+// first draft types the words on the card, which #1462 AC8 forbids, so no program passes both, and it is kept by hand
+// (3234-redraft-ac3/DISPUTE.md).
+byHand.push('tests/acceptance/3234/answer.test.ts');
+alone.push('tests/acceptance/3234-redraft-ac3/');
+// #3234's AC6 runs as its blind redraft, 3234-redraft-ac6/, on the owner's ruling ("Redraft #3234", Nov 23): the first
+// draft feeds an ask.moved, a kind #606.9092f0b3 forbids, so no program passes both. Its card.test.ts, with AC1 and AC2,
+// is kept by hand (3234-redraft-ac6/DISPUTE.md).
+byHand.push('tests/acceptance/3234/card.test.ts');
+alone.push('tests/acceptance/3234-redraft-ac6/');

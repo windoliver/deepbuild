@@ -97,6 +97,9 @@ export type Plant =
   | 'reap-session-volumes' | 'teardown-closes-on-word' | 'pool-asks-which-stack' | 'reap-on-kill'
   // #1023's: an adapter that leaves a Codex session open when its process ends with no SessionEnd.
   | 'leaves-codex-session-open'
+  // #3234's: an answer given where nothing is drawn reads on the verdict line as one from the card does, and Numbers
+  // counting every accepted taste call as seen, or giving a run's whole median for both its halves.
+  | 'unseen-reads-as-card' | 'folds-seen-unseen' | 'one-median-per-run'
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
@@ -216,6 +219,8 @@ export type Plant =
   // parent's exit, memory pressure ignored, an exclusive GPU lease beside shared ones, and scripts/lease run directly.
   | 'runs-matched-as-written' | 'denies-every-retry' | 'leases-every-cargo' | 'releases-on-parent-exit' | 'ignores-memory-pressure'
   | 'exclusive-beside-shared' | 'lease-script-runs-directly'
+  // #3219's: a later shared GPU request granted past a waiting exclusive one, and GPU waiters served in no order.
+  | 'shared-passes-waiting-exclusive' | 'serves-most-asks'
   // #1017's: a store that links its folders in, a manifest that knows only Cargo and npm, the nearest key cloned, a clone
   // placed whatever the worktree's sources, a store sessions can write, and a reclaim that ignores open files.
   | 'product-symlinks' | 'product-hard-links' | 'products-cargo-npm-only' | 'nearest-key' | 'places-stale' | 'store-writable' | 'reclaims-open-worktree'
@@ -407,7 +412,7 @@ const PLANTS: readonly string[] = [
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
   'runs-matched-as-written', 'denies-every-retry', 'leases-every-cargo', 'releases-on-parent-exit', 'ignores-memory-pressure',
-  'exclusive-beside-shared', 'lease-script-runs-directly',
+  'exclusive-beside-shared', 'lease-script-runs-directly', 'shared-passes-waiting-exclusive', 'serves-most-asks',
   'product-symlinks', 'product-hard-links', 'products-cargo-npm-only', 'nearest-key', 'places-stale', 'store-writable', 'reclaims-open-worktree',
   'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
@@ -463,6 +468,7 @@ const PLANTS: readonly string[] = [
   'canvas-world-built-once',
   'reply-cap-64kb', 'pager-drops-edge-row', 'refusal-schema-12000', 'unknown-client-64kb',
   'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',
+  'unseen-reads-as-card', 'folds-seen-unseen', 'one-median-per-run',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

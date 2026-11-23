@@ -3,7 +3,8 @@
 // while a budget is timed. `throttle.mjs <class> [--wait <min>] -- <command>` acquires, runs, releases and exits
 // with the child's status, or ends a command held past its `--hold` bound while another request waits; acquire and release serve the scripts that hold a grant themselves. `throttle.mjs window`
 // opens a budget window (section 12a): a timed grant that waits for every slot to empty, around budget-window.mjs.
-// `throttle.mjs load [--report]` reads the machine's load by who made it (#3067): a sample a minute, and their table.
+// `throttle.mjs load [--report]` reads the machine's load by who made it (#3067), its GPU time and the cores idle beside
+// the requests in line (#3240): a sample a minute, and their table.
 // An affected.mjs run's test grant is its admission, and its jobs take turns on one pool of job tokens (#3221).
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -546,28 +547,77 @@ const kind = (command) => (command === 'rustc' || command === 'cargo' ? 'compile
 // CPU is counted in thousandths of a core, whole numbers, so a sum's parts add up to it.
 const cores = (thousandths) => thousandths / 1000;
 const shares = (tally) => ({ cpu: cores(KINDS.reduce((sum, name) => sum + tally[name], 0)), ...Object.fromEntries(KINDS.map((name) => [name, cores(tally[name])])) });
+// GPU time is counted in whole milliseconds and written in seconds (#3240).
+const seconds = (ms) => ms / 1000;
+const failure = (name, run) => `${name} ${run.error?.code ?? (run.signal ? `ended by ${run.signal}` : `exited ${run.status}`)}`;
+
+/**
+ * Each GPU client's accumulated GPU time, in nanoseconds, by its registry entry's ID, with the pid of the process that
+ * opened it: one ioreg listing of each accelerator and its clients (#3240). Throws, in this code's words, when the
+ * listing can't be made or names no client.
+ */
+function gpuClients() {
+  const listing = spawnSync('ioreg', ['-r', '-l', '-d', '2', '-w', '0', '-c', 'IOAccelerator'], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, LC_ALL: 'C' } });
+  if (listing.status !== 0) throw Error(failure('ioreg', listing));
+  const clients = new Map();
+  let entry = {};
+  for (const line of listing.stdout.split('\n')) {
+    const object = line.match(/\+-o .*<class [^,]+, id (0x[0-9a-f]+)/);
+    if (object) entry = { id: object[1], ns: 0 };
+    const creator = line.match(/"IOUserClientCreator" = "pid (\d+),/);
+    if (creator && entry.id) clients.set(entry.id, Object.assign(entry, { pid: Number(creator[1]) }));
+    const usage = line.match(/"AppUsage" = \((.*)\)/);
+    if (usage && entry.id) entry.ns = [...usage[1].matchAll(/"accumulatedGPUTime"=(\d+)/g)].reduce((sum, [, ns]) => sum + Number(ns), 0);
+  }
+  if (!clients.size) throw Error('ioreg listed no GPU client');
+  return clients;
+}
+// The GPU clients at the last read made: a client's change is from there, so a read that wasn't made loses nothing.
+let gpuBefore = null;
+
+/** Each CPU's ticks, busy and in all, as os.cpus() counts them. */
+const ticks = () => cpus().map(({ times }) => ({ busy: times.user + times.nice + times.sys + times.irq, all: times.user + times.nice + times.sys + times.irq + times.idle }));
 
 /**
  * One sample: the load, the cores, and each running process's CPU, by ps, under the outermost held grant whose holder
- * is the process or above it, or else under `outside`. A reading that can't be made says `failed`, with no numbers. The
- * reason is this code's own words, never ps's, so the log holds no path.
+ * is the process or above it, or else under `outside`; on macOS, each process's GPU time since the read before, by
+ * ioreg, under the same; the requests in line by class; and the cores idle and busy over the sample's wait of a second
+ * and its reads. A reading that can't be made says `failed`, with no numbers, and a GPU read that can't be made says
+ * `gpuUnread`, with no GPU numbers. The reasons are this code's own words, never ps's or ioreg's, so the log holds no path.
  */
 function sample() {
   const reading = { at: new Date().toISOString(), load: loadavg()[0], cores: cpus().length };
-  let held, procs;
+  const first = ticks();
+  // The first sample's GPU read before is made here, so its change is over the second the sample waits.
+  if (process.platform === 'darwin' && !gpuBefore) {
+    try {
+      gpuBefore = gpuClients();
+    } catch {}
+  }
+  sleep(1000);
+  let held, requests, procs, clients, unread;
   try {
     // The table is replaced whole by a rename, so a read without its lock sees one table or the next.
     try {
-      held = JSON.parse(readFileSync(join(folder(), 'table.json'), 'utf8')).grants;
+      ({ grants: held, requests = [] } = JSON.parse(readFileSync(join(folder(), 'table.json'), 'utf8')));
     } catch (error) {
       if (error.code !== 'ENOENT') throw Error('the table can\'t be read');
-      held = [];
+      held = requests = [];
     }
-    if (!Array.isArray(held)) throw Error('the table can\'t be read');
+    if (!Array.isArray(held) || !Array.isArray(requests)) throw Error('the table can\'t be read');
     // A turn's job runs under its run's grant, the outermost, so a turn has no entry of its own (#3221).
     held = held.filter((grant) => grant.class !== 'turn');
+    if (process.platform !== 'darwin') unread = 'no GPU reading on this machine';
+    else {
+      try {
+        clients = gpuClients();
+        if (!gpuBefore) unread = 'the GPU read before this sample failed';
+      } catch (error) {
+        unread = error.message;
+      }
+    }
     const listing = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,%cpu=,lstart=,ucomm='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
-    if (listing.status !== 0) throw Error(`ps ${listing.error?.code ?? (listing.signal ? `ended by ${listing.signal}` : `exited ${listing.status}`)}`);
+    if (listing.status !== 0) throw Error(failure('ps', listing));
     procs = new Map();
     for (const line of listing.stdout.split('\n')) {
       const [, pid, ppid, cpu, start, command] = line.match(/^\s*(\d+)\s+(\d+)\s+(\d+(?:\.\d+)?)\s+(\S+\s+\S+\s+\d+\s+\S+\s+\d+)\s+(.*?)\s*$/) ?? [];
@@ -577,22 +627,47 @@ function sample() {
   } catch (error) {
     return { ...reading, failed: error.message };
   }
-  const tally = () => Object.fromEntries(KINDS.map((name) => [name, 0]));
+  const tally = () => ({ ...Object.fromEntries(KINDS.map((name) => [name, 0])), gpu: 0 });
   // A holder of two grants counts under the one it took first; the other still has its entry.
   const entries = held.filter((grant) => procs.get(grant.pid)?.start === grant.start).map((grant) => ({ id: grant.id, class: grant.class, pid: grant.pid, tally: tally() }));
   const grants = new Map([...entries].reverse().map((entry) => [entry.pid, entry]));
+  const ownerOf = (pid) => grants.get(chain(procs, pid).findLast((at) => grants.has(at)));
   const outside = tally();
   const used = [];
   for (const [pid, proc] of procs) {
-    const owner = grants.get(chain(procs, pid).findLast((at) => grants.has(at)));
+    const owner = ownerOf(pid);
     (owner?.tally ?? outside)[kind(proc.command)] += proc.cpu;
     if (proc.cpu) used.push({ pid, command: proc.command, cpu: proc.cpu, ...owner && { grant: owner.id } });
   }
+  // A client's change since the last read made, or its whole time when it is new since then, goes to its process.
+  const gpu = new Map();
+  if (!unread) {
+    for (const [id, { pid, ns }] of clients) {
+      const before = gpuBefore.get(id)?.ns ?? 0;
+      gpu.set(pid, (gpu.get(pid) ?? 0) + (ns >= before ? ns - before : ns));
+    }
+  }
+  const drawn = [];
+  for (const [pid, ns] of gpu) {
+    const ms = Math.round(ns / 1e6), owner = ownerOf(pid);
+    (owner?.tally ?? outside).gpu += ms;
+    if (ms && procs.has(pid)) drawn.push({ pid, command: procs.get(pid).command, gpu: ms, ...owner && { grant: owner.id } });
+  }
+  if (clients) gpuBefore = clients;
+  const waiting = Object.fromEntries(CLASSES.map((cls) => [cls, 0]));
+  for (const request of requests) if (Object.hasOwn(waiting, request.class) && procs.get(request.pid)?.start === request.start) waiting[request.class] += 1;
+  // Each CPU's share of busy ticks over the sample's wait and reads, in thousandths of a core; the rest is idle.
+  const busy = Math.round(1000 * ticks().reduce((sum, now, k) => sum + (now.all > first[k].all ? (now.busy - first[k].busy) / (now.all - first[k].all) : 0), 0));
+  const counted = (mine) => ({ ...shares(mine), ...!unread && { gpu: seconds(mine.gpu) } });
   return {
     ...reading,
-    grants: entries.map(({ tally: mine, ...grant }) => ({ ...grant, ...shares(mine) })),
-    outside: shares(outside),
+    grants: entries.map(({ tally: mine, ...grant }) => ({ ...grant, ...counted(mine) })),
+    outside: counted(outside),
     top: used.sort((a, b) => b.cpu - a.cpu).slice(0, 5).map((proc) => ({ ...proc, cpu: cores(proc.cpu) })),
+    ...unread ? { gpuUnread: unread } : { gpuTop: drawn.sort((a, b) => b.gpu - a.gpu).slice(0, 5).map((proc) => ({ ...proc, gpu: seconds(proc.gpu) })) },
+    waiting,
+    idle: cores(1000 * reading.cores - busy),
+    busy: cores(busy),
   };
 }
 
@@ -601,7 +676,9 @@ function sample() {
  * were read, each class's and outside's mean CPU as a share of the mean of all, in tenths of a percent rounded so
  * they add up to 100.0 (the largest remainders take the tenths left over). The shares are of the CPU read, which the
  * cores bound, not of the load, so the mean of each is printed beside them, and the commands outside every grant that
- * the samples' `top` named, a process that outlived its parent among them.
+ * the samples' `top` named, a process that outlived its parent among them. Then the share of minutes in which a request
+ * waited beside two or more idle cores, and, over every sample whose GPU was read, the GPU seconds by class and outside
+ * with their shares, and the commands outside every grant that drew the most (#3240).
  */
 function loadReport(samples, torn) {
   const percent = (tenths) => `${(tenths / 10).toFixed(1)}%`;
@@ -616,10 +693,7 @@ function loadReport(samples, torn) {
   }
   const total = [...sums.values()].reduce((sum, cpu) => sum + cpu, 0);
   if (total > 0) {
-    const exact = [...sums].map(([name, cpu]) => ({ name, cpu, tenths: Math.floor((1000 * cpu) / total), rest: ((1000 * cpu) / total) % 1 }));
-    let left = 1000 - exact.reduce((sum, part) => sum + part.tenths, 0);
-    for (const part of [...exact].sort((a, b) => b.rest - a.rest)) if (left-- > 0) part.tenths += 1;
-    const of = new Map(exact.map((part) => [part.name, part]));
+    const of = apportion(sums, total);
     const classes = new Set(read.flatMap((entry) => entry.grants.map((grant) => grant.class)));
     for (const cls of sums.keys()) if (classes.has(cls)) lines.push(`${cls} ${percent(of.get(cls).tenths)}`);
     const [compile, node, other] = KINDS.map((name) => of.get(`outside ${name}`).tenths);
@@ -633,7 +707,43 @@ function loadReport(samples, torn) {
   } else if (above.length) lines.push('no CPU was read in those minutes');
   if (failed) lines.push(`${failed} of ${samples.length} samples failed and count in no share`);
   if (torn) lines.push(`${torn} lines of the log can't be read and count as no minute`);
+  // The line (#3240): a minute in which a request waited while two or more cores were idle.
+  const lined = samples.filter((entry) => entry.waiting && typeof entry.idle === 'number');
+  if (lined.length) {
+    const idle = lined.filter((entry) => Object.values(entry.waiting).reduce((sum, n) => sum + n, 0) >= 1 && entry.idle >= 2).length;
+    lines.push(`${percent(Math.round((1000 * idle) / lined.length))} of minutes with a request waiting beside two or more idle cores (${idle} of ${lined.length})`);
+  }
+  // GPU time by class and outside (#3240), over every sample whose GPU was read, in whole milliseconds.
+  const gpuRead = samples.filter((entry) => typeof entry.outside?.gpu === 'number');
+  const ms = (s) => Math.round(1000 * s);
+  const gpu = new Map([...CLASSES.map((cls) => [cls, 0]), ['outside', 0]]);
+  for (const entry of gpuRead) {
+    for (const grant of entry.grants) gpu.set(grant.class, (gpu.get(grant.class) ?? 0) + ms(grant.gpu));
+    gpu.set('outside', gpu.get('outside') + ms(entry.outside.gpu));
+  }
+  const gpuTotal = [...gpu.values()].reduce((sum, n) => sum + n, 0);
+  lines.push(`GPU read in ${gpuRead.length} of ${samples.length} samples, ${seconds(gpuTotal).toFixed(3)} s in all`);
+  if (gpuTotal > 0) {
+    const of = apportion(gpu, gpuTotal);
+    const classes = new Set([...gpuRead.flatMap((entry) => entry.grants.map((grant) => grant.class)), 'outside']);
+    for (const [name, n] of gpu) if (classes.has(name)) lines.push(`GPU ${name} ${seconds(n).toFixed(3)} s, ${percent(of.get(name).tenths)}`);
+    const ungranted = new Map();
+    for (const proc of gpuRead.flatMap((entry) => entry.gpuTop ?? [])) if (!proc.grant) ungranted.set(proc.command, (ungranted.get(proc.command) ?? 0) + ms(proc.gpu));
+    const named = [...ungranted].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([command, n]) => `${command} ${seconds(n).toFixed(3)} s`);
+    if (named.length) lines.push(`GPU top commands under no grant: ${named.join(', ')}`);
+  }
   return lines.join('\n');
+}
+
+/**
+ * Each name's share of `total`, the sum of `sums`' values, in tenths of a percent rounded so they add up to 100.0: the
+ * largest remainders take the tenths left over.
+ */
+function apportion(sums, total) {
+  const exact = [...sums].map(([name, n]) => ({ name, tenths: Math.floor((1000 * n) / total), rest: ((1000 * n) / total) % 1 }));
+  let left = 1000 - exact.reduce((sum, part) => sum + part.tenths, 0);
+  for (const part of [...exact].sort((a, b) => b.rest - a.rest)) if (left-- > 0) part.tenths += 1;
+  return new Map(exact.map((part) => [part.name, part]));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'load') {
