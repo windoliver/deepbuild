@@ -681,7 +681,7 @@ unsafe fn ax_rows(obj: &AnyObject, out: &mut Vec<Value>, depth: u32) {
 
 /// The window's accessibility tree read back through NSAccessibility, in process: the elements
 /// under the NSWindow, as an assistive client walks them.
-fn read_tree(window: &Window) -> Vec<Value> {
+pub(crate) fn read_tree(window: &Window) -> Vec<Value> {
     let mut rows = Vec::new();
     if let Some(view) = ns_view(window) {
         // SAFETY: the view is alive while the GPUI window is, and so is its NSWindow; this runs

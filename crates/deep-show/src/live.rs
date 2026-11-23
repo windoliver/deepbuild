@@ -283,6 +283,16 @@ pub(crate) fn nodes(
     (out, unboxed)
 }
 
+/// One step of the run, drawn at once. A draw is what gives AccessKit the tree and has it announce,
+/// and the display asks for none of a window nobody can see (covered, minimized, on another Space).
+fn step(window: WindowHandle<View>, cx: &mut AsyncApp, to: impl FnOnce(&mut View)) {
+    let _ = window.update(cx, |view, _, cx| {
+        to(view);
+        cx.notify();
+    });
+    let _ = cx.update_window(window.into(), |_, window, cx| window.draw(cx).clear(cx));
+}
+
 /// Plays the scenario's calls, then shows the panel the first document on screen sits in.
 pub fn show(hub: &mut Hub<'_>) -> Value {
     let Some((doc, panel_id)) = hub
@@ -432,14 +442,17 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         // Closing the window early ends the run.
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         cx.activate(true);
+        // The first read activates AccessKit's adapter, and the draw gives it the tree, so a client's
+        // own first ask finds it even where the window opens covered.
+        let _ = cx.update_window(handle.into(), |_, window, cx| {
+            crate::watch::read_tree(window);
+            window.draw(cx).clear(cx);
+        });
         let spoken = said.len();
         cx.spawn(async move |cx| {
             cx.background_executor().timer(HOLD).await;
             for j in 0..spoken {
-                let _ = handle.update(cx, |view, _, cx| {
-                    view.j = Some(j);
-                    cx.notify();
-                });
+                step(handle, cx, |view| view.j = Some(j));
                 cx.background_executor().timer(SAID).await;
             }
         })
@@ -447,10 +460,7 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         cx.spawn(async move |cx| {
             for k in 1..count {
                 cx.background_executor().timer(HOLD).await;
-                let _ = handle.update(cx, |view, _, cx| {
-                    view.k = k;
-                    cx.notify();
-                });
+                step(handle, cx, |view| view.k = k);
             }
             cx.background_executor().timer(LAST).await;
             cx.update(|cx| cx.quit());
