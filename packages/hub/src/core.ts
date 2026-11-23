@@ -2456,7 +2456,8 @@ export class Core {
     for (const wake of this.delivery.waiting.get(session) ?? []) wake();
     // What its reply carried never reached the agent (#906): stalled, unless a turn shows it, and it goes by the next route.
     for (const [ask, handed] of this.delivery.handed) if (handed.hook === id) void this.queue(() => this.delivery.unwoken(handed.session, ask)).catch(() => undefined);
-    // The notices it carried wait for the session's next hook (#352), its continues and workspace notices for the next prompt (#3305).
+    // The notices it carried wait for the session's next hook (#352); its continues, workspace notices, your notes and the
+    // promised check for the next prompt (#3305, #3309).
     this.siblings.gone(id);
     this.delivery.promptReplyGone(id);
   }

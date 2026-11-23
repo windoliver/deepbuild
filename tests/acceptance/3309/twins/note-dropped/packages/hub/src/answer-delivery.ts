@@ -182,6 +182,9 @@ export class AnswerDelivery {
    */
   private readonly inReply = new Map<string, { session: string; later: string[]; notices: string[]; notes: Note[]; promise: string | undefined; at: number }>();
 
+  /** Your notes a reply deep-hook never read carried, by session: kept apart from `carried`, which says this prompt's own were taken. */
+  private readonly givenBack = new Map<string, Note[]>();
+
   /**
    * A prompt's reply carries these: kept while deep-hook could still report its hook gone before reading it, and given
    * back at once when it already has, while the reply was being built.
@@ -441,9 +444,11 @@ export class AnswerDelivery {
    */
   takeCarried(session: string, held?: Draft[]): Note[] | undefined {
     if (held && !this.carried.has(session)) this.appNotes(held, session);
-    const notes = this.carried.get(session);
+    // Notes a reply deep-hook never read carried go first, already recorded with that prompt (#3309).
+    const notes = [...(this.givenBack.get(session) ?? []), ...(this.carried.get(session) ?? [])];
+    this.givenBack.delete(session);
     this.carried.delete(session);
-    return notes;
+    return notes.length ? notes : undefined;
   }
 
   /** The notes as the agent reads them, each labelled as yours, sent from the app, with its request ID. */
@@ -526,7 +531,7 @@ export class AnswerDelivery {
       const promise = this.promises.get(meta.session);
       clearTimeout(promise?.timer);
       this.promises.delete(meta.session);
-      for (const map of [this.options.state().acks, this.options.state().midTurn, this.carried, this.options.state().turnsStarted, this.options.state().onScreen]) map.delete(meta.session);
+      for (const map of [this.options.state().acks, this.options.state().midTurn, this.carried, this.givenBack, this.options.state().turnsStarted, this.options.state().onScreen]) map.delete(meta.session);
     } else if (meta.event === 'StopFailure') {
       // A turn that ends on an API error ends like a Stop, and Claude Code starts its waiter as at a Stop; one an
       // earlier stop started may still wait, and either may wake the idle session (#85). Only the newest turn's: a prompt you
