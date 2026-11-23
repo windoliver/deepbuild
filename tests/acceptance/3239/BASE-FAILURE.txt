@@ -14,7 +14,7 @@ $ node --test tests/acceptance/3239/ac1-bare-builds.test.mjs tests/acceptance/32
 |---|---|---|
 | #3239.ce662817 AC1 | FAIL at its assertion | every cargo each of the four scripts started ran under the cargo home's wrapper: 141 cargos, each named. The base sets no wrapper variable (RUSTC_WRAPPER unset in every call), so the machine's config decides |
 | #3239.9d1b4fd0 AC2 | PASS | the base is no wrong program for AC2: the outside build's two units were each logged. Twin repo-wide-off fails it (TWINS-RUN.txt) |
-| #3239.cb760c49 AC3 | PASS | the base is no wrong program for AC3: before and after are one tree, the four files' 24 tests passed and main lists none of them. Twin requires-caller fails it (TWINS-RUN.txt) |
+| #3239.cb760c49 AC3 | PASS | the base is no wrong program for AC3: before and after are one tree. This run passed and printed no counts. The counts come from the throwaway's run at the same merge base, below: 24 tests passed in the four files, and main lists none of them. Twin requires-caller fails it (TWINS-RUN.txt) |
 | #3239.cd5b51c3 AC4 | FAIL at its assertion | section 4 names no rule that the four scripts empty RUSTC_WRAPPER, and says the reference Mac's budgets "stay unwrapped", not that it may run the cache |
 
 started 2026-11-23T09:25:45.722Z, load 28.1

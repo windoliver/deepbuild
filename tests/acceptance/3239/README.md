@@ -102,7 +102,8 @@ a Mac.
 - **The checkout's cargo settings.** The fixture's `.cargo/config.toml` holds the `[build]` table of the checkout's
   `.cargo/config.toml`, if it has one (the base has none). Its `[patch]` tables name sources the fixture doesn't have.
   So a change that turns the wrapper off for every build in the repository, instead of for the four scripts' builds,
-  fails AC2, though it would pass AC1's per-script check.
+  fails AC2. Twin `repo-wide-off` fails AC1 too, at the build started outside each script: in that run no cargo a script
+  started ran under the wrapper, and no outside build logged a call (`TWINS-RUN.txt`).
 - **The base is not a wrong program for AC2**: it passes (`BASE-FAILURE.txt`). Twin `repo-wide-off` (the checkout's
   `.cargo/config.toml` with `[build] rustc-wrapper = ""`) fails it, naming the units the wrapper didn't log
   (`TWINS-RUN.txt`).
@@ -132,9 +133,10 @@ about 7 h serial). I chose the least surface its words support:
 - **What this leaves out**: the timed files above, the vitest and cargo blocks, and the acceptance suites that read the
   four scripts. They run in the implementer's `node scripts/affected.mjs` run under a timed grant, which AGENTS.md's
   Proof asks for anyway. Its FAIL lines are the rest of this criterion.
-- **The base is not a wrong program for AC3**: before and after are the same tree, and the run passes (24 tests, none
-  listed, `BASE-FAILURE.txt`). Twin `requires-caller` (a `perf.mjs` that refuses to run unless its caller emptied the
-  variable) fails it, naming the new FAIL IDs (`TWINS-RUN.txt`).
+- **The base is not a wrong program for AC3**: before and after are the same tree, and the base run passed. It printed no
+  counts. The counts come from the throwaway's run at the same merge base: 24 tests passed in the four files, and main
+  lists none of them (`BASE-FAILURE.txt`). Twin `requires-caller` (a `perf.mjs` that refuses to run unless its caller
+  emptied the variable) fails it, naming the new FAIL IDs (`TWINS-RUN.txt`).
 
 ### AC4
 
@@ -177,15 +179,24 @@ Nothing is killed by name or port. Each sandbox is removed after its test.
 
 ## Wrong programs
 
-`twins.json` maps each criterion the base can't fail to its planted wrong program under `twins/`. Each is the
-throwaway change (below) with one line changed and a header line naming the fault. It replaces one file, so it runs
-over whatever else the change holds:
+`twins.json` maps AC1, AC2 and AC3 to one planted wrong program each, under `twins/`. The base is itself a wrong program
+for AC1 and AC4, which fail on it. AC1 has a twin as well because the issue names that planted script, and AC4 has none.
+The base is none for AC2 and AC3, which pass on it, so their twins are what shows they can fail.
+
+Each twin replaces one file and has a header line naming the fault. `first-cargo-only` and `requires-caller` are the
+throwaway change's (below) `scripts/benchmark.mjs` and `scripts/perf.mjs` with one line changed. `repo-wide-off` is the
+base's `.cargo/config.toml`, which the throwaway leaves alone, with a `[build]` table added. I ran each over the
+throwaway change:
 
 | Criterion | Twin | The planted fault | Fails at |
 |---|---|---|---|
 | `#3239.ce662817` (AC1) | `first-cargo-only` (`scripts/benchmark.mjs`) | `warm()` empties `RUSTC_WRAPPER` for its first cargo only | `scripts/benchmark.mjs: its cargo 2 of 2, \`cargo clippy --workspace --all-targets --locked -- -D warnings\` …, ran under the wrapper: 4 compiles` |
 | `#3239.9d1b4fd0` (AC2) | `repo-wide-off` (`.cargo/config.toml`) | the repository's cargo config turns the wrapper off for every build in it | `the cargo home's wrapper logged no call for 2 of the 2 units the outside build compiled (fixture_core, fixture_app)` |
 | `#3239.cb760c49` (AC3) | `requires-caller` (`scripts/perf.mjs`) | perf throws unless its caller emptied `RUSTC_WRAPPER`, instead of emptying it itself | new FAIL IDs in `tests/perf.test.mjs` |
+
+A twin isn't confined to its criterion's test. On AC1, `repo-wide-off` fails at the build started outside each of the four
+scripts, and `requires-caller` fails because perf starts no cargo build (`TWINS-RUN.txt`). Beyond those two pairs, each
+twin was run only on its own criterion's file.
 
 AC1's other wrong program is the merge base itself, which fails it naming every cargo of each script. AC4's is the
 base's section 4. Both are in `BASE-FAILURE.txt`.
@@ -246,8 +257,8 @@ helpers as handling the table themselves: they name `HOME`.
 - `twins.json`, `twins/`: the planted wrong programs.
 - `BASE-FAILURE.txt`: each test's run on the base, and the throwaway's runs. `TWINS-RUN.txt`: each twin's run.
 
-Of the suite's about 2,000 added lines, about 1,050 are the twins, each a whole copy of the file it replaces, as
-the house form has them, and about 270 are the two run records.
+Of the suite's about 2,200 added lines, about 1,050 are the twins, each a whole copy of the file it replaces, as
+the house form has them, and about 370 are the two run records.
 
 No fixture holds a secret or personal data. Messages write the sandbox as `<sandbox>`, a home folder as `~` and the
 machine's name as `<host>`.
