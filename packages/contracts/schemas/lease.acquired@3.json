@@ -1,6 +1,6 @@
 {
   "title": "lease.acquired@3",
-  "description": "A lease was granted. It names the run whose recorded processes hold it open until proven gone, the holder session's agent process by ID and start time, so the lease table opened on the log ends it on the same proof, and, for a lease granted from the hub's queue, when its holder asked for it (#3219).",
+  "description": "A lease was granted. It names the run whose recorded processes hold it open until proven gone, the holder session's agent process by ID and start time, and on a pool(n) kind the units of n it takes, so the lease table opened on the log ends it on the same proof and counts its units.",
   "x-since": "R1",
   "x-stability": "stable",
   "x-feeds": [
@@ -110,6 +110,12 @@
           "maximum": 9007199254740991,
           "description": "Milliseconds since the Unix epoch."
         },
+        "units": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "On a pool(n) kind only: the units of its n the lease takes, fixed for its life. A lease recorded before this version takes 1."
+        },
         "run": {
           "type": "string",
           "pattern": "^run:[0-9A-Za-z]+$",
@@ -138,12 +144,6 @@
             "start"
           ],
           "additionalProperties": false
-        },
-        "asked": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991,
-          "description": "When the holder asked for the lease, in milliseconds since the Unix epoch: its place in the hub's queue, for a lease granted from it."
         }
       },
       "required": [

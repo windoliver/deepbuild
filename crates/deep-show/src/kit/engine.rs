@@ -83,7 +83,7 @@ impl Engine<'_> {
     /// needs that.
     pub fn incremental(
         &self,
-        doc: &Value,
+        doc: &mut Value,
         prev: &[Issue],
         changed: &BTreeSet<String>,
     ) -> Vec<Issue> {
@@ -162,7 +162,7 @@ impl Engine<'_> {
             out.changed = changed;
             return out;
         }
-        let after = self.incremental(&working, prev, &changed);
+        let after = self.incremental(&mut working, prev, &changed);
         let refusals = blocking(&after, prev, &working, &layer, &changed, None);
         if !refusals.is_empty() {
             let kept = if self.is(Planted::RefusedPatchWrites) {
@@ -201,7 +201,7 @@ impl Engine<'_> {
             minted_orders(&mut doc, &out.doc);
         }
         let changed = put.changed(&doc);
-        let after = self.incremental(&doc, &out.after, &changed);
+        let after = self.incremental(&mut doc, &out.after, &changed);
         // It may put back an issue its base held.
         let mut allowed = out.after.clone();
         allowed.extend(base.iter().cloned());

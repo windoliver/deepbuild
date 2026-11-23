@@ -1,0 +1,357 @@
+# #2854's suite (redraft) on base 58b4a8cb2, macOS 27.2.1 arm64, 2026-11-22 01:59, 1-minute/5/15 load averages at start: 46.24 66.57 93.49; Node v24.22.0; deep-hook built with cargo build -p deep-hook.
+# Run: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2854 --testTimeout=600000
+# Expected: 16 fail at an assertion, 1 passes. AC1: every server sends back 1900-01-01 and 2026-07-28 and answers no protocolVersion with 2025-06-18. AC2, AC3: every server holds no list (1900-01-01 sent back), their precondition. AC4: packages/contracts/schemas/mcp.handshake@1.json does not exist. AC5: neither facts file is adapter.facts@9 or has an mcpHandshake section, so no covered version has an entry; the cut-back test finds no revision named in mcpHandshake entries, before copying anything. AC6 (#2854.1891d3ad) passes on the base by its nature (the base against itself; README: Not tested).
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2854
+
+ ❯ ac5-facts.test.ts (3 tests | 3 failed) 9ms
+   ❯ #2854.9225ef55 each agent's facts name the revision its client opens the handshake with (3)
+     × #2854.9225ef55 claude-code's facts name in mcpHandshake, for every covered version, a held revision its MCP client opens with, and the recorded request adapters/corpus/claude-code/<version>/mcp-initialize.json names it 6ms
+     × #2854.9225ef55 codex's facts name in mcpHandshake, for every covered version, a held revision its MCP client opens with, and the recorded request adapters/corpus/codex/<version>/mcp-initialize.json names it 1ms
+     × #2854.9225ef55 with mcp.handshake@1's enum cut back to lack a revision the facts name, node scripts/corpus.mjs check exits non-zero with a line naming the agent, the version and the revision 1ms
+ ❯ ac4-one-entry.test.ts (1 test | 1 failed) 5ms
+   ❯ #2854.58c9395c one contract entry holds the list (1)
+     × #2854.58c9395c mcp.handshake@1's protocolVersion enum is 2025-06-18, 2025-11-25, generated as McpHandshake and McpHandshakeProtocolVersion; deep mcp and deep-hook hold no copy of their own and answer an unknown revision with its newest; the reading tools' copy equals it, and a planted reading tools file lacking the newest fails naming the file 3ms
+ ❯ ac2-same-tools.test.ts (4 tests | 4 failed) 199ms
+   ❯ #2854.411577d9 the same tools at each held revision (4)
+     × #2854.411577d9 deep mcp: after a handshake at each held revision tools/list returns the 2025-06-18 tools in the same order, and a call to its first tool is answered as at 2025-06-18 62ms
+     × #2854.411577d9 deep mcp actions: after a handshake at each held revision tools/list returns the 2025-06-18 tools in the same order, and a call to its first tool is answered as at 2025-06-18 54ms
+     × #2854.411577d9 deep-hook's mcp actions: after a handshake at each held revision tools/list returns the 2025-06-18 tools in the same order, and a call to its first tool is answered as at 2025-06-18 22ms
+     × #2854.411577d9 the reading tools: after a handshake at each held revision tools/list returns the 2025-06-18 tools in the same order, and a call to its first tool is answered as at 2025-06-18 60ms
+ ❯ ac3-schema-keywords.test.ts (4 tests | 4 failed) 244ms
+   ❯ #2854.aaad023c every tool's inputSchema means the same in 2020-12 and draft-07 (4)
+     × #2854.aaad023c deep mcp: every tool's inputSchema in tools/list at 2025-11-25 uses only keywords that mean the same in 2020-12 and draft-07; the list with a planted tool giving items as a list of schemas fails, naming the tool and the keyword 94ms
+     × #2854.aaad023c deep mcp actions: every tool's inputSchema in tools/list at 2025-11-25 uses only keywords that mean the same in 2020-12 and draft-07; the list with a planted tool giving items as a list of schemas fails, naming the tool and the keyword 66ms
+     × #2854.aaad023c deep-hook's mcp actions: every tool's inputSchema in tools/list at 2025-11-25 uses only keywords that mean the same in 2020-12 and draft-07; the list with a planted tool giving items as a list of schemas fails, naming the tool and the keyword 15ms
+     × #2854.aaad023c the reading tools: every tool's inputSchema in tools/list at 2025-11-25 uses only keywords that mean the same in 2020-12 and draft-07; the list with a planted tool giving items as a list of schemas fails, naming the tool and the keyword 68ms
+ ❯ ac1-answers.test.ts (4 tests | 4 failed) 1028ms
+   ❯ #2854.714225f2 initialize is answered from the held list (4)
+     × #2854.714225f2 deep mcp answers initialize naming 2025-06-18 with 2025-06-18 and naming 2025-11-25 with 2025-11-25; naming 1900-01-01, naming 2026-07-28 and with no protocolVersion it answers 2025-11-25 398ms
+     × #2854.714225f2 deep mcp actions answers initialize naming 2025-06-18 with 2025-06-18 and naming 2025-11-25 with 2025-11-25; naming 1900-01-01, naming 2026-07-28 and with no protocolVersion it answers 2025-11-25 305ms
+     × #2854.714225f2 deep-hook's mcp actions answers initialize naming 2025-06-18 with 2025-06-18 and naming 2025-11-25 with 2025-11-25; naming 1900-01-01, naming 2026-07-28 and with no protocolVersion it answers 2025-11-25 56ms
+     × #2854.714225f2 the reading tools answers initialize naming 2025-06-18 with 2025-06-18 and naming 2025-11-25 with 2025-11-25; naming 1900-01-01, naming 2026-07-28 and with no protocolVersion it answers 2025-11-25 268ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 16 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-answers.test.ts > #2854.714225f2 initialize is answered from the held list > #2854.714225f2 deep mcp answers initialize naming 2025-06-18 with 2025-06-18 and naming 2025-11-25 with 2025-11-25; naming 1900-01-01, naming 2026-07-28 and with no protocolVersion it answers 2025-11-25
+AssertionError: deep mcp's answers to the five handshakes: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25",
++   "deep mcp: initialize naming 2026-07-28 is answered \"2026-07-28\", not 2025-11-25",
++   "deep mcp: initialize naming no protocolVersion is answered \"2025-06-18\", not 2025-11-25",
++ ]
+
+ ❯ ac1-answers.test.ts:21:76
+     19|         if (answered !== want) failures.push(`${server.label}: initial…
+     20|       }
+     21|       expect(failures, `${server.label}'s answers to the five handshak…
+       |                                                                            ^
+     22|     }, 300_000);
+     23|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/16]⎯
+
+ FAIL  ac1-answers.test.ts > #2854.714225f2 initialize is answered from the held list > #2854.714225f2 deep mcp actions answers initialize naming 2025-06-18 with 2025-06-18 and naming 2025-11-25 with 2025-11-25; naming 1900-01-01, naming 2026-07-28 and with no protocolVersion it answers 2025-11-25
+AssertionError: deep mcp actions's answers to the five handshakes: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp actions: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25",
++   "deep mcp actions: initialize naming 2026-07-28 is answered \"2026-07-28\", not 2025-11-25",
++   "deep mcp actions: initialize naming no protocolVersion is answered \"2025-06-18\", not 2025-11-25",
++ ]
+
+ ❯ ac1-answers.test.ts:21:76
+     19|         if (answered !== want) failures.push(`${server.label}: initial…
+     20|       }
+     21|       expect(failures, `${server.label}'s answers to the five handshak…
+       |                                                                            ^
+     22|     }, 300_000);
+     23|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/16]⎯
+
+ FAIL  ac1-answers.test.ts > #2854.714225f2 initialize is answered from the held list > #2854.714225f2 deep-hook's mcp actions answers initialize naming 2025-06-18 with 2025-06-18 and naming 2025-11-25 with 2025-11-25; naming 1900-01-01, naming 2026-07-28 and with no protocolVersion it answers 2025-11-25
+AssertionError: deep-hook's mcp actions's answers to the five handshakes: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep-hook's mcp actions: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25",
++   "deep-hook's mcp actions: initialize naming 2026-07-28 is answered \"2026-07-28\", not 2025-11-25",
++   "deep-hook's mcp actions: initialize naming no protocolVersion is answered \"2025-06-18\", not 2025-11-25",
++ ]
+
+ ❯ ac1-answers.test.ts:21:76
+     19|         if (answered !== want) failures.push(`${server.label}: initial…
+     20|       }
+     21|       expect(failures, `${server.label}'s answers to the five handshak…
+       |                                                                            ^
+     22|     }, 300_000);
+     23|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/16]⎯
+
+ FAIL  ac1-answers.test.ts > #2854.714225f2 initialize is answered from the held list > #2854.714225f2 the reading tools answers initialize naming 2025-06-18 with 2025-06-18 and naming 2025-11-25 with 2025-11-25; naming 1900-01-01, naming 2026-07-28 and with no protocolVersion it answers 2025-11-25
+AssertionError: the reading tools's answers to the five handshakes: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the reading tools: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25",
++   "the reading tools: initialize naming 2026-07-28 is answered \"2026-07-28\", not 2025-11-25",
++   "the reading tools: initialize naming no protocolVersion is answered \"2025-06-18\", not 2025-11-25",
++ ]
+
+ ❯ ac1-answers.test.ts:21:76
+     19|         if (answered !== want) failures.push(`${server.label}: initial…
+     20|       }
+     21|       expect(failures, `${server.label}'s answers to the five handshak…
+       |                                                                            ^
+     22|     }, 300_000);
+     23|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/16]⎯
+
+ FAIL  ac2-same-tools.test.ts > #2854.411577d9 the same tools at each held revision > #2854.411577d9 deep mcp: after a handshake at each held revision tools/list returns the 2025-06-18 tools in the same order, and a call to its first tool is answered as at 2025-06-18
+AssertionError: deep mcp holds a list of handshake revisions: expected 'deep mcp: holds no list of handshake …' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"deep mcp: holds no list of handshake revisions: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25, so no handshake with it is at a held revision"
+
+ ❯ ac2-same-tools.test.ts:19:75
+     17|       const home = scratch();
+     18|       const held = await holdsAList(server, home);
+     19|       expect(held, `${server.label} holds a list of handshake revision…
+       |                                                                           ^
+     20|       const sessions = new Map<string, Awaited<ReturnType<typeof sessi…
+     21|       for (const revision of HELD) sessions.set(revision, await sessio…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/16]⎯
+
+ FAIL  ac2-same-tools.test.ts > #2854.411577d9 the same tools at each held revision > #2854.411577d9 deep mcp actions: after a handshake at each held revision tools/list returns the 2025-06-18 tools in the same order, and a call to its first tool is answered as at 2025-06-18
+AssertionError: deep mcp actions holds a list of handshake revisions: expected 'deep mcp actions: holds no list of ha…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"deep mcp actions: holds no list of handshake revisions: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25, so no handshake with it is at a held revision"
+
+ ❯ ac2-same-tools.test.ts:19:75
+     17|       const home = scratch();
+     18|       const held = await holdsAList(server, home);
+     19|       expect(held, `${server.label} holds a list of handshake revision…
+       |                                                                           ^
+     20|       const sessions = new Map<string, Awaited<ReturnType<typeof sessi…
+     21|       for (const revision of HELD) sessions.set(revision, await sessio…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/16]⎯
+
+ FAIL  ac2-same-tools.test.ts > #2854.411577d9 the same tools at each held revision > #2854.411577d9 deep-hook's mcp actions: after a handshake at each held revision tools/list returns the 2025-06-18 tools in the same order, and a call to its first tool is answered as at 2025-06-18
+AssertionError: deep-hook's mcp actions holds a list of handshake revisions: expected 'deep-hook\'s mcp actions: holds no li…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"deep-hook's mcp actions: holds no list of handshake revisions: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25, so no handshake with it is at a held revision"
+
+ ❯ ac2-same-tools.test.ts:19:75
+     17|       const home = scratch();
+     18|       const held = await holdsAList(server, home);
+     19|       expect(held, `${server.label} holds a list of handshake revision…
+       |                                                                           ^
+     20|       const sessions = new Map<string, Awaited<ReturnType<typeof sessi…
+     21|       for (const revision of HELD) sessions.set(revision, await sessio…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/16]⎯
+
+ FAIL  ac2-same-tools.test.ts > #2854.411577d9 the same tools at each held revision > #2854.411577d9 the reading tools: after a handshake at each held revision tools/list returns the 2025-06-18 tools in the same order, and a call to its first tool is answered as at 2025-06-18
+AssertionError: the reading tools holds a list of handshake revisions: expected 'the reading tools: holds no list of h…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the reading tools: holds no list of handshake revisions: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25, so no handshake with it is at a held revision"
+
+ ❯ ac2-same-tools.test.ts:19:75
+     17|       const home = scratch();
+     18|       const held = await holdsAList(server, home);
+     19|       expect(held, `${server.label} holds a list of handshake revision…
+       |                                                                           ^
+     20|       const sessions = new Map<string, Awaited<ReturnType<typeof sessi…
+     21|       for (const revision of HELD) sessions.set(revision, await sessio…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/16]⎯
+
+ FAIL  ac3-schema-keywords.test.ts > #2854.aaad023c every tool's inputSchema means the same in 2020-12 and draft-07 > #2854.aaad023c deep mcp: every tool's inputSchema in tools/list at 2025-11-25 uses only keywords that mean the same in 2020-12 and draft-07; the list with a planted tool giving items as a list of schemas fails, naming the tool and the keyword
+AssertionError: deep mcp holds a list of handshake revisions: expected 'deep mcp: holds no list of handshake …' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"deep mcp: holds no list of handshake revisions: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25, so no handshake with it is at a held revision"
+
+ ❯ ac3-schema-keywords.test.ts:25:75
+     23|       const home = scratch();
+     24|       const held = await holdsAList(server, home);
+     25|       expect(held, `${server.label} holds a list of handshake revision…
+       |                                                                           ^
+     26|       const { answered, tools } = await toolsAt(server, NEWEST, home);
+     27|       expect(answered, `${server.label} answers initialize naming ${NE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/16]⎯
+
+ FAIL  ac3-schema-keywords.test.ts > #2854.aaad023c every tool's inputSchema means the same in 2020-12 and draft-07 > #2854.aaad023c deep mcp actions: every tool's inputSchema in tools/list at 2025-11-25 uses only keywords that mean the same in 2020-12 and draft-07; the list with a planted tool giving items as a list of schemas fails, naming the tool and the keyword
+AssertionError: deep mcp actions holds a list of handshake revisions: expected 'deep mcp actions: holds no list of ha…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"deep mcp actions: holds no list of handshake revisions: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25, so no handshake with it is at a held revision"
+
+ ❯ ac3-schema-keywords.test.ts:25:75
+     23|       const home = scratch();
+     24|       const held = await holdsAList(server, home);
+     25|       expect(held, `${server.label} holds a list of handshake revision…
+       |                                                                           ^
+     26|       const { answered, tools } = await toolsAt(server, NEWEST, home);
+     27|       expect(answered, `${server.label} answers initialize naming ${NE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/16]⎯
+
+ FAIL  ac3-schema-keywords.test.ts > #2854.aaad023c every tool's inputSchema means the same in 2020-12 and draft-07 > #2854.aaad023c deep-hook's mcp actions: every tool's inputSchema in tools/list at 2025-11-25 uses only keywords that mean the same in 2020-12 and draft-07; the list with a planted tool giving items as a list of schemas fails, naming the tool and the keyword
+AssertionError: deep-hook's mcp actions holds a list of handshake revisions: expected 'deep-hook\'s mcp actions: holds no li…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"deep-hook's mcp actions: holds no list of handshake revisions: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25, so no handshake with it is at a held revision"
+
+ ❯ ac3-schema-keywords.test.ts:25:75
+     23|       const home = scratch();
+     24|       const held = await holdsAList(server, home);
+     25|       expect(held, `${server.label} holds a list of handshake revision…
+       |                                                                           ^
+     26|       const { answered, tools } = await toolsAt(server, NEWEST, home);
+     27|       expect(answered, `${server.label} answers initialize naming ${NE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/16]⎯
+
+ FAIL  ac3-schema-keywords.test.ts > #2854.aaad023c every tool's inputSchema means the same in 2020-12 and draft-07 > #2854.aaad023c the reading tools: every tool's inputSchema in tools/list at 2025-11-25 uses only keywords that mean the same in 2020-12 and draft-07; the list with a planted tool giving items as a list of schemas fails, naming the tool and the keyword
+AssertionError: the reading tools holds a list of handshake revisions: expected 'the reading tools: holds no list of h…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the reading tools: holds no list of handshake revisions: initialize naming 1900-01-01 is answered \"1900-01-01\", not 2025-11-25, so no handshake with it is at a held revision"
+
+ ❯ ac3-schema-keywords.test.ts:25:75
+     23|       const home = scratch();
+     24|       const held = await holdsAList(server, home);
+     25|       expect(held, `${server.label} holds a list of handshake revision…
+       |                                                                           ^
+     26|       const { answered, tools } = await toolsAt(server, NEWEST, home);
+     27|       expect(answered, `${server.label} answers initialize naming ${NE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/16]⎯
+
+ FAIL  ac4-one-entry.test.ts > #2854.58c9395c one contract entry holds the list > #2854.58c9395c mcp.handshake@1's protocolVersion enum is 2025-06-18, 2025-11-25, generated as McpHandshake and McpHandshakeProtocolVersion; deep mcp and deep-hook hold no copy of their own and answer an unknown revision with its newest; the reading tools' copy equals it, and a planted reading tools file lacking the newest fails naming the file
+AssertionError: the contract entry packages/contracts/schemas/mcp.handshake@1.json: expected 'packages/contracts/schemas/mcp.handsh…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"packages/contracts/schemas/mcp.handshake@1.json does not exist"
+
+ ❯ ac4-one-entry.test.ts:23:52
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/16]⎯
+
+ FAIL  ac5-facts.test.ts > #2854.9225ef55 each agent's facts name the revision its client opens the handshake with > #2854.9225ef55 claude-code's facts name in mcpHandshake, for every covered version, a held revision its MCP client opens with, and the recorded request adapters/corpus/claude-code/<version>/mcp-initialize.json names it
+AssertionError: adapters/claude-code.facts.json, version by version: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "adapters/claude-code.facts.json: its schema is \"adapter.facts@8\", not adapter.facts@9",
++   "packages/contracts/schemas/adapter.facts@9.json does not exist",
++   "adapters/claude-code.facts.json: has no mcpHandshake section",
++   "claude-code 2.1.299: 0 mcpHandshake entries name this version, not 1",
++   "claude-code 2.1.304: 0 mcpHandshake entries name this version, not 1",
++   "claude-code 2.1.308: 0 mcpHandshake entries name this version, not 1",
++ ]
+
+ ❯ ac5-facts.test.ts:23:95
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/16]⎯
+
+ FAIL  ac5-facts.test.ts > #2854.9225ef55 each agent's facts name the revision its client opens the handshake with > #2854.9225ef55 codex's facts name in mcpHandshake, for every covered version, a held revision its MCP client opens with, and the recorded request adapters/corpus/codex/<version>/mcp-initialize.json names it
+AssertionError: adapters/codex.facts.json, version by version: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "adapters/codex.facts.json: its schema is \"adapter.facts@8\", not adapter.facts@9",
++   "packages/contracts/schemas/adapter.facts@9.json does not exist",
++   "adapters/codex.facts.json: has no mcpHandshake section",
++   "codex 0.144.0: 0 mcpHandshake entries name this version, not 1",
++   "codex 0.160.0: 0 mcpHandshake entries name this version, not 1",
++   "codex 0.163.0-alpha.10.2: 0 mcpHandshake entries name this version, not 1",
++   "codex 0.166.0-alpha.5.1: 0 mcpHandshake entries name this version, not 1",
++ ]
+
+ ❯ ac5-facts.test.ts:23:95
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/16]⎯
+
+ FAIL  ac5-facts.test.ts > #2854.9225ef55 each agent's facts name the revision its client opens the handshake with > #2854.9225ef55 with mcp.handshake@1's enum cut back to lack a revision the facts name, node scripts/corpus.mjs check exits non-zero with a line naming the agent, the version and the revision
+AssertionError: the revisions the claude-code and codex facts' mcpHandshake entries name: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ ac5-facts.test.ts:38:112
+     36|       }
+     37|     }
+     38|     expect([...named.keys()], 'the revisions the claude-code and codex…
+       |                                                                                                                ^
+     39|     const { revisions, failure } = heldList();
+     40|     expect(failure, `the contract entry ${ENTRY}`).toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/16]⎯
+
+
+ Test Files  5 failed | 1 passed (6)
+      Tests  16 failed | 1 passed (17)
+   Start at  01:59:29
+   Duration  1.22s (tests 80%, transform 12%, import 5%, worker 3%)
+
