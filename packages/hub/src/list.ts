@@ -2,11 +2,11 @@
 // (`rows.read`) or, with it down, from its database read-only. `deep` prints the list and the one count; `deep status`
 // adds each row's detail and ends on the count, so what needs you is the last thing on screen however long the detail
 // is; `--json` prints the rows. Every clock time is in your time zone.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { call, clock, notAnswering, notAnsweringSince, Unanswered } from './client.js';
 import { StaleHub } from './generations.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { controlToken, hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
 import type { Row, Why } from './rows.js';
@@ -138,11 +138,15 @@ async function staleBeforeAsk(rows: Row[], ledger: string | undefined): Promise<
   }
 }
 
-/** The hub's socket and its token, beside the socket or the installed hub's. */
+/** The hub's socket and the token that belongs to it; none where no hub wrote one, so its database is still read. */
 function hub(): { socket: string; token: string } {
   const socket = hubAddress().path;
-  const token = [join(dirname(socket), 'control.token'), rootOf(installedRoot()).token].find((p) => existsSync(p));
-  return { socket, token: token ? readFileSync(token, 'utf8').trim() : '' };
+  try {
+    return { socket, token: controlToken(socket) };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return { socket, token: '' };
+  }
 }
 
 /** What a list read from the hub's database says first: the one sentence, since when and its fix (#1812), and what follows. */

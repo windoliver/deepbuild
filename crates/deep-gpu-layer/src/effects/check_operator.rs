@@ -82,7 +82,10 @@ pub fn check_operator(app: &mut App, out: &str, call: &Value) -> Value {
         })
         .unwrap_or_default();
     let skips = app.planted == Some(Planted::SkipsOperatorCheck);
-    let (emit_options, mut check_options) = operator_plants(app.planted);
+    let (mut emit_options, mut check_options) = operator_plants(app.planted);
+    // #161's planted change to one operator: the GPU's run of fx.levels@1 alone, red two codes high.
+    emit_options.off_by_two = app.planted == Some(Planted::FxLevelsGpuOffByTwo)
+        && call["operator"]["id"] == "fx.levels@1";
     // The class the check's limits apply under, as a document's budget class (#431).
     check_options.wide_fetches = matches!(call["class"].as_str(), Some("showpiece" | "export"));
     // A composed pass that calls the shipped blur compiles into its parts (#432).

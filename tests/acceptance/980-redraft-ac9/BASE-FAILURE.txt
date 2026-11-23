@@ -1,0 +1,78 @@
+The redraft of criterion 9 (#980.238de3e1), run once at the base 3f02bf52b ("Merge pull request #2885 …"; no pack
+there declares process@1), in the job's own checkout, with deep-logic's debug build made there first
+(`cargo build --locked -j 8 --bin deep-logic`, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0). The grant that made the
+build then ran the folder's test files once, under the same build slot. Paths redacted as <repo>.
+
+It fails as it should. The one test of ac9-budget.test.ts fails at an assertion of its own, ac9-budget.test.ts:107, in
+part 3 of the test (README: The test): the base's `first_party` lists three first-party packs, interfaces@1.0.0,
+lanes@1.0.0 and modslib@1.0.0, and none declares process@1. Nothing is BLOCKED or INCONCLUSIVE, and the failure is not
+at load, in a helper's own check, in a build or at a timeout.
+
+Before that assertion all of this ran at the base and held, since the test reaches line 107 only past it:
+- the file loaded, and the helpers' builds of deep-logic and of #416's assembler succeeded;
+- part 1: the model's builder calls make 2,000 entities, 40 queues, 30 resources and 10 conveyors; every case is made
+  before the first timed step and none can be out before the last;
+- the model's program and the idle item's were assembled;
+- part 2: `view` opened the idle piece, and its frames 0 to 599 each ran one step, trapped nothing and reported their
+  draws; the first drew the ten arrays the test reads, each as long as the item declares, with every count 0;
+- scripts/benchmark.mjs loaded, and `first_party` answered ok with its packs.
+
+Not run at the base: parts 4 to 7 (the model's view and warm-up, the 300 timed steps held to the criterion's counts,
+the model running on, judgeLimit). The base has no process@1 to link, so it has nothing to time: no timing of the
+model was taken there, and this record holds no measurement of the budget.
+
+The summary below counts two files, one failed and one passed. The file that passed is not this suite's, and the
+folder no longer holds it: probe-standin.test.ts, this job's scaffolding, with its helper standin.ts, both removed
+after the run. It was ac9-budget.test.ts with four edits: part 3 cut out, the model's piece swapped for a stand-in's,
+the helper's import, and "PROBE (the stand-in)" before the describe's title. Remade from the test's text by those
+edits, it has the sha256 listed below. The stand-in is an item that links nothing: its program holds the write region
+as data, laid out as ../980/README.md's arrays (2,000 live rows over the model's queues, request stations and
+conveyors, the 30 capacities, every unit busy), and its step writes the clock, every station's departures and
+statistics, the belt rows' distances and some ranks. Its pass shows that the test's own text for parts 4 to 7 runs at
+the base as written: the stand-in's view opened, its frames 0 to 899 each ran one step and trapped nothing, each of
+its 300 timed steps met model.ts's stateProblems and the first and last of them progressProblems, and judgeLimit read
+PASS on the five runs of the stand-in's frame less the idle item's. The log keeps none of its readings. It timed a
+stand-in's step, not a model's, so it is no measure of process@1. No test of this folder passes at the base.
+
+The files as they were when this ran (sha256). The folder keeps the first, second and last, unchanged:
+
+  61d81f5059fc7edbf466c751b346b56835fc07c00f3c4abdb5f3adcfae211308  tests/acceptance/980-redraft-ac9/ac9-budget.test.ts
+  e8b90128b772acfe752f3977b585a3790d1272d19635a05743fc74514b52057f  tests/acceptance/980-redraft-ac9/model.ts
+  5fd992b3614edcfe46cca3dcad5c3f362ad2ca40dfe922f57bdfb84bf6bc7e9b  tests/acceptance/980-redraft-ac9/probe-standin.test.ts
+  3f29dd106dc618bff431fcf62cb162e93ece26d76f817287daaabf0116814481  tests/acceptance/980-redraft-ac9/standin.ts
+  5d625241c741d480e7c662c1af14ea3031735dcb844684145f77ef65167308f1  tests/acceptance/980-redraft-ac9/tsconfig.json
+
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/980-redraft-ac9 --no-file-parallelism --testTimeout=1200000
+
+ RUN  v5.0.5 <repo>/tests/acceptance/980-redraft-ac9
+
+ ❯ ac9-budget.test.ts (1 test | 1 failed) 7412ms
+   ❯ #980.238de3e1 process@1's step budget on the reference Mac (1)
+     × #980.238de3e1 a model of 2,000 live entities, 40 queues, 30 resources and 10 conveyors steps in under 0.3 ms a step 6629ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac9-budget.test.ts > #980.238de3e1 process@1's step budget on the reference Mac > #980.238de3e1 a model of 2,000 live entities, 40 queues, 30 resources and 10 conveyors steps in under 0.3 ms a step
+AssertionError: one first-party pack declares process@1 (the build's first-party packs: interfaces@1.0.0, lanes@1.0.0, modslib@1.0.0): expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ ac9-budget.test.ts:107:144
+    105|       const named = (p: JsonObject): string => `${String(p['name'])}@$…
+    106|       const declaring = packs.filter((p) => isObject(p['interfaces']) …
+    107|       expect(declaring.map(named), `one first-party pack declares ${PR…
+       |                                                                                                                                                ^
+    108|       const libs = Object.entries(isObject(declaring[0]!['libs']) ? de…
+    109|         .filter(([, e]) => isObject(e) && Array.isArray(e['implements'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 1 passed (2)
+   Start at  04:12:38
+   Duration  15.02s (tests 99%)

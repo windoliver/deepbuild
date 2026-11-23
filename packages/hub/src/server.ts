@@ -22,7 +22,7 @@ import { registry } from './socket-adapters.js';
 import { agentReply, allowReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, withWaits } from './hook-replies.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
-import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
+import { handleOf as ruleHandle, noticeText } from './rules.js';
 import { dropTestSettings, installedRoot, real, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { processHealth } from './process-health.js';
@@ -36,11 +36,10 @@ import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, HELD_WAIT_MS, line, p
 import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { writeSynced } from './vfs.js';
 import { budgetFile, readBudget, spend, spentWhy } from './restart-budget.js';
+import { parserInline, parserPool, type Parsers } from './parser-pool.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
-/** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
-const BIG = 1 << 20;
 const MAX_LINE = 64 << 20;
 /**
  * A consumer more than this many frames behind is cut off with fell_behind, never dropped silently (#34): the
@@ -184,12 +183,6 @@ interface CoreLink {
   started: Promise<{ hooks: string[] }>;
   close(): Promise<void>;
 }
-/**
- * `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded); `count` is
- * the parser workers the pool holds, for hub.health (#2043).
- */
-interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; count(): number; close(): Promise<void> }
-
 /** A frame from the core: its event's JSON text, or, `caught` set, the head its subscriber's replay reached (#1575). */
 type OnFrame = (sub: string, event: string, caught?: boolean) => void;
 
@@ -245,78 +238,6 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
       else core.unsubscribe(message.sub);
     },
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
-    close: async () => undefined,
-  };
-}
-
-function parserPool(given: readonly string[], plant: Plant | undefined, dir: string): Parsers {
-  // The pool's own list: each scrub's values join it, so a parser started later begins with all its elder was sent.
-  const held = [...given];
-  // Each line a parser holds, until that parser answers it or ends.
-  const pending = new Map<number, { resolve: (parsed: Parsed) => void; worker: Worker }>();
-  let n = 0;
-  let closing = false;
-  const make = (): Worker => {
-    const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, dir, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
-    worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
-      pending.get(id)?.resolve(parsed);
-      pending.delete(id);
-    });
-    if (plant === 'parser-pool-messages-only') return worker;
-    // A parser that throws on a line ends, and takes neither the hub nor a line with it (#2043): each line it held is
-    // refused, and another parser takes its place.
-    worker.on('error', (error) => process.stderr.write(`deep hub: a parser failed: ${error.stack ?? error.message}\n`));
-    worker.on('exit', () => {
-      for (const [id, line] of pending) {
-        if (line.worker !== worker || plant === 'parser-pool-leaves-line-waiting') continue;
-        pending.delete(id);
-        line.resolve({ kind: 'refused', id: null, error: refusal('unavailable', '', 'The hub failed while it read this line, so nothing of it was recorded.') });
-      }
-      if (closing) return;
-      if (worker === small) small = make();
-      else if (worker === big) big = make();
-    });
-    return worker;
-  };
-  // One parser for small lines, and one for large ones, started at the first: an idle hub holds one thread fewer.
-  let small = make();
-  let big: Worker | undefined;
-  return {
-    parse(chunks, first) {
-      const size = chunks.reduce((sum, c) => sum + c.length, 0);
-      const worker = size > BIG ? (big ??= make()) : small;
-      return new Promise((resolve) => {
-        pending.set(++n, { resolve, worker });
-        // A line in a buffer of its own is handed to the parser's thread, not copied to it; a short one sits in Node's shared pool, which stays here.
-        worker.postMessage({ n, chunks, first }, [...new Set(chunks.filter((c) => plant === 'hands-over-socket-chunk' || c.buffer.byteLength === c.byteLength).map((c) => c.buffer as ArrayBuffer))]);
-      });
-    },
-    scrub(values) {
-      held.push(...values);
-      for (const worker of [small, big]) worker?.postMessage({ scrub: values });
-    },
-    count: () => (big ? 2 : 1),
-    close: async () => {
-      closing = true;
-      await Promise.all([small, big].map((w) => w?.terminate()));
-    },
-  };
-}
-/** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
-async function parserInline(held: string[], plant: Plant, dir: string): Promise<Parsers> {
-  const { parseLine } = await import('./hookmap.js');
-  const { scrubText } = await import('@deepbuild/evidence');
-  return {
-    parse: async (chunks, first) => {
-      const line = Buffer.concat(chunks);
-      const parsed = parseLine(line, first, held, plant);
-      // A hook line is scrubbed whole, as a hub that scrubs what it reads before keeping any field would.
-      if (parsed.kind === 'hook') scrubText(line.toString('utf8'), { held });
-      const scoped = parsed.kind === 'hook' ? scopedAt(parsed.meta, dir) : undefined;
-      return scoped ? { ...parsed, scoped } : parsed;
-    },
-    scrub(values) { held.push(...values); },
-    count: () => 0,
     close: async () => undefined,
   };
 }

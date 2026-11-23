@@ -40,7 +40,7 @@ export interface KnowledgeProvider {
     record: RecordStore; evidence: EvidenceStore; asks: Asks;
     env: Record<string, string | undefined>; connection: Connection; now(): number;
     held(): readonly string[]; forge: { api: string; repos: readonly string[] }; plant?: string | undefined;
-  }): Promise<{ pass(): Promise<void>; session(id: string): Promise<void>; archived(): Promise<Set<string>> }>;
+  }): Promise<{ pass(): Promise<void>; session(id: string, transcript?: string): Promise<void>; archived(): Promise<Set<string>> }>;
   wiki(options: WikiBuildOptions): WikiBuild;
   index(wiki: string, module?: string): Promise<IndexFill | undefined>;
   cwdOf(text: string): string | undefined;

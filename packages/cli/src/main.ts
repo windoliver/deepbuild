@@ -130,12 +130,13 @@ async function telemetryItems() {
 // (#34's slice of #19's bundle).
 async function debugBundle(): Promise<number> {
   const { scrubText } = await import('@deepbuild/evidence');
+  const { activePlant, rootOf, rootToken } = await import('@deepbuild/hub');
   const root = join(homedir(), '.deepbuild');
-  const token = existsSync(join(root, 'control.token')) ? readFileSync(join(root, 'control.token'), 'utf8').trim() : '';
+  let token = '';
+  try { token = rootToken(rootOf(root)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   // The values the hub holds by handle, as a test names them (DEEP_HUB_TEST_HELD), are scrubbed here too.
   const held = [token, ...(process.env.DEEP_HUB_TEST_HELD && existsSync(process.env.DEEP_HUB_TEST_HELD) ? readFileSync(process.env.DEEP_HUB_TEST_HELD, 'utf8').split('\n').map((v) => v.trim()) : [])].filter(Boolean);
   // The planted wrong program copies the logs as they are.
-  const { activePlant } = await import('@deepbuild/hub');
   const scrubLogs = process.env.DEEP_CLI_PLANT === 'bundle-raw-logs' || activePlant() === 'bundle-raw-logs' ? (text: string) => text : (text: string) => scrubText(text, { held });
   const scrub = (text: string) => scrubText(text, { held });
   const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).flatMap((name) => {

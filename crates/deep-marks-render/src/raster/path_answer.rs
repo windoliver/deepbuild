@@ -52,8 +52,17 @@ pub fn path_answer(
                 .get(&req.item)
                 .and_then(deep_canvas_marks::light::evaluated)
             {
-                let shown = match (&before, req.planted == Planted::LightStaleList) {
-                    (Some(kept), true) => kept.clone(),
+                let shown = match (&before, req.planted) {
+                    (Some(kept), Planted::LightStaleList) => kept.clone(),
+                    // #2053's twin: each light's height kept from the frame before.
+                    (Some(kept), Planted::LightStaleHeight) => {
+                        let mut shown = light.clone();
+                        let lights = shown["lights"].as_array_mut().into_iter().flatten();
+                        for (k, l) in lights.enumerate() {
+                            l["height"] = kept["lights"][k]["height"].clone();
+                        }
+                        shown
+                    }
                     _ => light.clone(),
                 };
                 before = Some(light);

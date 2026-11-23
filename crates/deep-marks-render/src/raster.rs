@@ -216,83 +216,6 @@ impl Config {
     }
 }
 
-/// What a painter draws glyphs on: Vello CPU's context with the drawing's resources, or Vello
-/// GPU's scene with its own.
-pub(crate) trait Glyphs: Canvas {
-    /// `glyphs` of one face at `size`, slanted `skew` degrees (#1964: a faux italic) and (#1215)
-    /// turned a quarter clockwise when a vertical run turns them, filled in the current paint as
-    /// one glyph run.
-    fn fill_run(
-        &mut self,
-        resources: &mut Resources,
-        font: &FontData,
-        size_skew: (f32, f32, bool),
-        coords: &[i16],
-        glyphs: &[vello_cpu::Glyph],
-    );
-
-    /// #496: a glyph's outline stroked `width` px wide in the current paint.
-    fn glyph_stroke(
-        &mut self,
-        resources: &mut Resources,
-        font: &FontData,
-        size_skew: (f32, f32, bool),
-        coords: &[i16],
-        glyph: vello_cpu::Glyph,
-        width: f64,
-    );
-
-    /// #496: opens a layer blurred by `radius` px, closed by `pop_layer`; false where this canvas
-    /// can't blur, and nothing was opened.
-    fn push_blur(&mut self, _radius: f32) -> bool {
-        false
-    }
-}
-
-impl Glyphs for RenderContext {
-    fn fill_run(
-        &mut self,
-        resources: &mut Resources,
-        font: &FontData,
-        (size, skew, turn): (f32, f32, bool),
-        coords: &[i16],
-        glyphs: &[vello_cpu::Glyph],
-    ) {
-        let run = self.glyph_run(resources, font);
-        let _ = run
-            .font_size(size)
-            .hint(false)
-            .glyph_transform(deep_text::atlas::glyph_transform(skew, turn))
-            .normalized_coords(coords)
-            .fill_glyphs(glyphs.iter().copied());
-    }
-
-    fn glyph_stroke(
-        &mut self,
-        resources: &mut Resources,
-        font: &FontData,
-        (size, skew, turn): (f32, f32, bool),
-        coords: &[i16],
-        glyph: vello_cpu::Glyph,
-        width: f64,
-    ) {
-        self.set_stroke(stroke(width));
-        let run = self.glyph_run(resources, font);
-        let _ = run
-            .font_size(size)
-            .hint(false)
-            .glyph_transform(deep_text::atlas::glyph_transform(skew, turn))
-            .normalized_coords(coords)
-            .stroke_glyphs(std::iter::once(glyph));
-    }
-
-    fn push_blur(&mut self, radius: f32) -> bool {
-        use vello_cpu::filter_effects::{Filter, FilterFunction};
-        self.push_filter_layer(Filter::from_function(FilterFunction::Blur { radius }));
-        true
-    }
-}
-
 /// A rect, rounded when `radius` is above 0.
 fn fill_box(ctx: &mut impl Canvas, b: [f64; 4], radius: f64) {
     if radius > 0.0 {
@@ -1081,8 +1004,11 @@ fn draw(req: &Request, kept: &RefCell<asset::Kept>) -> Result<Value, Value> {
         board.draw(&mut bare, crate::graphs::Placer::Honest);
         items = bare;
     }
-    let frame = scene::frame_planted(&req.doc, &items, (palette, ty), &record, zoom, req.planted)
-        .map_err(|r| refused(r.code, &r.path))?;
+    let mut frame =
+        scene::frame_planted(&req.doc, &items, (palette, ty), &record, zoom, req.planted)
+            .map_err(|r| refused(r.code, &r.path))?;
+    // #2053: each lit image's normal page, read as stored.
+    asset::pages(&mut frame, req.store.as_deref())?;
     let marks = scene::status_marks(&req.doc, &items, &record, req.look.status.as_ref(), palette)
         .map_err(|r| refused(r.code, &r.path))?;
     let (prims, _) = status::layout(&marks, &status::occupied(&frame), palette, frame.size, zoom);
@@ -1731,6 +1657,7 @@ pub fn planted_path(name: &str) -> Option<Planted> {
         "merge_zero_fills" => Some(Planted::MergeZeroFills),
         "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
         "light_stale_list" => Some(Planted::LightStaleList),
+        "light_stale_height" => Some(Planted::LightStaleHeight),
         _ => {
             let op = name.strip_prefix("moved:")?;
             OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))
@@ -1762,6 +1689,8 @@ pub(crate) fn clock_ms() -> f64 {
 }
 
 mod composite;
+mod glyphs;
 mod path_answer;
 use composite::composite;
+pub(crate) use glyphs::Glyphs;
 pub use path_answer::*;

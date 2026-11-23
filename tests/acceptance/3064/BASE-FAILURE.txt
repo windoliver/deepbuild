@@ -1,0 +1,90 @@
+# #3064 acceptance tests: the run on the base
+
+Base: c7dc0edc3 (HEAD c7dc0edc3, scripts/ as the base has it), where scripts/affected.mjs and
+scripts/main-watch.mjs know nothing of the settled list.
+
+$ node --test 'tests/acceptance/3064/*.test.mjs'
+(node v24.22.0, macOS, 12 cores; one-minute load 102 at the start and 105 at the end; 23 s; exit 1.
+Every failure is an AssertionError of the test's own. Under each test's name below is the first line of its message;
+the full output also holds what each run printed. The sandbox's path is cut to ~.)
+
+✖ #3064.a5a02f7e a suite whose file differs from the listed tree is not settled and runs; a list that admits it fails, naming the suite (4.8 s)
+✖ #3064.c0da1789 with no settled list the selection is today's and the run says so on one line; a run that treats a missing list as "all settled" fails (5.1 s)
+✖ #3064.c0da1789 with a settled list cut short, which can't be read, the selection is today's and the run says so on one line (4.6 s)
+✖ #3064.c0da1789 with a settled list that isn't the watch's shape, which can't be read as the list, the selection is today's and the run says so on one line (4.7 s)
+✖ #3064.1c658f8a names S's issue: a settled suite runs when the change's commit messages say Part of or Closes its issue; a selection that skips it fails, naming the case (5.1 s)
+✖ #3064.1c658f8a edits a file of S: a settled suite runs when the change adds or edits a file under its folder; a selection that skips it fails, naming the case (4.7 s)
+✖ #3064.1c658f8a is in S's own package: a settled suite runs when the change is in a package whose files its tests import themselves; a selection that skips it fails, naming the case (4.6 s)
+✖ #3064.25bec8c3 --list: a settled suite the change reaches only through the build it starts is named on one SETTLED 1 line and leaves the selection; a selection that drops it without the line fails, naming it (2.0 s)
+✖ #3064.25bec8c3 --list: a settled suite the change reaches only through a Rust binary it starts is named on one SETTLED 1 line and leaves the selection; a selection that drops it without the line fails, naming it (1.9 s)
+✖ #3064.25bec8c3 a run: the settled suite doesn't run, the run prints SETTLED 1 naming it and reads INCONCLUSIVE; a run that drops it without the line fails, naming it (4.6 s)
+✖ scope: --settled runs the settled suites too, as --wide runs the wide ones (1.6 s)
+✖ #3064.a5a02f7e a suite with 9 clean watch runs is not settled and runs; a list that admits it fails, naming the suite (22.4 s)
+✖ #3064.a5a02f7e a suite whose issue is open is not settled and runs; a list that admits it fails, naming the suite (0.0 s)
+✖ #3064.3deceb81 a settled suite that fails in a watch run is off the list in that run's settled.json; a watch that keeps it fails (0.0 s)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 0
+ℹ fail 14
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23371.042208
+
+## Each failing test, with the first line of its assertion
+
+test at tests/acceptance/3064/changed-suite.test.mjs:8:1
+✖ #3064.a5a02f7e a suite whose file differs from the listed tree is not settled and runs; a list that admits it fails, naming the suite
+  AssertionError [ERR_ASSERTION]: the settled list wasn't in force in this run, so that tests/acceptance/90001/ ran shows nothing: tests/acceptance/90002/, which holds the files the list names, ran
+
+test at tests/acceptance/3064/no-list.test.mjs:19:1
+✖ #3064.c0da1789 with no settled list the selection is today's and the run says so on one line; a run that treats a missing list as "all settled" fails
+  AssertionError [ERR_ASSERTION]: no settled list: the run doesn't say so on one line, "SETTLED no list: …" (it printed 0)
+
+test at tests/acceptance/3064/no-list.test.mjs:26:1
+✖ #3064.c0da1789 with a settled list cut short, which can't be read, the selection is today's and the run says so on one line
+  AssertionError [ERR_ASSERTION]: a settled list cut short: the run doesn't say so on one line, "SETTLED no list: …" (it printed 0)
+
+test at tests/acceptance/3064/no-list.test.mjs:35:1
+✖ #3064.c0da1789 with a settled list that isn't the watch's shape, which can't be read as the list, the selection is today's and the run says so on one line
+  AssertionError [ERR_ASSERTION]: a settled list of another shape: the run doesn't say so on one line, "SETTLED no list: …" (it printed 0)
+
+test at tests/acceptance/3064/runs.test.mjs:18:1
+✖ #3064.1c658f8a names S's issue: a settled suite runs when the change's commit messages say Part of or Closes its issue; a selection that skips it fails, naming the case
+  AssertionError [ERR_ASSERTION]: names S's issue: the settled list wasn't in force in this run, so that tests/acceptance/90001/ ran shows nothing: tests/acceptance/90002/, on the list and none of the three cases, ran
+
+test at tests/acceptance/3064/runs.test.mjs:40:1
+✖ #3064.1c658f8a edits a file of S: a settled suite runs when the change adds or edits a file under its folder; a selection that skips it fails, naming the case
+  AssertionError [ERR_ASSERTION]: edits a file of S: the settled list wasn't in force in this run, so that tests/acceptance/90001/ ran shows nothing: tests/acceptance/90002/, on the list and none of the three cases, ran
+
+test at tests/acceptance/3064/runs.test.mjs:50:1
+✖ #3064.1c658f8a is in S's own package: a settled suite runs when the change is in a package whose files its tests import themselves; a selection that skips it fails, naming the case
+  AssertionError [ERR_ASSERTION]: is in S's own package: the settled list wasn't in force in this run, so that tests/acceptance/90001/ ran shows nothing: tests/acceptance/90002/, on the list and none of the three cases, ran
+
+test at tests/acceptance/3064/settled.test.mjs:9:1
+✖ #3064.25bec8c3 --list: a settled suite the change reaches only through the build it starts is named on one SETTLED 1 line and leaves the selection; a selection that drops it without the line fails, naming it
+  AssertionError [ERR_ASSERTION]: tests/acceptance/90001/ is on the settled list and the change reaches it only through the build it starts, but no "SETTLED <n> …" line names it: it is still selected
+
+test at tests/acceptance/3064/settled.test.mjs:24:1
+✖ #3064.25bec8c3 --list: a settled suite the change reaches only through a Rust binary it starts is named on one SETTLED 1 line and leaves the selection; a selection that drops it without the line fails, naming it
+  AssertionError [ERR_ASSERTION]: tests/acceptance/90001/ is on the settled list and the change reaches it only through the binary it starts, deep-fix, but no "SETTLED <n> …" line names it: it is still selected
+
+test at tests/acceptance/3064/settled.test.mjs:38:1
+✖ #3064.25bec8c3 a run: the settled suite doesn't run, the run prints SETTLED 1 naming it and reads INCONCLUSIVE; a run that drops it without the line fails, naming it
+  AssertionError [ERR_ASSERTION]: tests/acceptance/90001/ is on the settled list and the change reaches it only through the build it starts, but the run printed no "SETTLED <n> …" line naming it: it ran
+
+test at tests/acceptance/3064/settled.test.mjs:54:1
+✖ scope: --settled runs the settled suites too, as --wide runs the wide ones
+  AssertionError [ERR_ASSERTION]: without --settled, tests/acceptance/90001/ isn't left to the watch on a SETTLED line, so --settled has nothing to show
+
+test at tests/acceptance/3064/watch.test.mjs:75:1
+✖ #3064.a5a02f7e a suite with 9 clean watch runs is not settled and runs; a list that admits it fails, naming the suite
+  AssertionError [ERR_ASSERTION]: the watch's tenth run of main's head left no settled list at ~/.deepbuild/main-watch/settled.json (the sandbox's HOME)
+
+test at tests/acceptance/3064/watch.test.mjs:83:1
+✖ #3064.a5a02f7e a suite whose issue is open is not settled and runs; a list that admits it fails, naming the suite
+  AssertionError [ERR_ASSERTION]: the watch's tenth run of main's head left no settled list at ~/.deepbuild/main-watch/settled.json (the sandbox's HOME)
+
+test at tests/acceptance/3064/watch.test.mjs:91:1
+✖ #3064.3deceb81 a settled suite that fails in a watch run is off the list in that run's settled.json; a watch that keeps it fails
+  AssertionError [ERR_ASSERTION]: the watch's tenth run of main's head left no settled list at ~/.deepbuild/main-watch/settled.json (the sandbox's HOME)

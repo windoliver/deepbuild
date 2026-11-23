@@ -45,7 +45,13 @@ fn register(r: &mut Registrar) {
             "",
             json!(""),
         ),
-        ranged("players", "", 2.0, [2.0, 8.0]),
+        // #278: one count, or a range a room starts within on the first player's Start.
+        param(
+            "players",
+            ParamType::Json("2 to 8 | {min: 1 to 8, max: 2 to 8}"),
+            "",
+            json!(2),
+        ),
         ranged("step_rate", "Hz", 60.0, [1.0, 240.0]),
         ranged("delay", "", 2.0, [0.0, 30.0]),
         ranged("window", "", 8.0, [0.0, 16.0]),
@@ -66,6 +72,7 @@ fn register(r: &mut Registrar) {
     };
     r.kind(net, &[], "");
     r.rule("net", relay_rule);
+    r.rule("net", players_rule);
     r.rule("net", rate_rule);
     // #550: deep_run's net kinds (Check input: net kinds), each running copies of the document's
     // match in one process over the test relay, through what the build binds.
@@ -247,6 +254,38 @@ fn relay_rule(_: &Value, id: &str, item: &Value) -> Vec<Raised> {
     }
 }
 
+/// #278: `players` is a whole count from 2 to 8, or `{min, max}` with min from 1, max from 2 to 8
+/// and min no more than max.
+fn players_rule(_: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    let whole = |v: &Value, lo: f64| {
+        v.as_f64()
+            .is_some_and(|n| n.fract() == 0.0 && (lo..=8.0).contains(&n))
+    };
+    let p = &item["params"]["players"];
+    let ok = match p {
+        Value::Null => true,
+        Value::Object(o) => {
+            o.keys().all(|k| k == "min" || k == "max")
+                && whole(&p["min"], 1.0)
+                && whole(&p["max"], 2.0)
+                && p["min"].as_f64() <= p["max"].as_f64()
+        }
+        n => whole(n, 2.0),
+    };
+    if ok {
+        return Vec::new();
+    }
+    vec![Raised {
+        code: "out_of_range",
+        severity: "error",
+        path: format!("items/{id}/params/players"),
+        what: format!(
+            "a net item's players is a count from 2 to 8, or {{min, max}} with min from 1, max from 2 to 8 and min no more than max; {p} isn't"
+        ),
+        fix_ops: None,
+    }]
+}
+
 /// #551: the planted rate rule, which accepts only items that step faster than the match.
 static FASTER_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -369,7 +408,17 @@ pub struct Config {
     /// The relay's URL as written, and the host it names; empty where the item names none.
     pub relay: String,
     pub host: String,
+    /// The match's seats: its one count, or its range's `max`.
     pub players: u8,
+    /// #278: the copies that must have joined before the match starts: `players`, or the range's
+    /// `min`; and whether the item declares a range, so the first player's Start starts it.
+    pub min: u8,
+    pub ranged: bool,
+    /// #278: the logic item and its bool array named `open` (a Join after the start is accepted
+    /// only while it's true), and the one named `finish` (nonzero at a confirmed step ends the
+    /// match as finished).
+    pub open: Option<(String, String)>,
+    pub finish: Option<(String, String)>,
     pub step_rate: i64,
     pub delay: i64,
     pub window: i64,
@@ -398,11 +447,26 @@ impl Config {
                 .clamp(range[0], range[1])
         };
         let timeout = p.get("timeout").and_then(Value::as_f64).unwrap_or(5.0);
+        let (min, players, ranged) = match p.get("players").filter(|v| v.is_object()) {
+            Some(range) => {
+                let of = |k: &str, d: f64| range[k].as_f64().unwrap_or(d) as i64;
+                let max = of("max", 8.0).clamp(2, 8);
+                (of("min", 2.0).clamp(1, max) as u8, max as u8, true)
+            }
+            None => {
+                let n = whole("players", 2, [2, 8]) as u8;
+                (n, n, false)
+            }
+        };
         Some(Config {
             item: id.to_string(),
             relay: p["relay"].as_str().unwrap_or_default().to_string(),
             host: host_of(&p["relay"]).unwrap_or_default(),
-            players: whole("players", 2, [2, 8]) as u8,
+            players,
+            min,
+            ranged,
+            open: named(form, "open"),
+            finish: named(form, "finish"),
             step_rate: whole("step_rate", 60, [1, 240]),
             delay: whole("delay", 2, [0, 30]),
             window: whole("window", 8, [0, 16]),
@@ -424,6 +488,23 @@ impl Config {
     pub fn step(&self) -> i64 {
         FLICKS / self.step_rate
     }
+
+    /// #278: the match is a room's: it starts on the first player's Start, takes a Join while its
+    /// lobby is open, or finishes and starts again. Every other match plays as before.
+    pub fn room(&self) -> bool {
+        self.ranged || self.open.is_some() || self.finish.is_some()
+    }
+}
+
+/// #278: the first logic item of `form` that names one of its arrays as `field` (`open` or
+/// `finish`), with the array's name.
+fn named(form: &Value, field: &str) -> Option<(String, String)> {
+    let items = form.get("items").and_then(Value::as_object);
+    items.into_iter().flatten().find_map(|(id, i)| {
+        let logic = i["kind"].as_str().is_some_and(|k| k.starts_with("logic@"));
+        let array = i["params"][field].as_str().filter(|_| logic)?;
+        Some((id.clone(), array.to_string()))
+    })
 }
 
 /// The document's `controls`, and under [`PROFILE`] the shape of the profile record a logic item
@@ -501,7 +582,7 @@ pub fn admit(controls: &Value, control: &str, value: &Value) -> Result<(), Value
             Some(_) => Ok(()),
             None => Err(
                 json!({"code": "out_of_range", "control": control, "value": value,
-                               "what": "a seat is left, absent or back"}),
+                               "what": "a seat is left, absent, back or joined"}),
             ),
         };
     }
@@ -577,6 +658,35 @@ mod tests {
             (FLICKS / 20, 5 * FLICKS, "r.test")
         );
         assert_eq!(Config::of(&json!({"items": {}})), None);
+    }
+
+    #[test]
+    fn a_range_of_players_makes_a_room_and_one_count_keeps_todays_match() {
+        let net = |players: Value| json!({"kind": "net@1", "params": {"relay": "https://r.test", "players": players}});
+        let c = Config::of(&json!({"items": {"m": net(json!({"min": 2, "max": 8}))}})).unwrap();
+        assert_eq!((c.min, c.players, c.ranged, c.room()), (2, 8, true, true));
+        let c = Config::of(&json!({"items": {"m": net(json!(4))}})).unwrap();
+        assert_eq!((c.min, c.players, c.ranged, c.room()), (4, 4, false, false));
+        let rules = json!({"kind": "logic@1", "params": {"open": "lobby", "finish": "done"}});
+        let c = Config::of(&json!({"items": {"m": net(json!(4)), "rules": rules}})).unwrap();
+        assert_eq!(c.open, Some(("rules".into(), "lobby".into())));
+        assert_eq!(c.finish, Some(("rules".into(), "done".into())));
+        assert!(c.room() && !c.ranged);
+        for (bad, ok) in [
+            (json!({"min": 2, "max": 8}), true),
+            (json!({"min": 1, "max": 2}), true),
+            (json!(8), true),
+            (json!(1), false),
+            (json!(2.5), false),
+            (json!({"min": 3, "max": 2}), false),
+            (json!({"min": 0, "max": 8}), false),
+            (json!({"min": 2, "max": 9}), false),
+            (json!({"min": 2}), false),
+            (json!({"min": 2, "max": 8, "open": true}), false),
+        ] {
+            let raised = players_rule(&Value::Null, "m", &net(bad.clone()));
+            assert_eq!(raised.is_empty(), ok, "{bad}");
+        }
     }
 
     #[test]
