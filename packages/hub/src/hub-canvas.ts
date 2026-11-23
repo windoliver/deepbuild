@@ -55,6 +55,7 @@ export class HubCanvas {
 
   /** The documents deep_show has named, each on the app's canvas panel. */
   private readonly shownDocs = new Set<string>();
+  private readonly unshown = new Set<string>();
 
   private readonly drawnUpTo = new Map<string, number>();
 
@@ -76,6 +77,7 @@ export class HubCanvas {
   private readingsBehind = false;
   private readonly asksBehind = new Set<string>();
   private catching: Promise<void> = Promise.resolve();
+  private recording: Promise<void> = Promise.resolve();
 
   /** An event the record took: what it changes in the world is read at the next canvas call. */
   appended(input: EventInput): void {
@@ -146,7 +148,32 @@ export class HubCanvas {
     if (fills.length) file.installed = [...(Array.isArray(file.installed) ? file.installed : []), ...fills];
     const sessions = [...this.options.sessions().values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
     await this.caughtUp();
-    return { sessions, record: this.worldRecord, recordRev: this.worldRev, file, docs: [...this.shownDocs] };
+    return { sessions, record: this.worldRecord, recordRev: this.worldRev, file, docs: [...this.shownDocs], recorded: (doc) => this.recordedRevisions(doc) };
+  }
+
+  /**
+   * A document's revisions in the record as the canvas core opens it from them after a restart (#1721). A call that drew
+   * the current revision again recorded it again; and a hub before #1721 counted from 1 after each restart, so only the
+   * last count is the document's.
+   */
+  private async recordedRevisions(doc: string): Promise<Obj[]> {
+    const rows = (await this.options.record().raw(`SELECT data FROM events WHERE kind = 'doc.patched' AND v >= 2 AND subject = ? ORDER BY log_pos`, [`doc:${doc}`])) as { data: string }[];
+    let out: (Obj & { rev: number; hash: string })[] = [];
+    for (const row of rows) {
+      const d = JSON.parse(row.data) as { rev: number; patch: string | null; writer: string; hash: string; thread: string | null };
+      const last = out.at(-1);
+      if (last?.rev === d.rev && last.hash === d.hash) continue;
+      if (last && d.rev <= last.rev) out = [];
+      out.push({ rev: d.rev, writer: `${d.writer}:${d.thread ?? d.writer}`, patch: d.patch, hash: d.hash });
+    }
+    return out;
+  }
+
+  /** A document the record holds is one the canvas core holds too, whichever call names it first (#1721); looked up once. */
+  private async named(doc: unknown): Promise<void> {
+    if (typeof doc !== 'string' || this.shownDocs.has(doc) || this.unshown.has(doc)) return;
+    if (await this.docRevision(doc)) this.shownDocs.add(doc);
+    else this.unshown.add(doc);
   }
 
   private canvas(): Canvas {
@@ -206,6 +233,7 @@ export class HubCanvas {
   }
 
   async canvasCall(call: Obj): Promise<Obj> {
+    await this.named(call.doc);
     return (await this.canvas().call(await this.canvasWorld(), call)).reply;
   }
 
@@ -263,7 +291,8 @@ export class HubCanvas {
     if (ofHub) { const { claim: _claim, ...rest } = call; call = rest; }
     const { reply: drawn, presented } = await this.canvas().call(world, { call: name, ...via, ...call });
     const reply = game.assets.length ? { ...drawn, assets: game.assets } : drawn;
-    if (presented) await this.recordRevision(as, presented, reply);
+    // In the canvas core's order: the record's order is the one a restart opens the document in (#1721).
+    if (presented) await (this.recording = this.recording.catch(() => undefined).then(() => this.recordRevision(as, presented, reply)));
     // A claim the world file defines keeps the canvas core's verdict on its deliverables (#393 AC3, which #806's
     // replay holds the hub to): that verdict is the check the core just ran, and no spec gives the claim a run (#3044).
     const fixture = typeof call.claim === 'string';
@@ -394,8 +423,8 @@ export class HubCanvas {
     await this.options.events.append({ ...connection, ...(agent ? { agent } : {}) }, {
       v: 2, id: ulid(ts), kind: 'doc.patched', ts, subject: `doc:${String(p.doc)}`, evidence: [hash],
       data: {
-        doc: `doc:${String(p.doc)}`, rev: Number(p.rev), patch: null, writer: writer.kind,
-        achieved: { created: {}, updated: count('changed'), deleted: {}, unchanged: count('changed') + count('created') + count('removed') === 0 },
+        doc: `doc:${String(p.doc)}`, rev: Number(p.rev), patch: typeof p.patch === 'string' ? p.patch : null, writer: writer.kind,
+        achieved: isObj(reply.achieved) ? reply.achieved : { created: {}, updated: count('changed'), deleted: {}, unchanged: count('changed') + count('created') + count('removed') === 0 },
         hash, layer: String(p.layer), thread: writer.kind === 'agent' ? writer.id : null,
       } as JsonValue,
     });
@@ -416,6 +445,7 @@ export class HubCanvas {
   /** The canvas verdict for a claim holding just this document check, with the revision in its key. */
   async documentCheck(run: { run: string; check: string; claim: string }, spec: DocSpec): Promise<CheckResult & { stdout: string }> {
     const [owner] = (await this.options.record().raw(`SELECT session_id FROM claims WHERE id = ?`, [run.claim.slice(6)])) as { session_id: string | null }[];
+    await this.named(spec.doc);
     const world = await this.canvasWorld();
     const handle = `${run.claim}#${run.check}`;
     world.file = { ...world.file, claims: { ...(isObj(world.file.claims) ? world.file.claims : {}), [handle]: canvasClaim(owner?.session_id ?? '', run.check, spec) } };
