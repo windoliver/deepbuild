@@ -1441,3 +1441,7 @@ timed.push('tests/acceptance/269/ac6-budgets.test.ts', 'tests/acceptance/269-red
 // #269's first AC6 draft is kept by hand until the owner swaps it: its budget program runs out of the default fuel at
 // step 0, so its grid never changes; its blind redraft, 269-redraft-ac6/, runs in its place.
 byHand.push('tests/acceptance/269/ac6-budgets.test.ts');
+
+// #3236's files (blind) each build deep-show; criterion 7 drives headless Chrome, 8 a real window read through AppKit,
+// 9 release builds here and at the merge base.
+alone.push('tests/acceptance/3236/');

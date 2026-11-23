@@ -335,13 +335,31 @@ impl Played {
     pub fn tree(&self) -> Vec<Value> {
         let controls = self.doc.get("controls").and_then(Value::as_object);
         let mut nodes = deep_play::access::tree(&self.doc, &[]);
+        // #3236: a set no pick control names is one Tab stop its walk is read from.
+        let reading = deep_canvas::scope::reading_sets(&self.doc, &[]);
         for n in &mut nodes {
-            let id = n["id"].as_str().unwrap_or_default();
-            if controls.is_some_and(|c| c.contains_key(id)) {
+            let id = n["id"].as_str().unwrap_or_default().to_string();
+            if controls.is_some_and(|c| c.contains_key(&id)) {
                 n["control"] = json!(true);
+            }
+            if reading.contains(&id) {
+                n["walk"] = json!(true);
             }
         }
         nodes
+    }
+
+    /// #3236: a set's walk as the app's reading focus takes it, each stop's ID and what it says.
+    pub fn walk(&self, set: &str) -> Vec<Value> {
+        use deep_canvas_marks::data::holds::{holds, Walk};
+        let items = self.doc.get("items").and_then(Value::as_object);
+        match items.and_then(|all| holds(set, all.get(set)?, all, Walk::Reading)) {
+            Some(Ok((held, stops))) => stops
+                .iter()
+                .map(|s| json!({"id": s.id(set), "text": held.says(s)}))
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 
     /// Each readout heard and what it says in the frame shown (#1045), as the app's `see` reads

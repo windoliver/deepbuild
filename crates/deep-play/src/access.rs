@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas::kinds::{lookup, registry, Lookup};
 use deep_canvas::template;
+use deep_canvas_marks::data::holds::{holds, Walk};
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
 use serde_json::{json, Map, Value};
@@ -120,13 +121,19 @@ pub fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
         "name": text(doc.get("title")),
         "description": text(doc.get("description")),
     })];
+    let items = doc.get("items").and_then(Value::as_object);
     for (id, item) in heard(doc, hidden) {
         // #505: a formula's accessible name is its source text (Vector and formula: `alt`).
         let alt = (item.get("kind").and_then(Value::as_str) == Some("vector@1"))
             .then(|| item.pointer("/params/alt"))
             .flatten();
         let name = text(alt.or(item.get("name")));
-        nodes.push(json!({"id": id, "role": item["role"], "name": name}));
+        let mut node = json!({"id": id, "role": item["role"], "name": name});
+        // #3236: a mark set's or a series' node says what it holds, computed from what it draws.
+        if let Some(Ok((held, _))) = items.and_then(|all| holds(id, item, all, Walk::Reading)) {
+            node["value"] = json!(held.text());
+        }
+        nodes.push(node);
     }
     // #504: a control's targets that draw follow it, each a button named by its option's or
     // stage's label, in the Tab order's reading order (Control: targets).

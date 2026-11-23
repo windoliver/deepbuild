@@ -20,6 +20,9 @@ use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
 
+/// #3236: a reading focus on a set no pick control names, beside the pick control's focus.
+mod reading;
+
 /// A pick control on rows: `verb: pick` with `rows`, the sets it names in order, and its `focus`.
 pub(crate) struct Picker {
     pub id: String,
@@ -116,6 +119,8 @@ pub(crate) struct Viewer {
     focus: Option<(String, Drawn)>,
     /// Each focus announcement, `{t, id, text}`, in the order made.
     pub(crate) said: Vec<Value>,
+    /// #3236: the reading focus on a set no pick control names: the set and its stop's ID.
+    pub(crate) reading: Option<(String, String)>,
     /// Each pick control's hovered cell.
     hover: BTreeMap<String, [i64; 2]>,
     /// #298: the pointer's place over each item a driver's `hover_at` names, 0 to 1 on each axis
@@ -133,7 +138,8 @@ pub(crate) struct Viewer {
 impl Viewer {
     /// The focused row's ID, which `state.focus` reports for the control's stop.
     pub(crate) fn focused(&self) -> Option<&str> {
-        self.focus.as_ref().map(|(_, d)| d.id.as_str())
+        let reading = self.reading.as_ref().map(|(_, id)| id.as_str());
+        self.focus.as_ref().map(|(_, d)| d.id.as_str()).or(reading)
     }
 }
 
@@ -610,6 +616,7 @@ impl Hub<'_> {
     /// drawing gives way to the nearest drawn row, each announced; any other stop holds no row.
     /// The planted `focus_stops_on_hidden_rows` takes rows that don't draw as drawn ones.
     pub(crate) fn settle_focus(&mut self, panel: &str) {
+        self.settle_reading(panel);
         let Some((doc, _)) = self.panel_document(panel) else {
             return;
         };
@@ -675,6 +682,9 @@ impl Hub<'_> {
         serial: u64,
     ) -> Result<Vec<Value>, Value> {
         self.settle_focus(panel);
+        if let Some(appended) = self.reading_key(panel, key) {
+            return Ok(appended);
+        }
         let Some((control, here)) = self.scopes.get(panel).and_then(|s| s.picks.focus.clone())
         else {
             return Ok(Vec::new());

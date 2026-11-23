@@ -31,7 +31,7 @@ use crate::document::member;
 use crate::kinds::with_defaults;
 
 mod picks;
-pub use picks::{pick_targets, PickTarget};
+pub use picks::{pick_targets, reading_sets, PickTarget, READING};
 
 /// The verb the full-screen button is bound to (Control: `verb`).
 pub const FULL_SCREEN: &str = "canvas.full_screen";
@@ -924,10 +924,15 @@ impl Scope {
             .find(|t| &t.item == id)
     }
 
-    /// The Tab stops in order: each control's own UI, then its targets that draw.
+    /// The Tab stops in order: each mark set's reading stop (#3236), then each control's own UI,
+    /// then its targets that draw.
     fn stops(&self, doc: &Value) -> Vec<(String, Option<String>)> {
-        let targets = pick_targets(doc, &self.hidden(doc));
-        let mut out = Vec::new();
+        let hidden = self.hidden(doc);
+        let targets = pick_targets(doc, &hidden);
+        let mut out: Vec<(String, Option<String>)> = reading_sets(doc, &hidden)
+            .into_iter()
+            .map(|set| (set, Some(READING.to_string())))
+            .collect();
         for control in member(doc, "controls")
             .and_then(Value::as_object)
             .into_iter()
@@ -1452,6 +1457,8 @@ impl Scope {
             "details": self.details,
             // #504: the Tab stop with focus: a target as its item's ID, a control as its own.
             "focus": self.focus.as_ref().map(|(control, option)| match option {
+                // #3236: a reading stop as its set's ID, until its host names the focused row.
+                Some(o) if o == READING => json!(control),
                 Some(o) => pick_targets(doc, &hidden)
                     .into_iter()
                     .find(|t| &t.control == control && &t.option == o)

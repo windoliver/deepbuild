@@ -4,7 +4,7 @@
   "crates/deep-canvas-effects/src/emit.rs": 1610,
   "crates/deep-canvas-effects/src/interp.rs": 1501,
   "crates/deep-canvas-marks/src/animator.rs": 1771,
-  "crates/deep-canvas-marks/src/data.rs": 2243,
+  "crates/deep-canvas-marks/src/data.rs": 2201,
   "crates/deep-canvas-marks/src/modules.rs": 2026,
   "crates/deep-canvas-marks/src/pathops.rs": 1996,
   "crates/deep-canvas-marks/src/scene.rs": 5421,

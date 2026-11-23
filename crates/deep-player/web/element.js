@@ -735,10 +735,37 @@ class DeepPlayer extends HTMLElement {
       // A control is a Tab stop by its own role; a target a button after it; a part, label or readout an image of its role.
       if (n.control) doc.append(el('div', { 'data-deep-id': n.id, role: n.role || 'group', 'aria-label': n.name, tabindex: 0 }));
       else if (n.item !== undefined) doc.append(el('button', { 'data-deep-id': n.id, type: 'button', 'aria-label': n.name }));
-      else doc.append(el('div', { 'data-deep-id': n.id, role: 'img', 'aria-roledescription': n.role, 'aria-label': n.name }));
+      else {
+        // #3236: a mark set says what it holds, and one no pick control names is a Tab stop whose rows the arrows walk.
+        const part = el('div', { 'data-deep-id': n.id, role: 'img', 'aria-roledescription': n.role, 'aria-label': n.name, 'aria-description': n.value, tabindex: n.walk ? 0 : null });
+        if (n.walk) this.#walkable(part, n.id);
+        doc.append(part);
+      }
     }
     this.#live = el('div', { 'aria-live': 'polite', role: 'status', style: unseen });
     this.append(doc, this.#live);
+  }
+
+  /** A set's reading focus (#3236): viewer state, never an entry. Focus enters at its first stop; arrows move to the next
+   * or the previous stop, Home and End to the first and last; each landing is said through the live region. */
+  #walkable(part, id) {
+    let at = -1;
+    const land = (to) => {
+      const stops = JSON.parse(this.#player.walk(id));
+      const next = Math.max(0, Math.min(stops.length - 1, to));
+      if (!stops.length || next === at) return;
+      at = next;
+      part.dataset.deepFocus = stops[at].id;
+      if (this.#live) this.#live.textContent = stops[at].text;
+    };
+    part.addEventListener('focus', () => { if (at < 0) land(0); });
+    part.addEventListener('keydown', (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const to = { ArrowRight: at + 1, ArrowDown: at + 1, ArrowLeft: at - 1, ArrowUp: at - 1, Home: 0, End: Infinity }[e.key];
+      if (to === undefined) return;
+      e.preventDefault();
+      land(to === Infinity ? JSON.parse(this.#player.walk(id)).length - 1 : to);
+    });
   }
 
   /** The readouts of the frame drawn: each whose text differs from what was last said for it is said once, through the
