@@ -1,0 +1,97 @@
+# #111.ddf55f68 blind redraft: runs of tests/acceptance/111/redraft-3178/revive.test.ts (6 tests)
+# Base 37dd3c0c8 (origin/main, fresh GitHub clone, built), Node 24.22.0, macOS. Machine under heavy load from other sessions.
+# Each run: npx vitest run tests/acceptance/111/redraft-3178/revive.test.ts --reporter=verbose from the clone root, this file alone. Homes are temp dirs.
+# Twins: APFS clone of the built base, twins/<name>/. laid over its root, npm run build -w packages/hub (exit 0 for each final run).
+# Test numbers as in README's table: 1 chat/propose, 2 chat/tool call, 3 Codex, 4 assistant's words, 5 other repo, 6 passed-over option.
+
+## Base, final run: 6 passed (6). load averages: 127.01 131.99 139.38
+  ✓ #111.ddf55f68 an agent proposing a direction you rejected in chat is refused, citing the decision, and you aren't asked; a direction nobody rejected reaches you 14155ms
+  ✓ #111.ddf55f68 an agent's tool call that revives a direction you rejected in chat is denied by deep-hook, citing the decision; a call naming a direction nobody rejected runs 8167ms
+  ✓ #111.ddf55f68 a direction you rejected in Codex's transcript is saved by the core for that repo, once, and reviving it is stopped citing it, proposed or run 12612ms
+  ✓ #111.ddf55f68 the same words from the assistant save no decision and stop nothing 10520ms
+  ✓ #111.ddf55f68 the decision covers the repo you said it in: the same direction in another repo is proposed to you and runs 10267ms
+  ✓ #111.ddf55f68 the option you passed over when you answered a choice is a rejected direction: an agent proposing it is refused, citing the decision your answer saved; the option you chose isn't stopped 9718ms
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+
+## Base, earlier run: 1 failed | 5 passed. load averages: 137.85 138.35 126.91. Environmental: deep-hook's 50 ms deadline at load ~138 (README, Readings).
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the revival is denied: exit 0, stdout "", stderr "deep-hook: spooled 01M83A8ZQR3MRTBE57Z8265PPQ, but its sync didn't finish within the hook's 50 ms\n": expected 'allow' to be 'deny' // Object.is equality
+      Tests  1 failed | 5 passed (6)
+
+## Twin never-stops: 4 failed | 2 passed (tests 1, 2, 3, 6 fail; 4, 5 pass). load averages: 168.36 145.17 133.72
+  × #111.ddf55f68 an agent proposing a direction you rejected in chat is refused, citing the decision, and you aren't asked; a direction nobody rejected reaches you 16089ms
+  × #111.ddf55f68 an agent's tool call that revives a direction you rejected in chat is denied by deep-hook, citing the decision; a call naming a direction nobody rejected runs 7151ms
+  × #111.ddf55f68 a direction you rejected in Codex's transcript is saved by the core for that repo, once, and reviving it is stopped citing it, proposed or run 13017ms
+  ✓ #111.ddf55f68 the same words from the assistant save no decision and stop nothing 15368ms
+  ✓ #111.ddf55f68 the decision covers the repo you said it in: the same direction in another repo is proposed to you and runs 12517ms
+  × #111.ddf55f68 the option you passed over when you answered a choice is a rejected direction: an agent proposing it is refused, citing the decision your answer saved; the option you chose isn't stopped 13015ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the revival is stopped: {"jsonrpc":"2.0","id":"tools/call#3","result":{"content":[{"type":"text","text":"{\"proposal\":\"doc:01M83AK1EGE92MM133KMR9KS88\",\"ask\":\"ask:01M83AK1DHVC3RFQD0CPJH312Y\"}"}],"isError":false,"structuredContent":{"proposal":"doc:01M83AK1EGE92MM133KMR9KS88","ask":"ask:01M83AK1DHVC3RFQD0CPJH312Y"}}}: expected false to be true // Object.is equality
+AssertionError: the revival is denied: exit 0, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+AssertionError: the revival is stopped: {"jsonrpc":"2.0","id":"tools/call#5","result":{"content":[{"type":"text","text":"{\"proposal\":\"doc:01M83AKN4HW0QJE10ACEGB4TAH\",\"ask\":\"ask:01M83AKN3E15DB090YEEN16VGD\"}"}],"isError":false,"structuredContent":{"proposal":"doc:01M83AKN4HW0QJE10ACEGB4TAH","ask":"ask:01M83AKN3E15DB090YEEN16VGD"}}}: expected false to be true // Object.is equality
+AssertionError: the passed-over option is stopped: {"jsonrpc":"2.0","id":"tools/call#13","result":{"content":[{"type":"text","text":"{\"proposal\":\"doc:01M83AMX302YWF4XQX2HTZGJGQ\",\"ask\":\"ask:01M83AMX19K65NX6YWXXYCNEPE\"}"}],"isError":false,"structuredContent":{"proposal":"doc:01M83AMX302YWF4XQX2HTZGJGQ","ask":"ask:01M83AMX19K65NX6YWXXYCNEPE"}}}: expected false to be true // Object.is equality
+ Test Files  1 failed (1)
+      Tests  4 failed | 2 passed (6)
+
+## Twin stops-uncited, final run: 4 failed | 2 passed (1, 2, 3, 6 fail at their citation line). load averages: 134.99 118.38 123.93
+  × #111.ddf55f68 an agent proposing a direction you rejected in chat is refused, citing the decision, and you aren't asked; a direction nobody rejected reaches you 10030ms
+  × #111.ddf55f68 an agent's tool call that revives a direction you rejected in chat is denied by deep-hook, citing the decision; a call naming a direction nobody rejected runs 7417ms
+  × #111.ddf55f68 a direction you rejected in Codex's transcript is saved by the core for that repo, once, and reviving it is stopped citing it, proposed or run 8296ms
+  ✓ #111.ddf55f68 the same words from the assistant save no decision and stop nothing 11000ms
+  ✓ #111.ddf55f68 the decision covers the repo you said it in: the same direction in another repo is proposed to you and runs 8771ms
+  × #111.ddf55f68 the option you passed over when you answered a choice is a rejected direction: an agent proposing it is refused, citing the decision your answer saved; the option you chose isn't stopped 7701ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the refusal cites the decision by its handle: expected '{"jsonrpc":"2.0","id":"tools/call#3",…' to contain 'decision:01M83CSM708AJYEQWTV8ZGC6BV'
+AssertionError: the denial cites the decision by its handle: expected '\nDeepBuild blocked this: You rejecte…' to contain 'decision:01M83CSW2ANRZCQAWF1FMWV9DW'
+AssertionError: citing the decision Codex's transcript saved: expected '{"jsonrpc":"2.0","id":"tools/call#5",…' to contain 'decision:01M83CT3EKBNQXRMTHCRYHVXAJ'
+AssertionError: citing the decision your answer saved: expected '{"jsonrpc":"2.0","id":"tools/call#13"…' to contain 'decision:01M83CTZQT6ETFM7H5KV4B963B'
+ Test Files  1 failed (1)
+      Tests  4 failed | 2 passed (6)
+# An earlier run of this twin had test 2 read allow by deep-hook's 50 ms deadline instead of failing at the citation; superseded by the run above.
+
+## Twin claude-only: 1 failed | 5 passed (test 3 fails). load averages: 156.63 159.38 150.92
+  ✓ #111.ddf55f68 an agent proposing a direction you rejected in chat is refused, citing the decision, and you aren't asked; a direction nobody rejected reaches you 20596ms
+  ✓ #111.ddf55f68 an agent's tool call that revives a direction you rejected in chat is denied by deep-hook, citing the decision; a call naming a direction nobody rejected runs 15537ms
+  × #111.ddf55f68 a direction you rejected in Codex's transcript is saved by the core for that repo, once, and reviving it is stopped citing it, proposed or run 19222ms
+  ✓ #111.ddf55f68 the same words from the assistant save no decision and stop nothing 15529ms
+  ✓ #111.ddf55f68 the decision covers the repo you said it in: the same direction in another repo is proposed to you and runs 14038ms
+  ✓ #111.ddf55f68 the option you passed over when you answered a choice is a rejected direction: an agent proposing it is refused, citing the decision your answer saved; the option you chose isn't stopped 15085ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: your "rejected: `mongodb`" in Codex is one saved decision: []: expected +0 to be 1 // Object.is equality
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+
+## Twin agent-word-saves (final file, drops the role and outside checks): 2 failed | 4 passed. load averages: 125.53 125.24 134.61
+# Test 4 fails as planted. Test 3's failure is deep-hook's 50 ms deadline under load, not this twin (its 'running it is denied' line).
+  ✓ #111.ddf55f68 an agent proposing a direction you rejected in chat is refused, citing the decision, and you aren't asked; a direction nobody rejected reaches you 14900ms
+  ✓ #111.ddf55f68 an agent's tool call that revives a direction you rejected in chat is denied by deep-hook, citing the decision; a call naming a direction nobody rejected runs 8844ms
+  × #111.ddf55f68 a direction you rejected in Codex's transcript is saved by the core for that repo, once, and reviving it is stopped citing it, proposed or run 13719ms
+  × #111.ddf55f68 the same words from the assistant save no decision and stop nothing 6606ms
+  ✓ #111.ddf55f68 the decision covers the repo you said it in: the same direction in another repo is proposed to you and runs 10396ms
+  ✓ #111.ddf55f68 the option you passed over when you answered a choice is a rejected direction: an agent proposing it is refused, citing the decision your answer saved; the option you chose isn't stopped 11805ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: running it is denied: exit 0, stdout "", stderr "deep-hook: spooled 01M83CAR0AGV7HGYAT3AEADGQJ, but its sync didn't finish within the hook's 50 ms\n": expected 'allow' to be 'deny' // Object.is equality
+AssertionError: an agent's word is no decision: expected [ { v: 1, …(12) } ] to deeply equal []
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+# A first version of this twin dropped only the role check; assistant lines are already read as outside (packages/record/src/learned.ts), so it changed nothing and all 6 passed. Replaced by the file in twins/.
+
+## Twin stops-every-repo (final file): 1 failed | 5 passed (test 5 fails). load averages: 93.99 107.76 124.17
+  ✓ #111.ddf55f68 an agent proposing a direction you rejected in chat is refused, citing the decision, and you aren't asked; a direction nobody rejected reaches you 13887ms
+  ✓ #111.ddf55f68 an agent's tool call that revives a direction you rejected in chat is denied by deep-hook, citing the decision; a call naming a direction nobody rejected runs 8587ms
+  ✓ #111.ddf55f68 a direction you rejected in Codex's transcript is saved by the core for that repo, once, and reviving it is stopped citing it, proposed or run 12167ms
+  ✓ #111.ddf55f68 the same words from the assistant save no decision and stop nothing 9636ms
+  × #111.ddf55f68 the decision covers the repo you said it in: the same direction in another repo is proposed to you and runs 7767ms
+  ✓ #111.ddf55f68 the option you passed over when you answered a choice is a rejected direction: an agent proposing it is refused, citing the decision your answer saved; the option you chose isn't stopped 11443ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the decision covers its repo, not /private/tmp/dh356-mM1Wxc/work/web: {"jsonrpc":"2.0","id":"tools/call#9","result":{"content":[{"type":"text","text":"{\"code\":\"rejected\",\"retryable\":false,\"remediation\":\"You can't propose `kafka`: the person rejected it (decision:01M83CK2E1F3BMR545WSC8FD6P). Take another direction; only they can overrule that decision.\",\"path\":\"/params/arguments/change\",\
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+
+## tsc --noEmit -p tests/acceptance/111/redraft-3178: exit 2, 5 errors, none in this folder or ../helpers.ts (twins/ excluded)
+   1 packages/adapters/src/shipped.ts(120,3)
+   1 packages/asks/src/decision-keys.ts(128,33)
+   1 packages/asks/src/index.ts(675,11)
+   1 packages/asks/src/index.ts(728,53)
+   1 packages/asks/src/index.ts(766,31)

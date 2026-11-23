@@ -548,6 +548,9 @@ export class McpOperations {
     const ask = { ...raised, fallback: 'you', provisional, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned, ...(subject ? { subject } : {}) };
     const handle = await this.options.services.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
     if (provisional) {
+      // A saved decision that answered it as it was raised is the answer the agent hears, not the recommendation (#3178).
+      const [row] = (await this.options.services.record.raw(`SELECT status FROM asks WHERE id = ?`, [handle.slice(4)])) as { status: string }[];
+      if (row?.status === 'decided') return this.waitFor(session, handle);
       const label = (raised.options as { id: string; label: string }[]).find((o) => o.id === raised.recommended)?.label;
       await this.options.schedule.askingNow().catch(() => undefined);
       return { ask: handle, status: 'provisional', answer: raised.recommended, note: `Go on with ${label ?? String(raised.recommended)}: it is provisional and can be undone, and only steps that leave the machine wait for the answer.` };

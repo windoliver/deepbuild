@@ -117,6 +117,21 @@ import { SessionState } from './session-state.js';
 import { SessionFlags } from './session-flags.js';
 import { McpOperations } from './mcp-operations.js';
 import { HubControl } from './hub-control.js';
+/**
+ * The pictures a taste call's evidence lists (#3234), by SHA-256 in its order: the manifest `{pictures: [{sha256, size}]}`
+ * the ask is pinned to, in the evidence store. Undefined when the pin is no such manifest.
+ */
+function picturesListed(store: string, evidence: string): string[] | undefined {
+  try {
+    const listed = (JSON.parse(readFileSync(join(store, evidence.slice(0, 2), evidence.slice(2)), 'utf8')) as { pictures?: unknown }).pictures;
+    if (!Array.isArray(listed)) return undefined;
+    const shas = listed.map((p) => (p && typeof p === 'object' ? (p as { sha256?: unknown }).sha256 : undefined));
+    return shas.every((sha) => typeof sha === 'string' && /^[0-9a-f]{64}$/.test(sha)) ? (shas as string[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function lazyServices<T extends Record<string, () => unknown>>(read: T): { [K in keyof T]: ReturnType<T[K]> } {
   return Object.defineProperties({}, Object.fromEntries(Object.entries(read).map(([key, get]) => [key, { get }]))) as { [K in keyof T]: ReturnType<T[K]> };
 }
@@ -606,6 +621,7 @@ export class Core {
       root: this.root.dir, forge: this.options.forge,
       token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       held: () => this.options.held,
+      ...(this.options.plant === 'folds-seen-unseen' || this.options.plant === 'one-median-per-run' ? { plant: this.options.plant } : {}),
       keep: (bytes, source) => this.control.keep(bytes, source),
       evidence: (sha) => this.store.read(sha).catch(() => null),
     });
@@ -650,7 +666,7 @@ export class Core {
         if (this.state.touched !== 'all') { if (connection.session) this.state.touched.add(connection.session); else this.state.touched = 'all'; }
         this.state.stateSoon();
       }
-      if (kind.startsWith('ask.') || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
+      if (kind.startsWith('ask.') || kind === 'card.taken_over' || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
       if (kind === 'verdict.made') this.github?.verdicts();
       // A deep_wait or deep_run waiting on what this event settles reads it again now, and answers before the
       // appender's next commit holds this thread with its sync (#823).
@@ -693,7 +709,9 @@ export class Core {
       signIn: signInCheck(() => this.agents.loginPath(), (agent) => this.runner?.account(agent as Agent) ?? null, this.now),
       // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
       // The asks core plays its own planted programs: #2646's, and #1101's of the hold.
-      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true, ...(this.options.plant === 'asks-without-tool-before' || (HOLD_PLANTS as readonly string[]).includes(this.options.plant ?? '') ? { plant: this.options.plant as AsksPlant } : {}),
+      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true,
+      // The pictures a taste call's evidence lists, from the manifest in the evidence store (#3234).
+      pictures: (evidence) => picturesListed(this.root.evidence, evidence), ...(this.options.plant === 'asks-without-tool-before' || (HOLD_PLANTS as readonly string[]).includes(this.options.plant ?? '') ? { plant: this.options.plant as AsksPlant } : {}),
     });
     await this.delivery.continues();
     this.askingSoon();

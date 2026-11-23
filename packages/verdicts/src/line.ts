@@ -1,6 +1,7 @@
 // The verdict in the chat (#83; design: The verdict in the chat). One line a stop reply carries, no wider than the
 // narrowest chat it goes to, in this order: what wasn't verified, if anything; the outcome and its count; the one
-// cause, with file and line; the tests its checks ran (#669); the next step's owner; the receipt. A line that would
+// cause, with file and line; a taste call answered where none of its pictures was drawn (#3234); the tests its checks
+// ran (#669); the next step's owner; the receipt. A line that would
 // pass the width shortens the cause first; "not verified", the outcome with its count and the tests run are never dropped.
 import type { Outcome, Result } from './types.js';
 
@@ -41,6 +42,8 @@ export interface LineState {
    * send-back reached, since no stop was held: the line reads FAIL with its count, and the next step is yours.
    */
   watch?: { why: string; unsent: boolean };
+  /** Its requirements whose taste call was answered where no picture it judges was drawn (#3234), by handle. */
+  unseen?: string[];
 }
 /** Who takes the next step: the agent (a send-back), you (a PASS or something only you can clear) or DeepBuild (checks still to run). */
 type Owner = 'agent' | 'you' | 'DeepBuild';
@@ -59,7 +62,7 @@ function about(seconds: number): string {
 }
 
 /** The parts of the line, in order, before any shortening. */
-interface Parts { watch: string; unverified: string; outcome: string; cause: string; points: string; tests: string; running: string[]; owner: string; receipt: string }
+interface Parts { watch: string; unverified: string; outcome: string; unseen: string; cause: string; points: string; tests: string; running: string[]; owner: string; receipt: string }
 function parts(s: LineState): Parts {
   const watch = s.watch ? (s.watch.why ? `watch-only: ${s.watch.why}` : 'watch-only') : '';
   const unverified = s.requirements.filter((r) => UNVERIFIED.has(r.outcome)).map((r) => name(r.req));
@@ -86,7 +89,8 @@ function parts(s: LineState): Parts {
     points = failing?.points_to ?? '';
   }
   const tests = s.tests ? `${s.tests} test${s.tests === 1 ? '' : 's'}` : '';
-  return { watch, unverified: unverified.length ? `not verified: ${unverified.join(', ')}` : '', outcome, cause, points, tests, running, owner: `next: ${s.watch?.unsent && s.outcome === 'FAIL' ? 'you' : ownerOf(s.outcome)}`, receipt: s.receipt ?? '' };
+  const unseen = s.unseen?.length ? `${s.unseen.map(name).join(', ')} answered unseen` : '';
+  return { watch, unverified: unverified.length ? `not verified: ${unverified.join(', ')}` : '', outcome, unseen, cause, points, tests, running, owner: `next: ${s.watch?.unsent && s.outcome === 'FAIL' ? 'you' : ownerOf(s.outcome)}`, receipt: s.receipt ?? '' };
 }
 
 /**
@@ -97,7 +101,7 @@ function parts(s: LineState): Parts {
 export function verdictLine(s: LineState, width = LINE_WIDTH): string {
   const p = parts(s);
   const join = (cause: string, keep: { points: boolean; owner: boolean; receipt: boolean }): string =>
-    [p.watch, p.unverified, `${p.outcome}${cause ? `${CAUSE_SEP}${cause}` : ''}`, keep.points ? p.points : '', ...p.running, p.tests, keep.owner ? p.owner : '', keep.receipt ? p.receipt : ''].filter(Boolean).join(DOT);
+    [p.watch, p.unverified, `${p.outcome}${cause ? `${CAUSE_SEP}${cause}` : ''}`, p.unseen, keep.points ? p.points : '', ...p.running, p.tests, keep.owner ? p.owner : '', keep.receipt ? p.receipt : ''].filter(Boolean).join(DOT);
   const all = { points: true, owner: true, receipt: true };
   let line = join(p.cause, all);
   if (columns(line) <= width) return line;

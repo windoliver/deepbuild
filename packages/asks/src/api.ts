@@ -79,6 +79,11 @@ export interface AsksOptions {
    * left out, the shipped adapters' caps answer, and an agent no adapter knows has none.
    */
   errorTurnHook?: (agent: string) => boolean;
+  /**
+   * The pictures a taste call's evidence lists (#3234), by their SHA-256 in its order, read from the manifest the ask is
+   * pinned to; undefined when the evidence lists none. Left out, no answer records its pictures unless the card sent them.
+   */
+  pictures?: (evidence: string) => string[] | undefined;
 }
 /** One row of the inbox projection that `deep inbox` and the app read. */
 export interface InboxRow {
