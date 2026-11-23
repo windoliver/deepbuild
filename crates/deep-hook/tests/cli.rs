@@ -226,23 +226,72 @@ fn a_call_its_agent_sends_past_the_watchdog_is_still_spooled() {
 
 #[test]
 fn a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it() {
-    let home =
-        fresh_home(std::env::temp_dir().join(format!("dh17-late-close-{}", std::process::id())));
-    // The agent writes the whole call at once and closes stdin only later, as one the machine gives no time may.
-    let start = std::time::Instant::now();
-    let mut child = hook(&home, "PreToolUse");
-    let mut stdin = child.stdin.take().unwrap();
-    std::io::Write::write_all(
-        &mut stdin,
-        br#"{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo closed late"}}"#,
-    )
-    .unwrap();
-    // stdin closes only after the hook has had its second: a hook that waits for the close is killed by then.
-    let exited = exit_within(&mut child, start, SECOND);
-    drop(stdin);
-    let spooled =
-        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
-    std::fs::remove_dir_all(&home).unwrap();
+    // A hook that reads its call only at stdin's close is let through unread at its watchdog's 500 ms (main.rs's
+    // RULING_LIMIT, mirrored here), with exit 0 and nothing spooled. So is one the machine gives no time to read its
+    // call. A control hook started beside it, with stdin closed after the same call, tells them apart: decided well
+    // inside the 500 ms, it shows the machine gave hooks time, so the late-close hook waited for the close and fails.
+    // Slow too, the try proves nothing either way and is made again, and 20 of them are INCONCLUSIVE (#3295). The hooks
+    // start after the test's clock does, so a let-through at their 500 ms always reads as 500 ms or more here.
+    const RULING_LIMIT: std::time::Duration = std::time::Duration::from_millis(500);
+    const GIVEN_TIME: std::time::Duration = std::time::Duration::from_millis(250);
+    const CALL: &[u8] = br#"{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo closed late"}}"#;
+    let spool = |home: &std::path::Path| {
+        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default()
+    };
+    let mut tries = 0;
+    let (exited, spooled) = loop {
+        let home = fresh_home(
+            std::env::temp_dir().join(format!("dh17-late-close-{}", std::process::id())),
+        );
+        let control_home = fresh_home(
+            std::env::temp_dir().join(format!("dh17-late-close-control-{}", std::process::id())),
+        );
+        // The agent writes the whole call at once and closes stdin only later, as one the machine gives no time may.
+        let start = std::time::Instant::now();
+        let mut child = hook(&home, "PreToolUse");
+        let mut stdin = child.stdin.take().unwrap();
+        std::io::Write::write_all(&mut stdin, CALL).unwrap();
+        let mut control = hook(&control_home, "PreToolUse");
+        feed(&mut control, CALL);
+        // stdin closes only after the hooks have had their second: a hook that waits for the close is killed by then.
+        // Both are watched in one loop, so each one's time is when it exited.
+        let mut ended: [Option<(Option<std::process::ExitStatus>, std::time::Duration)>; 2] =
+            [None, None];
+        while ended.iter().any(Option::is_none) {
+            for (end, proc) in ended.iter_mut().zip([&mut child, &mut control]) {
+                if end.is_none() {
+                    if let Some(status) = proc.try_wait().unwrap() {
+                        *end = Some((Some(status), start.elapsed()));
+                    } else if start.elapsed() > SECOND {
+                        proc.kill().unwrap();
+                        proc.wait().unwrap();
+                        *end = Some((None, start.elapsed()));
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        drop(stdin);
+        let [(exited, took), (control_exited, control_took)] = ended.map(Option::unwrap);
+        let spooled = spool(&home);
+        let control_spooled = spool(&control_home).contains("echo closed late");
+        std::fs::remove_dir_all(&home).unwrap();
+        std::fs::remove_dir_all(&control_home).unwrap();
+        tries += 1;
+        let unread = exited.and_then(|s| s.code()) == Some(0)
+            && !spooled.contains("echo closed late")
+            && took >= RULING_LIMIT;
+        let control_given_time = control_exited.and_then(|s| s.code()) == Some(0)
+            && control_spooled
+            && control_took < GIVEN_TIME;
+        if !unread || control_given_time {
+            break (exited, spooled);
+        }
+        assert!(
+            tries < 20,
+            "INCONCLUSIVE: the hook was given no time to read its call for 20 tries (each let through unread at or past the watchdog's 500 ms, its control hook slow too); rerun alone"
+        );
+    };
     assert_eq!(
         exited.and_then(|s| s.code()),
         Some(0),
