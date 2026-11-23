@@ -109,10 +109,13 @@ fn an_export_draws_a_recipe_instance_like_the_items_it_derives() {
     let root = root_with_pack("recipe-export");
     let block = json!({"id": "block", "kind": "rect@1", "name": "Block", "order": "b1",
         "params": {"box": [0, 0, 60, 60], "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [120, 50, 0]}});
+    // #157: the empty film's one flat frame is meant, so it declares it to film.blank.
+    let mut empty = film(DOCS[2], None);
+    empty["checks"] = json!([{"kind": "film.blank", "except": [["0s", "0.1s"]]}]);
     let docs = [
         film(DOCS[0], Some(instance(50.0))),
         film(DOCS[1], Some(("block", block))),
-        film(DOCS[2], None),
+        empty,
     ];
     let calls = DOCS
         .iter()

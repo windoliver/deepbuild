@@ -1,0 +1,20 @@
+#!/bin/bash
+# #1119 Mac readings: perf from worktree a (cold kept copy), then worktree b (the kept copy a left).
+unset GIT_CONFIG_PARAMETERS CARGO_TARGET_DIR DEEP_THROTTLE DEEP_PERF_LOCK
+R=~/deepbuild-runs-1119
+export PATH="$R/shim:$HOME/.nvm/versions/node/v24.22.0/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+state() { echo "== $1 $(date -u +%FT%TZ)"; uptime; pmset -g therm 2>&1 | grep -v '^$'; pmset -g batt | head -2; df -h /System/Volumes/Data | tail -1; du -sh "$HOME/Library/Caches/deepbuild-perf" 2>/dev/null; }
+for run in ${RUNS:-a b}; do
+  O=$R/out/$run; mkdir -p $O/cargo
+  cd $R/clone/.claude/worktrees/$run || exit 9
+  { echo "worktree: $PWD"; echo "head: $(/usr/bin/git rev-parse HEAD)  origin/main: $(/usr/bin/git rev-parse origin/main)"; hostname; sysctl -n hw.model hw.ncpu hw.memsize; sw_vers | tr '\n' ' '; echo; node --version; cargo --version; state start; } > $O/meta.txt 2>&1
+  ( while :; do echo "$(date -u +%FT%TZ) $(sysctl -n vm.loadavg)"; /bin/sleep 60; done ) > $O/load.txt & sampler=$!
+  export DEEP_1119_CARGO_LOG=$O/cargo
+  /usr/bin/time -l -o $O/time.txt node scripts/perf.mjs '{"status":0,"elapsedMs":1,"cpuMs":1,"peakBytes":1}' 2> $O/perf.stderr | while IFS= read -r line; do printf '%s %s\n' "$(date -u +%FT%TZ)" "$line"; done | tee $O/perf.stdout
+  code=${PIPESTATUS[0]}
+  kill $sampler 2>/dev/null
+  { echo "perf exit: $code"; state end; } >> $O/meta.txt 2>&1
+  echo "RUN $run DONE exit $code"
+  if [ "$code" = 3 ]; then echo "no timed grant for $run: stopping, the next run is not started"; break; fi
+done
+echo ALL DONE

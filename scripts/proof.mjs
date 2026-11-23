@@ -52,7 +52,8 @@ try {
 
   const touched = change.whole.map(({ path }) => path);
   if (lanes.has('lifecycle')) {
-    const tables = (release ? listFiles(root) : touched.filter((path) => listFiles(root).includes(path))).filter((path) => TABLES.test(path));
+    const files = new Set(listFiles(root));
+    const tables = (release ? [...files] : touched.filter((path) => files.has(path))).filter((path) => TABLES.test(path));
     if (tables.length) lifecycle(root, tables, say);
     else print(release ? 'lifecycle: no lifecycle table in the repository' : 'lifecycle: not run, the change touches no lifecycle table');
   }

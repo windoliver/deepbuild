@@ -15,6 +15,7 @@ mod caption_design;
 mod capture;
 mod clip;
 mod costs;
+mod counting;
 mod data_hash;
 mod defaults;
 mod determinism;
@@ -44,6 +45,7 @@ mod host;
 mod hub;
 mod input;
 mod jobs;
+mod joins;
 mod kept;
 mod kinds;
 mod kinds_word;
@@ -124,56 +126,6 @@ mod voiced;
 mod warps;
 mod workers;
 
-/// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
-/// `frames` call can read how many the scheduler made in a frame (#387: "the scheduler
-/// allocates nothing per frame after warm-up"). Outside it nothing is counted, so the kit's
-/// threads, which allocate on every core at once, don't all contend for one counter.
-struct Counting;
-
-static COUNTING_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static ALLOCATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-fn count() {
-    if COUNTING_ON.load(std::sync::atomic::Ordering::Relaxed) {
-        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-// SAFETY: every call forwards to the system allocator unchanged; the counter is a relaxed atomic.
-unsafe impl std::alloc::GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        count();
-        unsafe { std::alloc::System.alloc(layout) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-        unsafe { std::alloc::System.dealloc(ptr, layout) }
-    }
-
-    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        count();
-        unsafe { std::alloc::System.alloc_zeroed(layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
-        count();
-        unsafe { std::alloc::System.realloc(ptr, layout, new_size) }
-    }
-}
-
-#[global_allocator]
-static COUNTING: Counting = Counting;
-
-/// What `f` returns and how many heap allocations the process made while it ran.
-pub fn count_allocations<T>(f: impl FnOnce() -> T) -> (T, u64) {
-    use std::sync::atomic::Ordering::Relaxed;
-    let before = ALLOCATIONS.load(Relaxed);
-    COUNTING_ON.store(true, Relaxed);
-    let out = f();
-    COUNTING_ON.store(false, Relaxed);
-    (out, ALLOCATIONS.load(Relaxed) - before)
-}
-
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -184,6 +136,7 @@ use deep_canvas::registry::{BuildSet, Fault, Module, Registry, SealError};
 use deep_canvas::schedule::HashVersion;
 use serde_json::{json, Map, Value};
 
+pub use counting::count_allocations;
 use hub::{
     flicks, Body, Call, Card, Claim, Eval, Fault as HoldFault, Hold, Include, Panel, PatchCall,
     Planted, PressPhase, Process, RecordObject, Requirement, Scenario, Session, Show, Slot,
@@ -689,7 +642,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" | "play_match" | "sockets" | "replay" => return net::parse(name, c),
+        "match" | "play_match" | "lobby" | "sockets" | "replay" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -763,6 +716,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
         // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
         "fingerprint" => return Some(Call::Fingerprint),
+        "ship" => {
+            return Some(Call::Ship {
+                bundle: c.get("bundle")?.as_str()?.to_string(),
+                chrome: c.get("chrome")?.as_str()?.to_string(),
+            })
+        }
         "footprint" => return Some(Call::Footprint),
         "draw" => {
             let output = c.get("output")?.as_str()?;
@@ -823,6 +782,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 tour_pointer: flag("tour_pointer")?,
             })));
         }
+        "play_frames" => return joins::parse(c).map(|p| Call::PlayFrames(Box::new(p))),
         "frames" => {
             // #856: a whole revision arriving at a frame's latch.
             let revise = match c.get("revise") {
@@ -1371,7 +1331,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
-                || deep_canvas_marks::arrays::PLANTED.contains(p)
+                || deep_canvas_marks::arrays::PLANTED.contains(p) || deep_canvas_marks::atlas::PLANTED.contains(p) || *p == spatial::HIT_READS_QUADS
                 // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
                 || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
@@ -1650,6 +1610,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             }),
         },
     };
+    media::plant_images(planted);
     let u32_field = |k: &str| match input.get(k) {
         None => Some(None),
         Some(n) => n.as_u64().and_then(|n| u32::try_from(n).ok()).map(Some),
@@ -2783,6 +2744,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             Ok(StartPlanted::KitAdmitsAll(Box::leak(
                 name.to_string().into_boxed_str(),
             )))
+        }
+        _ if joins::planted(twin).is_some() => {
+            joins::planted(twin).map(StartPlanted::Run).ok_or(())
         }
         _ if export_planted(twin).is_some() => {
             export_planted(twin).map(StartPlanted::Run).ok_or(())

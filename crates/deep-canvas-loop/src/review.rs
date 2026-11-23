@@ -158,7 +158,7 @@ fn run_left(row: &mut [u32]) {
 /// tie, as `[x, y]`; `None` for a key with no px. The ID view numbers its items there, and a 3D
 /// snapshot's visible table gives it as each row's `at` (#3017).
 pub fn centres(keys: &[u32], w: usize, n: usize) -> Vec<Option<[u32; 2]>> {
-    let h = if w == 0 { 0 } else { keys.len() / w };
+    let h = keys.len().checked_div(w).unwrap_or(0);
     let depth = inside(keys, w, h);
     // Each key's largest distance so far (0: none yet, as every px's is at least 1) and its px.
     let (mut far, mut at) = (vec![0u32; n + 1], vec![0usize; n + 1]);

@@ -15,6 +15,7 @@ mod fidelity;
 mod frames;
 mod gltf;
 mod guards;
+mod gzip;
 mod lottie;
 mod page;
 mod paths;
@@ -28,6 +29,8 @@ mod test_guards;
 #[cfg(feature = "test-encode-tools")]
 pub(crate) mod test_tools;
 pub(crate) mod tools;
+// #2892: `ship.bytes` and the ship checks' test server.
+pub(crate) mod ship;
 mod web;
 pub(crate) use web::full_player;
 
@@ -138,6 +141,16 @@ pub enum Guard {
     WebPlaysOnFailure,
     /// #2856: the web player leaves the index page's line that it hasn't started in place.
     WebElementLeavesLine,
+    /// #2892: the web export stores the player's WebAssembly as it is.
+    WebStoresPlayerAsIs,
+    /// #2892: the web player inflates each stored file whole as it arrives, then checks it.
+    WebInflatesBeforeCheck,
+    /// #2892: the web export writes its time into each stored file's gzip header.
+    WebGzipHeaderTime,
+    /// #2892: the web export pads the player with 13,000,000 seeded pseudo-random bytes.
+    WebPlayerOver12mb,
+    /// #2892: the `ship` call's `bytes` sums each file's inflated bytes, not its stored bytes.
+    ShipBytesSumsInflated,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -147,7 +160,7 @@ pub enum Guard {
 pub(crate) const READS_ALL_FIRST: Guard = Guard::Codec("encode_reads_all_frames_first");
 
 /// The helper processes' wrong programs (#157), by the names they answer to.
-const CODEC_PLANTS: [&str; 19] = [
+const CODEC_PLANTS: [&str; 20] = [
     "encode_reads_all_frames_first",
     "encode_full_range_bt601",
     "h264_full_range_under_limited_tags",
@@ -167,6 +180,8 @@ const CODEC_PLANTS: [&str; 19] = [
     "muxer_timescale_1000",
     "muxer_drops_video_edit_list",
     "reader_pads_last_packet",
+    // #1488: every still decoder ignores a photo's EXIF orientation (media::plant_images).
+    "decoder_ignores_orientation",
 ];
 
 /// #501's wrong programs, #1897's and #157's, by the names their acceptance suites give them.
@@ -239,6 +254,11 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_export_carries_refused" => Planted::Export(G::WebCarriesRefused),
         "web_plays_on_failure" => Planted::Export(G::WebPlaysOnFailure),
         "web_element_leaves_line" => Planted::Export(G::WebElementLeavesLine),
+        "web_stores_player_as_is" => Planted::Export(G::WebStoresPlayerAsIs),
+        "web_inflates_before_check" => Planted::Export(G::WebInflatesBeforeCheck),
+        "web_gzip_header_time" => Planted::Export(G::WebGzipHeaderTime),
+        "web_player_over_12mb" => Planted::Export(G::WebPlayerOver12mb),
+        "ship_bytes_sums_inflated" => Planted::Export(G::ShipBytesSumsInflated),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }

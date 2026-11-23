@@ -13,17 +13,20 @@ use deep_canvas::canon::sha256_hex;
 use deep_canvas::scope::Event;
 use deep_logic::piece::Piece;
 use deep_logic::world::rollback::Plant;
-use deep_net::card::{self, Card};
-use deep_net::play::{Ask, Deliver, Fate, Faults, Held, Hold, Play, Withhold};
+use deep_net::card::Card;
+use deep_net::play::{
+    Ask, Deliver, Fate, Faults, Held, Hold, Join as Joins, Next, Play, Played, Start, Withhold,
+    Wrong,
+};
 use deep_net::prompt::{self, State};
-use deep_net::{checks, Change, Config, Copy, Defect, End, Planted, Stepper, FLICKS};
+use deep_net::{checks, Change, Config, Defect, Planted, Stepper, FLICKS};
 use deep_play::net::Logic;
-use deep_relay::direct::{random16, Listener, Peer};
-use deep_relay::macos::{check_hello_as, Connection, Event as Arrived};
 use deep_relay::wire;
 use serde_json::{json, Map, Value};
 
 use crate::hub::{Call, Hub};
+
+mod live;
 
 /// A panel's Join, held with its scope: where its prompt stands, the press of a person's click
 /// on its button, and every connection and request its match opened, each a capability call
@@ -36,6 +39,9 @@ pub struct Join {
     /// #552: the copy `match`'s `on_panel` put on the panel: its drawn form, through its own
     /// `match.me`, and the time it stood at after the match's last step.
     pub(crate) shown: Option<(Value, i64)>,
+    /// #278: the room this copy sits in, its one connection kept from the Join through every
+    /// match the room plays.
+    room: Option<live::Room>,
 }
 
 /// What a scenario gives a match: the link each document was opened through (`docs.<id>.link`),
@@ -80,18 +86,20 @@ pub fn module() -> Option<deep_canvas::registry::Module> {
     })
 }
 
-/// The net module's calls: `match`, `play_match`, `sockets` and `replay`.
+/// The net module's calls: `match`, `play_match`, `lobby`, `sockets` and `replay`.
 pub enum NetCall {
-    Match(MatchCall),
+    Match(Box<MatchCall>),
     Play(PlayCall),
+    Lobby(live::LobbyCall),
     Sockets,
     Replay(ReplayCall),
 }
 
 pub fn parse(name: &str, c: &Map<String, Value>) -> Option<Call> {
     let call = match name {
-        "match" => NetCall::Match(parse_match(c)?),
+        "match" => NetCall::Match(Box::new(parse_match(c)?)),
         "play_match" => NetCall::Play(parse_play(c)?),
+        "lobby" => NetCall::Lobby(live::parse_lobby(c)?),
         "replay" => NetCall::Replay(ReplayCall {
             doc: c.get("doc")?.as_str()?.to_string(),
             track: c.get("track")?.as_array()?.clone(),
@@ -149,6 +157,12 @@ pub struct MatchCall {
     feel: Option<Box<deep_net::feel::Feel>>,
     /// #276: each copy's own saves folder, its viewer's store (`saves_dirs: {"<player>": path}`).
     saves_dirs: BTreeMap<u8, PathBuf>,
+    /// #278: how a room's match starts (`start: {joined, click?}`), the copies whose person
+    /// clicks Join after it (`join: [{player, step}]`) and the room's next match (`next: {steps,
+    /// plays}`).
+    start: Option<Start>,
+    joins: Vec<Joins>,
+    next: Option<Next>,
 }
 
 fn plays_of(v: &Value) -> Option<Vec<Play>> {
@@ -178,20 +192,52 @@ fn flicks(seconds: f64) -> i64 {
     (seconds * FLICKS as f64).round() as i64
 }
 
+/// Each player's plays, `{player: [{step, control, value}]}`.
+fn plays_by(p: &Value) -> Option<BTreeMap<u8, Vec<Play>>> {
+    p.as_object()?
+        .iter()
+        .map(|(who, list)| {
+            Some((
+                who.parse().ok().filter(|p| (1..=8).contains(p))?,
+                plays_of(list)?,
+            ))
+        })
+        .collect()
+}
+
 fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
     let player = |v: &Value| v.as_u64().filter(|p| (1..=8).contains(p)).map(|p| p as u8);
     let plays = match c.get("plays") {
         None => BTreeMap::new(),
-        Some(p) => p
-            .as_object()?
+        Some(p) => plays_by(p)?,
+    };
+    let steps_of = |v: &Value| v.as_i64().filter(|n| (1..=100_000).contains(n));
+    let start = match c.get("start") {
+        None => None,
+        Some(s) => Some(Start {
+            joined: (1..=player(s.get("joined")?)?).collect(),
+            click: s.get("click").map_or(Some(true), Value::as_bool)?,
+        }),
+    };
+    let joins = match c.get("join") {
+        None => Vec::new(),
+        Some(j) => j
+            .as_array()?
             .iter()
-            .map(|(who, list)| {
-                Some((
-                    who.parse().ok().filter(|p| (1..=8).contains(p))?,
-                    plays_of(list)?,
-                ))
+            .map(|j| {
+                Some(Joins {
+                    player: player(j.get("player")?)?,
+                    step: j.get("step")?.as_i64().filter(|s| *s >= 0)?,
+                })
             })
             .collect::<Option<_>>()?,
+    };
+    let next = match c.get("next") {
+        None => None,
+        Some(n) => Some(Next {
+            steps: steps_of(n.get("steps")?)?,
+            plays: n.get("plays").map_or(Some(BTreeMap::new()), plays_by)?,
+        }),
     };
     let relay = c.get("relay");
     let holds = match relay.and_then(|r| r.get("hold")) {
@@ -422,7 +468,57 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 Some(Box::new(deep_net::feel::Feel::of(&f).ok()?))
             }
         },
+        start,
+        joins,
+        next,
     })
+}
+
+/// #278: the reply of a room's next match: each copy's report with its logic items' steps, the
+/// relay's report, and the match after it the same way when the room played one.
+fn match_reply(
+    played: &Played<crate::voiced::Voiced<Logic>>,
+    track: &[Value],
+    log: bool,
+    saves_dirs: &BTreeMap<u8, PathBuf>,
+) -> Value {
+    let copies: Vec<Value> = played
+        .copies
+        .iter()
+        .map(|c| {
+            let mut report = c.report();
+            // #276: the profile records its confirmed steps wrote, into its own folder.
+            if let Some(dir) = saves_dirs.get(&c.me) {
+                let upto = c.record()["confirmed"].as_i64().unwrap_or(-1);
+                let written: Vec<Value> = c.sim().inner.profiles(upto).into_iter().map(|r| {
+                    match deep_logic::profile::write(dir, &r["record"]) {
+                        Ok((hash, file)) => json!({"item": r["item"], "step": r["step"], "hash": hash, "file": file}),
+                        Err(e) => json!({"ok": false, "code": "profile_failed", "step": r["step"], "what": e}),
+                    }
+                }).collect();
+                report.insert("profiles".into(), json!(written));
+            }
+            report.insert("steps".into(), json!(c.sim().inner.rows));
+            report.insert("track".into(), json!(track));
+            // #297: a refusal of an entry text's range names its reason and grapheme.
+            if let Some(Value::Array(rows)) = report.get_mut("refused") {
+                for row in rows.iter_mut() {
+                    let why = row["why"].clone();
+                    for k in ["reason", "grapheme", "code_points"] {
+                        if let Some(v) = why.get(k) {
+                            row[k] = v.clone();
+                        }
+                    }
+                }
+            }
+            Value::Object(report)
+        })
+        .collect();
+    let mut reply = json!({"copies": copies, "relay": played.relay(log)});
+    if let Some(next) = &played.next {
+        reply["next"] = match_reply(next, track, log, saves_dirs);
+    }
+    reply
 }
 
 /// `{"call": "play_match", "panel", "steps", "plays"?, "link_to"?}`.
@@ -567,6 +663,7 @@ impl Hub<'_> {
         match call {
             NetCall::Match(m) => self.match_call(m),
             NetCall::Play(p) => self.play_match(p),
+            NetCall::Lobby(l) => self.lobby(l),
             NetCall::Replay(r) => self.match_replay(r),
             // `sockets`: every connection and request a match opened in this run.
             NetCall::Sockets => {
@@ -588,6 +685,7 @@ impl Hub<'_> {
         gesture: &crate::points::Gesture,
     ) -> Option<Value> {
         self.join_input(panel, event, gesture)
+            .or_else(|| self.start_input(panel, event, gesture))
             .or_else(|| self.piece_press(panel, event))
     }
 
@@ -624,6 +722,7 @@ impl Hub<'_> {
             Err(e) => return e,
         };
         let planted = self.net_planted();
+        let name = self.scenario.module_planted.as_deref();
         let ask = Ask {
             steps: m.steps,
             plays: m.plays.clone(),
@@ -645,11 +744,15 @@ impl Hub<'_> {
             draw_seed: m.secure.unwrap_or(m.faults.seed),
             // #280: only net.feel's planted wall-clock meter reads the host's clock.
             clock: Some(wall_ns),
+            start: m.start.clone(),
+            joins: m.joins.clone(),
+            next: m.next.clone(),
+            relay: name.and_then(Wrong::named).unwrap_or_default(),
+            nth: 0,
         };
         let (piece, track, doc) = (s.piece.clone(), s.track.clone(), s.doc.clone());
         let rounds = planted == Planted::HashRoundsFloats;
         let first_bits = planted == Planted::DrawsFromFirstBits;
-        let name = self.scenario.module_planted.as_deref();
         let ring = match m.full {
             true => Plant::Full,
             false => name.and_then(Plant::named).unwrap_or_default(),
@@ -834,6 +937,10 @@ impl Hub<'_> {
                 join.state = Some(State::Joined);
             }
         }
+        // #278: the room's next match, when this one finished and the ask named one.
+        if let Some(next) = &played.next {
+            reply["next"] = match_reply(next, &s.track, m.log, &m.saves_dirs);
+        }
         if !m.seeks.is_empty() {
             reply["seeks"] = json!(seeks);
         }
@@ -996,6 +1103,7 @@ impl Hub<'_> {
         let state = self.scopes.get(panel).and_then(|s| s.join.state.clone());
         let mut p = prompt::prompt(
             &cfg.host,
+            cfg.min,
             cfg.players,
             cfg.courtesy,
             cfg.controls.get(deep_net::kind::PROFILE).is_some(),
@@ -1050,315 +1158,6 @@ impl Hub<'_> {
             join.state = Some(State::Refused(refused, why));
         }
         reply
-    }
-
-    /// `play_match`: this copy's live match, in real time, once a person clicked Join: the
-    /// relay's hello checked before anything is sent, the seat, the first player's link, a
-    /// direct path where the network allows one, then `steps` match steps, after which this
-    /// copy leaves. Its reply is the copy's report with the match's ID and link.
-    fn play_match(&mut self, p: &PlayCall) -> Value {
-        let Some((doc, _)) = self.join_of(&p.panel) else {
-            return json!({"code": "no_match", "what": "the panel's piece declares no relay"});
-        };
-        match self
-            .scopes
-            .get(&p.panel)
-            .and_then(|s| s.join.state.as_ref())
-        {
-            Some(State::Joined) => {}
-            Some(State::Refused(refused, why)) => {
-                return json!({"code": "refused", "refused": refused, "why": why})
-            }
-            Some(State::Ended(_)) => return json!({"code": "ended"}),
-            Some(State::Open) | None => {
-                return json!({"code": "not_joined", "what": "only a person's click on Join joins a match"})
-            }
-        }
-        let s = match self.match_setup(&doc) {
-            Ok(s) => s,
-            Err(e) => return e,
-        };
-        let cfg = s.cfg.clone();
-        // A copy that joins through the first player's link holds that copy's card: one that
-        // differs is refused here, before anything is opened.
-        let through = self
-            .scenario
-            .net
-            .links
-            .get(&doc)
-            .and_then(|l| card::parse(l));
-        if let Some(m) = through
-            .as_ref()
-            .and_then(|(_, theirs)| s.card.differs(theirs))
-        {
-            return self.refuse(&p.panel, m.to_json(), m.text());
-        }
-        let (game, open) = match (&through, random16()) {
-            (Some((game, _)), _) => (*game, false),
-            (None, Ok(game)) => (game, true),
-            (None, Err(why)) => return json!({"code": "no_random", "why": why}),
-        };
-        let ca = match &self.scenario.net.relay_ca {
-            None => Vec::new(),
-            Some(path) => match std::fs::read(path) {
-                Ok(pem) => pem,
-                Err(e) => {
-                    return json!({"code": "bad_input", "path": "relay_ca", "why": e.to_string()})
-                }
-            },
-        };
-        // The Join opens the one connection its grant names: the declared relay.
-        self.opened(&p.panel, "relay", &cfg.host, &game);
-        // #277: a piece whose rules play a changed seat asks for relay@2.
-        let protocol = match cfg.seats {
-            true => wire::PROTOCOL2,
-            false => wire::PROTOCOL,
-        };
-        let asked = cfg.seats.then_some(protocol);
-        let (mut conn, hello) = match Connection::open_for_join(&cfg.relay, &ca, asked) {
-            Ok(c) => c,
-            Err(why) => return self.refuse(&p.panel, json!("unreachable"), why),
-        };
-        let limits = match check_hello_as(&cfg.host, &hello, protocol) {
-            Ok(l) => l,
-            Err(why) => {
-                conn.close();
-                return self.refuse(&p.panel, json!("relay"), why);
-            }
-        };
-        if (limits.frames_per_s as i64) < cfg.step_rate {
-            conn.close();
-            let why = format!(
-                "refused the relay {}: its hello allows {} frames a second, and this match needs {}, one a match step",
-                cfg.host, limits.frames_per_s, cfg.step_rate
-            );
-            return self.refuse(&p.panel, json!("relay"), why);
-        }
-        let hex = wire::hex(&game);
-        let join = json!({"join": {"match": hex, "players": cfg.players, "open": open}});
-        if let Err(why) = conn.send_control(&join) {
-            return self.refuse(&p.panel, json!("unreachable"), why);
-        }
-        let link = format!("deep://piece/{doc}#{}", card::fragment(&game, &s.card));
-        // Seated, then every seat taken.
-        let seating = Instant::now() + SEATING;
-        let mut me = None;
-        let mut early: Vec<Vec<u8>> = Vec::new();
-        let me = loop {
-            let arrived = match conn.next(seating.saturating_duration_since(Instant::now())) {
-                Ok(Some(a)) => a,
-                Ok(None) => {
-                    return self.refuse(
-                        &doc,
-                        json!("unknown"),
-                        format!("the relay {} started no match within an hour", cfg.host),
-                    )
-                }
-                Err(why) => return self.refuse(&p.panel, json!("unreachable"), why),
-            };
-            match arrived {
-                Arrived::Frame(f) => early.push(f),
-                Arrived::Control(m) => {
-                    if let Some(player) = m.pointer("/joined/player").and_then(Value::as_u64) {
-                        me = Some(player as u8 + 1);
-                        if let (true, Some(to)) = (open, &p.link_to) {
-                            let _ = std::fs::write(to, &link);
-                        }
-                    } else if let Some(reason) = m.get("refused").and_then(Value::as_str) {
-                        conn.close();
-                        let State::Refused(refused, why) =
-                            prompt::refused_by_relay(&cfg.host, reason)
-                        else {
-                            return json!({"code": "refused"});
-                        };
-                        return self.refuse(&p.panel, refused, why);
-                    } else if m.get("closed").is_some() {
-                        conn.close();
-                        if let Some(join) = self.join_mut(&p.panel) {
-                            join.state = Some(State::Ended("left".into()));
-                        }
-                        return json!({"code": "ended", "end": "left", "match": hex, "link": link});
-                    } else if let (Some(_), Some(me)) = (m.get("start"), me) {
-                        break me;
-                    }
-                }
-            }
-        };
-        // A direct path to each other copy where the network allows one: the lower-numbered
-        // copy listens where it reaches the relay from and says where through the relay.
-        let mut direct: BTreeMap<u8, Peer> = BTreeMap::new();
-        let mut listener = (me < cfg.players)
-            .then(|| conn.local_ip().and_then(|ip| Listener::open(ip).ok()))
-            .flatten();
-        if let Some(l) = &listener {
-            for to in me..cfg.players {
-                let signal = json!({"signal": {"match": hex, "to": to, "address": l.address, "offer": l.offer}});
-                let _ = conn.send_control(&signal);
-            }
-        }
-        let wanted = cfg.players as usize - 1;
-        let patience = Instant::now() + DIRECT;
-        let mut ended = None;
-        while direct.len() < wanted && Instant::now() < patience && ended.is_none() {
-            if let Some((player, peer)) = listener.as_mut().and_then(|l| l.accept(&game)) {
-                self.opened(&p.panel, "direct", &peer.host, &game);
-                direct.insert(player, peer);
-                continue;
-            }
-            match conn.next(Duration::from_millis(5)) {
-                Ok(Some(Arrived::Frame(f))) => {
-                    // A copy that gave up on a direct path already plays through the relay.
-                    early.push(f);
-                    break;
-                }
-                Ok(Some(Arrived::Control(m))) => {
-                    let sig = &m["signal"];
-                    let from = sig["from"].as_u64().map(|f| f as u8 + 1);
-                    if let (Some(from), Some(address), Some(offer)) =
-                        (from, sig["address"].as_str(), sig["offer"].as_str())
-                    {
-                        if from < me {
-                            if let Ok(peer) = Peer::connect(address, &game, offer, me) {
-                                self.opened(&p.panel, "direct", &peer.host, &game);
-                                direct.insert(from, peer);
-                            }
-                        }
-                    } else if m.get("closed").is_some() {
-                        ended = Some("left");
-                    }
-                }
-                Ok(None) => {}
-                Err(_) => ended = Some("left"),
-            }
-        }
-        drop(listener);
-        let all_direct = direct.len() == wanted;
-        // The match, on this copy's clock from here.
-        let sim = match Logic::new(s.piece.clone(), &s.track, false)
-            .and_then(|mut l| l.worlds(&s.doc).map(|()| l))
-        {
-            Ok(sim) => sim,
-            Err(e) => return e,
-        };
-        let started = Instant::now();
-        let mut copy = Copy::new(
-            cfg.clone(),
-            s.card.clone(),
-            me,
-            cfg.players,
-            game,
-            sim,
-            self.net_planted(),
-            0,
-        );
-        copy.limit(p.steps);
-        // #552: a draw's bits come from the platform's secure random source.
-        copy.draw_source(
-            Box::new(|| {
-                random16().map_or(0, |b| {
-                    u64::from_le_bytes(b[..8].try_into().unwrap_or_default())
-                })
-            }),
-            Default::default(),
-        );
-        copy.script(
-            p.plays
-                .iter()
-                .map(|q| (q.step, q.control.clone(), q.value.clone(), q.to.clone())),
-        );
-        if ended.is_some() {
-            copy.closed(0, "left");
-        }
-        for frame in early {
-            copy.receive(&frame, since(started));
-        }
-        let step = cfg.step();
-        let mut next_tick = 0;
-        let send = |conn: &mut Connection, direct: &mut BTreeMap<u8, Peer>, frame: Vec<u8>| {
-            let mut lost = Vec::new();
-            for (player, peer) in direct.iter_mut() {
-                if peer.send(&frame).is_err() {
-                    lost.push(*player);
-                }
-            }
-            // A direct path that broke leaves its copy to the relay.
-            let via_relay = !all_direct || !lost.is_empty();
-            for player in lost {
-                direct.remove(&player);
-            }
-            !via_relay || conn.send_frame(frame).is_ok()
-        };
-        let mut relayed = !all_direct;
-        // #277: relay@2's messages and the frames of other players' messages the copy forwards.
-        let sends = |copy: &mut Copy<Logic>, conn: &mut Connection| {
-            let (controls, frames) = copy.sends();
-            for m in controls {
-                let _ = conn.send_control(&m);
-            }
-            for f in frames {
-                let _ = conn.send_frame(f);
-            }
-        };
-        while !copy.done() {
-            let now = since(started);
-            let mut gone = Vec::new();
-            for (player, peer) in direct.iter_mut() {
-                match peer.receive() {
-                    Ok(frames) => frames.iter().for_each(|f| copy.receive(f, now)),
-                    Err(_) => gone.push(*player),
-                }
-            }
-            for player in gone {
-                direct.remove(&player);
-                relayed = true;
-            }
-            if now >= next_tick {
-                if let Some(frame) = copy.tick(now) {
-                    if !send(&mut conn, &mut direct, frame) {
-                        copy.leave();
-                    }
-                }
-                next_tick = (next_tick + step).max(now - step);
-                sends(&mut copy, &mut conn);
-            }
-            if copy.done() {
-                break;
-            }
-            let wait = ((next_tick - since(started)).max(0) as u128 * 1_000_000_000
-                / FLICKS as u128) as u64;
-            match conn.next(Duration::from_nanos(wait).min(Duration::from_millis(4))) {
-                Ok(Some(Arrived::Frame(f))) => {
-                    copy.receive(&f, since(started));
-                    sends(&mut copy, &mut conn);
-                }
-                // relay@1's `closed`, and #277's relay@2 messages.
-                Ok(Some(Arrived::Control(m))) => {
-                    copy.relay(&m, since(started));
-                    sends(&mut copy, &mut conn);
-                }
-                Ok(None) => {}
-                Err(_) => copy.leave(),
-            }
-        }
-        let _ = relayed;
-        // A match this copy ended says how in its last frame; one it only finished, it leaves.
-        if !matches!(copy.end(), None | Some(End::Left)) {
-            if let Some(frame) = copy.tick(since(started)) {
-                send(&mut conn, &mut direct, frame);
-            }
-        }
-        copy.leave();
-        drop(direct);
-        conn.close();
-        let how = copy.end().map_or("left", End::name);
-        if let Some(join) = self.join_mut(&p.panel) {
-            join.state = Some(State::Ended(how.to_string()));
-        }
-        let mut report = copy.report();
-        report.insert("match".into(), json!(hex));
-        report.insert("link".into(), json!(link));
-        report.insert("direct".into(), json!(all_direct));
-        Value::Object(report)
     }
 }
 

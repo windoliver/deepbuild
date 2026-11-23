@@ -1,0 +1,14 @@
+{
+  "#1121.73d8f179": [
+    "mac-only-dependency"
+  ],
+  "#1121.b915783e": [
+    "umask-spool-folder"
+  ],
+  "#1121.23cb368c": [
+    "x86-nofollow"
+  ],
+  "#1121.301969cb": [
+    "sbin-lsof"
+  ]
+}

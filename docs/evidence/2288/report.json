@@ -1,0 +1,63 @@
+{
+  "turned": {
+    "frames": 121,
+    "fps": 60,
+    "pixel_identical_frames": 120,
+    "drawn_vs_baked_max_m": 1.88610511042122e-8,
+    "at": "frame 101, tile#4",
+    "instancer_moved_max_m": 0,
+    "fall_m": {
+      "min": 0.35006678104400635,
+      "max": 4.217256546020508
+    }
+  },
+  "scatter": {
+    "elements": 200,
+    "built": 200,
+    "built_in_id_order": true,
+    "built_vs_scatter_max_m": 3.159789901360952e-7,
+    "step_hashes": 601,
+    "step_hashes_equal": 601,
+    "t0_scene3d_vs_built_pixel_identical": true,
+    "pixel_identical_frames": 151,
+    "frames": 151
+  },
+  "refusals": {
+    "change": {
+      "turned_with_channel": [
+        {
+          "code": "physics.moved_instancer",
+          "path": "outputs/written/to",
+          "actual": "nudge",
+          "what": "output written writes tiles's columns in tiles's frame at t = 0, and channel nudge moves it (items/tiles/at/pos); a world can't write the columns of an instancer a channel moves"
+        }
+      ]
+    },
+    "base": {
+      "turned": [
+        {
+          "code": "physics.unsupported",
+          "path": "bodies/tile/each",
+          "actual": "tiles",
+          "what": "each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; #2288 brings it (place tiles at the origin with its own ids and pos)"
+        }
+      ],
+      "scatter": [
+        {
+          "code": "physics.unsupported",
+          "path": "bodies/rock/each",
+          "actual": "rocks",
+          "what": "each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; #2288 brings it (place rocks at the origin with its own ids and pos)"
+        }
+      ],
+      "turned_with_channel": [
+        {
+          "code": "physics.unsupported",
+          "path": "bodies/tile/each",
+          "actual": "tiles",
+          "what": "each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; #2288 brings it (place tiles at the origin with its own ids and pos)"
+        }
+      ]
+    }
+  }
+}

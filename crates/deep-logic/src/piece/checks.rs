@@ -34,6 +34,8 @@ pub(super) struct Declared {
     process: Option<Vec<String>>,
     /// `separation`: its movers and minima, built into a table at check (#1255).
     separation: Option<Value>,
+    /// `circuit`: its nodes and parts, built into a table at check (#1181).
+    circuit: Option<Value>,
     /// The item's fields as given, for its bake key.
     given: String,
 }
@@ -52,6 +54,8 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "step_rate",
             "clock",
             "due",
+            "open",
+            "finish",
             "reads",
             "writes",
             "budget",
@@ -73,6 +77,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "fog",
             "process",
             "separation",
+            "circuit",
         ]
         .contains(&k.as_str())
         {
@@ -144,6 +149,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
                 ty,
                 count: count as u32,
                 linear: i == "linear",
+                cut: w.get("cut").map(|c| c.as_str().unwrap_or_default().to_string()),
             }),
             _ => refused.push(refusal(
                 "write",
@@ -151,6 +157,20 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
                 json!({"write": name}),
             )),
         }
+    }
+    // #2035: a linear write's cut names a bool write of its count in this item.
+    for w in &writes {
+        let Some(cut) = &w.cut else { continue };
+        let fits = |c: &Write| &c.name == cut && c.ty == Ty::Bool && c.count == w.count;
+        let what = match (w.linear, writes.iter().any(fits)) {
+            (true, true) => continue,
+            (false, _) => format!("{} holds, so it never blends: a cut is only for a linear write", w.name),
+            (true, false) => format!(
+                "{}'s cut {cut} isn't a bool write of {} elements in this item: a cut marks each element that jumps on a step, so it names a bool write with one element for each",
+                w.name, w.count
+            ),
+        };
+        refused.push(refusal("write", what, json!({"write": w.name})));
     }
     // Sized in u64 and held to the largest memory, so no region's size or offset passes a u32.
     let total: u64 = writes
@@ -216,6 +236,21 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             Some(name.to_string())
         }
     };
+    // #278: `open` names one of the item's own bool arrays of count 1 (joins after the start only
+    // while it's true), and `finish` one of its i32 arrays of count 1 (nonzero ends the match).
+    for (field, ty, word) in [("open", Ty::Bool, "bool"), ("finish", Ty::I32, "i32")] {
+        let Some(v) = params.get(field) else { continue };
+        let name = v.as_str().unwrap_or_default();
+        if !writes
+            .iter()
+            .any(|w| w.name == name && w.ty == ty && w.count == 1)
+        {
+            return Err(bad(
+                field,
+                format!("{field} names one of the item's own {word} arrays of count 1; {v} isn't"),
+            ));
+        }
+    }
     fn get<'a>(o: Option<&'a Value>, k: &str) -> Option<&'a Value> {
         o.and_then(|b| b.get(k))
     }
@@ -271,14 +306,27 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
     let process = match params.get("process") {
         None => None,
         Some(p) => {
-            let what = || bad("process", "process is {kinds: [name]}, 1 to 16 unique kind names".into());
+            let what = || {
+                bad(
+                    "process",
+                    "process is {kinds: [name]}, 1 to 16 unique kind names".into(),
+                )
+            };
             let kinds: Vec<String> = p
                 .get("kinds")
                 .and_then(Value::as_array)
                 .and_then(|a| a.iter().map(|k| k.as_str().map(str::to_string)).collect())
                 .ok_or_else(what)?;
-            let unique = kinds.iter().collect::<std::collections::BTreeSet<_>>().len() == kinds.len();
-            if kinds.is_empty() || kinds.len() > 16 || !unique || p.as_object().is_some_and(|o| o.len() != 1) {
+            let unique = kinds
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                == kinds.len();
+            if kinds.is_empty()
+                || kinds.len() > 16
+                || !unique
+                || p.as_object().is_some_and(|o| o.len() != 1)
+            {
                 return Err(what());
             }
             Some(kinds)
@@ -322,6 +370,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         lanes: params.get("lanes").cloned(),
         process,
         separation: params.get("separation").cloned(),
+        circuit: params.get("circuit").cloned(),
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -364,7 +413,7 @@ pub(super) fn preview_of(v: &Value) -> Result<(Vec<String>, Vec<Write>), Vec<Val
             .any(|(k, _)| k != "type" && k != "count");
         match (ty, count) {
             (Some(ty), Some(count)) if own_name(name) && ty != Ty::Quat && !extra => {
-                writes.push(Write { name: name.clone(), ty, count: count as u32, linear: false })
+                writes.push(Write { name: name.clone(), ty, count: count as u32, linear: false, cut: None })
             }
             _ => refused.push(what(format!(
                 "preview write {name} is an own name with a type of bool, i32, f64, vec2 or vec3 and a count of at least 1"
@@ -1007,6 +1056,23 @@ pub fn check_in(
                 Some(std::sync::Arc::new(t))
             }
         };
+        // #1181: the table `circuit` declares, its nodes and parts, is asset 0; each input that
+        // closes a part is found by its slot in the item's read region.
+        let circuit = match &d.circuit {
+            None => None,
+            Some(v) => {
+                let slot = |name: &str| {
+                    layout
+                        .entries
+                        .iter()
+                        .find(|e| e.region == "reads" && e.name == name && e.ty == "control")
+                        .map(|e| e.offset)
+                };
+                let c = crate::circuit::build(v, &slot).map_err(|r| logic_refused(id, r))?;
+                assets.push((rewrite::hash(&c.bytes), c.bytes.clone()));
+                Some(std::sync::Arc::new(c))
+            }
+        };
         for sha in &d.assets {
             assets.push((sha.clone(), asset(sha).ok_or_else(|| missing("data", sha))?));
         }
@@ -1108,6 +1174,8 @@ pub fn check_in(
             id: id.clone(),
             program: d.program.clone(),
             bytes,
+            #[cfg(not(target_arch = "wasm32"))]
+            compiled: Default::default(),
             hash,
             given,
             step: d.step,
@@ -1155,6 +1223,7 @@ pub fn check_in(
             lanes,
             process: d.process.clone(),
             separation,
+            circuit,
         });
     }
     // A save holds every item at one instant, so a piece with saves steps at one rate.

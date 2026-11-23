@@ -94,7 +94,10 @@ check and 374 ms in the call, at load 106. The check is the whole first call.
 
 Each sandbox run made a new wasmtime engine and compiled its program again, even bytes the same thread had compiled.
 `deep-sandbox-wasmtime` now keeps each thread's compiled programs, keyed by the bytes and whether wasmtime's own fuel
-counts. Each runner still gets its own store and instance. The cache is per thread so that one call's deadline,
+counts. Each runner still gets its own store and instance. Since main's #2662 (b3cde644c), a compiled `Program` makes
+fresh runners, and deep-logic's worlds keep theirs. The cache is now `Runner::sized`'s: a thread's `Program`s, keyed
+by everything one is made from (bytes, pages, both faults, `written`). `Program::new` still compiles every time, so
+#2662's count of one world's compiles is unchanged. The cache is per thread so that one call's deadline,
 which interrupts by its engine's epoch, can't stop a call on another thread.
 
 `crates/deep-sandbox-wasmtime/tests/compile_once.rs` reads the cost as a ratio: a later runner of the same program

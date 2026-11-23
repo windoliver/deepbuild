@@ -611,6 +611,24 @@ impl Player {
             .to_string()
     }
 
+    /// #278: the player's own Start as the page draws it, `{state, players, text}`; `null` where
+    /// it shows none.
+    pub fn start_prompt(&self) -> String {
+        self.net
+            .as_ref()
+            .map_or(Value::Null, crate::net::Match::start_prompt)
+            .to_string()
+    }
+
+    /// #278: a person clicked Start: `drawn` is 16 bytes from the browser's secure random source.
+    /// What to send the relay, empty when there is nothing.
+    pub fn press_start(&mut self, drawn: Vec<u8>) -> String {
+        let drawn: [u8; 16] = drawn.try_into().unwrap_or_default();
+        self.net
+            .as_mut()
+            .map_or(String::new(), |n| n.press_start(drawn))
+    }
+
     /// A control message from the relay: `{send}`, `{close}` or `{}`.
     pub fn net_control(&mut self, text: &str, now_ms: f64) -> String {
         self.net

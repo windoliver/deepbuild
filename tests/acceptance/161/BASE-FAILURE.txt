@@ -1,0 +1,116 @@
+#161's acceptance suite at the base, 7a256fd4 (main), on 2026-11-21. macOS, the base's own debug builds:
+`cargo build --locked --bin deep-gpu` and `cargo build --locked --bin deep-show --no-default-features --features full`.
+
+WHAT RAN
+
+1. The type-check, `node node_modules/typescript/bin/tsc -p tests/acceptance/161/tsconfig.json`: exit 0, no error.
+
+2. No vitest run. Two were queued through the build slot, as every file builds:
+     node scripts/throttle.mjs build --wait 180 -- sh scripts/lease node node_modules/vitest/vitest.mjs run \
+       --root tests/acceptance/161 --no-file-parallelism --testTimeout=600000 ac8-invert-premultiplied.test.ts
+     (the same) ac3-pack-check.test.ts ac9-alpha-guard.test.ts ac10-moved-group.test.ts ac12-linear-color-key.test.ts
+   Neither was granted the slot within this job's time (five other sessions' builds were queued ahead of them), so
+   both were stopped, by PID, having run nothing. No test below has an observed vitest result at the base.
+
+3. Instead, the base's two binaries were driven directly with this suite's own documents and calls (helpers.ts,
+   fixtures.ts, title.ts, measures.ts, from scratch scripts that are not delivered), to see that each is well formed
+   wherever the base takes it and what the base answers. Every line under "at the base" below is one of those
+   answers; each test's failing assertion is read from them and from the test's code, not from a run of the test.
+
+AT THE BASE, BY FILE
+
+ac1-reference.test.ts
+  test 1 fails at `expect(listProblems(packOperators())).toEqual([])`: the pack lacks 53 of the 70.
+  test 2 fails at `expect(color.filter((id) => !(id in packOperators()))).toEqual([])`: 7 of the color list's 14.
+  The harness itself holds at the base: its 17 graphs, each over its category's picture through `check_operator`'s
+  `reference` at 128 × 72, are accepted, both sides drawn, 0 of 9,216 texels over one code (worst 0.32 codes,
+  fx.twirl@1), each changing 560 texels or more of its picture. The CPU side of the base's fx.invert@1 reads
+  (0.2002, 1, 1, 1) on the opaque patch and (0.8, 1, 1, 0.251) on the quarter patch: the oracle check passes the
+  first and fails the second there, as the base's invert is criterion 8's wrong program.
+
+ac2-spline-homography.test.ts
+  fails at `expect(listProblems(...).filter(...)).toEqual([])`: the pack lacks fx.levels@1, fx.curves@1 and
+  fx.corner_pin@1. The fixtures draw: the ramp with no pass holds 224 inputs from 0 to 0.992 on a row, a pass's
+  output comes back in the layer's f32 (fx.invert@1: 1 − input within 0.2 codes), and the card's edge is one texel
+  sharp (alpha 0, 0, 1, 1 across x = 46 to 49).
+
+ac3-pack-check.test.ts
+  test 1 fails at `expect(listProblems(packOperators())).toEqual([])`: 17 operators, not 70. Past it the base would
+  hold: `install_pack` of packs/fx-1.0.0 as deepbuild/fx answers outcome installed, version 1.0.0, no issue, and the
+  `packs` row state installed, checks 1; each of the three changed copies is refused with an error at path
+  `operators/fx.invert@1`.
+  test 2 fails at `expect(refusedNaming(...)).toEqual([])`: the base admits a pack whose operator is named blur@1
+  (outcome installed, no issue).
+
+ac4-cost.test.ts
+  tests 1 and 2 fail at `expect(listProblems(operators)).toEqual([])`. The base's `live` takes this suite's 2D figure
+  with a group's passes at 1920 × 1080, 2560 × 1440 and 3840 × 2160 (state live, drawn), so the large group is kept
+  there: its document check sums no pass's cost.
+ac4-measured.test.ts
+  not run: timed. It fails at the list check before anything is timed; `calibrate` at the base has no pack row.
+
+ac5-status-guard.test.ts
+  fails at `expect(listProblems(packOperators())).toEqual([])`. The fixture holds at the base: the look is admitted;
+  the picture alone has 8,904 pixels within 0.10 of a status color; with the binding, under fx.invert@1 at amount 0
+  and under each of the base's 17 operators, no pixel outside the mark's box is within 0.095 (nearest 0.0982).
+
+ac6-budgets.test.ts
+  test 1 fails at `expect(entry).toBeDefined()`: budgets.json has no task canvas-fx-pack.
+  test 2 fails at the list check; the base's 17 graphs are each accepted and compiled on thread "deep-gpu render",
+  UI thread "main".
+  test 3 fails at `expect(listProblems(...).filter(...)).toEqual([])` (no fx.levels@1, fx.radial_blur@1 or
+  fx.turbulent_displace@1). With the base's operators in the same figure, `live` lists one pass, `flat`, with
+  operator null in frame 1 and none after for the still figure, and `flat` in every frame for the moving one.
+ac6-timed.test.ts
+  not run: timed. It fails at the list check; `install_pack` at the base answers no `check_ms`.
+
+ac7-slice-shift.test.ts
+  tests 1 and 2 fail at `expect(listProblems(...).filter((p) => p.includes('fx.slice_shift@1'))).toEqual([])`.
+  The clean title plays at the base: 539 × 208, 14 frames of one pixel hash, flicker {"verdict": "PASS", "flashes":
+  0}, frame 9 sought in a fresh process equal to the played one, and no row of it unchanged by a move of 18 px.
+
+ac8-invert-premultiplied.test.ts
+  test 1 fails at `expect(failures).toEqual([])` with, of the group's own texel (`blend_inputs` source):
+    fx.invert@1: the fill it leaves, of (0.2007, 0, 0, 0.251) (the criterion's (0.05, 0.25, 0.25, 0.25)): reads
+    (0.7993, 1, 1, 0.251), not (0.0503, 0.251, 0.251, 0.251)
+    fx.invert@1: it leaves (0.7993, 1, 1, 0.251), brighter than its alpha allows
+  and the two composites, (0.251, 0.251, 0.5521, 1) over the fill (0, 0, 0.402, 1) and (0.251, 0.251, 0.251, 1)
+  over black. The fixture's own lines hold: the layer is 3d, the fills read (0, 0, 0, 1) and (0, 0, 0.402, 1).
+  test 2 fails at `expect(left.length).toBe(4)`: `deep-gpu run --planted invert_on_premultiplied` answers
+  {"ok": false, "code": "bad_input"}, since the base has no such plant.
+
+ac9-alpha-guard.test.ts
+  test 1 fails at `expect(failures).toEqual([])` with
+    fx.invert@1: <n> texels hold a channel more than one 10-bit code above their alpha; first texel (x, y) …
+  (n and the texel are the test's to print; they were not observed. Observed: the base's band reads
+  (0.9902, 1, 1, 0.012) at (104, 64) and (0.9448, 1, 1, 0.0688) at (106, 64)). Its other lines hold there: the patch reads (0.7991, 0, 0, 1), the blur alone
+  leaves its centre (0.7979, 0, 0, 1), both passes leave it (0.2021, 1, 1, 1), every texel outside x 104 to 152,
+  y 40 to 88 is (0, 0, 0, 0), and 1,760 texels hold an alpha between 0.02 and 0.98.
+  test 2 fails at `expect(centre.length).toBe(4)`: no such plant at the base.
+
+ac10-moved-group.test.ts
+  test 1 fails at `expect(listProblems(...).filter(...)).toEqual([])`: 20 of the 22 operators are unknown. Of the
+  cases the base can draw: fx.twirl@1 differs on 5,947 of 8,385 texels between the two places (first texel (0, 0) of
+  the group: (0.9019, 0.6274, 0.1569, 1) at (16, 16), (0, 0, 0, 0) at (53, 35)); fx.directional_blur@1 and the chain
+  blur@1 then fx.invert@1 differ on none.
+  test 2 fails where the plant's run answers bad_input: `expect(found.some(...)).toBe(true)`.
+
+ac11-internal-scale.test.ts
+  test 1 fails at `expect(failures).toEqual([])` with
+    the blurred edge at internal_scale 0.5: the view says it drew at internal_scale 1
+  The widths the base draws: 0.80 px with no pass, 9.75 px blurred, at either surface.
+  test 2 fails at `expect(widths.length).toBe(3)`: no such plant at the base.
+
+ac12-linear-color-key.test.ts
+  tests 1 and 2 fail at `expect(listProblems(...).filter((p) => p.includes('fx.linear_color_key@1'))).toEqual([])`.
+  A fact of the base the planted test leans against: `blend_inputs`' `source` answers (0, 0, 0, 0) for a texel a pass
+  wrote as (1, 1, 1, 0) (the base's invert on a transparent texel inside its grow), and the layer shows what lies
+  under such a texel; README, Readings, "A texel of alpha 0 that holds color".
+
+ac13-taste.test.ts
+  fails at `expect(listProblems(packOperators())).toEqual([])`. A tile under one of the base's operators draws
+  through `layers` and answers its PNG.
+
+TESTS THAT WOULD PASS AT THE BASE
+
+None. Every test names an operator, a field or a plant the base lacks.

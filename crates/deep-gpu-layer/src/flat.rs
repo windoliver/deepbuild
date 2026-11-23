@@ -22,6 +22,7 @@ use deep_gpu::device::Device;
 use deep_gpu::surface::FORMAT;
 use deep_groups_render::frame2;
 use deep_marks_render::gpu::{Options, Vello2d};
+use deep_scene3d_render::surface::{self, Low, Surface, Upscale, SHARPEN_PASS, UPSCALE_PASS};
 use serde_json::{Map, Value};
 
 use crate::drawn::Page;
@@ -56,6 +57,9 @@ pub struct Flat {
     drops_page: bool,
     /// #467: the marks the view last drew, on their page; a frame with the same draws nothing.
     shown: Option<(Vec<Drawn>, Option<Page>)>,
+    /// #161: the frame's targets below internal scale 1, and the compositor's wrong program.
+    low: Option<Low>,
+    plant: Option<deep_groups_render::Planted>,
 }
 
 /// A `live` call's look as a 2D document's frames read it (#1561): the look as every view reads
@@ -206,6 +210,8 @@ impl Flat {
             reused: false,
             drops_page: planted == Some(Planted::ReuseDropsPage),
             shown: None,
+            low: None,
+            plant: planted.and_then(Planted::composed),
         };
         flat.frame(0)?;
         Ok(flat)
@@ -300,22 +306,39 @@ impl Flat {
         Ok(same)
     }
 
-    /// Records the frame at `t` into `target`, `size` px, timed by `timer` as `session`'s.
+    /// Records the frame at `t` into `slot`, `size` px, timed by `timer` as `session`'s. With
+    /// `below`, the view's surface under internal scale 1, the frame draws at its internal size,
+    /// every u that many px, and returns to `size` through the upscale's two passes.
     #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,
         device: &Device,
         t: i64,
         size: [u32; 2],
-        target: &wgpu::TextureView,
+        slot: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
         timer: &mut Timer,
         session: usize,
+        below: Option<(&Upscale, Surface)>,
     ) -> Result<(), (&'static str, String)> {
         let mut vello = self
             .vello
             .take()
             .unwrap_or_else(|| Vello2d::new(&device.device, FORMAT));
+        let internal = below.map_or(size, |(_, s)| surface::scaled(size, s.scale));
+        let below = below.filter(|_| internal != size);
+        if let Some((up, _)) = below {
+            let fits = |l: &Low| l.internal == internal && l.size == size;
+            if !self.low.as_ref().is_some_and(fits) {
+                self.low = Some(Low::new(device, up, internal, size));
+            }
+        }
+        let zoom = below.map_or(1.0, |(_, s)| s.scale);
+        let target = &match (&self.low, below) {
+            (Some(low), Some(_)) => low.view.clone(),
+            _ => slot.clone(),
+        };
+        let size = internal;
         let marks = self.frame(t)?.to_vec();
         self.shown = Some((marks.clone(), self.page.clone()));
         // A look's paper and relief draw in the compositor, as a composited group does.
@@ -329,8 +352,10 @@ impl Flat {
             let mut first = device.device.create_command_encoder(&Default::default());
             mark_pass(&mut first, target, begin);
             device.queue.submit([first.finish()]);
-            self.composed(device, &mut vello, t, size, target, encoder)
+            self.composed(device, &mut vello, t, size, zoom, target, encoder)
         } else {
+            // No pass of a group runs in a frame Vello draws alone.
+            self.groups.iter_mut().for_each(|g| g.ran.clear());
             mark_pass(encoder, target, begin);
             vello.draw(
                 &device.device,
@@ -339,11 +364,32 @@ impl Flat {
                 marks.iter(),
                 size,
                 target,
-                Options::default(),
+                Options {
+                    zoom,
+                    ..Options::default()
+                },
             )
         };
         mark_pass(encoder, target, end);
         timer.end(i);
+        // Each operator a group's pass named ran in this frame: a pass row under its name, so a
+        // frame that dispatches one says so, and a still canvas, which draws no frame, none.
+        for op in self.groups.iter().flat_map(|g| g.ran.clone()) {
+            let k = timer.start(deep_effects_render::docops::mark_of(&op), session);
+            let (from, to) = timer.bracket(k);
+            mark_pass(encoder, target, from);
+            mark_pass(encoder, target, to);
+            timer.end(k);
+        }
+        if let (Some(low), Some((up, s))) = (&mut self.low, below) {
+            low.hold(device, s.sharpen);
+            for name in [UPSCALE_PASS, SHARPEN_PASS] {
+                let step = low.step(up, &s, surface::Planted::default(), name, slot);
+                let k = timer.start(step.name(), session);
+                step.record(encoder, timer.writes(k));
+                timer.end(k);
+            }
+        }
         self.vello = Some(vello);
         drawn.map_err(|e| ("not_drawn", e.to_string()))
     }
@@ -351,12 +397,14 @@ impl Flat {
 
 impl Flat {
     /// The last frame through the group compositor, each writer layer alone.
+    #[allow(clippy::too_many_arguments)]
     fn composed(
         &mut self,
         device: &Device,
         vello: &mut Vello2d,
         t: i64,
         size: [u32; 2],
+        zoom: f64,
         target: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<(), serde_json::Value> {
@@ -371,7 +419,9 @@ impl Flat {
         }
         let slices: Vec<&[Arc<Drawn>]> = layers.iter().map(Vec::as_slice).collect();
         let clock = Clock::of(&self.doc, t);
-        let layer = frame2::layer(&slices, size, clock, &self.roles, self.page.as_ref());
+        let mut layer = frame2::layer(&slices, size, clock, &self.roles, self.page.as_ref());
+        layer.options.zoom = zoom;
+        layer.planted = self.plant;
         let groups = self
             .groups
             .get_or_insert_with(|| Groups::new(&device.device));

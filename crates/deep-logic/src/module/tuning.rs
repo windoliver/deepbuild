@@ -125,6 +125,9 @@ pub struct Found {
     pub blocked: Vec<Value>,
 }
 
+/// Bakes the piece again with a catalog's moved bytes in its place: `(catalog, moved bytes)`.
+pub type Rebake<'a> = dyn Fn(&str, &[u8]) -> Result<Rc<Piece>, Value> + 'a;
+
 /// logic.tuning over `piece` baked on `entries` for `steps` steps: each tuning row of each catalog
 /// its items name (only `wanted`, when given), its record from `records`, moved and baked again by
 /// `rebake(catalog, moved bytes)`, the piece with the moved copy in the catalog's place.
@@ -134,7 +137,7 @@ pub fn run(
     steps: i64,
     records: Option<&Map<String, Value>>,
     wanted: Option<&str>,
-    rebake: &dyn Fn(&str, &[u8]) -> Result<Rc<Piece>, Value>,
+    rebake: &Rebake<'_>,
 ) -> Found {
     let mut out = Found::default();
     let mut seen = std::collections::BTreeSet::new();

@@ -247,6 +247,8 @@ pub struct Groups {
     paintfx: Option<crate::paintfx::PaintFx>,
     lightfx: Option<crate::lightfx::LightFx>,
     mips: Option<deep_effects_render::mips::Mips>,
+    /// The operator each group's pass named, for every pass the last frame composed ran.
+    pub ran: Vec<String>,
 }
 
 /// A mark's solid value in a collection target's `output`: the pressure it reads in red, or its
@@ -476,7 +478,7 @@ impl Groups {
             immediate_size: 0,
         });
         let mix = pipeline(device, &pipelines, &module, "fs", ACC);
-        let mix_linear = pipeline(device, &pipelines, &module, "fs", LINEAR);
+        let mix_linear = pipeline(device, &pipelines, &module, "fs_half", LINEAR);
         Groups {
             layout,
             module,
@@ -492,6 +494,7 @@ impl Groups {
             paintfx: None,
             lightfx: None,
             mips: None,
+            ran: Vec::new(),
         }
     }
 
@@ -884,6 +887,7 @@ impl Groups {
         };
         let inside: Vec<Drawn> = run.iter().map(|d| without(d, k)).collect();
         let bounds = union(&inside);
+        let zoom = x.options.zoom;
         let d = &x.device.device;
         // #2032: a lit run of plain marks, laid over an encoded layer at full opacity, is lit
         // and laid in one pass from the marks as Vello draws them: no target for the children,
@@ -1094,7 +1098,7 @@ impl Groups {
             dancing: effect.as_deref().is_some_and(|e| e.dancing),
             seed: item_seed(x.clock.seed, item),
             frame: x.clock.frame(),
-            rect: px(bounds, rect, x.size),
+            rect: px(bounds.map(|v| v * zoom), rect * zoom, x.size),
         };
         if cover && x.planted == Some(Planted::BackdropPastCoverage) {
             m.cover = None;
@@ -1189,167 +1193,15 @@ impl Groups {
     /// `view` read back as f32 bytes.
     fn floats(&mut self, device: &Device, view: &wgpu::TextureView, size: [u32; 2]) -> Vec<u8> {
         let copy = self.take(device, size, ACC);
-        let mix = Mix::over(view, size);
+        // Each texel as it is: one a pass left with color at alpha 0 keeps that color (#161).
+        let mix = Mix {
+            mode: REPLACE,
+            ..Mix::over(view, size)
+        };
         self.composite(device, &copy, mix, size);
         let bytes = f32_bytes(&read_texture(device, &copy, 0).1);
         self.give(&copy);
         bytes
-    }
-
-    /// A group's passes on `color`, in the space its layer composites in.
-    fn passes(
-        &mut self,
-        x: &mut Run<'_>,
-        group: &str,
-        e: &Effect,
-        bounds: [f64; 4],
-        color: &wgpu::TextureView,
-    ) -> Result<(wgpu::TextureView, f64), Value> {
-        let other = matches!(
-            (x.planted, x.space),
-            (Some(Planted::PassLinearIn2d), Space::Encoded)
-                | (Some(Planted::PassEncodedIn3d), Space::Linear)
-        );
-        if other {
-            self.in_other_space(x, group, e, bounds, color)
-        } else {
-            self.run_passes(x, group, e, bounds, color)
-        }
-    }
-
-    /// A group's passes in order on `color`, each on the last one's result, each within the
-    /// group's bounds grown by the grows so far: the result and the whole grow.
-    fn run_passes(
-        &mut self,
-        x: &mut Run<'_>,
-        group: &str,
-        e: &Effect,
-        bounds: [f64; 4],
-        color: &wgpu::TextureView,
-    ) -> Result<(wgpu::TextureView, f64), Value> {
-        let mut items = Map::new();
-        let mut scales = BTreeMap::new();
-        let mut params = BTreeMap::new();
-        let mut within = BTreeMap::new();
-        let mut grow = 0.0;
-        let mut collections = BTreeMap::new();
-        for (i, p) in e.passes.iter().enumerate() {
-            let at = format!("items/{group}/params/passes/{i}/op");
-            let graph = pass_graph(&p.op, p.item.as_ref(), &p.params, x.packs)
-                .map_err(|code| refused(code, &at))?;
-            grow += p.grow.unwrap_or(graph.grow);
-            for (j, stage) in graph.stages.iter().enumerate() {
-                compile_with(stage, &BTreeMap::new(), EmitOptions::default())
-                    .map_err(|issues| refused(issues[0].code, &at))?;
-                for read in target_reads(stage) {
-                    let view = self.target_of(x, &read)?;
-                    let key = (format!("{COLLECTION}{}", read.collection), read.output);
-                    collections.insert(key, view);
-                }
-                let id = format!("{group}#pass{i}.{j}");
-                scales.insert(id.clone(), scale_of(stage));
-                params.insert(id.clone(), p.params.clone().into_iter().collect());
-                if x.planted != Some(Planted::GroupPassPastGrow) {
-                    within.insert(id.clone(), px(bounds, grow, x.size));
-                }
-                items.insert(id, json!({"kind": "gpu.pass@1", "params": stage}));
-            }
-        }
-        // Operators read a filterable target.
-        let input = self.take(x.device, x.size, LINEAR);
-        let mix = Mix {
-            mode: REPLACE,
-            ..Mix::over(color, x.size)
-        };
-        self.composite(x.device, &input, mix, x.size);
-        let color = &input.create_view(&Default::default());
-        let doc = json!({"seed": x.clock.seed, "items": items});
-        let key = doc.to_string();
-        let device = x.device;
-        let stale = self.ops.get(group).is_none_or(|(k, _)| *k != key);
-        if stale {
-            let ops = DocOps::new(
-                device,
-                &doc,
-                EmitOptions::default(),
-                Default::default(),
-                &[],
-            );
-            self.ops.insert(group.to_string(), (key, ops));
-        }
-        let (_, ops) = self.ops.get_mut(group).expect("built above");
-        ops.params = params;
-        ops.within = within;
-        ops.collections = collections;
-        let frame = Frame {
-            t: (x.clock.t as f64 / FLICKS) as f32,
-            ..Frame::default()
-        };
-        let resolution = |item: &str| scales.get(item).copied().unwrap_or(0.5);
-        let (_, recs, shown) = ops.plan(
-            device,
-            color,
-            None,
-            None,
-            x.size,
-            &frame,
-            x.roles,
-            &resolution,
-            x.canonical,
-        );
-        let mut encoder = device.device.create_command_encoder(&Default::default());
-        let mut times = Profiled::new(None);
-        for r in &recs {
-            r.record(&mut encoder, &mut times);
-        }
-        device.queue.submit([encoder.finish()]);
-        let shown = shown.unwrap_or_else(|| color.clone());
-        deep_gpu::spans::done_with(&shown);
-        Ok((shown, grow))
-    }
-
-    /// `--planted`: [`Groups::passes`] in the other space, each way by the compositor's own
-    /// two conversions.
-    fn in_other_space(
-        &mut self,
-        x: &mut Run<'_>,
-        group: &str,
-        e: &Effect,
-        bounds: [f64; 4],
-        color: &wgpu::TextureView,
-    ) -> Result<(wgpu::TextureView, f64), Value> {
-        let d = &x.device.device;
-        let (size, device) = (x.size, x.device);
-        let encoded = |this: &mut Groups, from: &wgpu::TextureView| {
-            let t = target(d, size, ACC);
-            let mut encoder = d.create_command_encoder(&Default::default());
-            let v = t.create_view(&Default::default());
-            this.resolve(d, &mut encoder, from, &v, ACC, Space::Linear);
-            device.queue.submit([encoder.finish()]);
-            v
-        };
-        let decoded = |this: &mut Groups, from: &wgpu::TextureView| {
-            let t = target(d, size, ACC);
-            let mix = Mix {
-                decode: true,
-                ..Mix::over(from, size)
-            };
-            this.composite(device, &t, mix, size);
-            t.create_view(&Default::default())
-        };
-        let linear_in_2d = x.space == Space::Encoded;
-        let there = if linear_in_2d {
-            decoded(self, color)
-        } else {
-            encoded(self, color)
-        };
-        let (passed, grow) = self.run_passes(x, group, e, bounds, &there)?;
-        let back = if linear_in_2d {
-            encoded(self, &passed)
-        } else {
-            decoded(self, &passed)
-        };
-        Ok((back, grow))
     }
 
     /// Writes the finished layer into `view`, premultiplied and sRGB-encoded.
@@ -1458,3 +1310,4 @@ fn upload(device: &Device, image: &image::RgbaImage, size: [u32; 2]) -> wgpu::Te
 }
 
 mod compose;
+mod passes;

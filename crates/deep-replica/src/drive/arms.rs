@@ -155,9 +155,11 @@ impl Render for Host {
             )
             .h_full()
             .into_any_element(),
-            Kind::List => list(self.state.clone(), move |n, _, _| row(id, n).into_any_element())
-                .h_full()
-                .into_any_element(),
+            Kind::List => list(self.state.clone(), move |n, _, _| {
+                row(id, n).into_any_element()
+            })
+            .h_full()
+            .into_any_element(),
         };
         div()
             .id(ElementId::Name(id.into()))

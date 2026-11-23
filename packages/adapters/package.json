@@ -17,7 +17,7 @@
       "default": "./dist/unchecked.js"
     }
   },
-  "scripts": { "build": "tsc -b tsconfig.json" },
+  "scripts": { "build": "tsc -b tsconfig.json && node ../../scripts/built-escapes.mjs dist" },
   "dependencies": {
     "@deepbuild/contracts": "0.0.0"
   }
