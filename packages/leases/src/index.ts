@@ -12,6 +12,7 @@ import { execFile } from 'node:child_process';
 import { availableParallelism, totalmem } from 'node:os';
 import { validate } from '@deepbuild/contracts';
 import { readSince, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import { ulidTime } from '@deepbuild/record/ids';
 
 /** lease.kind@1: a resource kind, as data a plug-in's manifest (or the core) declares. */
 export interface LeaseKind {
@@ -42,6 +43,8 @@ export interface Caller {
   run?: string;
   /** The holder session's agent process, by ID and start time (`ps -o lstart=` under LC_ALL=C). */
   agent?: { pid: number; start: string };
+  /** When the holder asked, in ms since the Unix epoch: its place in the hub's queue, recorded with the grant (#3219). */
+  asked?: number;
 }
 /** A refusal: `free` is a pool's units left on the host; BLOCKED `size` is an ask for more units than its pool holds. */
 export type Refusal =
@@ -92,9 +95,9 @@ export interface LeaseTable {
    * Ends a lease whose holder is no session, citing the events that prove it over: the supervisor's, for a run, once
    * every process recorded for the run is proven gone. A session's lease ends only on the table's own tick, unless it
    * was taken for one run (the gate runner's `cpu.slot`, #29): that one ends with its run, once no process recorded
-   * for the run still runs.
+   * for the run still runs. Resolves with the time of its `lease.released`, or undefined when it held no such lease.
    */
-  release(lease: string, proof: string[]): Promise<void>;
+  release(lease: string, proof: string[]): Promise<number | undefined>;
   leases(): Promise<LeaseView[]>;
 }
 
@@ -350,11 +353,16 @@ class Table implements LeaseTable {
     this.held.set(lease.id, { lease, ...(caller.run ? { run: caller.run } : {}), ...(caller.agent ? { agent: caller.agent } : {}), stale: false });
     return lease;
   }
+  /**
+   * The grant's event, its time the lease's own, which its ID holds, so a reader finds either from the other (#3219). A
+   * grant from the hub's queue says when its holder asked, as lease.acquired@4; any other is @3, as #3218 reads it.
+   */
   private appendGrant(caller: Caller, lease: Lease): Promise<void> {
-    return this.append('lease.acquired', 3, lease.id, {
+    const id = lease.id.slice('lease:'.length);
+    return this.append('lease.acquired', caller.asked === undefined ? 3 : 4, lease.id, {
       resource: lease.resource, holder: lease.holder, mode: lease.mode, expires: lease.expires, ...(lease.units !== undefined ? { units: lease.units } : {}),
-      ...(caller.run ? { run: caller.run } : {}), ...(caller.agent ? { agent: caller.agent } : {}),
-    }, this.options.now(), lease.id.slice('lease:'.length));
+      ...(caller.run ? { run: caller.run } : {}), ...(caller.agent ? { agent: caller.agent } : {}), ...(caller.asked !== undefined ? { asked: caller.asked } : {}),
+    }, ulidTime(id), id);
   }
   private async oneAtATime(caller: Caller, asks: readonly Need[], kinds: Kind[]): Promise<AskResult> {
     const got: Lease[] = [];
@@ -494,24 +502,25 @@ class Table implements LeaseTable {
     const procs = [...(run ? this.procs.get(run) ?? [] : [])];
     return { running: procs.filter(([, ended]) => !ended).map(([pid]) => pid), proof: procs.flatMap(([, ended]) => (ended ? [ended] : [])) };
   }
-  async release(lease: string, proof: string[]): Promise<void> {
+  async release(lease: string, proof: string[]): Promise<number | undefined> {
     await this.sync();
     const h = this.held.get(lease);
-    if (!h) return;
+    if (!h) return undefined;
     if (h.lease.holder.startsWith('session:')) {
       if (!h.run) throw Error(`${lease} is ${h.lease.holder}'s: a session's lease ends only once the table reads it ended`);
       const { running } = this.processes(h.run);
       if (running.length) throw Error(`${lease} is held open by ${h.run}'s processes still running: ${running.join(', ')}`);
     }
-    await this.end(h, proof);
+    return this.end(h, proof);
   }
-  private async end(h: Held, proof: string[]): Promise<void> {
+  private async end(h: Held, proof: string[]): Promise<number | undefined> {
     // A tick and its holder's release can each reach a lease across an await: it ends once.
-    if (!this.held.has(h.lease.id)) return;
+    if (!this.held.has(h.lease.id)) return undefined;
     const now = this.options.now();
     this.held.delete(h.lease.id);
     this.endedAt.set(keyOf(h.lease.resource), now);
-    await this.append('lease.released', 2, h.lease.id, { resource: h.lease.resource, holder: h.lease.holder, mode: h.lease.mode, expires: h.lease.expires, proof });
+    await this.append('lease.released', 2, h.lease.id, { resource: h.lease.resource, holder: h.lease.holder, mode: h.lease.mode, expires: h.lease.expires, proof }, now);
+    return now;
   }
 
   async leases(): Promise<LeaseView[]> {

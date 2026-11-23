@@ -666,7 +666,7 @@ export class Core {
         if (this.state.touched !== 'all') { if (connection.session) this.state.touched.add(connection.session); else this.state.touched = 'all'; }
         this.state.stateSoon();
       }
-      if (kind.startsWith('ask.') || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
+      if (kind.startsWith('ask.') || kind === 'card.taken_over' || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
       if (kind === 'verdict.made') this.github?.verdicts();
       // A deep_wait or deep_run waiting on what this event settles reads it again now, and answers before the
       // appender's next commit holds this thread with its sync (#823).
