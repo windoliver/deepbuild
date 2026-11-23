@@ -10,7 +10,7 @@ assembler and deep-logic in a cleared target folder; deep-show was not built (it
 
 scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/276/match ac4-match.test.ts --testTimeout=600000 --hookTimeout=180000` runs unleased
 
- RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/github-issue-276-a3f02b/agent-ae46c0581bbde10cc/tests/acceptance/276/match
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-276-a3f02b/agent-ae46c0581bbde10cc/tests/acceptance/276/match
 
  ❯ ac4-match.test.ts (3 tests | 3 failed) 719961ms
    ❯ #276: a profile record in a two-seat match (3)

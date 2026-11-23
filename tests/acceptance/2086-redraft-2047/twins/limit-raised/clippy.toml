@@ -1,0 +1,4 @@
+# A planted wrong program for #2086's AC1 (tests/acceptance/2086-redraft-2047, twin `limit-raised`): clippy's size
+# limit for an `Err` raised for the whole workspace, which hides the unboxed operator error the example beside it
+# returns. The issue's Scope switches no lint off for the workspace to get there.
+large-error-threshold = 4096

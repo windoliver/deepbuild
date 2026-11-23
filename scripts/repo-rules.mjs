@@ -149,6 +149,8 @@ function cargoSpec(dependency, manifest) {
 }
 
 function checkDeps(files, listed) {
+  // A planted twin under tests/acceptance/ copies our own packages at a base (#3139); its manifests add no dependency.
+  files = files.filter((path) => !/^tests\/acceptance\/(?:[^/]+\/)*twins\//.test(path));
   const before = results.length;
   const declared = new Map(), read = new Set(), unread = new Set();
   let packageFiles = 0, crates = 0, cargoBlocked = false;

@@ -1415,6 +1415,10 @@ slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/accept
 // #3100's acceptance tests: AC1 builds the whole workspace; AC2 builds and tests it.
 slow.push('tests/acceptance/3100/ac1-build.test.mjs', 'tests/acceptance/3100/ac2-test.test.mjs');
 
+// #2086's blind redraft: AC1 runs whole-workspace clippy; AC2 runs #1732's suite, whose files each build deep-show.
+alone.push('tests/acceptance/2086-redraft-2047/');
+slow.push('tests/acceptance/2086-redraft-2047/ac1-workspace-clippy.test.ts', 'tests/acceptance/2086-redraft-2047/ac2-1732-unchanged.test.ts');
+
 // #1500's files (blind) each build deep-show and play hundreds of frames of a game whose revisions land mid-play;
 // ac08-join-time.test.ts judges a join's time on the reference Mac. The Oracle lane plays upstream's pile.
 alone.push('tests/acceptance/1500/', 'tests/acceptance/1500-oracle/');
@@ -1453,7 +1457,7 @@ alone.push('tests/acceptance/2215-redraft-ac5/');
 export const aloneReasons = {};
 for (const [reason, entries] of Object.entries({
   binary: [
-    'tests/acceptance/2386/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
+    'tests/acceptance/2386/', 'tests/acceptance/2086-redraft-2047/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
     'tests/acceptance/1523/', 'tests/acceptance/84/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/',
     'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/',
     'tests/acceptance/389/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/1487/',

@@ -326,10 +326,13 @@ fn parse(o: &Object) -> Result<Parsed, Refusal> {
     Ok(p)
 }
 
+/// An exported function's parameter types and result types.
+pub type Signature = (Vec<String>, Vec<String>);
+
 /// A library object's exported functions, by the names its pack lists, each with its parameter
 /// and result types as `i32`, `i64`, `f32` or `f64` (#416: an interface's exports are signatures).
-pub fn signatures(o: &Object) -> Result<BTreeMap<String, (Vec<String>, Vec<String>)>, Refusal> {
-    let p = parse(o)?;
+pub fn signatures(o: &Object) -> Result<BTreeMap<String, Signature>, Box<Refusal>> {
+    let p = parse(o).map_err(Box::new)?;
     let ty = |t: &wasmparser::ValType| t.to_string();
     Ok(p.exports
         .iter()
