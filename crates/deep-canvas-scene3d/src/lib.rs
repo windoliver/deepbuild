@@ -66,6 +66,7 @@ pub mod strokes;
 pub mod surface;
 pub mod sweep;
 pub mod terrain;
+pub mod tiles;
 pub mod tints;
 pub mod trail;
 pub mod tree;

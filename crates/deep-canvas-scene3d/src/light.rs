@@ -1013,6 +1013,9 @@ pub struct Shadowing {
     pub cache: bool,
     /// `per_cluster` (#1634): the fill lights a cluster shades at most.
     pub per_cluster: usize,
+    /// Shadow tiles (#2034): `shadowed.local: auto` past the fixed counts, decided once per
+    /// document from its declared lights. Every shaded key light with a shadow keeps one.
+    pub tiles: bool,
 }
 
 /// The most spots a policy may shadow; points take four, which the budget class never raises.
@@ -1030,6 +1033,7 @@ impl Default for Shadowing {
             local_map: 512,
             cache: true,
             per_cluster: PER_CLUSTER,
+            tiles: false,
         }
     }
 }
@@ -1069,6 +1073,11 @@ pub fn shadowed(lights: &[Light], policy: &Policy, budget: &Shadowing, scores: &
     for &(i, weight) in &policy.shaded {
         let l = &lights[i];
         if !l.shadow {
+            continue;
+        }
+        // Shadow tiles hold every shaded light's shadow (#2034).
+        if budget.tiles && l.kind != LightKind::Sun {
+            out.kept.push((i, 1.0));
             continue;
         }
         let (list, cap, group): (&mut Vec<usize>, usize, usize) = match l.kind {
