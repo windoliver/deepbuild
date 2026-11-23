@@ -3,6 +3,7 @@
 // #1345's AC8 reads the time's words from the list's `ask:<id>:time` node even when the row draws it 0 wide; this test
 // reads the slot's width as well. Run by hand on a Mac (the app draws headless only on macOS), from the repo root:
 //   npx vitest run --root tests/proof/1345 --no-file-parallelism
+// It has no tsconfig of its own: one under tests/ that no test names makes affected.mjs select every test there.
 // Its world is #1345's Proof fixture, built by that suite's helpers: five issues whose reversible changes land with
 // their taste calls open, then the app drawn over a copy of the record on your next visit.
 import { expect, test } from 'vitest';
