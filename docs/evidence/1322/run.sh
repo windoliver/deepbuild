@@ -16,10 +16,12 @@ clear
 {
 echo "#1322 e2e hand run of measureOnce (scripts/benchmark.mjs): fresh GitHub clone of claude/issue-1322-measureonce-v2"
 echo "HEAD $(git -C "$C" log -1 --format='%h %s' | cut -c1-100)"
-FIX=$(git -C "$C" merge-base --is-ancestor 8545c5bee HEAD && echo "in HEAD's history" || echo "MISSING")
 BASE=$(git -C "$C" merge-base HEAD origin/main | cut -c1-9)
 [ -n "$BASE" ] || exit 1
-echo "Fix 8545c5bee (group kill): $FIX. Branch vs merge base $BASE: $(git -C "$C" diff --name-only "$BASE" HEAD | wc -l | tr -d ' ') files, $(git -C "$C" diff --name-only "$BASE" HEAD | grep -vc '^tests/acceptance/1322/') outside tests/acceptance/1322/"
+FIX=$(git -C "$C" merge-base --is-ancestor 8545c5bee "$BASE" && echo "already on main (an ancestor of the merge base $BASE)" || echo "NOT in the merge base $BASE")
+CHANGED=$(git -C "$C" diff --name-only "$BASE" HEAD)
+echo "Fix 8545c5bee (group kill): $FIX"
+echo "This branch vs $BASE: $(grep -c . <<< "$CHANGED") files: $(grep -c "^tests/acceptance/1322/" <<< "$CHANGED") in tests/acceptance/1322/, $(grep -c "^docs/evidence/1322/" <<< "$CHANGED") in docs/evidence/1322/, $(grep -vc -e "^tests/acceptance/1322/" -e "^docs/evidence/1322/" <<< "$CHANGED") elsewhere"
 echo "$(uname -sm), node $(node --version), $(date '+%Y-%m-%d %H:%M %Z')"
 node "$E/e2e.mjs" "$C" "$T"
 echo

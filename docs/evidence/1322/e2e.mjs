@@ -70,7 +70,7 @@ function stopped(title, run, mode, timeoutMs, follow, expected) {
   console.log(`  measureOnce threw ${code} after ${ms} ms (expected ${expected}); the measured command ran under ${{ time: "/usr/bin/time", run: "the counting runner" }[above] ?? above}`);
   console.log(`  ${pids.map(([name, pid]) => `${name} PID ${pid}`).join(', ')}, both recorded while the run was going`);
   console.log(`  ${left.length ? `${left.map(([name]) => name).join(' and ')} left running` : (polls ? `both gone after ${polls * 50} ms of polling` : `both already gone at the first check`)}; ps -p ${pids.map(([, pid]) => pid).join(',')} lists ${listed} of 2`);
-  it.done();
+  it.done(); // SIGKILLs any recorded process still alive (the twin case) and removes the folder
   return { code, ms, left: left.length, listed, above };
 }
 
@@ -103,7 +103,7 @@ check('the in-time run was not stopped with its group', kept.status === 0 && ali
 quick.done();
 
 r = stopped('The wrong program: twin timeout-group-left-running (no group kill after ETIMEDOUT), same timeout case', twin.measureOnce, 'sleep', 3000, false, 'ETIMEDOUT');
-check('the twin leaves both processes (what the suite catches); this script then stops them', r.code === 'ETIMEDOUT' && r.left === 2 && r.listed === 2);
+check('the twin leaves both processes running (what the suite catches)', r.code === 'ETIMEDOUT' && r.left === 2 && r.listed === 2);
 
 console.log(`\nRESULT: ${checks.every(Boolean) ? 'PASS' : 'FAIL'} (${checks.filter(Boolean).length} of ${checks.length} checks)`);
 process.exitCode = checks.every(Boolean) ? 0 : 1;
