@@ -82,8 +82,10 @@ fn a_record_no_batching_core_wrote_shows_its_asks_at_once() {
     // asks draw as they did, and the rows are as many as the count.
     let mut view = crate::record::View::default();
     for id in ["a1", "a2"] {
-        view.apply(serde_json::json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "core",
-                                      "data": {"kind": "taste", "question": format!("{id}?")}}));
+        view.apply(
+            serde_json::json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "core",
+                                      "data": {"kind": "taste", "question": format!("{id}?")}}),
+        );
     }
     let open = read(&view, Kind::NeedsYou, None).open;
     let handles: Vec<&str> = open.iter().map(|row| row.0.as_str()).collect();
