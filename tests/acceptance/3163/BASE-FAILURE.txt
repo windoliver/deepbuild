@@ -1,0 +1,70 @@
+Base: 83b82f94a (origin/main), Node v24.22.0, Darwin arm64, 2026-11-23T01:25Z
+Command: node --test tests/acceptance/3163/guard.test.mjs (suite wall 337.9 s, setup clone + npm ci ~73 s)
+Load (1/5/15 min) before the suite: 48.26 20.77 9.84; after: 50.81 36.79 21.17
+
+[limits] exit null (SIGKILL); stopped by the test: it started more than 200 git processes (201) after 24.3 s
+wall 24.3 s; git processes started 201; load (1/5/15 min) at start 69.69 33.14 15.38, at end 56.32 32.99 15.84
+✖ #3163.9c395067 on PR #3093's branch in a fresh GitHub clone, node scripts/proof.mjs guard finishes in under 60 s wall, with the load at start and end recorded, and starts no more than 200 git processes (24296.102708ms)
+[verdict] exit null (SIGKILL); stopped by the test: it ran 4 minutes, the test's own cap, without finishing
+wall 240.1 s; git processes started 2764; load (1/5/15 min) at start 56.32 32.99 15.84, at end 51.66 36.72 21.05
+✖ #3163.d0eabe65 on that same clone and commit, node scripts/proof.mjs guard prints the same verdict lines as before the change, ignoring the proof: wall time line, and exits with the same code (240068.372625ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 337812.646959
+
+✖ failing tests:
+
+test at tests/acceptance/3163/guard.test.mjs:111:1
+✖ #3163.9c395067 on PR #3093's branch in a fresh GitHub clone, node scripts/proof.mjs guard finishes in under 60 s wall, with the load at start and end recorded, and starts no more than 200 git processes (24296.102708ms)
+  AssertionError [ERR_ASSERTION]: the guard started more than 200 git processes
+  exit null (SIGKILL); stopped by the test: it started more than 200 git processes (201) after 24.3 s
+  wall 24.3 s; git processes started 201; load (1/5/15 min) at start 69.69 33.14 15.38, at end 56.32 32.99 15.84
+  stdout:
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file:///<checkout>/tests/acceptance/3163/guard.test.mjs:113:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3163/guard.test.mjs:119:1
+✖ #3163.d0eabe65 on that same clone and commit, node scripts/proof.mjs guard prints the same verdict lines as before the change, ignoring the proof: wall time line, and exits with the same code (240068.372625ms)
+  AssertionError [ERR_ASSERTION]: the guard printed no verdict to compare: it did not finish within the test's cap
+  exit null (SIGKILL); stopped by the test: it ran 4 minutes, the test's own cap, without finishing
+  wall 240.1 s; git processes started 2764; load (1/5/15 min) at start 56.32 32.99 15.84, at end 51.66 36.72 21.05
+  stdout:
+  
+  stderr:
+  
+  + actual - expected
+  
+  + "it ran 4 minutes, the test's own cap, without finishing"
+  - null
+  
+      at TestContext.<anonymous> (file:///<checkout>/tests/acceptance/3163/guard.test.mjs:121:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "it ran 4 minutes, the test's own cap, without finishing",
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+real 337.87
+user 219.97
+sys 73.27
