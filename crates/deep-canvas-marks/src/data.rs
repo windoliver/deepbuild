@@ -12,6 +12,8 @@
 //! (or `y2`), a path and an area as one line through the rows in order (an area down to the
 //! zero), symbols, and images from an `asset` column with its `alt`. A key is unique across rows.
 
+mod series_rows;
+
 use serde_json::{json, Map, Value};
 
 use deep_canvas::color::Oklab;
@@ -1440,26 +1442,6 @@ pub struct Decimated {
     pub v: Vec<f64>,
     pub columns: Vec<Vec<usize>>,
     pub window: (f64, f64),
-}
-
-impl Decimated {
-    /// Every kept row, in draw order, each once.
-    pub fn rows(&self) -> Vec<usize> {
-        self.columns.iter().flatten().copied().collect()
-    }
-
-    /// The raw row nearest a time, never a decimated vertex: the crosshair's snap.
-    pub fn nearest(&self, at: f64) -> Option<usize> {
-        let i = self.t.partition_point(|&t| t < at);
-        match (i.checked_sub(1), (i < self.t.len()).then_some(i)) {
-            (Some(a), Some(b)) => Some(if at - self.t[a] <= self.t[b] - at {
-                a
-            } else {
-                b
-            }),
-            (a, b) => a.or(b),
-        }
-    }
 }
 
 /// The time-and-value columns of a line series and the rows each pixel column keeps.

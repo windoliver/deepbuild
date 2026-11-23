@@ -1,5 +1,5 @@
-//! A logic item's `fires: {world ID → [input ID]}` (#194, as much of #1834's as a catalog's
-//! tuning needs to reach a world; canvas primitives: Check input: logic kinds, As built (#194)).
+//! A logic item's `fires: {world ID → [input ID]}` (#194, #1834; canvas primitives: Logic
+//! `logic@1`, its fire region).
 //! Each fired input takes, in declaration order, a slot in the fire region at the exported global
 //! `fires_at`: an i32 count, then one f64 for each number field its kind takes. The logic module
 //! clears every count before a step, as it clears each emitted kind's; a step that leaves a count
@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn an_item_that_fires_and_exports_no_fires_at_is_refused() {
         let bytes = wat::parse_str(
-            &FIRES_AT_3.replace(r#"(global (export "fires_at") i32 (i32.const 2048))"#, ""),
+            FIRES_AT_3.replace(r#"(global (export "fires_at") i32 (i32.const 2048))"#, ""),
         )
         .expect("it assembles");
         let sha = deep_canvas_sandbox::rewrite::hash(&bytes);

@@ -282,7 +282,7 @@ fn transforms(doc: &Value, t: i64, paths: &[String]) -> Map<String, Value> {
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
     let map = doc.as_object().expect("compiled above");
-    let written = eval::written_with(map, &program, &state, &asked);
+    let written = eval::written_with(map, &program, &state, asked);
     written.into_iter().filter(|(id, _)| asked(id)).collect()
 }
 
