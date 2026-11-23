@@ -110,8 +110,7 @@
     "canvas-lint: crates/deep-text/src/lib.rs a target predicate (target_arch), code that computes differently per platform": 1,
     "canvas-lint: crates/deep-text/src/vertical.rs a static item, state a check could carry between runs": 1,
     "canvas-lint: deep-canvas-test-modules compiles ../../tests/acceptance/3023/seal.rs as a target's root, which the scan never reads: outside the crate, or under its target/ directory": 1,
-    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": 1,
-    "clippy: tests/acceptance/3016/fixture.rs manual implementation of `.is_multiple_of()`": 2
+    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": 1
   },
   "lintIssues": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": "#1967's unit test reading the crate's oracle recordings (#2381, added 2026-11-12)",
@@ -219,8 +218,7 @@
     "canvas-lint: crates/deep-text/src/lib.rs a target predicate (target_arch), code that computes differently per platform": "#172's web player: a face's bytes compiled in, or none in the player, whose bundle gives them by hash (#2381, added 2026-11-22)",
     "canvas-lint: crates/deep-text/src/vertical.rs a static item, state a check could carry between runs": "#1215's planted vertical shaper, the switch deep-show's line sets for that line alone (#2381, added 2026-11-22)",
     "canvas-lint: deep-canvas-test-modules compiles ../../tests/acceptance/3023/seal.rs as a target's root, which the scan never reads: outside the crate, or under its target/ directory": "#3023's blind acceptance test, wired as this crate's test target by its blind job; a test never ships in a check (#2381, added 2026-11-22)",
-    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": "two versions, through deep-typeset's typst in the whole-workspace resolve (#2381, added 2026-11-12)",
-    "clippy: tests/acceptance/3016/fixture.rs manual implementation of `.is_multiple_of()`": "two lines of #3016's blind fixture that clippy denies and no agent may edit: a proposal for the owner, or a blind redraft (#3194, added 2026-11-23)"
+    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": "two versions, through deep-typeset's typst in the whole-workspace resolve (#2381, added 2026-11-12)"
   },
   "timing": [],
   "skips": [
