@@ -1,0 +1,29 @@
+✔ #1115.b81207df the unit lane's evidence record names host, platform, tree hash and every test's state, from vitest, node --test and cargo (5529.373834ms)
+✔ #1115.b81207df a passing unit lane's record holds each of its tests PASS (4917.611875ms)
+✔ #1115.b81207df each lane writes a record, a lane that fails and one that ran nothing too, with no test list to fill (1320.214542ms)
+✔ #1115.3a2181d7 a vitest test failing with INCONCLUSIVE: … reads INCONCLUSIVE in lanes.mjs, not FAIL (5508.541833ms)
+✔ #1115.3a2181d7 a node --test test failing with INCONCLUSIVE: … reads INCONCLUSIVE in lanes.mjs, not FAIL (4928.733625ms)
+✔ #1115.3a2181d7 a test failing with BLOCKED: … takes that state in lanes.mjs too (3001.993125ms)
+✔ #1115.3a2181d7 a real failure beside a test failing with INCONCLUSIVE: … leaves the lane FAIL (3034.683542ms)
+✔ #1115.07ca71fc failures on main equal today's: affected.mjs with the merge base's scripts and with the change's, on one fixture set, list the same FAIL ids (10955.042375ms)
+✔ #1115.07ca71fc failures on main equal today's: the unit lane with the merge base's scripts and with the change's reads FAIL on one fixture set, and each names the failing tests (5821.583583ms)
+✔ #1115.07ca71fc failures on main equal today's: known-failures.json keeps the merge base's failures, lint and timing (115.694917ms)
+✔ #1115.67b0561c a listed id skipping under a different note than its entry's makes the lane INCONCLUSIVE and is listed (5438.918791ms)
+✔ #1115.67b0561c an entry with another id does not cover a skip under its note (5089.950334ms)
+✔ #1115.67b0561c a skip whose id and exact note prefix are listed leaves the lane PASS, and the summary prints it (2910.946125ms)
+✔ #1115.67b0561c a listed skip leaves a lane another skip makes INCONCLUSIVE as it is, and both are printed (2847.877917ms)
+✔ #1115.67b0561c a noteless entry covers a noteless skip, and a listed id skipping under a note is a different note (4694.467791ms)
+✔ #1115.67b0561c with DEEP_880_TOUCH_ID set on a machine that is not the reference Mac, 880's listed opt-in entry does not cover its notReference() skip and the lane is INCONCLUSIVE (4181.5245ms)
+✔ #1115.dbbdd753 a lanes.mjs unit run with an unlisted vitest skip reports the lane INCONCLUSIVE and lists the skip (5440.360709ms)
+✔ #1115.dbbdd753 a lanes.mjs unit run with an unlisted node --test skip reports the lane INCONCLUSIVE and lists the skip (5115.489916ms)
+✔ #1115.dbbdd753 a node --test suite skipped whole reports the lane INCONCLUSIVE and lists the suite (3002.430375ms)
+✔ #1115.dbbdd753 an unlisted vitest skip whose note starts with BLOCKED reports the lane BLOCKED, beside an INCONCLUSIVE one (2898.143459ms)
+✔ #1115.dbbdd753 an unlisted node --test skip whose note starts with BLOCKED reports the lane BLOCKED (2491.88275ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25271.84225

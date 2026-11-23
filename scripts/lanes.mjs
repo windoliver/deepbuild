@@ -832,16 +832,44 @@ export function exactTree(cwd) {
 }
 
 /**
- * A tree's lane records merged as remote lanes merge (parallel-proof §8): the worst state among them stands, so a lane's
- * FAIL wins over another's pass, and `lanes` names each lane whose own state is that state.
+ * A tree's lane records merged as remote lanes merge (parallel-proof §8): each lane's records, a Mac's and any other
+ * machine's, merge per test ID. A row that ran stands over a skipped row of the same ID, and among the rows that ran the
+ * worst state stands, so a Spark FAIL wins over a Mac pass. A record's `findings`, and a state its rows and findings
+ * don't explain, count as they are. A lane with no Mac record is never PASS, and another machine's lint record is a reading, left out. The
+ * tree's state is the worst of its lanes' (`states`), and `lanes` names each lane holding it.
  */
 export function mergeRecords(tree) {
   const folder = join(homedir(), '.deepbuild', 'lanes');
   const records = (existsSync(folder) ? readdirSync(folder) : [])
     .filter((name) => name.startsWith(`${tree}-`) && name.endsWith('.json'))
     .map((name) => JSON.parse(readFileSync(join(folder, name), 'utf8')));
-  const state = worst(records.map((r) => r.state)) ?? 'PASS';
-  return { tree, state, lanes: records.filter((r) => r.state === state).map((r) => r.lane) };
+  // A state the lanes don't write is no pass.
+  const read = (state) => (['PASS', 'LISTED', 'FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE'].includes(state) ? state : 'INVALID');
+  const states = {};
+  for (const lane of new Set(records.map((r) => r.lane))) {
+    const mac = records.filter((r) => r.lane === lane && String(r.platform).startsWith('darwin'));
+    const group = lane === 'lint' ? mac : records.filter((r) => r.lane === lane);
+    // A lane only Macs ran reads as it did before any merge: its records' own states.
+    if (mac.length && group.length === mac.length) {
+      states[lane] = worst(mac.map((r) => read(r.state))) ?? 'PASS';
+      continue;
+    }
+    // Each record's rows by ID first: within one record a skipped row and a row that ran stay what that lane read.
+    const rows = new Map(), own = [];
+    for (const r of group) {
+      const tests = (r.tests ?? []).map((row) => ({ ...row, state: read(row.state) })), findings = (r.findings ?? []).map((found) => read(found.state));
+      for (const id of new Set(tests.map((row) => row.id))) {
+        const same = tests.filter((row) => row.id === id);
+        rows.set(id, [...(rows.get(id) ?? []), { state: worst(same.map((row) => row.state)), skipped: same.every((row) => row.skipped) }]);
+      }
+      // What a lane found outside any test, and a state neither that nor its rows explain, count whatever the rows merge to.
+      own.push(...findings, ...(read(r.state) === (worst([...tests.map((row) => row.state), ...findings]) ?? 'PASS') ? [] : [read(r.state)]));
+    }
+    const merged = [...rows.values()].map((same) => worst((same.some((row) => !row.skipped) ? same.filter((row) => !row.skipped) : same).map((row) => row.state)));
+    states[lane] = worst([...merged, ...own, ...(mac.length ? [] : ['INCONCLUSIVE'])]) ?? 'PASS';
+  }
+  const state = worst(Object.values(states)) ?? 'PASS';
+  return { tree, state, lanes: Object.keys(states).filter((lane) => states[lane] === state), states };
 }
 
 /** A lane's evidence record, which T7 and T8 read: its state, where it ran, on what tree, and each test's state. */
@@ -890,7 +918,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
       const started = performance.now();
       console.log(`RUN ${lane.name}`);
       let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
-      const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [];
+      const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
       // The tests the lane's whole cargo test commands list, or null once a listing failed; whether any cargo test ran.
       let listedCargo, cargoRan = false;
       for (const [command, ...args] of lane.commands.map(runOf)) {
@@ -945,8 +973,11 @@ export function runLanes(lanes, { cwd = root } = {}) {
           // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
           // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
           const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
-          found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error };
+          found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error, lone: !failed };
         }
+        // What no test's row carries, as a missing grant or a runner that died, is the lane's own finding: the record
+        // names it, so a merge with another machine's rows (parallel-proof §8) can't lose it.
+        if (found && (found.lone || (results?.noGrant && found.error === results.noGrant) || !run.tests.some(({ state }) => state === found.state))) findings.push({ state: found.state, note: found.error });
         if (stands(found, failure)) failure = found;
         if (command === 'cargo' && args[0] === 'test') {
           cargoRan = true;
@@ -986,7 +1017,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
       else console.log(`PASS ${lane.name} (${elapsed} s)`);
       try {
-        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, more);
+        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, findings.length ? { ...more, findings } : more);
       } catch (error) {
         // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
         if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);
