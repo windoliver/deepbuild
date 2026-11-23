@@ -1,0 +1,21 @@
+✔ #1122.e6c3b0b8 a Spark FAIL and a Mac pass of the same test id merge to FAIL, naming the lane (431.345083ms)
+✔ #1122.7d260bb4 a row the Mac ran stands over the Spark's skipped row of the same id, so the merge reads PASS as a full Mac run does (276.145042ms)
+✔ #1122.7d260bb4 a lane with a Spark record and none from a Mac is never PASS: it reads INCONCLUSIVE (166.541459ms)
+✔ #1122.821346f6 a Spark lint FAIL beside the Mac's lint PASS leaves the lint verdict the Mac's, and the Mac's lint FAIL stands beside a Spark PASS (249.474625ms)
+✔ #1122.821346f6 a Spark lint PASS with no Mac lint record is no lint verdict: the tree reads INCONCLUSIVE, naming lint (131.121833ms)
+✔ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree (34075.220792ms)
+✔ #1122.7d260bb4 a bug in a darwin-only branch, which the Spark passes: the merged unit verdict is FAIL, as the full Mac run (28436.818833ms)
+✔ #1122.7d260bb4 a failing test the Spark skipped: the merged unit verdict is FAIL, as the full Mac run (48056.383833ms)
+✔ #1122.7d260bb4 a failing test only the Spark ran: the merged unit verdict is FAIL, as the full Mac run (27726.617042ms)
+✔ #1122.e6c3b0b8 the Spark's FAIL of a test the Mac's --only run passes merges to FAIL: "FAIL unit (merged)", exit 1 (19682.1205ms)
+✔ #1122.7d260bb4 with no fetched record of the tree and lane, --only runs nothing: BLOCKED lane-remote, exit 3 (1426.474833ms)
+✔ #1122.51c750de an untracked tagged test in the session worktree runs on the far machine, and its row comes back in the fetched record (28619.153916ms)
+✔ #1122.394befd9 a shipped merge base that differs from the one the far end computes refuses the run, naming both (26013.763959ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 160066.373
