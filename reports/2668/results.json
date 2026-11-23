@@ -1,0 +1,225 @@
+{
+  "base": "1b15ac3541a3e0d00bdc11eca089762cacaa212b",
+  "draftBase": "b9ba2eba8765df31be72ad4d087ba8d3f9558e98",
+  "applicationChanges": false,
+  "checksEdited": false,
+  "proposalPlacement": "Only in isolated proof bay, not adopted in repository",
+  "runs": [
+    {
+      "name": "current-2668-judges",
+      "counts": {
+        "total": 13,
+        "passed": 13,
+        "failed": 0,
+        "filtered": 0
+      },
+      "tests": [
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "drawnRowFailures: the window draws see's rows as the one list lays them out the list as main draws it passes, whatever order the projects take",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "drawnRowFailures: the window draws see's rows as the one list lays them out a window that draws the rows in their one order, the asks last, fails naming each ask",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "drawnRowFailures: the window draws see's rows as the one list lays them out a second order of the asks fails, naming the ask",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "drawnRowFailures: the window draws see's rows as the one list lays them out an ask with no word in its slot, without its title or with another entry fails, naming the ask",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "drawnRowFailures: the window draws see's rows as the one list lays them out no Needs you heading, or an ask drawn above it, fails naming the asks",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "drawnRowFailures: the window draws see's rows as the one list lays them out a session under another project, out of its project's order, or missing fails, naming the row",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "drawnRowFailures: the window draws see's rows as the one list lays them out a planted app that reads waiting as working, or a session row without its title, fails naming the row",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "drawnRowFailures: the window draws see's rows as the one list lays them out a quiet session not folded into its project's quiet row, or counted wrong, fails naming the row",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "drawnRowFailures: the window draws see's rows as the one list lays them out a window with no list fails",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "statusTextWord and appSessionWord: each session's word in deep status and in the app's list each row's word as the text says it, the quiet one from the folded line",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "statusTextWord and appSessionWord: each session's word in deep status and in the app's list a line with another word, the base's short-ID listing or no fold names no word",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "statusTextWord and appSessionWord: each session's word in deep status and in the app's list the app's word from the row's state-word slot, a quiet session's from its project's quiet row, the planted app's working",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/2668/judges.test.ts",
+          "name": "statusTextWord and appSessionWord: each session's word in deep status and in the app's list disagreements name the recording and the session; agreement, nothing",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "current-1463-list",
+      "counts": {
+        "total": 4,
+        "passed": 3,
+        "failed": 1,
+        "filtered": 0
+      },
+      "tests": [
+        {
+          "file": "tests/acceptance/1463/list.test.ts",
+          "name": "#1463.f9ab70a8 #1463.f9ab70a8: on one fixture, the app's list and deep status --json hold the same rows, IDs, words and order at one log_pos",
+          "status": "failed",
+          "error": "Error: Test timed out in 900000ms."
+        },
+        {
+          "file": "tests/acceptance/1463/list.test.ts",
+          "name": "#1463.f9ab70a8 #1463.f9ab70a8: a planted second order fails, naming the row",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/1463/list.test.ts",
+          "name": "#1463.f9ab70a8 #1463.f9ab70a8: a planted word fails, naming the row",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/1463/list.test.ts",
+          "name": "#1463.17f151eb #1463.17f151eb: the fields the first criterion compares include unread, and a planted deep status that disagrees with the app on unread fails, naming the row",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "current-992-agree",
+      "counts": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "filtered": 0
+      },
+      "tests": [
+        {
+          "file": "tests/acceptance/992/agree.test.ts",
+          "name": "AC3 #992.45c506d1 AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "current-992-planted",
+      "counts": {
+        "total": 1,
+        "passed": 0,
+        "failed": 1,
+        "filtered": 0
+      },
+      "tests": [
+        {
+          "file": "tests/acceptance/992/agree.test.ts",
+          "name": "AC3 #992.45c506d1 AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session",
+          "status": "failed",
+          "error": "AssertionError: deep status and the app name these sessions differently: expected [ Array(1) ] to deeply equal []"
+        }
+      ]
+    },
+    {
+      "name": "current-1463-words",
+      "counts": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "filtered": 0
+      },
+      "tests": [
+        {
+          "file": "tests/acceptance/1463/words.test.ts",
+          "name": "#1463.cc5d1e3f #1463.cc5d1e3f: 992/agree still holds",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/1463/words.test.ts",
+          "name": "#1463.cc5d1e3f #1463.cc5d1e3f: every word comes from states::TABLE",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "current-1463-words-planted",
+      "counts": {
+        "total": 2,
+        "passed": 0,
+        "failed": 1,
+        "filtered": 1
+      },
+      "tests": [
+        {
+          "file": "tests/acceptance/1463/words.test.ts",
+          "name": "#1463.cc5d1e3f #1463.cc5d1e3f: 992/agree still holds",
+          "status": "failed",
+          "error": "AssertionError: tests/acceptance/992's agree.test.ts must pass as it is: exit 1, 1 ⎯⎯⎯⎯⎯⎯⎯"
+        },
+        {
+          "file": "tests/acceptance/1463/words.test.ts",
+          "name": "#1463.cc5d1e3f #1463.cc5d1e3f: every word comes from states::TABLE",
+          "status": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "warm-list-case",
+      "counts": {
+        "total": 4,
+        "passed": 1,
+        "failed": 0,
+        "filtered": 3
+      },
+      "tests": [
+        {
+          "file": "tests/acceptance/1463/list.test.ts",
+          "name": "#1463.f9ab70a8 #1463.f9ab70a8: on one fixture, the app's list and deep status --json hold the same rows, IDs, words and order at one log_pos",
+          "status": "passed"
+        },
+        {
+          "file": "tests/acceptance/1463/list.test.ts",
+          "name": "#1463.f9ab70a8 #1463.f9ab70a8: a planted second order fails, naming the row",
+          "status": "skipped"
+        },
+        {
+          "file": "tests/acceptance/1463/list.test.ts",
+          "name": "#1463.f9ab70a8 #1463.f9ab70a8: a planted word fails, naming the row",
+          "status": "skipped"
+        },
+        {
+          "file": "tests/acceptance/1463/list.test.ts",
+          "name": "#1463.17f151eb #1463.17f151eb: the fields the first criterion compares include unread, and a planted deep status that disagrees with the app on unread fails, naming the row",
+          "status": "skipped"
+        }
+      ],
+      "reason": "The cold build exceeded the initial 900-second case timeout. Native variants were successfully prebuilt before this affected-case run. Original timeout/assertions unchanged; prior failure retained. Three plants were already proven in the initial run and are filtered here, not credited again."
+    }
+  ]
+}

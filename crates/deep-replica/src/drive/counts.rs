@@ -103,7 +103,7 @@ impl Replica {
         deep_app::views::keep_drawn(&reused);
         let pending = gpui_kit::frame_counts::take_notified();
         let rows = deep_app::views::take_rows_built();
-        let (drew, cost) = clock.map_or((false, None), |(drew, cost)| (drew, cost));
+        let (drew, cost) = clock.unwrap_or((false, None));
         let input = self.counts_mut().take_input();
         let last = drawn.len().saturating_sub(1);
         let had = !drawn.is_empty();
@@ -201,7 +201,9 @@ impl Replica {
 
     /// `refresh`: the window refreshes, so every view renders at the next frame; then one frame of the clock.
     pub(super) fn refresh(&mut self) -> Result<Value, Fail> {
-        let _ = self.cx.update_window(self.window, |_, window, _| window.refresh());
+        let _ = self
+            .cx
+            .update_window(self.window, |_, window, _| window.refresh());
         self.tick();
         Ok(json!({}))
     }
@@ -259,14 +261,19 @@ impl Replica {
                 .sum::<u64>()
         };
         let zero = drawn.iter().filter(|f| f["tiles"]["changed"] == 0).count();
-        let read_back = if counts.failed { "failed" } else { counts.read_back };
+        let read_back = if counts.failed {
+            "failed"
+        } else {
+            counts.read_back
+        };
         report["arm"] = json!(counts.arm);
         report["read_back"] = json!(read_back);
         report["root"] = json!(counts.root.as_u64().to_string());
         report["entities"] = Value::Object(entities);
         report["list"] = json!(counts.list);
         report["zero_tile_frames"] = json!(read.then_some(zero));
-        report["changed_area"] = json!(read.then(|| sum("changed") as f64 / sum("total").max(1) as f64));
+        report["changed_area"] =
+            json!(read.then(|| sum("changed") as f64 / sum("total").max(1) as f64));
         report
     }
 
@@ -291,7 +298,10 @@ fn tiles_changed(before: &RgbaImage, now: &RgbaImage) -> (u64, u64) {
     for ty in 0..down {
         let (y0, y1) = (ty * TILE.1, ((ty + 1) * TILE.1).min(h));
         for tx in 0..across {
-            let (x0, x1) = ((tx * TILE.0) as usize * 4, (((tx + 1) * TILE.0).min(w)) as usize * 4);
+            let (x0, x1) = (
+                (tx * TILE.0) as usize * 4,
+                (((tx + 1) * TILE.0).min(w)) as usize * 4,
+            );
             let differs = (y0..y1).any(|y| {
                 let row = y as usize * w as usize * 4;
                 a[row + x0..row + x1] != b[row + x0..row + x1]

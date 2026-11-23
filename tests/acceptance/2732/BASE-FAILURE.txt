@@ -1,0 +1,46 @@
+# The suite at the base 2eaaeb0e6 (origin/main), in the worktree at that commit with nothing implemented, macOS arm64,
+# Node v24.22.0, after npm ci, npm run build --workspaces and cargo build --locked -q -p deep-hook.
+# AC1's test fails at its named assertion: <root>/jobserver is still a named pipe after the hub exited, and the marks
+# show the scene played: the stop reached the core while init ran, then init made the pool (stopSeen true), then init
+# finished. AC2's test passes. Five runs at the base (loads 66 to 118 on this Mac) gave the same result each time:
+# runs 1 to 5 all "1 failed | 1 passed", AC1 failing on "expected 'a named pipe' to be 'nothing'".
+# (Run 1 predates watching spawnSync in stall.mjs, so its marks lacked "pool"; runs 2 to 5 are of the files as kept.)
+# Colour codes off (NO_COLOR=1); home paths written as ~.
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/2732/   # run 5
+2026-11-22T10:18:40Z
+ 2:18  up 2 days,  6:45, 4 users, load averages: 118.52 85.33 77.69
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/feat-2897-tool-search-clients-c0119b
+
+ ❯ tests/acceptance/2732/jobserver-stop.test.ts (2 tests | 1 failed) 3023ms
+   ❯ a hub's job pool pipe once its stop has finished (2)
+     × #2732.86d07610 AC1: stopped while init is running, before it creates the job pool, the hub leaves no <root>/jobserver once it has exited 1447ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2732/jobserver-stop.test.ts > a hub's job pool pipe once its stop has finished > #2732.86d07610 AC1: stopped while init is running, before it creates the job pool, the hub leaves no <root>/jobserver once it has exited
+AssertionError: what is at /tmp/d2732-SX2p0z/r/jobserver once the hub stopped during its init has exited (marks ["init-running","stop-posted","stop-received","pool","started"], exit 0); hub.log:
+{"v":1,"ready":true,"pid":26733,"socket":"/tmp/d2732-SX2p0z/r/hub.sock","start":"01M81C7S5YDTCVZ2ADGABC716P"}
+: expected 'a named pipe' to be 'nothing' // Object.is equality
+
+Expected: "nothing"
+Received: "a named pipe"
+
+ ❯ tests/acceptance/2732/jobserver-stop.test.ts:33:129
+     31|     for (const pool of seen.filter((m) => m.mark === 'pool')) expect(p…
+     32|     const left = lstatOrNull(w.jobserver);
+     33|     expect(kind(left), `what is at ${w.jobserver} once the hub stopped…
+       |                                                                                                                                 ^
+     34|   }, 240_000);
+     35|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  02:18:41
+   Duration  3.18s (tests 99%)
+
+exit 1

@@ -106,7 +106,12 @@ impl Judge {
     pub fn step(&mut self, k: i64, b: &[u8]) {
         self.steps += 1;
         self.last = k;
-        let e = self.kind.1.min(self.at.1).min(self.batch.1).min(self.holds.1);
+        let e = self
+            .kind
+            .1
+            .min(self.at.1)
+            .min(self.batch.1)
+            .min(self.holds.1);
         let n = self.left.1.saturating_sub(1);
         let row = |a: At, r: usize| i32_at(b, a.0 + 4 * r);
         let live = |r: i32| r >= 0 && (r as usize) < e && row(self.kind, r as usize) >= 0;
@@ -123,7 +128,10 @@ impl Judge {
                     *h += 1;
                 }
             }
-            if let Some(h) = usize::try_from(row(self.holds, r)).ok().and_then(|j| holders.get_mut(j)) {
+            if let Some(h) = usize::try_from(row(self.holds, r))
+                .ok()
+                .and_then(|j| holders.get_mut(j))
+            {
                 *h += 1;
             }
         }
@@ -157,7 +165,9 @@ impl Judge {
         self.counts.push(Counts {
             now,
             area: series(self.area),
-            left: (0..self.left.1).map(|i| i32_at(b, self.left.0 + 4 * i) as f64).collect(),
+            left: (0..self.left.1)
+                .map(|i| i32_at(b, self.left.0 + 4 * i) as f64)
+                .collect(),
             dwell: series(self.dwell),
         });
     }
@@ -175,9 +185,13 @@ impl Judge {
         let dt = end.now - start.map_or(0.0, |c| c.now);
         let n = end.left.len();
         for s in 0..n {
-            let d =|of: fn(&Counts) -> &Vec<f64>| of(end)[s] - start.map_or(0.0, |c| of(c)[s]);
+            let d = |of: fn(&Counts) -> &Vec<f64>| of(end)[s] - start.map_or(0.0, |c| of(c)[s]);
             let (area, left, dwell) = (d(|c| &c.area), d(|c| &c.left), d(|c| &c.dwell));
-            let (wip, rate) = if dt > 0.0 { (area / dt, left / dt) } else { (0.0, 0.0) };
+            let (wip, rate) = if dt > 0.0 {
+                (area / dt, left / dt)
+            } else {
+                (0.0, 0.0)
+            };
             let time = if left > 0.0 { dwell / left } else { 0.0 };
             let station = if s + 1 == n { json!("all") } else { json!(s) };
             let v = json!({"step": self.last, "station": station, "wip": wip, "throughput": rate * 3600.0, "time": time});

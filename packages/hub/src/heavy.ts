@@ -94,6 +94,7 @@ export function draftedPools(cores = availableParallelism(), memoryGb = totalmem
  */
 export class JobPool {
   private readonly fd: number;
+  private closed = false;
   constructor(readonly path: string, readonly tokens: number) {
     let fifo = false;
     try { fifo = lstatSync(path).isFIFO(); } catch { /* none yet */ }
@@ -108,6 +109,7 @@ export class JobPool {
   get makeflags(): string { return `-j${this.tokens} --jobserver-auth=fifo:${this.path}`; }
   /** Takes up to `max` free tokens from the pipe without waiting; how many it took. */
   take(max: number): number {
+    if (this.closed) return 0;
     let got = 0;
     const buf = Buffer.alloc(Math.max(1, max));
     while (got < max) {
@@ -119,7 +121,7 @@ export class JobPool {
     }
     return got;
   }
-  give(n: number): void { if (n > 0) writeSync(this.fd, Buffer.alloc(n, '+')); }
+  give(n: number): void { if (n > 0 && !this.closed) writeSync(this.fd, Buffer.alloc(n, '+')); }
   /** The tokens the hub holds back for memory pressure (#1411): out of the pipe, and never one a job holds. */
   private held = 0;
   /** How many it means to hold back; it reads the rest as jobs give them back. */
@@ -131,6 +133,7 @@ export class JobPool {
   private reader?: Socket;
   /** Holds back `n` tokens in all: those free now at once, the rest as jobs give theirs back; any over `n` go back now. */
   holdBack(n: number): void {
+    if (this.closed) return;
     this.want = n;
     if (n > this.held) this.held += this.take(n - this.held);
     else if (n < this.held) {
@@ -164,7 +167,14 @@ export class JobPool {
     this.reader?.pause();
     this.give(this.tokens - this.held);
   }
+  /**
+   * Once only, and nothing read, written or opened after: a hub's stop may reach it twice, and a build's release or a
+   * heavy tick may come after it (#2732); a second `closeSync`, a read or a write would reach whatever file has since
+   * reused the fd's number.
+   */
   close(remove = false): void {
+    if (this.closed) return;
+    this.closed = true;
     this.reader?.destroy();
     try { closeSync(this.fd); } catch { /* closed */ }
     if (remove) rmSync(this.path, { force: true });
