@@ -125,6 +125,8 @@ for (const [reason, entries] of Object.entries({
   ],
   timing: [
     'tests/acceptance/2513-redraft-2047/',
+    // #1851's redraft times the waiter's wake against 2 s, and starts real hubs.
+    'tests/acceptance/1851/',
     'tests/acceptance/896/', 'tests/acceptance/16/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1417-redraft-ac3/',
     'tests/acceptance/1022/', 'tests/acceptance/823/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
     'tests/acceptance/311/redraft-ac12/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts', 'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/315/',
