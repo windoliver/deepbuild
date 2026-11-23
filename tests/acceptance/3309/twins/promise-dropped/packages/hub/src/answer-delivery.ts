@@ -182,7 +182,10 @@ export class AnswerDelivery {
    */
   private readonly inReply = new Map<string, { session: string; later: string[]; notices: string[]; notes: Note[]; promise: string | undefined; at: number }>();
 
-  /** Your notes a reply deep-hook never read carried, by session: kept apart from `carried`, which says this prompt's own were taken. */
+  /**
+   * Your notes a reply deep-hook never read carried, by session: kept apart from `carried`, which says this prompt's own
+   * were taken, and kept past the session's end, as notes still waiting are, for its resume.
+   */
   private readonly givenBack = new Map<string, Note[]>();
 
   /**
@@ -532,7 +535,7 @@ export class AnswerDelivery {
       const promise = this.promises.get(meta.session);
       clearTimeout(promise?.timer);
       this.promises.delete(meta.session);
-      for (const map of [this.options.state().acks, this.options.state().midTurn, this.carried, this.givenBack, this.options.state().turnsStarted, this.options.state().onScreen]) map.delete(meta.session);
+      for (const map of [this.options.state().acks, this.options.state().midTurn, this.carried, this.options.state().turnsStarted, this.options.state().onScreen]) map.delete(meta.session);
     } else if (meta.event === 'StopFailure') {
       // A turn that ends on an API error ends like a Stop, and Claude Code starts its waiter as at a Stop; one an
       // earlier stop started may still wait, and either may wake the idle session (#85). Only the newest turn's: a prompt you
