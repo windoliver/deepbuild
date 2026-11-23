@@ -2697,6 +2697,30 @@
         }
       }
     },
+    "crates/deep-urdf/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #3035: the canonical bytes and hash the import writes with, and the ops module its angles go through."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #3035: the shipped clean look an imported robot's document names."
+        },
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #3035: the physics check a written world passes before any byte is kept."
+        },
+        "roxmltree": {
+          "spec": "=0.21.1",
+          "why": "Issue #3035: reads a robot description's XML, with no DTD and no entity a file declares; already in the workspace tree."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #3035: writes the document and its report. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-lottie-reader/Cargo.toml": {
       "dependencies": {
         "thorvg": {
