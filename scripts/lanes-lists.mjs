@@ -1450,7 +1450,8 @@ byHand.push('tests/acceptance/269/ac6-budgets.test.ts');
 // the reference Mac; shown.test.ts takes AC11's pictures for a person's call.
 timed.push('tests/acceptance/3234/budgets.test.ts');
 byHand.push('tests/acceptance/3234/shown.test.ts');
-// #3234's first AC3/AC4 draft types the words on the card, which #1462 AC8 forbids, so no program passes both; it is kept
-// by hand until the owner swaps it for its blind redraft, 3234-redraft-ac3/, which runs alone in its place.
+// #3234's AC3 and AC4 run as their blind redraft, 3234-redraft-ac3/, on the owner's ruling ("Yes, swap it", Nov 23): the
+// first draft types the words on the card, which #1462 AC8 forbids, so no program passes both, and it is kept by hand
+// (3234-redraft-ac3/DISPUTE.md).
 byHand.push('tests/acceptance/3234/answer.test.ts');
 alone.push('tests/acceptance/3234-redraft-ac3/');
