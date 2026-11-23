@@ -6,6 +6,8 @@ This is the field-level companion to the tech design's "The primitives, defined"
 
 ## Conventions every primitive uses
 
+The design's [principles](./technical-design.md#principles) hold here; these are the conventions every primitive shares.
+
 ### Time and the flick
 
 - **The unit.** One flick is 1/705,600,000 of a second. Time is stored as an `i64` count of flicks, which lasts about 414 years. Frames, audio samples, and physics and logic steps are all whole numbers of flicks, so a picture, a sound and a simulation can't drift apart.
@@ -610,7 +612,7 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `verdict.made`, `verdict.stale` (new) | `{verdict, claim, outcome, requirements, smallest, points_to, commit, key: {commit, doc_revisions, check_digests, state_digests, environment, tools}}`; `{verdict, because}` | verdicts | every status color on a chip or station |
 | `ask.created` | `{kind, question, options, recommended, deadline, fallback, default, provisional, owner, key, pinned_to}`; an unblock adds `{steps, where, why, unblocks, proves}`, with at least one step and one thing it unblocks, and `cost_usd` when it has a cost you pay (`ask.created@3`), and a taste call over candidates adds `{dropped: [{option, same_as}]}`, the near copies dropped before the ask (Sheet `sheet@1`) | asks | needs-you colors and cards |
 | `ask.batched`, `ask.answered`, `ask.defaulted`, `ask.escalated`, `ask.cancelled`, `ask.later` (new) | `{batch, asks: [{ask, plan_hash}]}`; `{answer, plan_hash, decision}`, and an answer adds `{via: card \| inbox \| session, verified, on, token, words, image}`: where it came from, false for text typed in the session, the revision the ask showed, the click token an approval bound, and your words and the screenshot sent with it from the card (#327), each null without; `{until}` for later | asks | closing a needs-you; one answer per plan in a batch |
-| `ask.superseded`, `ask.moot` (new) | `{by}`; `{because: check_passed, verdict}`, `{because: attempt_replaced, session}`, `{because: window_reset, at}` or `{because: thread_replied, link}` (`ask.moot@2`) | asks | an ask that leaves Needs you without an answer: its check passed, its attempt was replaced, the plan window it waited for reset, or the thread it watched got the reply it expected |
+| `ask.superseded`, `ask.moot` | `{by}`, the newer ask; `{because, …}`, with `verdict` for check_passed, `session` for attempt_replaced, `at` for window_reset, `link` for thread_replied, `host` for network_reached, or `agent` and `account` for signed_in | asks | an ask that leaves Needs you without an answer |
 | `session.continued` (new) | `{stop, because: transient \| context_overflow \| task_closed, task: ask \| null}` | nothing: the hub routes it | one automatic continue of a stopped session: once per turn you started after a dropped connection or a rate limit, once after a context overflow (compacted first), or when the one task its stop raised closed (#85) |
 | `answer.refused` (new) | `{outcome, closed_at, via: card \| inbox, option}` | asks | a late answer to a closed ask, refused and kept on its receipt |
 | `decision.created`, `decision.applied`, `decision.revoked` (new) | `{key, scope, answer, ask}`; `{decision, ask}`; `{decision}` | decisions | past calls and what was decided for you; a revoked decision covers nothing from then on |
@@ -630,10 +632,10 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `layer.rows` (new) | `{layer, project, parent, level, file: sha256}`, each row's citations in the file | layer_rows | a map layer's rows and links as they were at each log position |
 | `pr.merged` (new) | `{pr, merge_sha}` | tasks | the merge station |
 | `evidence.put` | `{sha256, kind, redaction, license, step_times}` | evidence | the evidence player; images |
-| `transcript.archived` | `{session, evidence: sha256}`; @2 adds `source: {size, sha256}`, the transcript as the archive read it, before redaction | sessions, evidence | a `session:` handle resolved through the record; the archived copy kept past retention |
+| `transcript.archived` | `{session, evidence: sha256}`; @2 adds `source: {size, sha256}`, the transcript as the archive read it, before redaction; @3 adds `parts` and the source's `stamp` and `ended`; @4 adds its `continuable` | sessions, evidence | a `session:` handle resolved through the record; the archived copy kept past retention |
 | `ci.archived` | `{repo, run, result, logs: [{job, evidence: sha256}]}` | evidence | a completed CI run copied from the forge before the forge's retention deletes it; each job's log kept past retention |
 | `archive.quiet` | `{agent, last}` | nothing | an agent that kept working for a day with no transcript captured, and when its source last captured |
-| `resource.created` | `{resource, kind, key, cost_usd, check, cwd}` | nothing | an outside resource a session's command created, which its teardown task is pinned to |
+| `resource.created` | `{resource, kind, key?, cost_usd, check, cwd}` | nothing | an outside resource a session's command created, which its teardown task is pinned to |
 | `learn.proposed`, `learn.applied`, `learn.widened`, `learn.rolled_back` | `{layer, target, diff, evidence: [{at, quote}], scope, replay, applied_by, supersedes}` | the learned layer | what DeepBuild learned, each change with its evidence, scope and replay result |
 | `doc.patched` | `{doc, rev, patch, writer, achieved}` | documents, returns | an item's history and the by-writer lens; what the agent drew, on its return card |
 | `note.opened`, `note.closed` (new) | `{note, doc, item, rev, t, region, text}`; `{note, by: you \| check, rev, run}` | notes | open notes on an item, in the editor panel and on return cards |
