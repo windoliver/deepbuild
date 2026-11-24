@@ -602,6 +602,11 @@ alone.push('tests/acceptance/1962/');
 alone.push('tests/acceptance/1802/');
 // #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
 alone.push('tests/acceptance/139-redraft-1802/');
+// #139's prices file and #350's AC9 redraft are kept by hand until the owner swaps them: their packages state a digest on
+// a use beside a provider's row that keeps none, which #2062 refuses, so no program passes both; their blind redrafts,
+// 139-redraft-2062/ and 350-redraft-2062/, run in their place, the first alone as #139's suite does.
+byHand.push('tests/acceptance/139/prices.test.ts', 'tests/acceptance/350/ac9-redraft/ac9.test.ts');
+alone.push('tests/acceptance/139-redraft-2062/');
 // #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s
 // six-stem render against the reference Mac.
 alone.push('tests/acceptance/154/', 'tests/acceptance/154-oracle/');
