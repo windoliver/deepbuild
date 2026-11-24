@@ -379,7 +379,7 @@ impl Hub<'_> {
             let from = if i == row0 { entry0 } else { 0 };
             // #3108: a row a page continues keeps only its kind and name; its other fields (its
             // planted entry, kit, schema) went with its first entries.
-            if from > 0 {
+            if from > 0 && row.get("entries").is_some() {
                 head = json!({"kind": head["kind"], "name": head["name"]});
             }
             let mut kept: Vec<Value> = Vec::new();
@@ -392,6 +392,12 @@ impl Hub<'_> {
             for (j, e) in entries.iter().enumerate().skip(from) {
                 let n = e.to_string().len() + 1;
                 if size + n > page_budget() && !(page.is_empty() && kept.is_empty()) {
+                    // #3108: a row none of whose entries fit starts the next page, head and all,
+                    // rather than sending its head twice.
+                    if kept.is_empty() && from == 0 {
+                        next = Some(format!("{i}.0"));
+                        break 'rows;
+                    }
                     if row.get("entries").is_some() {
                         head["entries"] = json!(kept);
                     }
