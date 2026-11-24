@@ -376,13 +376,13 @@ export class HumanAnswers {
    */
   private async cards(handle?: string): Promise<Map<string, { plan: ChannelAsk['plan']; revision: number; holder: string | null }>> {
     const one = handle ? ` AND (subject = ? OR json_extract(data, '$.ask') = ?)` : '';
-    const rows = (await this.options.services.record.raw(`SELECT kind, subject, json_extract(data, '$.ask') AS ask, json_extract(data, '$.hash') AS hash, json_extract(data, '$.steps') AS steps, json_extract(data, '$.device') AS device FROM events WHERE ((kind = 'plan.proposed' AND writer = 'core') OR kind = 'ask.taken_over')${one} ORDER BY log_pos`, handle ? [handle, handle] : [])) as { kind: string; subject: string | null; ask: string | null; hash: string | null; steps: string | null; device: string | null }[];
+    const rows = (await this.options.services.record.raw(`SELECT kind, subject, json_extract(data, '$.ask') AS ask, json_extract(data, '$.hash') AS hash, json_extract(data, '$.steps') AS steps, json_extract(data, '$.device') AS device FROM events WHERE ((kind = 'plan.proposed' AND writer = 'core') OR kind = 'card.taken_over')${one} ORDER BY log_pos`, handle ? [handle, handle] : [])) as { kind: string; subject: string | null; ask: string | null; hash: string | null; steps: string | null; device: string | null }[];
     const held = new Map<string, { hash?: string; steps?: string; revision: number; holder: string | null }>();
     for (const r of rows) {
-      const key = String(r.kind === 'ask.taken_over' ? r.subject : r.ask);
+      const key = String(r.kind === 'card.taken_over' ? r.subject : r.ask);
       const card = held.get(key) ?? { revision: 1, holder: null };
       held.set(key, card);
-      if (r.kind === 'ask.taken_over') Object.assign(card, { revision: card.revision + 1, holder: r.device });
+      if (r.kind === 'card.taken_over') Object.assign(card, { revision: card.revision + 1, holder: r.device });
       else if (r.hash !== card.hash) Object.assign(card, { revision: card.revision + (card.hash === undefined ? 0 : 1), hash: String(r.hash), steps: r.steps ?? '[]' });
     }
     return new Map([...held].map(([key, c]) => [key, {
@@ -425,7 +425,7 @@ export class HumanAnswers {
     await this.options.control().trusted('ask.take_over', params, context, `take over ${handle}`, handle, 'take over');
     const device = String((params.signature as { signed: { device: string } }).signed.device);
     const revision = ((await this.cards(handle)).get(handle)?.revision ?? 1) + 1;
-    await this.options.events.appendCore('ask.taken_over', { device, revision }, { subject: handle });
+    await this.options.events.appendCore('card.taken_over', { device, revision }, { subject: handle });
     return { ask: handle, device, revision };
   }
 
