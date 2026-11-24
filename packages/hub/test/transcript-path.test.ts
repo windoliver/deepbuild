@@ -8,6 +8,7 @@ import { delimiter, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { hookLine, reply, send, session, withHub } from './hub.js';
+import { first } from './stream.js';
 
 const QUESTION = 'Shall I push the fix to main?';
 /**
@@ -58,7 +59,7 @@ describe('the hub copies a session from the path its hook named', () => {
         const sock = join(root, 'hub.sock');
         await send(sock, hookLine('01K74FKZVK8Q2X5R7M3N9P4T70', 'SessionStart', s.payload('SessionStart', { source: 'startup' }), { ppid: process.pid }));
         await send(sock, hookLine('01K74FKZVK8Q2X5R7M3N9P4T71', 'SessionEnd', s.payload('SessionEnd', { reason: 'other' }), { ppid: process.pid }));
-        for (const until = Date.now() + 15_000; Date.now() < until && !copied(root).length; await new Promise((r) => setTimeout(r, 100)));
+        await first(root, 'transcript.archived');
         expect(copied(root), "the session's end copied the transcript at its hook's transcript_path").toEqual([handle(id)]);
       });
     }, HOME_ONLY);
@@ -77,9 +78,7 @@ describe('the hub copies a session from the path its hook named', () => {
         const sock = join(root, 'hub.sock');
         await send(sock, hookLine('01K74FKZVK8Q2X5R7M3N9P4T80', 'SessionStart', s.payload('SessionStart', { source: 'startup' }), { ppid: process.pid }));
         await send(sock, hookLine('01K74FKZVK8Q2X5R7M3N9P4T81', 'Stop', s.payload('Stop', { stop_hook_active: false, last_assistant_message: QUESTION }), { ppid: process.pid }));
-        const proceeded = () => { const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true }); try { return db.prepare("SELECT 1 FROM events WHERE kind = 'question.proceeded'").all().length; } finally { db.close(); } };
-        for (const until = Date.now() + 15_000; Date.now() < until && !proceeded(); await new Promise((r) => setTimeout(r, 100)));
-        if (!proceeded()) throw Error('BLOCKED: the planted proceed was not recorded, so no turn holds the push');
+        await first(root, 'question.proceeded', 'BLOCKED: the planted proceed was not recorded, so no turn holds the push');
         if (copied(root).length) throw Error(`BLOCKED: the transcript was copied before the push: ${copied(root).join(', ')}`);
         const held = await reply(sock, hookLine('01K74FKZVK8Q2X5R7M3N9P4T82', 'PreToolUse', s.payload('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'git push origin main' }, tool_use_id: 'toolu_01Push2316' }), { ppid: process.pid, matched: ['authority-push'] }));
         expect(`${held.exit} ${held.stdout}${held.stderr}`, 'the push is held by an authority ask').toMatch(/^2 .*waits for ask:/s);

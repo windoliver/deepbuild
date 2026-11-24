@@ -1,0 +1,71 @@
+#269 acceptance suite at the base, d84d541e9 (Merge pull request #3195, origin/main), before any implementation. Run on
+2026-11-23 on an arm64 Mac (Mac17,10, not a reference Mac; 18 cores; one-minute load about 90 to 360 through the builds
+and runs), with deep-show and deep-gpu built first (`cargo build --locked --bin deep-show`, the default set, 30 min 34 s
+at that load; then `cargo build --locked --bin deep-gpu`, 1 min 54 s), CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0,
+the toolchain rust-toolchain.toml pins, from rustup, and #544's assembler built by the first file into
+target/acceptance-538-wat. Each file was then run once, its own builds up to date:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    npx vitest run tests/acceptance/269/<file> --testTimeout=600000 --hookTimeout=600000
+
+12 tests, 12 failed; none passed. Every test fails at an assertion in this folder (or in #538's helpers it calls) that
+names the missing behavior: no crash, no timeout, no missing fixture, no build failure. Each file took 6 to 16 s.
+`npx tsc --noEmit -p tests/acceptance/269` exits 0. No file was rerun.
+
+What the base does with the fixtures: `deep-show run` presents each film (the unknown kind `grid_image@1` is kept and
+not drawn), so its key and backdrop draw and the key reads the clean look's term_red, term_green and term_blue as
+[138, 7, 63], [15, 79, 50] and [2, 65, 128] over a white ground; it knows none of the three planted names. `deep-gpu
+run`'s `layers` and `film2d` refuse every fixture, `module_missing` at items/<id>/kind (`grid_image@1`), and `--planted`
+with either of this suite's names exits 2 with `bad_input`.
+
+ac1-nearest-smooth.test.ts (3 failed of 3)
+- the grid fixture: ac1-nearest-smooth.test.ts:51 (`none`, ../538/helpers.ts:89): 3,074 failures, the first "nearest_map:
+  cell (0, 0), value 0: pixel (8, 8) draws [255, 255, 255], not its role [138, 7, 63]": no cell of either grid image is
+  drawn.
+- grid_bspline_rebuild: ac1-nearest-smooth.test.ts:55 (`runShow`, ../538/helpers.ts:268): "deep-show run answers the
+  scenario ok (it takes the planted grid_bspline_rebuild); got {"ok":false,"code":"bad_input"}".
+- grid_bilinear_rebuild: ac1-nearest-smooth.test.ts:62 (`runShow`): the same, `bad_input`.
+
+ac2-corner.test.ts (2 failed of 2)
+- the corner: ac2-corner.test.ts:42 (`none`): "corner_map: pixel (120, 120), cell (3, 3)'s centre, draws [255, 255,
+  255], not its own role 0 [138, 7, 63]", and so on for the other centres and every pixel round the corner ("draws
+  none: … 100% the ground").
+- grid_share_passes_half: ac2-corner.test.ts:46 (`runShow`): `bad_input`.
+
+ac3-rows-seek.test.ts (2 failed of 2)
+- the uploads and the seeks: ac3-rows-seek.test.ts:108 (`answered`, helpers.ts:62, through `filmFrames`): "the film
+  played from frame 0 is answered, not refused: {"code":"module_missing","reason":"items/smooth_map/kind:
+  grid_image@1"}". The canonical render's `determinism` isn't reached.
+- grid_keeps_previous_step: ac3-rows-seek.test.ts:112 (`runGpu`, helpers.ts:51): "deep-gpu run --planted
+  grid_keeps_previous_step exits 0 …; stdout: {"ok":false,"code":"bad_input"}".
+
+ac4-out-of-range.test.ts (1 failed of 1)
+- ac4-out-of-range.test.ts:51 (`none`): "step 30: eval raises no grid.out_of_range {array: teams.ground, cell: [8, 6],
+  value: 7, step: 30}; its issues: []", and "nearest_map, cell (7, 6) still draws role 0: pixel (68, 60) draws [255,
+  255, 255], not [138, 7, 63]" with the other three neighbours. (Cell (8, 6) itself draws nothing at the base, as
+  nothing does; the neighbours' check is what keeps a blank frame from passing.)
+
+ac5-cpu-gpu.test.ts (2 failed of 2)
+- the pair: ac5-cpu-gpu.test.ts:50 (`answered`, through `layerPicture`): "the smooth fixture by Vello CPU is answered,
+  not refused: {"code":"module_missing","reason":"items/smooth_map/kind: grid_image@1"}".
+- grid_role_before_rebuild: ac5-cpu-gpu.test.ts:60 (`runGpu`): `bad_input`.
+
+ac6-budgets.test.ts (1 failed of 1)
+- ac6-budgets.test.ts:86 (`answered`, through `filmFrames`): "the budget's fixture is answered, not refused:
+  {"code":"module_missing","reason":"items/war_map/kind: grid_image@1"}". Not reached after it: the lane's record (the
+  base's budgets.json has no task naming #269.6ad7e180, and scripts/lanes.mjs doesn't time the file) and the timings,
+  which on this Mac would read INCONCLUSIVE (Mac17,10 is not a reference Mac, and the load is above the cores).
+
+ac7-taste.test.ts (1 failed of 1)
+- ac7-taste.test.ts:56 (`inconclusive`): "INCONCLUSIVE: no taste call is recorded". At the base the two pictures were
+  written (the backdrop and the key, no grid) and then deleted by hand; nothing under docs/evidence/269/ is committed, and
+  no TASTE.json exists or was written.
+
+Before writing the judges, they were run against a model render of the issue's rule (shares rebuilt by the Catmull-Rom
+cubic, the largest share taken, an edge antialiased over 1 px in sRGB and, separately, in linear light) and of each CPU
+and GPU plant, in a scratch file not committed: the honest model passes the judges of criteria 1, 2 and 5 (its lone-cell
+edge reads 0.531 cells on the half-pixel-off axis lines, where 0.542 is expected, and 0.530 on the diagonals, where 0.553
+is, in both blend spaces), the B-spline model draws nothing at the lone cell, the bilinear model's diagonals read 0.387
+cells against 0.414, the "share passes 1/2" model leaves 160 pixels of ground at the corner at 32 px a cell, and the
+"role before rebuild" model differs from the honest one at 12,021 pixels, all at edges. Those are this suite's own
+model, not the implementation's pixels.

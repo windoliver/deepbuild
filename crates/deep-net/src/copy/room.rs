@@ -421,8 +421,8 @@ mod tests {
         let played = comes_back(Wrong::None, closed);
         let three = played.copies[2].report();
         assert_eq!(three["join_refused"], json!("started"));
-        let last = seats(&played.copies[0]).into_iter().filter(|s| s.1 == 3);
-        assert_eq!(last.last().unwrap().2, "left");
+        let mut last = seats(&played.copies[0]).into_iter().filter(|s| s.1 == 3);
+        assert_eq!(last.next_back().unwrap().2, "left");
     }
 
     #[test]

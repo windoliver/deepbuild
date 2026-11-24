@@ -1,0 +1,240 @@
+#!/usr/bin/env node
+// #2697's planted twin (tests/acceptance/2697/README.md): the merge base's generator, its craft line stating the clock
+// time the skill was generated at, so two starts a minute apart receive different skill text.
+// Generates each MCP tool's title and hints (packages/hub/annotations.json, #2898, from HINTS below), and the agent
+// skill (skills/deepbuild/SKILL.md) and each deep_* tool's description (packages/hub/tools.json) from the Building
+// blocks table of docs/technical-design.md (#26): every row whose "Agents, through MCP" cell names a tool gives that tool's description and the skill its block and what the block never is. Only what a tool can't teach
+// goes in the skill, when to use each block and what it never does, and never a tool's parameters, which agents read
+// from its schema. tests/acceptance/26 fails when either drifts from the table. The skill also states each craft@1
+// check in its own words, from crates/deep-canvas/src/craft.json, the table the checks read (#409);
+// tests/acceptance/409 fails when it drifts from what the checks state. It also writes each MCP server's `instructions`
+// and the tools marked to load up front (packages/hub/instructions.json, and the reading server's line), #2897.
+//   node scripts/skill.mjs
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/** When an agent uses each tool, and what its result does not prove. */
+const TOOLS = {
+  deep_status: {
+    use: 'Read where your session stands: the hub\'s gates; the checks the repo\'s spec names; your open asks, each with its state, its default and its deadline; your open items; and each of your claims with its runs, its verdict and any run that contradicts what you predicted.',
+    proves: 'Its result does not prove your work is done: only a verdict the checks reached says so, and a claim with no verdict is still open.',
+  },
+  deep_search: {
+    use: 'Search your wiki, past decisions and the project\'s spec, and in your own session its open items and verdicts, read only; every hit names its source.',
+    proves: 'A hit does not prove what it quotes still holds: it is what its source said, read through an index that is never the source of truth.',
+  },
+  deep_ask: {
+    use: 'Ask the person what only they can answer, a taste call or a choice, or raise a task only a person can do, naming the check that will prove it done. It waits for the answer and returns it, or says it is still waiting, with the ask\'s deadline and default.',
+    proves: 'An answer does not prove anything about your work, and a task answered as done does not prove it is: only its check passing does.',
+  },
+  deep_wait: {
+    use: 'Keep waiting on an ask you raised, once deep_ask says it is still waiting.',
+    proves: 'Still waiting does not prove the ask was seen; its default applies at its deadline.',
+  },
+  deep_open_item: {
+    use: 'Record what is still open on your task, such as a kind or a field a piece needs that does not exist, instead of working around it.',
+    proves: 'Recording an open item does not prove it matters, and you can\'t close your own without evidence.',
+  },
+  deep_claim: {
+    use: 'Declare your task done at a commit, with what you expect each check to show before it runs; the checks then decide.',
+    proves: 'A claim does not prove the task is done: the verdict comes from the checks\' runs, and a run that disagrees with your prediction shows as a contradiction.',
+  },
+  deep_evidence: {
+    use: 'Attach a file from your working folder as evidence, stored by its hash.',
+    proves: 'Storing a file does not prove what it shows; a path outside your working folder is answered as one that doesn\'t exist.',
+  },
+  deep_propose: {
+    use: 'Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person\'s inbox, and nothing changes until they apply it.',
+    proves: 'A proposal does not prove the change is right, and it is never applied by you or any agent.',
+  },
+  deep_run: {
+    use: 'Run a check the repo\'s spec names, for your claim at its commit; it answers with the run\'s outcome and its evidence once the run finishes.',
+    proves: 'One run\'s outcome does not prove your claim passes: only a verdict over the runs a claim needs says so.',
+  },
+  deep_show: {
+    use: 'Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document\'s issues and snapshots by hash.',
+    proves: 'A picture does not prove anything: a snapshot is never evidence for a claim, and only check results are.',
+  },
+  deep_drive: {
+    use: 'Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, open a page by its address, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease.',
+    proves: 'Only assertions count: a drive passes on the assertions that passed, and a screenshot, snapshot or recording proves nothing on its own.',
+  },
+  deep_kinds: {
+    use: 'Look up what this core can draw before you write a document, with the kinds, recipes, packs and registries it has, each with its schema, an example by hash, its stability and whether it is available here; the word another tool uses for one, from a familiar-names pack; and the installed guides and gallery, read in pages.',
+    proves: 'A listing does not prove your document is right: only its check and the checks that run on it say so, and an example is read, never run.',
+  },
+  deep_query: {
+    use: 'Read a revision of a document as evaluated data by stable ID instead of as a picture: its rows and the values at items/<id>/<field> at the times you name, each answer with a coverage block that names what it cut; its summary, with counts by kind, writer layer and canvas module; the why behind one value, naming the canvas module, operator and document paths that made it; every row that names an item, a table row, a pack entry or an asset, before you remove or rename it; or what costs most, its items and assets ranked by the meter\'s own terms. It reads only what your session may read.',
+    proves: 'A reading does not prove your work is right: it is never evidence for a claim, only check results are, and an absence concluded from a cut answer is refused.',
+  },
+  deep_job: {
+    use: 'List the job kinds and the tools that qualified for each, and run a kind on one tool pinned by name@version, outside the hub\'s process; a rerun with the same tool, params and input bytes is a cache hit that starts no process.',
+    proves: 'A job\'s outputs are a reading by hash with a receipt, never a verdict: one reaches an item only after the kind\'s output checks pass, and a job changes no document.',
+  },
+  deep_env: {
+    use: 'Bring your worktree\'s own stack up, on ports leased to that worktree, ready only once its health route answers, or take it down; every process runs through the supervisor.',
+    proves: 'A stack that is up does not prove any check passes, and a port leased to your worktree is never another worktree\'s: a child session in its own worktree gets its own.',
+  },
+  deep_root_plan: {
+    use: 'Propose a root plan for a host, with the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password.',
+    proves: 'A plan proposed has not run: only the run deep host run records, from a copy only root can write, shows what it did.',
+  },
+};
+
+/**
+ * Each MCP tool's title and its four hints (#2898): every tool of deep mcp, of deep mcp actions and of the reading
+ * tools, each hint stated, none left to the protocol's cautious default. R: read-only, a tool every form of which
+ * changes nothing but the record of the call; D: destructive, only call_action, since a plug-in's action may delete;
+ * I: idempotent, a read, or a change whose repeat the design makes a no-op; O: open-world, a form reaches past this
+ * machine. A hint is the server's word to a client: the hub never reads its own tools' hints, it counts them by the
+ * adapters' facts.
+ */
+const HINTS = {
+  deep_ask: ['Ask the person', ''],
+  deep_wait: ['Wait on an ask', 'RI'],
+  deep_open_item: ['Record an open item', ''],
+  deep_status: ['Read where the session stands', 'RI'],
+  deep_search: ['Search the wiki, decisions and spec', 'RI'],
+  deep_claim: ['Claim the task done', ''],
+  deep_evidence: ['Attach a file as evidence', ''],
+  deep_propose: ['Propose a change', ''],
+  deep_run: ['Run a check', 'O'],
+  deep_show: ['Draw a canvas document', ''],
+  deep_drive: ['Drive a replica', ''],
+  deep_kinds: ['Look up what the canvas can draw', 'O'],
+  deep_query: ['Read a document as data', 'RI'],
+  deep_job: ['List or run a job', 'IO'],
+  deep_env: ['Bring the worktree\'s stack up or down', ''],
+  deep_root_plan: ['Propose a root plan', ''],
+  find_actions: ['Find plug-in actions', 'RI'],
+  call_action: ['Call a plug-in action', 'DIO'],
+  read: ['Read a slice of a handle', 'RI'],
+  find: ['Find messages in the given sessions', 'RI'],
+};
+/** The MCP annotations of each tool, by name, as packages/hub/annotations.json holds them. */
+function annotations() {
+  for (const tool of Object.keys(TOOLS)) if (!HINTS[tool]) throw Error(`HINTS gives ${tool} no title or hints`);
+  return Object.fromEntries(Object.entries(HINTS).map(([tool, [title, hints]]) => [tool, {
+    title,
+    readOnlyHint: hints.includes('R'),
+    destructiveHint: hints.includes('D'),
+    idempotentHint: hints.includes('I'),
+    openWorldHint: hints.includes('O'),
+  }]));
+}
+
+/** Table text as an agent reads it: no backticks or bold. */
+const plain = (text) => text.replace(/`|\*\*/g, '');
+const cells = (row) => row.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map((c) => c.trim());
+
+/** The Building blocks table: each row's block, its "Agents, through MCP" cell and its Never cell. */
+export function blocks(design = readFileSync(join(ROOT, 'docs/technical-design.md'), 'utf8')) {
+  const lines = design.slice(design.indexOf('\n### Building blocks')).split('\n');
+  const head = lines.findIndex((l) => l.startsWith('| Block |'));
+  if (head < 0) throw Error('docs/technical-design.md has no Building blocks table');
+  const rows = [];
+  for (let i = head + 2; lines[i]?.startsWith('|'); i++) {
+    const [block, , mcp, , never] = cells(lines[i]);
+    rows.push({ block, mcp, never });
+  }
+  return rows;
+}
+const naming = (rows, tool) => rows.filter((r) => r.mcp.includes(`\`${tool}\``));
+/** craft@1's checks as the checks read them (#409): name, description, threshold and fix. */
+const CRAFT = JSON.parse(readFileSync(join(ROOT, 'crates/deep-canvas/src/craft.json'), 'utf8'));
+
+export function generate(rows = blocks()) {
+  const descriptions = {};
+  for (const [tool, { use, proves }] of Object.entries(TOOLS)) {
+    const named = naming(rows, tool);
+    if (!named.length) throw Error(`no row of the Building blocks table names ${tool}`);
+    descriptions[tool] = [use, proves, ...named.map((r) => `${r.block}, never: ${plain(r.never)}.`)].join(' ');
+  }
+  const { version } = JSON.parse(readFileSync(join(ROOT, 'packages/hub/package.json'), 'utf8'));
+  const used = rows.filter((r) => Object.keys(TOOLS).some((tool) => r.mcp.includes(`\`${tool}\``)));
+  // Every session reads the whole skill: a tool's line stands once, under the first block that names it.
+  const under = new Map();
+  const line = (tool, block) => (under.has(tool) ? `- ${tool}, as under ${under.get(tool)}.` : (under.set(tool, block), `- ${tool}. ${TOOLS[tool].use}`));
+  const skill = [
+    '---',
+    'name: deepbuild',
+    `description: DeepBuild's tools for an agent session. Use them to ask the person, record what is open, claim your task done and run the checks that decide it. Generated from DeepBuild ${version}'s Building blocks table; never edit by hand.`,
+    `version: ${version}`,
+    '---',
+    '',
+    '# DeepBuild',
+    '',
+    'Your word is never evidence; only check results are. Nothing missing or unrun passes. You can\'t change checks or decisions, and no tool answers, decides or overrules. This skill says when to use each block and what it never does; each tool\'s schema says what it takes.',
+    '',
+    'Begin each task with deep_status, which shows where your session stands; read it once, since deep_run\'s answer is the run\'s outcome and no verdict appears until the checks are judged. Predict before you run: declare your claim with what you expect each check to show, then run the checks. Make each call once, never again with the same input. When the hub is unreachable, nothing was recorded; call again once it is back.',
+    '',
+    ...used.flatMap((r) => {
+      const tools = Object.keys(TOOLS).filter((tool) => r.mcp.includes(`\`${tool}\``));
+      return [`## ${r.block}`, '', ...tools.map((tool) => line(tool, r.block)), '', `Never: ${plain(r.never)}.`, ''];
+    }),
+    // The canvas working order (#412; technical design, after the Building blocks table): what the tools can't teach.
+    '## Working on a canvas document',
+    '',
+    'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it. When a logic step needs more fuel than its step ceiling, which deep_kinds lists by step rate, budget class and host, split the work across steps and keep the progress in memory. For a formula, run the typeset job with deep_job: it turns LaTeX or Typst into an SVG with one id per term, which a vector@1 item imports, so a step moves the terms two formulas share; never set a formula as text.',
+    '',
+    // craft@1's checks (#409), each in its own words from the table the checks themselves read.
+    '## Craft checks a film brief names',
+    '',
+    `A film's brief names the ${CRAFT.pack} checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own. Generated at ${new Date().toISOString().slice(11, 19)}.`,
+    '',
+    ...CRAFT.checks.map((c) => `- ${c.name}. ${c.description} Threshold — ${c.threshold}. Fix — ${c.fix}`),
+    '',
+  ].join('\n');
+  return { descriptions, skill, instructions: instructions(used) };
+}
+
+/**
+ * The tools a client that reads a load mark loads at a session's start (#2897): deep_status alone, since its reply
+ * names what a session calls next. Every other tool stays behind the client's search.
+ */
+const UP_FRONT = ['deep_status'];
+/**
+ * Each server's `instructions` on initialize (#2897), which a client that loads tools by search reads at a session's
+ * start in place of the tool list: what the tools are for, when to look for them and which to call first. deep's names
+ * every other tool by the first Building blocks row that names it, so one search loads what a task needs. The same bytes
+ * at every start: nothing here reads the clock, the machine or the session.
+ */
+function instructions(used) {
+  const named = new Set(UP_FRONT);
+  const groups = used.flatMap((r) => {
+    const tools = Object.keys(TOOLS).filter((tool) => r.mcp.includes(`\`${tool}\``) && !named.has(tool));
+    tools.forEach((tool) => named.add(tool));
+    return tools.length ? [`${plain(r.block).replace(/\s*\(.*\)$/, '')}: ${tools.join(', ')}.`] : [];
+  });
+  return {
+    upFront: UP_FRONT,
+    servers: {
+      deep: [
+        'DeepBuild records this session\'s work; only check results decide when it is done, never your word.',
+        `Begin each task with ${UP_FRONT.join(', ')}, which is loaded already: its reply says where your session stands and what to call next.`,
+        'Every other deep_* tool loads when you search for it, so name in one search each tool your task needs. By block:',
+        ...groups,
+      ].join(' '),
+      'deep-actions': 'Actions the plug-ins installed in DeepBuild offer, such as sending a message or changing data outside the repo. Search for find_actions to list them with each one\'s input schema, and for call_action to run one by name, once a task needs a plug-in\'s action.',
+      'deepbuild-reading': 'This reading job\'s only way into the sessions, evidence and wiki pages it was given. Read each handle you were given a slice at a time, continuing with next until the reply has none; call find for the message handles of your sessions that hold a query.',
+    },
+  };
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const { descriptions, skill, instructions: given } = generate();
+  writeFileSync(join(ROOT, 'packages/hub/tools.json'), `${JSON.stringify(descriptions, null, 2)}\n`);
+  // The hub serves deep and deep-actions; the reading server's text stands in its own file, below.
+  const { 'deepbuild-reading': _reading, ...hub } = given.servers;
+  writeFileSync(join(ROOT, 'packages/hub/instructions.json'), `${JSON.stringify({ ...given, servers: hub }, null, 2)}\n`);
+  // The reading server is one file a reading job is granted alone, so its text stands in it, on its marked line.
+  const reading = join(ROOT, 'packages/reading/src/tools.mts');
+  const line = `const INSTRUCTIONS = ${JSON.stringify(given.servers['deepbuild-reading'])}; // scripts/skill.mjs writes this line`;
+  writeFileSync(reading, readFileSync(reading, 'utf8').replace(/^const INSTRUCTIONS = .*$/m, () => line));
+  writeFileSync(join(ROOT, 'packages/hub/annotations.json'), `${JSON.stringify(annotations(), null, 2)}\n`);
+  mkdirSync(join(ROOT, 'skills/deepbuild'), { recursive: true });
+  writeFileSync(join(ROOT, 'skills/deepbuild/SKILL.md'), skill);
+}

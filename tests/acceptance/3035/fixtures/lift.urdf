@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<!-- Issue #3035, criterion 3: a prismatic joint limited to 0.2 m along the file's Z, and a revolute joint limited to +-1.5708 rad about the file's Y. -->
+<robot name="lift">
+  <link name="base">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="5"/>
+      <inertia ixx="0.05" ixy="0" ixz="0" iyy="0.05" iyz="0" izz="0.05"/>
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.2 0.2 0.2"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="sled">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1"/>
+      <inertia ixx="0.002" ixy="0" ixz="0" iyy="0.002" iyz="0" izz="0.002"/>
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.1 0.1 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="hand">
+    <inertial>
+      <origin xyz="0.1 0 0" rpy="0 0 0"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.0002" ixy="0" ixz="0" iyy="0.002" iyz="0" izz="0.002"/>
+    </inertial>
+    <collision>
+      <origin xyz="0.1 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.2 0.04 0.04"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="rail" type="prismatic">
+    <parent link="base"/>
+    <child link="sled"/>
+    <origin xyz="0 0 0.1" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0" upper="0.2" effort="50" velocity="0.5"/>
+  </joint>
+  <joint name="wrist" type="revolute">
+    <parent link="sled"/>
+    <child link="hand"/>
+    <origin xyz="0.1 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.5708" upper="1.5708" effort="10" velocity="1"/>
+  </joint>
+</robot>

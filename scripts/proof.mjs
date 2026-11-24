@@ -96,6 +96,7 @@ function trace(issue, runs, proven, tree) {
     const tags = runs.tests.filter((test) => test.path === path).flatMap(({ tags: list }) => list);
     for (const tag of new Set(tags)) if (tag.startsWith(prefix) && !ids.has(tag)) fail(`${tag} names no criterion of #${issue.number} (${path})`);
   }
+  for (const [path, tags] of runs.byHandTags ?? []) for (const tag of tags) if (tag.startsWith(prefix) && !ids.has(tag)) fail(`${tag} names no criterion of #${issue.number} (${path}, by hand)`);
   const open = issue.criteria.filter(({ id }) => !runs.tests.some((test) => test.tags.includes(id) && proven.has(test.key))).map(({ id }) => id);
   if (issue.word === 'Closes' && open.length) fail(`Closes #${issue.number} refused: this change is Part of #${issue.number}; open: ${open.join(', ')}`);
   else if (open.length) say('PASS', 'trace', `Part of #${issue.number}; open: ${open.join(', ')}`);

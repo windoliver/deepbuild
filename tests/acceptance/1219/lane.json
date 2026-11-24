@@ -1,0 +1,1 @@
+{ "alone": true, "why": "every file builds deep-show with cargo, and ac7-taste.test.ts builds deep-gpu and draws on Metal at the reference window, as #2017 and #2014 do" }

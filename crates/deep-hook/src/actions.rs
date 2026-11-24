@@ -17,7 +17,8 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use deep_contracts::{jcs, parse, Value};
+use deep_contracts::generated::McpHandshakeProtocolVersion;
+use deep_contracts::{jcs, parse, Contract, Value};
 
 use super::{address, home, member, quoted, read_line, set_cwd, setting, worktree_hub, Got};
 
@@ -383,10 +384,11 @@ pub fn serve() -> ExitCode {
             };
             match method.as_str() {
                 "initialize" => {
-                    let version = match member(params, "protocolVersion") {
-                        Some(Value::String(v)) => v.clone(),
-                        _ => "2025-06-18".into(),
-                    };
+                    // #2854: the client's revision when mcp.handshake@1 holds it, as a whole string; the newest otherwise.
+                    let version = member(params, "protocolVersion")
+                        .and_then(|v| McpHandshakeProtocolVersion::from_json(v, "/params/protocolVersion").ok())
+                        .unwrap_or(McpHandshakeProtocolVersion::ALL[McpHandshakeProtocolVersion::ALL.len() - 1])
+                        .to_json();
                     let capabilities =
                         object(vec![("tools", empty.clone()), ("resources", empty.clone())]);
                     let info = object(vec![
@@ -398,7 +400,7 @@ pub fn serve() -> ExitCode {
                         &id,
                         "result",
                         object(vec![
-                            ("protocolVersion", Value::String(version)),
+                            ("protocolVersion", version),
                             ("capabilities", capabilities),
                             ("serverInfo", info),
                             // #2897: what a client that loads tools by search reads at the start.

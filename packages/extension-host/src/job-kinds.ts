@@ -108,6 +108,11 @@ export function paramsOf(schema: Schema, value: unknown): Record<string, JsonVal
   return params;
 }
 
+/** Whether a tool's own params schema holds `params`, a kind's canonical ones (#3035): a fixture runs on the tools that take its params. */
+export function takes(schema: Schema, params: Record<string, JsonValue>): boolean {
+  return registry([{ name: 'params', schema: checkable(schema) as Schema }]).validate('params', params).ok;
+}
+
 /** A kind as `deep.registerJob` declares it, or an Error naming what isn't so. */
 export function kindOf(kind: string, raw: unknown): JobKind {
   const k = (isPlain(raw) ? raw : {}) as Partial<JobKind>;

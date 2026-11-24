@@ -1,0 +1,16 @@
+Base: b4e6a09c0 (fresh GitHub clone, detached)
+Node: v24.22.0
+Platform: Darwin arm64 (macOS)
+Command: node --test --test-reporter=spec 'tests/acceptance/1322/*.test.mjs'
+
+PASS #1322.160d30bf a captured run that exits 0 in time returns status 0, its stdout and output, elapsed and CPU time, a peak RSS and its loads (3189 ms)
+PASS #1322.160d30bf a captured run that exits 3 in time returns status 3 with its output instead of throwing (3125 ms)
+PASS #1322.160d30bf a streamed run that exits 0 returns status 0 with empty captured output and its measurements (3276 ms)
+PASS #1322.160d30bf a run that finishes in time is not stopped: a background child it left behind is still running after measureOnce returns (242 ms)
+PASS #1322.2df04a4b a run stopped for writing 40 MiB past the 32 MiB maxBuffer leaves neither the still-running measured command nor its child running (321 ms)
+PASS #1322.0e535c64 a run stopped at its 5000 ms timeout (follow = false) leaves neither the measured command nor its child running (5017 ms)
+PASS #1322.0e535c64 a run stopped at its 5000 ms timeout (follow = true) leaves neither the measured command nor its child running (5015 ms)
+
+tests 7, pass 7, fail 0; duration 10.3 s. No process from the suite left running afterwards.
+node scripts/wait-ratchet.mjs: no line for tests/acceptance/1322 (its only FAIL lines at this base are packages/hub/test/transcript-path.test.ts:61 and :81).
+Not run on Linux.
