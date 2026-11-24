@@ -40,9 +40,7 @@ alone.push('tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-re
 slow.push('tests/acceptance/3178/suites.test.ts');
 slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
 
-// #3033's files (blind) build deep-gpu; height, speed and repeat read the sea's wave table on the noop backend, the
-// others draw on the GPU; budgets.test.ts times a sea at 1080p.
-alone.push('tests/acceptance/3033/');
+// #3033's folder (blind) runs alone by its lane.json; budgets.test.ts times a sea at 1080p with judgeLimit.
 timed.push('tests/acceptance/3033/budgets.test.ts');
 
 /**
@@ -215,7 +213,6 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/2738/', 'tests/acceptance/265/', 'tests/acceptance/3016/', 'tests/acceptance/552/', 'tests/acceptance/298/',
     'tests/acceptance/1488/', 'tests/acceptance/161/', 'tests/acceptance/2034/', 'tests/acceptance/2054/', 'tests/acceptance/3171/', 'tests/acceptance/290/',
     'tests/acceptance/2215/', 'tests/acceptance/2215-redraft-ac5/', 'tests/acceptance/3034/',
-    'tests/acceptance/3033/',
   ],
   'shared: the Lima VMs': [
     'tests/acceptance/1942/', 'tests/acceptance/1945/', 'tests/acceptance/1946/', 'tests/acceptance/1943/', 'tests/acceptance/1942-redraft-2073/',
