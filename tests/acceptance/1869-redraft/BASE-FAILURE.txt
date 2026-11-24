@@ -1,0 +1,46 @@
+# #1869 redraft suite on base b87494f02 (origin/main), 2026-11-24, Linux, Node 24.22.0
+# npx vitest run tests/acceptance/1869-redraft --reporter=verbose (ANSI colors stripped, repo path as <repo>)
+
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/1869-redraft/diff-fails.test.ts > #1869.2a6f926a a claim that edits an approved check's test file, with git diff failing, does not read PASS, and the check's line names the failed read > #1869.2a6f926a git diff fails in the worktree for a claim that edits test/total.check.cjs: not PASS, total's line names the failed diff 1743ms
+   → #1869.2a6f926a the claim read PASS; reasons: ["total: PASS on 1 clean run"]: approved check total passed it though the claim edits test/total.check.cjs, its own test file, because the failed read (git -c core.hooksPath=/dev/null diff --name-only --no-renames 28500d0d7dd296005b4f3674baf1821320cf13cf) was taken as no change: expected 'PASS' not to be 'PASS' // Object.is equality
+ × tests/acceptance/1869-redraft/ls-files-hangs.test.ts > #1869.c671af33 with git ls-files hanging, the claim gets a verdict other than PASS before its stop hold ends, naming the timed-out read > #1869.c671af33 git ls-files hangs in the worktree: before the 60 s stop hold ends, a verdict other than PASS naming the ls-files read 62166ms
+   → #1869.c671af33 the claim got no verdict before its 60 s stop hold ended: the stop was still waiting on the hung read (git -c core.hooksPath=/dev/null ls-files); it reads no verdict: expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1869-redraft/diff-fails.test.ts > #1869.2a6f926a a claim that edits an approved check's test file, with git diff failing, does not read PASS, and the check's line names the failed read > #1869.2a6f926a git diff fails in the worktree for a claim that edits test/total.check.cjs: not PASS, total's line names the failed diff
+AssertionError: #1869.2a6f926a the claim read PASS; reasons: ["total: PASS on 1 clean run"]: approved check total passed it though the claim edits test/total.check.cjs, its own test file, because the failed read (git -c core.hooksPath=/dev/null diff --name-only --no-renames 28500d0d7dd296005b4f3674baf1821320cf13cf) was taken as no change: expected 'PASS' not to be 'PASS' // Object.is equality
+ ❯ tests/acceptance/1869-redraft/diff-fails.test.ts:39:222
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1869-redraft/ls-files-hangs.test.ts > #1869.c671af33 with git ls-files hanging, the claim gets a verdict other than PASS before its stop hold ends, naming the timed-out read > #1869.c671af33 git ls-files hangs in the worktree: before the 60 s stop hold ends, a verdict other than PASS naming the ls-files read
+AssertionError: #1869.c671af33 the claim got no verdict before its 60 s stop hold ended: the stop was still waiting on the hung read (git -c core.hooksPath=/dev/null ls-files); it reads no verdict: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1869-redraft/ls-files-hangs.test.ts:38:188
+     36|       if (!hung.length) throw Error(`BLOCKED: the gate never listed tr…
+     37|       const reads = hung.map((s) => s.args).join('; ');
+     38|       expect(replied, `${AC2} the claim got no verdict before its ${ST…
+       |                                                                                                                                                                                            ^
+     39|       expect(v?.outcome, `${AC2} the claim has no verdict at the end o…
+     40|       expect(v?.outcome, `${AC2} the claim read ${shown(v)}: the hung …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  03:21:49
+   Duration  69.92s (tests 81%, transform 17%, import 1%)
+
+exit=1
