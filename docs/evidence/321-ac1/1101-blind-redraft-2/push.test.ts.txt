@@ -1,0 +1,213 @@
+// A blind redraft of criterion 1 of #1101, written at 6a4df9a89 from the issue, the design and the base (README). It
+// runs in place of ../1101/push.test.ts as a whole file, so it carries that file's criterion-3 tests unchanged.
+//
+// AC1 (#1101.5140ae1c): Approving a fixture push starts no git process for 10 s. The receipt shows "Starts in 10 s ·
+// Undo", counting down on a virtual clock, and the push starts at 10 s. A planted card that starts the push at the
+// click fails, naming the step.
+// AC3 (#1101.2d545cc0): After the push runs, its receipt says it ran and can't be undone, with no Undo control in the
+// text snapshot. A planted receipt that still shows Undo fails, naming the receipt.
+//
+// A real hub on its test clock holds the agent's `git push origin main` with an authority ask. Allow is pressed on the
+// ask's card in the replica, and what the app sent reaches the hub signed, as the app sends it; the hold starts at the
+// `ask.answered` the hub records. The agent then runs the same call at once and 9.5 s into the hold on the hub's clock,
+// and once more when the clock reaches 10 s; only a call the hub lets through starts a git process (a real `git push`
+// to a bare repository), so "the push starts" is the hub letting the call through, and the bare repository shows it.
+// The hold must let the push through inside a window of real time too short for a hold kept on real time to end.
+// The receipt is read on the ask's page in the replica, over a copy of the record taken 9.5 s into the hold, at five
+// times on the replica's virtual clock (README, The countdown).
+//
+// Imports only ../1101/helpers.ts, so the file runs from this folder or from ../1101 alike.
+import { afterAll, describe, expect, it } from 'vitest';
+import {
+  Agent, allowOnCard, awaitRecord, blocked, cleanup, clock, copyRecord, held, HOLD_MS, hubLists, ID, inconclusive, MINUTE, PLANT, PUSH, pressAllow,
+  quoted, ranReceipt, remoteHas, Replica, SECOND, shows, sleep, STARTS_IN, stepTo, stopHub, UNDO, undoControls, world, type Held, type World,
+} from '../1101/helpers.ts';
+
+/** One run of the held push by the agent: the hub's clock when sent and right after the reply, and what came of it. */
+interface Try { sent: number; call: string; replied: boolean; ran: boolean; at: number; said: string; reached: boolean; done: Promise<void> }
+
+interface Scene {
+  w: World; h: Held; start: number;
+  /** The hold's failures, each naming the step. */
+  hold: string[];
+  /** Why the run couldn't see the hold, when it couldn't: then no failure in `hold` is a pass either. */
+  unseen?: string;
+  /** A copy of the record taken inside the hold, 9.5 s in. */
+  during: string;
+  after?: { fixture: string; at: number };
+}
+
+/** Waits for `p`, or until `ms` of real time passed, whichever is first. */
+async function within(p: Promise<unknown>, ms: number): Promise<void> {
+  // A hub that keeps a held call waiting through its hold replies only later; the try is read again at 10 s.
+  await Promise.race([p, sleep(Math.max(0, ms))]); // deadline: bounds the wait for a reply a held call may keep back
+}
+
+/** The agent runs the push's call: sent once the hub's clock is read; whatever the hub lets through runs for real. */
+async function fire(w: World, a: Agent, tries: Try[]): Promise<Try> {
+  const t: Try = { sent: await clock(w), call: '', replied: false, ran: false, at: Number.NaN, said: '', reached: false, done: Promise.resolve() };
+  t.done = (async () => {
+    try {
+      const r = await a.call(PUSH);
+      t.at = await clock(w);
+      Object.assign(t, { call: r.call, replied: true, ran: r.ran, said: r.said });
+      if (r.ran) {
+        await a.runs(PUSH, r.call);
+        t.reached = await remoteHas(w, 'main');
+      }
+    } catch (error) {
+      t.said = `no reply: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  })();
+  tries.push(t);
+  return t;
+}
+const allDone = (tries: Try[]): Promise<unknown> => Promise.allSettled(tries.map((t) => t.done));
+const secs = (ms: number): string => (ms / 1000).toFixed(1);
+
+/**
+ * The fixture push, approved on its card (with `plant` given to the card and, when it lists it, the hub): the hold's
+ * failures, each naming the step; the record copied inside the hold, and after the push ran when it did.
+ */
+async function scene(plant?: string): Promise<Scene> {
+  const w = await world(plant ? { plant } : {});
+  worlds.push(w);
+  const a = await Agent.start(w);
+  const h = await held(w, a, PUSH);
+  const pressed = await pressAllow(await copyRecord(w), await clock(w), h, { ...(plant ? { plant } : {}), untilSent: true });
+  const yes = pressed.sent.find((p) => p.ask === h.ask) ?? blocked(`Allow pressed on ${h.ask}'s card sent no answer: ${JSON.stringify(pressed.sent)}`);
+  // Real time is read before the yes is sent, so the window below can only come out shorter than it is.
+  const yesReal = Date.now();
+  const start = (await allowOnCard(w, h, undefined, yes)).ts;
+  const step = `the step \`${PUSH.command}\` (${h.ask})`;
+  const hold: string[] = [];
+  let unseen: string | undefined;
+  const tries: Try[] = [];
+
+  // Inside the hold: the agent runs the call at once, as a held call is told to, and again 9.5 s in.
+  const first = await fire(w, a, tries);
+  await within(first.done, SECOND);
+  if ((await clock(w)) < start + 9.5 * SECOND) {
+    await stepTo(w, start + 9.5 * SECOND);
+    const again = await fire(w, a, tries);
+    await within(again.done, SECOND);
+  }
+  const early = (): Try[] => tries.filter((t) => t.ran && t.at < start + HOLD_MS);
+  const reachedEarly = await remoteHas(w, 'main');
+  const during = await copyRecord(w);
+  const beforeTen = await clock(w);
+  if (first.sent >= start + HOLD_MS) unseen = `the first try of ${step} was sent ${secs(first.sent - start)} s into its hold on the hub's clock, so no try was made inside it`;
+  else if (beforeTen >= start + HOLD_MS && !early().length) unseen = `real time carried the hub's clock ${secs(beforeTen - start)} s into the hold of ${step} before the run could bring it to 10 s`;
+
+  // At 10 s on the hub's clock the push starts: a try kept waiting comes back let through, or a new one is let through.
+  await stepTo(w, start + HOLD_MS);
+  const tenReal = Date.now();
+  // Real time in which only the hub's clock can have ended the hold: a hold kept on real time ends 10 s after the yes.
+  const window = yesReal + HOLD_MS - SECOND - tenReal;
+  if (!tries.some((t) => t.ran)) await fire(w, a, tries);
+  await within(allDone(tries), window);
+  const onTime = tries.filter((t) => t.ran).sort((x, y) => x.at - y.at)[0];
+  if (!onTime) {
+    await within(allDone(tries), 2 * MINUTE);
+    const late = tries.filter((t) => t.ran).sort((x, y) => x.at - y.at)[0];
+    if (late && (window < 2 * SECOND || unseen)) unseen ??= `the run took ${secs(tenReal - yesReal)} s of real time to bring the hub's clock to 10 s into the hold of ${step}, so a hold on the hub's clock couldn't be told from one on real time`;
+    else if (late) hold.push(`${step} didn't start at 10 s on the hub's clock: it was let through only after more than ${secs(window)} s of real time past 10 s, ${secs(late.at - start)} s into its hold, as a hold kept on real time would be`);
+    else hold.push(`${step} didn't start at 10 s: the hub still held it (${(tries.at(-1)?.said ?? '').slice(0, 200)})`);
+  }
+  for (const t of early()) hold.push(`${step} started ${secs(t.at - start)} s into its hold, before 10 s: a git process ran inside the hold`);
+  if (!early().length && reachedEarly) hold.push(`${step}: a git process pushed main to origin before 10 s into its hold`);
+  const ran = tries.filter((t) => t.ran).sort((x, y) => x.at - y.at)[0];
+  if (!ran) return { w, h, start, hold, ...(unseen ? { unseen } : {}), during };
+  await within(ran.done, MINUTE);
+  if (!tries.some((t) => t.reached)) hold.push(`${step} was let through, but no git push reached origin`);
+  await awaitRecord(w, (all) => all.find((e) => e.kind === 'tool.after' && e.data.call === ran.call), `the PostToolUse of ${step}`);
+  return { w, h, start, hold, ...(unseen ? { unseen } : {}), during, after: { fixture: await copyRecord(w), at: (await clock(w)) + SECOND } };
+}
+
+/** The seconds a page's receipt says are left: each "Starts in <n> s" it shows. */
+const startsIn = (texts: string[]): number[] => [...new Set(texts.flatMap((t) => [...t.matchAll(/Starts in (\d+)\s*s\b/g)].map((m) => Number(m[1]))))];
+
+/**
+ * The countdown's judge (README, The countdown): the ask's page over a copy of the record taken inside the hold, its
+ * replica's clock at 0 ms and 100 ms into the hold, then 2.5 s, 5.5 s and 8.5 s in. In the first reads it shows
+ * "Starts in 10 s" (at one of the two at least) with an Undo control; later it counts down, each read naming the
+ * seconds left rounded up or down, with an Undo control beside it.
+ */
+async function countdown(fixture: string, h: Held, start: number): Promise<string[]> {
+  const r = await Replica.on(fixture);
+  const failures: string[] = [];
+  const who = `${h.ask} (\`${h.step.command}\`)`;
+  try {
+    const firsts: string[] = [];
+    let ten = false;
+    for (const ms of [0, 100]) {
+      await r.at(start + ms);
+      const p = await r.page(h.ask);
+      ten ||= startsIn(p.texts).includes(10) || shows(p, STARTS_IN(10));
+      firsts.push(quoted(p));
+      if (!undoControls(p).length) failures.push(`${who}: ${ms} ms into its hold its receipt shows no ${UNDO} control; it reads ${quoted(p)}`);
+    }
+    if (!ten) failures.push(`${who}: as its hold starts its receipt must read "${STARTS_IN(10)} · ${UNDO}"; 0 ms in it reads ${firsts[0]}, 100 ms in ${firsts[1]}`);
+    for (const ms of [2500, 5500, 8500]) {
+      await r.at(start + ms);
+      const p = await r.page(h.ask);
+      const left = (HOLD_MS - ms) / 1000;
+      const want = [Math.floor(left), Math.ceil(left)];
+      const shown = startsIn(p.texts);
+      if (shown.length !== 1 || !want.includes(shown[0]!)) failures.push(`${who}: ${secs(ms)} s into its hold its receipt must count down to "${STARTS_IN(want[1]!)}" or "${STARTS_IN(want[0]!)}"; it reads ${quoted(p)}`);
+      if (!undoControls(p).length) failures.push(`${who}: ${secs(ms)} s into its hold its receipt shows no ${UNDO} control; it reads ${quoted(p)}`);
+    }
+  } finally {
+    await r.stop();
+  }
+  return failures;
+}
+
+const worlds: World[] = [];
+let clean: Promise<Scene> | undefined;
+const cleanRun = (): Promise<Scene> => (clean ??= scene());
+
+afterAll(async () => {
+  for (const w of worlds.splice(0)) await stopHub(w.hub).catch(() => undefined);
+  await cleanup();
+}, 5 * MINUTE);
+
+describe(`#1101 AC1 ${ID.hold}`, () => {
+  it(`${ID.hold} approving a fixture push starts no git process for 10 s, its receipt reads "Starts in 10 s · Undo" counting down on a virtual clock, and the push starts at 10 s`, async () => {
+    const s = await cleanRun();
+    const failures = [...s.hold, ...await countdown(s.during, s.h, s.start)];
+    expect(failures, failures.join('\n')).toEqual([]);
+    if (s.unseen) inconclusive(s.unseen);
+  }, 20 * MINUTE);
+
+  it(`${ID.hold} a planted card that starts the push at the click (${PLANT.startsAtClick}) fails, naming the step`, async () => {
+    const s = await cleanRun();
+    expect(s.hold, `the clean hold already fails, so the plant can't be told from it: ${s.hold.join('\n')}`).toEqual([]);
+    if (s.unseen) inconclusive(`the clean hold wasn't seen, so the plant can't be told from it: ${s.unseen}`);
+    const planted = await scene(PLANT.startsAtClick);
+    const naming = planted.hold.filter((f) => f.includes(`the step \`${PUSH.command}\``) && f.includes(planted.h.ask));
+    if (!naming.length && planted.unseen) inconclusive(`with ${PLANT.startsAtClick}: ${planted.unseen}`);
+    expect(naming, `the card that starts the push at the click wasn't caught, naming the step \`${PUSH.command}\` (${hubLists(PLANT.startsAtClick) ? 'the hub lists the plant' : 'the hub doesn\'t list the plant'}): ${JSON.stringify(planted.hold)}`).not.toEqual([]);
+  }, 20 * MINUTE);
+});
+
+describe(`#1101 AC3 ${ID.ran}`, () => {
+  it(`${ID.ran} after the push runs, its receipt says it ran and can't be undone, with no Undo control in the text snapshot`, async () => {
+    const s = await cleanRun();
+    if (!s.after) expect.fail(`the push never ran, so its receipt after it ran can't be read: ${s.hold.join('\n')}`);
+    const failures = await ranReceipt(s.after.fixture, s.h, s.after.at);
+    expect(failures, failures.join('\n')).toEqual([]);
+  }, 180 * MINUTE);
+
+  it(`${ID.ran} a planted receipt that still shows Undo (${PLANT.keepsUndo}) fails, naming the receipt`, async () => {
+    const s = await cleanRun();
+    if (!s.after) expect.fail(`the push never ran, so the clean receipt can't be read before the plant: ${s.hold.join('\n')}`);
+    const failures = await ranReceipt(s.after.fixture, s.h, s.after.at);
+    expect(failures, `the clean receipt already fails, so the plant can't be told from it: ${failures.join('\n')}`).toEqual([]);
+    // The receipt is the app's to draw; a hub that lists the plant makes it too, so its world runs again with it.
+    const p = hubLists(PLANT.keepsUndo) ? await scene(PLANT.keepsUndo) : s;
+    if (!p.after) expect.fail(`with ${PLANT.keepsUndo} the push never ran: ${p.hold.join('\n')}`);
+    const caught = (await ranReceipt(p.after.fixture, p.h, p.after.at, PLANT.keepsUndo)).filter((f) => f.includes(`the receipt of ${p.h.ask}`) && /Undo/.test(f));
+    expect(caught, `the receipt that still shows Undo wasn't caught, naming the receipt of ${p.h.ask}`).not.toEqual([]);
+  }, 180 * MINUTE);
+});

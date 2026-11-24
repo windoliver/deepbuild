@@ -8,7 +8,8 @@ file records how they came to be.
 - **#321 AC1's first draft** (`../321/proceed.test.ts`, criterion `#321.69952336`) approves the held push, then
   expects the agent's next try to run at once.
 - **#1101 AC1** holds a yes to a push for 10 s and refuses a try during the hold. Its blind redraft, made under
-  Dogfooding, stands (windoliver/deepbuild#3062, `docs/evidence/321-hold-waits/blind-redraft-2/RESULT.md`).
+  Dogfooding, stands (`docs/evidence/321-ac1/1101-blind-redraft-2/RESULT.md`, copied from windoliver/deepbuild#3062's
+  2dc871027).
 - So no hub passes both. #321's first draft fails on main, and #1101's redraft fails on a hub that keeps the try
   waiting (#3062).
 
@@ -57,12 +58,15 @@ All runs are on the Spark at main `dc8625b09`.
 
 - **Main unchanged** (`docs/evidence/321-ac1/failing-first.txt`): both tests fail. The draft plants its sorter as
   `DEEP_HUB_TEST_SORTER=<rule>`, and main read that setting only as a JSON file's path.
-- **The fix:** the hub reads a value that names no file as the rule itself, for every question (`packages/hub/src/holds.ts`).
+- **The fix:** the hub reads a value that isn't an absolute path as the rule itself, for every question
+  (`packages/hub/src/holds.ts`).
 - **Main with that fix, at load 163–175** (`docs/evidence/321-ac1/seam-runs.txt`):
-  - The wrong-program test passes in all 3 runs: the planted core fails the scenario, naming the call.
   - The scenario passes in 1 of 3 runs.
   - The other two failed when deep-hook's 50 ms wait for the hub ran out, so it spooled the call and let it through.
     That is timing under load, INCONCLUSIVE, not a verdict.
+  - The wrong-program test passed in all 3. But a pass counts only in a run where the scenario also passed. Under
+    that load, the correct hub also let the push through on deep-hook's timeout, with the same message. So only run 3
+    shows the planted core failing.
 
 Since main's hold already refuses a try during the hold and lets the push run after it, #3062's change isn't needed
 for this criterion.
