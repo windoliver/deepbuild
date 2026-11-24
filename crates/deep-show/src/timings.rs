@@ -59,10 +59,10 @@ pub(crate) fn time_remaps(
 
 /// The compares a frame at `t` applies first: each logic item's steps after the one its last
 /// frame here applied (`seen`, updated), up to the frame's own; a first frame applies its own.
-/// Each array's are those `kept` under the hash its `compares` holds.
+/// Each array's are those `kept` under the key its `compares` holds.
 pub(crate) fn compares(
     doc: &Value,
-    kept: &BTreeMap<String, (String, Vec<Value>)>,
+    kept: &BTreeMap<String, Vec<Value>>,
     t: i64,
     seen: &mut BTreeMap<String, i64>,
 ) -> Value {
@@ -73,8 +73,11 @@ pub(crate) fn compares(
         .into_iter()
         .flatten()
     {
-        let of = a.get("compares").and_then(Value::as_str);
-        let Some((_, list)) = kept.get(name).filter(|(k, _)| Some(k.as_str()) == of) else {
+        let Some(list) = a
+            .get("compares")
+            .and_then(Value::as_str)
+            .and_then(|k| kept.get(k))
+        else {
             continue;
         };
         let logic = name.split('.').next().unwrap_or_default().to_string();
@@ -153,7 +156,7 @@ pub(crate) fn code(sched: &Scheduler<'_>, session: &Session, doc: &Value) -> (Va
 pub(crate) fn add(
     frame: &mut Value,
     timed: (&Value, &Mappings, &Mappings, i64),
-    kept: &BTreeMap<String, (String, Vec<Value>)>,
+    kept: &BTreeMap<String, Vec<Value>>,
     seen: &mut BTreeMap<String, i64>,
 ) {
     let (doc, before, after, t) = timed;

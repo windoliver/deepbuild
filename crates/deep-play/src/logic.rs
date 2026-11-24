@@ -10,6 +10,8 @@ use std::rc::Rc;
 use deep_canvas::document::Issue;
 use deep_canvas::registry::Sealed;
 #[cfg(feature = "logic")]
+use deep_canvas::schedule::sha256_hex;
+#[cfg(feature = "logic")]
 use deep_logic::piece::{check_in, History, Piece};
 #[cfg(feature = "logic")]
 use deep_logic::world::{track_of, Entry, Record, World};
@@ -153,7 +155,7 @@ pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
 /// Each logic item of `piece` (`form`'s, checked) stepped on `track` over the transport's span,
 /// and its rows written to `occurrences.<logic ID>.occurrences`:
 /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
-/// Returns the bake's `compares` by array, which stay out of the form (#3278).
+/// Returns the bake's `compares`, which stay out of the form (#3278).
 #[cfg(feature = "logic")]
 pub fn inline_logic(
     form: &mut Value,
@@ -276,23 +278,24 @@ pub fn inline_logic(
         }
     }
     // #538: each item's comparisons after its steps, on its first array, for `frames`' timings.
-    // They are clock readings, so they stay out of the form, whose every member keys what reads
-    // it (#3278).
+    // They are clock readings, which would move the key of everything that reads the form
+    // (#3278), so the array holds only a key of what the bake ran on (the item's bake key, its
+    // steps and the planted hand-over), and the readings go back to the caller under it.
     let mut compares = Compares::new();
     for (id, list) in &rec.compares {
-        let first = piece
-            .items
-            .iter()
-            .find(|i| &i.id == id)
-            .and_then(|i| i.writes.first())
+        let Some(i) = piece.items.iter().position(|i| &i.id == id) else {
+            continue;
+        };
+        let first = piece.items[i]
+            .writes
+            .first()
             .map(|w| format!("{id}.{}", w.name));
-        if let Some(name) = first.filter(|f| arrays.contains_key(f)) {
-            compares.insert(
-                name,
-                list.iter()
-                    .map(|(k, bytes, ms)| json!([k, bytes, ms]))
-                    .collect(),
-            );
+        if let Some(a) = first.and_then(|f| arrays.get_mut(&f)) {
+            let ran = deep_logic::bake_key(&piece, i, &entries);
+            let of = sha256_hex(format!("{ran} {steps} {drops_last_range}").as_bytes());
+            a["compares"] = json!(of);
+            let list = list.iter().map(|(k, bytes, ms)| json!([k, bytes, ms]));
+            compares.insert(of, list.collect());
         }
     }
     // #1918: beside the readings of the worlds the document lists.
@@ -308,7 +311,7 @@ pub fn inline_logic(
 }
 
 /// #538: a bake's comparisons of each logic item's arrays after each step, `[step, bytes, ms]`,
-/// by the item's first array.
+/// under the key its first array holds as `compares`.
 #[cfg(feature = "logic")]
 pub type Compares = std::collections::BTreeMap<String, Vec<Value>>;
 

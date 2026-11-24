@@ -867,8 +867,7 @@ impl<'a> Hub<'a> {
             frame["remaps"] = remaps(&self.sched, &self.sessions[&f.doc]);
             if let (Some(before), Some(doc)) = (&before, self.sessions[&f.doc].document()) {
                 let after = crate::timings::mappings(&self.sched, &self.sessions[&f.doc]);
-                let kept = &self.compares.borrow();
-                crate::timings::add(&mut frame, (doc, before, &after, t), kept, &mut seen);
+                crate::timings::add(&mut frame, (doc, before, &after, t), &mut seen);
                 let (tokens, aligns) =
                     crate::timings::code(&self.sched, &self.sessions[&f.doc], doc);
                 frame["tokens"] = tokens;
