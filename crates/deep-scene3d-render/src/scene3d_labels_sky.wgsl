@@ -1,3 +1,65 @@
+// ---- points: a disc, square or diamond in px or m about the point's projection
+
+struct PointOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) @interpolate(flat) c: vec2<f32>,
+    @location(1) @interpolate(flat) r: f32,
+    @location(2) @interpolate(flat) color: u32,
+    @location(3) @interpolate(flat) pick: u32,
+    @location(4) @interpolate(flat) shape: u32,
+    // Where it is in the world; w 1 when the sky's fog applies to it (#1992).
+    @location(5) @interpolate(flat) world: vec4<f32>,
+};
+
+@vertex
+fn point_vs(
+    @builtin(vertex_index) vi: u32,
+    @location(0) p: vec4<f32>,
+    @location(1) color: u32,
+    @location(2) pick: u32,
+    @location(3) flags: u32,
+) -> PointOut {
+    var out: PointOut;
+    let c = frame.clip * vec4<f32>(p.xyz, 1.0);
+    out.color = color;
+    out.pick = pick;
+    out.shape = (flags >> 1u) & 3u;
+    out.world = vec4<f32>(p.xyz, f32((flags >> 3u) & 1u));
+    if c.w <= 0.0 {
+        out.pos = OFF;
+        return out;
+    }
+    var size = p.w * frame.px.x;
+    if (flags & 1u) != 0u {
+        size = p.w * px_per_m(c);
+    }
+    out.c = to_px(c);
+    out.r = size * 0.5;
+    let k = corner(vi) * 2.0 - 1.0;
+    out.pos = from_px(out.c + k * (out.r + 1.0), c);
+    return out;
+}
+
+@fragment
+fn point_fs(in: PointOut) -> Targets {
+    let q = in.pos.xy - in.c;
+    var dist = length(q);
+    if in.shape == 1u {
+        dist = max(abs(q.x), abs(q.y));
+    } else if in.shape == 2u {
+        dist = (abs(q.x) + abs(q.y)) * 0.70710678;
+    }
+    let cov = clamp(in.r + 0.5 - dist, 0.0, 1.0);
+    if cov <= 0.0 {
+        discard;
+    }
+    var c = paint(in.color);
+    if in.world.w > 0.5 {
+        c = fogged(c, in.world.xyz);
+    }
+    return targets(vec4<f32>(c * cov, cov), select(0u, in.pick, cov >= 0.5));
+}
+
 // ---- labels: a quad per glyph from the core's glyph atlas, in a label that faces the camera,
 // stays upright or keeps its axes
 
@@ -182,43 +244,7 @@ fn background(d: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn sky_fs(@builtin(position) pos: vec4<f32>) -> Targets {
-    return targets(vec4<f32>(background(view_ray(pos.xy)), 1.0), 0u);
-}
-
-// Fog on a lit surface or a mark at `world` (#422, #1992; Sky `sky@1` and its height fog): the
-// distance fog by its curve, over the distance from the eye whatever the curve, and the mist
-// below the height fog's top along the ray's length beneath it, mixed toward the fog's color or
-// what the background shows along the ray.
-fn fogged(c: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
-    let ramp = env.fog.y > 1.5;
-    if env.low.w < 0.5 || (env.fog.x <= 0.0 && env.fog.w <= 0.0 && !ramp) {
-        return c;
-    }
-    let ray = world - env.eye.xyz;
-    let dist = length(ray);
-    let a = env.fog.x * dist;
-    var keep = select(exp(-a), exp(-a * a), env.fog.y > 0.5);
-    if ramp {
-        keep = 1.0 - clamp((dist - env.range.x) / (env.range.y - env.range.x), 0.0, 1.0);
-    }
-    if env.fog.w > 0.0 {
-        // The share of the ray below the top, from the eye to the surface.
-        let y0 = env.eye.y;
-        let y1 = world.y;
-        var below = 0.0;
-        if y0 <= env.fog.z && y1 <= env.fog.z {
-            below = 1.0;
-        } else if y0 <= env.fog.z || y1 <= env.fog.z {
-            let cross = (env.fog.z - y0) / (y1 - y0);
-            below = select(1.0 - cross, cross, y0 <= env.fog.z);
-        }
-        keep *= exp(-env.fog.w * dist * below);
-    }
-    var tint = env.fog_color.rgb;
-    if env.fog_color.w > 0.5 {
-        tint = background(ray / max(dist, 1e-6));
-    }
-    return mix(tint, c, keep);
+    return targets(vec4<f32>(drowned_far(view_ray(pos.xy)), 1.0), 0u);
 }
 
 // ---- puffs (#422; Puff `puff@1`): soft cloud sprites, back to front after the solids

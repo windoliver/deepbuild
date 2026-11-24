@@ -75,6 +75,8 @@ export async function runProbe(probe: string, input: object, ctx: CheckContext, 
       if (late) return resolve({ outcome: 'overran', testsRun: 0, failures: [], evidence: [], read: [], mask: null });
       resolve(report(out, err, code, signal, at));
     });
+    // A probe that exits before it reads its input fails the write with EPIPE; the close handler settles the run (#2126).
+    child.stdin.on('error', () => undefined);
     child.stdin.end(JSON.stringify({ ...input, checkout: ctx.checkout }));
   });
 }

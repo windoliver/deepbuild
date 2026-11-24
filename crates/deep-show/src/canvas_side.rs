@@ -32,6 +32,9 @@ struct CanvasSide {
     /// The world's record objects (#1868): read once when the hub sends its world, then shared by
     /// every call's scenario, so a call that draws nothing from the record pays nothing for it.
     record: std::sync::Arc<BTreeMap<String, RecordObject>>,
+    /// The world's documents the hub's record holds (#1721), read from the evidence store when they
+    /// change and then shared by every call's scenario.
+    recorded: std::sync::Arc<BTreeMap<String, Vec<shared::Recorded>>>,
     /// #2694: the calls kept to play again, each at the time it was first played.
     calls: Vec<Value>,
     /// #2694: the calls played, reads included: the clock moves one spacing with each.
@@ -49,6 +52,7 @@ pub(super) fn serve(
     let mut side = CanvasSide {
         world: Map::from_iter([("evidence".to_string(), json!(""))]),
         record: Default::default(),
+        recorded: Default::default(),
         calls: Vec::new(),
         played: 0,
     };
@@ -97,6 +101,7 @@ impl CanvasSide {
         input.insert("calls".into(), Value::Array(self.calls.clone()));
         let mut scenario = scenario(&input)?;
         scenario.record = self.record.clone();
+        scenario.recorded = self.recorded.clone();
         Some(scenario)
     }
 
@@ -133,12 +138,17 @@ impl CanvasSide {
                 }
                 _ => BTreeMap::new(),
             };
+            let recorded = match world.get("docs") == self.world.get("docs") {
+                true => self.recorded.clone(),
+                false => std::sync::Arc::new(shared::recorded(&world).ok_or_else(bad_input)?),
+            };
             let before = std::mem::replace(&mut self.world, world);
             if self.scenario(false).is_none() {
                 self.world = before;
                 return Err(bad_input());
             }
             self.record = std::sync::Arc::new(record);
+            self.recorded = recorded;
             return Err(json!({"ok": true}));
         }
         let Some(Value::Object(call)) = input.get("call") else {
@@ -180,12 +190,13 @@ impl CanvasSide {
     /// the side holds after it.
     fn answer(&self, hub: &hub::Hub, reply: Value, doc: Option<&str>) -> Value {
         let presented = match doc {
-            // #1415: a patch that changed nothing made no revision to present.
+            // #1415: a patch that changed nothing made no revision to present, nor did one that
+            // wasn't applied, nor a dry run (#1721).
             Some(doc)
                 if reply.get("rev").is_some()
-                    && reply["outcome"] != "refused"
-                    && reply["outcome"] != "applied"
-                    && reply["outcome"] != "no_change" =>
+                    && reply.get("dry_run").is_none()
+                    && !["refused", "no_change", "conflict", "superseded"]
+                        .contains(&reply["outcome"].as_str().unwrap_or_default()) =>
             {
                 hub.presented_revision(doc)
             }

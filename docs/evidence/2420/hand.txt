@@ -1,0 +1,19 @@
+#2420 by hand: a run's sandbox.denied ceiling and a long target's cut
+clone of github.com/windoliver/deepbuild at f72256cd1 (branch issue-2420-denied-ceiling)
+last code commit: 7d9a5c7ac supervisor: a closing event the record didn't take at cleanup is left to the rec
+2026-11-23 15:40 PST, load 16.62 31.90 59.86, node v24.22.0
+
+run A run:01M85CGA3ZNC8ZD53XW7MXJ630: sandboxed stack up, egress filter on 127.0.0.1:60262
+1 request, Host of 9000 bytes: answer 403
+1,000 requests, each under a different Host: answers {"403":1000}
+  run A's sandbox.denied naming a target: 256
+1,000 more under other names: answers {"403":1000}
+  run A's sandbox.denied naming a target, still live: 256; closing events: 0
+  the long Host as recorded: 519 bytes, first 512 = the Host's first 512: true
+    ...1.l0082.l0083.l0084.l0…9000
+run B run:01M85CGBT33B5460FC497AB0D7: beside it, egress filter on 127.0.0.1:62280
+3 requests under different Hosts: answers {"403":3}
+deep env down: run A exit 0, cleaned true; run B exit 0, cleaned true
+run A ended: 256 naming a target; closing: [{"operation":"more","target":"1745"}]
+run B ended: 3 naming a target; closing: []
+hand run finished: exit 0

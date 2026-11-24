@@ -1,0 +1,59 @@
+# node --test 'tests/acceptance/3310/*.test.mjs' on the base 0a875355b (Node 24.22.0), trimmed: stack frames and assertion object fields cut, local paths redacted
+
+✖ #3310.b5cddbf4 a by-hand file listed by its path, failing on the change, gets no FAIL, BLOCKED or INCONCLUSIVE before line, a before line names it as by hand, and the tests not on the list are run and judged as today (4409.664708ms)
+✖ #3310.b5cddbf4 a by-hand file under a folder entry ending in /, failing on the change, gets no FAIL, BLOCKED or INCONCLUSIVE before line, a before line names it as by hand, and the tests not on the list are run and judged as today (4285.237417ms)
+✖ #3310.5f3438ea a change saying Closes, where the only test of one criterion is listed by hand and passes on the change and fails on the merge base at its assertion: trace refuses Closes with that criterion open, and the run exits non-zero (4050.971375ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12860.767583
+
+✖ failing tests:
+
+test at tests/acceptance/3310/before.test.mjs:65:1
+✖ #3310.b5cddbf4 a by-hand file listed by its path, failing on the change, gets no FAIL, BLOCKED or INCONCLUSIVE before line, a before line names it as by hand, and the tests not on the list are run and judged as today (4409.664708ms)
+  AssertionError [ERR_ASSERTION]: before named "tests/acceptance/93101/hand.test.mjs":
+  exit 1
+  stdout:
+  FAIL before: tests/acceptance/93101/double.test.mjs › #93101.db36b607 doubles a number, wrongly: fails on the change (AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:)
+    Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  PASS before: tests/acceptance/93101/half.test.mjs › #93101.78d9ff43 halves a number: failed on the merge base at its assertion
+  FAIL before: tests/acceptance/93101/hand.test.mjs › #93101.c8ae54e8 adds two numbers, by hand: fails on the change (AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:)
+    Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  proof: wall time 2.9 s
+  
+  stderr:
+  
+
+test at tests/acceptance/3310/before.test.mjs:71:1
+✖ #3310.b5cddbf4 a by-hand file under a folder entry ending in /, failing on the change, gets no FAIL, BLOCKED or INCONCLUSIVE before line, a before line names it as by hand, and the tests not on the list are run and judged as today (4285.237417ms)
+  AssertionError [ERR_ASSERTION]: before named "tests/acceptance/93101/first-draft/hand.test.mjs":
+  exit 1
+  stdout:
+  FAIL before: tests/acceptance/93101/double.test.mjs › #93101.db36b607 doubles a number, wrongly: fails on the change (AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:)
+    Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  FAIL before: tests/acceptance/93101/first-draft/hand.test.mjs › #93101.c8ae54e8 adds two numbers, by hand: fails on the change (AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:)
+    Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  PASS before: tests/acceptance/93101/half.test.mjs › #93101.78d9ff43 halves a number: failed on the merge base at its assertion
+  proof: wall time 2.8 s
+  
+  stderr:
+  
+
+test at tests/acceptance/3310/before.test.mjs:77:1
+✖ #3310.5f3438ea a change saying Closes, where the only test of one criterion is listed by hand and passes on the change and fails on the merge base at its assertion: trace refuses Closes with that criterion open, and the run exits non-zero (4050.971375ms)
+  AssertionError [ERR_ASSERTION]: no FAIL trace: line holding "Closes #93101"
+  exit 0
+  stdout:
+  PASS before: tests/acceptance/93101/double.test.mjs › #93101.db36b607 doubles a number: failed on the merge base at its assertion
+  PASS before: tests/acceptance/93101/half.test.mjs › #93101.78d9ff43 halves a number: failed on the merge base at its assertion
+  PASS before: tests/acceptance/93101/hand.test.mjs › #93101.c8ae54e8 adds two numbers: failed on the merge base at its assertion
+  PASS trace: Closes #93101: each of its 3 criteria has a tagged test that ran, passed and failed on a wrong program
+  proof: wall time 2.9 s
+  
+  stderr:
+  
