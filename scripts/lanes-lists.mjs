@@ -1481,6 +1481,11 @@ alone.push('tests/acceptance/3234-redraft-ac3/');
 // is kept by hand (3234-redraft-ac6/DISPUTE.md).
 byHand.push('tests/acceptance/3234/card.test.ts');
 alone.push('tests/acceptance/3234-redraft-ac6/');
+// #1881's blind redraft for the closed-issue sweep (#2047): suites85.test.ts runs each of #85's 17 test files in a child
+// Vitest (4 to 8 minutes), which start hubs of their own and include #85's budget measurement, judged on the reference Mac.
+alone.push('tests/acceptance/1881-redraft-2047/');
+timed.push('tests/acceptance/1881-redraft-2047/suites85.test.ts');
+slow.push('tests/acceptance/1881-redraft-2047/suites85.test.ts');
 
 // #112's eval and dispatched-run files, #2077's removal file and #2495's report file are kept by hand until the owner
 // swaps them: their judges score every request as the agents' work, and #3245's first request is a control with none, so
