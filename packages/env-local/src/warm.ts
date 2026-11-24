@@ -226,7 +226,6 @@ export class WarmStack {
     if (why) return `the compose file can't run here: ${why}; its containers would run outside the sandbox`;
     for (const s of Object.values(config.services ?? {})) for (const p of s.ports ?? []) p.host_ip ??= '127.0.0.1';
     config.name = this.project!;
-    openBinds(config, folder);
     return config;
   }
 
@@ -261,8 +260,11 @@ export class WarmStack {
   }
 
   /** Starts the services anew from the file; `wait`, through their own health checks. */
-  private async up(file: string, services: string[], wait = true): Promise<string | undefined> {
+  private async up(file: string, folder: string, services: string[], wait = true): Promise<string | undefined> {
     if (!services.length) return undefined;
+    // Right before they start: a step before may have written in a folder a service mounts.
+    const closed = openBinds(JSON.parse(readFileSync(file, 'utf8')) as Config, folder);
+    if (closed) return closed;
     const ran = await this.dock(this.compose(file, `up -d ${wait ? '--wait ' : ''}-t 3 --no-deps --no-build --pull never --force-recreate ${services.map(quote).join(' ')}`), [], BUILD_MS);
     return ran.code === 0 ? undefined : `docker compose up ${services.join(' ')} exited ${String(ran.code)}: ${ran.stderr.trim().split('\n').slice(-1)[0] ?? ''}`;
   }
@@ -273,15 +275,17 @@ export class WarmStack {
     const ran = await this.dock([
       `id=$(${this.compose(file, `ps -a -q ${quote(d.service)}`)}) || exit 1`, 'echo "$id"',
       `i=0; until "$0" exec "$id" pg_isready -q -h 127.0.0.1 -U ${quote(d.user)}; do`,
-      `  [ "$("$0" inspect -f '{{.State.Running}}' "$id")" = true ] || exit 3; i=$((i+1)); [ $i -lt 600 ] || exit 1; sleep 0.1`,
+      // Every tenth try, whether it still runs: one exited, or waiting on its restart policy to start it again, has ended.
+      `  [ $((i % 10)) -ne 0 ] || [ "$("$0" inspect -f '{{.State.Status}}' "$id")" = running ] || exit 3; i=$((i+1)); [ $i -lt 600 ] || exit 1; sleep 0.1`,
       'done',
     ].join('\n'));
     const id = ran.stdout.trim().split('\n')[0] ?? '';
     if (ran.code === 3 && id) {
       // A service that ended before it answered: its exit code and the last line it logged, as Docker keeps them.
       const exit = (await this.dock(`"$0" inspect -f '{{.State.ExitCode}}' "$1"`, [id])).stdout.trim();
-      const log = (await this.dock('"$0" logs --tail 1 "$1" 2>&1', [id])).stdout.trim().split('\n').slice(-1)[0] ?? '';
-      return `the database service ${d.service} exited with code ${exit || '(unknown)'} before it answered on its port; its last log line: ${log || '(none)'}`;
+      const logs = await this.dock('"$0" logs --tail 1 "$1" 2>&1', [id]);
+      const log = logs.code === 0 ? logs.stdout.trim().split('\n').slice(-1)[0] ?? '' : '';
+      return `the database service ${d.service} exited with code ${exit || '(unknown)'} before it answered on its port; its last log line: ${log || '(none Docker could read)'}`;
     }
     if (ran.code !== 0) return `the database service ${d.service} never answered on its port`;
     d.container = id;
@@ -383,7 +387,7 @@ export class WarmStack {
     if (config) {
       const made = await this.makeVolumes(others.flatMap((s) => this.namedVolumes(config, s).map((v) => this.volumeName(tag, v))));
       if (made) return made;
-      const up = await this.up(file, others);
+      const up = await this.up(file, folder, others);
       if (up) return up;
     }
     const at2 = join(this.data, `seed-record-${tag}.json`);
@@ -490,7 +494,7 @@ export class WarmStack {
     }
     // A service bind-mounting the repo restarts for each run, with its mount in the run's checkout and its volumes kept.
     if (dbService && (first || (this.o.plant !== 'env-keeps-db-mount' && config!.services![dbService]!.volumes?.some((v) => v.type === 'bind')))) {
-      const why = await this.up(base, [dbService], false);
+      const why = await this.up(base, r.folder, [dbService], false);
       if (why) return { cause: why };
     }
     if (dbService) {
@@ -560,7 +564,7 @@ export class WarmStack {
           const copied = await this.dock('"$0" run --rm --network none --label "com.docker.compose.project=$1" --entrypoint sh -v "$2:/from:ro" -v "$3:/to" "$4" -c "cp -a /from/. /to/"', [this.project!, p.from, p.to, image]);
           if (copied.code !== 0) return { cause: `the template's volume ${p.v} couldn't be copied: ${copied.stderr.trim().slice(-300)}` };
         }
-        const up = await this.up(file, others);
+        const up = await this.up(file, r.folder, others);
         if (up) return { cause: up };
         if (this.o.plant === 'env-keeps-redis') { this.held.started = true; this.held.volume = Object.fromEntries(pairs.map((p) => [p.v, p.to])); own.others = []; own.volumes = []; }
       }
@@ -583,7 +587,7 @@ export class WarmStack {
       images.push(...b.images);
       Object.assign(digests, b.digests);
       own.compose = file = this.filed(config, `run-${word}`, Object.fromEntries(others.map((s) => [s, keepRedis ? (v: string) => this.held.volume![v]! : (v: string) => this.volumeName(runTag, v)])), b.tags);
-      const up = await this.up(file, toBuild);
+      const up = await this.up(file, r.folder, toBuild);
       own.others = [...own.others, ...toBuild];
       if (up) return { cause: up };
     }

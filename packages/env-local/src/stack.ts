@@ -6,7 +6,7 @@
 // worktrees never share one; `docker compose up` and its `down` run through the host too.
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { chmodSync, constants, copyFileSync, createReadStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, copyFileSync, createReadStream, existsSync, fchmodSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import type { ClientRequest } from 'node:http';
 import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
@@ -576,30 +576,44 @@ export function composeRefusal(config: unknown, folder: string, leased: readonly
 }
 
 /**
- * Each bind mount's source in the folder, opened to read on Linux (#3377). A service runs as its own user (postgres is
- * uid 999), and the daemon checks that user against the mount's own mode bits there, which the hub's umask leaves
- * 0700. The daemon mounts as root, so only the source and what is under it need opening: the folder above it, its
- * checkouts folder and the hub's own keep their modes, so no other user of the machine reaches it. Links are left as
- * they are, and nothing outside the folder is touched. Docker Desktop on macOS doesn't check the container's uid.
+ * Each bind mount's source in the folder, opened to read on Linux (#3377); why one couldn't be, or nothing. A service
+ * runs as its own user (postgres is uid 999), and the daemon checks that user against the mount's own mode bits there,
+ * which the hub's umask leaves 0700. The daemon mounts as root, so only the source and what is under it need opening:
+ * the folder above it, its checkouts folder and the hub's own keep their modes, so no other user of the machine reaches
+ * it. Nothing outside the folder is changed: a link is never followed (each entry is opened without following one and
+ * changed through its handle, after its real path is checked to be in the folder), and a file with another name
+ * somewhere (a hard link) is left as it is. Docker Desktop on macOS doesn't check the container's uid.
  */
-export function openBinds(config: { services?: Record<string, { volumes?: { type?: string; source?: string }[] }> }, folder: string): void {
-  if (process.platform !== 'linux') return;
+export function openBinds(config: { services?: Record<string, { volumes?: { type?: string; source?: string }[] }> }, folder: string): string | undefined {
+  if (process.platform !== 'linux') return undefined;
   const root = realpathSync(folder);
+  const inside = (path: string): boolean => path === root || path.startsWith(`${root}${sep}`);
   const open = (at: string): void => {
-    const s = lstatSync(at);
-    if (s.isDirectory()) {
-      chmodSync(at, s.mode | 0o055);
-      for (const name of readdirSync(at)) open(join(at, name));
-    } else if (s.isFile()) chmodSync(at, s.mode | 0o044 | (s.mode & 0o100 ? 0o011 : 0));
+    const kind = lstatSync(at);
+    if ((!kind.isDirectory() && !kind.isFile()) || !inside(realpathSync(at))) return;
+    let fd: number;
+    try { fd = openSync(at, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ELOOP') return;
+      throw error;
+    }
+    try {
+      const s = fstatSync(fd);
+      if (s.isDirectory()) fchmodSync(fd, s.mode | 0o055);
+      else if (s.isFile() && s.nlink === 1) fchmodSync(fd, s.mode | 0o044 | (s.mode & 0o100 ? 0o011 : 0));
+      if (!s.isDirectory()) return;
+    } finally { closeSync(fd); }
+    for (const name of readdirSync(at)) open(join(at, name));
   };
   for (const service of Object.values(config.services ?? {})) {
     for (const v of service.volumes ?? []) {
       if (v.type !== 'bind' || !v.source) continue;
-      let source: string;
-      try { source = realpathSync(v.source); } catch { continue; }
-      if (source === root || source.startsWith(`${root}${sep}`)) open(source);
+      try { open(realpathSync(v.source)); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        return `the bind mount ${v.source} couldn't be opened to read for its service: ${(error as Error).message}`;
+      }
     }
   }
+  return undefined;
 }
 
 /** The compose project compose itself would pick: the file's top-level name:, else the folder's name. */
@@ -652,7 +666,8 @@ async function judge(host: Host, run: string, { work, judged }: { work: string; 
   for (const service of Object.values(config.services ?? {})) for (const port of service.ports ?? []) port.host_ip ??= '127.0.0.1';
   // The project it was judged as, whatever name the file gave.
   (config as { name?: string }).name = project;
-  openBinds(config, folder);
+  const closed = openBinds(config, folder);
+  if (closed) return closed;
   writeFileSync(join(judged, 'run.tmp'), JSON.stringify(config));
   renameSync(join(judged, 'run.tmp'), join(judged, 'run.json'));
   return undefined;
