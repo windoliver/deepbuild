@@ -5,6 +5,8 @@
 //! too, which a set without logic (#1490) runs as well.
 
 #[cfg(feature = "logic")]
+use std::collections::BTreeMap;
+#[cfg(feature = "logic")]
 use std::rc::Rc;
 
 use deep_canvas::document::Issue;
@@ -155,16 +157,17 @@ pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
 /// Each logic item of `piece` (`form`'s, checked) stepped on `track` over the transport's span,
 /// and its rows written to `occurrences.<logic ID>.occurrences`:
 /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
-/// Returns the bake's `compares`, which stay out of the form (#3278).
+/// Returns the bake's #538 `compares`, `[step, bytes, ms]` by item, under the key each item's
+/// first array holds as `compares`: the form holds them only by key (#3278).
 #[cfg(feature = "logic")]
 pub fn inline_logic(
     form: &mut Value,
     piece: Option<Piece>,
     track: &[Value],
     drops_last_range: bool,
-) -> Result<Compares, Box<Issue>> {
+) -> Result<BTreeMap<String, Vec<Value>>, Box<Issue>> {
     let Some(piece) = piece else {
-        return Ok(Compares::new());
+        return Ok(BTreeMap::new());
     };
     let entries: Vec<Entry> = track
         .iter()
@@ -219,7 +222,7 @@ pub fn inline_logic(
         });
     }
     let Some(doc) = form.as_object_mut() else {
-        return Ok(Compares::new());
+        return Ok(BTreeMap::new());
     };
     // And for a host whose own track the form takes later, the entries closed; for the canvas's
     // logic module, which steps the current branch afresh, the seen values it carries in.
@@ -281,7 +284,7 @@ pub fn inline_logic(
     // They are clock readings, which would move the key of everything that reads the form
     // (#3278), so the array holds only a key of what the bake ran (the item, its bake key and its
     // steps), and the readings go back to the caller under it.
-    let mut compares = Compares::new();
+    let mut compares = BTreeMap::new();
     for (id, list) in &rec.compares {
         let Some(i) = piece.items.iter().position(|i| &i.id == id) else {
             continue;
@@ -309,11 +312,6 @@ pub fn inline_logic(
     gate_fog(doc);
     Ok(compares)
 }
-
-/// #538: a bake's comparisons of each logic item's arrays after each step, `[step, bytes, ms]`,
-/// under the key its first array holds as `compares`.
-#[cfg(feature = "logic")]
-pub type Compares = std::collections::BTreeMap<String, Vec<Value>>;
 
 /// #552: the occurrences this copy's player doesn't see (its `match.me`, 1 for a piece played
 /// alone), taken out of every gated list; the planted burst that ignores the gate still reads
