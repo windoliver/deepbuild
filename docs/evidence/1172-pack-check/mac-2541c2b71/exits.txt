@@ -1,0 +1,25 @@
+start; 'AC Power'; caffeinate 8 assertions 15:05:42 load { 87.32 81.09 47.90 } thermal 0 lock 0 front [Claude] free KB 53664536
+disk guard ok before fix clone 15:05:42 load { 87.32 81.09 47.90 } thermal 0 lock 0 front [Claude] free KB 53664376
+FIX clone at 2541c2b71029c69b48ecd7d538e871b416749cde exit=0; origin/claude/fix-1172-pack-check 2541c2b71029c69b48ecd7d538e871b416749cde; origin/main 512d194bb2885717f655528fe3e2d102d9cc7640; merge-base 89df55943808afa2258362e0b22e24aa6045ea37 15:08:08 load { 73.18 71.82 48.88 } thermal 0 lock 0 front [Claude] free KB 318304840
+disk guard ok before base clone 15:08:08 load { 73.18 71.82 48.88 } thermal 0 lock 0 front [Claude] free KB 318304660
+BASE clone at 89df55943808afa2258362e0b22e24aa6045ea37 exit=0; porcelain 0 15:10:25 load { 47.58 63.04 48.78 } thermal 0 lock 0 front [Claude] free KB 330456536
+disk guard ok before base setup 15:10:25 load { 47.58 63.04 48.78 } thermal 0 lock 0 front [Claude] free KB 330456528
+setup base (npm ci, workspace build, cargo build --locked -p deep-hook -p deep-show -p deep-app -p deep-replica) exit=0 15:19:13 load { 96.57 113.52 82.36 } thermal 0 lock 0 front [Windows App] free KB 292957800
+disk guard ok before A rows 15:19:13 load { 96.57 113.52 82.36 } thermal 0 lock 0 front [Windows App] free KB 292892188
+base-1172-rows.txt: Tests 2 failed (2) exit=1 15:22:47 load { 76.81 107.05 87.16 } thermal 0 lock 0 front [Claude] free KB 288226368
+disk guard ok before A popout 15:22:47 load { 76.81 107.05 87.16 } thermal 0 lock 0 front [Claude] free KB 288222276
+base-1172-popout.txt: Tests 1 failed (1) exit=1 15:23:00 load { 73.18 104.72 86.68 } thermal 0 lock 0 front [Claude] free KB 287458244
+base porcelain after: 0 15:23:01 load { 73.18 104.72 86.68 } thermal 0 lock 0 front [Claude] free KB 287411872
+disk guard ok before fix setup 15:23:01 load { 73.18 104.72 86.68 } thermal 0 lock 0 front [Claude] free KB 287405556
+setup fix (npm ci, workspace build, cargo build --locked -p deep-hook -p deep-show -p deep-app -p deep-replica) exit=0 15:31:34 load { 60.04 90.43 89.51 } thermal 0 lock 0 front [Windows App] free KB 249958624
+disk guard ok before B rows 15:31:34 load { 60.04 90.43 89.51 } thermal 0 lock 0 front [Windows App] free KB 249958620
+fix-1172-rows.txt: Tests 2 passed (2) exit=0 15:39:22 load { 27.02 56.19 72.97 } thermal 0 lock 0 front [WeChat] free KB 260034936
+disk guard ok before B popout 15:39:22 load { 27.02 56.19 72.97 } thermal 0 lock 0 front [WeChat] free KB 260034460
+fix-1172-popout.txt: Tests 1 failed (1) exit=1 15:39:55 load { 19.01 50.98 70.39 } thermal 0 lock 0 front [WeChat] free KB 259977052
+fix-time-calls.txt exit=0 15:40:04 load { 18.96 49.93 69.79 } thermal 0 lock 0 front [WeChat] free KB 259968192
+base-time-calls.txt (fix clone's script, base clone) exit=0 15:40:58 load { 18.05 45.01 66.84 } thermal 0 lock 0 front [WeChat] free KB 259835236
+fix-foley-alone.txt exit=0 15:41:01 load { 18.13 44.58 66.56 } thermal 0 lock 0 front [WeChat] free KB 259815112
+base-foley-alone.txt (fix clone's script, base clone) exit=0 15:41:16 load { 19.70 43.63 65.84 } thermal 0 lock 0 front [WeChat] free KB 259687260
+fix porcelain after: 0 15:41:17 load { 19.70 43.63 65.84 } thermal 0 lock 0 front [WeChat] free KB 259687184
+clones pc2-base and pc2-fix removed 15:41:28 load { 19.88 42.87 65.31 } thermal 0 lock 0 front [WeChat] free KB 313537428
+ALL DONE 15:41:28 load { 19.88 42.87 65.31 } thermal 0 lock 0 front [WeChat] free KB 313537416

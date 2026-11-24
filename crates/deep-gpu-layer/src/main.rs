@@ -182,6 +182,8 @@ pub enum Planted {
     /// plate whose horizon table is never read, and its sky occlusion from its slope alone.
     TerrainNoHorizonBake,
     TerrainOcclusionFromSlope,
+    /// #3036's wrong program: a plate that keeps the surface the frame before drew.
+    TracksKeepLastFrame,
     /// #2215's wrong program (tests/acceptance/2215/README.md: Assumed surfaces 3): the frame's
     /// receipt lists no part that refracts through the round lobe.
     RasterListsNothing,
@@ -1022,6 +1024,7 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
+            deep_canvas_scene3d::tracks::KEEPS_LAST_FRAME => Planted::TracksKeepLastFrame,
             "raster_lists_nothing" => Planted::RasterListsNothing,
             _ => {
                 let planted = deep_canvas_scene3d::spans::PLANTED;
