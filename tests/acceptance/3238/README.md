@@ -17,6 +17,11 @@ I only listed. Beyond the brief's list I also read, at the base, `packages/hub/s
 `tests/acceptance/18/mapping/helpers.ts` (which #1015's helpers import), of `scripts/proof-runs.mjs` (how it runs
 twins), and the headers of the lints a new suite must pass.
 
+**Two bases.** The suite was drafted at `f8c6cff82`, and the runs recorded so far are there. The branch then merged main
+at `b87494f02`, which carries #3221 (admission and turns, section 6); I read main up to that commit, the admission and
+turn text, `scripts/throttle.mjs`, `scripts/affected.mjs` and `tests/acceptance/3221/` in it. The runs still to come (AC4,
+AC5 and `admitted.test.mjs`) have `b87494f02` as their base. `scripts/lease` is the same in both.
+
 `helpers.mjs` is this suite's own. `hub.test.ts` imports #1015's helpers (its world, scripted sessions and lease
 rows), as #1015's redraft does, since AC5 asks for the hub's table "as #1015's seventh criterion has it". No test
 imports the code under test: `scripts/lease` and `scripts/throttle.mjs` are run as processes, and the hub as `deep hub
@@ -39,6 +44,7 @@ and `hub.test.ts` under the same wrapper around its vitest command.
 | `serial.test.mjs` | AC1 | nothing built: a copy of `scripts/` | about 3 s |
 | `inherited.test.mjs` | AC2 | nothing built: a copy of `scripts/` | about 2 s |
 | `no-grant.test.mjs` | AC3 | nothing built: a copy of `scripts/` | about 2 s |
+| `admitted.test.mjs` | AC2, the admission case | nothing built: a copy of `scripts/` | not run yet |
 | `cli.test.mjs` | AC4 | the built CLI (`npm ci`, `npm run build --workspaces`); BLOCKED without it | not run yet |
 | `hub.test.ts` | AC5 | the built CLI, and deep-hook (`cargo build --locked -p deep-hook --features env-plants`, which #18's helper runs when it is missing) | not run yet |
 
@@ -112,6 +118,40 @@ readings leave no room for a second, so what it waits behind is its own run's gr
 `own-grant` asks for a `build` grant, the class the decision names, and waits behind the holders outside the run: a
 `test` grant doesn't block a `build` request, so that one doesn't wait behind its own run.
 
+### The admission case (`admitted.test.mjs`)
+
+Since #3221 an `affected.mjs` run's test grant is its admission, so "an ancestor's `test` grant" in the issue's sense is
+one. Plants a run admitted with `DEEP_THROTTLE_RUN=0 throttle.mjs test -- node run.mjs`, on a test's own table with
+`DEEP_THROTTLE_READINGS` at two cores: a pool of one token. The lint is `<copy>/scripts/lease node stub.mjs
+repo-rules-lint`, as `affected.mjs` starts a light lint.
+
+- **A token free.** The lint starts at once (no `build` or `test` request of its own waits in the table); its
+  `DEEP_THROTTLE` is the run's grant; the log has a `passed` entry through that grant and no build grant or timeout.
+- **Every token held by another job of the run**, which has a turn (the log's `turn`). The lint passes through (`passed`,
+  less the other job's own), with no build request; once the token goes back the lint has run exactly once and the run
+  ends with 0. Whether it started while the token was held is printed as a diagnostic, not asserted (below).
+
+On the base the script runs the lint directly: it holds the run's `DEEP_THROTTLE`, but the log has no `passed` entry, so
+both should fail at that assertion (read from the base's code; not run yet).
+
+### Open question: does a lint wait for a turn?
+
+The issue and main's design disagree here, so the test chooses neither; an owner's ruling is needed before the line
+that would be added to it.
+
+- **The issue says it doesn't.** "Under an ancestor's grant it passes through and waits for nothing" (Change); "A lint
+  that builds nothing, which `affected.mjs` runs through the script under its run's grant, starts at once, as section 7a
+  decided" (Unchanged); AC2, "starts at once". Section 7a on main still says lint scripts that build nothing run under no
+  throttle grant, since in the build class they waited behind a neighbour's cargo build and ran nothing.
+- **Section 6 says it does.** "Inside an admitted run, each `build` or `test` request from a process under no turn, as each
+  job `affected.mjs` starts, passes through on the run's grant as before, then waits for a turn". The decision comment
+  has the script always ask `throttle.mjs build`, so a lint's request is such a request: with every token held it waits.
+
+The issue's text is older than #3221 (read on main at `2a5bd60fd`) and says only that the pool is what would let several
+builds run, so neither is clearly meant to settle the other. On a ruling that the lint starts at once, the test gains an
+assertion that it did while the token was held; on the other, that it waited for a turn (its request in the table and
+its turn in the log) and started once the token went back.
+
 ## AC3 `#3238.4febe21a`: no grant, no run (`no-grant.test.mjs`)
 
 Plants every build slot held, and runs `scripts/lease node stub.mjs cargo-build exit` with `DEEP_LEASE_WAIT=0` and no
@@ -160,8 +200,8 @@ scripts the criteria name, and `own-grant` beside AC2's, are twins (`twins.json`
 against its test, failing as recorded at the end of `BASE-FAILURE.txt`. A throwaway reference script, the twins' source without their planted line,
 passed the tests of AC1, AC2 and AC3 here and was never committed.
 
-**`cli.test.mjs` (AC4) and `hub.test.ts` (AC5) have not run yet, on the base or anywhere.** Both need the packages
-built, and on the day these were drafted no build grant came on this Mac: a preflight held the machine's exclusive
+**`cli.test.mjs` (AC4), `hub.test.ts` (AC5) and `admitted.test.mjs` have not run yet, on the base or anywhere.** The
+last needs a test grant and no build. The other two need the packages built, and on the day these were drafted no build grant came on this Mac: a preflight held the machine's exclusive
 `timed` grant for over 10 hours. Their expected base failures above are read from the base's code, not seen. The
 runs of `serial`, `inherited`, `no-grant` and `design`, of the reference and of the twins were made with no machine
 grant, while that preflight held `timed` (`BASE-FAILURE.txt` has the times). They should have had a `test` grant:
