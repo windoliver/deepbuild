@@ -552,7 +552,7 @@ export class Core {
       raw: this.raw, now: this.now, plant: options.plant, held: options.held, scrub: (values) => this.scrubbing(values),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), supervisor: () => this.supervisor, leases: () => this.leases,
       environment: this.providers.environment.stacks({
-        host: () => this.host, compose: () => this.compose, plant: options.plant,
+        host: () => this.host, compose: () => this.compose, plant: options.plant, extensions: () => this.extensions,
         products: { declared: (f, p) => this.products.declared(f, p), holds: (w, n, k) => this.products.holds(w, n, k), place: (w, n, k, d) => this.products.placeIn(w, n, k, d), keep: (w, n, p, k, s) => this.products.keep(w, n, p, k, s), placeCache: (w, k, p, d) => this.products.placeCache(w, k, p, d), keepCache: (w, k, p, s) => this.products.keepCache(w, k, p, s) },
       }),
       stopping: () => this.stopping, session: (id) => this.state.sessions.get(id),
