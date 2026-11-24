@@ -272,6 +272,14 @@ impl Render for AskPage {
         // count, the way back to the list.
         let title = crate::views::narrow()
             .then(|| crate::views::page_title(div(), chrome).into_any_element());
+        // #1815's planted find opens its field here too.
+        let title = if crate::plain::planted("find-on-ask") {
+            crate::find::read(cx);
+            let row = crate::views::page_title(div(), chrome);
+            Some(crate::find::titled(row, chrome, window, cx))
+        } else {
+            title
+        };
         // The pictures a taste call judges draw beside the card, in a column of their own (#3234).
         let evidence = card
             .as_ref()

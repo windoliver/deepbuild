@@ -1518,3 +1518,9 @@ Object.assign(redrafted, {
   'tests/acceptance/1551/lane.test.ts': 'tests/acceptance/1551/redraft-3300/',
 });
 byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/lane.test.ts');
+
+// #1815's folder (blind) runs alone by its lane.json: its files build deep-drive with env-plants and test-confirm and draw
+// find's field and its matches. budget.test.ts times the first match on a 10,000-line page on the reference Mac;
+// shown.test.ts takes AC5's pictures for a person's call.
+timed.push('tests/acceptance/1815/budget.test.ts');
+byHand.push('tests/acceptance/1815/shown.test.ts');
