@@ -558,6 +558,26 @@ describe('a test its file holds that never ran', () => {
     expect(w.failures).toEqual([expect.objectContaining({ test: 'b exists', file: 't.test.mjs', line: 4 })]);
   }, 300_000);
 
+  it('a package script\'s --test-only leaves no focused test\'s control out, and it or a place of Vitest\'s that leaves a failing test out can\'t pass, naming it (#2081)', async () => {
+    const focused = folder({
+      'package.json': JSON.stringify({ type: 'module', scripts: { test: 'node --test --test-only' } }),
+      'o.test.mjs': `import assert from 'node:assert/strict';\nimport { test } from 'node:test';\ntest('a', { only: true }, () => {});\n`,
+    });
+    const run = (checkout: string) => runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'npm test' } }));
+    const o = await run(focused);
+    expect([o.outcome, o.testsRun], `${o.mask} ${o.output.stdout}`).toEqual(['passed', 1]);
+    writeFileSync(join(focused, 'o.test.mjs'), `${readFileSync(join(focused, 'o.test.mjs'), 'utf8')}test('b', () => { assert.fail(); });\n`);
+    const left = (test: string, file: string, line: number, filter: string) => [expect.objectContaining({ test, file, line, assertion: false, message: expect.stringContaining(`${filter} in package.json's test script`) })];
+    const b = await run(focused);
+    expect([b.outcome, b.failures], `${b.mask} ${b.output.stdout}`).toEqual(['failed', left('b', 'o.test.mjs', 4, '--test-only')]);
+    const placed = folder({
+      'package.json': JSON.stringify({ type: 'module', scripts: { test: 'vitest run a.test.js:2' } }),
+      'a.test.js': `import { expect, test } from 'vitest';\ntest('a', () => {});\ntest('b', () => { expect(1).toBe(2); });\n`,
+    }, true);
+    const p = await run(placed);
+    expect([p.outcome, p.failures], `${p.mask} ${p.output.stdout}`).toEqual(['failed', left('b', 'a.test.js', 3, 'a.test.js:2')]);
+  }, 300_000);
+
   it('a node:test file lists the tests a node --test run of it runs, at their lines, with and without --test-only', async () => {
     type Node = { suite: boolean; fn: string; mod: string; options: string; name: string; children: Node[] };
     const { tree } = fc.letrec<{ tree: Node[]; node: Node }>((tie) => ({

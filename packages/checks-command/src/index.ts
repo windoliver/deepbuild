@@ -12,7 +12,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { CheckResult, CheckRunnerFill, CheckSpec, RunOutcome } from '@deepbuild/conformance';
+import type { CheckResult, CheckRunnerFill, CheckSpec, Failure, RunOutcome } from '@deepbuild/conformance';
 import { scrubValues } from '@deepbuild/evidence';
 import { after, badDeadline, type Exit, type Host } from '@deepbuild/supervisor';
 import { segmentsOf } from '@deepbuild/gate';
@@ -20,7 +20,7 @@ import { isControl, plantControls, removeControls, unheld, type Control } from '
 import { listSource, unrun, type Listed } from './listing.js';
 import { evidence, goTest, nodeTest, under, vitest, type Listing, type Ran, type Reported } from './report.js';
 import { seededBy, type Seeded } from './seeded.js';
-import { absent, DOES_NOTHING, filtersIn, firstLine, GO_TEST, hiddenChild, maskOf, programsIn, scriptOf, untraced, type Spawned } from './shell.js';
+import { absent, DOES_NOTHING, filtersIn, firstLine, GO_TEST, hiddenChild, maskOf, programsIn, scriptFilters, scriptOf, untraced, type Spawned } from './shell.js';
 
 export type { Seeded } from './seeded.js';
 
@@ -268,6 +268,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     const PATH = pathOf(bin);
     const go = GO_TEST.test(spec.runner);
     const filters = filtersIn(spec.runner);
+    const scripted = scriptFilters(spec.runner, checkout);
     // Vitest reports its pattern's source, in which a `/` the command gave is escaped.
     const named = (filter: string): boolean => filters.some(({ value: v }) => v === filter || v.replaceAll('/', '\\/') === filter);
     if (refused.length) return { run: result('uncounted', { mask: `venv ${refused[0]}: name the venv's program by its path` }), ran: [] };
@@ -388,7 +389,12 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       // ran passed, missing or failed elsewhere can't record a failure, so its result isn't kept (#1099).
       const reportedFailures = reported.flatMap((r) => r.failures);
       const ranFiles = new Set([...(vitestRun?.files ?? []).map((f) => f.file), ...(nodeRun?.files ?? [])]);
-      const unrecorded = unheld(controls, reported.flatMap((r) => r.ran), reportedFailures, ranFiles);
+      // What left a test out that neither its source nor the check's own command does: Vitest's config, or a filter of a
+      // script the command runs.
+      const leftOutBy = (t: Listed): string[] => [...(t.names ? [] : vitestRun?.by ?? []),
+        ...scripted.filter((f) => (f.option === '--test-only' ? t.names : !unrun([t], [], [], [f], () => false).length))
+          .map((f) => `${[f.option === 'place' ? '' : f.option, f.value].filter(Boolean).join(' ')} in ${f.file}`)];
+      const unrecorded = unheld(controls, reported.flatMap((r) => r.ran), reportedFailures, ranFiles, leftOutBy);
       const ran = reported.flatMap((r) => r.ran).filter((t) => !isControl(t.test));
       const failures = reportedFailures.filter((f) => !isControl(f.test));
       const controlsFailed = reportedFailures.length > 0 && !failures.length;
@@ -436,8 +442,18 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         if (file?.altered) return done('uncounted', { ...rest, mask: `evidence altered ${name}`, evidence: [...ended.evidence, `${name}: ${file.altered}`] }, ran);
       }
       if (malformed) return done('uncounted', { ...rest, mask: 'evidence altered report', evidence: [...ended.evidence, `report: ${malformed} lines its reporter didn't write`] }, ran);
-      if (unrecorded) return done('uncounted', { ...rest, mask: unrecorded, evidence: [...ended.evidence, unrecorded] }, ran);
-      if (failures.length) return done('failed', rest, ran);
+      const uncounted = (why: string) => done('uncounted', { ...rest, mask: why, evidence: [...ended.evidence, why] }, ran);
+      if (unrecorded && !unrecorded.leftOut) return uncounted(unrecorded.why);
+      // Every test a file the run ran holds ran, but those the check's own command left out (see listing.ts).
+      const dropped = async (): Promise<Failure[]> => {
+        const runFiles = [...(vitestRun?.files ?? []), ...(nodeRun?.files ?? []).map((file) => ({ file, tool: 'node' as const }))];
+        const listed = [...(vitestRun?.listed ?? []), ...(await listedIn(checkout, runFiles, filters.some((f) => f.option === '--test-only')))];
+        return unrun(listed.filter((l) => !isControl(l.test)), [...(vitestRun?.ran ?? []), ...(nodeRun?.seen ?? [])], vitestRun?.left ?? [], filters, named).map((t) => {
+          const by = leftOutBy(t);
+          return { test: t.test, file: t.file, line: t.line, stack: null, assertion: false, message: `${t.test} never ran: ${by.length ? `${by.join(' and ')}, which the check's command doesn't name,` : "something other than its source or the check's command"} left it out` };
+        });
+      };
+      if (failures.length) return done('failed', { ...rest, failures: [...failures, ...(vitestRun?.by.length ? await dropped() : [])] }, ran);
       // A crash of what the check runs, or any other failing exit: a failed run.
       // The tool's failing exit for the controls alone is no failure of the check's.
       if ((code !== 0 && !(controlsFailed && code === 1)) || exit!.signal !== null) {
@@ -451,12 +467,9 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       // opened its report, even with no line to write, as for a pytest file whose every test the source skips.
       const tool = go || vitestReport !== null || (nodeReport?.lines.length ?? 0) > 0;
       if (!ran.length) return tool ? done('ran_nothing', rest, ran) : done('passed', { ...rest, testsRun: 1 }, ran);
-      // Every test a file the run ran holds ran, but those the check's own command left out (see listing.ts).
-      const runFiles = [...(vitestRun?.files ?? []), ...(nodeRun?.files ?? []).map((file) => ({ file, tool: 'node' as const }))];
-      const listed = [...(vitestRun?.listed ?? []), ...(await listedIn(checkout, runFiles, filters.some((f) => f.option === '--test-only')))];
-      const missed = unrun(listed.filter((l) => !isControl(l.test)), [...(vitestRun?.ran ?? []), ...(nodeRun?.seen ?? [])], vitestRun?.left ?? [], filters, named);
-      const dropped = missed.map((t) => ({ test: t.test, file: t.file, line: t.line, stack: null, assertion: false, message: `${t.test} never ran: something other than its source or the check's command left it out` }));
-      return done(dropped.length ? 'failed' : 'passed', { ...rest, failures: dropped }, ran);
+      const missed = await dropped();
+      if (missed.length) return done('failed', { ...rest, failures: missed }, ran);
+      return unrecorded ? uncounted(unrecorded.why) : done('passed', rest, ran);
     } catch (error) {
       const why = `evidence unreadable: ${error instanceof Error ? error.message : String(error)}`;
       if (cause !== 'exit') return done(cause === 'deadline' ? 'overran' : 'stopped', { ...ended, evidence: [...ended.evidence, why] }, []);

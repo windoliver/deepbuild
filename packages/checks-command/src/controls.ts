@@ -2,12 +2,15 @@
 // test tool's reporter, in the process of the code under test, so code that rewrites results on import passes both the
 // base run and check health. Each Vitest or node:test file in the run's checkout gets one test after its last line
 // whose assertion is false by construction, under a name drawn for the run; a run keeps its result only when the report
-// shows each control of a file it ran failed at the line written for it. Controls are never tests of the check: left
-// out of its counts, failures and listing, and the file is put back as it was once the run ends.
+// shows each control of a file it ran failed at the line written for it. In a file that focuses tests its control is
+// focused too, so it runs; one a filter other than the command's own left out can't hold, and the run can't pass (#2081).
+// Controls are never tests of the check: left out of its counts, failures and listing, and the file is put back as it
+// was once the run ends.
 import { randomBytes } from 'node:crypto';
 import { chmodSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Failure } from '@deepbuild/conformance';
+import { focusesTests, type Listed } from './listing.js';
 import type { Ran } from './report.js';
 
 /** Writes a file whose approved bytes the hub keeps read-only, putting its mode back after. */
@@ -25,11 +28,11 @@ const TEST_FILE = /\.(test|spec)\.[cm]?[jt]s$/;
 /** Folders whose test files are another tree's, never the run's: dependencies, and fixtures a test copies as a repo of its own. */
 const SKIP = new Set(['node_modules', '.git', 'fixtures', '__fixtures__', 'testdata']);
 
-export interface Control { file: string; name: string; line: number; block: string }
+export interface Control extends Listed { block: string }
 
 /** One run's checkouts at a time plant and put back, so two runs in one checkout never write a file at once. */
 const queue = new Map<string, Promise<unknown>>();
-function serial<T>(key: string, fn: () => T): Promise<T> {
+function serial<T>(key: string, fn: () => T | Promise<T>): Promise<T> {
   const next = (queue.get(key) ?? Promise.resolve()).then(fn, fn);
   queue.set(key, next.catch(() => undefined));
   return next;
@@ -45,38 +48,43 @@ function testFiles(root: string, dir = root, out: string[] = []): string[] {
   return out;
 }
 
-/** The control block for a file, by the tool and module form its own text uses; null for a file of another tool. Its names carry the run's draw, so two runs' controls in one file never clash. */
-function blockFor(text: string, name: string, draw: string): string | null {
+/** The control block for a file, by the tool and module form its own text uses, and whether the tool is node:test; null for a file of another tool. Its names carry the run's draw, so two runs' controls in one file never clash. */
+async function blockFor(text: string, file: string, name: string, draw: string): Promise<{ block: string; node: boolean } | null> {
   const esm = /^\s*(import|export)\s/m.test(text);
   const n = JSON.stringify(name);
   const [t, e] = [`__deepControl${draw}`, `__deepCheck${draw}`];
   if (/['"]vitest['"]/.test(text)) {
-    return esm ? `\nimport { test as ${t}, expect as ${e} } from 'vitest';\n${t}(${n}, () => { ${e}(0).toBe(1); });\n`
-      : `\nrequire('vitest').test(${n}, () => { require('vitest').expect(0).toBe(1); });\n`;
+    // The listing reads the file as planted, so it sees in this focus one the source states as `{ only: true }`.
+    const only = (await focusesTests(text, file)) ? '.only' : '';
+    return { node: false, block: esm ? `\nimport { test as ${t}, expect as ${e} } from 'vitest';\n${t}${only}(${n}, () => { ${e}(0).toBe(1); });\n`
+      : `\nrequire('vitest').test${only}(${n}, () => { require('vitest').expect(0).toBe(1); });\n` };
   }
   if (/['"]node:test['"]/.test(text)) {
-    return esm ? `\nimport ${t} from 'node:test';\nimport ${e} from 'node:assert';\n${t}(${n}, () => { ${e}.strictEqual(0, 1); });\n`
-      : `\nrequire('node:test')(${n}, () => { require('node:assert').strictEqual(0, 1); });\n`;
+    // node:test runs focused tests alone only under --test-only, which a script the command runs may give it.
+    const only = "{ only: process.execArgv.includes('--test-only') }";
+    return { node: true, block: esm ? `\nimport ${t} from 'node:test';\nimport ${e} from 'node:assert';\n${t}(${n}, ${only}, () => { ${e}.strictEqual(0, 1); });\n`
+      : `\nrequire('node:test')(${n}, ${only}, () => { require('node:assert').strictEqual(0, 1); });\n` };
   }
   return null;
 }
 
 /** Appends one control to each Vitest and node:test file of the checkout. */
 export function plantControls(checkout: string): Promise<Control[]> {
-  return serial(checkout, () => {
+  return serial(checkout, async () => {
     const out: Control[] = [];
     for (const file of testFiles(checkout)) {
       const path = join(checkout, file);
       const text = readFileSync(path, 'utf8');
       const draw = randomBytes(6).toString('hex');
       const name = `${CONTROL}${draw}`;
-      const block = blockFor(text, name, draw);
-      if (!block) continue;
+      const made = await blockFor(text, file, name, draw);
+      if (!made) continue;
+      const { block, node } = made;
       const body = text.endsWith('\n') ? text : `${text}\n`;
       // The control's assertion is the block's last line, after the file's lines and the blank one the block opens with.
       const line = body.split('\n').length - 1 + block.split('\n').length - 1;
       rewrite(path, `${body}${block}`);
-      out.push({ file, name, line, block });
+      out.push({ test: name, file, line, tagged: false, block, ...(node ? { names: [name] } : {}) });
     }
     return out;
   });
@@ -95,18 +103,26 @@ export function removeControls(checkout: string, controls: Control[]): Promise<v
   });
 }
 
-/** Why the run's report can't be trusted to record a failure: a control of a file it ran that didn't fail at its line; null when every one did. */
-export function unheld(controls: Control[], ran: Ran[], failures: Failure[], filesRan: Set<string>): string | null {
+/**
+ * Why the run's report can't be trusted to record a failure: a control of a file it ran that didn't fail at its line;
+ * null when every one did. `leftOut`: each is only missing, left out by what `leftOutBy` names. Such a run can fail, never pass.
+ */
+export function unheld(controls: Control[], ran: Ran[], failures: Failure[], filesRan: Set<string>, leftOutBy: (c: Listed) => string[]): { why: string; leftOut: boolean } | null {
+  let out: { why: string; leftOut: boolean } | null = null;
   for (const c of controls) {
     // A file the run reported no test of (one that failed to load) fails on its own; its control proves nothing.
     if (!filesRan.has(c.file) || !ran.some((t) => t.file === c.file && !isControl(t.test))) continue;
-    const r = ran.find((t) => t.test.includes(c.name));
-    const f = failures.find((x) => x.test.includes(c.name));
+    const r = ran.find((t) => t.test.includes(c.test));
+    const f = failures.find((x) => x.test.includes(c.test));
     const at = `${c.file}:${c.line}`;
-    if (!r) return `${UNRECORDED}: its control ${c.name} in ${c.file} is missing from the report`;
-    if (r.attempts.at(-1) !== 'failed' || !f) return `${UNRECORDED}: its control ${c.name} at ${at} was reported passed`;
-    if (f.file !== c.file || f.line !== c.line) return `${UNRECORDED}: its control ${c.name} failed at ${f.file}:${f.line}, not at ${at}`;
+    if (!r) {
+      const by = leftOutBy(c);
+      const why = `${UNRECORDED}: its control ${c.test} in ${c.file} is missing from the report`;
+      if (!by.length) return { why, leftOut: false };
+      out ??= { why: `${why}: ${by.join(' and ')} left it out`, leftOut: true };
+    } else if (r.attempts.at(-1) !== 'failed' || !f) return { why: `${UNRECORDED}: its control ${c.test} at ${at} was reported passed`, leftOut: false };
+    else if (f.file !== c.file || f.line !== c.line) return { why: `${UNRECORDED}: its control ${c.test} failed at ${f.file}:${f.line}, not at ${at}`, leftOut: false };
   }
-  return null;
+  return out;
 }
 export const isControl = (test: string): boolean => test.includes(CONTROL);
