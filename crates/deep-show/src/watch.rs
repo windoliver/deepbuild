@@ -426,9 +426,12 @@ impl Shown {
                 .collect();
             // An item heard but drawn in no box (a path) is still a node of the tree `see`
             // reads (criterion 4: "VoiceOver names every part"), at the panel it draws in.
-            let (_, unboxed) = nodes(revision, &[], &boxes, panel);
+            let mut heard = revision.clone();
+            let _ = hub.inline_tables(&mut heard);
+            let record = hub.record();
+            let (_, unboxed) = nodes(&heard, &[], &boxes, panel, &record);
             boxes.extend(unboxed.into_iter().map(|id| (id, panel)));
-            self.nodes = nodes(revision, &[], &boxes, panel).0;
+            self.nodes = nodes(&heard, &[], &boxes, panel, &record).0;
         }
         self
     }
@@ -681,7 +684,7 @@ unsafe fn ax_rows(obj: &AnyObject, out: &mut Vec<Value>, depth: u32) {
 
 /// The window's accessibility tree read back through NSAccessibility, in process: the elements
 /// under the NSWindow, as an assistive client walks them.
-fn read_tree(window: &Window) -> Vec<Value> {
+pub(crate) fn read_tree(window: &Window) -> Vec<Value> {
     let mut rows = Vec::new();
     if let Some(view) = ns_view(window) {
         // SAFETY: the view is alive while the GPUI window is, and so is its NSWindow; this runs

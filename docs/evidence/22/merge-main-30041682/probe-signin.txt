@@ -1,0 +1,6 @@
+scratch merge 876a12da8 = PR 1800a9372 + main 300416822, run Sun Nov 15 04:23:19 PM PST 2026
+PROBE after signIn [["ask:01M7FHA2305VSNNV27RDA8N8SG","queued"]]
+PROBE batched events 0 shown 0
+PROBE after stop [["ask:01M7FHA2305VSNNV27RDA8N8SG","queued"],["ask:01M7FHA41G15Y63Q4KA7HXV886","closed"]]
+PROBE +1h [["ask:01M7FHA2305VSNNV27RDA8N8SG","queued"],["ask:01M7FHA41G15Y63Q4KA7HXV886","closed"]] due Promise { <pending> }
+      Tests  1 passed (1)

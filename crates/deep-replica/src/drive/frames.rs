@@ -3,14 +3,18 @@
 //! dirty, and every read (`see`, `expect`, `wait_for`, an action's wait) reads the last frame GPUI drew. After each
 //! step the last drawn frame's snapshot is compared with a forced frame's: the check's own, never what a read sees, so
 //! a view a real window would show stale stays stale here. A run where every step drew proves nothing: it reads
-//! INCONCLUSIVE, never PASS. `feed` and `resize` are the record events and the resizes a journey is made of.
+//! INCONCLUSIVE, never PASS. `feed` and `resize` are the record events and the resizes a journey is made of; `window`
+//! says the rest of what a platform says of a window (#1843).
 
 use std::collections::BTreeMap;
 
-use gpui_kit::{px, size, test::TestWindowExt as _, ElementId};
+use gpui_kit::{point, px, size, test::TestWindowExt as _, DisplayId, ElementId, WindowVisibility};
 use serde_json::{json, Value};
 
 use super::{fail, locate::Frame, Fail, Plant, Replica, FLICKS};
+
+/// What `window` takes.
+const WINDOW: &str = "window is one of {origin: [x, y]}, {visible: true | false}, {display: id} and {active: true | false}";
 
 /// The mode's state: the last drawn frame, the step's counts, and what each step found.
 pub(super) struct Dirty {
@@ -105,6 +109,10 @@ impl Replica {
     /// is the one the reads see.
     pub(super) fn input_drew(&mut self) {
         if self.dirty.is_some() {
+            let glyphs = self.glyphs.clone();
+            let _ = self
+                .cx
+                .update_window(self.window, |_, window, _| glyphs.keep_scene(window));
             let read = self.live_tree();
             // Typing draws a frame a character, as it is delivered.
             let drew = self.count_frames(None).max(1) as u64;
@@ -268,8 +276,47 @@ impl Replica {
         }}))
     }
 
+    /// `resize` and `window`: what the platform says of the window.
+    pub(super) fn window_changes(&mut self, name: &str, call: &Value) -> Result<Value, Fail> {
+        if name == "resize" {
+            return self.resize(call);
+        }
+        self.window(&call["window"])
+    }
+
+    /// `window` (#1843): one thing the platform says of the window, as it tells a real one: its `origin` on its display, in
+    /// points, whether it is `visible` or covered, the `display` it is on by id, or whether it is the `active` one; then one
+    /// frame of the clock.
+    fn window(&mut self, says: &Value) -> Result<Value, Fail> {
+        let one = says.as_object().filter(|says| says.len() == 1);
+        let Some((what, value)) = one.and_then(|says| says.iter().next()) else {
+            return Err(fail("refused", WINDOW));
+        };
+        let (cx, window) = (&mut self.cx, self.window);
+        match (what.as_str(), value) {
+            ("origin", Value::Array(at)) if at.len() == 2 && at.iter().all(Value::is_number) => {
+                let at: Vec<f32> = at.iter().map(|n| n.as_f64().unwrap_or(0.) as f32).collect();
+                cx.simulate_move(window, point(px(at[0]), px(at[1])));
+            }
+            ("visible", Value::Bool(true)) => {
+                cx.simulate_visibility_change(window, WindowVisibility::Visible)
+            }
+            ("visible", Value::Bool(false)) => {
+                cx.simulate_visibility_change(window, WindowVisibility::Hidden)
+            }
+            ("active", Value::Bool(active)) => cx.simulate_active_status_change(window, *active),
+            ("display", id) if id.is_u64() => {
+                let id = DisplayId::new(id.as_u64().unwrap_or(0));
+                cx.simulate_move_to_display(window, id);
+            }
+            _ => return Err(fail("refused", WINDOW)),
+        }
+        self.tick();
+        Ok(json!({"window": says}))
+    }
+
     /// `resize`: the window's content to `[w, h]` points, as the platform resizes it; then one frame of the clock.
-    pub(super) fn resize(&mut self, call: &Value) -> Result<Value, Fail> {
+    fn resize(&mut self, call: &Value) -> Result<Value, Fail> {
         let wh = call["resize"]["size"].as_array();
         let Some([w, h]) = wh.and_then(|wh| {
             let n: Vec<u64> = wh

@@ -116,9 +116,9 @@ export function nodeTest(lines: string[], checkout: string, stderr: string): Rep
   return { ran, failures, malformed: lines.length - all.length, files, seen };
 }
 
-interface VitestLine { type: string; name?: string; file: string | null; retries?: number; errors: Caught[]; meta?: Record<string, unknown>; filter?: unknown; tool?: unknown; line?: unknown }
-/** What a Vitest-format report says besides its tests: each Vitest or Jest file it ran, and pytest's listing and the tests it left out. */
-export interface Listing { files: { file: string; tool: 'vitest' | 'jest' }[]; listed: Listed[]; left: Left[]; started: { test: string; file: string | null }[] }
+interface VitestLine { type: string; name?: string; file: string | null; retries?: number; errors: Caught[]; meta?: Record<string, unknown>; filter?: unknown; by?: unknown; replayed?: unknown; tool?: unknown; line?: unknown }
+/** What a Vitest-format report says besides its tests: each Vitest or Jest file it ran, pytest's listing and the tests it left out, and what Vitest's config leaves tests out by (`by`), each a run error too. */
+export interface Listing { files: { file: string; tool: 'vitest' | 'jest' }[]; listed: Listed[]; left: Left[]; by: string[]; started: { test: string; file: string | null }[] }
 /**
  * Vitest's report, as the command check kind's reporter writes it (runtime/vitest-reporter.mjs), and Jest's and
  * pytest's in the same format. A run error that names a filter is no failure when `named` (the check's command) holds it.
@@ -127,7 +127,8 @@ export function vitest(lines: string[], checkout: string, lastAttemptOnly = fals
   const all = parsed<VitestLine>(lines);
   const ran: Ran[] = [];
   const failures: Failure[] = [];
-  const listing: Listing = { files: [], listed: [], left: [], started: [] };
+  const listing: Listing = { files: [], listed: [], left: [], by: [], started: [] };
+  let replayed = false;
   let malformed = lines.length - all.length;
   // Every test of a file names it: each is placed once.
   const placed = new Map<string, string | null>();
@@ -156,10 +157,13 @@ export function vitest(lines: string[], checkout: string, lastAttemptOnly = fals
       else if (l.type === 'test:left' && typeof l.name === 'string' && typeof l.filter === 'string') listing.left.push({ test: l.name, file, filter: l.filter });
       else malformed += 1;
     } else if (!(l.type === 'run:error' && typeof l.filter === 'string' && named(l.filter))) {
+      if (typeof l.by === 'string') listing.by.push(l.by);
+      replayed ||= l.replayed === true;
       for (const e of l.errors) failures.push(failure(checkout, file ?? '(run)', file, e));
     }
   }
-  return { ran, failures, malformed, ...listing };
+  // Replayed results are an earlier run's: none of these tests ran.
+  return { ran: replayed ? [] : ran, failures, malformed, ...listing };
 }
 
 interface GoEvent { Action?: unknown; Package?: unknown; Test?: unknown; Output?: unknown }

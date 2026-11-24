@@ -6,8 +6,6 @@ import { expect, it } from 'vitest';
 import { ulid } from '../src/wire.js';
 import { deep, hookLine, mcp, reply, session, withHub } from './hub.js';
 
-const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-
 it('answers a repeated recommended choice from your saved decision, and the first one goes on provisional', async () => {
   const id = '7c4d5e60-3178-4222-8333-444455559999';
   await withHub(async (root, home, hub) => {
@@ -23,8 +21,6 @@ it('answers a repeated recommended choice from your saved decision, and the firs
       await tools.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } });
       const got = await tools.call('deep_ask', ask);
       tools.close();
-      // deep mcp exits once its input ends.
-      await sleep(1000);
       return got;
     };
 

@@ -1,0 +1,33 @@
+World: home /private/tmp/dh27-fp6vBv/h; deep-app pid 29227; machine Mac15,12
+
+$ deep inbox    # before the batch, 2026-11-10T05:12:15.700Z
+ask:01M71XXWSY3DCNMTCHXDGTN6A7  taste  556c875c-57c4-4e3c-8ac3-bf5edfb7ffa8  4s  queued  A: which header colour for checkout screen 1?  [blue | green]
+ask:01M71XXX3M8PGQKYHTWM93CQ2B  taste  d244b4cf-d5b1-4c36-8a1c-3cdfff516caf  4s  queued  B: which header colour for checkout screen 1?  [blue | green]
+ask:01M71XXXE0KYPHVB6RXVT30X5Q  taste  650411f1-cec8-4b80-87ca-0edba029b09f  4s  queued  D: which header colour for checkout screen 1?  [blue | green]
+ask:01M71XXXJEBN17DAT43YVCA38R  taste  650411f1-cec8-4b80-87ca-0edba029b09f  4s  queued  D: which header colour for checkout screen 2?  [blue | green]
+ask:01M71XXXS5P3FNB9547STHC4TS  taste  650411f1-cec8-4b80-87ca-0edba029b09f  3s  queued  D: which header colour for checkout screen 3?  [blue | green]
+ask:01M71XXXZRA7Q53AY3SXEVYSKE  taste  650411f1-cec8-4b80-87ca-0edba029b09f  3s  queued  D: which header colour for checkout screen 4?  [blue | green]
+ask:01M71XXY5K268DG3AM9Q24390H  taste  650411f1-cec8-4b80-87ca-0edba029b09f  3s  queued  D: which header colour for checkout screen 5?  [blue | green]
+ask:01M71XXYC6M2JP4V0PKJ78P9A4  exception  650411f1-cec8-4b80-87ca-0edba029b09f  3s  queued  This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  [together | pause | defaults]
+ask:01M71XXYC51E0BCQN4HTBG2EBQ  taste  650411f1-cec8-4b80-87ca-0edba029b09f  3s  folded  D: which header colour for checkout screen 6?  [blue | green]
+   screenshot 0-before-batch.png
+
+$ deep inbox    # after the 2026-11-10T05:13:00.000Z batch
+ask:01M71XXWSY3DCNMTCHXDGTN6A7  taste  556c875c-57c4-4e3c-8ac3-bf5edfb7ffa8  54s  shown  A: which header colour for checkout screen 1?  [blue | green]
+ask:01M71XXX3M8PGQKYHTWM93CQ2B  taste  d244b4cf-d5b1-4c36-8a1c-3cdfff516caf  54s  shown  B: which header colour for checkout screen 1?  [blue | green]
+ask:01M71XXXE0KYPHVB6RXVT30X5Q  taste  650411f1-cec8-4b80-87ca-0edba029b09f  53s  shown  D: which header colour for checkout screen 1?  [blue | green]
+ask:01M71XXXJEBN17DAT43YVCA38R  taste  650411f1-cec8-4b80-87ca-0edba029b09f  53s  shown  D: which header colour for checkout screen 2?  [blue | green]
+ask:01M71XXXS5P3FNB9547STHC4TS  taste  650411f1-cec8-4b80-87ca-0edba029b09f  53s  shown  D: which header colour for checkout screen 3?  [blue | green]
+ask:01M71XXXZRA7Q53AY3SXEVYSKE  taste  650411f1-cec8-4b80-87ca-0edba029b09f  53s  shown  D: which header colour for checkout screen 4?  [blue | green]
+ask:01M71XXY5K268DG3AM9Q24390H  taste  650411f1-cec8-4b80-87ca-0edba029b09f  53s  shown  D: which header colour for checkout screen 5?  [blue | green]
+ask:01M71XXYC6M2JP4V0PKJ78P9A4  exception  650411f1-cec8-4b80-87ca-0edba029b09f  52s  shown  This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  [together | pause | defaults]
+ask:01M71XXYC51E0BCQN4HTBG2EBQ  taste  650411f1-cec8-4b80-87ca-0edba029b09f  52s  folded  D: which header colour for checkout screen 6?  [blue | green]
+   screenshot 1-needs-you.png
+
+$ deep inbox answer ask:01M71XXYC6M2JP4V0PKJ78P9A4 together
+ask:01M71XXYC6M2JP4V0PKJ78P9A4 answered together; no decision saved (exit 0)
+
+$ deep inbox
+ask:01M71XXWSY3DCNMTCHXDGTN6A7  taste  556c875c-57c4-4e3c-8ac3-bf5edfb7ffa8  59s  shown  A: which header colour for checkout screen 1?  [blue | green]
+ask:01M71XXX3M8PGQKYHTWM93CQ2B  taste  d244b4cf-d5b1-4c36-8a1c-3cdfff516caf  59s  shown  B: which header colour for checkout screen 1?  [blue | green]
+   screenshot 2-after-bulk-answer.png

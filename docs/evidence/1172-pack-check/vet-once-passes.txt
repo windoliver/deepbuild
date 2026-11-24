@@ -1,0 +1,5 @@
+running 1 test
+first call 0.929 s, later calls [0.004, 0.004, 0.004] s
+test a_checked_pack_version_is_not_checked_again_on_a_later_call ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.18s
+exit=0

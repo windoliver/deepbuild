@@ -1,0 +1,84 @@
+== head 5388f2c932b3488bcc58fc0b8a72f75c34150901
+
+===== run 1 tests/acceptance/1459/panel.test.ts start 2026-11-15 14:12:14 load { 19.32 42.73 45.74 } thermal 1 Now drawing from 'AC Power' lowpowermode 0 screen-lock flag 0 front app [Claude] pointer [426,510]
+
+ RUN  v5.0.5 ~/private/d22t
+
+ ✓ tests/acceptance/1459/panel.test.ts (1 test) 648277ms
+   ✓ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     ✓ AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 648160ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  14:12:15
+   Duration  648.65s (tests 100%)
+
+===== run 1 exit=0 end 2026-11-15 14:23:04 load { 146.83 125.43 91.60 } thermal 1 Now drawing from 'AC Power' lowpowermode 0 screen-lock flag 0 front app [Claude] pointer [575,301]
+
+===== run 2 tests/acceptance/1459/panel.test.ts start 2026-11-15 14:23:04 load { 146.83 125.43 91.60 } thermal 1 Now drawing from 'AC Power' lowpowermode 0 screen-lock flag 0 front app [Claude] pointer [575,301]
+
+ RUN  v5.0.5 ~/private/d22t
+
+ ❯ tests/acceptance/1459/panel.test.ts (1 test | 1 failed) 27931ms
+   ❯ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     × AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 27760ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/panel.test.ts > AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture > AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture
+Error: BLOCKED: deep-app has no window to read
+ ❯ blocked tests/acceptance/1459/helpers.ts:40:56
+     38| /** The reference window, in points, at 2× (design: Decided). */
+     39| export const REFERENCE = { width: 1512, height: 982, scale: 2 } as con…
+     40| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     41| const LAUNCH_MS = 180_000;
+     42|
+ ❯ RealApp.lines tests/acceptance/1459/helpers.ts:469:103
+ ❯ tests/acceptance/1459/panel.test.ts:19:23
+ ❯ settled tests/acceptance/1459/helpers.ts:487:22
+ ❯ tests/acceptance/1459/panel.test.ts:18:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  14:23:05
+   Duration  28.10s (tests 100%)
+
+===== run 2 exit=1 end 2026-11-15 14:23:34 load { 100.66 116.17 89.41 } thermal 1 Now drawing from 'AC Power' lowpowermode 0 screen-lock flag 0 front app [Claude] pointer [575,352]
+
+===== run 3 tests/acceptance/1459/panel.test.ts start 2026-11-15 14:23:34 load { 100.66 116.17 89.41 } thermal 1 Now drawing from 'AC Power' lowpowermode 0 screen-lock flag 0 front app [Claude] pointer [575,352]
+
+ RUN  v5.0.5 ~/private/d22t
+
+ ❯ tests/acceptance/1459/panel.test.ts (1 test | 1 failed) 26194ms
+   ❯ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     × AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 26084ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/panel.test.ts > AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture > AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture
+Error: BLOCKED: deep-app has no window to read
+ ❯ blocked tests/acceptance/1459/helpers.ts:40:56
+     38| /** The reference window, in points, at 2× (design: Decided). */
+     39| export const REFERENCE = { width: 1512, height: 982, scale: 2 } as con…
+     40| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     41| const LAUNCH_MS = 180_000;
+     42|
+ ❯ RealApp.lines tests/acceptance/1459/helpers.ts:469:103
+ ❯ tests/acceptance/1459/panel.test.ts:19:23
+ ❯ settled tests/acceptance/1459/helpers.ts:487:22
+ ❯ tests/acceptance/1459/panel.test.ts:18:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  14:23:35
+   Duration  26.36s (tests 100%)
+
+===== run 3 exit=1 end 2026-11-15 14:24:01 load { 73.86 108.67 87.48 } thermal 1 Now drawing from 'AC Power' lowpowermode 0 screen-lock flag 0 front app [Windows App] pointer [593,175]

@@ -65,6 +65,7 @@ mod relation;
 mod reseed;
 mod scene;
 mod seam;
+mod serve;
 mod session3;
 mod shader_layout;
 mod simplify;
@@ -86,7 +87,6 @@ mod window;
 mod worker;
 
 use std::collections::HashMap;
-use std::io::{BufRead, Write};
 use std::sync::Arc;
 
 use deep_gpu::device::{Backend, Gpu};
@@ -101,6 +101,7 @@ use serde_json::{json, Value};
 pub(crate) use deep_groups_render::{drawn, groups, lightfx};
 
 use crate::scene::Scene;
+use crate::serve::serve;
 use crate::window::Win;
 use crate::worker::Worker;
 
@@ -182,6 +183,8 @@ pub enum Planted {
     /// plate whose horizon table is never read, and its sky occlusion from its slope alone.
     TerrainNoHorizonBake,
     TerrainOcclusionFromSlope,
+    /// #3036's wrong program: a plate that keeps the surface the frame before drew.
+    TracksKeepLastFrame,
     /// #2215's wrong program (tests/acceptance/2215/README.md: Assumed surfaces 3): the frame's
     /// receipt lists no part that refracts through the round lobe.
     RasterListsNothing,
@@ -1022,6 +1025,7 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
+            deep_canvas_scene3d::tracks::KEEPS_LAST_FRAME => Planted::TracksKeepLastFrame,
             "raster_lists_nothing" => Planted::RasterListsNothing,
             _ => {
                 let planted = deep_canvas_scene3d::spans::PLANTED;
@@ -1484,29 +1488,4 @@ fn main() {
         lane_adapter: None,
     };
     serve(|out, call| app.call(out, call));
-}
-
-/// Answers each scenario line on stdin with one line, each call through `call`.
-fn serve(mut call: impl FnMut(&str, &Value) -> Value) {
-    let stdin = std::io::stdin();
-    let mut stdout = std::io::stdout();
-    for line in stdin.lock().lines() {
-        let Ok(line) = line else { break };
-        let answer = match serde_json::from_str::<Value>(&line) {
-            Ok(sc) if sc["calls"].is_array() && sc["out"].is_string() => {
-                let out = sc["out"].as_str().unwrap_or_default().to_string();
-                let replies: Vec<Value> = sc["calls"]
-                    .as_array()
-                    .expect("checked above")
-                    .iter()
-                    .map(|c| call(&out, c))
-                    .collect();
-                deep_gpu::device::flush_suppressed();
-                json!({"ok": true, "replies": replies})
-            }
-            _ => json!({"ok": false, "code": "bad_input"}),
-        };
-        let _ = writeln!(stdout, "{answer}");
-        let _ = stdout.flush();
-    }
 }

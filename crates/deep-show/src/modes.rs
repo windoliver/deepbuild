@@ -8,6 +8,7 @@
 
 use deep_canvas::schedule::core_ops::{Fields, Transform};
 use deep_canvas_scene3d::scene::{Affine3, Layer3, Line, Scene, Segment};
+use deep_effects_render::scene::Staged;
 use serde_json::{json, Map, Value};
 
 use crate::hub::{Hub, Planted, Show};
@@ -343,9 +344,12 @@ impl Hub<'_> {
         if self.gpu3().is_none() {
             return Err(refuse("unsupported_platform", json!({})));
         }
-        let (mut scene, look) = self
+        let Staged {
+            mut scene, look, ..
+        } = self
             .evaluate3d(doc, show.t, size)
-            .map_err(|u| refuse(u.code, json!({"path": u.path})))?;
+            .map_err(|u| refuse(u.code, json!({"path": u.path})))?
+            .staged;
         let planted = |p: Planted| self.scenario.planted == Some(p);
         let mut diag = view_of(mode);
         let read_out = match mode {
@@ -438,8 +442,8 @@ impl Hub<'_> {
         if !read_out.lines.is_empty() {
             scene.layers.pop();
         }
-        let (_, targets) = gpu
-            .draw_scene(&scene, &look, false)
+        let targets = gpu
+            .draw_ids(&scene, &look)
             .ok_or_else(|| refuse("unsupported_platform", json!({})))?;
         let png = crate::snapshot::png(rgba, size);
         let sha = crate::evidence::put(&self.scenario.evidence, &png)
