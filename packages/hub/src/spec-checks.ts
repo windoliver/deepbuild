@@ -10,8 +10,9 @@ import { docCommand, type DocCheck } from './doc-checks.js';
 import type { ClaimCheck } from './gate-runner.js';
 import type { McpOperationsPort } from './hub-ports.js';
 import { isObj } from './hub-shared.js';
-import { blocked, cantRun, specEntries } from './release.js';
-import { SPEC } from './approved-spec.js';
+import { blocked, cantRun, specEntries, unreadSpec } from './release.js';
+import { type approvedSpec, SPEC } from './approved-spec.js';
+import { checksIn, docChecksIn } from './spec-entries.js';
 
 /** The top-level keys a reader takes: the gate's own, teardowns' `resources`, the stack's `environment`, the `asks` settings and deep-hook's `heavy_commands`. */
 const TOP = new Set(['claims', 'checks', 'outside', 'release', 'switches', 'resources', 'environment', 'asks', 'heavy_commands']);
@@ -61,4 +62,9 @@ export function specChecks(text: string, spec: unknown, checks: ReturnType<McpOp
       }];
     }),
   ];
+}
+
+/** The repo's spec checks (#322) from the approved revision of its spec (#1864). */
+export function approvedChecks(a: Awaited<ReturnType<typeof approvedSpec>>): ClaimCheck[] {
+  return a.text === undefined ? [] : !a.parsed ? unreadSpec(a.text) : specChecks(a.text, a.spec, checksIn(a.spec), docChecksIn(a.spec));
 }

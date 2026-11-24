@@ -18,3 +18,13 @@ export function docChecksIn(spec: unknown): Map<string, DocCheck> {
   const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
   return new Map(Object.entries(checks).flatMap(([name, c]) => { const d = docCheckOf(c); return d ? [[name, d] as const] : []; }));
 }
+/**
+ * Whether the approved spec runs this check outside the sandbox (#33, #1864): `outside: { checks: [paths], build }`
+ * in .deepbuild/done.yaml, for suites that start sandboxes of their own, which macOS can't nest. Its build makes what
+ * those suites start (the workspaces, deep-hook) once per checkout. A run of no claim the hub judges stays inside.
+ */
+export function outsideOf(spec: unknown, check: string): { build: string } | undefined {
+  const o = isObj(spec) && isObj(spec.outside) ? spec.outside : undefined;
+  const paths = Array.isArray(o?.checks) ? o.checks.map(String) : [];
+  return o && typeof o.build === 'string' && paths.some((p) => check === p || (p.endsWith('/') && check.startsWith(p))) ? { build: o.build } : undefined;
+}
