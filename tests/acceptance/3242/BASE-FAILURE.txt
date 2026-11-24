@@ -1,0 +1,185 @@
+# #3242 acceptance tests: the run on the base, and the planted inputs
+
+## The base (7cb1e5c4a, origin/main, no implementation), in this checkout, November 24
+
+$ node --test tests/acceptance/3242/ac1-project-hub.test.mjs tests/acceptance/3242/ac2-three-places.test.mjs \
+    tests/acceptance/3242/ac4-taste-call.test.mjs
+(stack-trace and assertion-object lines dropped; times dropped)
+
+All four offline tests fail, each at its own assertion and for its expected reason: no line of One hub for a project
+holds a decision's words, the Decided tables hold the base's 119 rows, none of the three places names a project's
+hub, and no taste call is recorded.
+
+✖ failing tests:
+
+test at tests/acceptance/3242/ac1-project-hub.test.mjs:8:1
+✖ AC1 #3242.7fbbc69e One hub for a project answers each of the four decisions (who is audited, whose answers make a rule, where a quote is checked, who a habit belongs to), each on a line of its own section that says "Not taken"
+  AssertionError [ERR_ASSERTION]: the section "One hub for a project shared by several people" doesn't answer these decisions with what was not taken:
+  - who is audited: no line of the section holds `audit…`
+  - whose answers make a rule: no line of the section holds `rule`, `answer…` and `offer…` or `three`
+  - where a quote is checked: no line of the section holds `quote`
+  - who a habit belongs to: no line of the section holds `habit`
+
+test at tests/acceptance/3242/ac1-project-hub.test.mjs:15:1
+✖ AC1 #3242.7fbbc69e the Decided tables gain a row for each of the four decisions: a row whose question no Decided row had at the base
+  AssertionError [ERR_ASSERTION]: the Decided tables haven't gained their rows:
+  - the Decided tables gained no row: each row's question is one a Decided row had at 7cb1e5c4a
+
+test at tests/acceptance/3242/ac2-three-places.test.mjs:8:1
+✖ AC2 #3242.a55ec11a The learned layer, the audit lines in How we know version 0 works and the taste-rule line in Later, as extensions each name a project's hub
+  AssertionError [ERR_ASSERTION]: these places don't say what holds on a project's hub:
+  - The learned layer: silent on a project's hub. None of the section's 10 lines holds both `project` and `hub`
+  - the audit lines in How we know version 0 works: silent on a project's hub. None of the section's 1 lines that hold `audit…` holds both `project` and `hub`
+  - the taste-rule line in Later, as extensions: silent on a project's hub. None of the section's 1 lines that hold `taste rule` holds both `project` and `hub`
+
+test at tests/acceptance/3242/ac4-taste-call.test.mjs:9:1
+✖ AC4 #3242.28fd1eed docs/evidence/3242/taste-call.json records one person's taste call that the text reads right, bound to the text as the design holds it now
+  AssertionError [ERR_ASSERTION]: no taste call is recorded: docs/evidence/3242/taste-call.json doesn't exist
+
+ℹ tests 4
+ℹ pass 0
+ℹ fail 4
+ℹ skipped 0
+
+## The live files on the base, each run once the same day (gh 2.103.3, signed in, network on)
+
+$ node --test tests/acceptance/3242/ac2-doc-lanes.live.test.mjs
+It stops at the missing new text before it reads GitHub or runs a lane.
+
+test at tests/acceptance/3242/ac2-doc-lanes.live.test.mjs:18:1
+✖ AC2 #3242.a55ec11a (live) with the new text in the design, the doc lanes (catalogue drift, design links and names, public text) find nothing the change brings
+  AssertionError [ERR_ASSERTION]: the design doesn't hold the new text yet, so the doc lanes have nothing to hold the rest of it against:
+  - who is audited: no line of the section holds `audit…`
+  - whose answers make a rule: no line of the section holds `rule`, `answer…` and `offer…` or `three`
+  - where a quote is checked: no line of the section holds `quote`
+  - who a habit belongs to: no line of the section holds `habit`
+  - The learned layer: silent on a project's hub. None of the section's 10 lines holds both `project` and `hub`
+  - the audit lines in How we know version 0 works: silent on a project's hub. None of the section's 1 lines that hold `audit…` holds both `project` and `hub`
+  - the taste-rule line in Later, as extensions: silent on a project's hub. None of the section's 1 lines that hold `taste rule` holds both `project` and `hub`
+
+$ node --test tests/acceptance/3242/ac3-issue-links.live.test.mjs
+It read the four bodies from GitHub. They link what the bodies saved that day link.
+
+test at tests/acceptance/3242/ac3-issue-links.live.test.mjs:12:1
+✖ AC3 #3242.4156bcc2 (live) #726, #109, #1567 and #1568 each have a body link that lands in One hub for a project, where the new text answers the four decisions
+  AssertionError [ERR_ASSERTION]: the issues don't each link into the new text:
+  - the section holds no new text to link into yet: who is audited: no line of the section holds `audit…`
+  - the section holds no new text to link into yet: whose answers make a rule: no line of the section holds `rule`, `answer…` and `offer…` or `three`
+  - the section holds no new text to link into yet: where a quote is checked: no line of the section holds `quote`
+  - the section holds no new text to link into yet: who a habit belongs to: no line of the section holds `habit`
+  - #726 links #the-learned-layer, #how-we-know-version-0-works, and none of them lands in "One hub for a project shared by several people" (#one-hub-for-a-project-shared-by-several-people, #project-hub)
+  - #109 links #later-as-extensions, #the-learned-layer, #first-party-extensions-that-ship-on-by-default, and none of them lands in "One hub for a project shared by several people" (#one-hub-for-a-project-shared-by-several-people, #project-hub)
+  - #1567 links #the-learned-layer, #first-party-extensions-that-ship-on-by-default, #reading-by-reference, and none of them lands in "One hub for a project shared by several people" (#one-hub-for-a-project-shared-by-several-people, #project-hub)
+  - #1568 links #the-learned-layer, #first-party-extensions-that-ship-on-by-default, #reading-by-reference, and none of them lands in "One hub for a project shared by several people" (#one-hub-for-a-project-shared-by-several-people, #project-hub)
+
+$ node --test tests/acceptance/3242/ac4-told.live.test.mjs
+It read #3242's comments from GitHub: there are none.
+
+test at tests/acceptance/3242/ac4-told.live.test.mjs:10:1
+✖ AC4 #3242.28fd1eed (live) a comment on #3242, made no earlier than the recorded taste call, names the criterion and says the others can overrule the call
+  AssertionError [ERR_ASSERTION]: the others on the project aren't told of the taste call:
+  - no taste call is recorded: docs/evidence/3242/taste-call.json doesn't exist
+  - none of #3242's 0 comments names #3242.28fd1eed and says the call can be overruled (`overrul…`)
+
+Each of the three: tests 1, pass 0, fail 1, skipped 0.
+
+## The judges on planted inputs (a scratch folder outside the checkout, never this checkout's docs/)
+
+Plain node scripts imported helpers.mjs and doc-lanes.mjs from this folder and held each judge against the base's
+design, a planted design built from it in memory, and mutants of that. The planted design, written for the harness
+only: four list items after the section's last, each opening with the decision's label from the issue and ending
+"Not taken: …"; a sentence or a clause naming a project's hub added to The learned layer's Local first item, to the
+audit item under Dogfooding and after the taste-rule sentence in Later, as extensions; and four rows, one a decision,
+after the last row under Decided for a hosted hub. The planted issue bodies are the four saved on November 24, each with a
+`#project-hub` link added to its Design line. All 68 checks came out as expected.
+
+decisionProblems (criterion 1, the section). The planted fix passes. So do the four decisions in one paragraph that
+says "Not taken" four times, a decision wrapped over three physical lines, and the four under a subheading of the
+section. Each of these fails, naming what is wrong:
+- the base: all four decisions, "no line of the section holds …".
+- one decision left out, each of the four in turn: that decision, "no line of the section holds `habit`" and so on.
+- the quote decision without its "Not taken": "no line that holds `quote` says "Not taken"".
+- the four decisions on one line with one "Not taken": "leaves one without its own".
+- a decision whose "Not taken" is a list item nested under it: "no line that holds `habit` says "Not taken"".
+- the four decisions under a new heading beside the section: all four, "no line of the section holds …".
+- `<a id="project-hub">` removed: no section, "has no heading or <a id> #project-hub".
+
+rowProblems (criterion 1, the Decided tables). The planted fix passes, and so do the same rows in a table of their own
+under a new heading in Decisions, and under `### Decided`. Each of these fails:
+- the base, and the planted fix without its rows: "the Decided tables gained no row".
+- rows for three decisions: "who a habit belongs to: none of the 3 rows the Decided tables gained (…) holds `habit`".
+- a base row's decision reworded to hold every word, its question kept: "gained no row".
+- the four rows added to the Yours table, and to a table with the Decided columns outside Decisions: "gained no row".
+
+placeProblems (criterion 2, the three places). The planted fix passes, and so does The learned layer saying no more
+than a link to `#project-hub`. Each of these fails, naming the place:
+- the base: all three, "silent on a project's hub".
+- each place left as at the base, in turn: that place alone.
+- a project's hub named in How we know version 0 works on a line that holds no `audit…`: the audit lines.
+- a project's hub named in The learned layer only inside its fenced example, or a project named with no hub.
+- the word audit gone from How we know version 0 works: "has no lines that hold `audit…`".
+
+linkProblems (criterion 3). The planted bodies pass, and so do bodies linking the section's slug, an `<a id>` set
+inside the section, or a relative link that ends a sentence. Each of these fails, naming the issue and what it links:
+- the four bodies as saved on November 24: all four.
+- #109 left as saved, the other three linked: "#109 links #later-as-extensions, …".
+- each body linking `#cloud-hub`, the section after: all four.
+
+callProblems and theText (criterion 4, the call). The planted fix's text is 11 lines: the four decisions, the three
+places' lines and the four rows; the base's is none. A record bound to that text passes, and still passes after an
+edit to another line of One hub for a project or to another Decided row. Each of these fails:
+- a record with the hash of other text, and the same record after an edit to a decision's line, to a gained row or to
+  The learned layer's line: "the call was made on other text".
+- a record on the base: "holds none of the text a call is on".
+- another criterion's ID, a call of `reads_wrong`, no person, a time without its zone, another file: each by its field.
+
+toldProblems (criterion 4, the others). A comment made after the call that holds the ID and "overrule" passes, and so
+does an earlier one beside a later one. Each of these fails:
+- no comment, a comment with the ID and no `overrul…`, and one with `overrul…` and no ID: "none of #3242's … comments".
+- a comment made before the call: "were made before the call".
+- a record whose `when` can't be read: "no comment can be held against the time of the call".
+
+## The test files on planted trees (the same scratch folder)
+
+The suite was copied beside a planted `docs/technical-design.md` and a planted record, with a stand-in for gh first on
+PATH that answers from planted files, so each test's own pass, fail and skip paths ran without touching GitHub. In
+order: AC1 section, AC1 Decided, AC2 places, AC3 links, AC4 call, AC4 told.
+
+- planted fix, linked bodies, a comment after the call: pass, pass, pass, pass, pass, pass.
+- the base, the bodies as saved, no comment, no record: six failures, as above.
+- planted fix, gh signed out: AC3 and AC4 told skip as `INCONCLUSIVE: gh couldn't read …`; the other four pass.
+- the base, gh signed out: six failures. The two live tests fail on what they could read, and say gh couldn't.
+- planted fix, #109 unlinked, the comment made before the call: AC3 and AC4 told fail; the other four pass.
+- planted fix, #1568 unreadable: AC3 skips as INCONCLUSIVE, naming #1568; the other five pass.
+- planted fix, #1568 unreadable and #726 unlinked: AC3 fails, naming #726; the other five pass.
+- planted fix, a record with another text's hash: AC4 call fails; the other five pass.
+- planted fix, no record: AC4 call and AC4 told fail; the other four pass.
+- planted fix with the habit decision removed and the record bound to that text: AC1 section and AC3 fail.
+
+The doc lanes test ran on four such trees, with no `packages/contracts/dist`. The open issues the stand-in listed
+were the eight bodies saved on November 24 and one planted issue naming the one planned name:
+- planted fix, in a folder that is no repository: skips, "INCONCLUSIVE: the catalogue drift lane reads
+  packages/contracts/dist/index.js, which this checkout has not built …; the public text lane couldn't read all it
+  checks: INCONCLUSIVE the change could not be worked out: no merge base with origin/main". Design links and names
+  passed there.
+- the base's design: fails at the missing new text, as above.
+- planted fix with `<a id="cloud-hub">` dropped: fails, "design links and names finds what the base's files don't
+  give: docs/technical-design.md #cloud-hub (no heading or <a id> in docs/technical-design.md is #cloud-hub)", nine
+  times, once for each link the design holds to it.
+- planted fix in a tree with no `adapters/` folder, so the public text lane can't start: fails, "public text fails:".
+
+And the lanes' runner alone (`docLanes`), in this checkout at the base with the eight bodies as the open issues:
+design links and names failed only on the planned name, whose issue was not among the eight, which the base's files
+give too, so it brought nothing; public text passed, reading this folder's ten files as the change; catalogue drift
+could not run.
+
+## Not run, and known limits
+
+- Catalogue drift ran nowhere: neither this checkout nor the scratch trees hold `packages/contracts/dist`, and this
+  job starts no build. Its findings reader was held only against lines in the format `scripts/catalogue-drift.mjs`
+  prints. So the doc lanes test has not been seen to pass, only to fail and to skip.
+- No live test has been seen to pass on GitHub: nothing of the work is there. Their pass paths ran against the
+  stand-in only.
+- A decision's words can sit in what was not taken, or in a line about something else; a place can name a project's
+  hub and say nothing of it; any link into the section counts, whatever the issue says beside it; and a comment can
+  hold the ID and the word and tell no one. Criterion 4's reader covers those.
