@@ -1,0 +1,11 @@
+# At the working tree committed after 8ba21220f (the sweep through deep-canvas's each_index)
+## cargo test --locked -p deep-canvas-media synth
+test synth::tests::a_packs_refusals_keep_its_presets_order ... ok
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 90 filtered out; finished in 0.40s
+## the same test with the sweeps' results stored in reverse (a wrong program), then restored
+test synth::tests::a_packs_refusals_keep_its_presets_order ... FAILED
+thread 'synth::tests::a_packs_refusals_keep_its_presets_order' (3964832) panicked at crates/deep-canvas-media/src/synth/tests.rs:322:9:
+preset test.p02@1 is refused: with param fb at 1.05, sample 22093 is 4.016323061765939 (first sample not finite or past 4) isn't preset test.p00@1 is refused: with param fb at 1.05
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.20s
+## node scripts/wasm32.mjs
+exit 0 (it exits 1 on any FAIL). Only its last six lines were kept, each a PASS: deep-canvas-sandbox, -scene3d, -seams, -sheet, -vector, deep-text.
