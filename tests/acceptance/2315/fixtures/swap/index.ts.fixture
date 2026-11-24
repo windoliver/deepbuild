@@ -1,0 +1,40 @@
+// A replacement environment@1 provider (#2315): a first-party test package registering the environment `swap`
+// through `deep.registerEnvironment`. Its fill is environment@1's own reference fill (the kit's `clean()`, through
+// the built conformance entry swap.json names, imported lazily on the first call), so it passes the kit at install.
+// Every call is appended to the log swap.json names, before the reference fill runs, so a test sees that this
+// provider was asked and with what. A spec field the caller leaves out is filled from the lease (the token) or a
+// default (health route /health, no warm-up): the kit always gives all three, so this changes nothing it judges.
+import { appendFileSync, readFileSync } from 'node:fs';
+
+interface Settings { conformance: string; log: string }
+let fill: Promise<any> | undefined;
+const reference = (settings: Settings): Promise<any> => fill ??= (async () => {
+  const { slotKits, cleanFills } = await import(settings.conformance);
+  const kit = slotKits().find((k: { slot: string }) => k.slot === 'environment@1');
+  if (!kit) throw Error('slotKits() ships no environment@1 kit');
+  return cleanFills(kit)[0];
+})();
+const note = (settings: Settings, line: Record<string, unknown>): void => appendFileSync(settings.log, `${JSON.stringify({ ...line, at: Date.now(), pid: process.pid })}\n`);
+
+export default function (deep: any): void {
+  const settings: Settings = JSON.parse(readFileSync(new URL('./swap.json', import.meta.url), 'utf8'));
+  deep.registerEnvironment('swap', {
+    slot: 'environment@1', revision: 1,
+    up: async (spec: any, lease: any, checkout: string) => {
+      note(settings, { op: 'up', spec: spec ?? null, lease: lease ?? null, checkout });
+      const given = spec && typeof spec === 'object' ? spec : {};
+      const full = {
+        health: typeof given.health === 'string' ? given.health : '/health',
+        token: typeof given.token === 'string' ? given.token : String(lease?.token ?? 'swap'),
+        warmup: Number.isFinite(given.warmup) ? given.warmup : 0,
+      };
+      const handle = await (await reference(settings)).up(full, lease, checkout);
+      note(settings, { op: 'ready', handle });
+      return handle;
+    },
+    down: async (handle: any) => {
+      note(settings, { op: 'down', handle: handle ?? null });
+      return (await reference(settings)).down(handle);
+    },
+  });
+}

@@ -1,0 +1,61 @@
+# #2315 acceptance tests on the base commit 118ec119f (origin/main), 2026-11-23, macOS, Node 24, load average ~86 at start
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/2315 --no-file-parallelism
+# (packages built with npm run build --workspaces; target/debug/deep-hook built with cargo build -p deep-hook)
+# Every test fails because env-local runs regardless of the loaded replacement: its marker is present and the replacement's up is never asked.
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-2315-stacks-provider-a8b496/tests/acceptance/2315
+
+ ❯ provider.test.ts (3 tests | 3 failed) 43307ms
+   ❯ AC1 #2315.9f5b8ef0 a kitted replacement environment@1 provider, installed and loaded, gets deep env up and down instead of env-local (1)
+     × AC1 `deep env up` and `deep env down` in a worktree invoke the loaded replacement provider's up and down, and env-local never runs 14161ms
+   ❯ AC2 #2315.7023c897 the loaded environment@1 provider disabled or no longer trusted: its active handle stops, and deep env up is refused naming it, never falling back to env-local (2)
+     × AC2 disabled in the running hub (its files changed, `extension.restart` refusing to load it again): its active handle is stopped once, and the next `deep env up` is refused naming the provider, env-local never running 12504ms
+     × AC2 trust revoked: a hub whose release no longer lists the provider it loaded refuses `deep env up` naming the provider, env-local never running 16639ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  provider.test.ts > AC1 #2315.9f5b8ef0 a kitted replacement environment@1 provider, installed and loaded, gets deep env up and down instead of env-local > AC1 `deep env up` and `deep env down` in a worktree invoke the loaded replacement provider's up and down, and env-local never runs
+AssertionError: deep env up in /private/tmp/dh2315-8ZcxdB/wt-a asks the replacement environment@1 provider's up with the worktree (exit 0; stdout {"status":"ready","run":"run:01M85V4DSTNEXKRSCGXR6H7KWY","worktree":"/private/tmp/dh2315-8ZcxdB/wt-a","ports":{"web":3000}}; stderr ; env-local's stack ran there: [25494]): expected [] to include '/private/tmp/dh2315-8ZcxdB/wt-a'
+ ❯ upThroughSwap provider.test.ts:28:214
+
+ ❯ provider.test.ts:44:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  provider.test.ts > AC2 #2315.7023c897 the loaded environment@1 provider disabled or no longer trusted: its active handle stops, and deep env up is refused naming it, never falling back to env-local > AC2 disabled in the running hub (its files changed, `extension.restart` refusing to load it again): its active handle is stopped once, and the next `deep env up` is refused naming the provider, env-local never running
+AssertionError: deep env up in /private/tmp/dh2315-40Z4CU/wt-a asks the replacement environment@1 provider's up with the worktree (exit 0; stdout {"status":"ready","run":"run:01M85V4SSE1ZPWYA09R77KCJZY","worktree":"/private/tmp/dh2315-40Z4CU/wt-a","ports":{"web":3000}}; stderr ; env-local's stack ran there: [26350]): expected [] to include '/private/tmp/dh2315-40Z4CU/wt-a'
+ ❯ upThroughSwap provider.test.ts:28:214
+
+ ❯ provider.test.ts:63:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  provider.test.ts > AC2 #2315.7023c897 the loaded environment@1 provider disabled or no longer trusted: its active handle stops, and deep env up is refused naming it, never falling back to env-local > AC2 trust revoked: a hub whose release no longer lists the provider it loaded refuses `deep env up` naming the provider, env-local never running
+AssertionError: with the provider no longer trusted, deep env up never falls back to env-local (exit 0; stdout {"status":"ready","run":"run:01M85V59X20EWFY8TGE50C47TN","worktree":"/private/tmp/dh2315-CU24rG/wt-a","ports":{"web":3000}}; stderr ): expected [ 27695 ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   27695,
++ ]
+
+ ❯ provider.test.ts:107:127
+    105|     try {
+    106|       const up = await envUp(hub, wt);
+    107|       expect(envLocalRan(wt), `with the provider no longer trusted, de…
+       |                                                                                                                               ^
+    108|       expect(up.code === 0 || up.out?.status === 'ready', `deep env up…
+    109|       expect(`${up.stdout}\n${up.stderr}`, `the refusal names the miss…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  19:55:44
+   Duration  44.57s (tests 98%, transform 1%, import 1%)
+
+
