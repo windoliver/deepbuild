@@ -59,7 +59,11 @@ async function ended(r: RecordStore, at: number): Promise<{ S: string; claim: Ev
   await r.append(hook(S), { ...event('agent.stop', at + 3, seqAt(at + 3), { turn: 1 }), subject: `session:${S}` });
   return { S, claim };
 }
-const settled = <T>(p: Promise<T>, ms: number): Promise<T | 'waiting'> => Promise.race([p, new Promise<'waiting'>((done) => setTimeout(() => done('waiting'), ms))]);
+/** `p`'s value, or 'waiting' when it hasn't settled in 30 s. */
+// deadline: a promise the record holds back fails its test's assertion, naming it, not its timeout
+const settled = <T>(p: Promise<T>): Promise<T | 'waiting'> => Promise.race([p, new Promise<'waiting'>((done) => setTimeout(() => done('waiting'), 30_000).unref())]);
+/** Whether `p` has settled yet. */
+const watched = (p: Promise<unknown>): { settled: boolean } => { const now = { settled: false }; void p.then(() => { now.settled = true; }, () => { now.settled = true; }); return now; };
 
 describe('a FULL commit in its evidence sync holds back only its own session (#2539)', () => {
   it('another session\'s event commits meanwhile, and the syncing session\'s later event lands after its verdict', async () => {
@@ -71,16 +75,18 @@ describe('a FULL commit in its evidence sync holds back only its own session (#2
     const verdict = r.append(core(b.S), verdictOf(b.claim, T0 + 20, sha));
     const later = r.append(hook(b.S), event('user.ask', T0 + 30, seqAt(T0 + 30), { msg: 2 }));
     try {
+      const laterYet = watched(later);
       // A record that holds every commit behind the sync leaves session A's prompt waiting until the sync ends.
-      const other = await settled(r.append(hook(a), event('user.ask', T0 + 40, seqAt(T0 + 40), { msg: 1 })), 2000);
+      const other = await settled(r.append(hook(a), event('user.ask', T0 + 40, seqAt(T0 + 40), { msg: 1 })));
       expect(other, 'session A\'s prompt commits while session B\'s verdict syncs').not.toBe('waiting');
-      expect(await settled(later, 200), 'session B\'s later prompt waits behind its verdict').toBe('waiting');
+      // Appended before A's prompt, so a record that doesn't hold it commits it first.
+      expect(laterYet.settled, 'session B\'s later prompt waits behind its verdict').toBe(false);
     } finally {
       release();
     }
     const [v, l] = await Promise.all([verdict, later]);
     expect(l.log_pos, 'session B\'s events keep their arrival order').toBeGreaterThan(v.log_pos);
-  });
+  }, 60_000);
 
   it('a FULL commit landing while a resume waits leaves the log\'s durable mark short of that session\'s end', async () => {
     const { r, release, sha, storage } = await slowRecord();

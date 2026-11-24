@@ -2,11 +2,11 @@
   "wasm_bindgen": "0.2.129",
   "set": "figure",
   "files": {
-    "player.js": "14a83bc09d702d8daa09b793b7ac50816866c614f5b412bc407046ad3526919e",
-    "player_bg.wasm": "a8837419b0692132a2b5ee48294dbb500e1dba5751bf7b90a6481d057e8b479a"
+    "player.js": "dfe42085c7e1d4a87236d09427d0d50202a4c542bf22cc6db070a88d6c16e8e5",
+    "player_bg.wasm": "ae2e2f44ef39e4850815df74485bf2cb5a79a52beb23d252b3872ba55feacfd6"
   },
   "core_version": "0.0.0",
-  "set_digest": "e0d535adac31c58c7a65fae890f5575ca14ffaa5a44cc71d4a5fd148fe14ea47",
+  "set_digest": "4c4ddb071a29db97fc8b3237cd92d1c3567daa3466bb734bcc536cc860690fda",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "modules": [
     "data",

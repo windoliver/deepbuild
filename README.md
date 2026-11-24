@@ -73,11 +73,13 @@ is `BLOCKED` when they fail. The checks with their builds must finish within the
 
 `lint` also runs `scripts/repo-rules.mjs`, which fails on GitHub workflows,
 agent hooks or plugins in a repo's `.claude` or `.codex` settings, secrets such
-as home paths and tokens, and any dependency `scripts/repo-rules.json` doesn't
-list, and it reports the change's size against the merge base. To add a
+as home paths and tokens, any dependency `scripts/repo-rules.json` doesn't list,
+and any fixture of a body's motion with no statement that it was drawn or agreed
+to, and it reports the change's size against the merge base. To add a
 dependency, list it there with its exact spec and why the task needs it. To keep
 a deliberate fixture value, add an `allowedFindings` entry with its path, kind,
-the SHA-256 of the exact value and why.
+the SHA-256 of the exact value and why. `scripts/body-fixtures.mjs` says what a
+statement and an agreement hold.
 
 `perf` compares the checkout with its merge base on `origin/main` using the
 budgets in `benchmarks/budgets.json`: p50 and p95 time and peak memory for each

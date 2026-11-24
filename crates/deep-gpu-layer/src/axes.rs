@@ -26,6 +26,8 @@ pub(crate) fn plant_name(planted: Option<Planted>) -> Option<&'static str> {
         Planted::ClampUnmirroredBehind => Some("clamp_unmirrored_behind"),
         Planted::ClampToFrame => Some("clamp_to_frame"),
         Planted::LeaderDrawsWhileClamped => Some("leader_draws_while_clamped"),
+        // #3036: scene3d keeps a plate's surface from the frame before.
+        Planted::TracksKeepLastFrame => Some(deep_canvas_scene3d::tracks::KEEPS_LAST_FRAME),
         _ => None,
     }
 }

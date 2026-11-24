@@ -31,7 +31,7 @@ use crate::document::member;
 use crate::kinds::with_defaults;
 
 mod picks;
-pub use picks::{pick_targets, PickTarget};
+pub use picks::{pick_targets, reading_sets, PickTarget, READING};
 
 /// The verb the full-screen button is bound to (Control: `verb`).
 pub const FULL_SCREEN: &str = "canvas.full_screen";
@@ -65,8 +65,9 @@ pub struct Planted {
     pub esc_to_root: bool,
     /// #504: a click on a control's target also selects the item and opens its panel.
     pub pick_selects: bool,
-    /// #2660: a hover keeps the targets it first built, whatever the document becomes.
-    pub keeps_targets: bool,
+    /// #2660 AC4's twin: the scope keeps the hit targets it built across a new revision of the
+    /// document, so after a patch that moves an item a pointer move hits by the targets before it.
+    pub keeps_targets_across_patch: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -924,10 +925,15 @@ impl Scope {
             .find(|t| &t.item == id)
     }
 
-    /// The Tab stops in order: each control's own UI, then its targets that draw.
+    /// The Tab stops in order: each mark set's reading stop (#3236), then each control's own UI,
+    /// then its targets that draw.
     fn stops(&self, doc: &Value) -> Vec<(String, Option<String>)> {
-        let targets = pick_targets(doc, &self.hidden(doc));
-        let mut out = Vec::new();
+        let hidden = self.hidden(doc);
+        let targets = pick_targets(doc, &hidden);
+        let mut out: Vec<(String, Option<String>)> = reading_sets(doc, &hidden)
+            .into_iter()
+            .map(|set| (set, Some(READING.to_string())))
+            .collect();
         for control in member(doc, "controls")
             .and_then(Value::as_object)
             .into_iter()
@@ -946,7 +952,7 @@ impl Scope {
     }
 
     /// Tab moves focus to the next stop, from the first after the last.
-    fn tab(&mut self, doc: &Value) {
+    pub fn tab(&mut self, doc: &Value) {
         let stops = self.stops(doc);
         let next = match self
             .focus
@@ -1037,7 +1043,7 @@ impl Scope {
                 && k.layers.as_ref() == layers
         };
         let kept = match self.kept.take() {
-            Some(k) if self.planted.keeps_targets || holds(&k) => k,
+            Some(k) if self.planted.keeps_targets_across_patch || holds(&k) => k,
             _ => Kept {
                 flat: self.rig.flat,
                 filter: (v.kinds.clone(), v.writers.clone(), v.isolate.clone()),
@@ -1452,6 +1458,8 @@ impl Scope {
             "details": self.details,
             // #504: the Tab stop with focus: a target as its item's ID, a control as its own.
             "focus": self.focus.as_ref().map(|(control, option)| match option {
+                // #3236: a reading stop as its set's ID, until its host names the focused row.
+                Some(o) if o == READING => json!(control),
                 Some(o) => pick_targets(doc, &hidden)
                     .into_iter()
                     .find(|t| &t.control == control && &t.option == o)

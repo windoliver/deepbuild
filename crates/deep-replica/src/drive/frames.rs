@@ -105,6 +105,10 @@ impl Replica {
     /// is the one the reads see.
     pub(super) fn input_drew(&mut self) {
         if self.dirty.is_some() {
+            let glyphs = self.glyphs.clone();
+            let _ = self
+                .cx
+                .update_window(self.window, |_, window, _| glyphs.keep_scene(window));
             let read = self.live_tree();
             // Typing draws a frame a character, as it is delivered.
             let drew = self.count_frames(None).max(1) as u64;
