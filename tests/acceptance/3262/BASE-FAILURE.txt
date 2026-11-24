@@ -1,0 +1,151 @@
+# #3262's acceptance tests at the base
+
+Base: c8d9684f003419173cf19bbc0171593acd5e0829 (origin/main; its last merge is #3268, the spike #3222).
+Host: this job's Mac (Mac17,10, macOS, Apple silicon), shared with many other sessions. Its one-minute load was 9 to
+81 when the runs below started and passed 300 during the night; each run's own load is beside it.
+Built once by this job's caller: npm run build --workspaces, then cargo build --locked -j 8 --bin deep-show and
+--bin deep-hook, debug, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 (cargo 1.99.1, Node 24.22.0, Vitest 5.0.5).
+  target/debug/deep-show  sha256 1ae97f7bd4a5ecda1098cd5aa8d647de9eab4961de02a5413011375a3ccf3d9e
+  target/debug/deep-hook  sha256 88680477d0a860e20d6cc773317ec469b398102eb9dc4aed4370dff512683e96
+Run November 23 to 24, 2026, each file once, one at a time, through the machine's throttle:
+
+  node scripts/throttle.mjs test --wait 60 -- <the file's own run command, as README.md gives it>
+
+No DEEP_3262_BASE was given: at the base the criteria 1 and 2 tests judge the checkout they are in first.
+
+## Summary
+
+| File | Criterion | At the base | On its planted side |
+|---|---|---|---|
+| ac1-sessions-1.test.mjs | #3262.55d4e80f | NOT RUN: no test grant came within the 60 minutes | (none named) |
+| ac1-sessions-4.test.mjs | #3262.55d4e80f | NOT RUN: the same wait | (none named) |
+| ac1-sessions-16.test.mjs | #3262.55d4e80f | NOT RUN: the same wait | (none named) |
+| ac2-slow-call.test.mjs | #3262.e02db7d6 | FAIL at its assertion, on both counts, each naming the render-back: the side held 17 calls after it and 16 before; the 15 patches' median service 470 ms behind it, 8.67 times their 54.2 ms with none | keeps-render-backs: the same run. Its binary is the base's, byte for byte |
+| ac3-script.test.mjs | #3262.693f8038 | PASS: behaviour that must not change. 240 calls, every reply equal | keeps-hub-when-session-ends: FAIL at its assertion, naming call 153, the first read after a session's end |
+| ac3-suites.test.ts | #3262.693f8038 | PASS: behaviour that must not change. 18 scenarios, 202 calls, every reply equal | keeps-hub-when-session-ends: FAIL at its assertion, naming call 3 of #806's two figures, the read after the session's end |
+
+No run started a compile of a workspace crate (each run's process tree was watched for one).
+
+## Not run: ac1-sessions-1, -4 and -16.test.mjs
+
+The three files' own commands were asked for under one test grant, one after the other:
+
+  $ node scripts/throttle.mjs test --wait 60 -- node <a script that runs node --test tests/acceptance/3262/ac1-sessions-1.test.mjs, then -4, then -16>
+  # started 2026-11-24T05:33:19Z, one-minute load 80.7
+  INCONCLUSIVE no grant: no test grant came within 60 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  # exit 3, took 3601 s
+
+The wait wasn't taken again. During it, at 01:10, the checkout's target/ was removed by something outside this job
+(nothing this job ran removes it), so the files could not have run at the end of the wait either: the hub finds
+deep-show and deep-hook only there. So criterion 1's test has not been seen failing at the base. What stands for it here:
+it runs the harness through the same `runHarness` as ac2-slow-call.test.mjs, which ran at the base below, and its
+judge, `judgeGrowth`, fails the spike's three kept outputs of the same base's side (docs/spikes/3222/out: 1.67, 3.24
+and 98.29 times) and passes the same rows with a flat service (README: What the base does). Neither is a run of the
+test.
+
+## ac2-slow-call.test.mjs at the base
+
+  $ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3262/ac2-slow-call.test.mjs
+  # started 2026-11-24T04:34:50Z; the grant came after 57 minutes
+  ✖ AC2 #3262.e02db7d6 in #3222's planted slow call's runs, the 15 patches' median service with the slow call in flight is at most 1.25 times their median with none, and the side doesn't keep the render-back (26771.991625ms)
+    AssertionError [ERR_ASSERTION]: AC2 #3262.e02db7d6: the side kept the render-back: after the slow call, session 7e2162df's render_back_3d of doc 01JC3200000000000000000032, the planted render-back, it held 17 calls, and 16 after the call before it (session 7e2162df's revision of doc 01JC3200000000000000000032); a render-back is answered and not kept, so the count stays
+    the 15 patches' median service is 470 ms with the slow call, session 7e2162df's render_back_3d of doc 01JC3200000000000000000032, the planted render-back (service 1050 ms), in flight (one-minute load 68.47 at its start and 62.82 at its end), 8.67 times their median with none, 54.2 ms (one-minute load 68.5 at its start and 68.47 at its end); the criterion allows at most 1.25 times
+        at TestContext.<anonymous> (file://~/…/tests/acceptance/3262/ac2-slow-call.test.mjs:26:10)
+  ℹ tests 1  pass 0  fail 1
+  # exit 1; the test itself took 27 s: the harness's two runs
+
+It fails where it should, for the reasons its criterion names, before DEEP_3262_BASE is asked for. The planted side
+`keeps-render-backs` is this run: its file is the base's `canvas_side.rs` with a comment, and its built binary has
+the base's sha256, so it wasn't run a second time.
+
+## ac3-script.test.mjs
+
+At the base:
+
+  $ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3262/ac3-script.test.mjs
+  # started 2026-11-24T04:12:54Z, one-minute load 17.1
+  ✔ AC3 #3262.693f8038 on #3222's 16-session script, every reply of the canvas side equals the reply of a fresh hub that plays every kept call (156074.816834ms)
+  ℹ 240 calls played ({"revision":96,"patch":32,"render_back_2d":32,"render_back_3d":32,"check":32}, and a read after each session's end), 160 of them kept; 93 fresh hubs; outcomes {"presented":192,"applied":32,"none":16}
+  ℹ tests 1  pass 1  fail 0
+  # exit 0, one-minute load 10.4 at the end
+
+It passes, as a test of behaviour that must not change does: the base's side plays every kept call again on a fresh
+hub for each call, render-backs among them, and its replies are those of a fresh hub that plays none of the earlier
+render-backs. So at the base playing a render-back again changes no later reply of this script.
+
+On `keeps-hub-when-session-ends` (its binary, sha256 2b8fd35d98df3f12f6daae4d6a2356b561d710d797bdb0510f787c0c5cfc418a,
+given as DEEP_BIN_DIR):
+
+  $ DEEP_BIN_DIR=<the folder of the planted side's deep-show> node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3262/ac3-script.test.mjs
+  # started 2026-11-24T04:20:38Z, one-minute load 10.6
+  ✖ AC3 #3262.693f8038 on #3222's 16-session script, every reply of the canvas side equals the reply of a fresh hub that plays every kept call (142953.146541ms)
+    AssertionError [ERR_ASSERTION]: AC3 #3262.693f8038: on #3222's 16-session script, call 153 (revisions on doc 01JC3200000000000000000003) is the first call whose reply differs from that of a fresh hub that played the 112 kept calls before it: `reply.revisions[0].state` is "superseded" from the side and "current" from a fresh hub
+        at TestContext.<anonymous> (file://~/…/tests/acceptance/3262/ac3-script.test.mjs:29:10)
+  ℹ tests 1  pass 0  fail 1
+  # exit 1
+
+Call 153 is the read that follows the first session's end. The planted side still holds that session's revisions
+(the seeded revision 0 superseded); a fresh hub in the world without the session refuses its calls, so revision 0 is
+current.
+
+## ac3-suites.test.ts
+
+At the base:
+
+  $ node scripts/throttle.mjs test --wait 60 -- node node_modules/vitest/vitest.mjs run tests/acceptance/3262/ac3-suites.test.ts --testTimeout=1200000
+  # started 2026-11-24T04:11:53Z, one-minute load 22.5
+  #393 AC4, AC6 as #806 plays it (writer): 18 calls, 11 kept, 8 fresh hubs, outcomes {"presented":5,"none":8,"refused":5}
+  #393 AC5 as #806 plays it (refs): 5 calls, 3 kept, 3 fresh hubs, outcomes {"presented":1,"none":2,"refused":2}
+  #393 AC7 as #806 plays it (revisions): 11 calls, 6 kept, 6 fresh hubs, outcomes {"presented":4,"none":5,"refused":2}
+  #393 AC9 as #806 plays it (issues): 2 calls, 2 kept, 1 fresh hubs, outcomes {"refused":2}
+  #393 AC3 as #806 plays it (proof): 2 calls, 2 kept, 1 fresh hubs, outcomes {"presented":2}
+  #393 AC2 as #806 plays it (hidden): 2 calls, 2 kept, 1 fresh hubs, outcomes {"presented":1,"not_presented":1}
+  #384 AC1 as #806 plays it (selection): 21 calls, 21 kept, 1 fresh hubs, outcomes {"applied":14,"none":7}
+  #384 AC2 as #806 plays it (caption): 17 calls, 17 kept, 1 fresh hubs, outcomes {"applied":14,"none":3}
+  #384 AC2 as #806 plays it (note): 17 calls, 17 kept, 1 fresh hubs, outcomes {"applied":14,"none":3}
+  #384 AC2 as #806 plays it (screenshot): 17 calls, 17 kept, 1 fresh hubs, outcomes {"applied":14,"none":3}
+  #384 AC2 as #806 plays it (page): 2 calls, 2 kept, 1 fresh hubs, outcomes {"none":2}
+  #384 AC3 as #806 plays it (detached): 22 calls, 18 kept, 5 fresh hubs, outcomes {"applied":15,"none":3,"presented":4}
+  #806's two sessions' figures on one panel, where the Codex session then ends: 7 calls, 3 kept, 6 fresh hubs, outcomes {"presented":4,"none":3}
+  #1415 AC6: a patch that changes nothing, and its undo: 6 calls, 3 kept, 4 fresh hubs, outcomes {"applied":1,"none":3,"no_change":1,"refused":1}
+  #1415 AC7: a create of an item the board holds: 4 calls, 2 kept, 3 fresh hubs, outcomes {"applied":1,"none":2,"refused":1}
+  #2694 AC1: a show, reads, a second show: 10 calls, 2 kept, 9 fresh hubs, outcomes {"presented":2,"none":8}
+  #2694 AC3: a terminal's row that arrives at 2 s, read 35 times: 36 calls, 1 kept, 36 fresh hubs, outcomes {"none":36}
+  #2694 AC4: a read of the revisions between two shows: 3 calls, 2 kept, 2 fresh hubs, outcomes {"presented":2,"none":1}
+   ✓ tests/acceptance/3262/ac3-suites.test.ts (1 test) 14605ms
+     ✓ AC3 #3262.693f8038 on the scenarios #806's, #393's, #384's, #1415's and #2694's suites play, and where a session ends, every reply of the canvas side equals a fresh hub's 12886ms
+   Test Files  1 passed (1)   Tests  1 passed (1)
+  # exit 0
+
+It passes, as a test of behaviour that must not change does.
+
+On `keeps-hub-when-session-ends` (its binary given as DEEP_BIN_DIR):
+
+  $ DEEP_BIN_DIR=<the folder of the planted side's deep-show> node scripts/throttle.mjs test --wait 60 -- node node_modules/vitest/vitest.mjs run tests/acceptance/3262/ac3-suites.test.ts --testTimeout=1200000
+  # started 2026-11-24T04:20:14Z, one-minute load 11.3
+     × AC3 #3262.693f8038 on the scenarios #806's, #393's, #384's, #1415's and #2694's suites play, and where a session ends, every reply of the canvas side equals a fresh hub's 12167ms
+  AssertionError: AC3 #3262.693f8038: on #806's two sessions' figures on one panel, where the Codex session then ends, call 3 (revisions on doc 01JB7D00000000000000000002) is the first call whose reply differs from that of a fresh hub that played the 2 kept calls before it: `reply.revisions[0]` is {"rev":1,"base_rev":0,"writer":{"kind":"agent","id":"0a806c0d-0000-4000-8000-000000000002"},"hash":"b79530e72533444a3e17ae4334bfe8379737df8892e86a4edab8f0c0557f2011","state":"current"} from the side and nothing from a fresh hub
+   ❯ tests/acceptance/3262/ac3-suites.test.ts:38:35
+   Test Files  1 failed (1)   Tests  1 failed (1)
+  # exit 1
+
+The other 17 scenarios read no difference on the planted side: none of them ends a session.
+
+## Readings
+
+1. A planted binary copied over target/debug/deep-show doesn't reach a criterion 3 file. The planted side's binary
+   was copied there with cp (sha256 2b8fd35d… before the run) and ac3-suites.test.ts run by its own command. The
+   file's own `cargo build --locked --bin deep-show` compiled nothing, but put the checkout's own build back over the
+   copy: the file was the base's again after the run (sha256 1ae97f7b…), and the run passed, on the base. So that run
+   says nothing of the planted side; the two runs above, with DEEP_BIN_DIR, are the planted side's. The base's binary
+   was copied back and its sha256 checked before anything else ran. README.md, How to run, now says so.
+2. A probe before the runs, outside the suite: a short transcript on the base's side through this suite's `compare`
+   (two sessions; shows, a render-back, a patch, a read, a check, a second render-back, then one session's end and
+   three more calls). 10 calls, 5 kept, 7 fresh hubs, no reply differed. The side's `held` after each call was
+   1 2 3 4 4 5 6 6 6 7: it rises with each render-back at the base and stays with each read, and after the session's
+   end the read of its document's revisions answers an empty list.
+3. A second probe built every scenario of scenarios.ts against a stand-in for the side: 18 scenarios, 202 calls,
+   no call left with a time of its scenario's own clock.
+4. Times, on this Mac at one-minute loads of 10 to 70: ac3-suites 15 s; ac3-script 156 s at the base and 143 s on the
+   planted side; ac2-slow-call 27 s for the harness's two runs. A test grant took from seconds to 57 minutes to come.
