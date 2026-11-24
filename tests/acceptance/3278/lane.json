@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: opening.test.ts runs #490's redraft-2 suite, which cargo-builds deep-show into target/ (replacing target/debug/deep-show that stable-keys.test.ts runs when no DEEP_BIN_DIR is supplied), and builds the merge base in full" }

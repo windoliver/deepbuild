@@ -1,0 +1,72 @@
+Base: 3c564bbddf6f53389d519127aad64aa890a69646
+Date: 2026-11-24T04:16Z (macOS, debug deep-show, default features full)
+Load at start: load averages: 88.78 89.81 92.62
+
+== stable-keys.test.ts (#3278.99c4953a) ==
+Command: DEEP_BIN_DIR=<clone>/target/debug npx vitest run tests/acceptance/3278/stable-keys.test.ts --reporter=verbose
+Result: FAILED at the moved-keys assertion (expect(moved).toEqual([])), line 31; 27 keys moved, 9 nodes x 3 times.
+
+ × tests/acceptance/3278/stable-keys.test.ts > #3278.99c4953a parity/logic/readers.board keeps its content keys across two runs of one build > #3278.99c4953a running parity/logic/readers.board twice in one deep-show binary gives the same content key for every node at 0s, 0.5s and 1.5s 18459ms
+AssertionError: content keys that moved between the two runs:
+- Expected
++ Received
+
+- []
++ [
++   "at 0s: logic.step|- key c4ec0d66dab85d09576582548f096d73 then 0024c09322b78ed071a9e3c923486def",
++   "at 0s: motion.flip|dot key 1a60214c851e3c2aa9f53f6274fe4313 then 0766b34b15a0f273bde77f17725151d8",
++   "at 0s: text.copy_columns|labels key 7892681809ea477957214a4dddb27477 then b49741e7a25d1b772835d8f0e17c46a8",
++   "at 0s: text.copy|caption key 774c227425c64e5242524fe12039a150 then 1252c3f2dd129e2010599e3705e0f029",
++   "at 0s: text.counter|caption key f6a1dd298d15cbf2c2b13d04ad617091 then 946a8ee36da7e797c44546e91ab05f10",
++   "at 0s: text.shape|caption key f17b64b1c80e5787dfc165fc9e1c166d then 7ba487d5ddbd6addf238d9e85e948429",
++   "at 0s: marks2d.item|caption key 468499fe6dcd8a7031ea4ba6d5eff24b then 319b4cfb5d1516848a13eb1196de2e84",
++   "at 0s: marks2d.item|dot key a926d9998f6c26f4b85c4aa58fd23ffc then 66a64a8424187918b58606e0407d617d",
++   "at 0s: marks2d.frame|- key f46957feeae623b46de861d14996c6f4 then 9493fa9e56a7f093257660cefd02ea01",
++   "at 0.5s: logic.step|- key de2b35158900250cba8983aa0a993744 then fe2e339cb128001df4bb0fca9e46dbd3",
++   "at 0.5s: motion.flip|dot key 91b30d0cd7b22e55db622e586915c673 then 22fd3d07208cb42c2100a06557065140",
++   "at 0.5s: text.copy_columns|labels key 686c9c6d13c90b8e14e87b86137c6996 then e212efc89f65485ca64a5f3b7b269f13",
++   "at 0.5s: text.copy|caption key 75aa92c9a8ad1fc048327dc2c1968c31 then ef9cb2f6f4ffc407cc7c16439867ddce",
++   "at 0.5s: text.counter|caption key 034b8f678da1fe8477b7b129f2386580 then 7e323305268ec2200a75038e6d506c04",
++   "at 0.5s: text.shape|caption key a63d19506c56e1c95ee7dab5eeb22c34 then c03bbdee97ecd2ec9bc6eabd999f6b9f",
++   "at 0.5s: marks2d.item|caption key 9e67eea5e9e34dc34cd638a82ed61bc9 then 8bdd1a4b984b23a275e5fd27127a4008",
++   "at 0.5s: marks2d.item|dot key 0be0261c3bc773885920bc8414c68bd7 then 4e3593ec6ff22f2c82d45f4137352f51",
++   "at 0.5s: marks2d.frame|- key c070b29e7c8972fb226db0dbe6aa8327 then 94618cf41492456de638e2b7a259e20b",
++   "at 1.5s: logic.step|- key e4163d70384615ed00df055c55b9a7b4 then ecaaa5bacfb8d417218498d70741b3ff",
++   "at 1.5s: motion.flip|dot key 23e233cb1afbbd0f1d3f5bf182a3259e then 18a34103071efbf43bd7b362057c764d",
++   "at 1.5s: text.copy_columns|labels key ed1217677abb8b10317f55b4f58278ad then 9ada8c8fcee84c8c2db86680a9c1405f",
++   "at 1.5s: text.copy|caption key 7d6b24d1c6f4268717ce493c19178681 then b7cf33e5a5d2fb4f4d26a10e08e6909c",
++   "at 1.5s: text.counter|caption key d427124d26fa5c6af6c98f85d55d08bf then 2d0485b7eeac6081becdc83581f9ff4e",
++   "at 1.5s: text.shape|caption key e1331ffd9a6e52d3db835ddac3ec65f8 then 40204c07d9dd0f9614446df26a3dbb78",
++   "at 1.5s: marks2d.item|caption key 4fdd6e51ab230270c90a1771c8a378ff then 473023a6b7b3c6b0bc39ca17349d5e15",
++   "at 1.5s: marks2d.item|dot key 89bc15db0ffd92fe0fa67254926db94c then e7a536cb85309bb97500b01267a7a1ba",
++   "at 1.5s: marks2d.frame|- key bd1ba989ff9c590372321695ad00fdfb then bafd26f2850d8eb82d76a499f5e3c52c",
++ ]
+
+ ❯ tests/acceptance/3278/stable-keys.test.ts:31:93
+     29|       }
+     30|     }
+     31|     expect(moved, `content keys that moved between the two runs:\n  ${…
+       |                                                                                             ^
+     32|   }, BUILD_MS); // deadline: three deep-show runs of a few calls each,…
+     33| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  20:15:07
+   Duration  19.56s (tests 99%, transform 1%)
+
+vitest exit 1
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+
+== opening.test.ts (#3278.f8a0472b) ==
+Base run NOT YET MADE: it needs two more deep-show builds plus a merge-base build in its own target folder, and this
+machine had 14 GB of disk free. To be run on the Spark:
+  npx vitest run tests/acceptance/3278/opening.test.ts --reporter=verbose
+Expected there: fails at the notPassed assertion (expect(notPassed).toEqual([])), naming #490 redraft-2's AC2 test
+(the 27 readers.board key changes the issue reports).
