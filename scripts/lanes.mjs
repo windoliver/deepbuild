@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir, hostname, tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -801,6 +801,12 @@ export function testsOf([command, ...args], cwd, { report, output, status }) {
   }
 }
 
+/** The test files a command of a lane runs, as its runner takes them; none for one that names no file, as `cargo test`. */
+function testFilesOf(cwd, command) {
+  const named = require('./proof-binaries.mjs').commandFiles(cwd, command).flatMap((path) => (path.includes('*') ? globSync(path, { cwd }) : [path]));
+  return named.map((file) => relative(realpathSync(cwd), realpathSync(resolve(cwd, file))).split(sep).join('/'));
+}
+
 function knownFailures(cwd) {
   try {
     return JSON.parse(readFileSync(join(cwd, 'scripts/known-failures.json'), 'utf8'));
@@ -907,8 +913,10 @@ export function writeRecord(lane, state, tree, tests, more = {}) {
   return file;
 }
 
-export function runLanes(lanes, { cwd = root } = {}) {
+export function runLanes(lanes, { cwd = root, kept: key } = {}) {
   const failures = [];
+  // Loaded only for the preflight, as a copy of this script stands alone without it.
+  const { openKept, wholeJob } = key ? require('./proof-kept.mjs') : {};
   // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
   const release = process.env.DEEP_PREFLIGHT === 'release';
   // The lanes that read the open issues share one fetch a run, in this file (scripts/open-issues.mjs); perf's
@@ -918,7 +926,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
   // Never forward a shell's binary directory, even to a lane that starts its own proof.
   const environment = { ...process.env };
   delete environment.DEEP_BIN_DIR;
-  let changed, binaries, binaryError;
+  let changed, binaries, built = [], binaryError;
   try {
     const selected = [];
     for (const lane of lanes) {
@@ -946,29 +954,51 @@ export function runLanes(lanes, { cwd = root } = {}) {
       const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
       // The tests the lane's whole cargo test commands list, or null once a listing failed; whether any cargo test ran.
       let listedCargo, cargoRan = false;
-      for (const [command, ...args] of lane.commands.map(runOf)) {
+      // The preflight's kept results of this very tree (#3296): a job already done is read, never run again.
+      let kept = key && lane.name === 'unit' && key.tree === tree ? openKept(key, (row) => readSkips([row], knownFailures(cwd).skips, timed).covered.length > 0) : null, testFiles = [];
+      if (kept) try { testFiles = lane.commands.map((command) => testFilesOf(cwd, command)); } catch (error) {
+        console.log(`NOTE ${lane.name}: its files can't be listed, so nothing of it is kept or read: ${error.message}`);
+        kept = null;
+      }
+      for (const [index, listedCommand] of lane.commands.entries()) {
+        const [command, ...rest] = runOf(listedCommand), shards = rest[0] === 'scripts/affected.mjs', job = `${lane.name} ${index}`;
+        // The alone block's own run keeps its jobs, and reads them (affected.mjs).
+        const args = kept && shards ? [...rest, `--kept=${JSON.stringify(key)}`] : rest;
         let directory, descriptor, result, results, output = '';
         try {
-          directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
-          const log = join(directory, 'output'), report = join(directory, 'report');
-          const reported = reporting([command, ...args], report);
-          if (reported && !binaries && !binaryError) {
-            binaries = mkdtempSync(join(tmpdir(), 'deep-lane-binaries-'));
-            try {
-              const { binaryNames, buildBinaries, commandFiles, watchBinaries } = require('./proof-binaries.mjs');
-              watchBinaries(binaries);
-              const files = selected.flatMap((lane) => lane.commands.map(runOf)).flatMap((command) => commandFiles(cwd, command));
-              buildBinaries(cwd, join(binaries, 'bin'), binaryNames(cwd, files), undefined, { timeout: 0 });
-            } catch (error) { binaryError = error; }
+          const names = testFiles[index] ?? [];
+          const prior = kept && !shards && kept.jobDone(job, names) ? kept.results(names, job) : null;
+          if (prior) [results, result, output] = [prior, { status: prior.failures.length ? 1 : 0 }, `KEPT ${job}: ${prior.passed.length + prior.failures.length + prior.skips.length} results read from an earlier run of this tree`];
+          else {
+            directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
+            const log = join(directory, 'output'), report = join(directory, 'report');
+            const reported = reporting([command, ...args], report);
+            // Built for the run once, and again whenever a cleanup has emptied them since (#3296).
+            if (reported && !binaryError && (!binaries || built.some((name) => !existsSync(join(binaries, 'bin', name))))) {
+              try {
+                const { binaryNames, buildBinaries, commandFiles, watchBinaries } = require('./proof-binaries.mjs');
+                if (!binaries) {
+                  binaries = mkdtempSync(join(tmpdir(), 'deep-lane-binaries-'));
+                  watchBinaries(binaries);
+                  built = binaryNames(cwd, selected.flatMap((lane) => lane.commands.map(runOf)).flatMap((command) => commandFiles(cwd, command)));
+                }
+                buildBinaries(cwd, join(binaries, 'bin'), built, undefined, { timeout: 0 });
+              } catch (error) { binaryError = error; }
+            }
+            if (reported && binaryError) throw binaryError;
+            descriptor = openSync(log, 'w', 0o600);
+            // One shared descriptor preserves the child's stdout/stderr write order.
+            // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6), and under a cpu.slot
+            // of the calling session's through scripts/lease (#1015).
+            result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', leaseScript, ...reported?.command ?? [command, ...args]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
+            output = readFileSync(log, 'utf8').trim();
+            results = testsOf([command, ...args], cwd, { report, output, status: result.status });
+            if (kept && !shards) {
+              if (wholeJob({ label: 'vitest', status: result.status, output, results })) kept.keep(job, names, results);
+              // An earlier run's rows stand beside this one's, and a failure over a later pass.
+              results = kept.overlay(results, names, job);
+            }
           }
-          if (reported && binaryError) throw binaryError;
-          descriptor = openSync(log, 'w', 0o600);
-          // One shared descriptor preserves the child's stdout/stderr write order.
-          // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6), and under a cpu.slot
-          // of the calling session's through scripts/lease (#1015).
-          result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', leaseScript, ...reported?.command ?? [command, ...args]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
-          output = readFileSync(log, 'utf8').trim();
-          results = testsOf([command, ...args], cwd, { report, output, status: result.status });
         } catch (error) {
           result = { status: null, error };
         } finally {
@@ -1034,6 +1064,16 @@ export function runLanes(lanes, { cwd = root } = {}) {
         tests.push(...platformRead.map(({ id, state, message }) => ({ id, state, note: message, ...(absentIds.has(id) && { skipped: true }) })));
         const found = { state: worst(platformRead.map(({ state }) => state)), error: absentIds.size ? `${absentIds.size} of the Mac's cargo tests are absent on this platform` : platformRead[0].message };
         if (stands(found, failure)) failure = found;
+      }
+      if (kept) {
+        const files = testFiles.flat(), ran = new Set(tests.filter(({ id, state }) => !id.endsWith(' › (file)') || state === 'FAIL').map(({ id }) => id.split(' › ')[0]));
+        const unrun = files.filter((file) => !ran.has(file));
+        if (unrun.length) {
+          const found = { state: 'INCONCLUSIVE', error: `${unrun.length} of ${files.length} test files have no result on this tree: ${unrun.slice(0, 10).join(', ')}${unrun.length > 10 ? ', …' : ''}` };
+          console.log(`UNRUN ${lane.name}: ${found.error}`);
+          findings.push({ state: found.state, note: found.error });
+          if (stands(found, failure)) failure = found;
+        }
       }
       const elapsed = ((performance.now() - started) / 1000).toFixed(2);
       for (const { id, note, reason } of listedTests) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);

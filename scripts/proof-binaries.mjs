@@ -197,12 +197,18 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
     const allowed = picked.packages.length ? picked.packages.flatMap((name) => binsOf.get(name)) : [...binsOf.values()].flat();
     return picked.bins.length + picked.packages.length > 0 && picked.bins.every((name) => allowed.includes(name));
   };
+  // What a build the run makes leaves in the checkout's target/, by binary: gone, a cleanup emptied it since (#3296).
+  const outputs = (args) => {
+    const named = (flag) => args.flatMap((arg, at) => (args[at - 1] === flag ? [arg] : []));
+    const bins = named('--bin');
+    return (bins.length ? bins : [...named('-p'), ...named('--package')].flatMap((name) => binsOf.get(name) ?? [])).map((name) => join(args.includes('--release') ? 'release' : 'debug', name));
+  };
   const builds = new Map();
   for (const { builds: calls, source } of selfBuilt) for (const { args, profile } of calls) {
     const slot = args.findIndex((arg, at) => arg === null && args[at - 1] === '--bin');
     // A variable --bin is filled only with the binaries the test names, not every binary of a package it names.
     const filled = slot < 0 ? [args] : packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && mentions(target.name, source)).map((target) => target.name)).map((name) => args.map((arg, at) => at === slot ? name : arg));
-    for (const each of filled) if (known(each)) builds.set(JSON.stringify([each, profile]), { args: each, profile });
+    for (const each of filled) if (known(each)) builds.set(JSON.stringify([each, profile]), { args: each, profile, outputs: outputs(each) });
   }
   return { bin: [...new Set(bins)], target, hub: target.length ? hubRoots : [], builds: [...builds.values()] };
 }
@@ -221,6 +227,9 @@ export function placeHubBinaries(cwd, bin, names) {
     utimesSync(join(debug, name), now, now);
   }
 }
+
+/** The files `builds` (binaryPlan) leave in `cwd`'s target/. */
+export const builtIn = (cwd, builds) => builds.flatMap(({ outputs }) => outputs.map((path) => join(cwd, 'target', path)));
 
 /**
  * The selected tests' own `cargo build`s (binaryPlan), each run in `cwd` as the test will run it, its target/, the

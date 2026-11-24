@@ -84,9 +84,9 @@ const ended = (entry) => !alive(processes(), entry) && !alive(processes({ fresh:
 /** This process and its ancestors, nearest first: what a DEEP_THROTTLE or DEEP_PERF_LOCK holder is verified against. */
 export const ancestors = () => chain(processes({ fresh: true }), process.pid);
 /** Every process under `pid` now, by PID and start, so a stop later reaches only these and not a number since taken. */
-export function descendants(pid) {
+export function descendants(...pids) {
   const procs = processes({ fresh: true });
-  return [...procs].filter(([at]) => at !== pid && chain(procs, at).includes(pid)).map(([at, { start }]) => ({ pid: at, start }));
+  return [...procs].filter(([at]) => !pids.includes(at) && chain(procs, at).some((pid) => pids.includes(pid))).map(([at, { start }]) => ({ pid: at, start }));
 }
 /** SIGKILL to each of `tree` still listed with the start it had. */
 export function killTree(tree) {
