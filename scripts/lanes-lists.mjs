@@ -1552,3 +1552,7 @@ byHand.push('tests/acceptance/1815/shown.test.ts');
 // 3295-redraft-fae86cca/ (a planted product twin for fae86cca) and 3295-redraft-byhand/ (63a9095d and 2acd3e71).
 Object.assign(redrafted, { 'tests/acceptance/3295/late-close.test.mjs': 'tests/acceptance/3295-redraft-fae86cca/' });
 byHand.push('tests/acceptance/3295/late-close.test.mjs');
+
+// #3257's folder (blind) runs alone by its lane.json: its files build deep-gpu, the merge base's too, and draw on Metal.
+// ac7-budget.test.ts times the mask map's chain against the merge base's on the reference Mac.
+timed.push('tests/acceptance/3257/ac7-budget.test.ts');
