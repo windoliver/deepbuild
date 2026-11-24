@@ -1,0 +1,182 @@
+# #2697's acceptance suite on its base, 4aa543da7 (origin/main), nothing of #2697 applied, deep-show built first
+# (cargo build --locked --bin deep-show --no-default-features --features full), at a load average of 30-140:
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2697 --no-file-parallelism --reporter=verbose
+# Seven tests fail at an assertion, each for its expected reason: AC1 names the skill's 3735 tokens; AC2 (both), AC3
+# (both) and AC4 (both) fail at their first assertion, the skill's craft lines naming no guide deep_kinds serves (AC4
+# would fail next at "BLOCKED: no recorded film session"; the checkout's one recorded run is #26's red-unit fixture).
+# AC5 passes on the base by definition; its wrong program is twins/skill-names-its-time (checked by hand: two starts
+# 61 s apart generate "Generated at 06:29:55" and "Generated at 06:30:56", so its first comparison fails).
+# <checkout> stands for this checkout's path; home folders are written as ~.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2697
+
+ × source.test.ts > AC3 #2697.09d255e9 the guide and the skill's line come from craft.json alone > AC3 #2697.09d255e9 a check added to craft.json shows in the guide, with its description, threshold and fix, and the skill is unchanged 6826ms
+   → the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+ × source.test.ts > AC3 #2697.09d255e9 the guide and the skill's line come from craft.json alone > AC3 #2697.09d255e9 the skill is what its generator gives, its craft line names the guide, and tests/acceptance/26/ finds no drift 352ms
+   → the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+ × sessions.test.ts > AC4 #2697.1f9af6f6 on the agent eval's recorded film sessions, the guide is read before the first render > AC4 #2697.1f9af6f6 each recorded film session reads the guide before its first render, and runs its brief's named checks as the merge base's session did 6855ms
+   → the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+ × sessions.test.ts > AC4 #2697.1f9af6f6 on the agent eval's recorded film sessions, the guide is read before the first render > AC4 #2697.1f9af6f6 a recorded film session on a planted skill with no line naming the guide fails, naming the session 404ms
+   → the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+ × guide.test.ts > AC2 #2697.5bf72d0a the guide deep_kinds serves states every craft check as the merge base's skill did > AC2 #2697.5bf72d0a deep_kinds op: read with the guide's name returns every craft check with its description, thresholds and fix, each the merge base's skill's text 6770ms
+   → the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+ × guide.test.ts > AC2 #2697.5bf72d0a the guide deep_kinds serves states every craft check as the merge base's skill did > AC2 #2697.5bf72d0a a planted guide that drops text_led fails, naming it 365ms
+   → the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+stdout | ceiling.test.ts > AC1 #2697.588cc8a0 the skill is at most 1900 tokens by the pinned tokenizer, and the merge base's skill fails the same check, naming its count
+skills/deepbuild/SKILL.md: 3735 tokens; the merge base's: 3735 tokens
+
+ × ceiling.test.ts > AC1 #2697.588cc8a0 the skill is at most 1900 tokens by the pinned tokenizer, and the merge base's skill fails the same check, naming its count 30ms
+   → the skill is at most 1900 tokens:
+  skills/deepbuild/SKILL.md is 3735 tokens by o200k_base (gpt-tokenizer 4.0.0), over the ceiling of 1900: expected [ Array(1) ] to deeply equal []
+ ✓ bytes.test.ts > AC5 #2697.2d464f5e two sessions started a minute apart receive byte-identical skill text, the checkout's SKILL.md; a planted text holding the clock time fails, naming it 168ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ceiling.test.ts > AC1 #2697.588cc8a0 the skill is at most 1900 tokens by the pinned tokenizer, and the merge base's skill fails the same check, naming its count
+AssertionError: the skill is at most 1900 tokens:
+  skills/deepbuild/SKILL.md is 3735 tokens by o200k_base (gpt-tokenizer 4.0.0), over the ceiling of 1900: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "skills/deepbuild/SKILL.md is 3735 tokens by o200k_base (gpt-tokenizer 4.0.0), over the ceiling of 1900",
++ ]
+
+ ❯ none helpers.ts:49:60
+     47| /** No failures; the message lists them. */
+     48| export function none(failures: readonly string[], what: string): void {
+     49|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     50| }
+     51| /** At least one failure, one naming every one of `names`, and (with `…
+ ❯ ceiling.test.ts:17:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  guide.test.ts > AC2 #2697.5bf72d0a the guide deep_kinds serves states every craft check as the merge base's skill did > AC2 #2697.5bf72d0a deep_kinds op: read with the guide's name returns every craft check with its description, thresholds and fix, each the merge base's skill's text
+AssertionError: the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the skill's craft line names no guide deep_kinds serves: deep_kinds op: read answers no text for any of 26 names its 2 craft line(s) give (Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]"
+
+ ❯ theGuide guide.test.ts:25:86
+     23| function theGuide(b: string): { name: string; text: string } {
+     24|   const named = guideName(b, readFileSync(SKILL, 'utf8'));
+     25|   expect(named.failure, 'the skill\'s craft line names the guide deep_…
+       |                                                                                      ^
+     26|   const guide = guideText(b, named.name!);
+     27|   expect(guide.failure, `deep_kinds read guide: ${named.name}`).toBeUn…
+ ❯ guide.test.ts:34:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  guide.test.ts > AC2 #2697.5bf72d0a the guide deep_kinds serves states every craft check as the merge base's skill did > AC2 #2697.5bf72d0a a planted guide that drops text_led fails, naming it
+AssertionError: the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the skill's craft line names no guide deep_kinds serves: deep_kinds op: read answers no text for any of 26 names its 2 craft line(s) give (Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]"
+
+ ❯ theGuide guide.test.ts:25:86
+     23| function theGuide(b: string): { name: string; text: string } {
+     24|   const named = guideName(b, readFileSync(SKILL, 'utf8'));
+     25|   expect(named.failure, 'the skill\'s craft line names the guide deep_…
+       |                                                                                      ^
+     26|   const guide = guideText(b, named.name!);
+     27|   expect(guide.failure, `deep_kinds read guide: ${named.name}`).toBeUn…
+ ❯ guide.test.ts:39:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  sessions.test.ts > AC4 #2697.1f9af6f6 on the agent eval's recorded film sessions, the guide is read before the first render > AC4 #2697.1f9af6f6 each recorded film session reads the guide before its first render, and runs its brief's named checks as the merge base's session did
+AssertionError: the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the skill's craft line names no guide deep_kinds serves: deep_kinds op: read answers no text for any of 26 names its 2 craft line(s) give (Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]"
+
+ ❯ sessions sessions.test.ts:34:86
+     32|   const skill = readFileSync(SKILL, 'utf8');
+     33|   const named = guideName(bin(), skill);
+     34|   expect(named.failure, 'the skill\'s craft line names the guide deep_…
+       |                                                                                      ^
+     35|   const guide = named.name!;
+     36|   const all = recordings();
+ ❯ sessions.test.ts:49:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  sessions.test.ts > AC4 #2697.1f9af6f6 on the agent eval's recorded film sessions, the guide is read before the first render > AC4 #2697.1f9af6f6 a recorded film session on a planted skill with no line naming the guide fails, naming the session
+AssertionError: the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the skill's craft line names no guide deep_kinds serves: deep_kinds op: read answers no text for any of 26 names its 2 craft line(s) give (Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]"
+
+ ❯ sessions sessions.test.ts:34:86
+     32|   const skill = readFileSync(SKILL, 'utf8');
+     33|   const named = guideName(bin(), skill);
+     34|   expect(named.failure, 'the skill\'s craft line names the guide deep_…
+       |                                                                                      ^
+     35|   const guide = named.name!;
+     36|   const all = recordings();
+ ❯ sessions.test.ts:56:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  source.test.ts > AC3 #2697.09d255e9 the guide and the skill's line come from craft.json alone > AC3 #2697.09d255e9 a check added to craft.json shows in the guide, with its description, threshold and fix, and the skill is unchanged
+AssertionError: the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the skill's craft line names no guide deep_kinds serves: deep_kinds op: read answers no text for any of 26 names its 2 craft line(s) give (Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]"
+
+ ❯ source.test.ts:43:88
+     41|     const skill = readFileSync(SKILL, 'utf8');
+     42|     const named = guideName(b, skill);
+     43|     expect(named.failure, 'the skill\'s craft line names the guide dee…
+       |                                                                                        ^
+     44|     const before = guideText(b, named.name!);
+     45|     expect(before.failure, `deep_kinds read guide: ${named.name}`).toB…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  source.test.ts > AC3 #2697.09d255e9 the guide and the skill's line come from craft.json alone > AC3 #2697.09d255e9 the skill is what its generator gives, its craft line names the guide, and tests/acceptance/26/ finds no drift
+AssertionError: the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the skill's craft line names no guide deep_kinds serves: deep_kinds op: read answers no text for any of 26 names its 2 craft line(s) give (Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]"
+
+ ❯ source.test.ts:87:88
+     85|     const skill = readFileSync(SKILL, 'utf8');
+     86|     const named = guideName(b, skill);
+     87|     expect(named.failure, 'the skill\'s craft line names the guide dee…
+       |                                                                                        ^
+     88|     const generated = generatedSkill(REPO);
+     89|     expect(generated.failure, 'scripts/skill.mjs generates the skill')…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  7 failed | 1 passed (8)
+   Start at  22:36:09
+   Duration  28.56s (tests 97%, import 3%)
+

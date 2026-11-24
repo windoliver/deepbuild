@@ -84,7 +84,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
-  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['extension.restart', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
+  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['lease.gpu', ['cli']], ['lease.release', ['cli']], ['extension.install', ['cli']], ['extension.restart', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['mcp.tools', ['mcp']], ['evidence.paste', ['app']], ['eval.report', ['cli']],
   // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
   ['wiki.build', ['cli']], ['setup.report', ['cli']],

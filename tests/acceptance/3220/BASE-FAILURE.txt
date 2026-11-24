@@ -1,0 +1,104 @@
+#3220 acceptance tests at the base commit f8c6cff822b5b960d35312d75d44769616a95516 (origin/main), before any implementation.
+Run on 2026-11-23, Node 24.22.2, macOS 27.2 (26B8119) on a Mac17,10 (a reference Mac), its 1-minute load 50 to 110 from
+other sessions' builds, with `npm run build --workspaces` and `cargo build -p deep-hook` (debug) done first. The checkout
+is shown as <repo>, each world's temp folder as <tmp>. `scripts/lease` found no hub of the user's answering, so each run
+ran unleased, as it says.
+
+Each file was run once on the base:
+  NO_COLOR=1 scripts/lease node node_modules/vitest/vitest.mjs run tests/acceptance/3220/<file> --testTimeout=600000 --no-file-parallelism
+  (ac1-peak alone; ac2-unread and ac4-available together; ac3, ac5-ac6, ac7, ac8 and ac9 together.)
+
+Result: 16 of 17 tests fail: each of the 9 new-behavior tests at a named assertion in its file, and each of the 7
+planted-program tests BLOCKED; the one count of AC9 that compares with the merge base passes on it by design. The base has no `used` on any
+run's end, admits every check run on `needs.memory_mb: 0`, has no `mem` pool, reads no available memory, and lists none
+of the plants, so a hub started with one stops at once ("names no planted program").
+
+ac1-peak.test.ts (7.6 s)
+  FAIL    #3220.023c3e9b AC1 the fixture run: run.finished has no `used`.
+          AssertionError: run:01M83VM6MH1JFJ9JYYQ5DAB4C3's run.finished must record what it used as used: {memory_peak_mb, cpu_s}:
+          run:01M83VM6MH1JFJ9JYYQ5DAB4C3 (alloc, passed, key none, needs.memory_mb 0, mem units none, used null): expected undefined to be type of 'object'
+  BLOCKED #3220.023c3e9b AC1 (wrong program scan-keeps-first-sample): the base's hub doesn't list the plant.
+          Error: BLOCKED: the hub with DEEP_HUB_PLANT=scan-keeps-first-sample did not start: file://<repo>/packages/hub/dist/plant.js:140
+          Error: DEEP_HUB_PLANT=scan-keeps-first-sample names no planted program
+
+ac2-unread.test.ts (6.5 s)
+  FAIL    #3220.ade7d70e AC2 two runs: the control, in the supervisor's sandbox, records no peak (nothing records one).
+          AssertionError: the control, run:01M83VPFBTVFMCXECT2CWZZK3W, ran in the supervisor's sandbox, where the scan reads its tree: its
+          run.finished must record its peak in used.memory_peak_mb, at least 270 MB for the 300 MiB it held: run:01M83VPFBTVFMCXECT2CWZZK3W
+          (alloc, passed, key none, needs.memory_mb 0, mem units none, used null): expected undefined to be type of 'number'
+  BLOCKED #3220.ade7d70e AC2 (wrong program unread-peak-recorded-zero): the base's hub doesn't list the plant.
+          Error: BLOCKED: the hub with DEEP_HUB_PLANT=unread-peak-recorded-zero did not start: file://<repo>/packages/hub/dist/plant.js:140
+  The file's first run on the base failed the same way but at a TypeError (toBeGreaterThanOrEqual on undefined); the test
+  then gained the type assertion before the bound, so it fails at an assertion, and this is its run after that change.
+
+ac3-key.test.ts (92 s)
+  FAIL    #3220.4f86303d AC3 three then the fourth: the key's clean runs record no peak, so nothing can be admitted on them.
+          AssertionError: key 2ded20e2de15cee29864660ea830f6427681779dc3598785bc20c77bd7121023: each of its three clean runs must record its
+          peak on its end (used.memory_peak_mb): run:01M83W034ZS0MSREDWGBF8D0GM (alloc, passed, key 2ded20e2de15, needs.memory_mb 0,
+          mem units none, used null): expected undefined to be type of 'number'
+          (The scenario ran whole: the history's three claims each ran the check on one key, and the four later claims all ran it at once.)
+  BLOCKED #3220.4f86303d AC3 (wrong program admits-on-class-constant): the base's hub doesn't list the plant.
+          Error: BLOCKED: the hub with DEEP_HUB_PLANT=admits-on-class-constant did not start: file://<repo>/packages/hub/dist/plant.js:140
+  BLOCKED #3220.4f86303d AC3 (wrong program admits-on-nothing): the base's hub doesn't list the plant.
+          Error: BLOCKED: the hub with DEEP_HUB_PLANT=admits-on-nothing did not start: file://<repo>/packages/hub/dist/plant.js:140
+
+ac4-available.test.ts (3.8 s)
+  FAIL    #3220.ea9feb2e AC4 waits: the base starts the command at once, with 500 MB available against 600 expected.
+          AssertionError: with 500 MB available and the pool free, `deep lease -- memjob`, which expects 600 MB, must wait: memjob started
+          at once, 1795426037440, before the reading passed 600 MB; deep lease printed "": expected undefined to be defined
+  BLOCKED #3220.ea9feb2e AC4 (wrong program admits-on-pool-only): the base's hub doesn't list the plant.
+          Error: BLOCKED: the hub with DEEP_HUB_PLANT=admits-on-pool-only did not start: file://<repo>/packages/hub/dist/plant.js:140
+
+ac5-ac6-declared.test.ts (24 s; the eight claims ran whole, each running the check once and passing)
+  FAIL    #3220.33b787b4 AC5 declared: the key's first run is admitted on 0, not the 900 its check declares.
+          AssertionError: key dc87d6ae9569636fc8f10ce654379f90db6be148b6e4a7f78b8aa9adc61ea901 had 0 clean runs when
+          run:01M83W2YK7FY5F2MQJD2F14ZEG started: it must be admitted on what its check declares, memory_mb 900 (run.started's
+          needs.memory_mb): run:01M83W2YK7FY5F2MQJD2F14ZEG (alloc, passed, key dc87d6ae9569, needs.memory_mb 0, mem units none,
+          used null): expected +0 to be 900 // Object.is equality
+  BLOCKED #3220.33b787b4 AC5 (wrong program admits-on-one-peak): the base's hub doesn't list the plant.
+          Error: BLOCKED: the hub with DEEP_HUB_PLANT=admits-on-one-peak did not start: file://<repo>/packages/hub/dist/plant.js:140
+  FAIL    #3220.d549cdd6 AC6 a new key: the old key's runs record no peak for its fourth run to be admitted on.
+          AssertionError: key dc87d6ae9569636fc8f10ce654379f90db6be148b6e4a7f78b8aa9adc61ea901: run:01M83W2YK7FY5F2MQJD2F14ZEG's end must
+          record its peak (used.memory_peak_mb) for the key's next runs to be admitted on: run:01M83W2YK7FY5F2MQJD2F14ZEG (alloc, passed,
+          key dc87d6ae9569, needs.memory_mb 0, mem units none, used null): expected undefined to be type of 'number'
+  (On the base each claim also carries a BLOCKED spec entry, `.deepbuild/done.yaml: missing a key DeepBuild reads in place of
+  memory_mb`: the base reads no `memory_mb` on a check. The check itself still runs.)
+
+ac7-lease.test.ts (9.7 s; both `deep lease -- cargo test --workspace` passed)
+  FAIL    #3220.24f80034 AC7 two leased runs: no event records what the lease's run used.
+          AssertionError: the first `deep lease -- cargo test --workspace`'s run, run:LEASED85E19459D8FMWT2KBZ3, must record what it used
+          (used: {memory_peak_mb, cpu_s}) on the event that ends it; the record's events naming it: lease.acquired@2 at log_pos 4
+          {"resource":{"host":"local","kind":"cpu.slot","key":"slow"},"holder":"cli",...,"run":"run:LEASED85E19459D8FMWT2KBZ3"};
+          process.tracked@1 at log_pos 5 {...,"cwd":"<tmp>/repo","token":null}; process.ended@1 at log_pos 6
+          {"run":"run:LEASED85E19459D8FMWT2KBZ3","pid":68384}: expected undefined to be defined
+  BLOCKED #3220.24f80034 AC7 (wrong program admits-heavy-on-last-peak): the base's hub doesn't list the plant.
+          Error: BLOCKED: the hub with DEEP_HUB_PLANT=admits-heavy-on-last-peak did not start: file://<repo>/packages/hub/dist/plant.js:140
+
+ac8-readings.test.ts (20 s; the five claims each ran their three checks, all passing)
+  FAIL    #3220.783a59e5 AC8: on the merge base nothing is recorded to compare.
+          AssertionError: each check run must record its peak on its end, so the host's reading has something to compare:
+          run:01M83W4EEKMGPSGNBJTCRA0TSW (small, passed, key 5a0563f12584, needs.memory_mb 0, mem units none, used null): expected
+          undefined to be type of 'number'
+
+ac9-budgets.test.ts (14 s)
+  FAIL    #3220.c2610cec AC9 the perf lane: benchmarks/budgets.json has no task naming the criterion.
+          AssertionError: benchmarks/budgets.json must have a task whose criteria name #3220.c2610cec, timing a scan that keeps the peak
+          and one admission with 10,000 keys kept against the merge base: it has none: expected 0 to be greater than 0
+  PASS    #3220.c2610cec AC9 process starts, by design: it measures the merge base itself. Its reading, printed when the one test was
+          run again with --silent=false to record it (vitest hides a passing test's output):
+          AC9 process starts per scan with one run in flight: 1.98 (95 over 48 scans), against the merge base's 2
+          The base's scan of a live run starts its native helper's scan and one `ps` of the run's processes: 2, the number pinned
+          as BASE_PER_SCAN. A scan that kept the peak with a process of its own (a `ps` for CPU time, say) reads 3 and fails.
+
+Typecheck at the base:
+  $ node node_modules/typescript/bin/tsc -p tests/acceptance/3220/tsconfig.json
+  (no output: it passes; no test imports what the issue adds)
+
+After their base runs, two tests were made safer for a right program, neither on the path where the base failed: AC1's
+child waits 3 s, not 1.5, before it allocates, so a scan's first sample on a loaded machine still comes before its memory;
+and AC3 takes a run's `mem` units within 1 of its `needs.memory_mb`, since units are whole MB. AC1's base failure (no
+`used` on run.finished) and AC3's (no peak on the history's runs) come before either, so neither file was run again.
+
+While the last group ran, helpers.ts gained `stopOwned`, so a scenario's sessions and `deep lease` processes are stopped by
+PID when its hub stops rather than when the file ends (vitest-setup had named four left running after ac3). It changes no
+assertion and no reading, so no file was run again for it.
