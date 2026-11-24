@@ -258,7 +258,8 @@ fn fit<E: Styled + ParentElement>(slot: E, title: String, cut: Option<String>) -
     }
 }
 
-/// How wide `text` draws in the chrome's face at the body size and `weight`.
+/// How wide `text` draws in the chrome's face at the body size and `weight`, with the tabular figures a row's text is
+/// set in (`Typed`), so a time measures as wide as it draws (#3282).
 fn drawn_width(window: &Window, text: &str, weight: FontWeight) -> Pixels {
     if text.is_empty() {
         return px(0.);
@@ -268,6 +269,7 @@ fn drawn_width(window: &Window, text: &str, weight: FontWeight) -> Pixels {
         len: text.len(),
         font: Font {
             weight,
+            features: FontFeatures(std::sync::Arc::new(vec![("tnum".into(), 1)])),
             ..font(s.face.clone())
         },
         color: Hsla::default(),
@@ -449,12 +451,15 @@ impl RowDrawn {
         // width, so the title keeps at least 12 characters. An ask row's time is when its recommended answer applies, so
         // it stays and the title takes what's left (#3282).
         let wide = |text: &str, weight| drawn_width(window, text, weight);
+        // The slots beside the title lay out at whole points, so each is taken at its text's width rounded up: an ask's
+        // title cut to a few characters would otherwise be fitted to room its slot doesn't have, and lose its ellipsis.
+        let slot_wide = |text: &str| wide(text, FontWeight::NORMAL).ceil();
         let roomy = shape.width.map(|width| {
             let flag = row.flag.as_ref().map_or(px(0.), |flag| {
-                s.space(1) + wide(&flag.code, FontWeight::NORMAL)
+                s.space(1) + slot_wide(&flag.code)
             });
-            let fixed = s.space(1) * 4. + s.space(3) + wide(&drawn_word, FontWeight::NORMAL) + flag;
-            let time = (s.space(1) + wide(&time, FontWeight::NORMAL)).max(s.space(5));
+            let fixed = s.space(1) * 4. + s.space(3) + slot_wide(&drawn_word) + flag;
+            let time = (s.space(1) + slot_wide(&time)).max(s.space(5));
             let mut least: String = title.chars().take(TITLE_LEAST).collect();
             if title.chars().count() > TITLE_LEAST {
                 least.push('…');
