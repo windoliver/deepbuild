@@ -1,13 +1,77 @@
-#1815's acceptance tests at the base, a5fc47436 (main), 2026-11-23.
+#1815's acceptance tests at the base, a5fc47436 (main), 2026-11-23 18:27-18:55 local: 10 of 10 fail, each at its own assertion.
+Machine: Mac17,10, Apple M5 Max, 18 cores: not a reference Mac. One-minute load 255 to 400 through the run.
 
-NOT RUN at the base yet. The machine's build grant was held with a long queue ahead (load 110 to 430 on 18 cores), so
-`deep-drive` at this base was still building (`nice -n 10 scripts/lease cargo build --locked -q -p deep-replica --bin
-deep-drive --features env-plants,deep-app/test-confirm`) when this was first committed. The base run follows.
+`deep-drive` was built in the checkout at the base (`nice -n 10 scripts/lease cargo build --locked -q -p deep-replica --bin
+deep-drive --features env-plants,deep-app/test-confirm`, no hub answered, so it ran unleased) because the throttle's build
+grant was held with a long queue, and copied where #1101's `driveBin` keeps it. Then, after `npm ci --ignore-scripts` and
+`npm run build --workspaces`: `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1815 --no-file-parallelism
+--testTimeout=600000 --disableConsoleIntercept`. Type-check: `node node_modules/typescript/bin/tsc -p
+tests/acceptance/1815/tsconfig.json` exits 0.
 
-What each test fails on there, by its own message:
-- find.test.ts AC1, AC2 and AC3, and their four plants: `⌘F on session/<id> opens no field: the window holds no node
-  find-field (README, Surfaces)`; a plant's run reads the same, so its own message is never found in it.
-- find.test.ts AC1's Scope: `the action table (crates/deep-app/src/actions.json) holds one action on cmd-f`, expected length 1,
-  got 0.
-- budget.test.ts AC4: the same `⌘F on session/<id> opens no field`, on the short page, before the big one is opened.
-- shown.test.ts AC5: `each state is on the window's tree before its picture is taken`, both themes naming the same.
+ ❯ find.test.ts (8 tests | 8 failed) 1657854ms
+     × AC1 #1815.346b32b0: with "backoff" in three messages, ... 244975ms
+     × AC1 #1815.346b32b0 wrong program: a find that searches only drawn rows reads "1 of 2", naming the missed line 1397090ms
+     × AC1 #1815.346b32b0 Scope: ⌘F is one action of the table, in the Edit menu under its name with its key, and picking it opens the field 4ms
+     × AC2 #1815.d7e06bb8: a word that appears only in a row's state word or a heading isn't a match 7266ms
+     × AC2 #1815.d7e06bb8 wrong program: a find that matches chrome fails, naming the string 1790ms
+     × AC3 #1815.fb03fd00: Escape closes the field and the page keeps its scroll place; ... 2042ms
+     × AC3 #1815.fb03fd00 wrong program: a find whose Escape takes the page back to its top fails, naming the line 2234ms
+     × AC3 #1815.fb03fd00 wrong program: a find that opens over a presented card fails, naming the ask 2299ms
+ ❯ budget.test.ts (1 test | 1 failed) 2954ms
+     × AC4 #1815.e2a26281: the first match shows within 100 ms on a 10,000-line page, on the reference Mac 2939ms
+ ❯ shown.test.ts (1 test | 1 failed) 7252ms
+     × AC5 #1815.0afba244: the check run takes the field with a match marked in the lane, in light and dark, ... 7189ms
+      Tests  10 failed (10)
+   Duration  1672.84s
+
+ FAIL  find.test.ts > AC1 #1815.346b32b0 ... : with "backoff" in three messages, one 4,000 lines down, ...
+AssertionError: expected [ Array(1) ] to deeply equal []
++   "⌘F on session/1815a5e0-6f1c-4a2b-9c3d-000000000001 opens no field: the window holds no node find-field (README, Surfaces)",
+
+ FAIL  find.test.ts > AC1 #1815.346b32b0 ... wrong program: a find that searches only drawn rows reads "1 of 2", naming the missed line
+AssertionError: the planted find (README, Plants: find-drawn-only): expected '⌘F on session/1815a5e0-6f1c-4a2b-9c3d…' to contain 'reads "1 of 2", not "1 of 3": it miss…'
+Received: "⌘F on session/1815a5e0-6f1c-4a2b-9c3d-000000000001 opens no field: the window holds no node find-field (README, Surfaces)"
+
+ FAIL  find.test.ts > AC1 #1815.346b32b0 ... Scope: ⌘F is one action of the table, ...
+AssertionError: the action table (crates/deep-app/src/actions.json) holds one action on cmd-f: expected [] to have a length of 1 but got +0
+
+ FAIL  find.test.ts > AC2 #1815.d7e06bb8 ... a word that appears only in a row's state word or a heading isn't a match
+AssertionError: expected [ Array(1) ] to deeply equal []
++   "⌘F on session/1815a5e0-6f1c-4a2b-9c3d-000000000002 opens no field: the window holds no node find-field (README, Surfaces)",
+
+ FAIL  find.test.ts > AC2 #1815.d7e06bb8 ... wrong program: a find that matches chrome fails, naming the string
+AssertionError: the planted find (README, Plants: find-matches-chrome): expected '⌘F on session/1815a5e0-6f1c-4a2b-9c3d…' to contain 'find matches "queued", which only'
+Received: "⌘F on session/1815a5e0-6f1c-4a2b-9c3d-000000000002 opens no field: the window holds no node find-field (README, Surfaces)"
+
+ FAIL  find.test.ts > AC3 #1815.fb03fd00 ... Escape closes the field and the page keeps its scroll place; with a card presented, ⌘F writes nothing and moves nothing
+AssertionError: expected [ Array(1) ] to deeply equal []
++   "⌘F on session/1815a5e0-6f1c-4a2b-9c3d-000000000002 opens no field: the window holds no node find-field (README, Surfaces)",
+
+ FAIL  find.test.ts > AC3 #1815.fb03fd00 ... wrong program: a find whose Escape takes the page back to its top fails, naming the line
+AssertionError: the planted find (README, Plants: find-escape-rewinds): expected '⌘F on session/1815a5e0-6f1c-4a2b-9c3d…' to contain 'after Escape the page lost its scroll…'
+Received: "⌘F on session/1815a5e0-6f1c-4a2b-9c3d-000000000002 opens no field: the window holds no node find-field (README, Surfaces)"
+
+ FAIL  find.test.ts > AC3 #1815.fb03fd00 ... wrong program: a find that opens over a presented card fails, naming the ask
+AssertionError: the planted find (README, Plants: find-on-ask): expected '⌘F on session/1815a5e0-6f1c-4a2b-9c3d…' to contain '⌘F on ask/01KB1815AK0000000000000001 …'
+Received: "⌘F on session/1815a5e0-6f1c-4a2b-9c3d-000000000002 opens no field: the window holds no node find-field (README, Surfaces)"
+
+ FAIL  budget.test.ts > AC4 #1815.e2a26281 ... the first match shows within 100 ms on a 10,000-line page, on the reference Mac
+AssertionError: ⌘F on session/1815a5e0-6f1c-4a2b-9c3d-000000000002 opens no field: the window holds no node find-field (README, Surfaces)
+
+ FAIL  shown.test.ts > AC5 #1815.0afba244 ... reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+AssertionError: each state is on the window's tree before its picture is taken: expected [ …(2) ] to deeply equal []
++   "light: ⌘F on session/1815a5e0-6f1c-4a2b-9c3d-000000000002 opens no field: the window holds no node find-field (README, Surfaces)",
++   "dark: ⌘F on session/1815a5e0-6f1c-4a2b-9c3d-000000000002 opens no field: the window holds no node find-field (README, Surfaces)",
+
+## What the base shows of the premises (a scratch test on the same binary, not committed)
+
+- The pages open as the fixtures say: the first two matches' lines in the lane, the third not drawn (each test above gets
+  past `openPage`, which is BLOCKED otherwise). The row's state word reads `queued`. An open session page calls its hub never.
+- The ask's card is armed on `ask/01KB1815AK0000000000000001`; two looks half a second apart are equal; ⌘F there changes
+  no node, bound, drawn string or focus, writes nothing and leaves the record's position at 6.
+- A window's wheel moves nothing on a session's page at the base: on the 240-line page, 1,000 points toward the end over a
+  content line and over the lane leave "step 00001" first and "step 00042" last (#1808's AC2 was judged on its own base).
+  Nothing here turns the wheel: a match is reached by find alone.
+
+Not run anywhere: AC4's 10,000-line page and its timing (no field to type in; off a reference Mac the timing is
+INCONCLUSIVE before anything is built for release), and every assertion past the first in each test.
