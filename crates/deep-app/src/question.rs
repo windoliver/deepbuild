@@ -27,6 +27,7 @@ use crate::{
 
 mod faults;
 pub use faults::Faults;
+mod look;
 
 /// The card's least size, in window points, tall enough for a batch of four with its switches (it draws about 525
 /// tall): a slot smaller than this, or than the card as drawn, never arms.
@@ -438,6 +439,9 @@ impl Controller {
             crate::pictures::HALF
         };
         self.now = now;
+        // A frame drawn while nobody can see the window shows you nothing.
+        let none = Default::default();
+        let drawn = if self.machine.seen() { drawn } else { &none };
         self.pictures.frame(drawn, half, now);
         self.lefts() != left
     }

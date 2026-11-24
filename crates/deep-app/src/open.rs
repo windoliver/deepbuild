@@ -796,9 +796,11 @@ pub fn tick(now: u64, cx: &mut App) {
                     !crate::plain::planted("read-needs-reopen") || since < opened_at
                 })
             });
+        let seen = crate::shown::seen(window);
+        crate::card::look(window, seen, cx);
         let present = crate::unread::present(
             window.is_window_active() || crate::shown::forced().is_some(),
-            crate::shown::seen(window),
+            seen,
             views::last_input(),
             now,
         );

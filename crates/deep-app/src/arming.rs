@@ -1,8 +1,8 @@
 //! Issue #327: the question card's arming, as one state table (Question card, in the canvas primitives
-//! reference). A card counts as shown only once presented; it arms `ARM_AFTER` after its presentation, while
-//! wholly inside its view and large enough; a press counts only when its own platform timestamp is at least
-//! `ARM_AFTER` past that moment, its down falls on an armed option, the card stays armed through release on that
-//! option and it is no key repeat. An input that isn't hardware answers only after the OS confirms you.
+//! reference). A card counts as shown only once presented; it arms `ARM_AFTER` after its presentation, while its
+//! window can be seen and it is wholly inside its view and large enough; a press counts only when its own platform
+//! timestamp is at least `ARM_AFTER` past that moment, its down falls on an armed option, the card stays armed through
+//! release on that option and it is no key repeat. An input that isn't hardware answers only after the OS confirms you.
 //!
 //! Everything here is pure and runs on whatever clock feeds it timestamps, so a test drives it with recorded
 //! input on a virtual clock. The shell reads its platform's event timestamps into it; nothing here reads a
@@ -19,6 +19,9 @@ pub const HOLD_STILL: &str = "arming.hold_still";
 
 /// What a card too tall for its page says on a click: its options aren't all in view, so it can't arm (#1808).
 pub const TOO_SMALL: &str = "arming.too_small";
+
+/// What a card in a window nobody can see says on a press, which an assistive client can send it.
+pub const UNSEEN: &str = "arming.unseen";
 
 /// Where an input came from, as the platform names it (Input router: `source`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,6 +132,8 @@ pub struct Machine {
     /// Why the card can't arm besides its interval and its slot, which a press is told (#1808): a long card's end not
     /// shown yet, or options folded behind a count not opened yet.
     held: Option<&'static str>,
+    /// Whether its window can be seen; until it's told, it can.
+    seen: bool,
 }
 
 impl Machine {
@@ -144,6 +149,7 @@ impl Machine {
             down: None,
             confirming: None,
             held: None,
+            seen: true,
         }
     }
 
@@ -205,7 +211,28 @@ impl Machine {
     }
 
     fn may_arm(&self) -> bool {
-        self.fits() && self.held.is_none()
+        self.seen && self.fits() && self.held.is_none()
+    }
+
+    /// Its window can be seen from `t`, or can't any more (`rearm_on: occluded`): either stops an armed card being armed,
+    /// and it arms once its interval ran since it could be seen. Whether that is new.
+    pub fn look(&mut self, seen: bool, t: u64) -> bool {
+        if seen == self.seen {
+            return false;
+        }
+        self.seen = seen;
+        if let Some(seq) = self.shown() {
+            self.state = State::Presented { seq, t };
+            self.since = t;
+            self.down = None;
+            self.confirming = None;
+        }
+        true
+    }
+
+    /// Whether its window can be seen.
+    pub fn seen(&self) -> bool {
+        self.seen
     }
 
     /// Why the card can't arm at `t` besides its interval, or `None` once nothing holds it (#1808). A card held armed
@@ -224,7 +251,9 @@ impl Machine {
     /// What a press before the card armed is told, in the language shown: why it can't arm, or to hold still while
     /// only its interval runs.
     pub fn says(&self) -> &'static str {
-        if !self.fits() {
+        if !self.seen {
+            crate::copy::text(UNSEEN)
+        } else if !self.fits() {
             crate::copy::text(TOO_SMALL)
         } else {
             self.held.unwrap_or_else(|| crate::copy::text(HOLD_STILL))
