@@ -973,3 +973,22 @@ pub(super) fn profiled_points(
         .collect();
     (fine, widths)
 }
+
+/// The X, Y, Z angles in degrees of the rotation `r` (its rows), as `local_of` composes them:
+/// Rz · Ry · Rx.
+fn euler_of(r: &[Vec3; 3]) -> Vec3 {
+    use deep_canvas::ops::{asin, atan2, deg};
+    if r[2][0].abs() > 1.0 - 1e-12 {
+        // Straight up or down: X and Z turn about one axis, so Z takes none.
+        return [
+            deg(atan2(-r[1][2], r[1][1])),
+            deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
+            0.0,
+        ];
+    }
+    [
+        deg(atan2(r[2][1], r[2][2])),
+        deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
+        deg(atan2(r[1][0], r[0][0])),
+    ]
+}
