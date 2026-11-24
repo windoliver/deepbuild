@@ -12,7 +12,7 @@ import { basename, dirname, join } from 'node:path';
 import type { Grant, Host, Supervisor } from '@deepbuild/supervisor';
 import { parse } from './yaml.js';
 import {
-  composeRefusal, composed, daemon, dockerEnv, downStack, get, isObj, newRun, quote, readEnvironment, seedRecordAt, sleep, stackValues, step,
+  composeRefusal, composed, daemon, openBinds, dockerEnv, downStack, get, isObj, newRun, quote, readEnvironment, seedRecordAt, sleep, stackValues, step,
   type Environment, type SeedRecord, type Take,
 } from './stack.js';
 
@@ -226,6 +226,7 @@ export class WarmStack {
     if (why) return `the compose file can't run here: ${why}; its containers would run outside the sandbox`;
     for (const s of Object.values(config.services ?? {})) for (const p of s.ports ?? []) p.host_ip ??= '127.0.0.1';
     config.name = this.project!;
+    openBinds(config, folder);
     return config;
   }
 
@@ -268,12 +269,22 @@ export class WarmStack {
   /** Waits for the database on its own TCP port: Postgres's first start answers on its socket before it is ready. */
   private async dbReady(file: string): Promise<string | undefined> {
     const d = this.db!;
+    // `-a`: a container that already exited is listed too, so its exit and log can be named.
     const ran = await this.dock([
-      `id=$(${this.compose(file, `ps -q ${quote(d.service)}`)}) || exit 1`, 'echo "$id"',
-      `i=0; until "$0" exec "$id" pg_isready -q -h 127.0.0.1 -U ${quote(d.user)}; do i=$((i+1)); [ $i -lt 600 ] || exit 1; sleep 0.1; done`,
+      `id=$(${this.compose(file, `ps -a -q ${quote(d.service)}`)}) || exit 1`, 'echo "$id"',
+      `i=0; until "$0" exec "$id" pg_isready -q -h 127.0.0.1 -U ${quote(d.user)}; do`,
+      `  [ "$("$0" inspect -f '{{.State.Running}}' "$id")" = true ] || exit 3; i=$((i+1)); [ $i -lt 600 ] || exit 1; sleep 0.1`,
+      'done',
     ].join('\n'));
+    const id = ran.stdout.trim().split('\n')[0] ?? '';
+    if (ran.code === 3 && id) {
+      // A service that ended before it answered: its exit code and the last line it logged, as Docker keeps them.
+      const exit = (await this.dock(`"$0" inspect -f '{{.State.ExitCode}}' "$1"`, [id])).stdout.trim();
+      const log = (await this.dock('"$0" logs --tail 1 "$1" 2>&1', [id])).stdout.trim().split('\n').slice(-1)[0] ?? '';
+      return `the database service ${d.service} exited with code ${exit || '(unknown)'} before it answered on its port; its last log line: ${log || '(none)'}`;
+    }
     if (ran.code !== 0) return `the database service ${d.service} never answered on its port`;
-    d.container = ran.stdout.trim().split('\n')[0]!;
+    d.container = id;
     return undefined;
   }
   /** One statement in the database service, with a template's last connection given time to close. */

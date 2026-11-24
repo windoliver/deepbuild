@@ -6,7 +6,7 @@
 // worktrees never share one; `docker compose up` and its `down` run through the host too.
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { constants, copyFileSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, constants, copyFileSync, createReadStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import type { ClientRequest } from 'node:http';
 import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
@@ -575,6 +575,33 @@ export function composeRefusal(config: unknown, folder: string, leased: readonly
   return undefined;
 }
 
+/**
+ * Each bind mount's source in the folder, opened to read on Linux (#3377). A service runs as its own user (postgres is
+ * uid 999), and the daemon checks that user against the mount's own mode bits there, which the hub's umask leaves
+ * 0700. The daemon mounts as root, so only the source and what is under it need opening: the folder above it, its
+ * checkouts folder and the hub's own keep their modes, so no other user of the machine reaches it. Links are left as
+ * they are, and nothing outside the folder is touched. Docker Desktop on macOS doesn't check the container's uid.
+ */
+export function openBinds(config: { services?: Record<string, { volumes?: { type?: string; source?: string }[] }> }, folder: string): void {
+  if (process.platform !== 'linux') return;
+  const root = realpathSync(folder);
+  const open = (at: string): void => {
+    const s = lstatSync(at);
+    if (s.isDirectory()) {
+      chmodSync(at, s.mode | 0o055);
+      for (const name of readdirSync(at)) open(join(at, name));
+    } else if (s.isFile()) chmodSync(at, s.mode | 0o044 | (s.mode & 0o100 ? 0o011 : 0));
+  };
+  for (const service of Object.values(config.services ?? {})) {
+    for (const v of service.volumes ?? []) {
+      if (v.type !== 'bind' || !v.source) continue;
+      let source: string;
+      try { source = realpathSync(v.source); } catch { continue; }
+      if (source === root || source.startsWith(`${root}${sep}`)) open(source);
+    }
+  }
+}
+
 /** The compose project compose itself would pick: the file's top-level name:, else the folder's name. */
 function defaultProject(folder: string, file: string): string {
   try {
@@ -618,13 +645,14 @@ async function judge(host: Host, run: string, { work, judged }: { work: string; 
     if (Date.now() > deadline) return 'docker compose config gave nothing within 60 s';
     await sleep(50);
   }
-  let config: { services?: Record<string, { ports?: { host_ip?: string }[] }> };
+  let config: { services?: Record<string, { ports?: { host_ip?: string }[]; volumes?: { type?: string; source?: string }[] }> };
   try { config = JSON.parse(readFileSync(join(work, 'resolved.json'), 'utf8')) as typeof config; } catch { return 'docker compose config gave no JSON'; }
   const why = composeRefusal(config, folder, ports.map(String), project);
   if (why) return `the compose file can't run here: ${why}; its containers would run outside the sandbox`;
   for (const service of Object.values(config.services ?? {})) for (const port of service.ports ?? []) port.host_ip ??= '127.0.0.1';
   // The project it was judged as, whatever name the file gave.
   (config as { name?: string }).name = project;
+  openBinds(config, folder);
   writeFileSync(join(judged, 'run.tmp'), JSON.stringify(config));
   renameSync(join(judged, 'run.tmp'), join(judged, 'run.json'));
   return undefined;
