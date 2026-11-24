@@ -442,10 +442,14 @@ pub fn mapped(read: &Read, array: &Value, t: i64, last: Option<&Mapped>) -> Opti
         }
     }
     // A linear array's rows that step k changed blend every frame of its step, from their value
-    // before it: a frame reads a linear write one step late.
+    // before it: a frame reads a linear write one step late. #2035: a row its cut marks on that
+    // step shows the step's value with no blend.
     let mut blending = BTreeSet::new();
     if linear {
-        rows_of(at(k).map_or(&Value::Null, |s| &s["changed"]), &mut blending);
+        let (mut cut, s) = (BTreeSet::new(), at(k));
+        rows_of(s.map_or(&Value::Null, |s| &s["changed"]), &mut blending);
+        rows_of(s.map_or(&Value::Null, |s| &s["cut"]), &mut cut);
+        blending.retain(|r| !cut.contains(r));
     }
     let a = (t - k * every) as f64 / every as f64;
     m.step = k;
@@ -509,6 +513,35 @@ pub fn hidden_rows(m: &Mapped, alive: bool) -> Vec<usize> {
         .collect()
 }
 
+/// #552: this copy's player as a `seen` column reads it (Net: this copy's player): the view's
+/// `match.me`, 1 to 8 in a match; 1 for a piece played alone, where the view names none; and
+/// None for `none`, which sees every row.
+pub fn match_me(view: &Value) -> Option<u32> {
+    match view {
+        Value::Null => Some(1),
+        v => v.as_u64().filter(|p| (1..=8).contains(p)).map(|p| p as u32),
+    }
+}
+
+/// #552: the fog state (0 unseen, 1 radar, 2 seen) a player's two bits of a fog grid's value
+/// hold where they see the cell, which `match.me` none reads everywhere.
+pub const FOG_SEEN: u8 = 2;
+
+/// #552: player `me`'s two bits of a fog grid's value (bits 2(me − 1) and 2(me − 1) + 1), or
+/// [`FOG_SEEN`] for none.
+pub fn fog_state(value: i64, me: Option<u32>) -> u8 {
+    me.map_or(FOG_SEEN, |me| ((value >> (2 * (me - 1))) & 3) as u8)
+}
+
+/// #552: the rows a mapped `seen` column hides on the copy of player `me`: each whose value lacks
+/// bit me − 1 (bit i is set where player i + 1 sees the row), and each its reader can't narrow;
+/// with `me` none every row is seen.
+pub fn unseen_rows(m: &Mapped, me: Option<u32>) -> Vec<usize> {
+    (0..m.values.len())
+        .filter(|r| m.hidden[*r] || me.is_some_and(|me| (m.values[*r] as i64) >> (me - 1) & 1 == 0))
+        .collect()
+}
+
 /// A mapped column's values as a data column's bytes: f64 little-endian, base64.
 pub fn data_of(m: &Mapped) -> String {
     let mut bytes = Vec::with_capacity(m.values.len() * 8);
@@ -530,6 +563,15 @@ fn excursions_of(column: &Value) -> Vec<(i64, usize, f64)> {
 /// #537: every step at which a row of `array` (baked), as `read` takes it, begins to hide, by
 /// the rule alone, with the value that hides it: `(step, row, value)`.
 pub fn excursions(read: &Read, array: &Value) -> Vec<(i64, usize, f64)> {
+    excursions_by(array, |e| read.hiding(e))
+}
+
+/// #538, #269: [`excursions`] by a reader's own rule, `hiding`: a row's element's value where it
+/// hides, else `None`.
+pub fn excursions_by(
+    array: &Value,
+    hiding: impl Fn(&[f64]) -> Option<f64>,
+) -> Vec<(i64, usize, f64)> {
     let (Some(n), Some(w)) = (
         array["count"].as_u64(),
         array["type"].as_str().and_then(width),
@@ -569,7 +611,7 @@ pub fn excursions(read: &Read, array: &Value) -> Vec<(i64, usize, f64)> {
             touched.into_iter().collect()
         };
         for row in rows {
-            let hiding = read.hiding(&raw[row * w..(row + 1) * w]);
+            let hiding = hiding(&raw[row * w..(row + 1) * w]);
             if let Some(value) = hiding.filter(|_| !hidden[row]) {
                 out.push((step, row, value));
             }
@@ -590,12 +632,22 @@ pub fn view(doc: &mut Value, entries: &[SealedEntry], t: i64) -> Vec<Issue> {
     let step = t.max(0) as u64 / 11_760_000;
     let arrays = doc.get("arrays").cloned().unwrap_or(Value::Null);
     let worlds = doc.get("worlds").cloned().unwrap_or(Value::Null);
+    let me = doc.get("match.me").cloned().unwrap_or(Value::Null);
     let Some(Value::Object(items)) = doc.get_mut("items") else {
         return issues;
     };
     for (id, item) in items.iter_mut() {
+        // #552: a mark set's `seen` is the core's to bake; an instancer's is scene3d's.
+        let marks = item.get("kind").and_then(Value::as_str) == Some("marks@1");
+        if let Some(seen) = item
+            .pointer_mut("/params/seen")
+            .filter(|s| marks && s.get("array").is_some())
+        {
+            // This copy's player, which the data module maps the column through.
+            seen["me"] = me.clone();
+        }
         if let Some(Value::Object(params)) = item.get_mut("params") {
-            issues.extend(arrays_of(id, params, entries, (&arrays, &worlds), t));
+            issues.extend(arrays_of(id, params, entries, (&arrays, &worlds), t, marks));
         }
         let Some(Value::Object(columns)) = item.pointer_mut("/params/columns") else {
             continue;
@@ -745,13 +797,18 @@ pub fn source<'a>(
         )));
     }
     arrays.get(form).ok_or_else(|| {
-        Box::new(Issue::error(
+        let mut issue = Issue::error(
             "ref_unresolved",
             id,
             path.to_string(),
             json!(form),
             "no logic item or world in the document writes this array",
-        ))
+        );
+        // #552: and the item the array's path names, whose writes it reads (refused, or absent).
+        if let Some((writer, _)) = form.split_once('.') {
+            issue.ids.push(writer.to_string());
+        }
+        Box::new(issue)
     })
 }
 
@@ -764,13 +821,18 @@ fn arrays_of(
     entries: &[SealedEntry],
     (arrays, worlds): (&Value, &Value),
     t: i64,
+    marks: bool,
 ) -> Vec<Issue> {
     let mut issues = Vec::new();
     let mut readers: Vec<(String, String, &mut Value)> = Vec::new();
     let mut alive = None;
+    let mut seen = None;
     for (k, v) in params.iter_mut() {
         match k.as_str() {
             "alive" if v.get("array").is_some() => alive = Some(v),
+            // #552: the rows each player sees, which the data module's `columns` maps through
+            // this copy's `match.me` at each frame.
+            "seen" if marks && v.get("array").is_some() => seen = Some(v),
             "columns" => readers.extend(
                 v.as_object_mut()
                     .into_iter()
@@ -785,6 +847,9 @@ fn arrays_of(
     }
     if let Some(a) = alive {
         readers.push(("alive".into(), format!("items/{id}/params/alive"), a));
+    }
+    if let Some(s) = seen {
+        readers.push(("seen".into(), format!("items/{id}/params/seen"), s));
     }
     let mut counts: Vec<(String, String, u64)> = Vec::new();
     for (name, path, column) in readers {
@@ -826,7 +891,13 @@ fn arrays_of(
             c.insert("dtype".into(), json!("f64"));
             c.insert("len".into(), json!(m.values.len()));
             c.insert("data".into(), json!(data_of(&m)));
-            c.insert("hide".into(), json!(hidden_rows(&m, alive)));
+            // A `seen` column hides by this copy's player, which only a frame's view knows: until
+            // the data module maps it, every row is hidden, so nothing shows that shouldn't.
+            let hide = match name.as_str() {
+                "seen" => (0..m.values.len()).collect(),
+                _ => hidden_rows(&m, alive),
+            };
+            c.insert("hide".into(), json!(hide));
         }
         counts.push((name, path, baked["count"].as_u64().unwrap_or(0)));
     }
@@ -853,6 +924,27 @@ fn arrays_of(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #552: a `seen` column hides each row whose value lacks this copy's bit; `match.me` none
+    /// sees every row, and a piece played alone (no `match.me`) reads player 1.
+    #[test]
+    fn a_seen_column_hides_the_rows_this_copys_player_does_not_see() {
+        let seen = json!({"type": "i32", "count": 4, "every": 10, "linear": false, "as": "i32",
+                          "steps": [{"step": 0, "changed": [[0, 4]], "values": [[0, [3, 2, 1, 0]]]}]});
+        let m = map(&seen, 0, None, false).expect("a map");
+        let hidden = |me: Value| unseen_rows(&m, match_me(&me));
+        assert_eq!(hidden(json!(1)), vec![1, 3]);
+        assert_eq!(hidden(json!(2)), vec![2, 3]);
+        assert_eq!(hidden(json!("none")), Vec::<usize>::new());
+        assert_eq!(hidden(Value::Null), vec![1, 3]);
+        assert_eq!(
+            (
+                fog_state(2 | 1 << 2, Some(1)),
+                fog_state(2 | 1 << 2, Some(2))
+            ),
+            (2, 1)
+        );
+    }
 
     /// One narrowing fixture per `as` (the registry's kit: "one narrowing fixture per `as`").
     #[test]
@@ -924,6 +1016,20 @@ mod tests {
         let mid = map(&column, 15, None, false).expect("a map");
         let played = map(&column, 20, Some(&mid), false).expect("a map");
         assert_eq!(played.values[0], 8.0);
+    }
+
+    /// #2035: a row the step's `cut` marks shows that step's value with no blend, seeked or
+    /// played from the frame before, while an unmarked row of the same step still blends.
+    #[test]
+    fn a_cut_row_jumps_while_the_rest_blend() {
+        let column = json!({"type": "f64", "count": 2, "every": 10, "linear": true, "as": "f64",
+            "steps": [{"step": 0, "changed": [[0, 2]], "values": [[0, [19.9, 4.0]]]},
+                      {"step": 1, "changed": [[0, 2]], "values": [[0, [0.0, 8.0]]], "cut": [[0, 1]]}]});
+        let seeked = map(&column, 15, None, false).expect("a map");
+        assert_eq!(seeked.values, vec![0.0, 6.0]);
+        let before = map(&column, 9, None, false).expect("a map");
+        let played = map(&column, 15, Some(&before), false).expect("a map");
+        assert_eq!(played.values, vec![0.0, 6.0]);
     }
 
     /// #537: a vec3 array read whole as f32 narrows every part; a row whose y is NaN hides, its

@@ -113,7 +113,8 @@ impl Hub<'_> {
                 "search" => &["query", "cursor"],
                 "read" => &["example", "guide", "offset"],
                 "gallery" => &["cursor"],
-                "sheet" | "step_ceilings" => &[],
+                "sheet" => &["offset"],
+                "step_ceilings" => &[],
                 "field" => &["path"],
                 "closure" => &["list"],
                 "bindings" => &["doc", "item", "language"],
@@ -207,7 +208,7 @@ impl Hub<'_> {
             "step_ceilings" => json!({"step_ceilings": deep_logic::budget::ceilings(
                 self.kinds_planted() == Some(Planted::StepCeilingsCap)
             )}),
-            _ => self.kinds_sheet(),
+            _ => self.kinds_sheet(c.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize),
         }
     }
 
@@ -357,7 +358,14 @@ impl Hub<'_> {
             .and_then(|(a, b)| Some((a.parse::<usize>().ok()?, b.parse::<usize>().ok()?)))
             .unwrap_or((0, 0));
         let mut out = l.header.clone();
-        out["packs"] = self.packs_listed();
+        // #3108: the modules, interfaces and packs go on the first page only. Repeated on every
+        // page they took a small room (#2896) whole, so each page held one entry.
+        if (row0, entry0) == (0, 0) {
+            out["packs"] = self.packs_listed();
+        } else if let Some(o) = out.as_object_mut() {
+            o.remove("modules");
+            o.remove("interfaces");
+        }
         let mut size = out.to_string().len() + 64;
         let mut page: Vec<Value> = Vec::new();
         let mut next = None;
@@ -369,16 +377,27 @@ impl Hub<'_> {
                 .and_then(|e| e.as_array().cloned())
                 .unwrap_or_default();
             let from = if i == row0 { entry0 } else { 0 };
+            // #3108: a row a page continues keeps only its kind and name; its other fields (its
+            // planted entry, kit, schema) went with its first entries.
+            if from > 0 && row.get("entries").is_some() {
+                head = json!({"kind": head["kind"], "name": head["name"]});
+            }
             let mut kept: Vec<Value> = Vec::new();
             let head_size = head.to_string().len() + 16;
-            if size + head_size > PAGE_BUDGET && !page.is_empty() {
+            if size + head_size > page_budget() && !page.is_empty() {
                 next = Some(format!("{i}.{from}"));
                 break;
             }
             size += head_size;
             for (j, e) in entries.iter().enumerate().skip(from) {
                 let n = e.to_string().len() + 1;
-                if size + n > PAGE_BUDGET && !(page.is_empty() && kept.is_empty()) {
+                if size + n > page_budget() && !(page.is_empty() && kept.is_empty()) {
+                    // #3108: a row none of whose entries fit starts the next page, head and all,
+                    // rather than sending its head twice.
+                    if kept.is_empty() && from == 0 {
+                        next = Some(format!("{i}.0"));
+                        break 'rows;
+                    }
                     if row.get("entries").is_some() {
                         head["entries"] = json!(kept);
                     }
@@ -566,10 +585,7 @@ impl Hub<'_> {
                 &offset.to_string(),
             );
         }
-        let mut end = (offset + GUIDE_PAGE).min(text.len());
-        while !text.is_char_boundary(end) {
-            end -= 1;
-        }
+        let end = text_end(&text, offset);
         let truncated = end < text.len();
         let mut out = json!({"guide": name, "offset": offset, "text": &text[offset..end], "truncated": truncated});
         if truncated {
@@ -618,10 +634,47 @@ impl Hub<'_> {
         out
     }
 
-    pub(super) fn kinds_sheet(&self) -> Value {
+    /// The sheet, whole when it fits the call's room; past it, in pages of whole lines from
+    /// `offset`, each saying where the next starts (#2896).
+    pub(super) fn kinds_sheet(&self, offset: usize) -> Value {
         let l = self.kinds_listing();
         let drop_packs = self.kinds_planted() == Some(Planted::SheetWithoutPackEntries);
         let text = sheet_text(&sheet_lines(&l.rows, drop_packs));
-        json!({"module_set": self.startup.sealed.set_digest, "bytes": text.len(), "text": text})
+        let mut out = json!({"module_set": self.startup.sealed.set_digest, "bytes": text.len()});
+        if offset == 0 && text.len() <= text_page() {
+            out["text"] = json!(text);
+            return out;
+        }
+        if offset > text.len() || !text.is_char_boundary(offset) {
+            return refused(
+                "range",
+                "/offset",
+                "Give 0 or the next offset a page gave.",
+                &offset.to_string(),
+            );
+        }
+        let mut end = text_end(&text, offset);
+        // A page ends at a line's end, unless one line is longer than the page.
+        if end < text.len() {
+            if let Some(nl) = text[offset..end].rfind('\n') {
+                end = offset + nl + 1;
+            }
+        }
+        out["offset"] = json!(offset);
+        out["text"] = json!(&text[offset..end]);
+        out["truncated"] = json!(end < text.len());
+        if end < text.len() {
+            out["next"] = json!(end);
+        }
+        out
     }
+}
+
+/// Where a page of `text` from `offset` ends: a text page's bytes of it, at a char boundary.
+fn text_end(text: &str, offset: usize) -> usize {
+    let mut end = (offset + text_page()).min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    end
 }

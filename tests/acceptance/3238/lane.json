@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: hub.test.ts starts a hub, which runs deep-hook from this checkout's target/, as #1015's hub files do" }

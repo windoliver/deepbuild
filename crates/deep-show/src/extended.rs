@@ -19,13 +19,17 @@ fn is_sha(s: &str) -> bool {
 
 /// Every hash a document names, with the item that names it ("" for the envelope) and its path:
 /// each item's by hash, and each envelope asset record's, all of them or (`all` false) only those
-/// an item or the envelope's look names by the record's name, which the document draws from.
+/// an item or the envelope's look names by the record's name, which the document draws from. A
+/// logic item's `carry_in.accepts` lists state layouts, which are hashes but never assets (#189).
 pub(crate) fn hashes(doc: &Value, all: bool) -> Vec<(String, String, String)> {
     fn walk(v: &Value, id: &str, path: String, out: &mut Vec<(String, String, String)>) {
         match v {
             Value::String(s) if is_sha(s) => out.push((id.to_string(), path, s.clone())),
             Value::Object(m) => {
                 for (k, x) in m {
+                    if k == "accepts" && path.ends_with("/params/carry_in") {
+                        continue;
+                    }
                     walk(x, id, format!("{path}/{k}"), out);
                 }
             }

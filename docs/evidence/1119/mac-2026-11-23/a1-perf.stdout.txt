@@ -1,0 +1,4 @@
+2026-11-23T05:52:31Z { 52.24 59.72 71.08 } RUN perf
+2026-11-23T05:53:02Z { 46.94 57.68 69.95 } perf: base copy ~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/copy: wrote 0 files, deleted 0; rewrote what the last run left with other bytes: nothing
+2026-11-23T06:57:58Z { 60.92 80.92 80.80 } BLOCKED perf: spawnSync /usr/bin/time ETIMEDOUT
+2026-11-23T06:57:58Z { 60.92 80.92 80.80 }   Fix: Resolve the named cause; budgets in benchmarks/budgets.json are frozen once they reach main.

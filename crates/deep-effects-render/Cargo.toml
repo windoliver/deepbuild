@@ -12,6 +12,8 @@ rust-version = "1.95"
 # the frame: glow's mip chain, the ground grid, the shadow filter over the core's shadow map,
 # sparks and the selection outline. Each pass is timed with wgpu-profiler.
 [dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-gpu = { path = "../deep-gpu" }

@@ -3,6 +3,8 @@
 
 use deep_gpu::device::Device;
 
+pub use deep_effects_render::look_ops::map_rows;
+
 fn f16(bits: u16) -> f32 {
     let sign = if bits & 0x8000 != 0 { -1.0 } else { 1.0 };
     let exp = i32::from((bits >> 10) & 0x1f);

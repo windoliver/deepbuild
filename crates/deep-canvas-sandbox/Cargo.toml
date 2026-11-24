@@ -17,3 +17,7 @@ sha2 = "0.10"
 wasmparser = { version = "=0.258.3", default-features = false, features = ["std", "validate", "features", "simd"] }
 wasm-encoder = { version = "=0.258.3", default-features = false, features = ["std", "wasmparser"] }
 
+# Issue #2662: the acceptance tests, written blind in tests/acceptance/2662.
+[[test]]
+name = "acceptance_2662_check_allocations"
+path = "../../tests/acceptance/2662/check_allocations.rs"

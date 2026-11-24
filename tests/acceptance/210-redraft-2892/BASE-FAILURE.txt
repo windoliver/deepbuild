@@ -1,0 +1,20 @@
+#210 criterion 6 (#210.e496d38b), the blind redraft after #2892: how the test meets the base 5f5791e2d ("Merge pull
+request #3068").
+
+Read, not run. The Mac stood at a one-minute load of 120 to 200 and the brief said not to run the browser legs; the
+test needs deep-show (full) built and headless Chrome. What ran: the type check (node
+node_modules/typescript/bin/tsc -p tests/acceptance/210-redraft-2892/tsconfig.json, exit 0), `vitest list` (1 test
+collected), and the scratch probe of the shared reader described in ../172-redraft-2892/BASE-FAILURE.txt (a plug-in
+ID inside a gzip-stored JSON file is found at its inflated offset and not in its stored bytes; the leak twin plants
+into the smallest file of a folder with no gzip file and the search then finds it there inflated).
+
+At the base: expected to pass. The base already meets the criterion and stores every file as it is.
+- crates/deep-show/src/export/web.rs removes `ports` from the document the bundle carries (unless
+  `web_export_keeps_port` is planted), names each port in the receipt's `refused` as {item, code: "web.port", why},
+  and writes every file raw, none starting 1f 8b. So the search reads every file as stored and finds no `test.gear`;
+  the leak twin gzips the smallest file but the index page with `test.gear` inside, and the search names it. The other
+  legs are the first draft's, which passed on #210's PR (its closing comment: AC1-AC7 pass).
+
+Under #2892, the first draft this replaces (read): `bytes.includes(Buffer.from(GEAR.id))` over stored bytes; a
+document stored gzip that kept the port would show `test.gear` only once inflated, so a bundle that kept the port and
+still answered `exported` would pass it.

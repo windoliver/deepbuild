@@ -751,7 +751,7 @@ pub fn mesh_of(
 ) -> Result<crate::geom::Mesh, Refused> {
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
     let built = if crate::building::KINDS.contains(&kind) {
-        crate::building::build(doc, id, item)
+        crate::building::build(doc, id, item, outlines.planted)
     } else {
         // #1929: a host that keeps a memo between its frames keeps each deform's bind there.
         let memo = outlines.memo;
@@ -819,8 +819,8 @@ pub(super) fn edge_line(
         },
     };
     // Its dash and gap in its size space; one length dashes as long as it gaps.
-    let dash = match params.get("dash") {
-        None | Some(Value::Null) => [0.0; 2],
+    let dash_of = |of: &Value, path: &str| match of.get("dash") {
+        None | Some(Value::Null) => Ok([0.0; 2]),
         Some(v) => match v
             .as_array()
             .map(|a| a.iter().map(|x| num(Some(x))).collect())
@@ -828,11 +828,12 @@ pub(super) fn edge_line(
             Some(Some::<Vec<f64>>(d))
                 if d.iter().all(|x| *x >= 0.0) && matches!(d.len(), 1 | 2) =>
             {
-                [d[0], d[d.len() - 1]]
+                Ok([d[0], d[d.len() - 1]])
             }
-            _ => return refused("out_of_range", format!("{path}/dash")),
+            _ => refused("out_of_range", format!("{path}/dash")),
         },
     };
+    let dash = dash_of(params, &path)?;
     let mut mesh = match (item.get("kind").and_then(Value::as_str), assets) {
         // A glTF asset's mesh, read as its solid is (#1640).
         (Some("mesh.asset@1"), Some(read)) => {
@@ -840,6 +841,11 @@ pub(super) fn edge_line(
             asset_mesh(read, target, params, item)?.0
         }
         _ => mesh_of(doc, target, item, seconds, outlines)?,
+    };
+    // #1782: each triangle's material on the item, where the crease kind picks by it.
+    let mut materials = match kind {
+        crate::geom::EdgeKind::Crease { material: true, .. } => mesh.material_ids(item),
+        _ => None,
     };
     if let Some((_, part)) = of.split_once('#') {
         let Some(tris) = mesh
@@ -855,6 +861,7 @@ pub(super) fn edge_line(
             normals: mesh.normals.clone(),
             ..Default::default()
         };
+        materials = materials.map(|m| tris.iter().map(|t| m[*t as usize]).collect());
         for t in tris {
             let k = 3 * t as usize;
             only.indices.extend(&mesh.indices[k..k + 3]);
@@ -863,8 +870,25 @@ pub(super) fn edge_line(
         mesh = only;
     }
     let (list, derived) = match kind {
-        crate::geom::EdgeKind::Crease { angle, border } => mesh.crease_set(angle, border, None),
-        _ => (Arc::new(mesh.edge_list(kind, None)), true),
+        crate::geom::EdgeKind::Crease { angle, border, .. } => {
+            mesh.crease_set(angle, border, materials.as_deref(), None)
+        }
+        _ => (Arc::new(mesh.edge_list(kind, None, None)), true),
+    };
+    let color = paint(look, params, &path)?;
+    // #1782: the style its spans behind opaque geometry draw in, the line's own paint unless it
+    // names one.
+    let hidden = match params.get("hidden") {
+        None | Some(Value::Null) => None,
+        Some(h) if h.is_object() => Some(Hidden {
+            dash: dash_of(h, &format!("{path}/hidden"))?,
+            color: match h.get("paint") {
+                None | Some(Value::Null) => color,
+                Some(_) => paint(look, h, &format!("{path}/hidden"))?,
+            },
+            planted: None,
+        }),
+        Some(_) => return refused("out_of_range", format!("{path}/hidden")),
     };
     let source = EdgesOf {
         mesh: Arc::new(mesh),
@@ -873,13 +897,15 @@ pub(super) fn edge_line(
         width,
         list,
         derived,
+        materials: materials.map(Arc::new),
+        hidden,
     };
     let world = params.get("size_space").and_then(Value::as_str) == Some("world");
     Ok(Line {
         id: id.to_string(),
         segments: source.segments(true),
         world,
-        color: paint(look, params, &path)?,
+        color,
         edges: Some(Arc::new(source)),
         over: false,
         joined: false,
@@ -946,4 +972,23 @@ pub(super) fn profiled_points(
         .map(|at| deep_canvas_drawn::geometry::width_along(&metres, *at, total))
         .collect();
     (fine, widths)
+}
+
+/// The X, Y, Z angles in degrees of the rotation `r` (its rows), as `local_of` composes them:
+/// Rz · Ry · Rx.
+fn euler_of(r: &[Vec3; 3]) -> Vec3 {
+    use deep_canvas::ops::{asin, atan2, deg};
+    if r[2][0].abs() > 1.0 - 1e-12 {
+        // Straight up or down: X and Z turn about one axis, so Z takes none.
+        return [
+            deg(atan2(-r[1][2], r[1][1])),
+            deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
+            0.0,
+        ];
+    }
+    [
+        deg(atan2(r[2][1], r[2][2])),
+        deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
+        deg(atan2(r[1][0], r[0][0])),
+    ]
 }

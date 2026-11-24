@@ -18,9 +18,9 @@ it('a historical rule symlink never lets either variant overwrite its outside ta
     const report = await runEval({ root: join(root, 'runs'), env: {},
       tasks: [{ id: 't', at: 2, repo, commit: git('rev-parse', 'HEAD'), prompt: 'Fix a cart.' }],
       plan: { id: 'links', cutoff: 1, tasks: ['t'], fitted: [], models: { agent: 'claude-haiku-5-5', judge: 'gpt-reserve' }, repeats: 1, measures: [{ name: 'grade', better: 'higher' }], rule: 'paired-mean-one-sided-95', budget: { ms: 60_000, plan_share: 0.5 }, variants: { base: { name: 'base', files: { 'AGENTS.md': '- rule\n' } }, change: { name: 'change', files: { 'AGENTS.md': '' } } } },
-      launcher: { work: async () => ({ ok: true, result: 'done' }), judge: async ({ outputs }) => outputs.map(({ label }) => ({ label, score: 1 })) },
+      launcher: { work: async () => ({ ok: true, result: 'done' }), judge: async ({ outputs }) => outputs.map(({ label, text }) => ({ label, score: text.includes('diff --git') ? 1 : 0 })) },
     });
     expect(readFileSync(victim, 'utf8')).toBe('person-owned bytes\n');
-    expect(report.runs.every((r) => !r.ok)).toBe(true);
+    expect(report.runs.map((r) => r.ok), report.after.reason).toEqual([false, false]);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }, 60_000);

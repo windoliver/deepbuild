@@ -31,6 +31,9 @@ function fixture() {
   return { dir, tasks, plan };
 }
 
+/** A judge's score that passes the control: a change 0.5, no change 0.1. */
+const scored = (text: string): number => (text.includes('diff --git') ? 0.5 : 0.1);
+
 it('grades a task as soon as its runs end, while other tasks still run', async () => {
   // Failed on an eval that graded only after every run had ended, so a long eval left its judge no time.
   const { dir, tasks, plan } = fixture();
@@ -45,11 +48,12 @@ it('grades a task as soon as its runs end, while other tasks still run', async (
           const graded = await Promise.race([t1Graded.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10_000))]);
           if (!graded) return { ok: false };
         }
+        writeFileSync(join(run.cwd, 'fix.txt'), 'fixed\n');
         return { ok: true, result: 'Fixed it.' };
       },
       async judge(request) {
         if (request.prompt.includes('t1')) judgedT1();
-        return request.outputs.map((o) => ({ label: o.label, score: 0.5 }));
+        return request.outputs.map((o) => ({ label: o.label, score: scored(o.text) }));
       },
     },
   });
@@ -70,12 +74,12 @@ it("never shows the judge a variant's instruction file, even when the agent edit
       },
       async judge(request) {
         judged.push(request);
-        return request.outputs.map((o) => ({ label: o.label, score: 0.5 }));
+        return request.outputs.map((o) => ({ label: o.label, score: scored(o.text) }));
       },
     },
   });
   expect(report.hash).toBe(planHash(plan));
-  expect(judged.length).toBe(2);
+  expect(judged.length, 'the control, then a request a task').toBe(3);
   const shown = JSON.stringify(judged);
   expect(shown).toContain('fix.txt');
   expect(shown).not.toMatch(/kestrel|osprey|CLAUDE\.md/);

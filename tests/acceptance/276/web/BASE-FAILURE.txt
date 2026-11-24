@@ -1,0 +1,80 @@
+# #276 web acceptance test (criterion 7 and the Scope line on the piece's menu) at the base: fcbfca05f (main e575a47af
+# with #189's branch merged), clean but for tests/acceptance/276/web added, on an Apple-silicon Mac (macOS 27.2, 18
+# cores, load average about 205 from other sessions), Node 24.22.2, rustup's cargo.
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease node node_modules/vitest/vitest.mjs run
+#          --root tests/acceptance/276/web ac07-web-player.test.ts --testTimeout=600000 --hookTimeout=180000
+# (scripts/lease ran it unleased: no deep CLI in this worktree). Most of the 2,263 s is beforeAll's cold build of the
+# assembler and deep-logic; each test then failed within 3 s.
+# Also: node node_modules/typescript/bin/tsc -p tests/acceptance/276/web/tsconfig.json exits 0.
+# Result: 2 of 2 tests fail, each at its first call, the layout probe's check in deep-logic, which the base refuses:
+# "logic@1 has no field profile". That is the feature missing, not the harness: no test reached deep-show's build, an
+# export, a browser, probe().profile or a control; deep-show (full) was not built at the base on this loaded Mac.
+# The harness was checked against the base's deep-logic in a scratch script (not committed), with the profile field
+# taken out and the profile entry stood in at offset 64, which the base never fills: both programs assemble; the
+# piece bakes 1,200 steps with no trap; xp is 300 at step 0, 1,200 at step 900 and 1,201 at 901; keep is 1 at step
+# 900 only; got_flag and got_xp read 0xa5a5a5a5 (-1515870811) at every step, which is what a module that leaves the
+# entry unfilled gives. The browser legs (export, Chrome, reload, download, file chooser) are #189's and #1041's
+# driver, cut down, and were not run here.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/276/web ac07-web-player.test.ts --testTimeout=600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/276/web
+
+ ❯ ac07-web-player.test.ts (2 tests | 2 failed) 2255676ms
+   ❯ AC7 #276.74f16402 a profile record in the web player (1)
+     × AC7 #276.74f16402 the record step 900 writes keeps to the browser's storage and reopens at the next start with xp 1200 at step 0; exported and imported into a fresh profile, it reopens there the same way 2206ms
+   ❯ Scope #276 the piece's menu in the web player (1)
+     × Scope #276 the piece's menu, the player's own controls, names the profile, with start fresh (this run only) and delete 721ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac07-web-player.test.ts > AC7 #276.74f16402 a profile record in the web player > AC7 #276.74f16402 the record step 900 writes keeps to the browser's storage and reopens at the next start with xp 1200 at step 0; exported and imported into a fresh profile, it reopens there the same way
+AssertionError: check of a layout probe with profile admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ regionMap helpers.ts:142:70
+    140|   try { reply = JSON.parse((r.stdout ?? '').split('\n')[0] ?? '') as J…
+    141|   const o = obj(reply, `${what}: the reply`);
+    142|   expect(o['ok'], `${what} admits the piece (ok: true): ${show(o)}`).t…
+       |                                                                      ^
+    143|   const item = obj(obj(o['items'], `${what}.items`)['probe'], `${what}…
+    144|   return arr(obj(item['layout'], `${what}.items.probe.layout`)['entrie…
+ ❯ program ac07-web-player.test.ts:65:15
+ ❯ served ac07-web-player.test.ts:123:30
+ ❯ ac07-web-player.test.ts:157:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac07-web-player.test.ts > Scope #276 the piece's menu in the web player > Scope #276 the piece's menu, the player's own controls, names the profile, with start fresh (this run only) and delete
+AssertionError: check of a layout probe with profile admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field profile","field":"profile"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ regionMap helpers.ts:142:70
+    140|   try { reply = JSON.parse((r.stdout ?? '').split('\n')[0] ?? '') as J…
+    141|   const o = obj(reply, `${what}: the reply`);
+    142|   expect(o['ok'], `${what} admits the piece (ok: true): ${show(o)}`).t…
+       |                                                                      ^
+    143|   const item = obj(obj(o['items'], `${what}.items`)['probe'], `${what}…
+    144|   return arr(obj(item['layout'], `${what}.items.probe.layout`)['entrie…
+ ❯ program ac07-web-player.test.ts:65:15
+ ❯ served ac07-web-player.test.ts:123:30
+ ❯ ac07-web-player.test.ts:189:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  16:28:05
+   Duration  2263.27s (tests 100%)
+

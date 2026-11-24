@@ -1,0 +1,96 @@
+How the #298 acceptance suite fails at the base, 7a256fd4b (main, "Merge pull request #2947 …").
+
+Not run against a binary. The surfaces these tests drive plainly don't exist at the base, and the machine was under a
+load above 100 on 18 cores, so neither deep-gpu nor deep-show was built just to watch them fail; each line below is
+read from the base's code and was not observed. What was run:
+
+  $ node node_modules/typescript/bin/tsc -p tests/acceptance/298/tsconfig.json
+  (no output, exit 0)
+
+  $ node node_modules/vitest/vitest.mjs list --root tests/acceptance/298
+  (13 tests in 6 files; scripts/proof-change.mjs's `spans` reads all 13 names from the source, each tagged with its
+  criterion's ID)
+
+  A scratch test, not kept, ran the fixtures' own numbers through helpers.ts with no binary: the still's five tags,
+  the flythrough's 200 pairs at both sizes, the leader's 21 frames and the card's probe points. They are the numbers
+  README.md lists under Fixtures, and every test asserts them again as guards.
+
+What the base has and lacks, read from its code:
+
+- `overlay.frame@1` anchored to an item's point draws with its frame's top left corner at the point's projection plus
+  its offset, wherever that falls, and has no place while the point is behind a perspective camera
+  (crates/deep-canvas-scene3d/src/scene.rs, `overlay`; `Camera::project` returns none at a depth of 0 or less).
+- `hide` is read only where the overlay has a `leader`, and takes `off_frame` or `never`; any other value there is
+  refused, `out_of_range` at `items/<id>/params/hide` (the same function). Without a leader, `hide` and `clamp_inset`
+  aren't read: scene3d's spec holds no param list for `overlay.frame@1`. If a document check ahead of it refuses the
+  unknown value or field instead, each view3d test below fails one step earlier, at "… was drawn, not refused".
+- `view3d`'s `overlays: true` rows are `{id, at}` and, with a leader, `leader: {to} | null`
+  (crates/deep-gpu-layer/src/view3d.rs). No `edge`, no `edge_angle`.
+- A driver var written `<name>.<field>` is a logic array's; one that names no baked array is refused,
+  `ref_unresolved` at `drivers/<id>/vars/<name>` (crates/deep-canvas-motion/src/doc.rs, `driver_of`;
+  program/groups.rs). So no driver reads `tag-east.edge_angle`.
+- Every name a driver's `expr` reads must be one of its vars, else `ref_unresolved` at `drivers/<id>/expr`
+  (`driver_of`); the closed function list has no `hover_at` (crates/deep-canvas/src/expr.rs). So the card's drivers are
+  refused.
+- A logic item's read that names no control, reading or logic array is refused, "names no control or logic item of
+  this piece" (crates/deep-logic/src/piece/checks.rs, `region_map`): a read of a driver, of a path or of
+  `hover_at(card)` is refused at the base already, for that reason.
+- `deep-gpu run --planted <name>` with a name `Planted::parse` doesn't know prints {"ok": false, "code": "bad_input"}
+  and exits 2 (crates/deep-gpu-layer/src/main.rs); `deep-show run` answers a scenario whose `planted` it doesn't know
+  {"ok": false, "code": "bad_input"} (crates/deep-show/src/main.rs).
+
+Where each test fails (on macOS with cargo; elsewhere every GPU test is INCONCLUSIVE first, and with no cargo BLOCKED):
+
+ac1-clamp-still.test.ts (not run)
+  AC1 #298.febe6b8e tags whose anchors project to (2400, 540), (960, −300) and (2400, −300) draw centered at …
+    The guards pass (the tops project where the criterion says; the rule gives the issue's values). The tags draw on
+    their anchors: none(...) fails with "frame 0 (1920 × 1080, safe 48): overlay tag-east (its frame tag-east-frame)
+    draws centered at (2400.00, 540.00), not at (1848.00, 540.00), on the inset frame's right side", "… reports edge
+    null, not 1", "… reports edge_angle null, not 0.00", the same for tag-north and tag-corner, and "… overlay tag-rear
+    (its frame tag-rear-frame) isn't drawn; it draws centered at (72.00, 392.00), on the inset frame's left side".
+    tag-near's place is right; it "reports edge null, not 0".
+  AC1 #298.febe6b8e the planted clamps fail, naming the frame …
+    `deep-gpu run --planted clamp_each_axis` exits 2 with bad_input: "deep-gpu run --planted clamp_each_axis exited 0"
+    fails.
+
+ac2-safe-area.test.ts (not run)
+  AC2 #298.ef87b0b5 at 390 × 844 and 1920 × 1080 every clamped overlay's box lies inside the safe area …
+    The guards pass. none(...) fails from frame 0 at each size: "390 × 844, frame 0 (0.0 s): overlay tag-east's box,
+    (…) to (…), leaves the safe area (48 to 342 by 48 to 796) by … px: it lies under the inset", and "… overlay
+    tag-rear isn't drawn; its anchor points toward (…), behind the camera, and a clamped overlay never hides".
+  AC2 #298.ef87b0b5 the planted clamp to the frame puts a tag under the inset and fails, naming the overlay
+    "deep-gpu run --planted clamp_to_frame exited 0" fails (exit 2, bad_input).
+
+ac3-edge-angle-seek.test.ts (not run)
+  AC3 #298.85119906 edge_angle at the flythrough's 20 sampled times equals its value after a seek to each …
+    The guards pass. The document's drivers are refused: "the flythrough played was drawn, not refused: {"code":
+    "ref_unresolved", …}" (drivers/turn-…/vars/a).
+  AC3 #298.85119906 the planted driver that reads the previous frame's projection …
+    "deep-gpu run --planted edge_from_previous_frame exited 0" fails (exit 2, bad_input).
+  AC3 #298.85119906 a logic item whose read names a driver over edge_angle is refused at check, naming the item
+    The document whose logic item reads no driver is refused for its arrows' drivers: "the clamp fixture with its
+    arrows' drivers over edge_angle and a logic item that reads no driver is presented" fails. (The two documents after
+    it are refused too, at the base for the drivers and for a read the logic module doesn't know.)
+
+ac4-card-tilt.test.ts (not run)
+  AC4 #298.fd687640 the card whose tilt driver reads hover_at tilts toward a hover at (0.9, 0.5) of its bounds live …
+    The guards pass. The card's drivers are refused, so the first run, which reads the panel's camera, fails: "AC4 the
+    card is presented".
+  AC4 #298.fd687640 a logic item that reads hover_at, directly or through a driver, is refused at check …
+    "the card with its drivers over hover_at and a logic item that reads nothing is presented" fails.
+  AC4 #298.fd687640 the planted export that keeps the live hover tilts the card and fails the golden …
+    Fails as the first test does, at "AC4 the card is presented", before the planted scenario runs. (That scenario
+    would answer bad_input: the base knows `export_keeps_live_hover`, #539's, and not `export_keeps_live_hover_at`.)
+
+ac5-leader-clamped.test.ts (not run)
+  AC5 #298.1903184f the leader on a clamped overlay draws nothing while edge is 1 and returns …
+    The guards pass. `hide: "clamp"` beside a leader is refused: "the tag with its leader was drawn, not refused:
+    {"code": "out_of_range", …}" (items/tag/params/hide).
+  AC5 #298.1903184f the planted leader that keeps drawing crosses the frame and fails, naming the overlay
+    "deep-gpu run --planted leader_draws_while_clamped exited 0" fails (exit 2, bad_input).
+
+taste.test.ts (not run)
+  AC6 #298.4ae89dd7 the run writes clamped overlays at 1920 × 1080 and 390 × 844, an edge arrow, a card tilted …
+    The fixtures with arrows are refused for their drivers: "the flythrough, recorded was drawn, not refused". With
+    the behaviour built and no TASTE.json, it writes the five files and fails "INCONCLUSIVE: no taste call is recorded
+    …; this is not a pass".

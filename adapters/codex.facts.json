@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@7",
+  "schema": "adapter.facts@9",
   "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
   "agent": "codex",
   "hookTimeouts": {
@@ -842,7 +842,7 @@
   "stop": {
     "readBy": "each agent.stop names its cause from the stop's closed set and carries its usage (#603); the turn is the rollout's entries from the first carrying the payload's turn_id to the first carrying another",
     "conformance": "codex/stop/cause-and-usage",
-    "turn": { "payload": "turn_id", "transcript": "payload.turn_id" },
+    "turn": { "payload": "turn_id", "transcript": "payload.turn_id", "elsewhere": "agent_id" },
     "cause": {
       "readBy": "the first that names a cause, never the agent's text: an error event of the turn by its codex_error_info (codex-rs/protocol CodexErrorInfo), then the turn's last token_count rate_limits: a limit reached (rate_limit_reached_type) is plan_window_spent, resetting when the spent window (used_percent 100) does, resets_at being Unix seconds; one with no reset time is rate_limited; Codex's Stop payload carries no error; anything else is unknown",
       "errors": {
@@ -906,7 +906,7 @@
     "readBy": "a turn no prompt hook started opens with a user.ask whose origin the rollout's opening user message names; goals and heartbeats are continuations, never your asks",
     "conformance": "codex/turnWithoutPrompt/goal",
     "payloadField": "turn_id",
-    "startedBy": ["UserPromptSubmit", "SessionStart"],
+    "startedBy": ["UserPromptSubmit", "SessionStart", "SubagentStart"],
     "turnEntry": "turn_context",
     "turnField": "payload.turn_id",
     "messageRole": { "path": "payload.role", "value": "user" },
@@ -933,6 +933,25 @@
     "name": "o200k_base",
     "package": "gpt-tokenizer",
     "version": "4.0.0"
+  },
+  "toolResult": {
+    "readBy": "a deep_* reply's cap (#2896): deep mcp names its client, and a reply in the text that client receives stays a fifth under each figure here, the rest by next; a refusal a fifth under the error figures' characters and tokens, and within their bytes as Codex receives an error",
+    "conformance": "codex/toolResult/per-version",
+    "tokenizer": { "name": "o200k_base", "package": "gpt-tokenizer", "version": "4.0.0", "readBy": "what a reply's tokens are counted in: Codex's own tokenizer entry, above; the counter is the one packages/hub/src/reply-fit.ts imports, pinned in packages/hub/package.json, so a change here changes that import and pin with it" },
+    "entries": [
+      {
+        "versions": ["0.144.0"],
+        "result": { "tokens": 10000, "bytes": 10000, "past": "cut in the middle: both ends kept, with a marker where the cut is" },
+        "error": { "tokens": 10000, "bytes": 10000, "past": "cut in the middle, as a result is: Codex truncates a tool's output alike whether it failed or not" },
+        "source": "the catalog `codex debug models` prints, as 0.144.0 builds it in (codex-rs/models-manager/models.json at tag rust-v0.144.0, read Nov 19 2026): every model's truncation_policy is {mode: tokens, limit: 10000} but gpt-5.2's, {mode: bytes, limit: 10000}, so both hold"
+      },
+      {
+        "versions": ["0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
+        "result": { "tokens": 10000, "past": "cut in the middle: both ends kept, with a marker where the cut is" },
+        "error": { "tokens": 10000, "past": "cut in the middle, as a result is: Codex truncates a tool's output alike whether it failed or not" },
+        "source": "`codex debug models` on 0.160.0, run Nov 19 2026 (its 10 models), and the catalog it prints as each version builds it in (codex-rs/models-manager/models.json at tags rust-v0.160.0, rust-v0.163.0-alpha.10.2 and rust-v0.166.0-alpha.5.1): every model's truncation_policy is {mode: tokens, limit: 10000}"
+      }
+    ]
   },
   "ruleLoad": {
     "readBy": "which rule lines reach a Codex session by Codex's own loading (#1514): the rules page marks a line it says won't, naming Codex and the cause, deep doctor reports the same as rules.not_loaded with the file and the first line lost, the start slice sends such a rule by DeepBuild's own route, and the session facts digest the files it says a session loads; a load the agent reports itself outranks it",
@@ -965,6 +984,19 @@
         "memoryIndex": null,
         "stops": [{ "cause": "untrusted", "file": "~/.codex/config.toml", "key": "projects.<root>.trust_level", "value": "untrusted" }],
         "loadEvent": null
+      }
+    ]
+  },
+  "toolLoading": {
+    "readBy": "what a session holds of DeepBuild's MCP servers at its start is counted the way its client loads them (#2897); a way not read charges neither, and a Codex session's start records no count, since the hub records one only for a Claude Code session whose config loads deepbuild",
+    "conformance": "codex/toolLoading/unread",
+    "entries": [
+      {
+        "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2", "0.166.0-alpha.5.1"],
+        "way": "unread",
+        "instructionsCutChars": null,
+        "mark": null,
+        "source": "not read, Nov 19, 2026: no corpus session of these versions calls a DeepBuild tool, and 0.160.0's desktop-heartbeat calls a tool_search tool for the app's own tools without saying whether it defers an MCP server's (#2897 names Codex 0.170.0's tool search as unread)"
       }
     ]
   },
@@ -1030,5 +1062,39 @@
         "readBy": "measured Nov 7, 2026 on a running `codex app-server` in a temp HOME: after config.toml gained an [mcp_servers] table and hooks.json a SessionStart entry, the same server's next mcpServerStatus/list and hooks/list named both, with no restart. A session already started keeps the set it loaded; only a new thread reads the new one"
       }
     }
+  },
+  "mcpHandshake": {
+    "readBy": "DeepBuild's MCP servers (deep mcp, deep mcp actions, deep-hook's mcp actions, the reading tools) hold the handshake revisions mcp.handshake@1 lists and answer any other with the newest (#2854); each version's client opens with the revision here, read from its recorded initialize request. Recorded by codex exec under a scratch CODEX_HOME with an invalid API key (no model call), -c mcp_servers naming one stdio server that kept each line it was sent; the client's npm build (@openai/codex), Nov 22, 2026",
+    "conformance": "codex/mcpHandshake/held",
+    "entries": [
+      {
+        "versions": [
+          "0.144.0"
+        ],
+        "revision": "2025-06-18",
+        "request": "adapters/corpus/codex/0.144.0/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "0.160.0"
+        ],
+        "revision": "2025-06-18",
+        "request": "adapters/corpus/codex/0.160.0/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "0.163.0-alpha.10.2"
+        ],
+        "revision": "2025-06-18",
+        "request": "adapters/corpus/codex/0.163.0-alpha.10.2/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "0.166.0-alpha.5.1"
+        ],
+        "revision": "2025-06-18",
+        "request": "adapters/corpus/codex/0.166.0-alpha.5.1/mcp-initialize.json"
+      }
+    ]
   }
 }

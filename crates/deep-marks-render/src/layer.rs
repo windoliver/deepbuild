@@ -71,16 +71,18 @@ pub struct Planted {
 }
 
 /// The layer's marks over transparent black at `size` px, drawn by GPUI in a window of `cx` at
-/// scale 1 and read back from GPUI's offscreen Metal renderer; straight alpha.
+/// scale 1 and read back from GPUI's offscreen Metal renderer; straight alpha. Its images are read
+/// from `store` (#2053), a folder whose files are named by their sha256.
 #[cfg(target_os = "macos")]
 pub fn gpui(
     cx: &mut gpui_kit::HeadlessAppContext,
     marks: &[Arc<Drawn>],
     size: [u32; 2],
     planted: Planted,
+    store: Option<&std::path::Path>,
 ) -> Result<image::RgbaImage, Value> {
     let marks: Vec<&Drawn> = marks.iter().map(|m| &**m).collect();
-    crate::macos::picture(cx, &marks, size, planted)
+    crate::macos::picture(cx, &marks, size, planted, store)
 }
 
 fn status_look(look: &Value) -> Result<(crate::Look, Value), Value> {
@@ -146,8 +148,10 @@ pub fn gpui_lacks<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Option<Stri
                 fill: Fill::Ramp(_),
                 ..
             } => true,
-            // #535: GPUI draws no turned picture.
-            Mark::Image { adjust, turn, .. } => !adjust.is_identity() || *turn != 0.0,
+            // #535: GPUI draws no turned picture; #269: nor a grid image, rebuilt on the GPU.
+            Mark::Image {
+                adjust, turn, grid, ..
+            } => !adjust.is_identity() || *turn != 0.0 || grid.is_some(),
             _ => false,
         };
         if lacks {

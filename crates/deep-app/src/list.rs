@@ -354,7 +354,11 @@ pub fn opens_on(asks: &[Ask], sessions: &[Session]) -> Option<Address> {
 }
 
 /// A reading, the key it was read at, and when what it wrote from the clock next reads differently (#1482).
-type ReadAt = ((u64, u64, bool), std::rc::Rc<(Vec<Ask>, Vec<Session>)>, Option<u64>);
+type ReadAt = (
+    (u64, u64, bool),
+    std::rc::Rc<(Vec<Ask>, Vec<Session>)>,
+    Option<u64>,
+);
 
 thread_local! {
     /// The last reading of the record, by its `log_pos`, the second it was read at and whether the record before the
@@ -389,6 +393,12 @@ pub fn read_now(now: u64) -> std::rc::Rc<(Vec<Ask>, Vec<Session>)> {
         })
     })
     .unwrap_or_default()
+}
+
+/// Forgets the last reading: a record installed since is read afresh, though it stands at the `log_pos` and second the
+/// last reading was keyed by (#3100).
+pub(crate) fn forget_reading() {
+    READ.with(|cell| cell.borrow_mut().take());
 }
 
 /// How many of the list's rows are unread: what #2028's planted counts add to the asks.

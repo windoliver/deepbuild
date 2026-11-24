@@ -294,10 +294,11 @@ pub(super) fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Valu
                 | "surface"
                 | "window_linear"
                 | "velocity"
+                | "shadow"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, pre_curve, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface, window_linear, velocity and checks",
+            "targets are final, linear, ids, pre_tone, pre_curve, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface, window_linear, velocity, shadow and checks",
         ));
     }
     // A render-back draws as an export does, through the view your hand turned (#173).
@@ -886,6 +887,46 @@ pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, 
     )
     .map_err(|e| refused("not_written", e.to_string()))?;
     Ok(name)
+}
+
+/// #506: where each anchored overlay draws in a frame, `{id, at}`; #468: and where its leader
+/// ends, or null while it hides; #298: and a clamping overlay's `edge` and `edge_angle`.
+pub(super) fn overlay_rows(overlays: &[deep_canvas_scene3d::scene::Overlay]) -> Value {
+    let row = |o: &deep_canvas_scene3d::scene::Overlay| {
+        let mut row = json!({"id": o.id, "at": o.origin});
+        if let Some(l) = &o.leader {
+            let to = l.points.as_ref().and_then(|p| p.last());
+            row["leader"] = to.map_or(Value::Null, |to| json!({"to": to}));
+        }
+        if let Some(e) = &o.edge {
+            row["edge"] = json!(u8::from(e.clamped));
+            row["edge_angle"] = json!(e.angle);
+        }
+        row
+    };
+    Value::Array(overlays.iter().map(row).collect())
+}
+
+/// #298: `doc` with the view values its drivers read at t bound on it (Overlay: clamped to the
+/// edge), from its camera and its anchors at t. `last` holds the ones the frame drawn before
+/// read, which the planted `edge_from_previous_frame` binds instead.
+pub(super) fn edged(
+    doc: Value,
+    t: i64,
+    planted: Option<Planted>,
+    last: &mut Option<Vec<(String, deep_canvas_scene3d::scene::Edge)>>,
+) -> Result<Value, Value> {
+    use deep_canvas_scene3d::scene::{bound, view_values};
+    let now = view_values(&doc, t, crate::axes::plant_name(planted))
+        .map_err(|r| refused(r.code, r.path))?;
+    if now.is_empty() {
+        return Ok(doc);
+    }
+    let read = match last.replace(now.clone()) {
+        Some(before) if planted == Some(Planted::EdgeFromPreviousFrame) => before,
+        _ => now,
+    };
+    bound(&doc, t, &read).map_err(|r| refused(r.code, r.path))
 }
 
 /// Each label's glyphs, with their places in the core's glyph atlas, and the pages they sample,

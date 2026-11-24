@@ -1,0 +1,55 @@
+#2034's acceptance tests at the base commit 5fcfb690ba6592ad567c303ecf67054dbcbdfc3c (main), run once on this Mac
+(macOS, Metal) with that commit's deep-gpu (cargo build --locked --bin deep-gpu, dev profile, CARGO_INCREMENTAL=0,
+CARGO_PROFILE_DEV_DEBUG=0, under scripts/throttle.mjs build and scripts/lease). Type-check:
+`npx tsc --noEmit -p tests/acceptance/2034` passes.
+
+Each test fails at its own assertion for missing behaviour: no `size`, `slots` or `pixel_hash` on a `shadows.maps`
+row, at most today's caps of shadowed lights, and no planted name (`--planted <name>` answers {"ok":false,
+"code":"bad_input"} and exits 2). AC6 passes by construction: it holds the base's own picture.
+
+== Noop lane (run directly: no GPU, no build beyond cargo's no-op check) ==
+
+ac1-tile-table.test.ts
+  × AC1 #2034.07726d12 at each of the hall's 8 poses the tile table (light, size, slots) equals the CPU evaluation of the rule
+    AssertionError: AC1 #2034.07726d12: the hall's tile tables against the rule:
+      pose 1 (far): point_1 has no tile, where the rule gives it 256 px at slots [0, 1, 2, 3, 4, 5]
+      pose 1 (far): spot_04's map reports no tile (size null, slots none), where the rule gives it 256 px at slots [14]
+      … 144 failures in all, every pose (the base shadows at most 2 spots, as maps with no size or slots)
+  × AC1 #2034.07726d12 a planted assignment in arrival order (--planted tile_arrival_order) differs at one pose at least and fails, naming the pose and the first light
+    AssertionError: deep-gpu run --backend noop --planted tile_arrival_order exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ac2-every-light.test.ts (the noop test)
+  × AC2 #2034.f29824eb with 32 shadowed point lights every light holds six tiles of 256 px or less and none is reported as dropped
+    AssertionError: AC2 #2034.f29824eb: the 32 lamps' tiles:
+      frame 0: lamp_01 has no tiles
+      frame 0: lamp_02 has no tiles
+      … (the base shadows no point light under a policy that names no counts)
+
+ac6-unchanged.test.ts (the noop test)
+  ✓ AC6 #2034.7732697b the hall with shadowed.local: fixed shadows 2 spots and reports the other 16 lights once each by ID, as today
+    (the base ignores `local` and keeps spot_01 and spot_09 at the inside pose, reporting the other 16 in frame 0)
+
+== Metal: type-checked, not run at the base ==
+
+ac2-every-light.test.ts (the hall's two tests), ac3-threshold-hash.test.ts, ac4-edge-width.test.ts,
+ac5-cache-clean.test.ts, ac7-budget.test.ts, and ac6-unchanged.test.ts's merge-base comparison were not run at the
+base. Their surface plainly doesn't exist there (AC1's run shows map rows with no size, slots or pixel_hash, and no
+planted name), so each would stop at the same reads: AC2's hall at lights with no map row, lit through the wall; AC3,
+AC4 and AC5 at `tableProblems` (no tile size); AC7 at "lights hold tiles, not 18"; every plant at bad_input. The
+machine's shared test queue held them for over an hour (its build queue had held the base build for ten), and the
+coordinator allowed a type-check plus one representative run. AC6's comparison would set the base against itself and
+needs a second cold build of the same commit in an export.
+
+== Fixture checks against the base's deep-gpu (scratch probes, not tests; they read today's fixed maps) ==
+
+- The hall at `above` under `shadowed: {spots: 8, points: 2}` (512 px maps), 19 frames as AC2 draws them, at each
+  light's check pixel: the 4 lights shadowed in full read 0 code values from their light-off frame (point_1, point_2,
+  spot_04, spot_05) and 2 read 2 (spot_12, spot_13); the 8 left unshadowed read 29 to 42 apart (spot_01 30, spot_08
+  34, spot_09 38, spot_10 39, spot_11 39, spot_14 35, spot_15 42, spot_16 40), so a light shining through the wall
+  shows; the 4 kept at a faded share read 8 to 31 (today's margin fade, which a tile table doesn't have).
+- The walk at A (frame 2) and B (frame 3) with its 3 spots on fixed maps (`shadowed: {spots: 3}`) of 512 and of 256 px:
+  edge_lamp's 10%–90% edge width 1.0516 and 1.0510 m at 512 px, 1.0477 and 1.0479 m at 256 px (0.4% apart), 20.0
+  coarse texels; the profile runs 0.000 to 1.000 from x = 1.5 to 3.7 m; the open floor reads 0.028 or more.
+- The hall under `shadowed: {local: fixed}` on the noop lane: at `inside` it maps spot_01 and spot_09 and reports 16
+  shadows dropped; at `above` today's rule keeps neither spot (the spot left out shares their score bucket and scores
+  as high), which is why AC6 reads the inside pose.

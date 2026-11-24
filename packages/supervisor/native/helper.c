@@ -1,10 +1,12 @@
 // The supervisor's native helper on macOS (#236), built beside the package's JavaScript by its build script.
 //
 //   helper scan <marker>...     every process whose Seatbelt profile allows the mach-lookup of a run's marker and
-//                               denies the window server's, one line each: "<marker> <pid> <ppid> <pgid> <bytes>",
-//                               <bytes> its physical footprint, the memory macOS charges it (#1409). A profile
+//                               denies the window server's, one line each: "<marker> <pid> <ppid> <pgid> <bytes> <cpu>",
+//                               <bytes> its physical footprint, the memory macOS charges it (#1409), and <cpu> the
+//                               nanoseconds of CPU it has used, user and system (#3220). A profile
 //                               is inherited through fork, exec and setsid and can't be dropped, so this finds every
-//                               process a run's sandbox holds, whatever its group, parent or environment.
+//                               process a run's sandbox holds, whatever its group, parent or environment. A marker
+//                               "pgid:<n>" names a process group instead, sandboxed or not: a leased command's (#3220).
 //   helper limit <bytes> <program> [<arg>...]
 //                               execs <program> with RLIMIT_FSIZE at <bytes> (#1409): `ulimit -f` in bytes, where a
 //                               shell's counts blocks of 1024 bytes in macOS's bash 3.2 and of 512 in dash and zsh.
@@ -31,6 +33,7 @@
 #include <fcntl.h>
 #include <libproc.h>
 #include <limits.h>
+#include <mach/mach_time.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <spawn.h>
@@ -68,14 +71,24 @@ static int scan(int count, char **markers) {
     pid_t pid = pids[i];
     if (pid <= 1) continue;
     // An unsandboxed process allows every lookup; every run's profile denies the window server's.
-    if (sandbox_check(pid, "mach-lookup", FILTER_GLOBAL_NAME | NO_REPORT, WINDOW_SERVER) == 0) continue;
+    int boxed = -1;
     for (int m = 0; m < count; m++) {
-      if (sandbox_check(pid, "mach-lookup", FILTER_GLOBAL_NAME | NO_REPORT, markers[m]) != 0) continue;
       struct proc_bsdinfo info;
-      if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof info) != (int)sizeof info) continue;
+      if (strncmp(markers[m], "pgid:", 5) == 0) {
+        if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof info) != (int)sizeof info || info.pbi_pgid != (uint32_t)atoi(markers[m] + 5)) continue;
+      } else {
+        if (boxed < 0) boxed = sandbox_check(pid, "mach-lookup", FILTER_GLOBAL_NAME | NO_REPORT, WINDOW_SERVER) != 0;
+        if (!boxed || sandbox_check(pid, "mach-lookup", FILTER_GLOBAL_NAME | NO_REPORT, markers[m]) != 0) continue;
+        if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof info) != (int)sizeof info) continue;
+      }
       struct rusage_info_v0 usage;
-      unsigned long long bytes = proc_pid_rusage(pid, RUSAGE_INFO_V0, (rusage_info_t *)&usage) == 0 ? usage.ri_phys_footprint : 0;
-      printf("%s %d %u %u %llu\n", markers[m], pid, info.pbi_ppid, info.pbi_pgid, bytes);
+      int read = proc_pid_rusage(pid, RUSAGE_INFO_V0, (rusage_info_t *)&usage) == 0;
+      unsigned long long bytes = read ? usage.ri_phys_footprint : 0;
+      // Its CPU times are in Mach ticks, which the timebase turns into nanoseconds.
+      static mach_timebase_info_data_t base;
+      if (!base.denom) mach_timebase_info(&base);
+      unsigned long long cpu = read ? (usage.ri_user_time + usage.ri_system_time) * base.numer / base.denom : 0;
+      printf("%s %d %u %u %llu %llu\n", markers[m], pid, info.pbi_ppid, info.pbi_pgid, bytes, cpu);
     }
   }
   free(pids);

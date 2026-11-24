@@ -355,7 +355,7 @@ fn solids(scene: &Scene) -> impl Iterator<Item = &Solid> {
 /// A solid's mesh as the renderer draws it, in its own space: positions, uv0 and indices. A
 /// builder's mesh is its own; a primitive's is the renderer's unit mesh (1 m across, outward
 /// winding, the same vertex order), in f64.
-fn drawn_mesh(s: &Solid) -> (Vec<V3>, Vec<[f64; 2]>, Vec<u32>) {
+pub(crate) fn drawn_mesh(s: &Solid) -> (Vec<V3>, Vec<[f64; 2]>, Vec<u32>) {
     if let Some(m) = &s.mesh {
         return (m.positions.clone(), m.uv0.clone(), m.indices.clone());
     }

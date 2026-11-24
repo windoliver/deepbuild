@@ -157,6 +157,8 @@ export interface CanvasWorld {
   file: Obj;
   /** The documents shown so far, each on the app's one canvas panel unless the world file places it. */
   docs: string[];
+  /** A document's revisions in the record, oldest first, each `{rev, writer, patch, hash}` (#1721). */
+  recorded?: (doc: string) => Promise<Obj[]>;
 }
 
 /** One call to the canvas core: who it writes as, and #393's call fields. */
@@ -170,6 +172,11 @@ export class Canvas {
   private waiting: ((line: Obj) => void)[] = [];
   private chain: Promise<unknown> = Promise.resolve();
   private world = '';
+  /**
+   * Each document's revisions as the record held them when this core first heard of it (#1721): a core started again, as
+   * after a hub restart, opens the document from them. What the core plays itself it already holds.
+   */
+  private readonly opened = new Map<string, Obj[]>();
 
   constructor(private readonly evidence: string) {}
 
@@ -211,7 +218,9 @@ export class Canvas {
   /** Plays one call against the world as it stands, after every call before it: its reply, and the revision it presented. */
   call(world: CanvasWorld, call: CanvasCall): Promise<{ reply: Obj; presented?: Obj }> {
     const run = this.chain.then(async () => {
-      const shaped = shape(world, this.evidence);
+      if (!this.child) this.opened.clear();
+      for (const doc of world.docs) if (!this.opened.has(doc)) this.opened.set(doc, (await world.recorded?.(doc)) ?? []);
+      const shaped = shape(world, this.evidence, this.opened);
       // A record kept across calls is compared by its revision: its text grows with history (#1868).
       const text = JSON.stringify(world.recordRev === undefined ? shaped : { ...shaped, record: world.recordRev });
       if (text !== this.world) {
@@ -237,11 +246,16 @@ const PANEL = 'main';
 const PANELS = { [PANEL]: { rect: [0, 0, 800, 600] } };
 
 /** The world as `deep-show canvas` reads it: #393's scenario fields, sessions keyed by session ID. */
-function shape(world: CanvasWorld, evidence: string): Obj {
+function shape(world: CanvasWorld, evidence: string, opened: ReadonlyMap<string, Obj[]>): Obj {
   const sessions: Obj = {};
   for (const s of world.sessions) sessions[s.id] = { thread: s.thread, name: s.name, process: { pid: 0, start: 0 } };
   const out: Obj = { evidence, sessions, record: world.record, panels: PANELS, docs: Object.fromEntries(world.docs.map((doc) => [doc, { panel: PANEL }])) };
   for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault', 'packs', 'job_tools', 'installed']) if (world.file[key] !== undefined) out[key] = world.file[key];
+  // A document stored whole opens from that, as a release stored it; every other one from the record.
+  for (const [doc, recorded] of opened) {
+    const placed = (out.docs as Obj)[doc];
+    if (recorded.length && isObj(placed) && placed.document === undefined) out.docs = { ...(out.docs as Obj), [doc]: { ...placed, recorded } };
+  }
   return out;
 }
 

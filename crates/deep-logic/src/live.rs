@@ -137,7 +137,7 @@ fn checked(line: &Value, planted: Planted) -> Result<Piece, Value> {
 /// The piece's world and the check's reply.
 fn build(line: &Value, planted: Planted) -> Result<(World, Value), Value> {
     let piece = Rc::new(checked(line, planted)?);
-    let entries = track(&piece, line, 0)
+    let entries = track(&piece, line, 0, &planted)
         .ok_or_else(|| json!({"ok": false, "code": "bad_input", "what": "track"}))?;
     let items: Map<String, Value> = piece
         .items
@@ -212,7 +212,7 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
         }
         // A piece without logic gains no work per frame: nothing steps, nothing is timed.
         if world.lives.is_empty() {
-            let reply = json!({"want": t / len + 1, "at": t / len + 1, "stale": false, "steps": 0, "eval_ns": 0,
+            let reply = json!({"want": t / len + 1, "at": t / len + 1, "stale": false, "steps": 0, "eval_ns": 0, "saves_ns": 0,
                 "deep_hash": world.deep_hashes(), "stamped": null, "fork_at": null});
             if outbox.send(reply).is_err() {
                 return;
@@ -286,7 +286,7 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
         draws.extend(world.previews());
         let at = world.at().unwrap_or(0);
         let reply = json!({"want": want, "at": at, "stale": at != want, "steps": steps, "eval_ns": eval_ns,
-            "previews": previews, "blends": world.blends(t), "traps": crate::libraries_in(&world.piece, traps),
+            "saves_ns": std::mem::take(&mut world.saves_ns), "previews": previews, "blends": world.blends(t), "traps": crate::libraries_in(&world.piece, traps),
             "deep_hash": world.deep_hashes(), "stamped": stamped, "fork_at": fork_at,
             "draws": draws, "valid_until": if at == want { world.valid_until(t) } else { Some(t + 1) },
             "drawn": hashes(at - 1, &world.arrays())});
@@ -375,7 +375,8 @@ fn logic(line: Value, planted: Planted, inbox: Receiver<Latched>, up: Sender<Up>
             continue;
         }
         let Some(k) = world.at() else { return };
-        world.run(k + 1, &mut Record::default(), &mut |_, _| {});
+        // Nothing reads a pipelined view's steps' record (#2662).
+        world.run(k + 1, &mut Record::none(), &mut |_, _| {});
         if up
             .send(Up::Ended(k, world.deep_hashes(), world.shown()))
             .is_err()
@@ -504,7 +505,7 @@ fn front(
             &piece,
             shown.iter().map(|(l, p, a)| (*l, &p[..], &a[..])),
             t,
-            planted.linear_blends_forward,
+            &planted,
         );
         let drawn = hashes(
             due,
@@ -526,7 +527,9 @@ fn front(
         let eval_ns = cpu_ns() - start;
         let reply = json!({"want": due + 1, "at": due + 1, "stale": !ended.contains_key(&due), "steps": steps,
             "eval_ns": eval_ns, "deep_hash": deep, "stamped": stamped, "fork_at": fork_at,
-            // A pipelined item has no preview (budget::pipelined), so it previews nothing.
+            // A pipelined item has no preview (budget::pipelined), so it previews nothing; its logic
+            // thread keeps no saves folder, so the saves machinery never runs there (#189).
+            "saves_ns": 0,
             "previews": 0, "blends": world::blends(&piece, shown.iter().map(|(l, p, _)| (*l, p.is_empty())), t), "traps": [],
             "draws": draws, "valid_until": valid_until, "ended": listed, "drawn": drawn});
         // Steps before the one drawn are done with: a seek back runs them again.

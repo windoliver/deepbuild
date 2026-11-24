@@ -18,6 +18,7 @@ export const gatesCommand = async (off: boolean): Promise<number> => (await impo
 export const backupCommand = async (args: Args): Promise<number> => (await import('./backup.js')).backupCommand(args);
 export const restoreCommand = async (args: Args): Promise<number> => (await import('./backup.js')).restoreCommand(args);
 export const envCommand = async (args: Args, setUp?: SetUp): Promise<number> => (await import('./env.js')).envCommand(args, setUp);
+export const handleRead = async (root: string, params: Record<string, unknown>): Promise<Record<string, unknown> | undefined> => (await import('./client.js')).handleRead(root, params);
 export const guardCommand = async (args: Args, setUp?: SetUp): Promise<number> => (await import('./guards.js')).guardCommand(args, setUp);
 export const confirmedCommand = async (args: Args): Promise<number> => (await import('./confirmed-command.js')).confirmedCommand(args);
 export const inboxCommand = async (args: Args, setUp?: SetUp): Promise<number> => (await import('./inbox.js')).inboxCommand(args, setUp);
@@ -50,6 +51,6 @@ export const exportCommand = async (args: Args): Promise<number> => (await impor
 export const kindsCommand = async (args: Args): Promise<number> => (await import('./canvas.js')).kindsCommand(args);
 export { activePlant } from './plant.js';
 export { contractAdapter, extendPreview, type DeprecatedNotice, type RpcEntry } from './contracts.js';
-export { rootOf } from './paths.js';
+export { rootOf, rootToken } from './paths.js';
 /** The config eval script keeps its finished report through the hub, the sole evidence writer (#2495). */
 export const storeEvalReport = async (report: string): Promise<string> => (await import('./eval-report.js')).storeEvalReport(report);

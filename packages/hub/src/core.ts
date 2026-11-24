@@ -6,20 +6,21 @@ import { parseYaml } from './yaml.js';
 import { UsageTail } from '@deepbuild/readings';
 import { Numbers } from './numbers.js';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { basename, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADAPTERS } from '@deepbuild/adapters';
-import { openAsks, signInSignature, type Asks } from '@deepbuild/asks';
+import { HOLD_PLANTS, openAsks, signInSignature, type Asks, type AsksPlant } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
 import { openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust, type ReleaseEntry } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
-import type { DecisionsProvider } from './decisions-port.js';
+import type { CoreProviders } from './core-providers.js';
 import type { EnvironmentProvider, ComposeResource } from './environment-port.js';
-import { openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/gate';
+import { memFree, openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/gate';
+import { availableMb } from './admission.js';
 
-import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
+import { MEM_KEPT_MB, openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
 import { Landing } from './landing.js';
 import { openRunner, type Agent, type JobRecord, type JobSpec, type Runner } from '@deepbuild/runner';
@@ -48,10 +49,11 @@ import { Questions } from './questions.js';
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
 import { coverage, coveredBy } from './adapter-facts.js';
-import { SLASH_COMMAND, adapterOf, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
+import { SLASH_COMMAND, adapterOf, registry, toolClasses, versionOf } from './hookmap.js';
 import { continueLine, fit, type Part } from './context-fit.js';
 
 import { briefing, headOf, loadsOf } from './session-facts.js';
+import { toolLoad } from './tool-load.js';
 
 import { GateRunner, type KeptRow } from './gate-runner.js';
 import { Siblings } from './siblings.js';
@@ -59,16 +61,16 @@ import { groupUnder } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { OWNER, People, scopeOf } from './people.js';
 
-import type { KnowledgeProvider, WikiBuild } from './knowledge-port.js';
+import type { WikiBuild } from './knowledge-port.js';
 import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
 import { Box } from './box.js';
 import { NEWER_SET, OLDER_SET } from './status.js';
 import { aboutPermission, decide } from './standing.js';
 import { Channels } from './channels.js';
-import type { WorkspacesProvider, WorkspaceService } from './workspaces-port.js';
+import type { WorkspaceService } from './workspaces-port.js';
 import { Devices } from './trusted.js';
-import type { ForgeProvider, ForgeObserver, AppKey } from './forge-port.js';
+import type { ForgeObserver, AppKey } from './forge-port.js';
 
 import { ISSUE_LINK, ISSUE_UNREAD, liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
 import { OpenItems } from './open-items.js';
@@ -76,21 +78,23 @@ import { isStatusQuestion, newestClaim, statusAnswer } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackThreads } from './reach.js';
 import { signInCheck } from './sign-in.js';
 
-import { Answers } from './answers.js';
+import { Answers, readsAnswer } from './answers.js';
 import { Runs } from './runs.js';
-import type { ChecksProvider, CheckKinds, ReviewOf } from './checks-port.js';
+import type { CheckKinds, ReviewOf } from './checks-port.js';
+import { ReviewPasses } from './review-passes.js';
 import { ReviewRounds } from './review-rounds.js';
 import type { CheckSpec } from '@deepbuild/conformance';
 import type { DocSpec } from './doc-checks.js';
 const PROMPTED = new Set(['claude-code', 'claude', 'codex', 'paseo']);
 
 import { Stacks } from './stacks.js';
+import { Variants, variantSealer } from './variants.js';
 import { Starts } from './starts.js';
 import { Work } from './work.js';
 
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedStop } from './plant.js';
-import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
+import { draftedPools, entryMemory, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { LogReads } from './log-reads.js';
 import { Hosts } from './hosts.js';
@@ -98,11 +102,12 @@ import { Jobs } from './jobs.js';
 import { Libraries } from './libraries.js';
 
 import { excerpt, historyKey, type Restored } from './waits.js';
-import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
+import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { disk, testVfs, writeAtomic, type Durable } from './vfs.js';
-import { CHROME, EXTENSION_HOOK_MS, derivedId, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
+import { EXTENSION_HOOK_MS, derivedId, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
 import type { CallContext, Session, Live, Cursor, Counter, Routes } from './session-types.js';
-import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, TYPED_RULE } from "./hub-shared.js";
+import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, PROMPT_PLACE_MS, CORES, TEST_MEM_MB, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, counted, TYPED_RULE, wakeable, planOf, hubConfig, lazyServices, picturesListed } from "./hub-shared.js";
+import { leasesScreen, offScreen } from './screen-gate.js';
 
 import { HubCanvas } from './hub-canvas.js';
 import { TranscriptReader } from './transcript-reader.js';
@@ -114,21 +119,10 @@ import { SessionState } from './session-state.js';
 import { SessionFlags } from './session-flags.js';
 import { McpOperations } from './mcp-operations.js';
 import { HubControl } from './hub-control.js';
-function lazyServices<T extends Record<string, () => unknown>>(read: T): { [K in keyof T]: ReturnType<T[K]> } {
-  return Object.defineProperties({}, Object.fromEntries(Object.entries(read).map(([key, get]) => [key, { get }]))) as { [K in keyof T]: ReturnType<T[K]> };
-}
+import { loopAt, loopsOfTurn, turnFrom } from './turn-loops.js';
 export type { CallContext } from './session-types.js';
 
 type HookReply = { context?: string; block?: string; message?: string };
-/** Internal DI contract: required domain capabilities supplied by the outer runtime, never selected by Core. */
-export interface CoreProviders {
-  checks: ChecksProvider;
-  environment: EnvironmentProvider;
-  decisions: DecisionsProvider;
-  knowledge: KnowledgeProvider;
-  forge: ForgeProvider;
-  workspaces: WorkspacesProvider;
-}
 /** Internal kernel. Production constructs it through hub-runtime.createCore; package entry points stay unchanged. */
 export class Core {
   private readonly options: CoreOptions & { forge: string };
@@ -155,7 +149,7 @@ export class Core {
     const readstopping = () => this.stopping;
     const readabandoned = () => this.abandoned;
     const readoverrides = () => this.overrides;
-    this.judging = new StopJudging({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, reviewRounds: () => this.reviewRounds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable: (waits, key, ms) => this.wakeable(waits, key, ms), askingNow: () => this.askingNow() } });
+    this.judging = new StopJudging({ settings: this.options, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, reviewRounds: () => this.reviewRounds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable, askingNow: () => this.askingNow() } });
   }
   private wireSessionMemory(): void {
     this.memory = new SessionMemory({ decisions: this.providers.decisions, cwdOf: this.providers.knowledge.cwdOf, removal: this.providers.knowledge.removal, settings: this.options, services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, raw: () => this.raw, root: () => this.root, store: () => this.store, wikiBuild: () => this.wikiBuild, confirmer: () => this.confirmer, runner: () => this.runner, durable: () => this.durable }), delivery: () => this.delivery, mcp: () => this.mcp, state: () => this.state, events: { connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { config: () => this.config() } });
@@ -173,14 +167,14 @@ export class Core {
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readstopping = () => this.stopping;
-    this.mcp = new McpOperations({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ sessionStarts: () => this.sessionStarts, hosts: () => this.hosts, canvasSide: () => this.canvasSide, replicas: () => this.replicas, extensions: () => this.extensions, holds: () => this.holds, record: () => this.record, numbers: () => this.numbers, root: () => this.root, asks: () => this.asks, now: () => this.now, raw: () => this.raw, runs: () => this.runs, stacks: () => this.stacks, checkouts: () => this.checkouts }), control: () => this.control, state: () => this.state, judging: () => this.judging, delivery: () => this.delivery, events: { connection: (writer, extra) => this.connection(writer, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get blocked() { return readblocked(); }, get stopping() { return readstopping(); } }, schedule: { get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting), askingNow: () => this.askingNow(), wakeable: (waits, key, ms) => this.wakeable(waits, key, ms) } });
+    this.mcp = new McpOperations({ settings: this.options, doneSpec: this.doneSpec, services: lazyServices({ sessionStarts: () => this.sessionStarts, hosts: () => this.hosts, canvasSide: () => this.canvasSide, replicas: () => this.replicas, extensions: () => this.extensions, holds: () => this.holds, record: () => this.record, numbers: () => this.numbers, root: () => this.root, asks: () => this.asks, now: () => this.now, raw: () => this.raw, runs: () => this.runs, stacks: () => this.stacks, checkouts: () => this.checkouts }), control: () => this.control, state: () => this.state, judging: () => this.judging, delivery: () => this.delivery, events: { connection: (writer, extra) => this.connection(writer, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get blocked() { return readblocked(); }, get stopping() { return readstopping(); } }, schedule: { get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting), askingNow: () => this.askingNow(), wakeable } });
   }
   private wireHubControl(): void {
     const readready = () => this.ready;
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readjobs = () => this.jobs;
-    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, work: () => this.work, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks, intakeOf: () => this.providers.workspaces.intake }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
+    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, work: () => this.work, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks, intakeOf: () => this.providers.workspaces.intake }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
   }
 
   private transcriptReader!: TranscriptReader;
@@ -193,7 +187,7 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
-  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight.keys()]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
+  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight.keys()]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught), plant: () => this.options.plant });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
@@ -206,9 +200,11 @@ export class Core {
   /** Only real questions reach you (#84): what a stop ends on, and the question cards a turn raises, sorted. */
   private questions!: Questions;
   /** One session's transcript copied into the record now; unset until the archive opens. */
-  private archiveSession?: (session: string) => Promise<void>;
+  private archiveSession?: (session: string, transcript?: string) => Promise<void>;
   /** The sessions whose transcripts their agents moved to an archived folder; unset until the archive opens. */
   private archivedSessions?: () => Promise<Set<string>>;
+  /** The archive pass under way, if one is: a stop waits for it before the record closes (#2573). */
+  private archiving: () => Promise<void> | undefined = () => undefined;
   /** Ask-tasks in the kernel (#303): a task for each prompt you typed that asks for a change, and its definition locked by hash. */
   private tasks!: AskTasks;
   private sizing!: SizeScope;
@@ -275,8 +271,10 @@ export class Core {
   private spaces!: WorkspaceService;
   /** The supervisor's runs (runs.ts). */
   private runs!: Runs;
+  private variants!: Variants;
   private checkKinds!: () => Promise<CheckKinds>;
   private reviewRounds!: ReviewRounds;
+  private reviewPasses!: ReviewPasses;
   /** Each worktree's stack and every stack run a check started (#331, #332). */
   private stacks!: Stacks;
   /** Each outside resource a session created, and its teardown task (#342). */
@@ -298,10 +296,25 @@ export class Core {
   /** Each session's deep_drive replicas (#124). */
   private replicas!: Replicas;
   /**
-   * Appends handed to the record and not yet settled, by event ID: a read waits for them, so it sees every hook
-   * acknowledged before it.
+   * Appends handed to the record and not yet settled, by event ID and kind: a read waits for them, so it sees every
+   * hook acknowledged before it. A reply's read waits only for the kinds it reads (#2539).
    */
-  private readonly inflight = new Map<Promise<unknown>, string>();
+  private readonly inflight = new Map<Promise<unknown>, { id: string; kind: string }>();
+  /**
+   * Each prompt's origin as its hook's event carries it, by event ID, until its reply reads it: the reply never reads it
+   * back from the log, behind the event's own commit and the evidence sync a resume's commit waits for (#2539).
+   */
+  private readonly origins = new Map<string, string>();
+  /** The readings of an unsaved rule line on their way to the record, by session and text: each is said once, and lands before a stop closes the record. */
+  private readonly unsaved = new Map<string, Promise<unknown>>();
+  /** Other appends a reply made behind itself, each logged if it fails, and landed before a stop closes the record. */
+  private readonly after = new Set<Promise<unknown>>();
+  private behind(append: Promise<unknown>, what: string): void {
+    const landed = append.catch((error: unknown) => { process.stderr.write(`deep hub: ${what} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => this.after.delete(landed));
+    this.after.add(landed);
+  }
+  /** What you rejected in a prompt, saved behind its reply, one prompt after another (#111, #2539). */
+  private rejecting: Promise<void> = Promise.resolve();
   private readonly timers: NodeJS.Timeout[] = [];
   /** The background jobs whose beat stops while they have nothing to do, and an event wakes (#2648). */
   private readonly beats = new Beats((name, job) => this.run(name, job), (name) => this.jobs.set(name, null));
@@ -400,7 +413,7 @@ export class Core {
       raw: this.raw, asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
       pin: (cwd, question) => this.mcp.pinOf(cwd, question), heard: (ask) => this.delivery.heardBy(ask),
-      archived: async (session) => { await this.archiveSession?.(session); },
+      archived: async (session, transcript) => { await this.archiveSession?.(session, transcript); },
       reading: (session, agent, reading) => this.appendReading(session, agent, reading),
     });
     this.questions = new Questions({
@@ -444,7 +457,7 @@ export class Core {
       reading: (session, agent, text) => this.appendReading(session, agent, text),
       // The window reading of the account the session's agent runs on, in the hub's own home (#322).
       atReserve: (agent) => this.runner.atReserve(agent === 'claude' ? 'claude-code' : agent as Parameters<typeof this.runner.atReserve>[0], homedir()),
-      pin: (cwd, question) => this.mcp.pinOf(cwd, question), keep: (bytes, source) => this.control.keep(bytes, source), run: (r) => this.judging.runClaim(r),
+      pin: (cwd, question) => this.mcp.pinOf(cwd, question), keep: (bytes, source, sealed) => this.control.keep(bytes, source, sealed), keeps: (task, requirements) => this.variants.keeps(task, requirements), run: (r) => this.judging.runClaim(r),
       invalid: (claim, commit, reason) => this.judging.invalid(claim, commit, reason),
       // A definition just locked: its paid checks priced (#325), and a plan marked large sized before any code (#324).
       locked: async (d) => {
@@ -476,7 +489,7 @@ export class Core {
     const options = this.options;
     this.gate = new GateRunner({
       raw: this.raw, now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
-      start: (r) => this.judging.runApproved(r), ended: (run) => this.judging.runEnded(run), judged: (claim) => this.judging.judged(claim), stackStart: (folder, worktree) => this.stacks.expectedStart(folder, worktree), stacked: (folder) => this.stacks.wanted(folder),
+      start: (r) => this.judging.runApproved(r), spent: (task, files) => this.variants.spent(task, files), ended: (run) => this.judging.runEnded(run), judged: (claim) => this.judging.judged(claim), stackStart: (folder, worktree) => this.stacks.expectedStart(folder, worktree), stacked: (folder) => this.stacks.wanted(folder),
       ...(options.plant === 'env-starts-at-every-claim' ? {
         startsAtClaim: async (folder: string, session: string, worktree: string) => {
           const run = this.providers.environment.newRun();
@@ -503,7 +516,8 @@ export class Core {
       over: (session) => { const s = this.sessionStarts.runOf(session); return s !== undefined && !this.sessionStarts.live(s.run); },
     });
     this.delivery.answers = new Answers({
-      raw: this.raw, settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, id]) => (id === except ? [] : [append]))),
+      raw: this.raw, settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, { id, kind }]) => (id !== except && readsAnswer(kind) ? [append] : []))),
+      thread: (session) => this.state.sessions.get(session)?.thread,
       excluded: (id) => this.delivery.handed.has(id) || this.delivery.prompts.has(`ask:${id}`),
       delivered: options.plant === 'words-only-at-turn-start' ? undefined : (session) => { const live = this.state.live.get(session); if (live) live.words ??= 'answer'; },
       append: (data, v) => this.appendCore('delivery.outcome', data, { subject: data.delivery, ...(v === 2 ? { v } : {}) }),
@@ -559,13 +573,16 @@ export class Core {
 
   private wireRunServices(): void {
     const options = this.options;
+    this.variants = new Variants({ root: this.root.dir, now: this.now, raw: this.raw, append: (session, agent, input) => this.append(this.connection('core', { session, agent }), input as EventInput), spent: async (task) => { for (const claim of this.gate.claimsOn(task)) await this.judging.judged(claim); } });
     this.runs = new Runs({
-      command: this.providers.checks.command,
+      command: this.providers.checks.command, variants: () => this.variants,
       hosts: () => this.hosts,
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
+      // A lease holder as a waiting run's line names it (#3220): a session with its worktree's folder.
+      who: (holder) => { const id = holder.startsWith('session:') ? holder.slice('session:'.length) : undefined; const cwd = id ? [...this.state.sessions.values()].find((x) => letters(x.id) === id)?.cwd : undefined; return cwd ? `${holder} (${basename(cwd)})` : holder; },
       raw: this.raw, sync: () => this.record.sync(), appendAsCore: (input) => this.append(this.connection('core'), input as EventInput),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), stored: (put, what) => this.control.stored(put, what),
-      invalid: (claim, commit, reason, outcome) => this.judging.invalid(claim, commit, reason, outcome), recorded: (run, record) => this.gate.recorded(run, record), keyed: (key, run, record) => this.gate.keyed(key, run, record),
+      invalid: (claim, commit, reason, outcome) => this.judging.invalid(claim, commit, reason, outcome), recorded: (run, record) => this.gate.recorded(run, record), keyed: (key, run, record, used) => this.gate.keyed(key, run, record, used),
       stopping: () => this.stopping, stacks: this.stacks, store: () => this.store, host: () => this.host, supervisor: () => this.supervisor, leases: () => this.leases, extensions: () => this.extensions,
       kind: async (run, checkout, deadline, stop) => {
         const of: ReviewOf = this.judging.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
@@ -577,11 +594,14 @@ export class Core {
         // On a pull request it reads from the commit the last round read, and its own run on the snapshot is the next round (#1862).
         if (spec.kind === 'review') {
           const head = this.gate.snapshotOf(run.claim) ?? run.commit;
-          const since = of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
+          // A review pass (#2748) reads the claim's whole diff with its own prompt: no round before it, and no rubric.
+          const passes = 'pass' in spec;
+          const since = !passes && of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
           // The rules page's text-only rules in scope of the diff go in the run's request from the hub (#1512).
-          const rules = await this.memory.reviewRules(join(this.root.dir, 'objects'), this.judging.claimFolder(run.claim), spec as unknown as { base: string }, since?.commit, head, (cwd) => this.judging.projectTrusted(cwd));
-          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since, rules } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+          const rules = passes ? [] : await this.memory.reviewRules(join(this.root.dir, 'objects'), this.judging.claimFolder(run.claim), spec as unknown as { base: string }, since?.commit, head, (cwd) => this.judging.projectTrusted(cwd));
+          const { round, pass, ...result } = await (await this.checkKinds()).run({ ...spec, head, since, rules } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, { ...of, kept: (key, model) => this.reviewPasses.kept(key, model) });
           if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
+          if (pass && run.commit === head) await this.reviewPasses.ran(run.claim, head, pass);
           return result;
         }
         return (await this.checkKinds()).run(spec, { checkout, deadline, now: this.now }, of, { run: run.run, worktree: this.judging.claimFolder(run.claim) ?? checkout, stop });
@@ -589,6 +609,7 @@ export class Core {
     });
     // Check implementations load for a claim or a kinds listing, never for the first session or tool hook.
     this.reviewRounds = new ReviewRounds({ outcomes: this.providers.checks.reviewOutcomes, raw: this.raw, appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
+    this.reviewPasses = new ReviewPasses({ plant: options.plant, raw: this.raw, appendCore: (kind, data, extra) => this.appendCore(kind, data, extra) });
     this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => (spec.kind === 'work' ? Promise.reject(Error('a work job runs only under an approved job that repeats (#1527), never for a check')) : this.runner.submit(spec)), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions, evidence: this.root.evidence });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
@@ -596,6 +617,7 @@ export class Core {
       root: this.root.dir, forge: this.options.forge,
       token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       held: () => this.options.held,
+      ...(this.options.plant === 'folds-seen-unseen' || this.options.plant === 'one-median-per-run' ? { plant: this.options.plant } : {}),
       keep: (bytes, source) => this.control.keep(bytes, source),
       evidence: (sha) => this.store.read(sha).catch(() => null),
     });
@@ -621,11 +643,12 @@ export class Core {
   }
   private async openRecordAndAsks(): Promise<void> {
 
-    this.store = await openEvidenceStore({ root: this.root.evidence, now: this.now });
+    this.store = await openEvidenceStore({ root: this.root.evidence, now: this.now, sealer: variantSealer(this.root.dir) });
     const storage = this.durable.backend();
     // Each event its own commit: the durable write points a run makes depend only on the events it appends,
     // never on how many arrived together, so a cut at any one can be replayed.
-    this.record = receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) }));
+    // Each read counted against the call it runs for, where one counts its queries (#1576).
+    this.record = counted(receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) })));
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
@@ -639,7 +662,7 @@ export class Core {
         if (this.state.touched !== 'all') { if (connection.session) this.state.touched.add(connection.session); else this.state.touched = 'all'; }
         this.state.stateSoon();
       }
-      if (kind.startsWith('ask.') || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
+      if (kind.startsWith('ask.') || kind === 'card.taken_over' || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
       if (kind === 'verdict.made') this.github?.verdicts();
       // A deep_wait or deep_run waiting on what this event settles reads it again now, and answers before the
       // appender's next commit holds this thread with its sync (#823).
@@ -659,6 +682,7 @@ export class Core {
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
     await this.runs.open();
+    await this.variants.open(this.runs.leftVariants());
     // The continues the hub carried before this start are those recorded before it; opening the core below settles
     // what landed while the hub was down (a task's check passed, a window reset, a fresh transient stop), and each
     // continue that records is routed right after, never skipped as already carried (#85).
@@ -681,7 +705,10 @@ export class Core {
       // Each open sign-in task's probe, on the recorded login PATH (#1349).
       signIn: signInCheck(() => this.agents.loginPath(), (agent) => this.runner?.account(agent as Agent) ?? null, this.now),
       // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
-      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true, ...(this.options.plant === 'asks-without-tool-before' ? { plant: this.options.plant } : {}),
+      // The asks core plays its own planted programs: #2646's, and #1101's of the hold.
+      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true,
+      // The pictures a taste call's evidence lists, from the manifest in the evidence store (#3234).
+      pictures: (evidence) => picturesListed(this.root.evidence, evidence), ...(this.options.plant === 'asks-without-tool-before' || (HOLD_PLANTS as readonly string[]).includes(this.options.plant ?? '') ? { plant: this.options.plant as AsksPlant } : {}),
     });
     await this.delivery.continues();
     this.askingSoon();
@@ -704,6 +731,9 @@ export class Core {
     const due = async (): Promise<boolean> => {
       const pos = await landed();
       if (pos > ticked) { ticked = pos; return true; }
+      // A held yes starts its step once its hold is over (#1101).
+      const held = asks.heldUntil();
+      if (held !== null && held <= this.now()) return true;
       if (this.now() - looked >= 60_000 && (await this.record.raw(`SELECT 1 FROM asks WHERE status = 'open' AND batch_id IS NULL LIMIT 1`)).length) { looked = this.now(); return true; }
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0;
     };
@@ -735,6 +765,7 @@ export class Core {
     // cpu.slot, and the supervisor takes every run's keys through it.
     const leases = this.leases = await openLeases({
       record: this.record, now: this.now, cores: CORES, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}), ...(this.options.plant === 'fills-every-slot' ? { plant: this.options.plant } : {}),
+      ...(TEST_MEM_MB !== undefined ? { memory: (TEST_MEM_MB + MEM_KEPT_MB) * 2 ** 20 } : {}),
     });
     for (const kind of this.providers.environment.leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
     // deep_drive's replicas (#124): a replica's process ends with the hub that started it, whose pipe was its stdin,
@@ -761,6 +792,9 @@ export class Core {
       },
       worktreeOf: (s) => [...this.state.sessions.values()].find((x) => letters(x.id) === s || x.id === s)?.cwd,
       agentOf: (s) => { const x = this.state.sessions.get(s); return x ? { pid: x.pid, start: x.start } : undefined; },
+      // The supervisor opens after the queue: a command it can't follow yet records no use, never 0 (#3220).
+      supervisor: { follow: (run, pgid) => this.supervisor?.follow(run, pgid), unfollow: async (run) => this.supervisor?.unfollow(run) },
+      entryMemory, memory: { free: () => memFree(leases), available: availableMb },
     });
     await this.heavy.recover(this.raw);
     await this.heavy.tick();
@@ -813,7 +847,8 @@ export class Core {
       ...(this.options.plant === 'kept-in-service-cgroup' ? { plant: 'kept-in-service-cgroup' as const } : {}),
       ...(this.options.plant === 'env-holds-lease-for-helper' ? { plant: 'holds-lease-while-taken' as const } : {}),
       ...(this.options.plant === 'standin-value-in-env' || this.options.plant === 'standin-every-host' || this.options.plant === 'run-ca-in-login-keychain' || this.options.plant === 'sandbox-any-loopback'
-        || this.options.plant === 'egress-refusals-unrecorded' || this.options.plant === 'egress-refusal-once-per-operation' || this.options.plant === 'egress-refusals-seen-without-run' ? { plant: this.options.plant } : {}),
+        || this.options.plant === 'egress-refusals-unrecorded' || this.options.plant === 'egress-refusal-once-per-operation' || this.options.plant === 'egress-refusals-seen-without-run'
+        || this.options.plant === 'scan-keeps-first-sample' ? { plant: this.options.plant } : {}),
       ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}),
       ...(this.options.crash ? { crash: this.options.crash } : {}),
       // No run, run-as-you included, writes the record, the agents' config folders or the Node the hub runs on;
@@ -1005,7 +1040,8 @@ export class Core {
       return archiving;
     };
     archivePass();
-    this.archiveSession = (session) => archive.session(session);
+    this.archiving = () => archiving;
+    this.archiveSession = (session, transcript) => archive.session(session, transcript);
     this.archivedSessions = () => archive.archived();
     this.every('archived-threads', ARCHIVED_THREADS_MS, () => this.state.archivedThreads());
     // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
@@ -1078,22 +1114,7 @@ export class Core {
     try { slot = (JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as { stack?: { slot?: unknown } }).stack?.slot; } catch { /* none yet */ }
     return typeof slot === 'number' && Number.isInteger(slot) && slot > 0 ? slot : 4;
   }
-  /** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
-  private config(): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number }; acceptance: { slots: number; gateKey: string | null } } {
-    let c: Obj = {};
-    try { c = JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as Obj; } catch { /* none yet: no binary resolves, so every job is refused saying so */ }
-    const runner = isObj(c.runner) ? c.runner : {};
-    const plan = isObj(c.plan) ? c.plan : {};
-    // Standing rules are judged at this margin over this window (#23): the design's 1.5 and 30 days unless you set them.
-    const rules = isObj(c.rules) ? c.rules : {};
-    return {
-      loginPath: typeof runner.login_path === 'string' ? runner.login_path : '',
-      reservePct: typeof plan.reserve_pct === 'number' ? plan.reserve_pct : 10,
-      rules: { margin: typeof rules.margin === 'number' ? rules.margin : 1.5, windowMs: (typeof rules.window_days === 'number' ? rules.window_days : 30) * DAY },
-      // The issues that run at once, and the gate identity's key (#1325): with none, a swap goes to you.
-      acceptance: { slots: isObj(c.acceptance) && typeof c.acceptance.slots === 'number' ? c.acceptance.slots : 1, gateKey: isObj(c.gate) && typeof c.gate.key === 'string' ? c.gate.key : null },
-    };
-  }
+  private config(): ReturnType<typeof hubConfig> { return hubConfig(this.root.dir); }
 
   private writeState(state: 'running' | 'stopped'): void {
     writeAtomic(this.root.state, Buffer.from(`${state}\n`));
@@ -1115,7 +1136,7 @@ export class Core {
     if (this.lost) throw Error(this.blocked);
     const appended = this.record.append(connection, input);
     // No read waits for a backfill: nobody was acknowledged for its events.
-    if (!backfill) this.inflight.set(appended, input.id);
+    if (!backfill) this.inflight.set(appended, { id: input.id, kind: input.kind });
     try {
       await appended;
     } catch (error) {
@@ -1351,8 +1372,9 @@ export class Core {
     }
     // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
-      // Its live copy may be acknowledged and still on its way to the record.
-      await Promise.allSettled([...this.inflight.keys()]);
+      // Its live copy may be acknowledged and still on its way to the record: that append alone is waited for, never
+      // another session's commit in its evidence sync (#2539). The planted reader by ID waits for every append.
+      await Promise.allSettled([...this.inflight].flatMap(([append, { id }]) => (id === meta.id || this.options.plant === 'replay-keeps-place-by-id' ? [append] : [])));
       const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id ${this.options.plant === 'replay-keeps-place-by-id' ? '>=' : '='} ? LIMIT 1`, [meta.id]);
       if (known.length) {
         // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
@@ -1373,7 +1395,7 @@ export class Core {
     if (drafts.some((d) => d.kind === 'session.end')) {
       void this.control.leftProject(meta.session);
       // Copied now, verified or not: a desktop app deletes what follows this hook (#342), and a copy changes nothing.
-      void this.archiveSession?.(meta.session).catch((error: unknown) => process.stderr.write(`deep hub: archive of ${meta.session}: ${error instanceof Error ? error.message : String(error)}\n`));
+      void this.archiveSession?.(meta.session, meta.transcript).catch((error: unknown) => process.stderr.write(`deep hub: archive of ${meta.session}: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     if (meta.printed) void this.sessionStarts.refusals(meta.session, meta.toolUse, meta.printed).catch(() => undefined);
     if (meta.ran && meta.cwd) void this.teardowns.saw({ session: meta.session, agent: meta.agent, cwd: meta.cwd, call: meta.toolUse ?? meta.id, ...meta.ran }).catch(() => undefined);
@@ -1438,7 +1460,7 @@ export class Core {
     const call = session && verified && drafts.length ? meta.toolUse : undefined;
     if (session && call) session.pending.set(call, (session.pending.get(call) ?? 0) + 1);
     // A switch to a leased screen counts once it ran: Claude Code sends PostToolUse only for a call that succeeded (#332).
-    if (session && verified && meta.event === 'PostToolUse' && meta.call && /(^|_)switch_display$/.test(meta.call.tool) && SCREEN_TOOLS.some((prefix) => meta.call!.tool.startsWith(prefix))) await this.switched(session.id, String(meta.call.input.display ?? ''));
+    if (session && verified && meta.event === 'PostToolUse' && meta.call && /(^|_)switch_display$/.test(meta.call.tool) && SCREEN_TOOLS.some((prefix) => meta.call!.tool.startsWith(prefix))) { const display = String(meta.call.input.display ?? ''); if (leasesScreen(await this.leases.leases(), session.id, display)) this.state.onScreen.set(session.id, display); }
     if (session && verified) {
       await this.transcriptReader.readTranscript(session, this.flags.modelCalled(session));
       if (meta.event === 'SessionEnd') this.transcriptReader.endTurn(session);
@@ -1558,6 +1580,7 @@ export class Core {
       });
     }
     if (verified && meta.session) this.watchCalls(drafts, meta, settled);
+    void settled.then(() => this.variants.called(meta, drafts)).catch((error: unknown) => process.stderr.write(`deep hub: what ${meta.id} reached of a held-out variant was not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     if (meta.session) await this.products.hook(meta);
     if (meta.event === 'SessionStart') void this.products.sessionStart(meta.session, meta.cwd, meta.id).catch(() => undefined);
     return { settled };
@@ -1621,7 +1644,12 @@ export class Core {
         if (verified) live.judged = false;
       }
       if (draft.fill === 'msg') data.msg = count.msgs++;
-      if (draft.kind === 'user.ask') this.promptDraft(draft, meta, verified, data, count, live, typed, opens);
+      if (draft.kind === 'user.ask') {
+        this.promptDraft(draft, meta, verified, data, count, live, typed, opens);
+        // Its origin as appended, for its reply (#2539); a reply that never reads it leaves it, so the oldest go.
+        this.origins.set(draft.id, data.from === undefined ? 'unknown' : String(data.from));
+        for (const id of this.origins.keys()) { if (this.origins.size <= 64) break; this.origins.delete(id); }
+      }
       if (draft.fill === 'turn') {
         data.turn = ++count.turns;
         data.did_work = count.worked;
@@ -1699,8 +1727,8 @@ export class Core {
         }).catch(failed);
       }
     }
-    // A turn ends at its stop, or at the next prompt when it ended with none (an interrupt): its sends go with it.
-    if (drafts.some((d) => (d.kind === 'agent.stop' && !d.data.child) || d.kind === 'user.ask')) this.turnSends.delete(session);
+    // A turn ends at its stop, or at the next prompt (not a Codex subagent's, #39) when it ended with none: its sends go with it.
+    if (drafts.some((d) => (d.kind === 'agent.stop' && !d.data.child) || (d.kind === 'user.ask' && !childPrompt(meta)))) this.turnSends.delete(session);
     // A session's sends wait past its end for a resume; what it denied and saw run is the record's from then on.
     if (meta.event === 'SessionEnd') { this.denials.delete(session); this.overrides.delete(session); }
     if (meta.event === 'SessionStart') {
@@ -1734,21 +1762,6 @@ export class Core {
     return read;
   }
   /**
-   * The login plan of a Claude Code home (#1033), read again only after MODS_MS or once a file a sign-in rewrites
-   * changes: each read starts claude, about 175 ms of CPU, on every Claude Code session's start.
-   */
-  private planOf(home: string): Promise<unknown> {
-    const claude = claudeOnPath(process.env);
-    if (!claude) return Promise.resolve(undefined);
-    const files = [join(home, '.credentials.json'), join(home, '..', '.claude.json'), join(home, '.claude.json')];
-    const key = JSON.stringify([claude, ...files.map(statKey)]);
-    const seen = this.plansSeen.get(home);
-    if (seen && seen.key === key && this.now() - seen.at < MODS_MS) return seen.plan;
-    const plan = loginPlan(claude, { ...process.env, ...(home ? { CLAUDE_CONFIG_DIR: home } : {}) });
-    this.plansSeen.set(home, { key, at: this.now(), plan });
-    return plan;
-  }
-  /**
    * A denied call that ran anyway (#1033): guard.overridden with what denied it and the home's mods that could have
    * approved it, one line on the session's row, its claims judged again, and for a send, which may already have left,
    * one ask naming it.
@@ -1780,7 +1793,7 @@ export class Core {
   private async modsReading(meta: HookMeta): Promise<void> {
     const read = await this.sessionMods(meta);
     if (!read.home) return;
-    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env), () => this.planOf(read.home));
+    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env), () => planOf(this.plansSeen, this.now, read.home));
     const risky = held || !('mods' in read) ? [] : read.mods.filter((m) => m.overrides);
     let reading: string | undefined;
     if ('unread' in read && !held) reading = `${MODS_WATCH} (${read.home}) loads mods DeepBuild couldn't read (${read.unread}), so whether one can approve a call past the guard is not checked: its holds and blocks may be watch-only.`;
@@ -1827,6 +1840,8 @@ export class Core {
       if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd, live.agent ?? meta.agent).catch(() => []);
+        const load = toolLoad(live.agent ?? meta.agent, data.loads as { kind: string; name: string }[], meta.version);
+        if (load) data.toolLoad = load;
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
@@ -1837,7 +1852,7 @@ export class Core {
         }
       } else if (draft.kind === 'user.ask') {
         // The origin joins the prompt to its transcript entry; one it can't place is unknown and opens no ask.
-        const entry = meta.fields?.prompt_id && session ? (await this.turnFrom(session, meta.fields.prompt_id))[0] : undefined;
+        const entry = meta.fields?.prompt_id && session ? (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0] : undefined;
         // A Codex subagent's prompt carries the root's session ID with an agent_id: no message of yours, nor the root's turn (#39).
         if (childPrompt(meta)) { data.from = 'subagent'; continue; }
         let from = foreign ? 'unknown' : String(this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : [])?.from ?? data.from);
@@ -1881,8 +1896,8 @@ export class Core {
         }
       } else if (draft.kind === 'agent.stop' && !draft.data.child) {
         await this.stopRecords(draft, meta, session);
-        if (session && meta.agent === 'claude-code' && meta.fields?.prompt_id && !meta.fields.agent_id) this.loopsOfTurn(live, await this.turnFrom(session, meta.fields.prompt_id));
-        const loop = this.loopAt(live);
+        if (session && meta.agent === 'claude-code' && meta.fields?.prompt_id && !meta.fields.agent_id) loopsOfTurn(live, await turnFrom(session, meta.fields.prompt_id, this.transcriptReader), this.stepped);
+        const loop = loopAt(live, this.options.plant);
         if (loop) data.loop = loop;
         if (session && meta.agent === 'codex' && !meta.fields?.agent_id && !meta.watchOnly) await this.judging.codexStop(meta, data, live).catch(() => undefined);
         // A check the agent promises for later becomes a wake-up (#120); a subagent's stop promises nothing to you.
@@ -2058,26 +2073,13 @@ export class Core {
   }
 
   /**
-   * The transcript entries of the turn a prompt opened, from its own entry on. The core keeps the current turn's as
-   * it reads them; a session it met after its prompt's entry was written (its first hook came late) is read here
-   * from the transcript's last few MiB.
-   */
-  private async turnFrom(session: Session, promptId: string): Promise<Obj[]> {
-    if (session.prompts.has(promptId)) return session.entries[0]?.promptId === promptId ? session.entries : [session.prompts.get(promptId)!];
-    const lines = (await this.transcriptReader.tail(session.transcript, 4 << 20)).split('\n');
-    const at = lines.findIndex((l) => l.includes(promptId) && l.includes('"promptId"'));
-    if (at < 0) return [];
-    return lines.slice(at).flatMap((l) => { try { const e: unknown = JSON.parse(l); return isObj(e) && e.isSidechain !== true ? [e] : []; } catch { return []; } }).slice(0, TURN_ENTRIES);
-  }
-
-  /**
    * A stop's cause from its records: the payload's error, then the turn's transcript error records, never the
    * agent's text; its usage; and for a stop with a cause, its error signature and who can act on it.
    */
   private async stopRecords(draft: Draft, meta: HookMeta, session: Session | undefined): Promise<void> {
     const data = draft.data;
     if (session && meta.fields?.prompt_id && !meta.fields.agent_id) {
-      const read = this.mapped(meta, draft, { ...meta.fields }, await this.turnFrom(session, meta.fields.prompt_id));
+      const read = this.mapped(meta, draft, { ...meta.fields }, await turnFrom(session, meta.fields.prompt_id, this.transcriptReader));
       if (read && typeof read.cause === 'string') {
         data.cause = read.cause;
         if (read.cause === 'plan_window_spent' && typeof read.plan_resets === 'number') data.plan_resets = read.plan_resets;
@@ -2105,7 +2107,9 @@ export class Core {
     if (meta.agent === 'claude-code') {
       const tail = this.state.tails.get(meta.session) ?? new UsageTail();
       this.state.tails.set(meta.session, tail);
-      const { tokens, cost, model } = await tail.read(meta.transcript);
+      const { tokens, cost: counted, model } = await tail.read(meta.transcript);
+      // turn.usage@1's cost has no place for the count's "at least", so the event carries the amount alone.
+      const cost = counted.basis === 'estimated' ? { basis: counted.basis, usd: counted.usd, rate_card: counted.rate_card } : counted;
       if (model) usage = { turn: this.state.live.get(meta.session)?.turnAsk ?? meta.fields?.prompt_id ?? meta.id, model, covers: 'session', tokens: { input: tokens.input + tokens.cache_write, cached: tokens.cache_read, output: tokens.output, exact: true }, cost };
     } else if (meta.agent === 'codex') {
       const text = await readFile(meta.transcript, 'utf8').catch(() => '');
@@ -2117,48 +2121,6 @@ export class Core {
     await this.appendSession(meta.session, meta.agent, 'turn.usage', usage);
   }
 
-  /**
-   * The wake-ups and cron jobs the turn's transcript shows it scheduled or cancelled, read by the same loop facts as
-   * their hooks (#965): a PostToolUse deep-hook spooled under load reaches the hub after the stop, and the stop would
-   * otherwise read no loop and start checks on code the next wake-up changes. A wake-up its hook counted too is due
-   * at the same time.
-   */
-  private loopsOfTurn(live: Live, entries: readonly Obj[]): void {
-    const results = new Map<string, unknown>();
-    const parts = (e: Obj): Obj[] => (isObj(e.message) && Array.isArray(e.message.content) ? e.message.content.filter(isObj) : []);
-    for (const e of entries) for (const p of parts(e)) if (p.type === 'tool_result') results.set(String(p.tool_use_id), e.toolUseResult);
-    for (const e of entries) {
-      for (const p of parts(e)) {
-        if (p.type !== 'tool_use' || !results.has(String(p.id))) continue;
-        const payload = { tool_input: p.input, tool_response: results.get(String(p.id)), tool_use_id: p.id } as Parameters<typeof loopFact>[3];
-        const fact = loopFact('claude', String(p.name), 'PostToolUse', payload, '');
-        if (!fact) continue;
-        if ('scheduled' in fact) { if (fact.scheduled !== null) live.wakeups.push(Date.parse(String(e.timestamp)) + this.stepped + fact.scheduled); }
-        else if ('cron' in fact) { if (!live.crons.has(fact.cron)) live.crons.set(fact.cron, { due: fact.due, recurring: fact.recurring }); }
-        else if ('cancelled' in fact) live.crons.delete(fact.cancelled);
-      }
-    }
-  }
-  /**
-   * A stop's loop reading, from the session's own tool calls: looping while a wake-up or cron job it scheduled is
-   * due, or a background subagent or command it started hasn't reported; a loop with none left once neither holds.
-   */
-  private loopAt(live: Live): Obj | undefined {
-    const dues = [...live.wakeups, ...[...live.crons.values()].flatMap((c) => (c.due === null ? [] : [c.due]))];
-    const due = dues.length ? Math.min(...dues) : null;
-    // What the soonest is, for the gate runner and the line (#965).
-    live.due = due === null ? null : { at: due, what: live.wakeups.includes(due) ? 'wake-up' : 'cron' };
-    let loop: Obj | undefined;
-    if (this.options.plant === 'loop-from-origins') {
-      // The planted wrong program reads the loop from the prompt's origin alone.
-      loop = live.from === 'scheduled' || live.from === 'subagent' ? { state: 'looping', due: null } : live.wakeups.length || live.background.size ? { state: 'looping', due } : undefined;
-    } else if (live.wakeups.length || live.crons.size) loop = { state: 'looping', due };
-    else if (live.background.size) loop = { state: 'looping', due: null };
-    else if (live.looping || live.from === 'scheduled' || live.from === 'subagent') loop = { state: 'none_left' };
-    live.looping = loop?.state === 'looping';
-    live.wakeups = [];
-    return loop;
-  }
   private askingQueued = false;
   private askingSent = '';
   /** The agents whose hook entries run a program that can't run, as the last check found (#993): their gates are watch-only. */
@@ -2221,7 +2183,7 @@ export class Core {
     }
     // Computer use stays on what the session leases (#332), so your own screen and browser are never touched.
     if (call.screen && meta.call) {
-      const deny = await this.offScreen(meta.session, meta.call.tool, meta.call.input);
+      const deny = offScreen(await this.leases.leases(), meta.session, this.state.onScreen.get(meta.session), meta.call.tool, meta.call.input);
       if (deny) return { deny };
     }
     // A send the cut-off turn started with no recorded end isn't made again (#85): denied with the earlier result. The
@@ -2249,44 +2211,6 @@ export class Core {
     // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23); a dependency
     // with its registry's reading, and a package run straight from one isn't asked once it's a week old (#1509).
     return decide({ holds: this.holds, covered: (s, a) => this.delivery.covered(s, a), now: () => this.now(), reading: (s, a, t) => this.appendReading(s, a, t), registry: this.options.registry, plant: this.options.plant }, meta, call);
-  }
-  /** The session is on `display` once its switch ran, if that is a screen it leases. */
-  private async switched(session: string, display: string): Promise<void> {
-    const leased = (await this.leases.leases()).some((v) => v.lease.holder === `mcp:${session}` && v.lease.resource.kind === 'screen' && v.lease.resource.key === display);
-    if (leased) this.state.onScreen.set(session, display);
-  }
-  /**
-   * Why a computer-use or Chrome step is denied, or nothing when it acts on what its session leases (#332): a switch
-   * to a screen it leases, an app whose window it leases, and any other step on the leased screen it last switched
-   * to. Claude in Chrome, a session that leases no screen, a step naming another, and one before any switch are
-   * denied, so your own screen, your browser and their windows are never touched.
-   */
-  private async offScreen(session: string, action: string, input: Record<string, unknown>): Promise<string | undefined> {
-    const holder = `mcp:${session}`;
-    const mine = (await this.leases.leases()).filter((v) => v.lease.holder === holder && v.lease.resource.host === 'local');
-    const keys = (kind: string) => mine.filter((v) => v.lease.resource.kind === kind).map((v) => v.lease.resource.key);
-    const screens = keys('screen');
-    const windows = keys('window');
-    const leased = screens.length ? `it leases ${screens.join(', ')}` : 'it leases no screen; deep env up leases one when the environment names a screen pool';
-    const why = (what: string) => `DeepBuild blocked this: computer use acts only on a screen and windows its session leases, so your own are never touched. This step ${what}, and ${leased}${windows.length ? ` and the windows of ${windows.join(', ')}` : ''}.`;
-    // Claude in Chrome acts in your own Chrome profile, with your sign-ins, which no window lease covers.
-    if (action.startsWith(CHROME)) return why('acts in your own Chrome, which no lease covers');
-    if (/(^|_)switch_display$/.test(action)) {
-      const display = String(input.display ?? '');
-      // The screen counts as the session's once the switch has run (`switched`), never on the asking alone.
-      return screens.includes(display) ? undefined : why(`switches to ${display || 'a screen it doesn\'t name'}`);
-    }
-    const current = this.state.onScreen.get(session);
-    if (current === undefined || !screens.includes(current)) return why('acts on the screen the session is on, which it hasn\'t switched to a leased one');
-    // Your clipboard is yours whichever screen a session is on.
-    if (/clipboard/.test(action) || input.clipboardRead || input.clipboardWrite) return why('acts on your clipboard, which no lease covers');
-    if (input.systemKeyCombos) return why('asks for key combos that act on your whole machine');
-    // Any step naming apps, granting, teaching or opening them, names only apps whose windows it leases.
-    const apps = [...(input.app === undefined ? [] : [input.app]), ...(Array.isArray(input.apps) ? input.apps : [])];
-    if (!apps.length && /(^|_)(open_application|request_access|request_teach_access)$/.test(action)) return why('names no app');
-    const off = apps.find((app) => typeof app !== 'string' || !windows.includes(app));
-    if (off !== undefined) return why(`acts on the window of ${typeof off === 'string' ? off : JSON.stringify(off)}, which it doesn't lease`);
-    return undefined;
   }
   /**
    * What the hub says back to a hook it holds: a session's start gets its briefing and the answers of its thread; a
@@ -2365,8 +2289,12 @@ export class Core {
         const from = hasRule || prompt.includes('rejected:') || isStatusQuestion(prompt) ? await this.promptOrigin(meta) : undefined;
         if (from !== 'person' && hasRule) {
           const reading = `A rule line in a prompt nobody typed was not saved (origin: ${from ?? 'unknown'}).`;
-          const [seen] = await this.record.raw(`SELECT 1 FROM events WHERE session_id = ? AND kind = 'session.reading' AND json_extract(data, '$.reading') = ? LIMIT 1`, [meta.session, reading]);
-          if (!seen) await this.appendReading(meta.session, meta.agent, reading);
+          const said = `${meta.session}\0${reading}`;
+          const [seen] = this.unsaved.has(said) ? [true] : await this.record.raw(`SELECT 1 FROM events WHERE session_id = ? AND kind = 'session.reading' AND json_extract(data, '$.reading') = ? LIMIT 1`, [meta.session, reading]);
+          // Recorded after the reply, behind any evidence sync, never on its path (#2539); said once while on its way.
+          if (!seen) {
+            this.unsaved.set(said, this.appendReading(meta.session, meta.agent, reading).catch((error: unknown) => { process.stderr.write(`deep hub: ${meta.session}'s reading was not recorded: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => this.unsaved.delete(said)));
+          }
         }
         const held = await this.loopHeld(meta);
         if (held) return { block: held, message: held.split(':')[0]! };
@@ -2388,7 +2316,7 @@ export class Core {
         if (status && !waiting.length && !r.later.length && !this.delivery.promiseDueFor(meta.session)) {
           // The prompt's event read as the session working; it stays as it was, since no model runs on it.
           const live = this.state.live.get(meta.session);
-          if (live?.state && live.state !== 'working') await this.state.attention(meta.session, live.agent, live.state);
+          if (live?.state && live.state !== 'working') this.behind(this.state.attention(meta.session, live.agent, live.state), `${meta.session}'s attention`);
           return { block: status, message: status.split('\n')[0]! };
         }
         // The planted wrong program counts the waiter your settings declare as a route, shown or not, and leaves the answer for it.
@@ -2405,10 +2333,15 @@ export class Core {
         const ack = this.acknowledge(meta.session);
         const promised = await this.delivery.promiseCarried(meta.session, 'next_prompt', prompt);
         // What you reject while a session runs stops it now, not at the next wiki build (#111).
+        // Saved behind the reply, one capture at a time, so each reads the decisions the one before saved: the decision
+        // commits FULL, behind any evidence sync, and the reply never waits for it (#2539).
         if (from === 'person' && prompt.includes('rejected:')) {
           const message = { id: meta.id, role: 'user', text: prompt, outside: false } as Message;
-          await captureRejected(this.record, this.connection('cli'), this.now, [{ session: meta.session.replace(/[^0-9A-Za-z]/g, ''), project: repoOf(meta.cwd) ?? null, messages: [message], from: 0 }], true);
-          await syncRejected(this.raw, this.root.dir).catch(() => undefined);
+          const unread = [{ session: meta.session.replace(/[^0-9A-Za-z]/g, ''), project: repoOf(meta.cwd) ?? null, messages: [message], from: 0 }];
+          this.rejecting = this.rejecting.then(async () => {
+            await captureRejected(this.record, this.connection('cli'), this.now, unread, true);
+            await syncRejected(this.raw, this.root.dir).catch(() => undefined);
+          }).catch((error: unknown) => { process.stderr.write(`deep hub: ${meta.session}'s rejection was not saved: ${error instanceof Error ? error.message : String(error)}\n`); });
         }
         // A branch's name may not say which screen a session works on, so its first prompt is read too.
         const first = !this.memory.firstPrompted.has(meta.session);
@@ -2469,7 +2402,7 @@ export class Core {
     const session = this.state.sessions.get(meta.session);
     if (!live?.turnFrom || childPrompt(meta)) return undefined;
     return this.siblings.held(meta, live.turnFrom, async () => {
-      const entry = session && meta.fields?.prompt_id ? (await this.turnFrom(session, meta.fields.prompt_id))[0] : undefined;
+      const entry = session && meta.fields?.prompt_id ? (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0] : undefined;
       const origin = entry && isObj(entry.origin) ? entry.origin : undefined;
       return typeof origin?.from === 'string' ? /^local_(.+)$/.exec(origin.from)?.[1] : undefined;
     });
@@ -2520,6 +2453,9 @@ export class Core {
     const from = spliced?.get(meta.id)?.from;
     spliced?.delete(meta.id);
     if (from !== undefined) return from;
+    const appended = this.origins.get(meta.id);
+    this.origins.delete(meta.id);
+    if (appended !== undefined) return appended;
     await Promise.allSettled([...this.inflight.keys()]);
     const [row] = (await this.record.raw(`SELECT json_extract(data, '$.from') AS f FROM events WHERE id = ?`, [meta.id])) as { f: string | null }[];
     return row ? row.f ?? 'unknown' : undefined;
@@ -2537,11 +2473,12 @@ export class Core {
     const claim = unjudged ? undefined : live?.claim ?? (await newestClaim(this.raw, meta.session).then((id) => (id ? `claim:${id}` : undefined)));
     const state = claim ? await this.judging.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL`, [meta.session])) as { at: number | null }[];
-    // The list's one count (#1463, #1810): its ask rows, as deep and the app count them. #1810's planted reader counts
-    // an ask that took its default, which can still be undone, as open too.
-    await this.state.statesSettled();
+    // The list's one count (#1463, #1810): its ask rows, as deep and the app count them, each an ask the inbox holds
+    // open. Read from the inbox, not the rows: a row lands with its row.set's commit, which can wait on another
+    // commit's evidence sync, and the reply never does (#2539). #1810's planted reader counts an ask that took its
+    // default, which can still be undone, as open too.
     const defaulted = this.options.plant === 'needs-you-counts-defaulted' ? Number(((await this.record.raw(`SELECT COUNT(*) AS n FROM asks WHERE status = 'defaulted'`)) as { n: number }[])[0]?.n ?? 0) : 0;
-    const needsYou = [...this.state.rows.keys()].filter((id) => id.startsWith('ask:')).length + defaulted;
+    const needsYou = (await this.asks.inbox()).filter((a) => a.status !== 'closed').length + defaulted;
     return statusAnswer(state, { session: meta.session, agent: live?.agent ?? meta.agent, worktree: live?.cwd || meta.cwd, needsYou, now: this.now(), lastStop: stop?.at ?? null, state: claim ? undefined : live?.state });
   }
 
@@ -2557,26 +2494,6 @@ export class Core {
     this.gate.tick();
     void this.state.quietDue().catch(() => undefined);
     return { now: this.now() };
-  }
-  /**
-   * A wait on `key`, woken by whoever wakes `waits` for it, by the hub stopping or after `ms`. It counts from the
-   * call, so a wake that comes while the caller still reads what it waits on isn't missed; `cancel` ends it.
-   */
-  private wakeable(waits: Map<string, Set<() => void>>, key: string, ms: number): { woken: Promise<void>; cancel: () => void } {
-    const set = waits.get(key) ?? new Set();
-    waits.set(key, set);
-    let wake = (): void => undefined;
-    const woken = new Promise<void>((done) => {
-      wake = () => {
-        clearTimeout(timer);
-        set.delete(wake);
-        if (!set.size && waits.get(key) === set) waits.delete(key);
-        done();
-      };
-    });
-    const timer = setTimeout(wake, Math.max(0, ms));
-    set.add(wake);
-    return { woken, cancel: wake };
   }
 
   /** The hook kinds some loaded extension handles, read once the extensions have started. */
@@ -2649,15 +2566,24 @@ export class Core {
     for (const p of this.delivery.promises.values()) clearTimeout(p.timer);
     this.claudeSettings.close();
     for (const waits of [this.delivery.waiting, this.delivery.settling]) for (const set of [...waits.values()]) for (const wake of set) wake();
-    try {
-      await this.ready;
-    } catch {
-      return;
-    }
+    const started = await this.ready.then(() => true, () => false);
+    // The job pool a start made after the first pass found none, whether the start finished or failed (#2732).
+    this.pool?.close(true);
+    if (!started) return;
+    // A stop that came while the core was starting cleared the timers before the start armed its own and opened the
+    // work runs (#2573): those go now, and the archive's pass under way ends before the record closes. Up to 5 s: a
+    // pass can take minutes, and the hub gives its whole stop 20 s. One that runs longer reads a closed record, as before.
+    for (const timer of this.timers) clearInterval(timer);
+    this.work?.close();
+    let bound: NodeJS.Timeout | undefined;
+    await Promise.race([this.archiving(), new Promise<void>((done) => { bound = setTimeout(done, 5000); })]);
+    clearTimeout(bound);
     await this.replaying;
     await Promise.all(this.promptItems.pending);
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);
     await this.chain;
+    // What replies saved behind themselves, a typed rule or a rejection, lands before the record closes (#2539).
+    await Promise.all([this.rejecting, this.memory.saved(), ...this.unsaved.values(), ...this.after]);
     await this.tasks.settled();
     await this.state.flushStates();
     // The pass the stop kept from starting, so the rows a stopped hub's database holds are the list as it stood.

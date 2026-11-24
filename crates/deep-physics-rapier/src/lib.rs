@@ -44,6 +44,7 @@ pub mod fp;
 mod inputs;
 mod joints;
 mod kinematic;
+mod laws;
 mod occurrences;
 pub mod planted;
 pub mod runner;
@@ -172,6 +173,13 @@ pub enum Twin {
     /// inertia.
     CentreIgnored,
     CentreParallelAxis,
+    /// #2035's wrong drawing across a place: outputs that blend; ones that hold the position but
+    /// blend the rotation; ones that hold a vehicle's chassis but blend its wheels; and a seek
+    /// whose restored run keeps no cut.
+    PlaceBlends,
+    PlaceBlendsRotation,
+    PlaceBlendsWheels,
+    RestoreForgetsPlace,
     /// #2239's: a wrapper that drops each body's `ccd`, so none starts a sweep of another body.
     DropsBodyCcd,
     /// #2241's wrong belts: a wrapper that leaves the contact hook out; one that applies a
@@ -201,6 +209,16 @@ pub enum Twin {
     LinksAtZero,
     TreeCountsOnly,
     Small(runner::contact::Small),
+    /// #1931's wrong laws: an inverse square that falls off as 1 ÷ r; a magnetic law that holds
+    /// q (v × B) over the step; one that takes B × v; a pair law without the factor 2; and one
+    /// without the cutoff. And its wrong check, which admits a held central force at any
+    /// substeps.
+    LawFallsAsR,
+    LawHoldsQvb,
+    LawTakesBv,
+    LawWithoutTwo,
+    LawWithoutCutoff,
+    SubstepsAdmitted,
 }
 
 /// A Rapier world behind the backend interface.
@@ -270,11 +288,23 @@ pub struct Rapier {
     /// #251: its vehicle bodies, and the wheel contacts this step's places and drives wrote.
     pub(crate) vehicles: vehicle::Vehicles,
     wheel_rows: Vec<Raw>,
+    /// #2035: the character and vehicle bodies a place moved in the last step; none restored.
+    pub(crate) placed: Vec<String>,
     /// #2098: a 2D world, which rapier2d runs in this one's place.
     flat: Option<dim2::World2>,
     /// #2098: the triangles a wind pushes, by body, in the body's frame.
     aero: BTreeMap<String, Vec<deep_canvas_physics::wind::Triangle>>,
 }
+
+/// #189's test builds of the physics implementation: a document's every world built as if it
+/// declared its gravity this many times over; none in every shipped build.
+pub const GRAVITY_TIMES: Option<f64> = if cfg!(feature = "test-gravity-heavy") {
+    Some(2.0)
+} else if cfg!(feature = "test-gravity-drift") {
+    Some(1.000_001)
+} else {
+    None
+};
 
 fn v3(a: [f64; 3]) -> Vector {
     Vector::new(a[0] as f32, a[1] as f32, a[2] as f32)
@@ -540,7 +570,7 @@ impl Rapier {
                 InteractionTestMode::And,
             ))
             .sensor(u.sensor);
-        c = belt::carrying(c, m.tangent_speed, self.twin);
+        c = belt::carrying(c, m.tangent_speed, belt::turns(w, id, self.twin), self.twin);
         // #191: a sensor reports every body that overlaps it, kinematic ones included, which the
         // engine's default pair filter would skip against a static or kinematic sensor.
         if u.sensor && self.twin != Twin::DefaultPairFilter {
@@ -945,13 +975,17 @@ impl Backend for Rapier {
         p.dt = (1.0 / w.step_rate) as f32;
         // The world's substeps are the solver's iterations, not repeated steps (World and backend).
         p.num_solver_iterations = w.substeps as usize;
-        let (hz, unit, cap, sleep) = runner::contact::lengths(self.twin, w);
+        let (hz, unit, cap, sleep, reuse) = runner::contact::lengths(self.twin, w);
         p.contact_softness = SpringCoefficients::new(hz, w.solver.contact_damping as f32);
         // Rapier holds a contact with a fixed body at twice the frequency; the world keeps that.
-        let fixed = if self.twin == Twin::StaticContactSame { 1.0 } else { 2.0 };
+        let fixed = if self.twin == Twin::StaticContactSame {
+            1.0
+        } else {
+            2.0
+        };
         p.static_contact_softness =
             SpringCoefficients::new(fixed * hz, w.solver.contact_damping as f32);
-        p.length_unit = unit as f32;
+        (p.length_unit, p.normalized_contact_recycle_distance) = (unit as f32, reuse);
         p.normalized_max_linear_velocity = (w.solver.max_speed / cap) as f32;
         p.max_ccd_substeps = usize::from(w.solver.ccd && self.twin != Twin::NoSweep);
         let mut handles = BTreeMap::new();
@@ -1001,6 +1035,7 @@ impl Backend for Rapier {
                 .can_sleep(b.sleep && w.solver.sleep.on && b.kind != BodyKind::Character)
                 .enabled(b.active)
                 .locked_axes(locks)
+                .user_data(belt::fitted(w, id, self.twin))
                 .build();
             let a = rb.activation_mut();
             a.normalized_linear_threshold = (w.solver.sleep.speed / sleep) as f32;
@@ -1097,6 +1132,7 @@ impl Backend for Rapier {
             return Ok(());
         }
         self.wheel_rows.clear();
+        self.placed.clear();
         let resting = self.vehicles.resting(&self.world);
         self.apply(inputs)?;
         self.walk();
@@ -1106,10 +1142,7 @@ impl Backend for Rapier {
         self.aim(targets);
         self.push(targets);
         let vehicles = self.vehicles.ids();
-        let belts = belt::Belts {
-            twin: self.twin,
-            up: self.up,
-        };
+        let belts = belt::hook(&mut self.world, &self.bodies, self.twin, self.up);
         // #251: a world never stepped has no broad phase yet, so a wheel's ray would meet nothing
         // on the first step; it is built first, as the world stands.
         if self.step == 0 && !vehicles.is_empty() {
@@ -1291,6 +1324,7 @@ impl Backend for Rapier {
 
     fn restore(&mut self, cp: &Checkpoint) -> Result<(), Box<Refusal>> {
         tally("restore");
+        self.placed.clear();
         let pin = self.pin();
         if !self.restore_any_version && (cp.backend != pin.backend || cp.version != pin.version) {
             return Err(Box::new(refusal(
@@ -1419,111 +1453,4 @@ impl Backend for Rapier {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A static 2 × 2 m height field of 3 × 3 samples, raised only at its (column 2, row 0)
-    /// corner, through the physics document and the backend interface.
-    #[test]
-    fn a_ray_down_meets_a_heightfield_on_its_shipped_split() {
-        let mut heights = vec![0.0; 9];
-        heights[2] = 1.0;
-        let doc = json!({
-            "kind": "physics.world@1", "dimensions": 3, "step_rate": 60, "substeps": 1,
-            "gravity": [0, 0, 0], "mode": "dynamic",
-            "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
-            "backend": {"name": "rapier3d", "version": "=0.36.1"},
-            "shapes": {"land": {"kind": "heightfield", "cols": 3, "rows": 3, "heights": heights, "scale": [2, 1, 2]}},
-            "bodies": {"ground": {"kind": "static", "shapes": [{"shape": "land"}]}}
-        });
-        let w =
-            deep_canvas_physics::check::check(&doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
-                .unwrap_or_else(|e| panic!("{e:?}"));
-        let mut b = Rapier::default();
-        b.build(&w).unwrap();
-        let down = [0.0, -1.0, 0.0];
-        // The raised cell's centre lies on the diagonal through its raised corner: 0.5 m.
-        let k = b.ray([0.5, 2.0, -0.5], down, 10.0).unwrap();
-        assert!((2.0 - k - 0.5).abs() < 1e-6, "{k}");
-        assert!((2.0 - b.ray([-0.5, 2.0, 0.5], down, 10.0).unwrap()).abs() < 1e-6);
-        assert_eq!(b.ray([5.0, 2.0, 0.0], down, 10.0), None);
-    }
-
-    /// #2240: a body that leaves its mass to its shapes still reads that mass, density × volume,
-    /// with its centre of mass written, so #523's mass-ratio check reads it as before.
-    #[test]
-    fn a_written_centre_of_mass_keeps_the_mass_the_shapes_give() {
-        let body = |centre: Option<[f64; 3]>| {
-            let mut b =
-                json!({"kind": "dynamic", "shapes": [{"shape": "box", "contact_material": "m"}]});
-            if let Some(c) = centre {
-                b["centre_of_mass"] = json!(c);
-            }
-            b
-        };
-        let doc = json!({
-            "kind": "physics.world@1", "dimensions": 3, "step_rate": 60, "substeps": 1,
-            "gravity": [0, 0, 0], "mode": "dynamic",
-            "capacity": {"bodies": 2, "shapes": 2, "joints": 0, "contacts": 0, "particles": 0},
-            "backend": {"name": "rapier3d", "version": "=0.36.1"},
-            "contact_materials": {"m": {"friction": 0.5, "restitution": 0, "density": 250}},
-            "shapes": {"box": {"kind": "box", "half": [0.5, 1.0, 0.5]}},
-            "bodies": {"bare": body(None), "low": body(Some([0.0, -0.75, 0.0]))}
-        });
-        let w =
-            deep_canvas_physics::check::check(&doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
-                .unwrap_or_else(|e| panic!("{e:?}"));
-        let mut b = Rapier::default();
-        b.build(&w).unwrap();
-        // 250 kg/m³ × 1 × 2 × 1 m, as f32 holds it.
-        let bare = b.shapes_mass("bare").unwrap();
-        assert!((bare - 500.0).abs() < 1e-3, "{bare}");
-        assert_eq!(b.shapes_mass("low"), Some(bare));
-    }
-
-    /// #2240: the bounds the check holds a centre of mass to are those of the shapes as built: a
-    /// box turned by degrees about three axes, a capsule turned by a quaternion, a rounded hull
-    /// and a compound of a turned box and a turned cylinder, each at an offset.
-    #[test]
-    fn the_bounds_a_centre_of_mass_is_held_to_are_the_built_shapes() {
-        let turned = [0.1, 0.2, 0.3, 0.9];
-        let child = |shape: &str, pos: [f64; 3], rot: Value| json!({"shape": shape, "pose": {"pos": pos, "rot": rot}});
-        let body = |shape: &str, pos: [f64; 3], rot: Value| json!({"kind": "dynamic", "shapes": [{"shape": shape, "contact_material": "m", "offset": {"pos": pos, "rot": rot}}]});
-        let doc = json!({
-            "kind": "physics.world@1", "dimensions": 3, "step_rate": 60, "substeps": 1,
-            "gravity": [0, 0, 0], "mode": "dynamic",
-            "capacity": {"bodies": 4, "shapes": 8, "joints": 0, "contacts": 0, "particles": 0},
-            "backend": {"name": "rapier3d", "version": "=0.36.1"},
-            "contact_materials": {"m": {"friction": 0.5, "restitution": 0, "density": 1000}},
-            "shapes": {"box": {"kind": "box", "half": [0.5, 1.0, 0.25]},
-                       "pill": {"kind": "capsule", "half_height": 0.6, "radius": 0.2},
-                       "can": {"kind": "cylinder", "half_height": 0.7, "radius": 0.3},
-                       "hull": {"kind": "convex", "points": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], "radius": 0.05},
-                       "pair": {"kind": "compound", "children": [child("box", [1.0, 0.0, 0.0], json!([10, 20, 30])),
-                                                                 child("can", [0.0, 2.0, 0.0], json!(turned))]}},
-            "bodies": {"a": body("box", [0.1, 0.2, 0.3], json!([30, 40, 50])),
-                       "b": body("pill", [-0.3, 0.0, 0.2], json!(turned)),
-                       "c": body("hull", [0.0, 0.5, 0.0], json!([0, 0, 75])),
-                       "d": body("pair", [0.4, -0.1, 0.0], json!([0, 0, 0]))}
-        });
-        let w =
-            deep_canvas_physics::check::check(&doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
-                .unwrap_or_else(|e| panic!("{e:?}"));
-        let mut b = Rapier::default();
-        b.build(&w).unwrap();
-        for (id, h) in &b.bodies {
-            let built = b.world.bodies[*h]
-                .colliders()
-                .iter()
-                .map(|c| b.world.colliders[*c].compute_aabb())
-                .reduce(|x, y| x.merged(&y))
-                .unwrap();
-            let (lo, hi) =
-                deep_canvas_physics::doc::bounds(&w.shapes, &w.bodies[id].shapes).unwrap();
-            for (read, built) in [(lo, built.mins), (hi, built.maxs)] {
-                let off = (v3(read) - built).abs().max_element();
-                assert!(off < 1e-5, "{id}: {read:?} at check, {built:?} built");
-            }
-        }
-    }
-}
+mod tests;

@@ -44,8 +44,28 @@ interface NumbersOptions {
   evidence(sha256: string): Promise<Uint8Array | null>;
   /** Values the hub holds, scrubbed from text it stores. */
   held(): readonly string[] | undefined;
+  /** #3234's planted readings of taste calls, if a test asked for one. */
+  plant?: 'folds-seen-unseen' | 'one-median-per-run';
 }
 interface Row { id: string; kind: string; v: number; ts: number; session_id: string | null; subject: string | null; data: string; log_pos: number }
+
+/**
+ * #3234's planted wrong programs over the taste readings: every accepted call counted as seen, or a run's halves each
+ * given the whole run's median.
+ */
+function planted(readings: Reading[], plant: NumbersOptions['plant']): Reading[] {
+  if (plant === 'folds-seen-unseen') {
+    const all = readings.filter((r) => r.id === 'taste_calls_seen' || r.id === 'taste_calls_unseen').reduce((n, r) => n + Number(r.value), 0);
+    return readings.map((r) => (r.id === 'taste_calls_seen' ? { ...r, value: all } : r.id === 'taste_calls_unseen' ? { ...r, value: 0 } : r));
+  }
+  if (plant === 'one-median-per-run') {
+    return readings.map((r) => {
+      if (r.id !== 'taste_calls_in_a_row' || !r.detail) return r;
+      return { ...r, detail: r.detail.map((d) => { const whole = (Number(d.first_half_ms) + Number(d.second_half_ms)) / 2; return { ...d, first_half_ms: whole, second_half_ms: whole }; }) };
+    });
+  }
+  return readings;
+}
 
 export class Numbers {
   private state: ReadingsState = recompute([]);
@@ -118,7 +138,7 @@ export class Numbers {
   }
   async read(): Promise<{ rows: ReturnType<typeof panelRows>; decision_one: ReturnType<typeof decisionOneInputs> }> {
     await this.catchUp();
-    return { rows: panelRows(await this.checked(readingsOf(this.state)), { now: this.o.now(), fresh_for: FRESH_FOR }), decision_one: decisionOneInputs(await this.checks()) };
+    return { rows: panelRows(planted(await this.checked(readingsOf(this.state)), this.o.plant), { now: this.o.now(), fresh_for: FRESH_FOR }), decision_one: decisionOneInputs(await this.checks()) };
   }
   /** Readings for deep_search: a call reads its own session's and those of no session, never another session's. */
   async search(query: string, session: string | undefined | { everyone: true }) {

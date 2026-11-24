@@ -170,6 +170,8 @@ pub enum ForceKind {
     },
     /// #2098: a wind (`doc::wind`).
     Wind(Wind),
+    /// #1931: a closed law (`doc/laws.rs`).
+    Law(Law),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -232,6 +234,7 @@ pub mod data;
 mod dims;
 mod heightfield;
 mod inputs;
+mod laws;
 mod reads;
 mod soft;
 mod solver;
@@ -242,6 +245,7 @@ pub use character::{Character, FIELDS as CHARACTER_FIELDS};
 pub use dims::Flat;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
 pub use inputs::{addressed, number_fields, resolved, Input, On};
+pub use laws::{held, Law, LAWS};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
 pub use reads::{Formula, Reduce, Sampled};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
@@ -1361,8 +1365,9 @@ impl Reader {
                 }
             }
             "wind" => ForceKind::Wind(self.wind(fields, &kp)?),
-            "buoyancy" | "inverse_square" | "magnetic" | "lennard_jones" => {
-                let issue = if name == "buoyancy" { "#1786" } else { "#1931" };
+            "inverse_square" | "magnetic" | "lennard_jones" => self.law(name, fields, &kp),
+            "buoyancy" => {
+                let issue = "#1786";
                 self.refuse(
                     "physics.unsupported",
                     kp,

@@ -123,9 +123,7 @@ pub(crate) fn grid(
     (cols, rows): (u16, usize),
     pressing: &mut bool,
 ) -> Option<Vec<[u16; 3]>> {
-    let (_, drawn) = crate::canvas::placed()
-        .into_iter()
-        .find(|(id, _)| id == "terminal")?;
+    let drawn = crate::cells::terminal_at()?;
     match kind {
         "down" if drawn.contains(&at) => *pressing = true,
         "down" => return None,
@@ -200,6 +198,11 @@ impl Outlined {
             color,
         }
     }
+
+    /// Where its text is laid out, once it is: ⌘F marks its match there (#1815).
+    pub(crate) fn layout(&self) -> TextLayout {
+        self.styled_text.layout().clone()
+    }
 }
 
 /// The boxes a range from `start` to `end` takes, a line tall each, inside `bounds`.
@@ -232,7 +235,14 @@ fn selection_bounds(
     quads
 }
 
-fn outline(layout: &TextLayout, range: Range<usize>, color: Hsla, window: &mut Window) {
+/// Outlines `range` of the text `layout` lays out, `out` past its ends where the text's box has room.
+pub(crate) fn outline(
+    layout: &TextLayout,
+    range: Range<usize>,
+    out: Pixels,
+    color: Hsla,
+    window: &mut Window,
+) {
     let (Some(start), Some(end)) = (
         layout.position_for_index(range.start),
         layout.position_for_index(range.end),
@@ -240,8 +250,10 @@ fn outline(layout: &TextLayout, range: Range<usize>, color: Hsla, window: &mut W
         return;
     };
     for bounds in selection_bounds(start, end, layout.bounds(), layout.line_height()) {
+        let left = (bounds.left() - out).max(layout.bounds().left());
+        let right = bounds.right() + out;
         window.paint_quad(quad(
-            bounds,
+            Bounds::from_corners(point(left, bounds.top()), point(right, bounds.bottom())),
             px(0.),
             transparent_black(),
             crate::chrome::sizes().hairline,
@@ -335,7 +347,7 @@ impl Element for Outlined {
             window.refresh();
         }
         for range in projection.ranges().iter().flatten().cloned() {
-            outline(&layout, range, self.color, window);
+            outline(&layout, range, px(0.), self.color, window);
         }
         self.styled_text.paint(
             global_id,
