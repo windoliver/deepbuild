@@ -153,15 +153,16 @@ pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
 /// Each logic item of `piece` (`form`'s, checked) stepped on `track` over the transport's span,
 /// and its rows written to `occurrences.<logic ID>.occurrences`:
 /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
+/// Returns the bake's `compares` by array, which stay out of the form (#3278).
 #[cfg(feature = "logic")]
 pub fn inline_logic(
     form: &mut Value,
     piece: Option<Piece>,
     track: &[Value],
     drops_last_range: bool,
-) -> Result<(), Box<Issue>> {
+) -> Result<Compares, Box<Issue>> {
     let Some(piece) = piece else {
-        return Ok(());
+        return Ok(Compares::new());
     };
     let entries: Vec<Entry> = track
         .iter()
@@ -216,7 +217,7 @@ pub fn inline_logic(
         });
     }
     let Some(doc) = form.as_object_mut() else {
-        return Ok(());
+        return Ok(Compares::new());
     };
     // And for a host whose own track the form takes later, the entries closed; for the canvas's
     // logic module, which steps the current branch afresh, the seen values it carries in.
@@ -275,18 +276,23 @@ pub fn inline_logic(
         }
     }
     // #538: each item's comparisons after its steps, on its first array, for `frames`' timings.
-    for (id, compares) in &rec.compares {
+    // They are clock readings, so they stay out of the form, whose every member keys what reads
+    // it (#3278).
+    let mut compares = Compares::new();
+    for (id, list) in &rec.compares {
         let first = piece
             .items
             .iter()
             .find(|i| &i.id == id)
             .and_then(|i| i.writes.first())
             .map(|w| format!("{id}.{}", w.name));
-        if let Some(a) = first.and_then(|f| arrays.get_mut(&f)) {
-            a["compares"] = json!(compares
-                .iter()
-                .map(|(k, bytes, ms)| json!([k, bytes, ms]))
-                .collect::<Vec<_>>());
+        if let Some(name) = first.filter(|f| arrays.contains_key(f)) {
+            compares.insert(
+                name,
+                list.iter()
+                    .map(|(k, bytes, ms)| json!([k, bytes, ms]))
+                    .collect(),
+            );
         }
     }
     // #1918: beside the readings of the worlds the document lists.
@@ -298,8 +304,13 @@ pub fn inline_logic(
         all.extend(arrays);
     }
     gate_fog(doc);
-    Ok(())
+    Ok(compares)
 }
+
+/// #538: a bake's comparisons of each logic item's arrays after each step, `[step, bytes, ms]`,
+/// by the item's first array.
+#[cfg(feature = "logic")]
+pub type Compares = std::collections::BTreeMap<String, Vec<Value>>;
 
 /// #552: the occurrences this copy's player doesn't see (its `match.me`, 1 for a piece played
 /// alone), taken out of every gated list; the planted burst that ignores the gate still reads

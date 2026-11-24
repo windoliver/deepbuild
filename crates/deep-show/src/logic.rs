@@ -163,7 +163,18 @@ impl Hub<'_> {
             let read = self.world_reads(form, &track, p)?;
             track.extend(read);
         }
-        deep_play::logic::inline_logic(form, piece, &track, drops)
+        let compares = deep_play::logic::inline_logic(form, piece, &track, drops)?;
+        // #538, #3278: the bake's comparisons, clock readings, wait here for `frames`' timings;
+        // the array holds only the hash of its own content, which says which bake they belong to.
+        let mut kept = self.compares.borrow_mut();
+        for (name, list) in compares {
+            if let Some(a) = form.pointer_mut(&format!("/arrays/{name}")) {
+                let of = deep_canvas::schedule::sha256_hex(&deep_canvas::schedule::canonical(a));
+                a["compares"] = json!(of);
+                kept.insert(name, (of, list));
+            }
+        }
+        Ok(())
     }
 
     /// `form`'s logic items as one piece, checked by the logic module, each program read from the

@@ -839,6 +839,9 @@ pub struct Hub<'a> {
     pub carried_rows: BTreeMap<String, BTreeMap<i64, Value>>,
     /// #538's planted lookup: each copy table's key order in its document's first revision.
     pub first_orders: BTreeMap<String, Vec<String>>,
+    /// #538, #3278: each logic array's latest bake comparisons, `[step, bytes, ms]`, under the
+    /// hash its array in the form holds as `compares`; kept out of the form, whose key they'd move.
+    pub(crate) compares: std::cell::RefCell<BTreeMap<String, (String, Vec<Value>)>>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -1042,6 +1045,7 @@ impl<'a> Hub<'a> {
             first_frames: BTreeMap::new(),
             carried_rows: BTreeMap::new(),
             first_orders: BTreeMap::new(),
+            compares: Default::default(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
