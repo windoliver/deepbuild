@@ -57,6 +57,11 @@ export type Plant =
   // #1840: a person's deep_search that reads every decision, whatever scope it was saved at.
   | 'search-decisions-unfiltered'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
+  // #3220's: a scan that keeps a run's first sample as its peak, an unread tree's peak recorded as 0, a check run on a key
+  // admitted on its class's constant, on no number, on the pool alone or on one run's peak, and an agent's heavy command
+  // admitted on its last run's peak.
+  | 'scan-keeps-first-sample' | 'unread-peak-recorded-zero' | 'admits-on-class-constant' | 'admits-on-nothing' | 'admits-on-pool-only'
+  | 'admits-on-one-peak' | 'admits-heavy-on-last-peak'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
   | 'stops-at-first-bad-line' | 'remove-spool-after-normal' | 'drops-post-tool-use' | 'replay-appends-twice'
@@ -260,6 +265,9 @@ export type Plant =
   // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
   // reads it, a store of the newest result per key, and a carry that copies the source run's evidence whole.
   | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence'
+  // #3229's: a hub that leaves a held-out variant's file in its run's checkout, one whose read by handle answers with a
+  // variant's bytes, a gate that counts a spent variant's run, and one that keys the spent mark on the session's ID.
+  | 'leaves-unsealed-variant' | 'answers-variant-bytes' | 'counts-spent-variant' | 'spent-by-session-id'
   // #2652's: a runner that keeps the first 2,000 characters a run printed in place of the last, and one that gives a
   // later kept run an earlier one's list of read paths, then changes it for the earlier run.
   | 'keeps-output-head' | 'shares-read-across-runs'
@@ -349,6 +357,8 @@ const PLANTS: readonly string[] = [
   'sentence-from-agent-text', 'sentence-from-model', 'open-item-no-sentence',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
+  'scan-keeps-first-sample', 'unread-peak-recorded-zero', 'admits-on-class-constant', 'admits-on-nothing', 'admits-on-pool-only',
+  'admits-on-one-peak', 'admits-heavy-on-last-peak',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
   'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project', 'env-clone-without-record',
   'env-reuses-stale-install', 'env-keeps-database', 'env-keeps-redis', 'env-reuses-web-image', 'env-keeps-db-mount', 'env-second-install-store',
@@ -432,6 +442,7 @@ const PLANTS: readonly string[] = [
   'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
+  'leaves-unsealed-variant', 'answers-variant-bytes', 'counts-spent-variant', 'spent-by-session-id',
   'keeps-output-head', 'shares-read-across-runs',
   'append-unknown-kind', 'leak-file-per-session',
   'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket', 'trust-renames-over-link',

@@ -2906,6 +2906,7 @@ dependencies = [
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-pre-macos",
+ "ignore",
  "image",
  "libc",
  "miniz_oxide 0.9.1",

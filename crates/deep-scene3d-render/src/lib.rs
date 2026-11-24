@@ -103,6 +103,7 @@ const SHADER: &str = concat!(
     include_str!("scene3d.wgsl"),
     include_str!("scene3d_labels_sky.wgsl"),
     include_str!("tiles.wgsl"),
+    include_str!("fog.wgsl"),
     include_str!("ao_shade.wgsl"),
     include_str!("ambient.wgsl"),
     include_str!("tint.wgsl"),
@@ -471,6 +472,9 @@ struct EnvUniform {
     /// The linear fog curve's near and far, in m, and what the background draws as a scale
     /// (#1992).
     range: [f32; 4],
+    /// #3034: a frame under water, and the color deep water takes ([`water::under`]).
+    under: [f32; 4],
+    under_color: [f32; 4],
 }
 
 /// Our DFG table (#421): for 32 cosines of the view angle across and 32 roughnesses down, the
@@ -3573,6 +3577,10 @@ impl Renderer {
                 u.sun_color = v4(l.color.map(|c| c * l.intensity / omega), 0.0);
             }
         }
+        // #3034: under water, what a frame sees dims with the distance seen through the water.
+        if let Some(under) = water::under(scene, self.planted.water) {
+            [u.eye, u.under, u.under_color] = under;
+        }
         deep_gpu::alloc::outside(|| {
             device
                 .queue
@@ -4732,14 +4740,7 @@ impl Renderer {
             }
             _ => None,
         };
-        let lighting = water::Lighting {
-            toward: scene.sun.as_ref().map_or([0.0, 1.0, 0.0], |s| s.toward),
-            sun: scene
-                .sun
-                .as_ref()
-                .map_or(0.0, |s| s.illuminance / std::f64::consts::PI),
-            ambient: scene.sky.as_ref().map_or([0.3; 3], |s| s.ambient[0]),
-        };
+        let lighting = water::Lighting::of(scene);
         let reversed = self.depth_grows_nearer();
         let samples = self.families.samples;
         let Some(t) = self.targets.as_ref() else {
@@ -4755,6 +4756,7 @@ impl Renderer {
             picks: &self.picks,
             lighting,
             planted: self.planted.water,
+            above: (!self.sky).then(|| scene.ground.map(decode)),
         };
         self.waterer
             .get_or_insert_with(|| Box::new(water::Waterer::new(device, reversed, samples)))
@@ -5733,12 +5735,9 @@ impl Renderer {
                 false
             }
         };
-        self.ground = [
-            decode(scene.ground[0]),
-            decode(scene.ground[1]),
-            decode(scene.ground[2]),
-            1.0,
-        ];
+        // #3034: under water, a ray that meets nothing ends in deep water's color.
+        let [r, g, b] = water::far(scene, self.sky).unwrap_or(scene.ground.map(decode));
+        self.ground = [r, g, b, 1.0];
     }
 
     /// The subsurface share and spread while a part's subsurface spreads (#481), made at the
