@@ -659,7 +659,7 @@ function cargoList(output, workspace) {
   return list;
 }
 
-const lanesFolder = () => join(homedir(), '.deepbuild', 'lanes');
+export const lanesFolder = () => join(homedir(), '.deepbuild', 'lanes');
 
 /**
  * The Mac's reference list of a lane on a tree, among this machine's lane records: the `list` of the Mac's own record,
@@ -914,7 +914,19 @@ export function writeRecord(lane, state, tree, tests, more = {}) {
   return file;
 }
 
-export function runLanes(lanes, { cwd = root, kept: key } = {}) {
+/**
+ * What of the unit lane has no kept result to stand on for `key`'s tree: the test files, and `cargo test` when its job has
+ * none, with how many files the lane has. The preflight finishes only once there are none (#3297).
+ */
+export function unrunOf(key, cwd = root) {
+  const { openKept } = require('./proof-kept.mjs'), lane = checks.find(({ name }) => name === 'unit');
+  const kept = openKept(key, (row) => readSkips([row], knownFailures(cwd).skips, timed).covered.length > 0);
+  const files = lane.commands.map((command) => testFilesOf(cwd, command));
+  const unrun = files.flatMap((names, index) => (names.length ? names.filter((file) => !kept.done(file)) : kept.jobDone(`unit ${index}`, []) ? [] : ['cargo test']));
+  return { unrun, of: files.flat().length };
+}
+
+export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: treeOf } = {}) {
   const failures = [];
   // Loaded only for the preflight, as a copy of this script stands alone without it.
   const { openKept, wholeJob } = key ? require('./proof-kept.mjs') : {};
@@ -952,23 +964,33 @@ export function runLanes(lanes, { cwd = root, kept: key } = {}) {
       const started = performance.now();
       console.log(`RUN ${lane.name}`);
       let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
-      const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
+      // perf's copy of a commit isn't a checkout of it, so it names its tree (#3297); else the one on disk.
+      const tree = treeOf ?? exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
       // The tests the lane's whole cargo test commands list, or null once a listing failed; whether any cargo test ran.
-      let listedCargo, cargoRan = false;
+      let listedCargo, cargoRan = false, keptRead = 0;
       // The preflight's kept results of this very tree (#3296): a job already done is read, never run again.
       let kept = key && lane.name === 'unit' && key.tree === tree ? openKept(key, (row) => readSkips([row], knownFailures(cwd).skips, timed).covered.length > 0) : null, testFiles = [];
       if (kept) try { testFiles = lane.commands.map((command) => testFilesOf(cwd, command)); } catch (error) {
         console.log(`NOTE ${lane.name}: its files can't be listed, so nothing of it is kept or read: ${error.message}`);
         kept = null;
       }
-      for (const [index, listedCommand] of lane.commands.entries()) {
-        const [command, ...rest] = runOf(listedCommand), shards = rest[0] === 'scripts/affected.mjs', job = `${lane.name} ${index}`;
+      // A command's jobs, the timed files it lists each a job of its own under its own timed grant (#3297).
+      const jobs = lane.commands.flatMap((listedCommand, index) => {
+        const [command, ...rest] = runOf(listedCommand), shards = rest[0] === 'scripts/affected.mjs', names = testFiles[index] ?? [];
+        const whole = { command, rest, shards, names, job: `${lane.name} ${index}`, cls: throttleClass([command, ...rest]) };
+        const own = kept && !shards ? names.filter((file) => listed(timed, file)) : [], vitest = rest[0]?.endsWith('vitest.mjs');
+        if (!own.length) return [whole];
+        const others = names.filter((file) => !own.includes(file));
+        const apart = own.map((file) => ({ ...whole, names: [file], job: `${whole.job} ${file}`, cls: 'timed', rest: vitest ? [rest[0], 'run', '--no-file-parallelism', '--testTimeout=600000', file] : ['--test', file] }));
+        return [...others.length ? [{ ...whole, names: others, rest: vitest ? [...rest, ...own.flatMap((file) => ['--exclude', file])] : ['--test', ...others] }] : [], ...apart];
+      });
+      for (const { command, rest, shards, names, job, cls } of jobs) {
         // The alone block's own run keeps its jobs, and reads them (affected.mjs).
         const args = kept && shards ? [...rest, `--kept=${JSON.stringify(key)}`] : rest;
         let directory, descriptor, result, results, output = '';
         try {
-          const names = testFiles[index] ?? [];
           const prior = kept && !shards && kept.jobDone(job, names) ? kept.results(names, job) : null;
+          if (prior) keptRead += names.length;
           if (prior) [results, result, output] = [prior, { status: prior.failures.length ? 1 : 0 }, `KEPT ${job}: ${prior.passed.length + prior.failures.length + prior.skips.length} results read from an earlier run of this tree`];
           else {
             directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
@@ -991,11 +1013,14 @@ export function runLanes(lanes, { cwd = root, kept: key } = {}) {
             // One shared descriptor preserves the child's stdout/stderr write order.
             // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6), and under a cpu.slot
             // of the calling session's through scripts/lease (#1015).
-            result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', leaseScript, ...reported?.command ?? [command, ...args]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
+            // The fill holds no grant over the alone block's own run, whose admission and turns are its jobs' (#3297).
+            const began = performance.now(), leased = [leaseScript, ...reported?.command ?? [command, ...args]];
+            result = spawnSync(...fill && shards ? [leased[0], leased.slice(1)] : [process.execPath, [throttle, cls, '--wait', '30', '--', ...leased]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
             output = readFileSync(log, 'utf8').trim();
             results = testsOf([command, ...args], cwd, { report, output, status: result.status });
+            if (kept && shards) try { keptRead += JSON.parse(readFileSync(report, 'utf8')).kept?.read ?? 0; } catch {}
             if (kept && !shards) {
-              if (wholeJob({ label: 'vitest', status: result.status, output, results })) kept.keep(job, names, results);
+              if (wholeJob({ label: 'vitest', status: result.status, output, results })) kept.keep(job, names, results, performance.now() - began);
               // An earlier run's rows stand beside this one's, and a failure over a later pass.
               results = kept.overlay(results, names, job);
             }
@@ -1083,7 +1108,7 @@ export function runLanes(lanes, { cwd = root, kept: key } = {}) {
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
       else console.log(`PASS ${lane.name} (${elapsed} s)`);
       try {
-        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, findings.length ? { ...more, findings } : more);
+        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, { ...more, ...findings.length && { findings }, ...kept && { kept: { read: keptRead, of: testFiles.flat().length } } });
       } catch (error) {
         // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
         if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);

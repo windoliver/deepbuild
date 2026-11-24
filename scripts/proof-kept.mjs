@@ -55,6 +55,19 @@ const resultsOf = (rows) => ({
 });
 const stands = ({ state }) => state === 'FAIL' || state === 'INVALID';
 
+/** What the kept jobs of `key` took, all runs of them: their count, their machine time and the preflights that ran them. */
+export function keptTime(key) {
+  const lines = [];
+  try {
+    for (const line of readFileSync(join(folder(), `${key.tree}.jsonl`), 'utf8').split('\n')) {
+      let kept;
+      try { kept = JSON.parse(line); } catch { continue; }
+      if (kept?.key && KEY.every((part) => kept.key[part] === key[part]) && typeof kept.ms === 'number') lines.push(kept);
+    }
+  } catch {}
+  return { jobs: lines.length, ms: lines.reduce((sum, { ms }) => sum + ms, 0), runs: new Set(lines.map(({ run }) => run)).size };
+}
+
 /** Whether a job ended with its results whole, so nothing of them is missing. `results` is what its report reads as. */
 export function wholeJob({ label, status, idle, output, results }) {
   return typeof status === 'number' && status < 128 && !idle && results && !results.noGrant && !results.cut
@@ -67,7 +80,7 @@ export function wholeJob({ label, status, idle, output, results }) {
  * The kept results of `key`, and what keeps more of them. `covers({ id, note })` says whether a `skips` entry covers a
  * skip. A file's rows are its test's, its own and no other job's; a job with no files, as `cargo test`, answers for all of its rows.
  */
-export function openKept(key, covers) {
+export function openKept({ run, ...key }, covers) {
   const path = join(folder(), `${key.tree}.jsonl`);
   const files = new Map(), jobs = new Map();
   const merge = (rows, row) => { if (!rows.has(row.id) || !stands(rows.get(row.id))) rows.set(row.id, row); };
@@ -105,14 +118,14 @@ export function openKept(key, covers) {
       return { ...results, ...resultsOf([...rows.values()]) };
     },
     /** Keeps one job's results, whole, as it ends. One that can't be kept is run again, and says so. */
-    keep(job, names, results) {
+    keep(job, names, results, ms) {
       let fd;
       try {
         mkdirSync(folder(), { recursive: true, mode: 0o700 });
         fd = openSync(path, 'a+', 0o600);
         const { size } = fstatSync(fd), last = Buffer.alloc(1);
         const torn = size > 0 && readSync(fd, last, 0, 1, size - 1) === 1 && last[0] !== 10;
-        const line = { key, job, files: names, tests: rowsOf(results) };
+        const line = { key, run, job, ms: Math.round(ms), files: names, tests: rowsOf(results) };
         // One write, so a line another process appends never falls inside it, and a line cut short stays its own.
         writeSync(fd, `${torn ? '\n' : ''}${JSON.stringify(line)}\n`);
         take(line);

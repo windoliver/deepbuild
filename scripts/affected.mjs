@@ -444,8 +444,8 @@ function run(logs, label, command, args, env = {}, cwd = root) {
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
   const report = /^(?:vitest|node)/.test(label) ? join(logs, `${label}.jsonl`) : null;
   const descriptor = openSync(log, 'w');
-  const cls = label.endsWith('timed') ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
-  const leased = [join(root, 'scripts/lease'), command, ...args];
+  const cls = /timed(?:-\d+)?$/.test(label) ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
+  const leased = [join(root, 'scripts/lease'), command, ...args], began = performance.now();
   return new Promise((done) => {
     const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
     live.add(child);
@@ -481,7 +481,7 @@ function run(logs, label, command, args, env = {}, cwd = root) {
       await idle?.killed;
       live.delete(child);
       closeSync(descriptor);
-      done({ label, log, status, output: readFileSync(log, 'utf8'), idle });
+      done({ label, log, status, output: readFileSync(log, 'utf8'), idle, ms: performance.now() - began });
     });
   });
 }
@@ -680,15 +680,15 @@ async function main(args) {
   const unrunSlow = runSlow ? [] : [...slowFiles.vitest, ...slowFiles.node].sort();
   // With --slow, the slow files join the blocks lanes.mjs gives them.
   if (runSlow) for (const runner of ['vitest', 'node']) for (const file of slowFiles[runner]) blocks[listed(alone, file) || listed(exclusive, file) ? 'alone' : 'parallel'][runner].push(file);
-  // A file done in an earlier run of this tree is read, not run: the timed block only when all of it is (#3296).
+  // A file done in an earlier run of this tree is read, not run (#3296).
   const done = { vitest: [], node: [] };
   if (kept) for (const runner of ['vitest', 'node']) {
     done[runner] = blocks.alone[runner].filter((file) => kept.done(file));
     blocks.alone[runner] = blocks.alone[runner].filter((file) => !done[runner].includes(file));
   }
-  if (kept && runTimed && [...timedFiles.vitest, ...timedFiles.node].every((file) => kept.done(file))) for (const runner of ['vitest', 'node']) {
-    done[runner].push(...timedFiles[runner]);
-    timedFiles[runner] = [];
+  if (kept && runTimed) for (const runner of ['vitest', 'node']) {
+    done[runner].push(...timedFiles[runner].filter((file) => kept.done(file)));
+    timedFiles[runner] = timedFiles[runner].filter((file) => !done[runner].includes(file));
   }
   if (!held) for (const [block, runners] of Object.entries({ ...blocks, timed: timedFiles, ...!runSlow && { slow: slowFiles } })) for (const [runner, files] of Object.entries(runners)) if (files.length) console.log(`${block} ${runner}: ${files.join(' ')}${block === 'timed' && !runTimed ? ' (--timed runs them)' : block === 'slow' ? ' (--slow runs them)' : ''}`);
   if (!held) {
@@ -751,7 +751,7 @@ async function main(args) {
       let report = '';
       try { report = readFileSync(join(logs, `${job.label}.jsonl`), 'utf8'); } catch {}
       const results = reportResults(job.cwd ?? root, report, job.label);
-      if (kept && wholeJob({ ...job, results })) kept.keep(job.label, job.files, results);
+      if (kept && wholeJob({ ...job, results })) kept.keep(job.label, job.files, results, job.ms);
     };
     const built = new Map(held.prep.built);
     const ready = (cwd) => {
@@ -821,10 +821,19 @@ async function main(args) {
     if (id && process.env.DEEP_THROTTLE !== held.before) release({ class: cls, id });
     const own = { DEEP_THROTTLE: held.before };
     // A timed test measures for as long as its issue says, #1477's arms 8 s each: its limit is its own, or ten minutes, never vitest's 5 s (#2569).
-    const timedJob = (job) => { const taken = { ...job, files: timedFiles[job.label.split('-')[0]] }; ended(taken); jobs.push(taken); };
-    if (runTimed && (timedFiles.vitest.length || timedFiles.node.length)) ready(root);
-    if (runTimed && timedFiles.vitest.length) timedJob(await vitest(timedFiles.vitest, ['--no-file-parallelism', '--testTimeout=600000'], 'vitest-timed', root, own));
-    if (runTimed && timedFiles.node.length) timedJob(await node(timedFiles.node, ['--test-concurrency=1'], 'node-timed', root, own));
+    // A timed file is a job of its own under a grant it gives back, so another session's request goes first between two (#3297).
+    const timedJobs = async (runner, files) => {
+      for (const [at, group] of (kept ? files.map((file) => [file]) : files.length ? [files] : []).entries()) {
+        ready(root);
+        const job = await (runner === 'vitest' ? vitest(group, ['--no-file-parallelism', '--testTimeout=600000'], kept ? `vitest-timed-${at}` : 'vitest-timed', root, own) : node(group, ['--test-concurrency=1'], kept ? `node-timed-${at}` : 'node-timed', root, own));
+        ended({ ...job, files: group });
+        jobs.push({ ...job, files: group });
+      }
+    };
+    if (runTimed) {
+      await timedJobs('vitest', timedFiles.vitest);
+      await timedJobs('node', timedFiles.node);
+    }
 
     if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];
     const failures = [], passed = [], findings = [], skips = [], partial = new Set();
@@ -885,7 +894,7 @@ async function main(args) {
     const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || watched.folders.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
     const resultsFile = args.find((arg) => arg.startsWith('--results='))?.slice(10);
     // Each test's result as its runner reported it, which runLanes reads for the unit lane's record as a runner's report.
-    const tests = block ? { tests: { failures, passed, skips } } : {};
+    const tests = block ? { tests: { failures, passed, skips }, ...kept && { kept: { read: done.vitest.length + done.node.length } } } : {};
     if (resultsFile) writeFileSync(resultsFile, `${JSON.stringify({ state, ...fileResults(selection, { fresh, known, unsure, passed }, jobs.some(({ label, status }) => label === 'cargo' && status === 0), partial), ...tests }, null, 2)}\n`);
     console.log(`${state} affected: ${fresh.length} new, ${known.length} already failing on main, ${unsure.length} inconclusive or blocked, ${covered.length} listed skips, ${passed.length} passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; logs in ${logs}`);
     return { FAIL: 1, INCONCLUSIVE: 2, BLOCKED: 3, INVALID: 3 }[state] ?? 0;
