@@ -1,0 +1,36 @@
+#3234's redraft of criteria 3 and 4 at the base, f8c6cff822b5b960d35312d75d44769616a95516 (main), 2026-11-23.
+Every home folder below is written as ~, every temp folder as <tmp>.
+
+Type-check: `node node_modules/typescript/bin/tsc -p tests/acceptance/3234-redraft-ac3/tsconfig.json` exits 0 (after
+`npm ci --ignore-scripts`).
+
+## answer.test.ts: not run here (no replica built)
+
+The tests were not run: they need #1101's `deep-drive` build (and its `env-plants` build), which this job was told it
+need not build. What follows is read from the base's code, as the original's BASE-FAILURE.txt reads the same file.
+
+At the base the taste card draws no picture: no node `picture:<sha256>` exists anywhere in `crates/deep-app/src` or
+`crates/deep-replica/src` (searched), so the trace (`drawnIn`) finds none. `openOn` opens `ask/<ULID>` and waits its
+3 s for a picture, `scrollPictures` stops at once (nothing drawn to turn the wheel over), three pictures are never
+shown and all four are never drawn whole. `backRun` returns its premise failure before ⌘N, the words or the press,
+and each test's first judge fails there, by its own message:
+
+- AC3 #3234.c875f23b (clean): `expect(run.failures, "the card for ask:<ULID> (\"Does the footer look right
+  (clean)?\")'s Send back").toEqual([])` fails, receiving
+  `["the fixture's premise doesn't hold: three of the card for ask:<ULID> (\"Does the footer look right (clean)?\")'s
+  pictures must be shown and one never drawn whole; shown none, never drawn whole <12 hex>, <12 hex>, <12 hex>,
+  <12 hex>"]`.
+- AC3 #3234.c875f23b wrong program (refuses-send-back): the base ignores an app plant it doesn't know
+  (`deep_app::plain::planted` compares names; the replica's `Plant::parse` answers None), so the planted run reads the
+  same premise, and `expect(...).toContain("the card for ask:<ULID> (\"Does the footer look right (refuses)?\")
+  refused Send back with words")` fails with the message `the planted card (README of #3234, Plants:
+  refuses-send-back) wasn't caught naming the ask`, receiving the premise string for the `refuses` ask.
+- AC4 #3234.38958545 (clean): the same clean run, so its first judge `expect(run.failures, "…'s Send back")
+  .toEqual([])` fails on the same premise string as AC3's clean test. Were the premise met, the record would still fail:
+  at the base `ask.answered` holds no `pictures` (the original's BASE-FAILURE.txt: the asks core refuses the field).
+- AC4 #3234.38958545 wrong program (marks-all-shown): `expect(run.failures, "the card for ask:<ULID> (\"Does the
+  footer look right (marks)?\")'s Send back, planted").toEqual([])` fails, receiving the premise string for the
+  `marks` ask.
+
+None of these reaches the redraft's change (⌘N and the words in the box): at the base every test stops on the missing
+pictures, as the original's AC3 and AC4 did.

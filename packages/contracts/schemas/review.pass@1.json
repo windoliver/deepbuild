@@ -1,0 +1,258 @@
+{
+  "title": "review.pass@1",
+  "description": "A review pass that found bugs after a close ran on a claim, before its pull request says Closes (#2748): what it sent back, the findings on lines the change didn't add or alter, and its replay on each pull request it found bugs in. A later claim reads a replay as carried while the pass, that pull request's commits and the answering model are unchanged. How many bugs a replay finds again is a reading, never a pass or a fail.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "review.pass"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "claim": {
+          "type": "string",
+          "pattern": "^claim:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The claim the pass ran on."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192,
+          "description": "The commit the pass read: the claim's snapshot."
+        },
+        "pass": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The pass, by its ID on the wiki's passes page."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The model that answered, as the job's own output names it."
+        },
+        "sent": {
+          "type": "array",
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The pass's ID: its findings go back as one item under it."
+              },
+              "sites": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 4096,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "file": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192,
+                      "description": "The file, as the diff names it."
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991,
+                      "description": "The line in the commit the pass read."
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192,
+                      "description": "The text at that line."
+                    }
+                  },
+                  "required": [
+                    "file",
+                    "line",
+                    "quote"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Every site the pass cited on a line the change added or altered."
+              }
+            },
+            "required": [
+              "rule",
+              "sites"
+            ],
+            "additionalProperties": false
+          },
+          "description": "The item this run sent back; empty when it sent nothing back."
+        },
+        "follow_ups": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The file, as the diff names it."
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "description": "The line in the commit the pass read."
+              },
+              "quote": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The text at that line."
+              }
+            },
+            "required": [
+              "file",
+              "line",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Findings on lines the change didn't add or alter: pre-existing, never sent back."
+        },
+        "replays": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "type": "object",
+            "properties": {
+              "pr": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "description": "A pull request the pass found bugs in after its close."
+              },
+              "head": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$",
+                "maxLength": 8192,
+                "description": "That pull request's head commit, which the replay read."
+              },
+              "key": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "maxLength": 8192,
+                "description": "What the replay's result depends on, beside the answering model: the pass's ID and prompt, and the pull request's commits and bug sites, hashed."
+              },
+              "found": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535,
+                "description": "How many of the pull request's bugs the pass found again."
+              },
+              "of": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535,
+                "description": "How many bugs the pass found in it after its close."
+              },
+              "carried": {
+                "const": true,
+                "description": "Present when the replay was read from an earlier run with an equal key and model, and the second model wasn't asked."
+              }
+            },
+            "required": [
+              "pr",
+              "head",
+              "key",
+              "found",
+              "of"
+            ],
+            "additionalProperties": false
+          },
+          "description": "The pass's replay on each pull request it found bugs in."
+        }
+      },
+      "required": [
+        "claim",
+        "commit",
+        "pass",
+        "model",
+        "sent",
+        "follow_ups",
+        "replays"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

@@ -23,6 +23,7 @@
     "mix.balance",
     "net.budget",
     "net.desync",
+    "net.feel",
     "net.rollback",
     "render.contrast",
     "render.exposure",
@@ -101,6 +102,7 @@
     "motion/sound-lock-off-palette",
     "net/net-budget",
     "net/net-desync",
+    "net/net-feel",
     "net/net-rollback",
     "physics/character-course",
     "physics/late-joint",
@@ -121,6 +123,50 @@
     "vector/stored-paint"
   ],
   "entries": [
+    {
+      "entry": "arch.bay_frame@1",
+      "registry": "kind@1",
+      "module": "building",
+      "section": "Building module",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
+    {
+      "entry": "arch.bracket@1",
+      "registry": "kind@1",
+      "module": "building",
+      "section": "Building module",
+      "paths": {
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    },
     {
       "entry": "arch.guard_rail@1",
       "registry": "kind@1",

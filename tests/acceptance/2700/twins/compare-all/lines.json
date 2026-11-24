@@ -1,0 +1,14 @@
+{
+  "crates/deep-canvas/src/schedule/mod.rs": [
+    {
+      "find": [
+        "            if reached.iter().any(|k| l.doc.get(k) != doc.get(k)) {",
+        "                return None;"
+      ],
+      "wrong": [
+        "            if doc.as_object()?.iter().any(|(k, v)| k != \"items\" && l.doc.get(k) != Some(v)) || l.doc.as_object()?.keys().any(|k| k != \"items\" && doc.get(k).is_none()) {",
+        "                return None;"
+      ]
+    }
+  ]
+}

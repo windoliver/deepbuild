@@ -103,7 +103,7 @@ impl Replica {
         deep_app::views::keep_drawn(&reused);
         let pending = gpui_kit::frame_counts::take_notified();
         let rows = deep_app::views::take_rows_built();
-        let (drew, cost) = clock.map_or((false, None), |(drew, cost)| (drew, cost));
+        let (drew, cost) = clock.unwrap_or((false, None));
         let input = self.counts_mut().take_input();
         let last = drawn.len().saturating_sub(1);
         let had = !drawn.is_empty();

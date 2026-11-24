@@ -10,6 +10,9 @@
 // scripts/wait-ceilings.json lists today's files with their counts. A count may drop, and its ceiling drops with it in
 // the same change; it never rises above its ceiling, a ceiling never rises above the merge base's with origin/main, and
 // a file the merge base doesn't list starts at zero, so a suite drafted after this landed has none.
+// A blind suite under tests/acceptance/ is never edited once it lands (AGENTS.md, Proof; #3139). So a planted twin, a
+// file under a twins/ folder there, is out: it copies our own code at a base. A suite's own file is judged in the change
+// that adds it, from zero; once the merge base holds it, a file with no ceiling is out.
 // One `FAIL waits: …` line per finding, or one PASS line; exit 1 on a finding, 2 when git can't list the files.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -27,6 +30,8 @@ const CLOCK = /\b(?:Date|performance)\s*\.\s*now\s*\(\s*\)\s*-|\bprocess\s*\.\s*
 const CLOCKED = 'an assertion on a clock difference judges how busy the machine is, unless it only bounds a wait, marked // deadline: <why>';
 const ASSERT = /(?<![\w$])(?:\w*assert\w*(?:\s*\.\s*\w+)?\s*!?|(?<!\.\s*)(?:expect|ok))\s*\(/g;
 const DEADLINE = /\/\/\s*deadline:\s*\S/;
+const BLIND = 'tests/acceptance/';
+const TWIN = /^tests\/acceptance\/(?:[^/]+\/)*twins\//;
 // Character tests by code, not by RegExp: the stripper runs them on every character of every test file.
 const isWord = (c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c === '_' || c === '$';
 const isSpace = (c) => c === ' ' || c === '\n' || c === '\t' || c === '\r';
@@ -221,8 +226,11 @@ try {
 }
 // The base's ceilings, or null when there is no origin/main or the base predates the ratchet.
 let base = null;
+// The blind suites' files the merge base holds.
+let landed = new Set();
 try {
   const at = git('merge-base', 'HEAD', 'origin/main').trim();
+  landed = new Set(git('ls-tree', '-r', '-z', '--name-only', at, '--', BLIND).split('\0'));
   if (git('ls-tree', '--name-only', at, '--', CEILINGS).trim()) base = parse(git('show', `${at}:${CEILINGS}`), `${CEILINGS} at the merge base`);
 } catch {}
 let listing;
@@ -240,6 +248,7 @@ const seen = new Set();
 let total = 0;
 for (const path of listing.sort()) {
   if (!(SCRIPT.test(path) || path.endsWith('.rs')) || !tests.some((pattern) => pattern.test(path))) continue;
+  if (TWIN.test(path) || (ceilings[path] === undefined && landed.has(path))) continue;
   let text;
   try {
     text = readFileSync(join(root, path), 'utf8');

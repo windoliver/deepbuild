@@ -11,14 +11,67 @@ export function git(root, args, options = {}) {
   return execFileSync('git', ['-c', 'core.quotePath=false', ...args], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 30, stdio: ['ignore', 'pipe', 'pipe'], ...options });
 }
 
+// The blob paths of each commit `show` has read by its full ID, which never changes what it holds (#3163), with the
+// files read from it: the guard probes tens of thousands of paths a commit lacks, and reads some files many times, each
+// a git process of its own, where one listing answers every probe and one read each file. A replace ref added after
+// the listing would go unseen; no script here makes one.
+const trees = new Map();
+const NON_ASCII = /[^\x00-\x7f]/;
+function treeOf(root, rev, path) {
+  // git reads `rev:./path` and `rev:../path` from the working folder, so those still ask git, and a NUL in a path
+  // still throws there, as no git argument can hold one.
+  if (!/^[0-9a-f]{40}$/.test(rev) || /^\.\.?\//.test(path) || path.includes('\0')) return null;
+  const key = `${root}\0${rev}`;
+  if (!trees.has(key)) {
+    const listed = spawnSync('git', ['ls-tree', '-r', '-z', '--full-tree', rev], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 30 });
+    const names = listed.status === 0 ? new Set(listed.stdout.split('\0').filter((entry) => / blob [0-9a-f]+\t/.test(entry)).map((entry) => entry.slice(entry.indexOf('\t') + 1))) : null;
+    trees.set(key, names && { names, ascii: [...names].every((name) => !NON_ASCII.test(name)), read: new Map() });
+  }
+  return trees.get(key);
+}
+
 /** A file as `rev` holds it, or null when it doesn't. `rev` null reads the worktree. */
 export function show(root, rev, path) {
   if (rev === null) {
     const file = join(root, path);
     return existsSync(file) && statSync(file).isFile() ? readFileSync(file, 'utf8') : null;
   }
+  const tree = treeOf(root, rev, path);
+  // On macOS git composes a decomposed name before it looks, so a name beyond ASCII may find a file listed under
+  // another spelling: it asks git, unless the tree has no such name at all, since composing keeps a name beyond ASCII.
+  if (tree && (NON_ASCII.test(path) ? tree.ascii : !tree.names.has(path))) return null;
+  if (tree?.read.has(path)) return tree.read.get(path);
   const result = spawnSync('git', ['cat-file', 'blob', `${rev}:${path}`], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 30 });
-  return result.status === 0 ? result.stdout : null;
+  const text = result.status === 0 ? result.stdout : null;
+  if (tree?.names.has(path)) tree.read.set(path, text);
+  return text;
+}
+
+/**
+ * Reads the files of `rev` among `paths` that `show` would read with a process of its own, all in one git process,
+ * so `show` then answers each from what it read (#3179): the guard reads every hit of a `git grep`, which can be a
+ * thousand files. A path `show` asks git about anyway, or one a batch line can't hold, is left to `show`.
+ */
+export function readAll(root, rev, paths) {
+  const tree = treeOf(root, rev, '');
+  if (!tree) return;
+  const wanted = [...new Set(paths)].filter((path) => tree.names.has(path) && !tree.read.has(path) && !NON_ASCII.test(path) && !/^\.\.?\//.test(path) && !/[\n\r]/.test(path));
+  if (wanted.length < 2) return;
+  const result = spawnSync('git', ['cat-file', '--batch'], { cwd: root, input: wanted.map((path) => `${rev}:${path}\n`).join(''), maxBuffer: 1 << 30 });
+  if (result.status !== 0) return;
+  // Each answer is `<oid> blob <size>\n<bytes>\n`, or `<name> missing\n`, in the order asked.
+  const out = result.stdout;
+  let at = 0;
+  for (const path of wanted) {
+    const end = out.indexOf(10, at);
+    if (end < 0) return;
+    const found = /^[0-9a-f]{40,64} (\w+) (\d+)$/.exec(out.toString('latin1', at, end));
+    at = end + 1;
+    if (!found) continue;
+    const size = Number(found[2]);
+    if (found[1] === 'blob') tree.read.set(path, out.toString('utf8', at, at + size));
+    at += size + 1;
+  }
 }
 
 /** The people whose signature approves (#1326): one list in the repo, an SSH allowed-signers file, read at the merge base only. */
@@ -67,7 +120,9 @@ const PRESENT = 0x01 | 0x04;
 /**
  * Approval items by the commit they approve. An approval is an annotated tag under
  * refs/tags/deep/approved/ on a commit of the change, SSH-signed by a key that `.deepbuild/approvers`
- * lists at the merge base, with one `Approves: <item>` line per item. The list is never read from the
+ * lists at the merge base, with one `Approves: <item>` line per item. A line `Approves: <item> @<sha>` approves its item for
+ * that commit alone: a commit of the change, by its full ID, that the tagged commit is or descends
+ * from (#3166); any other ID approves nothing. The list is never read from the
  * working tree, a home folder or a variable, so every checkout reads the same one (#1326). Only keys
  * of a type that needs a touch or a biometric count, and only a signature whose authenticator says
  * one was made: so no agent running as a person can make one. A signature by a listed key without
@@ -102,8 +157,14 @@ export function readApprovals(root, change, issue) {
         continue;
       }
       const message = tag.slice(0, at).split('\n\n').slice(1).join('\n\n');
-      const items = [...message.matchAll(/^Approves: (.+?)\s*$/gm)].map(([, item]) => item).filter(keep);
-      approvals.set(target, [...(approvals.get(target) ?? []), ...items]);
+      for (const [, line] of message.matchAll(/^Approves: (.+?)\s*$/gm)) {
+        // One tag for the commits before it too (#3166): the signature on a commit commits to each commit it descends from.
+        // A line ending in any other commit-like ID approves nothing, rather than its whole text for the tagged commit;
+        // an @ word that is no ID, as in a test named "… moves to @3", stays part of the item.
+        const [, item, sha] = (presence && /^(.+?) @([0-9a-f]{40})$/.exec(line)) || (presence && /\s@[0-9a-fA-F]{7,}$/.test(line) ? [] : [null, line, target]);
+        if (!item || !keep(item) || !shas.has(sha) ||(sha !== target && spawnSync('git', ['merge-base', '--is-ancestor', sha, target], { cwd: root }).status !== 0)) continue;
+        approvals.set(sha, [...(approvals.get(sha) ?? []), item]);
+      }
     }
   };
   try {

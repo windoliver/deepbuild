@@ -1,0 +1,46 @@
+start; Now drawing from 'AC Power'; front app [Windows App] 11:54:50 load { 5.44 4.21 2.92 }  free KB 255346788
+head 80086dcc65d0221c46af3b1066c0625abf2fd2e6; origin/main 86b99ac36cfbbf5d806aaa5566bd8486f671920c; merge-base 86b99ac36cfbbf5d806aaa5566bd8486f671920c 11:54:50 load { 5.44 4.21 2.92 }  free KB 255346768
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 11:54:52 load { 5.44 4.21 2.92 }  free KB 255345460
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261 11:54:52 load { 5.44 4.21 2.92 }  free KB 255345460
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720 11:54:52 load { 5.44 4.21 2.92 }  free KB 255345460
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733 11:54:52 load { 5.44 4.21 2.92 }  free KB 255345452
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711 11:54:52 load { 5.44 4.21 2.92 }  free KB 255345460
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305 11:54:52 load { 5.44 4.21 2.92 }  free KB 255345460
+judge copy checks: sha256 49d5208a9851189ce6f9348dd334d905bafb833f201560c8db0fef4a2c5f5167 diff-lines=4 reopen-early-return=1 row22=1 11:54:52 load { 5.44 4.21 2.92 }  free KB 255345460
+part 1 start: Now drawing from 'AC Power'; front app [Windows App] 11:54:52 load { 5.44 4.21 2.92 }  free KB 255345460
+1a-deep-app-lib.txt: cargo exit=0; test result: ok. 132 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s 11:57:28 load { 21.71 12.17 6.41 }  free KB 244805804
+1b-deep-app-full.txt: cargo exit=101; failing tests 7; targets [acceptance_1141 acceptance_1141_memory acceptance_34 hub_client]; front app [Claude] 12:01:45 load { 87.67 57.48 28.66 }  free KB 229660204
+part setup start: Now drawing from 'AC Power'; front app [Claude] 12:01:45 load { 87.67 57.48 28.66 }  free KB 229658796
+setup (npm ci, workspace build, deep-hook) exit=0 12:06:16 load { 127.67 102.82 57.31 }  free KB 225815936
+part 2 start: Now drawing from 'AC Power'; front app [Windows App] 12:06:16 load { 127.67 102.82 57.31 }  free KB 225816300
+part 2 app run: vitest exit=0; PNGs 3; front app [Claude] 12:14:20 load { 122.69 144.17 103.57 }  free KB 205176168
+part 3 start: Now drawing from 'AC Power'; front app [Claude] 12:14:20 load { 122.69 144.17 103.57 }  free KB 205176020
+part 3 signin: vitest exit=0; PNGs 1; front app [Windows App] 12:14:37 load { 103.09 138.79 102.36 }  free KB 204415396
+part 4 1459/identifier start: Now drawing from 'AC Power'; front app [Windows App] 12:14:37 load { 103.09 138.79 102.36 }  free KB 204399404
+tests/acceptance/1459/identifier.test.ts exit=1; front app [Windows App] 12:26:40 load { 82.86 86.86 90.93 }  free KB 182516216
+part 4 1459/panel start: Now drawing from 'AC Power'; front app [Windows App] 12:26:40 load { 82.86 86.86 90.93 }  free KB 182516356
+tests/acceptance/1459/panel.test.ts exit=1; front app [Windows App] 12:26:55 load { 89.85 88.01 91.26 }  free KB 181558444
+part 4 1172/rows start: Now drawing from 'AC Power'; front app [Windows App] 12:26:55 load { 89.85 88.01 91.26 }  free KB 181553584
+tests/acceptance/1172/rows.test.ts exit=1; front app [Windows App] 12:27:24 load { 72.90 84.21 89.79 }  free KB 179577300
+part 4 1172/panel start: Now drawing from 'AC Power'; front app [Windows App] 12:27:24 load { 72.90 84.21 89.79 }  free KB 179577356
+tests/acceptance/1172/panel.test.ts exit=1; front app [Windows App] 12:27:39 load { 66.90 82.31 89.01 }  free KB 179649564
+part 4 1460/cli start: Now drawing from 'AC Power'; front app [Windows App] 12:27:39 load { 66.90 82.31 89.01 }  free KB 179600268
+tests/acceptance/1460/cli.test.ts exit=0; front app [Windows App] 12:32:31 load { 62.45 73.56 83.03 }  free KB 171825276
+part 5 318 start: Now drawing from 'AC Power'; front app [Windows App] 12:32:31 load { 62.45 73.56 83.03 }  free KB 171825264
+318 exit=0; Tests 27 passed (27); front app [Windows App] 12:32:38 load { 60.65 73.00 82.78 }  free KB 171527788
+part 5 319-budgets start: Now drawing from 'AC Power'; front app [Windows App] 12:32:38 load { 60.65 73.00 82.78 }  free KB 171522940
+319-budgets exit=0; Tests 2 skipped (2); front app [Windows App] 12:32:39 load { 60.65 73.00 82.78 }  free KB 171456808
+part 5 83-redraft-319 start: Now drawing from 'AC Power'; front app [Windows App] 12:32:40 load { 60.65 73.00 82.78 }  free KB 171454628
+83-redraft-319 exit=0; Tests 5 passed (5); front app [Windows App] 12:32:55 load { 57.97 71.80 82.18 }  free KB 170779884
+part 5 1349 start: Now drawing from 'AC Power'; front app [Windows App] 12:32:55 load { 57.97 71.80 82.18 }  free KB 170775912
+1349 exit=1; Tests 12 failed | 3 passed (15); front app [Windows App] 12:37:54 load { 115.02 90.62 86.90 }  free KB 161068816
+part 5 1345 start: Now drawing from 'AC Power'; front app [Windows App] 12:37:55 load { 115.02 90.62 86.90 }  free KB 161068256
+1345 exit=1; Tests 1 failed | 7 passed (8); front app [loginwindow] 13:21:44 load { 16.38 33.12 51.39 }  free KB 33955460
+part 6 start: Now drawing from 'AC Power'; front app [loginwindow] 13:21:44 load { 16.38 33.12 51.39 }  free KB 33949324
+readIssue pre-check lines 170, 'blocked' count 0 13:21:45 load { 16.38 33.12 51.39 }  free KB 33914656
+status before the judge [?? scripts/spine-22-mac-80086dcc.mjs] 13:21:46 load { 16.38 33.12 51.39 }  free KB 33904000
+gh probe before: {comments:2,number:22,state:OPEN} exit=0 {comments:1,number:319,state:CLOSED} exit=0 13:21:48 load { 16.38 33.12 51.39 }  free KB 33641492
+judge exit=1 wall 535 s 13:30:43 load { 33.40 50.20 52.01 }  free KB 26029332
+gh probe after: {comments:2,number:22,state:OPEN} exit=0 {comments:1,number:319,state:CLOSED} exit=0 13:30:44 load { 31.37 49.50 51.76 }  free KB 26030612
+git status --porcelain lines after: 1 13:30:45 load { 31.37 49.50 51.76 }  free KB 26029116
+ALL DONE 13:30:45 load { 31.37 49.50 51.76 }  free KB 26029108

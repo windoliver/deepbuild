@@ -12,14 +12,18 @@ const throttle = beside('./throttle.mjs') ? await import('./throttle.mjs') : nul
 const bays = beside('./bays.mjs') ? await import('./bays.mjs') : null;
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+// Every cargo perf starts runs bare by perf's own setting, never by the machine's: an empty RUSTC_WRAPPER is no wrapper
+// over any cargo config, so a machine's compile cache never reaches a budget (docs/parallel-proof.md, section 4).
+process.env.RUSTC_WRAPPER = '';
 const manifest = 'benchmarks/budgets.json';
 const run = (command, args, cwd = root, options = {}) => execFileSync(command, args, { cwd, encoding: 'utf8', timeout: 120_000, maxBuffer: 128 * 1024 * 1024, ...options });
 const files = (args) => run('git', [...args, '-z']).split('\0').filter(Boolean);
 // BLOCKED: perf could not compare. FAIL: a measurement broke its budget.
 const blocked = (message, fix) => Object.assign(Error(message), { fix });
 const regressed = 'Restore the regressed budget; budgets are frozen once they reach main.';
-// Where every result's instructions retired came from; GNU time has no counter.
-const counter = process.platform === 'darwin' ? '/usr/bin/time -l and scripts/count-children.c: instructions retired, children included' : null;
+// Where every result's instructions retired came from: on Linux the kernel's counter, which GNU time doesn't read.
+const counter = process.platform === 'darwin' ? '/usr/bin/time -l and scripts/count-children.c: instructions retired, children included'
+  : process.platform === 'linux' ? "scripts/count-linux.c: the kernel's instructions retired in user space, children included" : null;
 // Each side's copy lives at the same path every run, in this user's cache directory under a name
 // for this machine and clone, not for a checkout, with its Cargo builds kept beside it, so a preflight
 // from any worktree, a new one too, doesn't rebuild what the last run on the machine built (#594, #1119).
@@ -189,7 +193,7 @@ function keptCopy(side, fill) {
 // CARGO_TARGET_DIR names the kept build directory, so Cargo resolves it to the same path every run.
 // DEEP_OPEN_ISSUES names the open issues this checkout's checks fetched (scripts/open-issues.mjs), cached beside the
 // kept copy, so each side's lanes read the same issues and none fetches again (#605, #910).
-function checkRun(directory, timeoutMs) {
+function checkRun(directory, timeoutMs, key) {
   const previous = { CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR, DEEP_OPEN_ISSUES: process.env.DEEP_OPEN_ISSUES };
   process.env.CARGO_TARGET_DIR = join(dirname(directory), 'target');
   const issues = join(root, 'target', 'open-issues.json');
@@ -198,7 +202,7 @@ function checkRun(directory, timeoutMs) {
     copyFileSync(issues, process.env.DEEP_OPEN_ISSUES);
   }
   try {
-    return checkCopy(directory, timeoutMs);
+    return key ? keptCheckCopy(directory, timeoutMs, key) : checkCopy(directory, timeoutMs);
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
@@ -213,6 +217,16 @@ function checkCopy(directory, timeoutMs) {
   rmSync(join(directory, 'target'), { recursive: true, force: true });
   prepareCopy(directory);
   return measureOnce([process.execPath, 'scripts/checks.mjs'], directory, false, timeoutMs, false);
+}
+/** A copy of the commit whose tree is `key`'s: its checks read the kept results of that tree (#3297), and its unit record says how many. */
+function keptCheckCopy(directory, timeoutMs, key) {
+  rmSync(join(directory, '.git'), { recursive: true, force: true });
+  rmSync(join(directory, 'target'), { recursive: true, force: true });
+  prepareCopy(directory);
+  const run = measureOnce([process.execPath, 'scripts/checks.mjs', `--kept=${JSON.stringify(key)}`, `--tree=${key.tree}`], directory, false, timeoutMs, false);
+  let kept;
+  try { kept = JSON.parse(readFileSync(join(homedir(), '.deepbuild', 'lanes', `${key.tree}-unit.json`), 'utf8')).kept; } catch {}
+  return { ...run, kept };
 }
 // perf is a measured run: it holds timed from before its timer to its end, so its
 // kept copies and lock are taken only under timed. Under a preflight's grant it passes through on it.
@@ -248,7 +262,8 @@ try {
     // Git reads stay in this checkout; checkRun gives the kept copy a repository of its own. The archive streams into
     // tar: the repository's outgrew any buffer a process can hold (141 MiB on the Mac).
     archive = keptCopy('base', (from) => run('bash', ['-c', 'set -o pipefail; git archive "$1" | tar -xf - -C "$2"', 'bash', baseCommit, from], root, { stdio: 'pipe' }));
-    baseline = checkRun(archive, allowance);
+    // The merge base's own tree: its copy holds a target link and lacks tracked files an ignore pattern covers, so it isn't one.
+    baseline = checkRun(archive, allowance, observed.key && { ...observed.key, tree: run('git', ['rev-parse', `${baseCommit}^{tree}`]).trim() });
     if (baseline.status !== 0) throw blocked(`merge-base checks exited ${baseline.status}: ${baseline.output}`, 'Repair the checks on main; a failing merge base cannot be compared.');
   }
   const reading = ({ elapsedMs, cpuMs, peakBytes, instructions }) => ({ elapsedMs, cpuMs, peakBytes, instructions: instructions ?? null });
@@ -292,17 +307,23 @@ try {
     // the merge base, and the full run only with the caps.
     if (rest) console.log(`perf: the change's own tests (${ownTests.join(', ')}) account for ${observed.cpuMs - rest.cpuMs} ms of CPU; the checks without them are compared with the merge base`);
     const workload = { id: 'preflight', ...current.preflight };
-    // Each run is judged on its own, so a regression against the base never hides the full run's cap.
-    const [outcome, full = outcome] = [[rest ?? observed, workloadBase], ...rest ? [[observed, null]] : []].map(([run, against]) => {
-      try {
-        return compare(workload, run, against, ['cpuMs', 'peakBytes']);
-      } catch (error) {
-        verdicts.push(['FAIL', error.message, regressed]);
-        return null;
-      }
-    });
-    if (outcome && full) console.log(JSON.stringify({ task: 'preflight', baseCommit, ...outcome, samples: 1, current: reading(rest ?? observed), base: workloadBase && reading(workloadBase),
-      ...rest && { full: reading(observed), ownTests, ownTestsCpuMs: observed.cpuMs - rest.cpuMs }, counter, fingerprint: fingerprint() }));
+    // A side that read kept results did less than one that ran its tests: they are compared only when they read the same.
+    const side = rest ?? observed, readOf = (kept) => kept?.read ?? 0;
+    if (workloadBase && readOf(side.kept) !== readOf(workloadBase.kept)) {
+      verdicts.push(['INCONCLUSIVE', `preflight: this side read ${readOf(side.kept)} test files from kept results and the merge base ${readOf(workloadBase.kept)}, so their workloads are unlike`, 'Fill both trees, the merge base\'s too, then run the preflight again; or run it with nothing kept for either.']);
+    } else {
+      // Each run is judged on its own, so a regression against the base never hides the full run's cap.
+      const [outcome, full = outcome] = [[rest ?? observed, workloadBase], ...rest ? [[observed, null]] : []].map(([run, against]) => {
+        try {
+          return compare(workload, run, against, ['cpuMs', 'peakBytes']);
+        } catch (error) {
+          verdicts.push(['FAIL', error.message, regressed]);
+          return null;
+        }
+      });
+      if (outcome && full) console.log(JSON.stringify({ task: 'preflight', baseCommit, ...outcome, samples: 1, current: reading(rest ?? observed), base: workloadBase && reading(workloadBase),
+        ...rest && { full: reading(observed), ownTests, ownTestsCpuMs: observed.cpuMs - rest.cpuMs }, counter, fingerprint: fingerprint() }));
+    }
   } catch (error) {
     verdicts.push(['FAIL', error.message, regressed]);
   }
@@ -327,7 +348,8 @@ try {
     }
     if (instructions?.status === 'FAIL') verdicts.push(['FAIL', `${budget.id}: instructions: ${instructions.reason}`, `Bring ${budget.id}'s instructions retired back within 2% of the merge base's.`]);
     if (instructions?.status === 'INCONCLUSIVE') verdicts.push(['INCONCLUSIVE', `${budget.id}: instructions: ${instructions.reason}`, instructions.uncounted.length ? "Have the budget's command wait for each child it starts, from a process that isn't a platform binary such as /bin/sh."
-      : instructions.change === null ? "Run perf on macOS, whose /usr/bin/time -l reports instructions retired."
+      : instructions.change === null ? (process.platform === 'linux' ? "Make sure cc can build scripts/count-linux.c, the runner that counts instructions retired through the kernel's counter."
+        : 'Run perf on macOS, whose /usr/bin/time -l reports instructions retired.')
       : `Rerun perf with both sides at the same QoS on a machine whose load is under its cores, or have ${budget.id} count work that doesn't wait by spinning or on a lock: that waiting counts, so it moves with the schedule.`]);
     for (const [metric, { status, reason }] of Object.entries(limits)) {
       if (status === 'PASS') continue;

@@ -1,0 +1,30 @@
+== twin mac-pass-wins: exit 1
+✖ #1122.7d260bb4 a bug in a darwin-only branch, which the Spark passes: the merged unit verdict is FAIL, as the full Mac run
+✖ #1122.7d260bb4 a failing test only the Spark ran: the merged unit verdict is FAIL, as the full Mac run
+✖ #1122.7d260bb4 a failing test the Spark skipped: the merged unit verdict is FAIL, as the full Mac run
+✖ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree
+✖ #1122.e6c3b0b8 a Spark FAIL and a Mac pass of the same test id merge to FAIL, naming the lane
+✖ #1122.e6c3b0b8 the Spark's FAIL of a test the Mac's --only run passes merges to FAIL: "FAIL unit (merged)", exit 1
+== twin spark-lint-counts: exit 1
+✖ #1122.821346f6 a Spark lint FAIL beside the Mac's lint PASS leaves the lint verdict the Mac's, and the Mac's lint FAIL stands beside a Spark PASS
+== twin skipped-row-stands: exit 1
+✖ #1122.7d260bb4 a row the Mac ran stands over the Spark's skipped row of the same id, so the merge reads PASS as a full Mac run does
+✖ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree
+== twin spark-alone-passes: exit 1
+✖ #1122.7d260bb4 a lane with a Spark record and none from a Mac is never PASS: it reads INCONCLUSIVE
+✖ #1122.821346f6 a Spark lint PASS with no Mac lint record is no lint verdict: the tree reads INCONCLUSIVE, naming lint
+== twin only-skipped-rows: exit 1
+✖ #1122.7d260bb4 a bug in a darwin-only branch, which the Spark passes: the merged unit verdict is FAIL, as the full Mac run
+✖ #1122.7d260bb4 a failing test only the Spark ran: the merged unit verdict is FAIL, as the full Mac run
+✖ #1122.7d260bb4 a failing test the Spark skipped: the merged unit verdict is FAIL, as the full Mac run
+✖ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree
+✖ #1122.e6c3b0b8 the Spark's FAIL of a test the Mac's --only run passes merges to FAIL: "FAIL unit (merged)", exit 1
+== twin only-platform-sources: exit 1
+✖ #1122.7d260bb4 a bug in a darwin-only branch, which the Spark passes: the merged unit verdict is FAIL, as the full Mac run
+✖ #1122.7d260bb4 a failing test only the Spark ran: the merged unit verdict is FAIL, as the full Mac run
+✖ #1122.7d260bb4 a failing test the Spark skipped: the merged unit verdict is FAIL, as the full Mac run
+✖ #1122.7d260bb4 a tree that passes: the merged unit verdict is PASS, as the full Mac run of the same tree
+== twin tracked-only: exit 1
+✖ #1122.51c750de an untracked tagged test in the session worktree runs on the far machine, and its row comes back in the fetched record
+== twin trusted-base: exit 1
+✖ #1122.394befd9 a shipped merge base that differs from the one the far end computes refuses the run, naming both

@@ -1,0 +1,40 @@
+Base commit 61aa8eb06 (origin/main), checkout ~/private/clones/deepbuild-1632, built (npm run build --workspaces, cargo build -p deep-hook). Load average about 78 at the run.
+Command: rtk proxy npx vitest run tests/acceptance/1632-sweep-2047 --silent=false   (Node 24.22.0)
+
+
+ RUN  v5.0.5 ~/private/clones/deepbuild-1632
+
+stdout | tests/acceptance/1632-sweep-2047/ac2.test.ts > #1632.b9d4ec97 after /clear, your answer to the ask A raised before it is never returned through deep mcp as B's, by B's deep_wait on it or any other session-bound call B makes, while B's own calls act for B
+B's deep_wait on A's ask:01M8377DSNR3233RHJVE3H28ZE, stamped by B and sent before your answer: refused not_found: Wait on an ask this session raised, by the handle deep_ask returned.
+
+stdout | tests/acceptance/1632-sweep-2047/ac2.test.ts > #1632.b9d4ec97 after /clear, your answer to the ask A raised before it is never returned through deep mcp as B's, by B's deep_wait on it or any other session-bound call B makes, while B's own calls act for B
+B's deep_wait on A's ask:01M8377DSNR3233RHJVE3H28ZE, stamped by B: refused not_found: Wait on an ask this session raised, by the handle deep_ask returned.
+
+stdout | tests/acceptance/1632-sweep-2047/ac2.test.ts > #1632.b9d4ec97 after /clear, your answer to the ask A raised before it is never returned through deep mcp as B's, by B's deep_wait on it or any other session-bound call B makes, while B's own calls act for B
+B's deep_wait on A's ask:01M8377DSNR3233RHJVE3H28ZE, with no PreToolUse: refused unbound: This deep_wait call binds to no session: no PreToolUse stamped for it is unspent.
+
+stdout | tests/acceptance/1632-sweep-2047/ac2.test.ts > #1632.b9d4ec97 after /clear, your answer to the ask A raised before it is never returned through deep mcp as B's, by B's deep_wait on it or any other session-bound call B makes, while B's own calls act for B
+B's deep_status: ok {"session":"bfe79c6d-d542-4831-a4df-f73116ac129c","gates":{"watch_only":false,"reason":null},"claims":[],"checks":["unit","lint"],"asks":[],"open_items":[]}
+
+stdout | tests/acceptance/1632-sweep-2047/ac2.test.ts > #1632.b9d4ec97 after /clear, your answer to the ask A raised before it is never returned through deep mcp as B's, by B's deep_wait on it or any other session-bound call B makes, while B's own calls act for B
+B's own deep_ask: ok {"ask":"ask:01M8377GPX4AC82G6WD7DHAZNY","status":"provisional","answer":"thinqdc10d","note":"Go on with Thin qbcc7e: it is provisional and can be undone, and only steps that leave the machine wait for
+
+stdout | tests/acceptance/1632-sweep-2047/ac2.test.ts > #1632.b9d4ec97 after /clear, your answer to the ask A raised before it is never returned through deep mcp as B's, by B's deep_wait on it or any other session-bound call B makes, while B's own calls act for B
+B's deep_claim: ok {"session":"bfe79c6d-d542-4831-a4df-f73116ac129c","claim":"claim:01M8377GSKCMX9FCASS62000JR","event":"01M8377GSKCMX9FCASS62000JR"}
+
+stdout | tests/acceptance/1632-sweep-2047/ac2.test.ts > #1632.b9d4ec97 after /clear, your answer to the ask A raised before it is never returned through deep mcp as B's, by B's deep_wait on it or any other session-bound call B makes, while B's own calls act for B
+B's deep_open_item: ok {"task_ref":"task:01M8377GS700000000A62Z107K","event":"01M8377GT4P70XRD3DH3GDS33S"}
+
+stdout | tests/acceptance/1632-sweep-2047/ac2.test.ts > #1632.b9d4ec97 after /clear, your answer to the ask A raised before it is never returned through deep mcp as B's, by B's deep_wait on it or any other session-bound call B makes, while B's own calls act for B
+B's deep_wait on its own ask:01M8377GPX4AC82G6WD7DHAZNY: ok {"ask":"ask:01M8377GPX4AC82G6WD7DHAZNY","status":"answered","answer":"thickqa8198"}
+
+stdout | tests/acceptance/1632-sweep-2047/ac2.test.ts > #1632.b9d4ec97 after /clear, your answer to the ask A raised before it is never returned through deep mcp as B's, by B's deep_wait on it or any other session-bound call B makes, while B's own calls act for B
+B's deep_wait on A's ask:01M8377DSNR3233RHJVE3H28ZE again, stamped by B: refused not_found: Wait on an ask this session raised, by the handle deep_ask returned.
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  19:29:31
+   Duration  10.51s (tests 92%, transform 6%, import 2%)
+
+exit 0

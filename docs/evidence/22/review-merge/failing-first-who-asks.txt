@@ -1,0 +1,38 @@
+
+ RUN  v5.0.5 <tree>
+
+ ❯ packages/asks/test/timing.test.ts (39 tests | 1 failed | 38 skipped) 277ms
+   ❯ the fold (11)
+     × an inbox row names the exception holding it, another session's on the same thread included, and no other row names one (#22) 146ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/asks/test/timing.test.ts > the fold > an inbox row names the exception holding it, another session's on the same thread included, and no other row names one (#22)
+AssertionError: ask:01M5CJXHG0B7HEW9S3MZ04Z1TE: expected { actor: undefined, scope: undefined } to deeply equal { actor: 'you', scope: 'you' }
+
+- Expected
++ Received
+
+  {
+-   "actor": "you",
+-   "scope": "you",
++   "actor": undefined,
++   "scope": undefined,
+  }
+
+ ❯ packages/asks/test/timing.test.ts:178:77
+    176|     for (const r of rows) expect(r.folded, r.ask).toBe(r.ask === folde…
+    177|     // Who raised each: a fold is one person's, so the app folds a liv…
+    178|     for (const r of rows) expect({ actor: r.actor, scope: r.scope }, r…
+       |                                                                             ^
+    179|   });
+    180|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 38 skipped (39)
+   Start at  18:46:30
+   Duration  618ms (tests 56%, transform 28%, import 13%, setup 2%, worker 1%)
+

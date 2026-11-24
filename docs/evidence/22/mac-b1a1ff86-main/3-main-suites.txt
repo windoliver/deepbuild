@@ -1,0 +1,272 @@
+== head b1a1ff86234e7e080e0e339774ac12ad05813e9b
+
+===== tests/acceptance/1454/answer.test.ts  start 13:32:33 load { 14.05 6.08 5.93 }
+
+ RUN  v5.0.5 ~/private/dbc-22k
+
+ ❯ tests/acceptance/1454/answer.test.ts (3 tests | 2 failed) 519734ms
+   ❯ #1454 an answer on the real app's card reaches its session (3)
+     × AC1 #1454.67866115 in the real app, answering a card on a live fixture session reaches that session, and the record shows the answer once 463237ms
+     × AC1 #1454.67866115 wrong program: an app that takes a press from no hardware as you fails, naming the ask 56163ms
+     ✓ AC1 #1454.67866115 the stand-in for the OS prompt is in no shipped build: the plain app holds no word of it 175ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/answer.test.ts > #1454 an answer on the real app's card reaches its session > AC1 #1454.67866115 in the real app, answering a card on a live fixture session reaches that session, and the record shows the answer once
+AssertionError: the run built the stand-in: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Needs you has no row for \"Which header colour on the login page?\" that takes a press; the window's names are []",
++ ]
+
+ ❯ tests/acceptance/1454/answer.test.ts:65:109
+     63|   it('AC1 #1454.67866115 in the real app, answering a card on a live f…
+     64|     const run = await answerOnCard();
+     65|     expect([...run.unconfirmed, ...run.answered, ...run.left], run.mis…
+       |                                                                                                             ^
+     66|     expect(run.missing, 'the stand-in for the OS prompt exists').toBeU…
+     67|   }, 10 * MINUTES);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1454/answer.test.ts > #1454 an answer on the real app's card reaches its session > AC1 #1454.67866115 wrong program: an app that takes a press from no hardware as you fails, naming the ask
+AssertionError: expected '' to contain 'ask:01M7E02V7JQR2F07915J0SPAJN was an…'
+
+- Expected
++ Received
+
+- ask:01M7E02V7JQR2F07915J0SPAJN was answered green though the OS didn't confirm you
+
+ ❯ tests/acceptance/1454/answer.test.ts:72:40
+     70|     const run = await answerOnCard('plant-card-skips-confirm');
+     71|     expect(run.missing, 'the planted build exists').toBeUndefined();
+     72|     expect(run.unconfirmed.join('\n')).toContain(`${run.ask.handle} wa…
+       |                                        ^
+     73|   }, 10 * MINUTES);
+     74|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  13:32:33
+   Duration  520.20s (tests 100%)
+
+===== tests/acceptance/1454/answer.test.ts exit=1
+
+===== tests/acceptance/1454/shown.test.ts  start 13:41:18 load { 25.38 28.17 19.19 }
+
+ RUN  v5.0.5 ~/private/dbc-22k
+
+ ❯ tests/acceptance/1454/shown.test.ts (1 test | 1 failed) 18536ms
+   ❯ #1454 shown to you (1)
+     × AC7 #1454.f1f3739d the check run takes the screenshots and the recording at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 18433ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/shown.test.ts > #1454 shown to you > AC7 #1454.f1f3739d the check run takes the screenshots and the recording at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+Error: BLOCKED: deep-app has no window: first-frame-ms 247.8
+
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.mainWindow tests/acceptance/1454/helpers.ts:185:19
+ ❯ answerShots tests/acceptance/1454/shown.test.ts:50:36
+ ❯ tests/acceptance/1454/shown.test.ts:122:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:41:18
+   Duration  18.74s (tests 99%)
+
+===== tests/acceptance/1454/shown.test.ts exit=1
+
+===== tests/acceptance/1462/real.test.ts  start 13:41:40 load { 26.02 28.21 19.42 }
+
+ RUN  v5.0.5 ~/private/dbc-22k
+
+ ❯ tests/acceptance/1462/real.test.ts (4 tests | 4 failed) 123948ms
+   ❯ AC2 #1462.61a5fe15 With no pointer, a person answers two asks, opens a session, pauses it, opens the Map and returns, on the real app (1)
+     × AC2 on the real app, by keys posted to it alone: two answers on the card, a session opened and paused, its project opened and left 44667ms
+   ❯ AC10 #1462.efa89138 On the real app, with no pointer, a push whose step can't be undone is approved by keys alone (1)
+     × AC10 focus starts on No; Tab reaches the step's switch, Space turns it on, Tab reaches Push it, Return approves 24728ms
+   ❯ AC13 #1462.bac1a512 After ⌘W the menu bar still shows the count and a new ask still notifies; after ⌘Q the hub still answers deep (1)
+     × AC13 on the real app: Quit is on ⌘Q; ⌘W leaves the count and the notifier; ⌘Q leaves the hub 19439ms
+   ❯ AC22 #1462.bda7846d In the real app, the status item's menu lists each session with its state's word and mark, and the replica reports that same menu (1)
+     × AC22 the status item's menu, read from the status item itself, holds a line per session with its word and mark, and the replica's equals it 34943ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1462/real.test.ts > AC2 #1462.61a5fe15 With no pointer, a person answers two asks, opens a session, pauses it, opens the Map and returns, on the real app > AC2 on the real app, by keys posted to it alone: two answers on the card, a session opened and paused, its project opened and left
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Return on ask:01M7E04V8QJKHBXVQX7DQTY65Y's card (\"Which header colour for the cart page?\") answered nothing in 20 s: the app's log reads \"first-frame-ms 275.8\\n\"",
++ ]
+
+ ❯ tests/acceptance/1462/real.test.ts:100:71
+     98|     const app = await App.launch(real.world.home, await appBinary('tes…
+     99|     try {
+    100|       expect(await noPointerProblems(real, app, tableOrNull().table)).…
+       |                                                                       ^
+    101|     } finally {
+    102|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1462/real.test.ts > AC10 #1462.efa89138 On the real app, with no pointer, a push whose step can't be undone is approved by keys alone > AC10 focus starts on No; Tab reaches the step's switch, Space turns it on, Tab reaches Push it, Return approves
+AssertionError: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Tab never reached the step's switch (card-step:0): focus is on null",
++   "Tab never reached Push it (card-option:approve): focus is on null",
++ ]
+
+ ❯ tests/acceptance/1462/real.test.ts:137:24
+    135|         else if (answered.data?.answer !== 'approve' || answered.data?…
+    136|       }
+    137|       expect(failures).toEqual([]);
+       |                        ^
+    138|     } finally {
+    139|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1462/real.test.ts > AC13 #1462.bac1a512 After ⌘W the menu bar still shows the count and a new ask still notifies; after ⌘Q the hub still answers deep > AC13 on the real app: Quit is on ⌘Q; ⌘W leaves the count and the notifier; ⌘Q leaves the hub
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "before ⌘W the status item shows no count: null (if the app does make one, macOS may be keeping it out of the menu bar: allow it in System Settings, Menu Bar)",
++ ]
+
+ ❯ tests/acceptance/1462/real.test.ts:167:24
+    165|       const deep = await t26.deep(real.world.home, []);
+    166|       if (deep.code !== 0) failures.push(`after ⌘Q the hub doesn't ans…
+    167|       expect(failures).toEqual([]);
+       |                        ^
+    168|     } finally {
+    169|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1462/real.test.ts > AC22 #1462.bda7846d In the real app, the status item's menu lists each session with its state's word and mark, and the replica reports that same menu > AC22 the status item's menu, read from the status item itself, holds a line per session with its word and mark, and the replica's equals it
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the app has no status item an assistive client finds: none in its AXExtrasMenuBar and none at a status-layer window it owns (if the app does make one, macOS may be keeping it out of the menu bar: allow it in System Settings, Menu Bar)",
++ ]
+
+ ❯ tests/acceptance/1462/real.test.ts:209:24
+    207|         }
+    208|       }
+    209|       expect(failures).toEqual([]);
+       |                        ^
+    210|     } finally {
+    211|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  13:41:41
+   Duration  124.13s (tests 100%)
+
+===== tests/acceptance/1462/real.test.ts exit=1
+
+===== tests/acceptance/1462-redraft-ac2/ac2-real.test.ts  start 13:43:49 load { 21.87 27.16 20.33 }
+
+ RUN  v5.0.5 ~/private/dbc-22k
+
+ ❯ tests/acceptance/1462-redraft-ac2/ac2-real.test.ts (1 test | 1 failed) 40021ms
+   ❯ AC2 #1462.61a5fe15 With no pointer, a person answers two asks, opens a session, pauses it, opens the Map and returns, by keys alone, on the real app (1)
+     × AC2 #1462.61a5fe15 on the real app, by keys posted to it alone: two answers on the card, a session opened and paused (session.paused on its handle), its project opened and left 39919ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1462-redraft-ac2/ac2-real.test.ts > AC2 #1462.61a5fe15 With no pointer, a person answers two asks, opens a session, pauses it, opens the Map and returns, by keys alone, on the real app > AC2 #1462.61a5fe15 on the real app, by keys posted to it alone: two answers on the card, a session opened and paused (session.paused on its handle), its project opened and left
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "ask 1 of 2: Return on ask:01M7E08KFK3NQJ5RH7R7Z94FYQ's card (\"Which header colour for the cart page?\"), the keyboard on null, recorded no ask.answered in 20 s: the app's log reads \"first-frame-ms 298.4\\n\"",
++ ]
+
+ ❯ tests/acceptance/1462-redraft-ac2/ac2-real.test.ts:137:50
+    135|     const app = await App.launch(real.world.home, await appBinary('tes…
+    136|     try {
+    137|       expect(await noPointerProblems(real, app)).toEqual([]);
+       |                                                  ^
+    138|     } finally {
+    139|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:43:50
+   Duration  40.20s (tests 100%)
+
+===== tests/acceptance/1462-redraft-ac2/ac2-real.test.ts exit=1
+
+===== tests/acceptance/1459/identifier.test.ts  start 13:44:32 load { 13.97 24.50 19.67 }
+
+ RUN  v5.0.5 ~/private/dbc-22k
+
+ ✓ tests/acceptance/1459/identifier.test.ts (1 test) 104415ms
+   ✓ AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped (1)
+     ✓ AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record 104297ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  13:44:33
+   Duration  104.61s (tests 100%)
+
+===== tests/acceptance/1459/identifier.test.ts exit=0
+
+===== tests/acceptance/1459/panel.test.ts  start 13:46:21 load { 18.28 23.63 19.94 }
+
+ RUN  v5.0.5 ~/private/dbc-22k
+
+ ✓ tests/acceptance/1459/panel.test.ts (1 test) 52685ms
+   ✓ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     ✓ AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 52581ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  13:46:22
+   Duration  52.85s (tests 100%)
+
+===== tests/acceptance/1459/panel.test.ts exit=0

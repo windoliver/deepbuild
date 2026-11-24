@@ -167,6 +167,8 @@ export function repoWith(dir: string, doneYaml: string): string {
 const REFERENCE_MACS = [
   { model: 'Mac15,7', chip: 'Apple M3 Pro', gib: 36 },
   { model: 'Mac15,12', chip: 'Apple M3', gib: 16 },
+  { model: 'Mac17,10', chip: 'Apple M5 Max', gib: 64 },
+  { model: 'Mac18,1', chip: 'Apple M6', gib: 32 },
 ];
 const read = (cmd: string, ...args: string[]): string => execFileSync(cmd, args, { encoding: 'utf8' }).trim();
 /** Why a timing here is only a reading, or null on a reference Mac on mains power, Low Power Mode off, thermal state nominal. */

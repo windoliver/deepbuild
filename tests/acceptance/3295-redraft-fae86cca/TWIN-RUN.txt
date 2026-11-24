@@ -1,0 +1,118 @@
+Hand runs of tests/acceptance/3295-redraft-fae86cca on the Mac (MacBook Pro, Apple silicon). Paths under the job's scratch folder read <tmp>: c3295-redraft is the blind commit's checkout, r3295/twin an APFS clone (cp -cR) of its Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, vendor, tests, adapters, scripts and package.json with the twin's lines.json laid over crates/deep-hook/src/main.rs (each find matched once, as twinOverlay does). Home paths read <home>.
+Expected: on the blind commit (the base's cli.rs) the test fails at its assertion, as the first draft's did on the base; with the twin the deep-hook builds and the late-close test as it stands here still reads FAIL, now let through before 500 ms (0.37 s against 0.72 s).
+Not run: the twin on the change, which this job doesn't have; the proof lanes.
+
+## The blind commit
+# 2026-11-23T22:36:45Z, head 890bbad12, Darwin arm64, node v24.22.0, cargo 1.99.1 (5f94df478 2026-08-27)
+# load at start: { 72.79 92.12 87.48 }
+$ node --test --test-concurrency=1 tests/acceptance/3295-redraft-fae86cca/late-close.test.mjs
+✖ #3295.fae86cca the late-close test reads INCONCLUSIVE, never FAIL or PASS, on a deep-hook given no time to read its call (145991.133209ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 154033.546167
+
+✖ failing tests:
+
+test at tests/acceptance/3295-redraft-fae86cca/late-close.test.mjs:117:1
+✖ #3295.fae86cca the late-close test reads INCONCLUSIVE, never FAIL or PASS, on a deep-hook given no time to read its call (145991.133209ms)
+  AssertionError [ERR_ASSERTION]: the lanes read the late-close test INCONCLUSIVE, not FAIL, on a hook given no time to read its call:
+  starved: FAIL in 0.72s, 1 hook starts
+  failures:
+  
+  ---- a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it stdout ----
+  
+  thread 'a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it' (156683008) panicked at crates/deep-hook/tests/cli.rs:251:5:
+  the call is spooled: ""
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  
+  
+  failures:
+      a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it
+  
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.72s
+  
+  error: test failed, to rerun pass `-p deep-hook --test cli`
+  
+  + actual - expected
+  
+  + 'FAIL'
+  - 'INCONCLUSIVE'
+  
+      at TestContext.<anonymous> (file://<tmp>/c3295-redraft/tests/acceptance/3295-redraft-fae86cca/late-close.test.mjs:126:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL',
+    expected: 'INCONCLUSIVE',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+# exit 1; load at end: { 98.00 93.42 88.61 }
+
+
+
+## Twin drops-unread-call
+laid over crates/deep-hook/src/main.rs
+$ diff of the twin's main.rs against the commit's
+1545,1546c1545
+<             && (RULING.load(Ordering::SeqCst) && !RULED.load(Ordering::SeqCst)
+<                 || PENDING.get().is_none())
+---
+>             && RULING.load(Ordering::SeqCst) && !RULED.load(Ordering::SeqCst)
+# 2026-11-23T22:39:37Z; load at start: { 97.43 93.54 88.74 }
+$ node --test --test-concurrency=1 tests/acceptance/3295-redraft-fae86cca/late-close.test.mjs
+✖ #3295.fae86cca the late-close test reads INCONCLUSIVE, never FAIL or PASS, on a deep-hook given no time to read its call (264641.718375ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 273434.304958
+
+✖ failing tests:
+
+test at tests/acceptance/3295-redraft-fae86cca/late-close.test.mjs:117:1
+✖ #3295.fae86cca the late-close test reads INCONCLUSIVE, never FAIL or PASS, on a deep-hook given no time to read its call (264641.718375ms)
+  AssertionError [ERR_ASSERTION]: the lanes read the late-close test INCONCLUSIVE, not FAIL, on a hook given no time to read its call:
+  starved: FAIL in 0.37s, 1 hook starts
+  failures:
+  
+  ---- a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it stdout ----
+  
+  thread 'a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it' (156980321) panicked at crates/deep-hook/tests/cli.rs:251:5:
+  the call is spooled: ""
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  
+  
+  failures:
+      a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it
+  
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.37s
+  
+  error: test failed, to rerun pass `-p deep-hook --test cli`
+  
+  + actual - expected
+  
+  + 'FAIL'
+  - 'INCONCLUSIVE'
+  
+      at TestContext.<anonymous> (file://<tmp>/r3295/twin/tests/acceptance/3295-redraft-fae86cca/late-close.test.mjs:126:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL',
+    expected: 'INCONCLUSIVE',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+# exit 1; load at end: { 98.79 99.06 92.71 }
+

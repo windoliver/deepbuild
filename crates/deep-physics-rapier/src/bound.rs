@@ -1,20 +1,23 @@
 //! #1921: bodies a world builds from its scene's items. A body with `item: ID` is bound to that
 //! item and built at its world position and rotation at t = 0; one with `each: instancer ID` is
 //! one body per element of the scene's `instance@1` item, `<body>#<element id>`, each with the
-//! body's own fields, built at its element's row. Scale stays out of physics: an item, an
-//! instancer or an element whose transform scales it is refused, naming it and the scale, so a
-//! drawn mesh's scale never reaches a collider; shapes carry their sizes in metres.
+//! body's own fields, built (#2288) at the instancer's world transform at t = 0 × its element's
+//! row: its written columns' rows, or a scatter's (`from: distribute(…)`) in element-ID order.
+//! Scale stays out of physics: an item, an instancer or an element whose transform scales it is
+//! refused, naming it and the scale, so a drawn mesh's scale never reaches a collider; shapes
+//! carry their sizes in metres.
 
 use std::collections::BTreeSet;
 
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::{Program, TRANSFORM};
+use deep_canvas_physics::backend::{product, rotate};
 use deep_canvas_physics::check::SCALED;
 use deep_canvas_physics::doc::Refusal;
 use serde_json::{json, Map, Value};
 
-/// The issue that brings `each:` over an instancer that is moved, turned or scattered.
-const PLACED_LATER: &str = "#2288";
+/// One element of an instancer: its ID, and its row's position, rotation and scale.
+type Element = (u64, Vec<f64>, [f64; 4], Vec<f64>);
 
 fn refusal(code: &'static str, path: String, actual: &Value, what: String) -> Refusal {
     Refusal {
@@ -27,7 +30,7 @@ fn refusal(code: &'static str, path: String, actual: &Value, what: String) -> Re
 
 /// A rotation of Euler degrees about X, then Y, then Z in fixed axes (R = Rz·Ry·Rx, Units and
 /// conventions) as a quaternion `[x, y, z, w]`.
-fn quat(d: &[f64]) -> [f64; 4] {
+pub(crate) fn quat(d: &[f64]) -> [f64; 4] {
     let h = |a: f64| (a.to_radians() / 2.0).sin_cos();
     let ((sx, cx), (sy, cy), (sz, cz)) = (h(d[0]), h(d[1]), h(d[2]));
     [
@@ -70,6 +73,67 @@ fn element(params: &Map<String, Value>, row: usize) -> Option<(Vec<f64>, [f64; 4
     Some((pos, rot, scale))
 }
 
+/// The elements of instancer `name`'s written columns, in row order.
+fn written(params: &Map<String, Value>, name: &str) -> Result<Vec<Element>, Vec<Refusal>> {
+    let rows = match (params.get("ids"), params.get("pos")) {
+        (Some(Value::Array(ids)), _) => ids.len(),
+        (None, Some(Value::Array(pos))) => pos.len(),
+        _ => 0,
+    };
+    let mut seen = BTreeSet::new();
+    (0..rows)
+        .map(|row| {
+            let e = match params.get("ids") {
+                Some(ids) => ids[row].as_u64().filter(|e| *e <= u64::from(u32::MAX)),
+                None => Some(row as u64),
+            };
+            let element = e.zip(element(params, row)).filter(|(e, _)| seen.insert(*e));
+            let what = || {
+                format!(
+                    "{name}'s row {row} isn't an element: a new u32 ID with its pos, rot and scale"
+                )
+            };
+            let at = || format!("items/{name}/params");
+            let refused = || vec![refusal("out_of_range", at(), &json!(row), what())];
+            element
+                .map(|(e, (pos, rot, scale))| (e, pos, rot, scale))
+                .ok_or_else(refused)
+        })
+        .collect()
+}
+
+/// #2288: the elements instancer `name` of `scene` scatters (`from: distribute(…)`), in element-ID
+/// order, as the scene module lays them out at t = 0.
+#[cfg(not(target_arch = "wasm32"))]
+fn scattered(scene: &Value, name: &str) -> Result<Vec<Element>, Vec<Refusal>> {
+    let rows = deep_canvas_scene3d::scene::elements_at(scene, 0, name, None).map_err(|r| {
+        let what = format!("{name}'s scatter is refused: {} at {}", r.code, r.path);
+        vec![refusal(r.code, r.path, &Value::Null, what)]
+    })?;
+    let element = |r: &deep_canvas_scene3d::distribute::Row| {
+        let rot = match numbers(&r.to_json()["rot"], 4) {
+            Some(q) => [q[0], q[1], q[2], q[3]],
+            None => quat(&[0.0, r.yaw, 0.0]),
+        };
+        (u64::from(r.id), r.pos.to_vec(), rot, vec![r.scale; 3])
+    };
+    Ok(rows.iter().flatten().map(element).collect())
+}
+
+/// The wasm32 build doesn't link the scene module's scatter (source.rs), so a scattered
+/// instancer's elements are refused, naming the issue that brings the scene module to it.
+#[cfg(target_arch = "wasm32")]
+fn scattered(_: &Value, name: &str) -> Result<Vec<Element>, Vec<Refusal>> {
+    let what = format!("{name} is scattered, and the wasm32 runner doesn't link the scene module that lays out its elements; #2466 brings it");
+    let path = format!("items/{name}/params/from");
+    Err(vec![refusal(
+        "physics.unsupported",
+        path,
+        &json!(name),
+        what,
+    )])
+}
+
 /// `doc`, a world document, with each body bound to `scene`'s items expanded: an `item:` body
 /// posed at its item, an `each:` body replaced by its element bodies; unchanged when no body binds.
 /// Without a scene, or with a binding that can't build, the refusals naming each.
@@ -83,6 +147,7 @@ pub fn expand(scene: Option<&Value>, doc: &Value) -> Result<Value, Vec<Refusal>>
     if !bodies.values().any(binds) {
         return Ok(doc.clone());
     }
+    let whole = scene.unwrap_or(&Value::Null);
     let Some(scene) = scene.and_then(Value::as_object) else {
         let out = bodies.iter().filter(|(_, b)| binds(b)).map(|(id, b)| {
             let key = if b.get("item").is_some() { "item" } else { "each" };
@@ -149,43 +214,35 @@ pub fn expand(scene: Option<&Value>, doc: &Value) -> Result<Value, Vec<Refusal>>
         }
         let params = items.and_then(|m| m[name]["params"].as_object());
         let params = params.cloned().unwrap_or_default();
-        if t[0..6].iter().any(|x| *x != 0.0) || params.contains_key("from") {
-            let what = format!("each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; {PLACED_LATER} brings it (place {name} at the origin with its own ids and pos)");
-            out.push(refusal(
-                "physics.unsupported",
-                format!("{p}/each"),
-                named,
-                what,
-            ));
-            continue;
-        }
-        let rows = match (params.get("ids"), params.get("pos")) {
-            (Some(Value::Array(ids)), _) => ids.len(),
-            (None, Some(Value::Array(pos))) => pos.len(),
-            _ => 0,
+        let elements = match params.contains_key("from") {
+            true => scattered(whole, name),
+            false => written(&params, name),
         };
-        let mut seen = BTreeSet::new();
-        for row in 0..rows {
-            let e = match params.get("ids") {
-                Some(ids) => ids[row].as_u64().filter(|e| *e <= u64::from(u32::MAX)),
-                None => Some(row as u64),
-            };
-            let at = format!("items/{name}/params");
-            let Some((e, (pos, rot, scale))) = e
-                .zip(element(&params, row))
-                .filter(|(e, _)| seen.insert(*e))
-            else {
-                let what = format!(
-                    "{name}'s row {row} isn't an element: a new u32 ID with its pos, rot and scale"
-                );
-                out.push(refusal("out_of_range", at, &json!(row), what));
-                break;
-            };
+        let elements = match elements {
+            Ok(e) => e,
+            Err(r) => {
+                out.extend(r);
+                continue;
+            }
+        };
+        // #2288: each element at the instancer's world transform at t = 0 × its row; an
+        // instancer at the origin, unturned, keeps its rows' own numbers.
+        let placed = t[0..6].iter().any(|x| *x != 0.0);
+        let (moved, turned) = ([t[0], t[1], t[2]], quat(&t[3..6]));
+        for (e, pos, rot, scale) in elements {
             if scale.iter().any(|s| *s != 1.0) {
                 let what = format!("body {id} is built per element of {name}, whose element {e} is scaled by {scale:?}; scale stays out of physics");
                 out.push(refusal(SCALED, format!("{p}/each"), &json!(scale), what));
                 break;
             }
+            let (pos, rot) = match placed {
+                true => {
+                    let at = rotate(turned, [pos[0], pos[1], pos[2]]);
+                    let pos: Vec<f64> = (0..3).map(|k| moved[k] + at[k]).collect();
+                    (pos, product(turned, rot))
+                }
+                false => (pos, rot),
+            };
             let mut body = fields.clone();
             body.insert("pose".into(), json!({"pos": pos, "rot": rot}));
             expanded.insert(format!("{id}#{e}"), Value::Object(body));
