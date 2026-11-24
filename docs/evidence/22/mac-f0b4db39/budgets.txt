@@ -1,0 +1,40 @@
+
+ RUN  v5.0.5 ~/private/dbc-22/tests/acceptance/319
+
+warm-up: create 1.792 ms, answer 5.874 ms at p50 (discarded)
+#319 create an ask, p50 (ms): 2.268, 2.127, 1.816, 1.989, 1.918 against 5 (margin 25%)
+#319 answer an ask, p50 (ms): 6.532, 5.871, 6.094, 6.014, 6.102 against 5 (margin 11%)
+ × budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 creating or answering an ask takes under 5 ms in the hub 10358ms
+   → FAIL #319 answer an ask, p50 (ms): 6.532, 5.871, 6.094, 6.014, 6.102 against 5 (margin 11%): expected true to be false // Object.is equality
+warm-up: 1.7 ms (discarded)
+#319 inbox with 10,000 asks (ms): 0.899, 0.709, 0.659, 0.551, 0.543 against 100 (margin 65%)
+ ✓ budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 the inbox projection with 10,000 asks loads in under 100 ms 1232ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 creating or answering an ask takes under 5 ms in the hub
+AssertionError: FAIL #319 answer an ask, p50 (ms): 6.532, 5.871, 6.094, 6.014, 6.102 against 5 (margin 11%): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ judge helpers.ts:203:72
+    201|   console.log(shown);
+    202|   if (runs.every((r) => r <= limit)) return;
+    203|   expect(runs.every((r) => r > limit * (1 + margin)), `FAIL ${shown}`)…
+       |                                                                        ^
+    204|   ctx.skip(`INCONCLUSIVE ${shown}`);
+    205| }
+ ❯ budgets.test.ts:48:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  23:07:30
+   Duration  11.90s (tests 98%, transform 1%, import 1%)
+

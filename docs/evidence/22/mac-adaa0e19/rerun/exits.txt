@@ -1,0 +1,45 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 23:58:00 load { 6.63 7.61 19.56 } thermal 0 free KB 50965992
+head adaa0e19d08810370d6ba5bca9fa3563b41d1d2f; parts 1-2 not rerun (22p has them) 23:58:02 load { 6.63 7.61 19.56 } thermal 0 free KB 50965644
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 23:58:07 load { 6.58 7.58 19.48 } thermal 0 free KB 50433648
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261; session's copy same 23:58:08 load { 6.58 7.58 19.48 } thermal 0 free KB 50433648
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720; session's copy same 23:58:08 load { 6.58 7.58 19.48 } thermal 0 free KB 50433648
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733; session's copy same 23:58:08 load { 6.58 7.58 19.48 } thermal 0 free KB 50433644
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711; session's copy same 23:58:08 load { 6.58 7.58 19.48 } thermal 0 free KB 50433616
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305; session's copy same 23:58:08 load { 6.58 7.58 19.48 } thermal 0 free KB 50433616
+copy checks before any build: sha256 7e5323b292e9424b3c48802144fce8da1b427a6cfb894e4d56fdbeeaabffdfac diff-lines=4 reopen-early-return=1 row22=1 other-gh-calls=0 23:58:08 load { 6.58 7.58 19.48 } thermal 0 free KB 50433616
+readIssue pre-check (before any build) exit=0, lines 5, 'blocked' count 0 23:58:08 load { 8.22 7.91 19.52 } thermal 0 free KB 50433572
+setup in dbc-22pa at b51d52cd3: exit=0 23:59:04 load { 15.52 10.07 19.61 } thermal 0 free KB 48900436
+setup in dbc-22pb at adaa0e19d: exit=0 23:59:58 load { 17.39 11.65 19.60 } thermal 1 free KB 47766564
+part 3 start; no load wait (the user's choice at the Mac for this run); front app [Windows App]; pointer at x=659 y=51 (points, origin bottom-left of the main screen 1470x956) 23:59:59 load { 17.39 11.65 19.60 } thermal 1 free KB 47760076
+temp binary folder cleared before round A1 (nothing was running from it) 23:59:59 load { 17.39 11.65 19.60 } thermal 1 free KB 47767928
+round A1 tests/acceptance/1459/identifier.test.ts exit=1; front app [Windows App] 00:11:25 load { 25.63 31.24 29.11 } thermal 1 free KB 40339448
+round A1 tests/acceptance/1459/panel.test.ts exit=1; front app [Windows App] 00:11:48 load { 26.99 31.16 29.13 } thermal 0 free KB 40303684
+round A1 tests/acceptance/1172/rows.test.ts exit=1; front app [Windows App] 00:13:41 load { 19.85 27.53 27.97 } thermal 0 free KB 39745648
+temp binary folder cleared before round B1 (nothing was running from it) 00:13:41 load { 19.85 27.53 27.97 } thermal 0 free KB 40291736
+round B1 tests/acceptance/1459/identifier.test.ts exit=0; front app [Windows App] 00:24:28 load { 32.22 38.37 35.42 } thermal 1 free KB 33162896
+round B1 tests/acceptance/1459/panel.test.ts exit=0; front app [Windows App] 00:24:56 load { 30.59 37.38 35.16 } thermal 1 free KB 33141716
+round B1 tests/acceptance/1172/rows.test.ts exit=0; front app [Windows App] 00:26:30 load { 25.50 34.25 34.20 } thermal 1 free KB 32593368
+probe start at adaa0e19d; probe file sha256 3c40d577259b633cb8fb5843bf5cb18ee88fdcf68db5bbd10d73988273f178d7; front app [Windows App] 00:26:30 load { 25.50 34.25 34.20 } thermal 1 free KB 32593204
+probe vitest exit=0; lines in probe1459.txt 108 00:28:22 load { 16.52 28.27 31.83 } thermal 0 free KB 32446908
+temp binary folder cleared before round A2 (nothing was running from it) 00:28:22 load { 16.52 28.27 31.83 } thermal 0 free KB 32992316
+round A2 tests/acceptance/1459/identifier.test.ts exit=0; front app [Windows App] 00:28:52 load { 15.84 26.97 31.24 } thermal 0 free KB 32669348
+round A2 tests/acceptance/1459/panel.test.ts exit=0; front app [Windows App] 00:29:13 load { 12.83 25.56 30.63 } thermal 1 free KB 32667176
+round A2 tests/acceptance/1172/rows.test.ts exit=0; front app [Windows App] 00:30:34 load { 8.54 21.12 28.47 } thermal 1 free KB 32429552
+temp binary folder cleared before round B2 (nothing was running from it) 00:30:34 load { 8.54 21.12 28.47 } thermal 1 free KB 32983224
+round B2 tests/acceptance/1459/identifier.test.ts exit=0; front app [Windows App] 00:31:03 load { 6.93 19.53 27.64 } thermal 1 free KB 32662768
+round B2 tests/acceptance/1459/panel.test.ts exit=0; front app [Windows App] 00:31:25 load { 7.24 18.79 27.19 } thermal 1 free KB 32662040
+round B2 tests/acceptance/1172/rows.test.ts exit=0; front app [Windows App] 00:32:47 load { 4.91 15.23 25.02 } thermal 0 free KB 32418212
+worktree ~/private/dbc-22pa removed 00:32:50 load { 4.91 15.23 25.02 } thermal 0 free KB 40870580
+4a app run start; screen-lock flag 0; front app [Windows App]; pointer not moved by the runner (it cannot move it): pointer at x=211 y=296 (points, origin bottom-left of the main screen 1470x956) 00:32:50 load { 4.91 15.23 25.02 } thermal 0 free KB 40875384
+4a vitest exit=0; PNGs: 3; front app [Claude]; pointer at x=1079 y=834 (points, origin bottom-left of the main screen 1470x956) 00:40:19 load { 41.47 63.04 48.07 } thermal 0 free KB 30543320
+tests/acceptance/1172/panel.test.ts exit=0 00:40:42 load { 28.71 58.30 46.79 } thermal 0 free KB 30583616
+tests/acceptance/1460/cli.test.ts exit=0 00:41:06 load { 22.69 55.01 45.88 } thermal 0 free KB 30306068
+readIssue pre-check (after the build) exit=0, lines 5, 'blocked' count 0 00:41:06 load { 22.23 54.38 45.71 } thermal 0 free KB 30292008
+status before the judge [] 00:41:08 load { 22.23 54.38 45.71 } thermal 0 free KB 30289332
+judge gate: NOT NOMINAL at the start (load 22.23, thermal 0); no load wait, the user's standing choice at the Mac 00:41:08 load { 22.23 54.38 45.71 } thermal 0 free KB 30289296
+gh probe before the judge: exit=0 exit=0  00:41:09 load { 22.23 54.38 45.71 } thermal 0 free KB 30289276
+judge exit=1 wall 369 s (NOT NOMINAL at the start (load 22.23, thermal 0); no load wait, the user's standing choice at the Mac) 00:47:18 load { 3.61 18.34 30.88 } thermal 0 free KB 29781540
+gh probe after the judge: exit=0 exit=0  00:47:19 load { 3.61 18.34 30.88 } thermal 0 free KB 29780164
+status after [] 00:47:20 load { 3.61 18.34 30.88 } thermal 0 free KB 29780408
+login-name hits after redaction: 0 00:47:20 load { 3.61 18.34 30.88 } thermal 0 free KB 29794940
+secret scan hits=0 00:47:20 load { 3.61 18.34 30.88 } thermal 0 free KB 29794932

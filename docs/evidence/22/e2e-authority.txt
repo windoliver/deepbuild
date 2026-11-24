@@ -1,0 +1,35 @@
+World: home /tmp/dh321-rkwqBl/h, repo /tmp/dh321-rkwqBl/repo; MCP server tracker (yours, local scope) with list_tickets (read-only) and create_ticket.
+
+1. Session 1: list_tickets runs with no ask (its tool list is recorded at the session start).
+
+2. tracker 2.0.0 adds delete_repo. Session 2 starts and calls it: deep-hook holds the call at PreToolUse.
+   held by ask:01M7217382Y3HMF4FHY2VBR5J8 (kind authority): tracker (local config, version 2.0.0) has new or changed tools that can change or destroy: delete_repo. Let tracker run them?
+   options [{"id":"approve","label":"Allow them","decision":"allow"},{"id":"decline","label":"Keep them held","decision":"deny"}]; default decline; deadline 2026-11-11T06:09:38.050Z (raised 2026-11-10T06:09:38.069Z)
+
+3. The agent runs `git push origin main`: held by ask:01M7217394VJ7Y7SKMBHZ3B7QV (kind authority): Run `git push origin main`? It pushes, and no request in this thread names that.
+   5 s later, with no answer, neither call has run and neither ask has closed.
+
+$ deep inbox    # both authority asks wait for you
+ask:01M7217382Y3HMF4FHY2VBR5J8  authority  8988cb74-b4c8-4ed5-8858-d1a4a640717f  5s  shown  tracker (local config, version 2.0.0) has new or changed tools that can change or destroy: delete_repo. Let tracker run them?  [approve | decline]
+    plan 786237be4b20: 1 step, 1 can't be undone
+    1. Let tracker run delete_repo, which can change or destroy  changes tracker/delete_repo  undo: can't undo  cost $0.00
+ask:01M7217394VJ7Y7SKMBHZ3B7QV  authority  8988cb74-b4c8-4ed5-8858-d1a4a640717f  5s  shown  Run `git push origin main`? It pushes, and no request in this thread names that.  [approve | decline]
+    plan 1fc66236b587: 1 step, 0 can't be undone
+    1. Run `git push origin main`, which pushes  changes git push origin main  undo: Revert it with a new commit  cost $0.00
+
+4. You approve delete_repo: `deep inbox answer ask:01M7217382Y3HMF4FHY2VBR5J8 approve` exit 0 (the OS confirmation is the test stand-in).
+   delete_repo ran: tracker received 1 tools/call for it after your yes.
+
+5. You say no to the push: `deep inbox answer ask:01M7217394VJ7Y7SKMBHZ3B7QV decline` exit 0 ask:01M7217394VJ7Y7SKMBHZ3B7QV answered decline; no decision saved
+   deep-hook's PreToolUse for the push ended: exit 2, stdout "", stderr "DeepBuild denied this (guard push-needs-ask): no request you typed in this thread names it. DeepBuild is holding this: `git push origin main` needs your authority and waits for ask:01M7217394VJ7Y7SKMBHZ3B7QV. Once you say yes, run the same call again."
+
+$ deep inbox    # after your two answers
+No open asks.
+
+6. The record: every ask event, in order.
+  06:09:38Z ask.created ask:01M7217382Y3HMF4FHY2VBR5J8 {"kind":"authority","question":"tracker (local config, version 2.0.0) has new or changed tools that can change or destroy: delete_repo. Let tracker run them?","default":"decline"}
+  06:09:38Z ask.batched ask:01M7217388SAC603GSZQG8M2XD {"batch":"now:2026-11-10T06:09:38.056Z","asks":[{"ask":"ask:01M7217382Y3HMF4FHY2VBR5J8","plan_hash":"786237be4b201c69911c10497f202c322cb02eae143b5eebb16bac74e64421d6"}]}
+  06:09:38Z ask.created ask:01M7217394VJ7Y7SKMBHZ3B7QV {"kind":"authority","question":"Run `git push origin main`? It pushes, and no request in this thread names that.","default":"decline"}
+  06:09:38Z ask.batched ask:01M721739977HWWQMCSC921Z9E {"batch":"now:2026-11-10T06:09:38.089Z","asks":[{"ask":"ask:01M7217394VJ7Y7SKMBHZ3B7QV","plan_hash":"1fc66236b587851d13b6d9cb08e3c56e80b904409f339a426dcddff8e1945b51"}]}
+  06:09:43Z ask.answered ask:01M7217382Y3HMF4FHY2VBR5J8 {"answer":"approve","plan_hash":"786237be4b201c69911c10497f202c322cb02eae143b5eebb16bac74e64421d6","decision":"allow","via":"inbox","verified":true,"on":{"kind":"commit","ref":"01e9a59fad34018d0f2efe5dde95244f13dab6b4"},"token":"os-confirm:01M72178NM0EB2Y9K62AS2DDJA","words":null,"image":null}
+  06:09:43Z ask.answered ask:01M7217394VJ7Y7SKMBHZ3B7QV {"answer":"decline","plan_hash":null,"decision":"deny","via":"inbox","verified":true,"on":{"kind":"commit","ref":"01e9a59fad34018d0f2efe5dde95244f13dab6b4"},"token":null,"words":null,"image":null}

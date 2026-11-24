@@ -1,0 +1,116 @@
+== side a commit b51d52cd3e4b7fc226e8934e01a0fbbb6e391b21
+
+===== tests/acceptance/1459/identifier.test.ts  start 22:31:18 load { 17.18 23.55 30.68 } thermal 0 screen-lock flag 0 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/dbc-22oab
+
+ ❯ tests/acceptance/1459/identifier.test.ts (1 test | 1 failed) 912202ms
+   ❯ AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped (1)
+     × AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record 912078ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/identifier.test.ts > AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped > AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record
+AssertionError: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the real window has no row whose label starts with \"Which header colour on the login page?\"",
++   "the real window has no row whose label starts with \"Which font for the printed receipt?\"",
++   "the real window has no row whose label starts with \"Which layout for the changelog?\"",
++ ]
+
+ ❯ tests/acceptance/1459/identifier.test.ts:37:24
+     35|         });
+     36|       });
+     37|       expect(failures).toEqual([]);
+       |                        ^
+     38|     } finally {
+     39|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:31:19
+   Duration  912.51s (tests 100%)
+
+===== tests/acceptance/1459/identifier.test.ts exit=1 end 22:46:31 load { 46.46 122.90 101.73 } thermal 1 front app [Windows App]
+
+===== tests/acceptance/1459/panel.test.ts  start 22:46:31 load { 46.46 122.90 101.73 } thermal 1 screen-lock flag 0 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/dbc-22oab
+
+ ✓ tests/acceptance/1459/panel.test.ts (1 test) 21966ms
+   ✓ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     ✓ AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 21851ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:46:32
+   Duration  22.13s (tests 100%)
+
+===== tests/acceptance/1459/panel.test.ts exit=0 end 22:46:55 load { 36.81 114.51 99.32 } thermal 0 front app [Google Chrome]
+
+===== tests/acceptance/1172/rows.test.ts  start 22:46:55 load { 36.81 114.51 99.32 } thermal 0 screen-lock flag 0 front app [Google Chrome]
+
+ RUN  v5.0.5 ~/private/dbc-22oab
+
+ ❯ tests/acceptance/1172/rows.test.ts (2 tests | 2 failed) 102212ms
+   ❯ #1172 Needs you shows questions and presents their cards (2)
+     × AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 62612ms
+     × AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 39448ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Needs you has no row showing ask:01M7EZB0ZXARMNPAHG111H6WTT's question \"Which header colour on the login page?\"",
++ ]
+
+ ❯ tests/acceptance/1172/rows.test.ts:51:22
+     49|     const failures: string[] = [];
+     50|     for (const ask of world.asks) failures.push(...await rowFailures(w…
+     51|     expect(failures).toEqual([]);
+       |                      ^
+     52|   }, 12 * MINUTES);
+     53|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask
+AssertionError: expected 'Needs you has no row showing ask:01M7…' to match /by its handle/
+
+- Expected:
+/by its handle/
+
++ Received:
+"Needs you has no row showing ask:01M7EZCWT8ECVHVGCHR47D9SNT's question \"Which header colour on the login page?\""
+
+ ❯ tests/acceptance/1172/rows.test.ts:59:33
+     57|     const failures = await rowFailures(world, ask, 'plant-handle-rows'…
+     58|     expect(failures.join('\n'), 'the row that shows a handle fails the…
+     59|     expect(failures.join('\n')).toMatch(/by its handle/);
+       |                                 ^
+     60|   }, 8 * MINUTES);
+     61| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:46:55
+   Duration  102.37s (tests 100%)
+
+===== tests/acceptance/1172/rows.test.ts exit=1 end 22:48:38 load { 22.11 87.40 90.44 } thermal 0 front app [Windows App]

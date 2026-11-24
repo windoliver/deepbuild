@@ -1,0 +1,31 @@
+head fe56c13482021066182b9b8d9acb5b23b41dc215 (main 1ab89128 merged), the test added, no fix; Sun Nov 15 04:26:35 PM PST 2026
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ packages/asks/test/sign-in.test.ts (2 tests | 1 failed) 399ms
+   × under setup's 8-hour batches a sign-in task shows at once, from a Send or a lapsed sign-in, while another block waits for its batch (#22) 122ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/asks/test/sign-in.test.ts > under setup's 8-hour batches a sign-in task shows at once, from a Send or a lapsed sign-in, while another block waits for its batch (#22)
+AssertionError: a lapsed sign-in shows at once: expected 'queued' to be 'shown' // Object.is equality
+
+Expected: "shown"
+Received: "queued"
+
+ ❯ packages/asks/test/sign-in.test.ts:127:67
+    125|   const lapsed = (await open()).find((r) => r.ask !== crashed)?.ask;
+    126|   expect(lapsed, 'the lapsed sign-in raised its task').toBeDefined();
+    127|   expect(await status(lapsed!), 'a lapsed sign-in shows at once').toBe…
+       |                                                                   ^
+    128|   expect(await status(crashed!), 'and the crashed agent\'s block still…
+    129|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  16:26:34
+   Duration  805ms (tests 60%, transform 25%, import 13%, setup 2%)
+

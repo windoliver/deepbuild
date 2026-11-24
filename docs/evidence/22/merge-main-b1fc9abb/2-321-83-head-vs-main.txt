@@ -1,0 +1,46 @@
+start Sun Nov 15 05:13:23 PM PST 2026; load 89.41 76.66 69.99
+main npm ci 0
+main build 0
+main deep-hook 0
+=== round 1 862fdbb9e tests/acceptance/321/deadline.test.ts load 77.53
+exit 0
+      Tests  2 passed (2)
+=== round 1 862fdbb9e tests/acceptance/321/proceed.test.ts load 67.23
+exit 0
+      Tests  2 passed (2)
+=== round 1 862fdbb9e tests/acceptance/83/redraft-319/status.test.ts load 65.00
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the question is answered from the record: {"model":true,"runs":[{"command":"exec '<worktree>/target/debug/deep-hook' claude-code UserPromptSubmit","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":"deep-hook: spooled 01M7GYX
+      Tests  1 failed | 4 passed (5)
+=== round 1 b1fc9abb2 tests/acceptance/321/deadline.test.ts load 60.72
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+Error: AC5 #321.e6090cff [effect.merge] the call never runs: `gh pr merge 12`, sent again after ask:01M7GYY9N3RB7C471PRZQXMHKM took no, was allowed (exit 0 after 53 ms, stdout "", stderr "deep-hook: spooled 01M7GYZKJF3AF53E9763S9ZFFK, but its sync didn't finish within the hook's 50 ms\n")
+Error: #321.e6090cff the planted hold-as-choice must fail this test naming the source (effect.push, effect.merge or mcp.tool_changed); it failed with: AC5 #321.e6090cff the planted sorter's proceed for "want me to push to main?" must be recorded with the question and the rule that sorted it (planted
+      Tests  2 failed (2)
+=== round 1 b1fc9abb2 tests/acceptance/321/proceed.test.ts load 70.75
+exit 0
+      Tests  2 passed (2)
+=== round 1 b1fc9abb2 tests/acceptance/83/redraft-319/status.test.ts load 69.21
+exit 1
+=== round 2 cd42d4517 tests/acceptance/321/deadline.test.ts load 69.21
+exit 0
+      Tests  2 passed (2)
+=== round 2 cd42d4517 tests/acceptance/321/proceed.test.ts load 64.46
+exit 0
+      Tests  2 passed (2)
+=== round 2 cd42d4517 tests/acceptance/83/redraft-319/status.test.ts load 61.59
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the planted hub must fail the unplaced-prompt check: expected null not to be null
+      Tests  1 failed | 4 passed (5)
+=== round 2 b1fc9abb2 tests/acceptance/321/deadline.test.ts load 64.13
+exit 0
+      Tests  2 passed (2)
+=== round 2 b1fc9abb2 tests/acceptance/321/proceed.test.ts load 71.61
+exit 0
+      Tests  2 passed (2)
+=== round 2 b1fc9abb2 tests/acceptance/83/redraft-319/status.test.ts load 75.11
+exit 1
+done Sun Nov 15 05:24:16 PM PST 2026; load 75.11 71.11 71.01
