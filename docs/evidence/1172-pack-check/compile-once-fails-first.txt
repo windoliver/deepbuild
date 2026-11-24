@@ -1,0 +1,19 @@
+
+running 2 tests
+test runners_of_one_program_keep_their_own_state ... ok
+first runner 0.590 s, later runners [0.530, 0.330, 0.292] s
+
+thread 'a_thread_compiles_a_program_once' (2834981) panicked at crates/deep-sandbox-wasmtime/tests/compile_once.rs:38:5:
+a later runner took 0.292 s against the first's 0.590 s: it compiled the program again
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test a_thread_compiles_a_program_once ... FAILED
+
+failures:
+
+failures:
+    a_thread_compiles_a_program_once
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.84s
+
+error: test failed, to rerun pass `-p deep-sandbox-wasmtime --test compile_once`
+exit=101

@@ -458,6 +458,17 @@ impl Player {
         Value::Array(self.played.as_ref().map(Played::tree).unwrap_or_default()).to_string()
     }
 
+    /// A set's walk (#3236), as JSON `[{id, text}]` in the order its reading focus takes it.
+    pub fn walk(&self, set: &str) -> String {
+        Value::Array(
+            self.played
+                .as_ref()
+                .map(|p| p.walk(set))
+                .unwrap_or_default(),
+        )
+        .to_string()
+    }
+
     /// Each readout heard and what it says in the frame shown (#1045), as JSON `{id: text}`.
     pub fn readouts(&self) -> String {
         let readouts = self.played.as_ref().map(Played::readouts);

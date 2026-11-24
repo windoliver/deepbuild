@@ -754,9 +754,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let mut finish_ms = 0.0;
             if let Some((f, raw)) = finish.and_then(|f| Some((f, bytes.take()?))) {
                 let mut image = picture(&raw, size, ground, false);
-                finish_ms = f
-                    .apply(app, profiler.clone(), "", &mut image, size, &[], false)?
-                    .unwrap_or(0.0);
+                finish_ms = crate::look_ops::apply(
+                    f,
+                    app,
+                    profiler.clone(),
+                    "",
+                    &mut image,
+                    size,
+                    &[],
+                    false,
+                )?
+                .unwrap_or(0.0);
                 if hash {
                     pixels = Some(frames::hex(&image));
                 }

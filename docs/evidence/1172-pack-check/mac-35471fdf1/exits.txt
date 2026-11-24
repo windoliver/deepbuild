@@ -1,0 +1,23 @@
+start; 'AC Power'; caffeinate 5 assertions 10:57:08 load { 106.86 92.71 85.17 } thermal 0 lock 0 front [Windows App] free KB 43500692
+disk guard ok before fix clone 10:57:08 load { 106.86 92.71 85.17 } thermal 0 lock 0 front [Windows App] free KB 43498524
+FIX clone at 35471fdf13dd1f262eee6f94213d1f93ff9abece exit=0; origin/claude/fix-1172-pack-check 35471fdf13dd1f262eee6f94213d1f93ff9abece; origin/main 2e34fdb0bd25a76a0838bc2f14664884661caebf; merge-base b6b99ad8ccdd5155bed00b7d4b4647c7e066a9ea 10:58:13 load { 93.62 91.15 85.11 } thermal 0 lock 0 front [Windows App] free KB 38774408
+disk guard ok before base clone 10:58:14 load { 93.62 91.15 85.11 } thermal 0 lock 0 front [Windows App] free KB 38773268
+BASE clone at b6b99ad8ccdd5155bed00b7d4b4647c7e066a9ea exit=0; porcelain 0 10:59:37 load { 100.27 92.30 86.02 } thermal 0 lock 0 front [Claude] free KB 34853700
+disk guard ok before base setup 10:59:37 load { 100.27 92.30 86.02 } thermal 0 lock 0 front [Claude] free KB 34853580
+setup base (npm ci, workspace build, cargo deep-hook deep-show deep-replica deep-app) exit=0 11:16:37 load { 65.70 93.56 91.16 } thermal 0 lock 0 front [Claude] free KB 124762856
+disk guard ok before A rows 11:16:37 load { 65.70 93.56 91.16 } thermal 0 lock 0 front [Claude] free KB 124762280
+base-1172-rows.txt: Tests 2 failed (2) exit=1 11:22:29 load { 44.69 61.99 77.06 } thermal 0 lock 0 front [Windows App] free KB 112823956
+disk guard ok before A popout 11:22:29 load { 44.69 61.99 77.06 } thermal 0 lock 0 front [Windows App] free KB 112821020
+base-1172-popout.txt: Tests 1 failed (1) exit=1 11:22:42 load { 46.37 61.79 76.81 } thermal 0 lock 0 front [Windows App] free KB 112312100
+base porcelain after: 0 11:22:42 load { 46.37 61.79 76.81 } thermal 0 lock 0 front [Windows App] free KB 112355896
+disk guard ok before fix setup 11:22:42 load { 46.37 61.79 76.81 } thermal 0 lock 0 front [Windows App] free KB 112355884
+setup fix (npm ci, workspace build, cargo deep-hook deep-show deep-replica deep-app) exit=0 12:26:36 load { 37.59 54.72 67.05 } thermal 0 lock 0 front [Claude] free KB 80431500
+disk guard ok before B rows 12:26:36 load { 37.59 54.72 67.05 } thermal 0 lock 0 front [Claude] free KB 80430776
+fix-1172-rows.txt: Tests 2 failed (2) exit=1 12:31:46 load { 50.23 64.46 69.36 } thermal 0 lock 0 front [Claude] free KB 72638692
+disk guard ok before B popout 12:31:46 load { 50.23 64.46 69.36 } thermal 0 lock 0 front [Claude] free KB 72638688
+fix-1172-popout.txt: Tests 1 failed (1) exit=1 12:31:59 load { 46.86 63.26 68.88 } thermal 0 lock 0 front [Claude] free KB 72488360
+fix-time-calls.txt exit=0 12:32:26 load { 42.33 60.62 67.73 } thermal 0 lock 0 front [Claude] free KB 72297888
+base-time-calls.txt (fix clone's script, base clone) exit=0 12:33:40 load { 51.17 58.27 66.20 } thermal 0 lock 0 front [Claude] free KB 70091524
+fix porcelain after: 0 12:33:40 load { 48.27 57.55 65.90 } thermal 0 lock 0 front [Claude] free KB 70091020
+clones pc-base and pc-fix removed 12:33:50 load { 45.21 56.76 65.57 } thermal 0 lock 0 front [Claude] free KB 76793800
+ALL DONE 12:33:50 load { 45.21 56.76 65.57 } thermal 0 lock 0 front [Claude] free KB 76793788

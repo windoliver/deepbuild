@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use deep_canvas_motion::program::Program;
 use serde_json::{json, Value};
 
-pub(crate) use deep_play::access::{data_at, readouts, tree};
+pub(crate) use deep_play::access::{data_at, readouts, tree, tree_with};
 
 use crate::hub::{Hub, Planted};
 
@@ -79,10 +79,27 @@ impl Hub<'_> {
                 said.insert(id, text);
             }
         }
-        let tree = match (self.scopes.get(panel), self.panel_document(panel)) {
-            (Some(s), Some((shown, _))) => tree(&shown, &s.scope.hidden(&shown)),
+        // #3236: with its tables inlined, so a mark set's value comes from the rows it draws.
+        let mut tree = match (self.scopes.get(panel), self.shown_with_tables(panel)) {
+            (Some(s), Some(shown)) => tree_with(&shown, &s.scope.hidden(&shown), &self.record()),
             _ => Vec::new(),
         };
+        // The planted tree: each set's value as the document's first revision held it.
+        if self.scenario.module_planted.as_deref()
+            == Some(deep_canvas_marks::data::holds::TREE_KEEPS_VALUE)
+        {
+            let first = self.currents(&doc).into_iter().map(|(_, r)| r).min();
+            if let Some(mut first) = first.and_then(|r| self.revision(&doc, r)) {
+                let _ = self.inline_tables(&mut first);
+                let kept = tree_with(&first, &[], &self.record());
+                for n in &mut tree {
+                    let was = kept.iter().find(|k| k["id"] == n["id"]);
+                    if let (Some(v), Some(_)) = (was.and_then(|k| k.get("value")), n.get("value")) {
+                        n["value"] = v.clone();
+                    }
+                }
+            }
+        }
         // #539: each landing of a pick control's roving focus, by its row's label, in time order.
         announcements.extend(
             self.scopes

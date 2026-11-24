@@ -84,9 +84,9 @@ const ended = (entry) => !alive(processes(), entry) && !alive(processes({ fresh:
 /** This process and its ancestors, nearest first: what a DEEP_THROTTLE or DEEP_PERF_LOCK holder is verified against. */
 export const ancestors = () => chain(processes({ fresh: true }), process.pid);
 /** Every process under `pid` now, by PID and start, so a stop later reaches only these and not a number since taken. */
-export function descendants(pid) {
+export function descendants(...pids) {
   const procs = processes({ fresh: true });
-  return [...procs].filter(([at]) => at !== pid && chain(procs, at).includes(pid)).map(([at, { start }]) => ({ pid: at, start }));
+  return [...procs].filter(([at]) => !pids.includes(at) && chain(procs, at).some((pid) => pids.includes(pid))).map(([at, { start }]) => ({ pid: at, start }));
 }
 /** SIGKILL to each of `tree` still listed with the start it had. */
 export function killTree(tree) {
@@ -355,10 +355,11 @@ let blocked = [];
  * Takes a grant of `cls`, waiting at most `wait` minutes; null when none came, or an ENOSPC marked `waited` thrown when
  * the wait ran out on a full disk (#2869). A build or test request from a chain
  * that holds a grant, and a timed request from one that holds timed, passes through: it holds its ancestor's grant
- * and is released with it. The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
+ * and is released with it. With `turns` false it takes no turn of the pool inside an admitted run either, as
+ * scripts/lease asks (#3238). The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
  * run down while a window is open: a window outlasts a wait, and only its end decides when the next build starts.
  */
-export function acquire(cls, { wait = 30, window = false, run } = {}) {
+export function acquire(cls, { wait = 30, window = false, run, turns = true } = {}) {
   if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
   const pid = process.pid;
   // A readings variable the table can't take is refused before anything is asked.
@@ -371,7 +372,7 @@ export function acquire(cls, { wait = 30, window = false, run } = {}) {
       // A run asked under a caller's grant is admitted at once, with no slot; inside an admitted run, a request under no
       // turn waits for one (#3221).
       const turn = held.some((grant) => grant.class === 'turn');
-      const admitted = !turn && cls !== 'timed' && held.find((grant) => grant.run === true);
+      const admitted = !turn && turns && cls !== 'timed' && held.find((grant) => grant.run === true);
       if (!turn && !admitted && cls === 'test' && run !== undefined) {
         const entry = { id, class: cls, pid, start, nested: true, run: true, used: 0, at: Date.now() };
         table.grants.push(entry);
@@ -791,9 +792,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   const command = window ? [process.execPath, fileURLToPath(new URL('budget-window.mjs', import.meta.url))] : split < 0 ? [] : args.slice(split + 1);
   const given = new Map(Array.from({ length: options.length / 2 | 0 }, (_, k) => [options[2 * k], Number(options[2 * k + 1])]));
   const wait = given.get('--wait') ?? (window ? 60 : 30), hold = given.get('--hold') ?? HOLD;
-  const flags = window ? ['--wait'] : ['--wait', '--hold'];
+  const flags = window ? ['--wait'] : ['--wait', '--hold', '--turns'];
   if (!LIMITS[cls] || !command.length || options.length !== 2 * given.size || ![...given].every(([flag, value]) => flags.includes(flag) && value >= 0)) {
-    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min>] [--hold <min>] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
+    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min>] [--hold <min>] [--turns 0] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
     process.exit(2);
   }
   // A run's admission names the free disk its shards need (#3221); its command doesn't inherit the mark.
@@ -805,7 +806,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   }
   let grant;
   try {
-    grant = acquire(cls, { wait, window, run });
+    grant = acquire(cls, { wait, window, run, turns: given.get('--turns') !== 0 });
   } catch (error) {
     // A wait that ran out on a full disk is no grant (#2869).
     if (error.waited) grant = null;

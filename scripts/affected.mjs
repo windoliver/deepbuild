@@ -11,11 +11,12 @@
 // skip, or BLOCKED by its note, unless the same file's `skips` list covers it, which is printed.
 //
 //   node scripts/affected.mjs [--list] [--wide] [--settled] [--timed] [--slow] [--results=<file>] [path ...]
-//   node scripts/affected.mjs --alone [--timed] [--slow] [--results=<file>]
+//   node scripts/affected.mjs --alone [--timed] [--slow] [--results=<file>] [--kept=<key>]
 //
 // --alone runs the unit lane's alone block whole, the files lanes.mjs's aloneCommand lists, whatever the change, and
 // nothing else: the preflight's unit lane runs it so (#3137; docs/parallel-proof.md, section 7a). --results then holds
-// each test's result too.
+// each test's result too. --kept, from scripts/preflight alone, names the kept results of this tree (#3296, section 7b):
+// a file done there is read, and each job that ends keeps its own.
 //
 // A suite of a closed issue on the main watch's settled list that the change reaches only through a process the suite
 // starts is left to the watch, named on one SETTLED line, and the run reads INCONCLUSIVE; --settled runs it (settled,
@@ -42,7 +43,7 @@ import { alone, aloneCommand, byHand, cargoResults, changedPaths, checks, crates
 import { isTestFile, listFiles, named, underTestPaths } from './proof-change.mjs';
 import { namedByConfig } from './proof-guard.mjs';
 import { childEnv } from './proof-runs.mjs';
-import { binaryNames, binaryPlan, buildBinaries, buildInPlace, commandFiles, watchBinaries } from './proof-binaries.mjs';
+import { binaryNames, binaryPlan, buildBinaries, buildInPlace, builtIn, commandFiles, watchBinaries } from './proof-binaries.mjs';
 import { claimShards, cloneBuilds, roomy, shardsRoom } from './shards.mjs';
 import { acquire, asking, descendants, killTree, release } from './throttle.mjs';
 
@@ -443,8 +444,8 @@ function run(logs, label, command, args, env = {}, cwd = root) {
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
   const report = /^(?:vitest|node)/.test(label) ? join(logs, `${label}.jsonl`) : null;
   const descriptor = openSync(log, 'w');
-  const cls = label.endsWith('timed') ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
-  const leased = [join(root, 'scripts/lease'), command, ...args];
+  const cls = /timed(?:-\d+)?$/.test(label) ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
+  const leased = [join(root, 'scripts/lease'), command, ...args], began = performance.now();
   return new Promise((done) => {
     const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
     live.add(child);
@@ -480,7 +481,7 @@ function run(logs, label, command, args, env = {}, cwd = root) {
       await idle?.killed;
       live.delete(child);
       closeSync(descriptor);
-      done({ label, log, status, output: readFileSync(log, 'utf8'), idle });
+      done({ label, log, status, output: readFileSync(log, 'utf8'), idle, ms: performance.now() - began });
     });
   });
 }
@@ -496,15 +497,18 @@ const SHARDS = Math.min(Number(process.env.DEEP_SHARDS) || Math.max(1, Math.floo
  * Runs groups of the alone block (shardGroups), each one file at a time, in `places` taken in turn as each frees: shards,
  * or the worktree. Each job names its files and where it ran, so its report reads from there.
  */
-async function runGroups(groups, places, files, vitest, node, label, env = {}, more = () => true) {
+async function runGroups(groups, places, files, vitest, node, label, { env = {}, more = () => true, ready = () => {}, ended = () => {} } = {}) {
   const jobs = [], queue = [...groups];
   let at = 0;
+  const add = (job) => { ended(job); jobs.push(job); };
   const worker = async (cwd) => {
     while (queue.length && more()) {
       const group = queue.shift(), name = `${label}-${at++}`;
       const by = { vitest: group.filter((file) => files.vitest.includes(file)), node: group.filter((file) => files.node.includes(file)) };
-      if (by.vitest.length) jobs.push({ ...await vitest(by.vitest, ['--no-file-parallelism'], `vitest-${name}`, cwd, env), files: by.vitest, cwd });
-      if (by.node.length) jobs.push({ ...await node(by.node, ['--test-concurrency=1'], `node-${name}`, cwd, env), files: by.node, cwd });
+      // A build folder a machine's cleanup emptied since the run built it is built again before a job reads it.
+      ready(cwd);
+      if (by.vitest.length) add({ ...await vitest(by.vitest, ['--no-file-parallelism'], `vitest-${name}`, cwd, env), files: by.vitest, cwd });
+      if (by.node.length) add({ ...await node(by.node, ['--test-concurrency=1'], `node-${name}`, cwd, env), files: by.node, cwd });
     }
   };
   await Promise.all(places.map(worker));
@@ -591,12 +595,13 @@ async function prepare(untimed, timedFiles, alone, listedFiles, started) {
     shards = groups.shared.length > 1 && SHARDS > 1 ? await claimShards(root, Math.min(SHARDS, groups.shared.length), (line) => console.log(line)) : [];
     // All final executables are captured before any consumer or sibling cargo test starts. Each shard builds from its
     // own checkout; its first use covers every group it could take from the shared queue.
-    const binaries = [];
+    const binaries = [], built = [];
     for (const cwd of [root, ...shards.map(({ dir }) => dir)]) {
       await tick();
       if (stopped) break;
       const at = performance.now(), { names, builds } = cwd === root ? plan : binaryPlan(cwd, groups.shared.flat().filter((file) => untimed.includes(file)));
       buildInPlace(cwd, builds);
+      built.push([cwd, { names, builds }]);
       // No time limit before the test grant: a cold build holds no test slot, and at 2 jobs one ran past 20 minutes.
       binaries.push([cwd, buildBinaries(cwd, join(binRoot, String(binaries.length), 'bin'), names, undefined, { timeout: 0 })]);
       if (names.length || builds.length) console.log(`BINARIES ${cwd}: ${[...names.map((name) => `${name} (DEEP_BIN_DIR)`), ...builds.map(({ args }) => `cargo build ${args.join(' ')}`)].join(', ')}; built in ${((performance.now() - at) / 1000).toFixed(0)} s, before the test grant`);
@@ -607,7 +612,7 @@ async function prepare(untimed, timedFiles, alone, listedFiles, started) {
       console.log(`BLOCKED affected: stopped by ${stopped} before its test grant; logs in ${logs}`);
       return 128 + constants.signals[stopped];
     }
-    return { logs, binRoot, binaries, madeFor: madeFor(listedFiles), shards: shards.map(({ dir, lock }) => ({ dir, lock, holder: process.pid })) };
+    return { logs, binRoot, binaries, built, madeFor: madeFor(listedFiles), shards: shards.map(({ dir, lock }) => ({ dir, lock, holder: process.pid })) };
   } catch (error) {
     for (const shard of shards) shard.release();
     const state = error.message.startsWith('INCONCLUSIVE') ? 'INCONCLUSIVE' : 'BLOCKED';
@@ -646,7 +651,7 @@ export function fileResults(selection, { fresh, known, unsure, passed }, cargoRa
 async function main(args) {
   const started = performance.now();
   // Read once and dropped, so a test this run starts that runs affected.mjs itself queues on its own.
-  const held = process.env[HELD] && JSON.parse(process.env[HELD]);
+  let held = process.env[HELD] && JSON.parse(process.env[HELD]);
   delete process.env[HELD];
   if (held) writeFileSync(held.marker, '');
   const paths = args.filter((arg) => !arg.startsWith('--'));
@@ -668,10 +673,23 @@ async function main(args) {
   selection.tests = selection.tests.filter((file) => !watched.folders.includes(suiteOf(file)));
   const { blocks, skipped, timed: timedFiles, slow: slowFiles } = plan(root, selection.tests, changed);
   const runTimed = args.includes('--timed'), runSlow = args.includes('--slow');
+  const keptFrom = args.find((arg) => arg.startsWith('--kept='))?.slice(7);
+  const { openKept, wholeJob } = keptFrom ? await import('./proof-kept.mjs') : {};
+  const kept = keptFrom ? openKept(JSON.parse(keptFrom), (row) => readSkips([row], JSON.parse(readFileSync(join(root, BASELINE), 'utf8')).skips, timed).covered.length > 0) : null;
   const unrunTimed = runTimed ? [] : [...timedFiles.vitest, ...timedFiles.node].sort();
   const unrunSlow = runSlow ? [] : [...slowFiles.vitest, ...slowFiles.node].sort();
   // With --slow, the slow files join the blocks lanes.mjs gives them.
   if (runSlow) for (const runner of ['vitest', 'node']) for (const file of slowFiles[runner]) blocks[listed(alone, file) || listed(exclusive, file) ? 'alone' : 'parallel'][runner].push(file);
+  // A file done in an earlier run of this tree is read, not run (#3296).
+  const done = { vitest: [], node: [] };
+  if (kept) for (const runner of ['vitest', 'node']) {
+    done[runner] = blocks.alone[runner].filter((file) => kept.done(file));
+    blocks.alone[runner] = blocks.alone[runner].filter((file) => !done[runner].includes(file));
+  }
+  if (kept && runTimed) for (const runner of ['vitest', 'node']) {
+    done[runner].push(...timedFiles[runner].filter((file) => kept.done(file)));
+    timedFiles[runner] = timedFiles[runner].filter((file) => !done[runner].includes(file));
+  }
   if (!held) for (const [block, runners] of Object.entries({ ...blocks, timed: timedFiles, ...!runSlow && { slow: slowFiles } })) for (const [runner, files] of Object.entries(runners)) if (files.length) console.log(`${block} ${runner}: ${files.join(' ')}${block === 'timed' && !runTimed ? ' (--timed runs them)' : block === 'slow' ? ' (--slow runs them)' : ''}`);
   if (!held) {
     if (selection.crates.length) console.log(`parallel cargo test: ${selection.crates.join(' ')}`);
@@ -683,6 +701,11 @@ async function main(args) {
   if (!held && watched.folders.length) console.log(`SETTLED ${watched.folders.length} ${watched.folders.length === 1 ? 'suite of a closed issue is' : 'suites of closed issues are'} left to the main watch (--settled runs them): ${watched.folders.join(' ')}`);
   if (args.includes('--list')) return 0;
   const files = [...Object.values(blocks).flatMap((block) => [...block.vitest, ...block.node]), ...runTimed ? [...timedFiles.vitest, ...timedFiles.node] : []];
+  // Nothing left to run, so nothing to build and no grant to ask for: the kept results are all the run reads.
+  if (!held && kept && !files.length && !selection.crates.length) {
+    const logs = mkdtempSync(join(tmpdir(), 'deep-affected-'));
+    held = { before: process.env.DEEP_THROTTLE, prep: { logs, binRoot: join(logs, 'binaries'), binaries: [], built: [], shards: [], madeFor: madeFor([]) } };
+  }
   if (!held) {
     const listedFiles = [...files, ...selection.crates.map((name) => `cargo test -p ${name}`)];
     const timedRun = runTimed ? [...timedFiles.vitest, ...timedFiles.node] : [];
@@ -723,6 +746,30 @@ async function main(args) {
     const vitest = (files, extra, label, cwd, env = {}) => run(logs, label, process.execPath, ['node_modules/vitest/vitest.mjs', 'run', ...extra, '--reporter=dot', '--reporter=./scripts/proof-vitest-reporter.mjs', ...files], { ...env, ...binEnv(cwd), DEEP_PROOF_VITEST_REPORT: join(logs, `${label}.jsonl`) }, cwd);
     const node = (files, extra, label, cwd, env = {}) => run(logs, label, process.execPath, ['--test', ...extra, '--test-reporter=./scripts/proof-reporter.mjs', `--test-reporter-destination=${join(logs, `${label}.jsonl`)}`, '--test-reporter=dot', '--test-reporter-destination=stdout', ...files], { ...env, ...binEnv(cwd) }, cwd);
     const jobs = [];
+    // Keeps a job as it ends, whole, for the next run of this tree; a stopped or cut one is run again.
+    const ended = (job) => {
+      let report = '';
+      try { report = readFileSync(join(logs, `${job.label}.jsonl`), 'utf8'); } catch {}
+      const results = reportResults(job.cwd ?? root, report, job.label);
+      if (kept && wholeJob({ ...job, results })) kept.keep(job.label, job.files, results, job.ms);
+    };
+    const built = new Map(held.prep.built);
+    const ready = (cwd) => {
+      const { names = [], builds = [] } = built.get(cwd) ?? {}, bin = binaries.get(cwd);
+      const placed = builtIn(cwd, builds).every((path) => existsSync(path)), seen = names.every((name) => existsSync(join(bin, name)));
+      if (placed && seen) return;
+      if (!seen) buildBinaries(cwd, bin, names, undefined, { timeout: 0 });
+      if (placed) return;
+      const grant = acquire('build', { wait: 30 }), before = process.env.DEEP_THROTTLE;
+      if (!grant) throw Error('INCONCLUSIVE no grant: no build grant came within 30 min to build again what a cleanup removed');
+      process.env.DEEP_THROTTLE = grant.token;
+      try {
+        buildInPlace(cwd, builds);
+      } finally {
+        process.env.DEEP_THROTTLE = before;
+        release(grant);
+      }
+    };
     // Tests that run a package's build read dist, so a change to a package builds them first, as the typecheck lane does,
     // and the shards, claimed before it (prepare), take the new builds.
     if (changed.some((path) => /^packages\/[^/]+\/src\//.test(path))) {
@@ -752,7 +799,7 @@ async function main(args) {
     // The shards run beside those, since no shard's build writes the worktree's target/.
     // A shard takes its next group only while the disk keeps its floor, since other sessions fill it too; the groups it
     // leaves run in the worktree after the rest.
-    const inShards = shards.length ? runGroups(groups.shared, shards.map(({ dir }) => dir), blocks.alone, vitest, node, 'alone', {}, roomy) : null;
+    const inShards = shards.length ? runGroups(groups.shared, shards.map(({ dir }) => dir), blocks.alone, vitest, node, 'alone', { more: roomy, ready, ended }) : null;
     jobs.push(...await Promise.all(beside));
     let left = groups.shared;
     try {
@@ -767,25 +814,40 @@ async function main(args) {
     }
     if (inShards && left.length) console.log(`SHARD ${left.length} alone ${left.length === 1 ? 'group runs' : 'groups run'} in the worktree: the disk fell under its floor`);
     // Without shards the block runs in the worktree after the rest, one group at a time; the exclusive groups always do.
-    jobs.push(...(await runGroups([...left, ...groups.exclusive], [root], blocks.alone, vitest, node, 'alone-worktree')).jobs);
+    jobs.push(...(await runGroups([...left, ...groups.exclusive], [root], blocks.alone, vitest, node, 'alone-worktree', { ready, ended })).jobs);
     // The untimed jobs have ended, so the run's own grant goes back, and each timed block asks for its timed grant as the
     // run's caller would: nested in the caller's grant, or top-level.
     const [cls, id] = (process.env.DEEP_THROTTLE ?? '').split(':');
     if (id && process.env.DEEP_THROTTLE !== held.before) release({ class: cls, id });
     const own = { DEEP_THROTTLE: held.before };
     // A timed test measures for as long as its issue says, #1477's arms 8 s each: its limit is its own, or ten minutes, never vitest's 5 s (#2569).
-    if (runTimed && timedFiles.vitest.length) jobs.push(await vitest(timedFiles.vitest, ['--no-file-parallelism', '--testTimeout=600000'], 'vitest-timed', root, own));
-    if (runTimed && timedFiles.node.length) jobs.push(await node(timedFiles.node, ['--test-concurrency=1'], 'node-timed', root, own));
+    // A timed file is a job of its own under a grant it gives back, so another session's request goes first between two (#3297).
+    const timedJobs = async (runner, files) => {
+      for (const [at, group] of (kept ? files.map((file) => [file]) : files.length ? [files] : []).entries()) {
+        ready(root);
+        const job = await (runner === 'vitest' ? vitest(group, ['--no-file-parallelism', '--testTimeout=600000'], kept ? `vitest-timed-${at}` : 'vitest-timed', root, own) : node(group, ['--test-concurrency=1'], kept ? `node-timed-${at}` : 'node-timed', root, own));
+        ended({ ...job, files: group });
+        jobs.push({ ...job, files: group });
+      }
+    };
+    if (runTimed) {
+      await timedJobs('vitest', timedFiles.vitest);
+      await timedJobs('node', timedFiles.node);
+    }
 
     if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];
     const failures = [], passed = [], findings = [], skips = [], partial = new Set();
+    // What an earlier run of this tree kept, as its runner reported it.
+    if (kept) { const before = kept.results([...done.vitest, ...done.node]); failures.push(...before.failures); passed.push(...before.passed); skips.push(...before.skips); }
     for (const job of jobs) {
       const tests = /^(?:vitest|node)/.test(job.label);
       let report = '';
       try { if (tests) report = readFileSync(join(logs, `${job.label}.jsonl`)).subarray(0, job.idle?.cut).toString('utf8'); } catch {}
       // A stopped job's report may end part way through a row.
       if (job.idle) report = report.slice(0, report.lastIndexOf('\n') + 1);
-      const results = reportResults(job.cwd ?? root, report, job.label);
+      let results = reportResults(job.cwd ?? root, report, job.label);
+      // An earlier run of this tree's rows stand beside this job's, and a failure over a later pass.
+      if (kept && tests && !results.noGrant) results = { ...kept.overlay(results, job.files ?? [], job.label), cut: results.cut };
       // A job the throttle didn't run, for want of a grant or of its table, ran nothing, so none of its results is read:
       // it is unrun, never a failure on main. A vitest job's marker names each of its files; any other's output says so.
       const [, state, message] = results.noGrant ? [] : job.output.match(/^(INCONCLUSIVE|BLOCKED) (no grant|throttle): (.*)/) ?? [];
@@ -832,7 +894,7 @@ async function main(args) {
     const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || watched.folders.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
     const resultsFile = args.find((arg) => arg.startsWith('--results='))?.slice(10);
     // Each test's result as its runner reported it, which runLanes reads for the unit lane's record as a runner's report.
-    const tests = block ? { tests: { failures, passed, skips } } : {};
+    const tests = block ? { tests: { failures, passed, skips }, ...kept && { kept: { read: done.vitest.length + done.node.length } } } : {};
     if (resultsFile) writeFileSync(resultsFile, `${JSON.stringify({ state, ...fileResults(selection, { fresh, known, unsure, passed }, jobs.some(({ label, status }) => label === 'cargo' && status === 0), partial), ...tests }, null, 2)}\n`);
     console.log(`${state} affected: ${fresh.length} new, ${known.length} already failing on main, ${unsure.length} inconclusive or blocked, ${covered.length} listed skips, ${passed.length} passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; logs in ${logs}`);
     return { FAIL: 1, INCONCLUSIVE: 2, BLOCKED: 3, INVALID: 3 }[state] ?? 0;
