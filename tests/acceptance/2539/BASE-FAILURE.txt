@@ -1,0 +1,314 @@
+# #2539 acceptance suite on the base commit
+# date: 2026-11-23 02:38 UTC
+# base: 0fffd8fcfd8eb56f7224a950cafef81cd909ff67 (claude/issue-2539-hook-reply-evidence-sync-2a4426, = origin/main, clean but for this folder), no implementation of #2539
+# node: v24.22.0; machine: Darwin arm64 (12 cores), load average at start: 71.01 79.09 77.52, at end: 13.38 45.27 63.16
+#       (other sessions' runs; each test prints the 1-minute load with what it measured)
+# command: npx vitest run tests/acceptance/2539/ --reporter=verbose
+# expected: 12 failed, 4 passed.
+#   #2539.948b73c4 (own-prompt.test.ts), 4 failed: each resuming prompt over 8,192 characters (a typed rule line;
+#     rejected:; a status question; the scheduled prompt with both) replies after 1.9 s, cut at the hub's 2 s hold while
+#     its own evidence syncs for 4 s + 4 s. The rule, the rejection and their origins are saved as they should be; the
+#     status question's reply comes back empty.
+#   #2539.10f656f1 (other-session.test.ts), 6 failed: while session A's resuming prompt (plain; with a typed rule line)
+#     syncs its evidence, session B's prompt replies after 1.9 s, its held tool call (PostToolUseFailure) after 1.9 s,
+#     and its Stop after 7.9 s.
+#   #2539.fc330be5 (sees.test.ts), 2 failed, 4 passed: with the answer (the ask) recorded before the slowed commit
+#     starts, the asking session's prompt (status question) sent during its syncs waits, is cut at its hold after 1.9 s
+#     and comes back empty, without the answer (the count). With the answer given (the ask filed) during the slowed
+#     commit, the hook sent once the record holds it carries the answer (prompt, Stop, SessionStart) and counts the ask:
+#     those 4 pass on the base, where the record shows it only after the syncs; they guard the fix.
+# The verbatim output follows, the home folder in the RUN line shortened to ~.
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-2539-hook-reply-evidence-sync-2a4426
+
+stdout | tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 a typed rule line: the reply comes within 1 s, and the rule is saved once, from a prompt recorded as a person's
+#2539.948b73c4 the resuming prompt with a typed rule line: 9943 characters, reply in 1903 ms (hold 1795401512326, sent 1795401510324); recorded from person; its evidence's slowed syncs [[1795401510337,1795401514347],[1795401514347,1795401518361]]; 1-minute load 59.0 on 12 cores
+
+ × tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 a typed rule line: the reply comes within 1 s, and the rule is saved once, from a prompt recorded as a person's 19135ms
+   → the resuming prompt with a typed rule line's reply took 1903 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 59.0 on 12 cores): expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's prompt replies within 1 s while session A's resuming prompt (plain) is in its 4 s evidence syncs
+#2539.10f656f1 session B's prompt replies while session A's prompt (plain) synced: 26 judged, 1 sent while a slowed sync of A's evidence ran (1 of them held for a reply), slowest UserPromptSubmit at 1902 ms; each 4000 ms sync: [[1795401510390,1795401514397],[1795401514397,1795401518406]]; A's own reply 7 ms; 1-minute load 59.0 on 12 cores
+
+ × tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's prompt replies within 1 s while session A's resuming prompt (plain) is in its 4 s evidence syncs 22207ms
+   → session B's UserPromptSubmit (sent while a slowed sync of session A's evidence ran) replied in 1902 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms: expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 rejected: the reply comes within 1 s, and the rejection is saved as your decision with its guard entry, from a prompt recorded as a person's
+#2539.948b73c4 the resuming prompt with rejected:: 9917 characters, reply in 1902 ms (hold 1795401530878, sent 1795401528877); recorded from person; its evidence's slowed syncs [[1795401528884,1795401532891],[1795401532891,1795401536899]]; 1-minute load 51.5 on 12 cores
+
+ × tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 rejected: the reply comes within 1 s, and the rejection is saved as your decision with its guard entry, from a prompt recorded as a person's 18549ms
+   → the resuming prompt with rejected:'s reply took 1902 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 51.5 on 12 cores): expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 your answer, recorded before another session's slowed commit starts, is carried by the asking session's prompt sent while that commit's evidence syncs
+#2539.fc330be5 answer seen by UserPromptSubmit (recorded, then the slowed commit): the hook was sent at 1795401532392, replied in 1903 ms (hold 1795401534392), WITHOUT the answer; the slowed syncs [[1795401530898,1795401534911],[1795401534911,1795401538920]]; 1-minute load 51.5 on 12 cores
+
+ × tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 your answer, recorded before another session's slowed commit starts, is carried by the asking session's prompt sent while that commit's evidence syncs 39694ms
+   → your answer to ask:01M8349VEQBMYN070W0XG1DSCZ ("North road 105875") was in the record before the asking session's UserPromptSubmit was sent, so that hook's reply must carry it; the reply (after 1903 ms) was "\n": expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's tool-call replies (PreToolUse, PostToolUse, PostToolUseFailure) come within 1 s while session A's resuming prompt (plain) is in its 4 s evidence syncs
+#2539.10f656f1 session B's tool call replies while session A's prompt (plain) synced: 156 judged, 6 sent while a slowed sync of A's evidence ran (1 of them held for a reply), slowest PostToolUseFailure at 1901 ms; each 4000 ms sync: [[1795401532004,1795401536015],[1795401536015,1795401540029]]; A's own reply 5 ms; 1-minute load 49.5 on 12 cores
+
+ × tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's tool-call replies (PreToolUse, PostToolUse, PostToolUseFailure) come within 1 s while session A's resuming prompt (plain) is in its 4 s evidence syncs 21603ms
+   → session B's PostToolUseFailure (sent while a slowed sync of session A's evidence ran) replied in 1901 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms: expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 a status question: the reply comes within 1 s and is the status answer from the record, to a prompt recorded as a person's
+#2539.948b73c4 the resuming status question: 8415 characters, reply in 1903 ms (hold 1795401549477, sent 1795401547475); recorded from person; its evidence's slowed syncs [[1795401547486,1795401551497],[1795401551497,1795401555506]]; 1-minute load 46.9 on 12 cores
+
+ × tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 a status question: the reply comes within 1 s and is the status answer from the record, to a prompt recorded as a person's 18791ms
+   → the resuming status question's reply took 1903 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 46.9 on 12 cores)
+the status question's reply must be the status answer from the record (its state and "needs you: <n>"); it was "\n": expected [ …(2) ] to deeply equal []
+stdout | tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's Stop replies within 1 s while session A's resuming prompt (plain) is in its 4 s evidence syncs
+#2539.10f656f1 session B's Stop replies while session A's prompt (plain) synced: 25 judged, 1 sent while a slowed sync of A's evidence ran (1 of them held for a reply), slowest Stop at 7865 ms; each 4000 ms sync: [[1795401553633,1795401557647],[1795401557647,1795401561662]]; A's own reply 6 ms; 1-minute load 42.0 on 12 cores
+
+ × tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's Stop replies within 1 s while session A's resuming prompt (plain) is in its 4 s evidence syncs 21617ms
+   → session B's Stop (sent while a slowed sync of session A's evidence ran) replied in 7865 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms: expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 the right origin: the same rule line and rejected: in a long resuming prompt nobody typed (scheduled) reply within 1 s and save nothing, while yours after it are saved
+#2539.948b73c4 the scheduled resuming prompt with a rule line and rejected:: 9960 characters, reply in 1903 ms (hold 1795401568241, sent 1795401566240); recorded from scheduled; its evidence's slowed syncs [[1795401566246,1795401570253],[1795401570254,1795401574261]]; 1-minute load 39.4 on 12 cores
+
+ × tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 the right origin: the same rule line and rejected: in a long resuming prompt nobody typed (scheduled) reply within 1 s and save nothing, while yours after it are saved 18591ms
+   → the scheduled resuming prompt with a rule line and rejected:'s reply took 1903 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 39.4 on 12 cores): expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 your answer, given while another session's slowed commit syncs its evidence, is carried by the asking session's prompt sent once the record holds it
+#2539.fc330be5 answer seen by UserPromptSubmit (recorded during the slowed commit): the hook was sent at 1795401582145, replied in 4 ms (hold 1795401584145), carrying the answer; the slowed syncs [[1795401569687,1795401573707],[1795401573707,1795401577719]]; 1-minute load 37.8 on 12 cores
+
+ ✓ tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 your answer, given while another session's slowed commit syncs its evidence, is carried by the asking session's prompt sent once the record holds it 39204ms
+stdout | tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's prompt replies within 1 s while session A's resuming prompt (with a typed rule line) is in its 4 s evidence syncs
+#2539.10f656f1 session B's prompt replies while session A's prompt (with a typed rule line) synced: 25 judged, 1 sent while a slowed sync of A's evidence ran (1 of them held for a reply), slowest UserPromptSubmit at 1902 ms; each 4000 ms sync: [[1795401575228,1795401579238],[1795401579238,1795401583248]]; A's own reply 1903 ms; 1-minute load 36.3 on 12 cores
+
+ × tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's prompt replies within 1 s while session A's resuming prompt (with a typed rule line) is in its 4 s evidence syncs 21559ms
+   → session B's UserPromptSubmit (sent while a slowed sync of session A's evidence ran) replied in 1902 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms: expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's tool-call replies (PreToolUse, PostToolUse, PostToolUseFailure) come within 1 s while session A's resuming prompt (with a typed rule line) is in its 4 s evidence syncs
+#2539.10f656f1 session B's tool call replies while session A's prompt (with a typed rule line) synced: 150 judged, 6 sent while a slowed sync of A's evidence ran (1 of them held for a reply), slowest PostToolUseFailure at 1901 ms; each 4000 ms sync: [[1795401596860,1795401600870],[1795401600870,1795401604883]]; A's own reply 1905 ms; 1-minute load 29.4 on 12 cores
+
+ × tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's tool-call replies (PreToolUse, PostToolUse, PostToolUseFailure) come within 1 s while session A's resuming prompt (with a typed rule line) is in its 4 s evidence syncs 21716ms
+   → session B's PostToolUseFailure (sent while a slowed sync of session A's evidence ran) replied in 1901 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms: expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 your answer, given while another session's slowed commit syncs its evidence, is carried by the asking session's Stop sent once the record holds it
+#2539.fc330be5 answer seen by Stop (recorded during the slowed commit): the hook was sent at 1795401621536, replied in 6 ms (hold 1795401681537), carrying the answer; the slowed syncs [[1795401609093,1795401613097],[1795401613098,1795401617113]]; 1-minute load 28.8 on 12 cores
+
+ ✓ tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 your answer, given while another session's slowed commit syncs its evidence, is carried by the asking session's Stop sent once the record holds it 39454ms
+stdout | tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's Stop replies within 1 s while session A's resuming prompt (with a typed rule line) is in its 4 s evidence syncs
+#2539.10f656f1 session B's Stop replies while session A's prompt (with a typed rule line) synced: 24 judged, 1 sent while a slowed sync of A's evidence ran (1 of them held for a reply), slowest Stop at 7867 ms; each 4000 ms sync: [[1795401618703,1795401622710],[1795401622710,1795401626721]]; A's own reply 1903 ms; 1-minute load 26.9 on 12 cores
+
+ × tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's Stop replies within 1 s while session A's resuming prompt (with a typed rule line) is in its 4 s evidence syncs 21774ms
+   → session B's Stop (sent while a slowed sync of session A's evidence ran) replied in 7867 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms: expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 your answer, given while another session's slowed commit syncs its evidence, is carried by the asking session's SessionStart (resume) sent once the record holds it
+#2539.fc330be5 answer seen by SessionStart (recorded during the slowed commit): the hook was sent at 1795401661442, replied in 12 ms (hold 1795401663443), carrying the answer; the slowed syncs [[1795401648990,1795401653002],[1795401653002,1795401657009]]; 1-minute load 22.8 on 12 cores
+
+ ✓ tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 your answer, given while another session's slowed commit syncs its evidence, is carried by the asking session's SessionStart (resume) sent once the record holds it 39873ms
+stdout | tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 an ask, recorded before another session's slowed commit starts, is counted by the asking session's status question sent while that commit's evidence syncs
+#2539.fc330be5 ask seen by a status question (recorded, then the slowed commit): the hook was sent at 1795401669889, replied in 1901 ms (hold 1795401671890), needs you: not said; the slowed syncs [[1795401668394,1795401672400],[1795401672400,1795401676406]]; 1-minute load 18.6 on 12 cores
+
+ × tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 an ask, recorded before another session's slowed commit starts, is counted by the asking session's status question sent while that commit's evidence syncs 39384ms
+   → the ask "Which road should the path take (f28be8)?" was in the record before the status question was sent and is the only open one, so the reply must say "needs you: 1"; the reply (after 1901 ms) was "\n": expected [ Array(1) ] to deeply equal []
+stdout | tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 an ask, filed while another session's slowed commit syncs its evidence, is counted by the asking session's status question sent once the record holds it
+#2539.fc330be5 ask seen by a status question (recorded during the slowed commit): the hook was sent at 1795401719720, replied in 257 ms (hold 1795401721720), needs you: 1; the slowed syncs [[1795401707521,1795401711533],[1795401711533,1795401715541]]; 1-minute load 15.4 on 12 cores
+
+ ✓ tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 an ask, filed while another session's slowed commit syncs its evidence, is counted by the asking session's status question sent once the record holds it 39194ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's prompt replies within 1 s while session A's resuming prompt (plain) is in its 4 s evidence syncs
+ FAIL  tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's prompt replies within 1 s while session A's resuming prompt (with a typed rule line) is in its 4 s evidence syncs
+AssertionError: session B's UserPromptSubmit (sent while a slowed sync of session A's evidence ran) replied in 1902 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "session B's UserPromptSubmit (sent while a slowed sync of session A's evidence ran) replied in 1902 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms",
++ ]
+
+ ❯ tests/acceptance/2539/other-session.test.ts:86:45
+     84|       w = await startWorld();
+     85|       const problems = await other(w, 'prompt', a);
+     86|       expect(problems, problems.join('\n')).toEqual([]);
+       |                                             ^
+     87|     }, 500_000);
+     88|     it(`${C2} another session's tool-call replies (PreToolUse, PostToo…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's tool-call replies (PreToolUse, PostToolUse, PostToolUseFailure) come within 1 s while session A's resuming prompt (plain) is in its 4 s evidence syncs
+ FAIL  tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's tool-call replies (PreToolUse, PostToolUse, PostToolUseFailure) come within 1 s while session A's resuming prompt (with a typed rule line) is in its 4 s evidence syncs
+AssertionError: session B's PostToolUseFailure (sent while a slowed sync of session A's evidence ran) replied in 1901 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "session B's PostToolUseFailure (sent while a slowed sync of session A's evidence ran) replied in 1901 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms",
++ ]
+
+ ❯ tests/acceptance/2539/other-session.test.ts:91:45
+     89|       w = await startWorld();
+     90|       const problems = await other(w, 'tool call', a);
+     91|       expect(problems, problems.join('\n')).toEqual([]);
+       |                                             ^
+     92|     }, 500_000);
+     93|     it(`${C2} another session's Stop replies within 1 s while session …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's Stop replies within 1 s while session A's resuming prompt (plain) is in its 4 s evidence syncs
+AssertionError: session B's Stop (sent while a slowed sync of session A's evidence ran) replied in 7865 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "session B's Stop (sent while a slowed sync of session A's evidence ran) replied in 7865 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms",
++ ]
+
+ ❯ tests/acceptance/2539/other-session.test.ts:96:45
+     94|       w = await startWorld();
+     95|       const problems = await other(w, 'Stop', a);
+     96|       expect(problems, problems.join('\n')).toEqual([]);
+       |                                             ^
+     97|     }, 500_000);
+     98|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  tests/acceptance/2539/other-session.test.ts > #2539.10f656f1 while one session's FULL commit is in its evidence sync, another session's replies come within 1 s > #2539.10f656f1 another session's Stop replies within 1 s while session A's resuming prompt (with a typed rule line) is in its 4 s evidence syncs
+AssertionError: session B's Stop (sent while a slowed sync of session A's evidence ran) replied in 7867 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "session B's Stop (sent while a slowed sync of session A's evidence ran) replied in 7867 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms",
++ ]
+
+ ❯ tests/acceptance/2539/other-session.test.ts:96:45
+     94|       w = await startWorld();
+     95|       const problems = await other(w, 'Stop', a);
+     96|       expect(problems, problems.join('\n')).toEqual([]);
+       |                                             ^
+     97|     }, 500_000);
+     98|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 a typed rule line: the reply comes within 1 s, and the rule is saved once, from a prompt recorded as a person's
+AssertionError: the resuming prompt with a typed rule line's reply took 1903 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 59.0 on 12 cores): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the resuming prompt with a typed rule line's reply took 1903 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 59.0 on 12 cores)",
++ ]
+
+ ❯ tests/acceptance/2539/own-prompt.test.ts:52:47
+     50|     const n = learned(saved ?? r.events, line).length;
+     51|     if (n !== 1) r.problems.push(`the rule line you typed must be save…
+     52|     expect(r.problems, r.problems.join('\n')).toEqual([]);
+       |                                               ^
+     53|   }, 400_000);
+     54|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 rejected: the reply comes within 1 s, and the rejection is saved as your decision with its guard entry, from a prompt recorded as a person's
+AssertionError: the resuming prompt with rejected:'s reply took 1902 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 51.5 on 12 cores): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the resuming prompt with rejected:'s reply took 1902 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 51.5 on 12 cores)",
++ ]
+
+ ❯ tests/acceptance/2539/own-prompt.test.ts:66:47
+     64|     while (!guardsFor(w, word).length && Date.now() < deadline) await …
+     65|     if (!guardsFor(w, word).length) r.problems.push(`rejected: \`${wor…
+     66|     expect(r.problems, r.problems.join('\n')).toEqual([]);
+       |                                               ^
+     67|   }, 400_000);
+     68|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 a status question: the reply comes within 1 s and is the status answer from the record, to a prompt recorded as a person's
+AssertionError: the resuming status question's reply took 1903 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 46.9 on 12 cores)
+the status question's reply must be the status answer from the record (its state and "needs you: <n>"); it was "\n": expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the resuming status question's reply took 1903 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 46.9 on 12 cores)",
++   "the status question's reply must be the status answer from the record (its state and \"needs you: <n>\"); it was \"\\n\"",
++ ]
+
+ ❯ tests/acceptance/2539/own-prompt.test.ts:78:47
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  tests/acceptance/2539/own-prompt.test.ts > #2539.948b73c4 a resuming prompt over 8,192 characters that reads its own origin replies within 1 s of slowed evidence syncs, and saves what it saved before > #2539.948b73c4 the right origin: the same rule line and rejected: in a long resuming prompt nobody typed (scheduled) reply within 1 s and save nothing, while yours after it are saved
+AssertionError: the scheduled resuming prompt with a rule line and rejected:'s reply took 1903 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 39.4 on 12 cores): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the scheduled resuming prompt with a rule line and rejected:'s reply took 1903 ms, with each evidence sync taking 4000 ms; it must come within 1000 ms (1-minute load 39.4 on 12 cores)",
++ ]
+
+ ❯ tests/acceptance/2539/own-prompt.test.ts:97:47
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 your answer, recorded before another session's slowed commit starts, is carried by the asking session's prompt sent while that commit's evidence syncs
+AssertionError: your answer to ask:01M8349VEQBMYN070W0XG1DSCZ ("North road 105875") was in the record before the asking session's UserPromptSubmit was sent, so that hook's reply must carry it; the reply (after 1903 ms) was "\n": expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "your answer to ask:01M8349VEQBMYN070W0XG1DSCZ (\"North road 105875\") was in the record before the asking session's UserPromptSubmit was sent, so that hook's reply must carry it; the reply (after 1903 ms) was \"\\n\"",
++ ]
+
+ ❯ tests/acceptance/2539/sees.test.ts:111:43
+    109|     w = await startWorld();
+    110|     const problems = await answerSeen(w, 'recorded, then the slowed co…
+    111|     expect(problems, problems.join('\n')).toEqual([]);
+       |                                           ^
+    112|   }, 600_000);
+    113|   it(`${C3} your answer, given while another session's slowed commit s…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  tests/acceptance/2539/sees.test.ts > #2539.fc330be5 a reply still sees every answer and ask recorded before its hook > #2539.fc330be5 an ask, recorded before another session's slowed commit starts, is counted by the asking session's status question sent while that commit's evidence syncs
+AssertionError: the ask "Which road should the path take (f28be8)?" was in the record before the status question was sent and is the only open one, so the reply must say "needs you: 1"; the reply (after 1901 ms) was "\n": expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the ask \"Which road should the path take (f28be8)?\" was in the record before the status question was sent and is the only open one, so the reply must say \"needs you: 1\"; the reply (after 1901 ms) was \"\\n\"",
++ ]
+
+ ❯ tests/acceptance/2539/sees.test.ts:131:43
+    129|     w = await startWorld();
+    130|     const problems = await askSeen(w, 'recorded, then the slowed commi…
+    131|     expect(problems, problems.join('\n')).toEqual([]);
+       |                                           ^
+    132|   }, 600_000);
+    133|   it(`${C3} an ask, filed while another session's slowed commit syncs …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  12 failed | 4 passed (16)
+   Start at  18:38:29
+   Duration  237.05s (tests 100%)
+

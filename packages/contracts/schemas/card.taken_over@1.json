@@ -1,5 +1,5 @@
 {
-  "title": "ask.taken_over@1",
+  "title": "card.taken_over@1",
   "description": "Take over (#1580): a paired device moved an open ask's card to itself on the trusted path, signing the call with its own key. The card's revision rises to the one named here, so an answer from a copy at an earlier revision is refused, naming the revision, and an unrevisioned answer from another device is refused while the card is there. Only the core appends it.",
   "x-since": "R2",
   "x-stability": "preview",
@@ -19,7 +19,7 @@
       "description": "The event's ULID, its identity."
     },
     "kind": {
-      "const": "ask.taken_over"
+      "const": "card.taken_over"
     },
     "subject": {
       "type": "string",

@@ -397,6 +397,8 @@ wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "n
 # lockfile.
 [build-dependencies]
 sha2 = "0.10"
+# Issue #3299: the source digest skips what the workspace's .gitignore names, by git's own rules.
+ignore = "0.4"
 # Issue #2892: the player's prebuilt module sets stored as gzip once per build, by the export's own
 # compressor (src/export/gzip.rs).
 miniz_oxide = "0.9"
