@@ -44,7 +44,7 @@ fn refs_to_a_control_lists_each_read_of_it_and_no_other_read() {
     let doc = board(json!({"press": {"kind": "slider"}, "aim": {"kind": "slider"}}));
     let sealed = sealed();
     let rows = |id: &str| -> Vec<(String, &'static str)> {
-        refs::refs_to(&doc, &sealed, &Name::Item(id.into()))
+        refs::refs_to(&doc, &sealed, &Name::Control(id.into()))
             .into_iter()
             .map(|r| (r.path, r.kind))
             .collect()
@@ -81,4 +81,25 @@ fn a_read_of_a_control_the_document_no_longer_holds_is_unresolved() {
             "press".to_string()
         )]
     );
+}
+
+#[test]
+fn a_control_and_an_item_of_one_id_keep_their_rows_apart() {
+    let mut doc = board(json!({"press": {"kind": "slider"}, "aim": {"kind": "slider"}}));
+    doc["items"]["press"] =
+        json!({"id": "press", "kind": "group@1", "name": "Press", "order": "a2"});
+    doc["items"]["dot"] =
+        json!({"id": "dot", "kind": "circle@1", "name": "Dot", "order": "a3", "parent": "press"});
+    let sealed = sealed();
+    let paths = |name: Name| -> Vec<String> {
+        refs::refs_to(&doc, &sealed, &name)
+            .into_iter()
+            .map(|r| r.path)
+            .collect()
+    };
+    assert_eq!(
+        paths(Name::Control("press".into())),
+        ["items/counter/params/reads/0"]
+    );
+    assert_eq!(paths(Name::Item("press".into())), ["items/dot/parent"]);
 }

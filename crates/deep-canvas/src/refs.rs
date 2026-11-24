@@ -78,8 +78,9 @@ impl Decl {
 /// What a field names.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Name {
-    /// An item's ID, or a control's (#3379): a whole revision's `removes` names both by ID alone.
     Item(String),
+    /// A document control, by its ID (#3379).
+    Control(String),
     /// A table's row: a keyed copy's table and key.
     Row(String, String),
     /// A pack's entry, `name@major` as an item's kind names it.
@@ -90,7 +91,8 @@ pub enum Name {
 
 impl Name {
     /// What a read's `target` names: an asset by its SHA-256 (64 hex), a keyed copy's table row
-    /// as `<table>[<key>]`, a pack entry as `name@major`, else an item or a control by its ID.
+    /// as `<table>[<key>]`, a pack entry as `name@major`, else an item by its ID (`deep_query`
+    /// reads a bare ID as an item's or a control's, since the two may share it).
     pub fn of_target(target: &str) -> Name {
         if target.len() == 64 && target.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Name::Asset(target.to_ascii_lowercase());
@@ -259,7 +261,7 @@ fn named(doc: &Value, holds: Holds, value: &Value) -> Option<Name> {
         Control => {
             let held = doc.get("controls").and_then(|c| c.get(s)).is_some();
             let bare = !s.is_empty() && !s.contains(['.', ':', '#', '/']);
-            (held || bare).then(|| Name::Item(s.to_string()))
+            (held || bare).then(|| Name::Control(s.to_string()))
         }
     }
 }
@@ -370,9 +372,15 @@ pub fn refs(doc: &Value, sealed: &Sealed) -> Vec<Ref> {
 
 /// The fields of `doc` that name `name`, in their paths' order by code point.
 pub fn refs_to(doc: &Value, sealed: &Sealed, name: &Name) -> Vec<Ref> {
+    refs_to_any(doc, sealed, &[name])
+}
+
+/// The fields of `doc` that name any of `names`, in their paths' order by code point, from one
+/// walk of the document (#3379: a bare ID asks for an item's rows and a control's).
+pub fn refs_to_any(doc: &Value, sealed: &Sealed, names: &[&Name]) -> Vec<Ref> {
     let mut out: Vec<Ref> = refs(doc, sealed)
         .into_iter()
-        .filter(|r| &r.name == name)
+        .filter(|r| names.contains(&&r.name))
         .collect();
     out.sort_by(|a, b| a.path.cmp(&b.path));
     out
@@ -380,20 +388,34 @@ pub fn refs_to(doc: &Value, sealed: &Sealed, name: &Name) -> Vec<Ref> {
 
 /// Each declared control field of `doc` that names no control the document holds, a read left
 /// dangling by the control's removal or rename (#3379): `(row's ID, path, control ID)`.
+/// Only the items of a kind that declares a control field are read.
 pub fn unresolved_controls(doc: &Value, sealed: &Sealed) -> Vec<(String, String, String)> {
     let controls = doc.get("controls").and_then(Value::as_object);
-    refs(doc, sealed)
-        .into_iter()
-        .filter(|r| r.kind == kind::CONTROL)
-        .filter_map(|r| {
-            let Name::Item(id) = r.name else { return None };
-            if controls.is_some_and(|c| c.contains_key(&id)) {
-                return None;
+    let empty = Map::new();
+    let items = doc
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let mut out = Vec::new();
+    for (id, item) in items {
+        let Some(kind) = item.get("kind").and_then(Value::as_str) else {
+            continue;
+        };
+        let decls = kind_decls(sealed, kind);
+        for d in decls.iter().filter(|d| d.holds == Control) {
+            let mut found = Vec::new();
+            at_pattern(item, d.field, &format!("items/{id}"), &mut found);
+            for (path, value) in found {
+                let Some(Name::Control(control)) = named(doc, Control, value) else {
+                    continue;
+                };
+                if !controls.is_some_and(|c| c.contains_key(&control)) {
+                    out.push((id.clone(), path, control));
+                }
             }
-            let row = r.row.rsplit('/').next().unwrap_or(&r.row).to_string();
-            Some((row, r.path, id))
-        })
-        .collect()
+        }
+    }
+    out
 }
 
 /// Each field of the items of a kind `sealed` knows whose value names an item of `doc` or one of

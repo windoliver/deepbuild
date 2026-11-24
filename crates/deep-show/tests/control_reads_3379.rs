@@ -131,3 +131,42 @@ fn a_patch_deleting_a_read_control_from_a_shared_document_is_refused_listing_its
     assert_eq!(rows.as_array().map(Vec::len), Some(1), "{}", replies[1]);
     refused_at_the_read(&replies[2], rows);
 }
+
+#[test]
+fn removing_a_read_control_lists_its_readers_and_not_an_items_of_the_same_id() {
+    let with_group = |sha: &str, controls: Value| {
+        let mut doc = board(sha, controls);
+        doc["items"]["press"] =
+            json!({"id": "press", "kind": "group@1", "name": "Press", "order": "a1", "params": {}});
+        doc["items"]["dot"] = json!({"id": "dot", "kind": "circle@1", "name": "Dot", "order": "a2", "parent": "press",
+            "params": {"center": [40, 60], "r": 8, "paint": {"fill": {"role": "accent"}}}});
+        doc
+    };
+    let replies = run("shared-id", json!({}), |sha| {
+        vec![
+            show(with_group(sha, press())),
+            refs_to("press"),
+            json!({"call": "deep_show", "session": "sess-alpha", "doc": DOC, "document": with_group(sha, json!({})),
+                "removes": ["press"], "include": ["issues"]}),
+        ]
+    });
+    assert_eq!(replies[0]["outcome"], "presented", "{}", replies[0]);
+    let paths: Vec<&Value> = replies[1]["rows"]
+        .as_array()
+        .expect("rows")
+        .iter()
+        .map(|r| &r["path"])
+        .collect();
+    assert_eq!(
+        paths,
+        [
+            &json!("items/counter/params/reads/0"),
+            &json!("items/dot/parent")
+        ],
+        "refs_to a bare ID gives both"
+    );
+    refused_at_the_read(
+        &replies[2],
+        &json!([{"row": "items/counter", "path": "items/counter/params/reads/0", "kind": "control"}]),
+    );
+}

@@ -27,6 +27,7 @@ use deep_canvas::document::{
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
+use deep_canvas::refs::Name;
 use deep_canvas::registry::Sealed;
 use deep_canvas::show::{
     inline_count, order_issues, truncated, unreadable_handles, whole_diff_by, Writer, WriterKind,
@@ -982,16 +983,19 @@ fn restore(
 /// #1801: each refusal that a removed item's dangling name raised (`ref_unresolved` at one of the
 /// fields naming it, or naming it as its value) gets as its `actual` every row that still names
 /// the item in `doc`, as `refs_to` lists them and in its order, so one refusal names them all.
+/// #3379: a removed control's, the same way, its rows never an item's that shares its ID.
 pub(crate) fn name_referrers(
     refusals: &mut [Issue],
     doc: &Value,
-    removed: &[&str],
+    removed: &[Name],
     sealed: &Sealed,
     planted: Option<Planted>,
 ) {
-    for id in removed {
-        let name = deep_canvas::refs::Name::Item(id.to_string());
-        let refs = deep_canvas::refs::refs_to(doc, sealed, &name);
+    for name in removed {
+        let (Name::Item(id) | Name::Control(id)) = name else {
+            continue;
+        };
+        let refs = deep_canvas::refs::refs_to(doc, sealed, name);
         if refs.is_empty() {
             continue;
         }
