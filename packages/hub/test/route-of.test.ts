@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { openRecord, ulid } from '@deepbuild/record';
-import { routeOf } from '../src/route-of.js';
+import { routeOf } from '../src/session-facts.js';
 
 const OWN = { ANTHROPIC_BASE_URL: false, ANTHROPIC_AUTH_TOKEN: false, CLAUDE_CODE_USE_BEDROCK: false, CLAUDE_CODE_USE_VERTEX: false };
 
