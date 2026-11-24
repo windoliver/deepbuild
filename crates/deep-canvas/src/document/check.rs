@@ -1619,12 +1619,12 @@ fn check_item(
             None
         }
         Lookup::Malformed => {
-            issues.push(Issue::error(
-                "out_of_range",
+            // Another tool's word is refused as a pack's census holds it (#3032).
+            issues.push(super::close::no_kind(
                 key,
-                at("kind"),
-                json!(text),
-                "not family.name@major",
+                text,
+                (ctx.packs, ctx.resolved),
+                ctx.sealed.close_fault,
             ));
             None
         }
