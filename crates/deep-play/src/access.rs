@@ -13,6 +13,8 @@ use std::collections::BTreeMap;
 use deep_canvas::kinds::{lookup, registry, Lookup};
 use deep_canvas::template;
 use deep_canvas_marks::data::holds::{holds, Walk};
+use deep_canvas_marks::data::BoundRows;
+use deep_canvas_marks::scene::{bound_rows, Record};
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
 use serde_json::{json, Map, Value};
@@ -114,7 +116,17 @@ fn heard<'a>(doc: &'a Value, hidden: &[String]) -> Vec<(&'a String, &'a Value)> 
 /// The accessibility tree of a document: its own node first (its title as the name, with its
 /// description), then one node per item heard, in reading order, and then one per control,
 /// named by its label and with its ARIA role.
+///
+/// A cell bound to a reading is one this has none for: its row doesn't draw where no record is.
 pub fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
+    tree_with(doc, hidden, &Record::default())
+}
+
+/// [`tree`] as a host that holds `record` draws it: a set's bound cells with their readings.
+pub fn tree_with(doc: &Value, hidden: &[String], record: &Record) -> Vec<Value> {
+    let empty = Map::new();
+    let readings = bound_rows(doc.as_object().unwrap_or(&empty), record);
+    let unbound = BoundRows::new();
     let mut nodes = vec![json!({
         "id": text(doc.get("id")),
         "role": "document",
@@ -130,7 +142,10 @@ pub fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
         let name = text(alt.or(item.get("name")));
         let mut node = json!({"id": id, "role": item["role"], "name": name});
         // #3236: a mark set's or a series' node says what it holds, computed from what it draws.
-        if let Some(Ok((held, _))) = items.and_then(|all| holds(id, item, all, Walk::Reading)) {
+        let bound = readings.get(id).unwrap_or(&unbound);
+        if let Some(Ok((held, _))) =
+            items.and_then(|all| holds(id, item, all, bound, Walk::Reading))
+        {
             node["value"] = json!(held.text());
         }
         nodes.push(node);

@@ -2,11 +2,11 @@
   "wasm_bindgen": "0.2.129",
   "set": "full",
   "files": {
-    "player.js": "18273f13ceffcd7eeb374e9d78a33e32bb539ea64fbcbac87a37ac55089d3455",
-    "player_bg.wasm": "8ae8b2f60926a6ef359bc01c9780bb04089ba54b6527e573ed9b2f9745b4aea1"
+    "player.js": "70cb0082d26ebcf2de0ad9e9775d46beb10b28fea7406e22ffa6fef62e22b561",
+    "player_bg.wasm": "d9251df9848924441af69212fba8adb26fc790deb7aa7c871374c0d8dadc7758"
   },
   "core_version": "0.0.0",
-  "set_digest": "2ba566cdbb0f322a5359b5b4d1a1f77d29597d378a59293946b71974f50c1020",
+  "set_digest": "6c54ed20df598c749888887fefbf0a9e6b03d903b337639b89f5f3d9c6c3e3ce",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "modules": [
     "building",

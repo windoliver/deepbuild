@@ -342,7 +342,8 @@ impl Played {
             if controls.is_some_and(|c| c.contains_key(&id)) {
                 n["control"] = json!(true);
             }
-            if reading.contains(&id) {
+            // A set that draws nothing to walk is no Tab stop, as in the app.
+            if reading.contains(&id) && !self.walk(&id).is_empty() {
                 n["walk"] = json!(true);
             }
         }
@@ -352,8 +353,16 @@ impl Played {
     /// #3236: a set's walk as the app's reading focus takes it, each stop's ID and what it says.
     pub fn walk(&self, set: &str) -> Vec<Value> {
         use deep_canvas_marks::data::holds::{holds, Walk};
-        let items = self.doc.get("items").and_then(Value::as_object);
-        match items.and_then(|all| holds(set, all.get(set)?, all, Walk::Reading)) {
+        use deep_canvas_marks::scene::{bound_rows, Record};
+        // The player holds no record, so a cell bound to a reading has none here.
+        let Some(form) = self.doc.as_object() else {
+            return Vec::new();
+        };
+        let bound = bound_rows(form, &Record::default())
+            .remove(set)
+            .unwrap_or_default();
+        let items = form.get("items").and_then(Value::as_object);
+        match items.and_then(|all| holds(set, all.get(set)?, all, &bound, Walk::Reading)) {
             Some(Ok((held, stops))) => stops
                 .iter()
                 .map(|s| json!({"id": s.id(set), "text": held.says(s)}))

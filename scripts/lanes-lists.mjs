@@ -1462,6 +1462,16 @@ timed.push('tests/acceptance/269/ac6-budgets.test.ts', 'tests/acceptance/269-red
 // step 0, so its grid never changes; its blind redraft, 269-redraft-ac6/, runs in its place.
 byHand.push('tests/acceptance/269/ac6-budgets.test.ts');
 
+// #3236's files (blind) each build deep-show; criterion 7 drives headless Chrome, 8 a real window read through AppKit,
+// 9 release builds here and at the merge base.
+alone.push('tests/acceptance/3236/');
+// #3236's criterion 8 was redrafted blind: the first draft's client hears each announcement twice
+// (tests/acceptance/3236-redraft-ac8/DISPUTE.md). The redraft runs in its place, both opening real windows, and the
+// hidden-window regression opens one too.
+alone.push('tests/acceptance/3236-redraft-ac8/', 'tests/live-window-hidden.test.ts');
+byHand.push('tests/acceptance/3236/ac8-appkit.test.ts');
+// tests/web-reading-walk.test.ts builds deep-show, exports each chart as a web bundle and presses keys in headless Chrome.
+alone.push('tests/web-reading-walk.test.ts');
 // #2848's first draft and its fuser test are kept by hand until the owner swaps them: they test the jobserver each run
 // made for itself, which #3221 replaces with job pipes lent from one pool; the blind redraft, 2848-redraft-3221/, runs
 // in their place (tests/acceptance/2848/DISPUTE-3221.md).
@@ -1488,12 +1498,3 @@ alone.push('tests/acceptance/3234-redraft-ac6/');
 // no program passes both; their blind redrafts, 112-redraft-3245/, 2077-redraft-3245/ and 2495-redraft-3245/, run in
 // their place.
 byHand.push('tests/acceptance/112/eval.test.ts', 'tests/acceptance/112/ci.test.ts', 'tests/acceptance/2077/removal.test.ts', 'tests/acceptance/2495/report.test.ts');
-
-// #3236's files (blind) each build deep-show; criterion 7 drives headless Chrome, 8 a real window read through AppKit,
-// 9 release builds here and at the merge base.
-alone.push('tests/acceptance/3236/');
-// #3236's criterion 8 was redrafted blind: the first draft's client hears each announcement twice
-// (tests/acceptance/3236-redraft-ac8/DISPUTE.md). The redraft runs in its place, both opening real windows, and the
-// hidden-window regression opens one too.
-alone.push('tests/acceptance/3236-redraft-ac8/', 'tests/live-window-hidden.test.ts');
-byHand.push('tests/acceptance/3236/ac8-appkit.test.ts');
