@@ -447,7 +447,7 @@ export function acquire(cls, { wait = 30, stall, window = false, run } = {}) {
       const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now, ...pending.run && { run: true, used: 0 } };
       table.grants.push(entry);
       const load = loadavg()[0], cores = cpus().length;
-      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, wait, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
+      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, ...stall !== undefined ? { stall } : { wait }, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
       return entry;
     });
     if (grant === 'timeout') {
