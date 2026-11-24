@@ -24,6 +24,7 @@ pub struct Planted {
     pub ignores_occlusion: bool,
 }
 
+deep_gpu::paired! { params: "flare.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Params {
@@ -33,6 +34,7 @@ struct Params {
     emissive: [f32; 4],
     tint: [f32; 4],
     sources: [[f32; 8]; MAX_SOURCES],
+}
 }
 
 pub struct Flarer {

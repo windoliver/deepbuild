@@ -47,19 +47,23 @@ impl<'a> Ground<'a> {
     }
 }
 
+deep_gpu::paired! { slot_uniform: "scene3d.wgsl", MapSlot;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct SlotUniform {
     u: [f32; 4],
     v: [f32; 4],
 }
+}
 
+deep_gpu::paired! { maps_uniform: "scene3d.wgsl", Maps;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct MapsUniform {
     slots: [SlotUniform; SLOTS],
     has: [u32; 4],
     values: [f32; 4],
+}
 }
 
 /// The wgpu format a map's texels name.

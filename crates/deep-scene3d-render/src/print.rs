@@ -16,6 +16,7 @@ pub const LINEAR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 
 const SOURCE: &str = include_str!("print.wgsl");
 
+deep_gpu::paired! { sep: "print.wgsl", Sep;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Sep {
@@ -23,7 +24,9 @@ struct Sep {
     screen: [f32; 4],
     offset: [f32; 4],
 }
+}
 
+deep_gpu::paired! { params: "print.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct Params {
@@ -45,6 +48,7 @@ pub struct Params {
     tracking: [f32; 4],
     ground: [f32; 4],
     seps: [Sep; MAX_SEPARATIONS],
+}
 }
 
 const FLAG_SEPS: u32 = 1;
