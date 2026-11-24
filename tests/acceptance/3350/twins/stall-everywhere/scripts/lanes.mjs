@@ -137,7 +137,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/2650/planted-jobs.test.ts', 'tests/acceptance/2650/planted-names.test.ts', 'tests/acceptance/1498/', 'tests/acceptance/1812/',
     'tests/acceptance/67-redraft-1812/', 'tests/acceptance/1495/app-download.test.ts', 'tests/acceptance/1592/', 'tests/acceptance/1411/', 'tests/acceptance/1512/',
     'tests/acceptance/1509/', 'tests/acceptance/1929/', 'tests/acceptance/1826/', 'tests/acceptance/1415/', 'tests/acceptance/1430/', 'tests/acceptance/1430-redraft-ac2/',
-    'tests/acceptance/2456/', 'tests/write-reveal-frames.test.ts', 'tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts',
+    'tests/acceptance/2456/', 'tests/write-reveal-frames.test.ts', 'tests/web-reading-walk.test.ts', 'tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts',
     'tests/acceptance/2776/listing.test.ts', 'tests/acceptance/2457/', 'tests/acceptance/2500/', 'tests/acceptance/211/', 'tests/acceptance/981/', 'tests/acceptance/189/saves/',
     'tests/acceptance/189-oracle/', 'tests/acceptance/189/lab-redraft/', 'tests/acceptance/276/record/', 'tests/acceptance/276/match/', 'tests/acceptance/2109/',
     'tests/acceptance/953/', 'tests/acceptance/953-oracle/', 'tests/acceptance/1250/', 'tests/acceptance/1576/', 'tests/acceptance/2661/', 'tests/acceptance/980/',
@@ -234,6 +234,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1172/', 'tests/acceptance/1454/', 'tests/acceptance/1459/', 'tests/acceptance/1002/first-screen-redraft/', 'tests/acceptance/994/first-screen-redraft/',
     'tests/acceptance/2494/', 'tests/acceptance/1455/', 'tests/acceptance/1462/', 'tests/acceptance/1462-redraft-ac2/', 'tests/acceptance/539/', 'tests/acceptance/542/',
     'tests/acceptance/903/', 'tests/acceptance/548/', 'tests/acceptance/1808/', 'tests/acceptance/1431/', 'tests/acceptance/2403/',
+    'tests/acceptance/3236/', 'tests/acceptance/3236-redraft-ac8/', 'tests/live-window-hidden.test.ts',
   ],
 })) for (const entry of entries) aloneReasons[entry] = reason;
 for (const entry of alone) {
