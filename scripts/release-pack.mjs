@@ -75,6 +75,31 @@ if (keyArg) {
 await turn();
 const archives = [];
 work = mkdtempSync(join(tmpdir(), 'release-pack-'));
+// SIGKILL, as a test's timeout or its group stop sends it, runs nothing here. So a watcher in its own session, started
+// through a launcher that exits at once and so outside this process's tree and group, removes the folder once this
+// pack is gone, however it went, and no process names the folder on its command line: a child that outlived it and
+// writes there by path (the clone, the stage, tar) ends first. One named only by its cwd (npm pack, git checkout) can
+// no longer create anything there once the folder is gone. A watcher stopped itself, as a unit's teardown stops it,
+// removes the folder then.
+const WATCH = `const { execFileSync } = require('child_process');
+const { existsSync, rmSync } = require('fs');
+const [pid, dir] = process.argv.slice(-2);
+const drop = () => { rmSync(dir, { recursive: true, force: true }); process.exit(0); };
+const named = () => {
+  try {
+    return execFileSync('ps', ['-axww', '-o', 'pid=,command='], { encoding: 'utf8', maxBuffer: 1 << 28 }).split('\\n').some((l) => l.includes(dir) && Number.parseInt(l, 10) !== process.pid);
+  } catch {
+    return false; // no ps to ask: only the pack is waited for
+  }
+};
+process.on('SIGTERM', drop);
+setInterval(() => {
+  if (!existsSync(dir)) process.exit(0);
+  try { process.kill(+pid, 0); return; } catch { /* the pack is gone */ }
+  try { if (!named()) drop(); } catch { /* the next poll tries again */ }
+}, 500);`;
+const LAUNCH = `require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(WATCH)}, ...process.argv.slice(-2)], { detached: true, stdio: 'ignore', cwd: '/' }).unref();`;
+spawnSync(process.execPath, ['-e', LAUNCH, String(process.pid), resolve(work)], { detached: true, stdio: 'ignore', cwd: '/' });
 try {
   const clean = join(work, 'checkout');
   run('git', ['clone', '-q', '--no-hardlinks', repo, clean], work);
