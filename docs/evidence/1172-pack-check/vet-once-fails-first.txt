@@ -1,0 +1,6 @@
+running 1 test
+test a_checked_pack_version_is_not_checked_again_on_a_later_call ... FAILED
+thread 'a_checked_pack_version_is_not_checked_again_on_a_later_call' (4118784) panicked at crates/deep-show/tests/pack_vet_once.rs:56:5:
+a later call took 1.015 s against the first's 1.047 s: it checked lanes again
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.42s
+exit=101

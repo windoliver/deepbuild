@@ -1,0 +1,146 @@
+Acceptance tests for #3347 on the base 863761023 (origin/main when this suite was written; scripts/ unchanged), run on
+2026-11-24 with Node v24.22.2 and OpenSSH 10.5p1 on macOS 27.2 (Mac17,10), with the suite uncommitted, each file once, at a
+load of about 171. Trimmed to each test's result, each failure's message and its frame in the test's own file. The
+checkout's path is made relative; no local path is left. All 14 tests fail: 12 at a named assertion, since the base has no
+check for such fixtures and no clip, and the two of ac2-reading.test.mjs with BLOCKED, since the base has no detector.
+"lines of checks other than the base's eight" are the repo rules' lines of any check the base doesn't have: none.
+
+== node --test tests/acceptance/3347/ac1-statement.test.mjs   (exit 1)
+
+✖ #3347.fc5ea222 AC1: a fixture that states drawn with its script passes, and so does one that states agreed with an agreement that matches its hash and is signed by a key on the list at the merge base
+✖ #3347.fc5ea222 AC1: a planted clip with no statement fails, naming the clip
+✖ #3347.fc5ea222 AC1: a planted agreed statement whose agreement is missing, or differs from its hash, fails, naming the file
+✖ #3347.fc5ea222 AC1: an agreement signed by a key that is not on the list fails, naming the key; so does one with no signature, and one edited after it was signed
+✖ #3347.fc5ea222 AC1: the list is the one at the merge base: a key the working tree adds, or the change itself commits, signs nothing, and one they drop still signs
+✖ #3347.fc5ea222 AC1: a listed key signs only as the edit guard counts it, by a touch: an agreement signed with a security key and no touch, and one signed with a key in a plain file, each fail
+✖ #3347.fc5ea222 AC1: a statement that says neither or both, or leaves out what drawn or agreed must carry, is no statement: each planted clip fails, named
+ℹ tests 7
+ℹ pass 0
+ℹ fail 7
+ℹ skipped 0
+
+✖ #3347.fc5ea222 AC1: a fixture that states drawn with its script passes, and so does one that states agreed with an agreement that matches its hash and is signed by a key on the list at the merge base
+  AssertionError [ERR_ASSERTION]: no PASS line lists tests/fixtures/hands@1/wave.mov as drawn, a drawn fixture with its script
+  exit 1; lines of checks other than the base's eight (0):
+      at tests/acceptance/3347/ac1-statement.test.mjs:14:3
+✖ #3347.fc5ea222 AC1: a planted clip with no statement fails, naming the clip
+  AssertionError [ERR_ASSERTION]: no FAIL line names tests/fixtures/hands@1/bare.mov: a clip with no statement beside it
+  exit 1; lines of checks other than the base's eight (0):
+      at tests/acceptance/3347/ac1-statement.test.mjs:30:3
+✖ #3347.fc5ea222 AC1: a planted agreed statement whose agreement is missing, or differs from its hash, fails, naming the file
+  AssertionError [ERR_ASSERTION]: no FAIL line names tests/fixtures/hands@1/gone.mov: its agreement is missing
+  exit 1; lines of checks other than the base's eight (0):
+      at tests/acceptance/3347/ac1-statement.test.mjs:46:3
+✖ #3347.fc5ea222 AC1: an agreement signed by a key that is not on the list fails, naming the key; so does one with no signature, and one edited after it was signed
+  AssertionError [ERR_ASSERTION]: no FAIL line names tests/fixtures/hands@1/theirs.mov: its agreement is signed by a key that isn't on the list
+  exit 1; lines of checks other than the base's eight (0):
+      at tests/acceptance/3347/ac1-statement.test.mjs:61:3
+✖ #3347.fc5ea222 AC1: the list is the one at the merge base: a key the working tree adds, or the change itself commits, signs nothing, and one they drop still signs
+  AssertionError [ERR_ASSERTION]: no FAIL line names tests/fixtures/hands@1/theirs.mov: the working tree adds the key that signed to the list, which the merge base does not hold
+  exit 1; lines of checks other than the base's eight (0):
+      at tests/acceptance/3347/ac1-statement.test.mjs:73:5
+✖ #3347.fc5ea222 AC1: a listed key signs only as the edit guard counts it, by a touch: an agreement signed with a security key and no touch, and one signed with a key in a plain file, each fail
+  AssertionError [ERR_ASSERTION]: no FAIL line names tests/fixtures/hands@1/no-touch.mov: its agreement is signed by a listed security key with no touch, which an agent can make
+  exit 1; lines of checks other than the base's eight (0):
+      at tests/acceptance/3347/ac1-statement.test.mjs:96:3
+✖ #3347.fc5ea222 AC1: a statement that says neither or both, or leaves out what drawn or agreed must carry, is no statement: each planted clip fails, named
+  AssertionError [ERR_ASSERTION]: no FAIL line names tests/fixtures/hands@1/neither.mov: its statement is neither drawn nor agreed
+  exit 1; lines of checks other than the base's eight (0):
+      at tests/acceptance/3347/ac1-statement.test.mjs:122:54
+
+== node --test tests/acceptance/3347/ac2-clip.test.mjs   (exit 1)
+
+✖ #3347.e7d2e863 AC2: the clip #1186's test camera plays states drawn or agreed
+✖ #3347.e7d2e863 AC2: drawn, the script of #1186's clip run again without the clip makes the clip's own hash; agreed, its agreement names the maintainer, the use and the clip's hash
+✖ #3347.e7d2e863 AC2: an agreement names the clip it was made for: a planted agreed clip whose agreement, signed and matching its hash, names another recording's hash fails
+ℹ tests 3
+ℹ pass 0
+ℹ fail 3
+ℹ skipped 0
+
+✖ #3347.e7d2e863 AC2: the clip #1186's test camera plays states drawn or agreed
+  AssertionError [ERR_ASSERTION]: the hands@1 fixtures hold no clip for #1186's test camera: git lists no file under a fixtures/hands@1/ folder
+      at tests/acceptance/3347/ac2-clip.test.mjs:11:28
+✖ #3347.e7d2e863 AC2: drawn, the script of #1186's clip run again without the clip makes the clip's own hash; agreed, its agreement names the maintainer, the use and the clip's hash
+  AssertionError [ERR_ASSERTION]: the hands@1 fixtures hold no clip for #1186's test camera: git lists no file under a fixtures/hands@1/ folder
+      at tests/acceptance/3347/ac2-clip.test.mjs:29:28
+✖ #3347.e7d2e863 AC2: an agreement names the clip it was made for: a planted agreed clip whose agreement, signed and matching its hash, names another recording's hash fails
+  AssertionError [ERR_ASSERTION]: no FAIL line names tests/fixtures/hands@1/swapped.mov: its agreement names another recording's hash, so nobody agreed to this one
+  exit 1; lines of checks other than the base's eight (0):
+      at tests/acceptance/3347/ac2-clip.test.mjs:48:3
+
+== node --test tests/acceptance/3347/ac2-reading.test.mjs   (exit 1)
+
+✖ #3347.e7d2e863 AC2: on the reference Mac #1186's backend finds one hand with 21 points in at least 0.95 of the drawn clip's frames
+✖ #3347.e7d2e863 AC2: a planted drawn clip with no hand in its frames fails the reading, naming the share of frames
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+ℹ skipped 0
+
+✖ #3347.e7d2e863 AC2: on the reference Mac #1186's backend finds one hand with 21 points in at least 0.95 of the drawn clip's frames
+  Error: BLOCKED: there is no detector to read a clip: #1186's hands@1 backend and its camera.clip aren't in this checkout (no Rust file under crates/ names "hands@1" or "camera.clip")
+      at tests/acceptance/3347/ac2-reading.test.mjs:16:3
+✖ #3347.e7d2e863 AC2: a planted drawn clip with no hand in its frames fails the reading, naming the share of frames
+  Error: BLOCKED: there is no detector to read a clip: #1186's hands@1 backend and its camera.clip aren't in this checkout (no Rust file under crates/ names "hands@1" or "camera.clip")
+      at tests/acceptance/3347/ac2-reading.test.mjs:27:3
+
+== node --test tests/acceptance/3347/ac3-list.test.mjs   (exit 1)
+
+✖ #3347.0c0a0f6e AC3: the check lists every hands@1 fixture with its statement, a clip, a recorded track and a run, in any fixtures/hands@1/ folder, tracked or new, and a check that skips a clip with no statement fails this, naming the clip
+✖ #3347.0c0a0f6e AC3: on this checkout the check's list for hands@1 holds #1186's clip, and every other hands@1 fixture, with its statement
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+ℹ skipped 0
+
+✖ #3347.0c0a0f6e AC3: the check lists every hands@1 fixture with its statement, a clip, a recorded track and a run, in any fixtures/hands@1/ folder, tracked or new, and a check that skips a clip with no statement fails this, naming the clip
+  AssertionError [ERR_ASSERTION]: the check skips tests/fixtures/hands@1/open.mov (drawn), packs/hands-1.0.0/fixtures/hands@1/labeled/left.track (agreed), packages/checks/playtest/fixtures/hands@1/round.run.json (drawn): no PASS line names a fixture with its statement, or no FAIL line names one that has none
+  exit 1; lines of checks other than the base's eight (0):
+      at tests/acceptance/3347/ac3-list.test.mjs:22:3
+✖ #3347.0c0a0f6e AC3: on this checkout the check's list for hands@1 holds #1186's clip, and every other hands@1 fixture, with its statement
+  AssertionError [ERR_ASSERTION]: the hands@1 fixtures hold no clip for #1186's test camera: git lists no file under a fixtures/hands@1/ folder
+      at tests/acceptance/3347/ac3-list.test.mjs:40:28
+
+== A stand-in and wrong programs
+
+A stand-in for the check (about 90 lines beside scripts/repo-rules.mjs, kept out of the repo) ran in a scratch copy of the
+scripts and this suite, with a clip of random bytes and a script that writes them as #1186's clip. Every test passes on it
+but the two of ac2-reading.test.mjs, which read BLOCKED there too. With stand-in files that hold the two strings and a
+stand-in scripts/hands-reading.mjs, all 14 pass, with the clip drawn and with it agreed. On each wrong program below, the
+tests named fail at the assertion given, and no other does (the two BLOCKED ones apart):
+
+  lists only a fixture that has a statement     AC1 2: no FAIL line names …/bare.mov
+                                                AC3 1: the check skips …/bare.mov, …/right.track, …/second.run.json and
+                                                …/behind.mov (no statement)
+  takes any JSON statement                      AC1 3 to 7 and AC2 clip 3: no FAIL line names the first planted clip
+  takes a missing agreement                     AC1 3: no FAIL line names …/gone.mov
+  never compares the agreement's hash           AC1 3: no FAIL line names …/other.mov
+  takes an agreement with no signature          AC1 4: no FAIL line names …/unsigned.mov
+  reads the signer, never the bytes signed      AC1 4: no FAIL line names …/edited.mov
+  doesn't name the unlisted key                 AC1 4 and 5: no FAIL line of …/theirs.mov names the key that signed
+  reads the list from the working tree          AC1 5: no FAIL line names …/theirs.mov: the working tree adds the key
+  reads the list from HEAD                      AC1 5: no FAIL line names …/theirs.mov: the change itself commits the key
+  reads HEAD's list when there is no merge base AC1 5: a PASS line lists …/fist.mov as agreed with no merge base
+  only asks ssh-keygen -Y verify                AC1 6: no FAIL line names …/no-touch.mov
+  asks a touch of security keys only            AC1 6: no FAIL line names …/plain-key.mov
+  never looks for the script                    AC1 7: no FAIL line names …/lost-script.mov
+  never asks who and what use                   AC1 7: no FAIL line names …/no-who.mov
+  takes one agreement for any recording         AC2 clip 3: no FAIL line names …/swapped.mov
+  reads tracked files only                      AC3 1: the check skips …/round.run.json (drawn)
+  reads tests/fixtures/hands@1/ only            AC3 1: the check skips …/left.track (agreed) and …/round.run.json (drawn)
+  reads .mov files only                         AC3 1: the same two
+  leaves out whatever a statement names         AC3 1: the check skips …/behind.mov (no statement)
+  lists drawn fixtures only                     AC1 1 to 7, AC2 clip 3 and AC3 1
+  fails pen@1 fixtures too                      AC3 1: the check fails tests/fixtures/pen@1/stroke.track
+  #1186's clip: its script copies it            AC2 clip 2: draw.mjs exits 1 in a checkout without the clip
+  #1186's clip: no statement is for it          AC2 clip 1 and 2, AC3 2: the hands@1 fixtures hold no clip for #1186's
+  #1186's clip: agreed, to another recording    AC2 clip 2: the agreement doesn't name the clip's hash; AC3 2: the repo
+                                                rules fail the clip
+  a reading that passes every clip              AC2 reading 2: a drawn clip with no hand in its frames reads PASS
+  a reading that passes a share of 0.60         AC2 reading 1: in 0.6 of the 600 frames, under 0.95; AC2 reading 2, since it
+                                                passes the planted clip too
+  a reading that prints BLOCKED                 AC2 reading 1 and 2: BLOCKED, with its line
+
+The planted clip plants/no-hand.swift draws was made once on this Mac: 60 frames, 31,747 bytes. macOS's own hand-pose
+request, asked directly as a probe of the plant and not as #1186's backend, finds one hand with 21 points in 0 of them.

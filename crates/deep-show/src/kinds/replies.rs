@@ -358,7 +358,14 @@ impl Hub<'_> {
             .and_then(|(a, b)| Some((a.parse::<usize>().ok()?, b.parse::<usize>().ok()?)))
             .unwrap_or((0, 0));
         let mut out = l.header.clone();
-        out["packs"] = self.packs_listed();
+        // #3108: the modules, interfaces and packs go on the first page only. Repeated on every
+        // page they took a small room (#2896) whole, so each page held one entry.
+        if (row0, entry0) == (0, 0) {
+            out["packs"] = self.packs_listed();
+        } else if let Some(o) = out.as_object_mut() {
+            o.remove("modules");
+            o.remove("interfaces");
+        }
         let mut size = out.to_string().len() + 64;
         let mut page: Vec<Value> = Vec::new();
         let mut next = None;
@@ -370,6 +377,11 @@ impl Hub<'_> {
                 .and_then(|e| e.as_array().cloned())
                 .unwrap_or_default();
             let from = if i == row0 { entry0 } else { 0 };
+            // #3108: a row a page continues keeps only its kind and name; its other fields (its
+            // planted entry, kit, schema) went with its first entries.
+            if from > 0 && row.get("entries").is_some() {
+                head = json!({"kind": head["kind"], "name": head["name"]});
+            }
             let mut kept: Vec<Value> = Vec::new();
             let head_size = head.to_string().len() + 16;
             if size + head_size > page_budget() && !page.is_empty() {
@@ -380,6 +392,12 @@ impl Hub<'_> {
             for (j, e) in entries.iter().enumerate().skip(from) {
                 let n = e.to_string().len() + 1;
                 if size + n > page_budget() && !(page.is_empty() && kept.is_empty()) {
+                    // #3108: a row none of whose entries fit starts the next page, head and all,
+                    // rather than sending its head twice.
+                    if kept.is_empty() && from == 0 {
+                        next = Some(format!("{i}.0"));
+                        break 'rows;
+                    }
                     if row.get("entries").is_some() {
                         head["entries"] = json!(kept);
                     }

@@ -1074,6 +1074,9 @@ alone.push('tests/acceptance/2371/');
 // #1931's files build deep-physics (release and test-backends) and the wasm32 library; the blind redraft of #191's
 // first criterion's test under it builds deep-physics (shipped) and the wasm32 library, as #191's file does.
 alone.push('tests/acceptance/1931/', 'tests/acceptance/191-redraft-1931/');
+// #3258's folder (blind) runs alone by its lane.json: its files build deep-physics, as shipped and with the swapped soft
+// solver. ac6-budget times the audit of #524's banner, and of a world with no soft body, against the merge base.
+timed.push('tests/acceptance/3258/ac6-budget.test.ts');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1461,6 +1464,16 @@ timed.push('tests/acceptance/269/ac6-budgets.test.ts', 'tests/acceptance/269-red
 // step 0, so its grid never changes; its blind redraft, 269-redraft-ac6/, runs in its place.
 byHand.push('tests/acceptance/269/ac6-budgets.test.ts');
 
+// #3236's files (blind) each build deep-show; criterion 7 drives headless Chrome, 8 a real window read through AppKit,
+// 9 release builds here and at the merge base.
+alone.push('tests/acceptance/3236/');
+// #3236's criterion 8 was redrafted blind: the first draft's client hears each announcement twice
+// (tests/acceptance/3236-redraft-ac8/DISPUTE.md). The redraft runs in its place, both opening real windows, and the
+// hidden-window regression opens one too.
+alone.push('tests/acceptance/3236-redraft-ac8/', 'tests/live-window-hidden.test.ts');
+byHand.push('tests/acceptance/3236/ac8-appkit.test.ts');
+// tests/web-reading-walk.test.ts builds deep-show, exports each chart as a web bundle and presses keys in headless Chrome.
+alone.push('tests/web-reading-walk.test.ts');
 // #2848's first draft and its fuser test are kept by hand until the owner swaps them: they test the jobserver each run
 // made for itself, which #3221 replaces with job pipes lent from one pool; the blind redraft, 2848-redraft-3221/, runs
 // in their place (tests/acceptance/2848/DISPUTE-3221.md).
@@ -1518,3 +1531,9 @@ Object.assign(redrafted, {
   'tests/acceptance/1551/lane.test.ts': 'tests/acceptance/1551/redraft-3300/',
 });
 byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/lane.test.ts');
+
+// #1815's folder (blind) runs alone by its lane.json: its files build deep-drive with env-plants and test-confirm and draw
+// find's field and its matches. budget.test.ts times the first match on a 10,000-line page on the reference Mac;
+// shown.test.ts takes AC5's pictures for a person's call.
+timed.push('tests/acceptance/1815/budget.test.ts');
+byHand.push('tests/acceptance/1815/shown.test.ts');
