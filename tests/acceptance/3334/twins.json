@@ -1,0 +1,14 @@
+{
+  "#3334.6c8b5837": [
+    "fixed-wait"
+  ],
+  "#3334.e38df940": [
+    "far-fixed-wait"
+  ],
+  "#3334.f5046205": [
+    "far-blocked"
+  ],
+  "#3334.5d28f79a": [
+    "far-swallows-failure"
+  ]
+}

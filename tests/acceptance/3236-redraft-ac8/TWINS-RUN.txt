@@ -1,0 +1,64 @@
+#3236 AC8, blind redraft: the unit checks (client.test.ts) run for real on a Mac17,10 under macOS 27.2, Nov 23, 2026, at
+f8c6cff82 with only this folder added, the screen unlocked and the Accessibility API allowed. No deep-show.
+
+Command:
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3236-redraft-ac8 --silent=false --reporter=verbose \
+    --testTimeout=600000 --hookTimeout=1800000 --no-file-parallelism client
+
+== The run, on the files as committed: 10 passed. The client's line for each window follows its test. ==
+
+ ✓ client: reads the identifier and the value back exactly, hears every announcement, each as many times as it is posted, in order, and the judge passes it 3302ms
+     client: a right window: ended heard after 2902 ms, 1 identified, 7 said
+ ✓ client: a window whose value is stale fails, naming both values 3189ms
+     client: a stale value: ended heard after 2894 ms, 1 identified, 7 said
+ ✓ client: a window that skips an announcement fails, naming it 8471ms
+     client: one announcement skipped: ended cap after 8085 ms, 1 identified, 6 said
+ ✓ client: a window that says an announcement twice fails, naming it 3490ms
+     client: one announcement said twice: ended heard after 3008 ms, 1 identified, 8 said
+ ✓ client: a window that swaps two announcements fails, naming the first 3154ms
+     client: two announcements swapped: ended heard after 2868 ms, 1 identified, 7 said
+ ✓ client: a window with no identified element is BLOCKED, not a pass and not a fail 3239ms
+     client: no identified element: ended heard after 2855 ms, 0 identified, 7 said
+ ✓ client: a process that opens no window is BLOCKED once AppKit lists none for 30 s 30355ms
+     client: no window: ended unlisted after 0 ms, 0 identified, 0 said
+ ✓ client: the judge blocks a read the screen locked or the display slept during, whatever it holds 0ms
+ ✓ client: the judge blocks announcements only missing from a window hidden as they could have come, and fails every other difference 1ms
+ ✓ client: the judge reads the value from any of the three attributes, white space collapsed, and fails a tree that identifies only another item 0ms
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Duration  72.97s (tests 100%)
+
+== What an earlier draft's run found, and what changed ==
+
+An earlier draft excused any missing announcement as BLOCKED when the window had been hidden at any sample, and let other windows
+cover the stand-in. Its run had 9 pass and the skip check fail: another app's window covered the stand-in, and the judge read
+BLOCKED where it must read FAIL. The judge now excuses a missing announcement only when the window was hidden between the
+announcement heard before it and the one heard after it, checked both ways without a window, and the stand-in floats above
+ordinary windows. A scratch run on a stand-in that doesn't float, covered by another process's window from 4 s to 8 s, gave the
+stretch [[4056, 8396]].
+
+== Five broken copies of the suite, one at a time, each run on the check that must see it (copies made beside it and removed) ==
+
+ the client drops an announcement equal to the one before it: 1 failed
+   × reads the identifier and the value back exactly, ...: the announcements, in order: expected [ '0 s, 2 m', '1 s, 5 m', …(4) ] to deeply equal [ '0 s, 2 m', '1 s, 5 m', …(5) ]
+ the judge compares which texts were said, not how many times: 1 failed
+   × a window that says an announcement twice fails, naming it: expected 'announcement 6 the window asks for is…' to match /asks for "3 s, 12 m" 2 time\(s\), the…/
+ the judge ignores the order: 1 failed
+   × a window that swaps two announcements fails, naming the first: expected 'PASS' to be 'FAIL'
+ the judge takes any value: 1 failed
+   × a window whose value is stale fails, naming both values: expected 'PASS' to be 'FAIL'
+ the judge excuses a missing announcement when the window was hidden at any time: 1 failed
+   × the judge blocks announcements only missing ...: hidden only when it could not: expected 'BLOCKED' to be 'FAIL'
+
+== The criterion's own test over a made-up deep-show (a scratch copy of live.test.ts, its binary replaced by a script whose `run`
+   gives a canned replica: a value and 11 landings, and whose `live` is the stand-in, one announcement every 1.5 s, listened to for
+   its full 45 s) ==
+
+ right: 1 passed. 11 announcements heard from 1,676 ms to 17,426 ms after the window listed, ended "heard" at 45,047 ms.
+ swaps two announcements: 1 failed. announcement 4 the window asks for is "x 4 seconds, y 12 metres", the replica's is "x 3 seconds, y 4 metres"
+ a stale value: 1 failed. the element identified scatter gives value "... y metres 2 to 55, 1 missing" ...; the
+   replica's node holds the value "... y metres 2 to 40, 1 missing"
+ no identified element: 1 failed, BLOCKED: the window lists, but no element in its tree carries the identifier
+   of an item of the document (scatter, caption); the identifiers it holds: none; this is not a pass

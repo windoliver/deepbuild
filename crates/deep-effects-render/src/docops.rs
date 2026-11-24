@@ -68,6 +68,8 @@ pub struct Hooks {
     /// #1993: after a lost device the carried state starts from its clear value at the step the
     /// frame shows, in place of being stepped again from the start.
     pub restore_from_clear: bool,
+    /// #853: a stepped operator's `t` is the frame's time, not its step's.
+    pub frame_time: bool,
 }
 
 /// One iterate step of a pass operator: its body's pipeline and its two ping-pong targets.
@@ -253,10 +255,12 @@ pub fn feeders(doc: &Value) -> BTreeSet<String> {
         .into_iter()
         .flatten()
         .filter(|(_, item)| {
+            // #853: the operators a stepped particles item lowers to feed the particle draw.
             item["kind"] == "gpu.compute@1"
-                && item["params"]["outputs"]
-                    .as_object()
-                    .is_some_and(|o| o.values().any(|v| v.get("instances").is_some()))
+                && (item.get("lowered").is_some()
+                    || item["params"]["outputs"]
+                        .as_object()
+                        .is_some_and(|o| o.values().any(|v| v.get("instances").is_some())))
         })
         .map(|(id, _)| id.clone())
         .collect();
