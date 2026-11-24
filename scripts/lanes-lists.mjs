@@ -1490,3 +1490,8 @@ alone.push('tests/acceptance/3234-redraft-ac6/');
 // no program passes both; their blind redrafts, 112-redraft-3245/, 2077-redraft-3245/ and 2495-redraft-3245/, run in
 // their place.
 byHand.push('tests/acceptance/112/eval.test.ts', 'tests/acceptance/112/ci.test.ts', 'tests/acceptance/2077/removal.test.ts', 'tests/acceptance/2495/report.test.ts');
+
+// #3278's opening file runs #490's redraft-2 opening suite, which builds deep-show and its merge base (hours) and passes
+// only on main once the fix has landed, as its criterion (#3278.f8a0472b) says: it outlasts a lane run's 20 minutes and,
+// in the folder's one vitest run, stopped stable-keys.test.ts with it. It is kept by hand, run on main after the merge.
+byHand.push('tests/acceptance/3278/opening.test.ts');
