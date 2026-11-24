@@ -11,6 +11,7 @@ The physics canvas module (issue #2009, `physics.world@1`, measured, with backen
 - A `soft@1` field, an address pattern or a soft lattice goes in `src/doc/soft.rs`; what a skin checks, bakes and writes into a frame in `src/skin.rs`.
 - How a track's entries resolve against the declared inputs, order, fork and join, and the entries a control's entries derive (`from_controls`, which a world's bake, a live play's world and deep-show share), go in `src/track.rs`; the ring's spacing and budget in `src/ring.rs`.
 - The occurrence list's kinds, canonical order, bytes and rows go in `src/occurrence.rs`; the manifest and the `column.source@1` entries in `src/module.rs`.
+- What counts as a soft body through what it met, `physics.audit`'s `soft.through`, goes in `src/through.rs`, and the f64 shapes it reads in `src/through/solid.rs` (issue #3258).
 - What a backend can't run goes in `src/caps.rs` as data, and its refusal in `src/check.rs`.
 - The backend interface is `src/backend.rs`; a backend lives in its own crate (Rapier's is `crates/deep-physics-rapier`).
 - A part of the bake key or how outputs are sampled goes in `src/bake.rs`; a hash, the comparator or a golden's cross-machine verdict in `src/golden.rs`. What the build resolved reaches them as a `Build` the backend's crate passes in. A golden's runtime digest is the seal's, of the set that holds this module alone (`Build::runtime_digest`, #1920).
