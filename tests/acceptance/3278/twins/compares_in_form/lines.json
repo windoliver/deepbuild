@@ -1,0 +1,15 @@
+{
+  "crates/deep-play/src/logic.rs": [
+    {
+      "find": [
+        "            a[\"compares\"] = json!(of);"
+      ],
+      "wrong": [
+        "            a[\"compares\"] = json!(list",
+        "                .iter()",
+        "                .map(|(k, bytes, ms)| json!([k, bytes, ms]))",
+        "                .collect::<Vec<_>>());"
+      ]
+    }
+  ]
+}
