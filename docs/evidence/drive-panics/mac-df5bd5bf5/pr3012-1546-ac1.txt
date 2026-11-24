@@ -1,0 +1,48 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-issue-2399-egress-refusal-once-8892c8/b1989361-ea39-4165-9c29-ac0db12d467f/scratchpad/clone
+
+ ❯ tests/acceptance/1546/ac1-journey.test.ts (6 tests | 2 failed) 28878ms
+   ❯ #1546 AC1 a record event reaches the window by itself, and the replica reads the frame it drew (2)
+     × planted record-in-thread-local: the drawn frame keeps the old count and rows, and the check fails naming Needs you, the ask's row and the step 187ms
+   ❯ #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes (4)
+     × seed 1546 with the planted view: FAIL, its first finding at a record event, naming Needs you and a raised ask's row at that ask's step 1748ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 a record event reaches the window by itself, and the replica reads the frame it drew > planted record-in-thread-local: the drawn frame keeps the old count and rows, and the check fails naming Needs you, the ask's row and the step
+AssertionError: a finding at step 1 names the Needs you view: step 1 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you",step 2 (see): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you",step 3 (wait_for): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you": expected undefined to be truthy
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ tests/acceptance/1546/ac1-journey.test.ts:52:100
+     50|     expect(atFeed.every((f) => f.call === 'feed'), `findings at step 1…
+     51|     const needsYou = atFeed.find((f) => /(^|\/)needs-you$/.test(f.view…
+     52|     expect(needsYou, `a finding at step 1 names the Needs you view: ${…
+       |                                                                                                    ^
+     53|     expect(needsYou!.node.name, `it names the node a forced frame has …
+     54|     expect(String(needsYou!.drawn?.name ?? ''), 'and the drawn frame h…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1546/ac1-journey.test.ts > #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes > seed 1546 with the planted view: FAIL, its first finding at a record event, naming Needs you and a raised ask's row at that ask's step
+AssertionError: a finding names Needs you and the row of an ask at the step that raised it; findings: step 3 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 11 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 12 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 13 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 16 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 21 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 28 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 29 (feed): deepbuild/sidebar drew "Seed 1546, ask 1: ship it?" where a forced frame has "Seed 1546, ask 1: ship it?"; step 30 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 33 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 34 (wait_for): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 35 (act): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 36 (act): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 38 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 39 (wait_for): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you"; step 42 (feed): deepbuild/sidebar drew "Needs you" where a forced frame has "Needs you": expected 0 to be greater than or equal to 1
+ ❯ tests/acceptance/1546/ac1-journey.test.ts:108:155
+    106|     const raised = fed(ran, ['ask']);
+    107|     const named = raised.filter((r) => frames.findings.some((f) => f.s…
+    108|     expect(named.length, `a finding names Needs you and the row of an …
+       |                                                                                                                                                           ^
+    109|   }, LONG);
+    110| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  22:24:08
+   Duration  29.10s (tests 100%)
+

@@ -1,0 +1,53 @@
+PRs #3012 + #3028, clone head df5bd5bf5 (main ce6866e65 merged), 2026-11-23 22:33:26
+
+$ node e2e-panics.mjs   # one deep-drive: hover then resize; 2 more launches; motion_check
+launch 1: hover an ask row, then resize
+  ok   launch (t 0)
+  ok   hover ask:01MCBHM300GP83QANM5WDCWNNP (t 35280000)
+  ok   resize 1200x800 (t 47040000)
+  ok   wait_for +1 s (t 705600000)
+  ok   screenshot launch1-after-resize (t 705600000)
+       launch1-after-resize.png 2400x1600
+  ok   close (t 705600000)
+launch 2: a later launch in the same process, its clock stepped
+  ok   launch (t 0)
+  ok   hover ask:01MCBHM300GP83QANM5WDCWNNP (t 35280000)
+  ok   wait_for +3 s (t 2116800000)
+  ok   screenshot launch2-after-3s (t 2116800000)
+       launch2-after-3s.png 3024x1964
+  ok   close (t 2116800000)
+launch 3: a later launch in the same process, its clock stepped
+  ok   launch (t 0)
+  ok   hover ask:01MCBHM300GP83QANM5WDCWNNP (t 35280000)
+  ok   wait_for +3 s (t 2116800000)
+  ok   screenshot launch3-after-3s (t 2116800000)
+       launch3-after-3s.png 3024x1964
+  ok   close (t 2116800000)
+motion_check: the shipped journeys, launched in the same process
+  ok   motion_check (t 0)
+       needs-you: PASS, 0 finding(s), recording 5feb1678334428aa…
+       session: PASS, 0 finding(s), recording d7e7986c502c1094…
+       project: PASS, 0 finding(s), recording 51eff526fab8f659…
+       motion: PASS
+e2e: no error, no panic
+exit 0
+
+$ node scripts/motion.mjs
+motion needs-you: PASS, 0 finding(s), recording 5feb1678334428aa88ef0ef8ffe9c41461df3fabee0f53e3faf7a8f544ff7dc6 (361 steps)
+motion session: PASS, 0 finding(s), recording d7e7986c502c1094f78c1d517d1e1f52d7faecd6a8a20f66a2f52ee9b46c4862 (361 steps)
+motion project: PASS, 0 finding(s), recording 51eff526fab8f65997a464a9a8bf6f9ff30d8309330c4e8c49006aa7fa8efac3 (361 steps)
+motion: PASS; pacing not measured: virtual time proves the shape of motion, not native pacing
+exit 0
+
+$ node node_modules/vitest/vitest.mjs run tests/acceptance/1427/ac7-shipped.test.ts
+ ✓ tests/acceptance/1427/ac7-shipped.test.ts (4 tests) 137073ms
+   ✓ #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each (3)
+     ✓ a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows 98773ms
+     ✓ the same shipped journeys in another process give the same recordings and findings, byte for byte 7673ms
+     ✓ a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey 7088ms
+   ✓ #1427 AC7 the lane (1)
+     ✓ scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash 23487ms
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Duration  137.84s (tests 100%)
+exit 0

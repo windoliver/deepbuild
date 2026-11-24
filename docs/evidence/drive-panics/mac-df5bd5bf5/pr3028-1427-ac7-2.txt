@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<user>-private-deepbuild-core--claude-worktrees-issue-2399-egress-refusal-once-8892c8/b1989361-ea39-4165-9c29-ac0db12d467f/scratchpad/clone
+
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  22:28:49
+   Duration  55.43s (tests 100%)
+
