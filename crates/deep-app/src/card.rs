@@ -1410,7 +1410,8 @@ impl Card {
             };
             let d = crate::pictures::Drawn {
                 scale: f64::from(f32::from(bounds.size.width) * ratio) / f64::from(picture.size[0]),
-                whole: inside(&bounds),
+                // A frame drawn for an assistive client of a window nobody can see shows you nothing.
+                whole: window.is_visible() && inside(&bounds),
             };
             let better = best
                 .get(&hash)
@@ -1488,3 +1489,6 @@ fn first_focus(controller: &Controller) -> Option<Target> {
 
 /// The card's measured size, what a slot must hold to arm.
 pub const SIZE: [i64; 2] = question::CARD_SIZE;
+
+#[cfg(test)]
+mod tests;
