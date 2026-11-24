@@ -36,16 +36,19 @@ pub struct Staged {
     pub want: Want,
 }
 
+/// A host's own evaluation of a document at a time, in the look it draws it in.
+pub type Evaluate<'a> = dyn FnMut(&Value, i64) -> Result<(Scene, Look3), Refusal> + 'a;
+
 /// #1719: `doc` at `t` flicks in the look `look_json` defines, for a host with no session of its own
 /// (no selection, no planted program, its noise keyed by its items' seeds), as `view3d` stages it:
 /// its film effects' particles written beside them (#508), its mesh particles an instancer's
 /// elements (#450), and where an operator reads the velocity target, the evaluations half a shutter
-/// either side of t. `evaluate` is the host's own evaluation of a document at a time.
+/// either side of t.
 pub fn staged(
     doc: &Value,
     t: i64,
     look_json: &Value,
-    evaluate: &mut dyn FnMut(&Value, i64) -> Result<(Scene, Look3), Refusal>,
+    evaluate: &mut Evaluate<'_>,
 ) -> Result<Staged, Refusal> {
     let kinds = || doc["items"].as_object().into_iter().flatten();
     let has = |k: &str| kinds().any(|(_, i)| i["kind"] == k);
@@ -618,4 +621,56 @@ pub fn gpu_strokes(laid: &[deep_canvas_scene3d::strokes::Dab]) -> Vec<crate::str
             seed: f64::from(d.seed) / f64::from(u32::MAX),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deep_canvas_scene3d::scene::{evaluate, Labels};
+
+    /// #508: two wave fields each draw in their own role's color: A's pass reads ink, B's accent.
+    #[test]
+    fn each_wave_field_draws_in_its_own_role() {
+        let doc = json!({
+            "format": 1, "id": "two-waves", "profile": "scene", "title": "t", "description": "d",
+            "size": [320, 240], "camera": "cam", "seed": 508,
+            "requires": {"modules": {"scene3d": "^1", "effects": "^1"}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "order": "a0",
+                        "params": {"projection": "orthographic", "position": [0, 0, 10], "target": [0, 0, 0],
+                                   "view_width": 6.4, "near": 0.05, "far": 100}},
+                "a": {"id": "a", "kind": "effect@1", "order": "a1",
+                      "params": {"kind": "wave_field", "wave_field": {"role": "ink"}}},
+                "b": {"id": "b", "kind": "effect@1", "order": "a2",
+                      "params": {"kind": "wave_field", "wave_field": {"role": "accent"}}},
+            },
+        });
+        let look_json = json!({"roles": {"ink": "#202020", "accent": "#e04010"}});
+        let look = Look3::read(&look_json).expect("the look reads");
+        let scene = evaluate(&doc, 0, &look, &mut Labels::new()).expect("the scene evaluates");
+        let s = settings(&scene, &look_json, &look, &[], 0.0, 508, Seeding::Item);
+        let read = |id: &str| {
+            let e = s
+                .emits
+                .iter()
+                .find(|e| e.item == id)
+                .expect("its emission pass");
+            e.roles["wave"]
+        };
+        let (ink, accent) = (
+            role(&look, Some("ink"), "accent"),
+            role(&look, Some("accent"), "ink"),
+        );
+        assert_ne!(ink, accent);
+        assert_eq!(
+            read("a"),
+            ink,
+            "wave field a (role ink) draws in another color"
+        );
+        assert_eq!(
+            read("b"),
+            accent,
+            "wave field b (role accent) draws in another color"
+        );
+    }
 }

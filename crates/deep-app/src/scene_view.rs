@@ -167,8 +167,11 @@ impl SceneView {
     }
 }
 
+/// A view, what it shares with its renderer, and the effects of its post stage.
+type Opened = (View, Arc<Mutex<Shared>>, Arc<Mutex<Effects>>);
+
 /// The view on the app's device: three slots handed off zero copy, drawn by scene3d's render module.
-fn open() -> Result<(View, Arc<Mutex<Shared>>, Arc<Mutex<Effects>>), String> {
+fn open() -> Result<Opened, String> {
     let gpu = GPU.get_or_init(|| Gpu::open(Backend::Gpu)).clone()?;
     let (module, shared) = Module3::new(Default::default());
     // #1719: the post stage render-back draws its frame through.
