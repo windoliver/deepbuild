@@ -27,7 +27,10 @@
 #
 # NOT A BASE FAILURE: hub.test.ts's first draft (#3238.8320a246), run on b87494f02 at 2026-11-24T03:42Z. deep-hook denied
 # the session's call, so the script never ran and no assertion of the criterion was reached. Its run is below for the
-# record. NOT RUN YET: the redraft of hub.test.ts, whose session reaches the script through a process it starts.
+# record.
+#   hub.test.ts         #3238.8320a246  (the redraft, whose session reaches the script through a process it starts;
+#                                      b87494f02, 2026-11-24T03:52Z, under a test grant) the lease-table assertion held,
+#                                      then the command ran under no throttle grant (DEEP_THROTTLE null)
 #
 # After the base runs: each twin once against its test (the file named), each failing at the assertion its run shows.
 # own-test-grant was added and run after the first commit of this suite, at 19:58 UTC; own-grant waits behind the build
@@ -313,6 +316,47 @@ test at tests/acceptance/3238/cli.test.mjs:12:1
     operator: 'match',
     diff: 'simple'
   }
+=== exit 1
+
+=== nice -n 10 node node_modules/vitest/vitest.mjs run --testTimeout=1200000 tests/acceptance/3238/hub.test.ts
+=== base b87494f02, scripts/lease unchanged; 2026-11-24T03:52:57.250Z; load 18 32 56
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e
+
+ ❯ tests/acceptance/3238/hub.test.ts (1 test | 1 failed) 2261ms
+   ❯ #3238 AC5: scripts/lease with a hub answering (1)
+     × #3238.8320a246 with a hub answering on a test's own root, the hub's lease table shows the command under its session and the throttle's log shows its grant 1746ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:52:57
+   Duration  2.36s (tests 99%, transform 1%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3238/hub.test.ts > #3238 AC5: scripts/lease with a hub answering > #3238.8320a246 with a hub answering on a test's own root, the hub's lease table shows the command under its session and the throttle's log shows its grant
+AssertionError: the command run through scripts/lease ran under no throttle grant (DEEP_THROTTLE null)
+notes: [{"name":"hub-job","event":"start","at":1795492379202,"pid":42418,"throttle":null},{"name":"hub-job","event":"end","at":1795492379304,"pid":42418,"throttle":null}]
+the throttle's log: (none)
+the call's output: "": expected 'null' to match /^build:[0-9a-f]+$/
+
+- Expected:
+/^build:[0-9a-f]+$/
+
++ Received:
+"null"
+
+ ❯ tests/acceptance/3238/hub.test.ts:76:127
+     74|       // The throttle's log: the build grant the command holds, grante…
+     75|       const token = String(job.throttle);
+     76|       expect(token, `the command run through scripts/lease ran under n…
+       |                                                                                                                               ^
+     77|       const id = token.slice('build:'.length);
+     78|       const granted = jsonLines<Entry>(join(table, 'log')).find((e) =>…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
 === exit 1
 
 === nice -n 10 node node_modules/vitest/vitest.mjs run --testTimeout=1200000 tests/acceptance/3238/hub.test.ts

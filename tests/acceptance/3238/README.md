@@ -47,7 +47,7 @@ and `hub.test.ts` under the same wrapper around its vitest command.
 | `no-grant.test.mjs` | AC3 | nothing built: a copy of `scripts/` | about 2 s |
 | `admitted.test.mjs` | AC2, the admission case | nothing built: a copy of `scripts/` | about 2 s |
 | `cli.test.mjs` | AC4 | the built CLI (`npm ci`, `npm run build --workspaces`); BLOCKED without it | under 1 s |
-| `hub.test.ts` | AC5 | the built CLI, and deep-hook (`cargo build --locked -p deep-hook --features env-plants`, which #18's helper runs when it is missing) | the redraft has not run yet |
+| `hub.test.ts` | AC5 | the built CLI, and deep-hook (`cargo build --locked -p deep-hook --features env-plants`, which #18's helper runs when it is missing) | about 3 s |
 | `design.test.mjs` | AC6 | nothing | under 1 s |
 
 The first three files' times are at a 1-minute load of 100 to 130 on 18 cores, and `admitted` and `cli` at 19 to 36; a test whose program leaves a command waiting adds up to
@@ -189,9 +189,10 @@ are released (a minute at most).
 - The stub's `DEEP_THROTTLE` is `build:<id>`, and the throttle's log has a top-level `granted` of class build with
   that ID.
 
-On the base the command runs through `deep lease` and holds a slot, but no grant, so it should fail at the grant
-assertion (read from the base's code; the redraft has not run yet). A denied call, or a command that never starts, is
-a thrown `BLOCKED` error and not an assertion, so a world that doesn't start can't read as a base failure.
+On the base the command runs through `deep lease` and holds a slot, but no grant, and it fails at the grant
+assertion, "the command run through scripts/lease ran under no throttle grant (DEEP_THROTTLE null)", after the
+lease-table assertion held (run once on `b87494f02`). A denied call, or a command that never starts, is a thrown
+`BLOCKED` error and not an assertion, so a world that doesn't start can't read as a base failure.
 
 **The first draft couldn't reach its assertions.** Its session typed `scripts/lease node <path>/stub.mjs hub-job`, and
 its one run on `b87494f02` (2026-11-24T03:42Z, under a test grant) ended at the test's own `expect.fail` because deep-hook
@@ -217,8 +218,7 @@ scripts the criteria name, and `own-grant` beside AC2's, are twins (`twins.json`
 against its test, failing as recorded at the end of `BASE-FAILURE.txt`. A throwaway reference script, the twins' source without their planted line,
 passed the tests of AC1, AC2 and AC3 here and was never committed.
 
-**`hub.test.ts`'s redraft (AC5) has not run yet, on the base or anywhere;** its expected base failure above is read from the
-base's code, not seen. `cli.test.mjs` (AC4) ran once, on `b87494f02`, once a build grant came: on the day these were
+`cli.test.mjs` (AC4) and `hub.test.ts`'s redraft (AC5) ran once each, on `b87494f02`, once a build grant came: on the day these were
 drafted a preflight held the machine's exclusive `timed` grant for over 10 hours. The
 runs of `serial`, `inherited`, `no-grant` and `design`, of the reference and of the twins were made with no machine
 grant, while that preflight held `timed` (`BASE-FAILURE.txt` has the times). They should have had a `test` grant:
