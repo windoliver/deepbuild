@@ -105,7 +105,7 @@ import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_
 import { disk, testVfs, writeAtomic, type Durable } from './vfs.js';
 import { EXTENSION_HOOK_MS, derivedId, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
 import type { CallContext, Session, Live, Cursor, Counter, Routes } from './session-types.js';
-import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, TEST_MEM_MB, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, counted, TYPED_RULE, wakeable, planOf, hubConfig, lazyServices, picturesListed } from "./hub-shared.js";
+import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, PROMPT_PLACE_MS, CORES, TEST_MEM_MB, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, counted, TYPED_RULE, wakeable, planOf, hubConfig, lazyServices, picturesListed } from "./hub-shared.js";
 import { leasesScreen, offScreen } from './screen-gate.js';
 
 import { HubCanvas } from './hub-canvas.js';
@@ -118,7 +118,7 @@ import { SessionState } from './session-state.js';
 import { SessionFlags } from './session-flags.js';
 import { McpOperations } from './mcp-operations.js';
 import { HubControl } from './hub-control.js';
-import { loopAt, loopsOfTurn } from './turn-loops.js';
+import { loopAt, loopsOfTurn, turnFrom } from './turn-loops.js';
 export type { CallContext } from './session-types.js';
 
 type HookReply = { context?: string; block?: string; message?: string };
@@ -1847,7 +1847,7 @@ export class Core {
         }
       } else if (draft.kind === 'user.ask') {
         // The origin joins the prompt to its transcript entry; one it can't place is unknown and opens no ask.
-        const entry = meta.fields?.prompt_id && session ? (await this.turnFrom(session, meta.fields.prompt_id))[0] : undefined;
+        const entry = meta.fields?.prompt_id && session ? (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0] : undefined;
         // A Codex subagent's prompt carries the root's session ID with an agent_id: no message of yours, nor the root's turn (#39).
         if (childPrompt(meta)) { data.from = 'subagent'; continue; }
         let from = foreign ? 'unknown' : String(this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : [])?.from ?? data.from);
@@ -1891,7 +1891,7 @@ export class Core {
         }
       } else if (draft.kind === 'agent.stop' && !draft.data.child) {
         await this.stopRecords(draft, meta, session);
-        if (session && meta.agent === 'claude-code' && meta.fields?.prompt_id && !meta.fields.agent_id) loopsOfTurn(live, await this.turnFrom(session, meta.fields.prompt_id), this.stepped);
+        if (session && meta.agent === 'claude-code' && meta.fields?.prompt_id && !meta.fields.agent_id) loopsOfTurn(live, await turnFrom(session, meta.fields.prompt_id, this.transcriptReader), this.stepped);
         const loop = loopAt(live, this.options.plant);
         if (loop) data.loop = loop;
         if (session && meta.agent === 'codex' && !meta.fields?.agent_id && !meta.watchOnly) await this.judging.codexStop(meta, data, live).catch(() => undefined);
@@ -2068,26 +2068,13 @@ export class Core {
   }
 
   /**
-   * The transcript entries of the turn a prompt opened, from its own entry on. The core keeps the current turn's as
-   * it reads them; a session it met after its prompt's entry was written (its first hook came late) is read here
-   * from the transcript's last few MiB.
-   */
-  private async turnFrom(session: Session, promptId: string): Promise<Obj[]> {
-    if (session.prompts.has(promptId)) return session.entries[0]?.promptId === promptId ? session.entries : [session.prompts.get(promptId)!];
-    const lines = (await this.transcriptReader.tail(session.transcript, 4 << 20)).split('\n');
-    const at = lines.findIndex((l) => l.includes(promptId) && l.includes('"promptId"'));
-    if (at < 0) return [];
-    return lines.slice(at).flatMap((l) => { try { const e: unknown = JSON.parse(l); return isObj(e) && e.isSidechain !== true ? [e] : []; } catch { return []; } }).slice(0, TURN_ENTRIES);
-  }
-
-  /**
    * A stop's cause from its records: the payload's error, then the turn's transcript error records, never the
    * agent's text; its usage; and for a stop with a cause, its error signature and who can act on it.
    */
   private async stopRecords(draft: Draft, meta: HookMeta, session: Session | undefined): Promise<void> {
     const data = draft.data;
     if (session && meta.fields?.prompt_id && !meta.fields.agent_id) {
-      const read = this.mapped(meta, draft, { ...meta.fields }, await this.turnFrom(session, meta.fields.prompt_id));
+      const read = this.mapped(meta, draft, { ...meta.fields }, await turnFrom(session, meta.fields.prompt_id, this.transcriptReader));
       if (read && typeof read.cause === 'string') {
         data.cause = read.cause;
         if (read.cause === 'plan_window_spent' && typeof read.plan_resets === 'number') data.plan_resets = read.plan_resets;
@@ -2410,7 +2397,7 @@ export class Core {
     const session = this.state.sessions.get(meta.session);
     if (!live?.turnFrom || childPrompt(meta)) return undefined;
     return this.siblings.held(meta, live.turnFrom, async () => {
-      const entry = session && meta.fields?.prompt_id ? (await this.turnFrom(session, meta.fields.prompt_id))[0] : undefined;
+      const entry = session && meta.fields?.prompt_id ? (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0] : undefined;
       const origin = entry && isObj(entry.origin) ? entry.origin : undefined;
       return typeof origin?.from === 'string' ? /^local_(.+)$/.exec(origin.from)?.[1] : undefined;
     });

@@ -1,7 +1,8 @@
-// A Claude Code turn's loops, read from its transcript at the stop (#965).
+// A Claude Code turn as its transcript shows it: its entries, and the loops it left at its stop (#965).
 import { loopFact } from './hookmap.js';
-import { isObj, type Obj } from './hub-shared.js';
-import type { Live } from './session-types.js';
+import { isObj, TURN_ENTRIES, type Obj } from './hub-shared.js';
+import type { Live, Session } from './session-types.js';
+import type { TranscriptReader } from './transcript-reader.js';
 
 /**
  * The wake-ups and cron jobs the turn's transcript shows it scheduled or cancelled, read by the same loop facts as
@@ -45,4 +46,17 @@ export function loopAt(live: Live, plant: string | undefined): Obj | undefined {
   live.looping = loop?.state === 'looping';
   live.wakeups = [];
   return loop;
+}
+
+/**
+ * The transcript entries of the turn a prompt opened, from its own entry on. The core keeps the current turn's as
+ * it reads them; a session it met after its prompt's entry was written (its first hook came late) is read here
+ * from the transcript's last few MiB.
+ */
+export async function turnFrom(session: Session, promptId: string, reader: TranscriptReader): Promise<Obj[]> {
+  if (session.prompts.has(promptId)) return session.entries[0]?.promptId === promptId ? session.entries : [session.prompts.get(promptId)!];
+  const lines = (await reader.tail(session.transcript, 4 << 20)).split('\n');
+  const at = lines.findIndex((l) => l.includes(promptId) && l.includes('"promptId"'));
+  if (at < 0) return [];
+  return lines.slice(at).flatMap((l) => { try { const e: unknown = JSON.parse(l); return isObj(e) && e.isSidechain !== true ? [e] : []; } catch { return []; } }).slice(0, TURN_ENTRIES);
 }
