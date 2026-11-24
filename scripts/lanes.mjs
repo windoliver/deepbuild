@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir, hostname, tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -137,7 +137,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/2650/planted-jobs.test.ts', 'tests/acceptance/2650/planted-names.test.ts', 'tests/acceptance/1498/', 'tests/acceptance/1812/',
     'tests/acceptance/67-redraft-1812/', 'tests/acceptance/1495/app-download.test.ts', 'tests/acceptance/1592/', 'tests/acceptance/1411/', 'tests/acceptance/1512/',
     'tests/acceptance/1509/', 'tests/acceptance/1929/', 'tests/acceptance/1826/', 'tests/acceptance/1415/', 'tests/acceptance/1430/', 'tests/acceptance/1430-redraft-ac2/',
-    'tests/acceptance/2456/', 'tests/write-reveal-frames.test.ts', 'tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts',
+    'tests/acceptance/2456/', 'tests/write-reveal-frames.test.ts', 'tests/web-reading-walk.test.ts', 'tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts',
     'tests/acceptance/2776/listing.test.ts', 'tests/acceptance/2457/', 'tests/acceptance/2500/', 'tests/acceptance/211/', 'tests/acceptance/981/', 'tests/acceptance/189/saves/',
     'tests/acceptance/189-oracle/', 'tests/acceptance/189/lab-redraft/', 'tests/acceptance/276/record/', 'tests/acceptance/276/match/', 'tests/acceptance/2109/',
     'tests/acceptance/953/', 'tests/acceptance/953-oracle/', 'tests/acceptance/1250/', 'tests/acceptance/1576/', 'tests/acceptance/2661/', 'tests/acceptance/980/',
@@ -227,6 +227,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/155-oracle/', 'tests/acceptance/162/', 'tests/acceptance/184/', 'tests/acceptance/184-redraft-ac7-2/', 'tests/acceptance/555/', 'tests/acceptance/1048/',
     'tests/acceptance/556/', 'tests/acceptance/2650/retries.test.ts', 'tests/acceptance/2650/jobs.test.ts', 'tests/acceptance/2650/replay.test.ts',
     'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/', 'tests/acceptance/3035/',
+    'tests/acceptance/139-redraft-2062/',
   ],
   'shared: memory': ['tests/acceptance/2645/'],
   'shared: the cores': ['tests/acceptance/2227/'],
@@ -234,6 +235,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1172/', 'tests/acceptance/1454/', 'tests/acceptance/1459/', 'tests/acceptance/1002/first-screen-redraft/', 'tests/acceptance/994/first-screen-redraft/',
     'tests/acceptance/2494/', 'tests/acceptance/1455/', 'tests/acceptance/1462/', 'tests/acceptance/1462-redraft-ac2/', 'tests/acceptance/539/', 'tests/acceptance/542/',
     'tests/acceptance/903/', 'tests/acceptance/548/', 'tests/acceptance/1808/', 'tests/acceptance/1431/', 'tests/acceptance/2403/',
+    'tests/acceptance/3236/', 'tests/acceptance/3236-redraft-ac8/', 'tests/live-window-hidden.test.ts',
   ],
 })) for (const entry of entries) aloneReasons[entry] = reason;
 for (const entry of alone) {
@@ -669,7 +671,7 @@ function cargoList(output, workspace) {
   return list;
 }
 
-const lanesFolder = () => join(homedir(), '.deepbuild', 'lanes');
+export const lanesFolder = () => join(homedir(), '.deepbuild', 'lanes');
 
 /**
  * The Mac's reference list of a lane on a tree, among this machine's lane records: the `list` of the Mac's own record,
@@ -734,8 +736,11 @@ function libtestTargets(args, cwd) {
 /** A cargo test command that runs its packages whole: it picks no target of its own and filters no test. */
 const wholeRun = (args) => !args.some((arg) => arg === '--' || /^--(?:lib|bins?|tests?|doc|examples?|bench(?:es)?|all-targets)$/.test(arg));
 
-/** What a whole cargo test command lists with `-- --list`, by cargoList, under the throttle; null when the listing fails. */
-function cargoListed(args, cwd, env) {
+/**
+ * What a whole cargo test command lists with `-- --list`, by cargoList, under the throttle, asked with `grantWait`;
+ * null when the listing fails.
+ */
+function cargoListed(args, cwd, env, grantWait) {
   const targets = libtestTargets(args, cwd);
   if (!targets) return null;
   const directory = mkdtempSync(join(tmpdir(), 'deep-cargo-list-')), log = join(directory, 'output');
@@ -743,7 +748,7 @@ function cargoListed(args, cwd, env) {
     const descriptor = openSync(log, 'w', 0o600);
     let result;
     try {
-      result = spawnSync(process.execPath, [throttle, 'build', '--wait', '30', '--', leaseScript, 'cargo', ...args, ...targets, '--', '--list'], { cwd, env, stdio: ['ignore', descriptor, descriptor] });
+      result = spawnSync(process.execPath, [throttle, 'build', ...grantWait, '--', leaseScript, 'cargo', ...args, ...targets, '--', '--list'], { cwd, env, stdio: ['ignore', descriptor, descriptor] });
     } finally {
       closeSync(descriptor);
     }
@@ -810,6 +815,12 @@ export function testsOf([command, ...args], cwd, { report, output, status }) {
   } catch {
     return null;
   }
+}
+
+/** The test files a command of a lane runs, as its runner takes them; none for one that names no file, as `cargo test`. */
+function testFilesOf(cwd, command) {
+  const named = require('./proof-binaries.mjs').commandFiles(cwd, command).flatMap((path) => (path.includes('*') ? globSync(path, { cwd }) : [path]));
+  return named.map((file) => relative(realpathSync(cwd), realpathSync(resolve(cwd, file))).split(sep).join('/'));
 }
 
 function knownFailures(cwd) {
@@ -918,8 +929,25 @@ export function writeRecord(lane, state, tree, tests, more = {}) {
   return file;
 }
 
-export function runLanes(lanes, { cwd = root } = {}) {
+/**
+ * What of the unit lane has no kept result to stand on for `key`'s tree: the test files, and `cargo test` when its job has
+ * none, with how many files the lane has. The preflight finishes only once there are none (#3297).
+ */
+export function unrunOf(key, cwd = root) {
+  const { openKept } = require('./proof-kept.mjs'), lane = checks.find(({ name }) => name === 'unit');
+  const kept = openKept(key, (row) => readSkips([row], knownFailures(cwd).skips, timed).covered.length > 0);
+  const files = lane.commands.map((command) => testFilesOf(cwd, command));
+  const unrun = files.flatMap((names, index) => (names.length ? names.filter((file) => !kept.done(file)) : kept.jobDone(`unit ${index}`, []) ? [] : ['cargo test']));
+  return { unrun, of: files.flat().length };
+}
+
+export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: treeOf, stall } = {}) {
   const failures = [];
+  // A remote lane's far end passes its stall bound: each grant then waits while its class's grants change hands (#3350).
+  // Every other run waits 30 minutes, as section 6's table says.
+  const grantWait = stall === undefined ? ['--wait', '30'] : ['--stall', String(stall)];
+  // Loaded only for the preflight, as a copy of this script stands alone without it.
+  const { openKept, wholeJob } = key ? require('./proof-kept.mjs') : {};
   // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
   const release = process.env.DEEP_PREFLIGHT === 'release';
   // The lanes that read the open issues share one fetch a run, in this file (scripts/open-issues.mjs); perf's
@@ -929,7 +957,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
   // Never forward a shell's binary directory, even to a lane that starts its own proof.
   const environment = { ...process.env };
   delete environment.DEEP_BIN_DIR;
-  let changed, binaries, binaryError;
+  let changed, binaries, built = [], binaryError;
   try {
     const selected = [];
     for (const lane of lanes) {
@@ -954,32 +982,67 @@ export function runLanes(lanes, { cwd = root } = {}) {
       const started = performance.now();
       console.log(`RUN ${lane.name}`);
       let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
-      const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
+      // perf's copy of a commit isn't a checkout of it, so it names its tree (#3297); else the one on disk.
+      const tree = treeOf ?? exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
       // The tests the lane's whole cargo test commands list, or null once a listing failed; whether any cargo test ran.
-      let listedCargo, cargoRan = false;
-      for (const [command, ...args] of lane.commands.map(runOf)) {
+      let listedCargo, cargoRan = false, keptRead = 0;
+      // The preflight's kept results of this very tree (#3296): a job already done is read, never run again.
+      let kept = key && lane.name === 'unit' && key.tree === tree ? openKept(key, (row) => readSkips([row], knownFailures(cwd).skips, timed).covered.length > 0) : null, testFiles = [];
+      if (kept) try { testFiles = lane.commands.map((command) => testFilesOf(cwd, command)); } catch (error) {
+        console.log(`NOTE ${lane.name}: its files can't be listed, so nothing of it is kept or read: ${error.message}`);
+        kept = null;
+      }
+      // A command's jobs, the timed files it lists each a job of its own under its own timed grant (#3297).
+      const jobs = lane.commands.flatMap((listedCommand, index) => {
+        const [command, ...rest] = runOf(listedCommand), shards = rest[0] === 'scripts/affected.mjs', names = testFiles[index] ?? [];
+        const whole = { command, rest, shards, names, job: `${lane.name} ${index}`, cls: throttleClass([command, ...rest]) };
+        const own = kept && !shards ? names.filter((file) => listed(timed, file)) : [], vitest = rest[0]?.endsWith('vitest.mjs');
+        if (!own.length) return [whole];
+        const others = names.filter((file) => !own.includes(file));
+        const apart = own.map((file) => ({ ...whole, names: [file], job: `${whole.job} ${file}`, cls: 'timed', rest: vitest ? [rest[0], 'run', '--no-file-parallelism', '--testTimeout=600000', file] : ['--test', file] }));
+        return [...others.length ? [{ ...whole, names: others, rest: vitest ? [...rest, ...own.flatMap((file) => ['--exclude', file])] : ['--test', ...others] }] : [], ...apart];
+      });
+      for (const { command, rest, shards, names, job, cls } of jobs) {
+        // The alone block's own run keeps its jobs, and reads them (affected.mjs).
+        const args = kept && shards ? [...rest, `--kept=${JSON.stringify(key)}`] : rest;
         let directory, descriptor, result, results, output = '';
         try {
-          directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
-          const log = join(directory, 'output'), report = join(directory, 'report');
-          const reported = reporting([command, ...args], report);
-          if (reported && !binaries && !binaryError) {
-            binaries = mkdtempSync(join(tmpdir(), 'deep-lane-binaries-'));
-            try {
-              const { binaryNames, buildBinaries, commandFiles, watchBinaries } = require('./proof-binaries.mjs');
-              watchBinaries(binaries);
-              const files = selected.flatMap((lane) => lane.commands.map(runOf)).flatMap((command) => commandFiles(cwd, command));
-              buildBinaries(cwd, join(binaries, 'bin'), binaryNames(cwd, files), undefined, { timeout: 0 });
-            } catch (error) { binaryError = error; }
+          const prior = kept && !shards && kept.jobDone(job, names) ? kept.results(names, job) : null;
+          if (prior) keptRead += names.length;
+          if (prior) [results, result, output] = [prior, { status: prior.failures.length ? 1 : 0 }, `KEPT ${job}: ${prior.passed.length + prior.failures.length + prior.skips.length} results read from an earlier run of this tree`];
+          else {
+            directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
+            const log = join(directory, 'output'), report = join(directory, 'report');
+            const reported = reporting([command, ...args], report);
+            // Built for the run once, and again whenever a cleanup has emptied them since (#3296).
+            if (reported && !binaryError && (!binaries || built.some((name) => !existsSync(join(binaries, 'bin', name))))) {
+              try {
+                const { binaryNames, buildBinaries, commandFiles, watchBinaries } = require('./proof-binaries.mjs');
+                if (!binaries) {
+                  binaries = mkdtempSync(join(tmpdir(), 'deep-lane-binaries-'));
+                  watchBinaries(binaries);
+                  built = binaryNames(cwd, selected.flatMap((lane) => lane.commands.map(runOf)).flatMap((command) => commandFiles(cwd, command)));
+                }
+                buildBinaries(cwd, join(binaries, 'bin'), built, undefined, { timeout: 0 });
+              } catch (error) { binaryError = error; }
+            }
+            if (reported && binaryError) throw binaryError;
+            descriptor = openSync(log, 'w', 0o600);
+            // One shared descriptor preserves the child's stdout/stderr write order.
+            // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6), and under a cpu.slot
+            // of the calling session's through scripts/lease (#1015).
+            // The fill holds no grant over the alone block's own run, whose admission and turns are its jobs' (#3297).
+            const began = performance.now(), leased = [leaseScript, ...reported?.command ?? [command, ...args]];
+            result = spawnSync(...fill && shards ? [leased[0], leased.slice(1)] : [process.execPath, [throttle, cls, ...grantWait, '--', ...leased]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
+            output = readFileSync(log, 'utf8').trim();
+            results = testsOf([command, ...args], cwd, { report, output, status: result.status });
+            if (kept && shards) try { keptRead += JSON.parse(readFileSync(report, 'utf8')).kept?.read ?? 0; } catch {}
+            if (kept && !shards) {
+              if (wholeJob({ label: 'vitest', status: result.status, output, results })) kept.keep(job, names, results, performance.now() - began);
+              // An earlier run's rows stand beside this one's, and a failure over a later pass.
+              results = kept.overlay(results, names, job);
+            }
           }
-          if (reported && binaryError) throw binaryError;
-          descriptor = openSync(log, 'w', 0o600);
-          // One shared descriptor preserves the child's stdout/stderr write order.
-          // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6), and under a cpu.slot
-          // of the calling session's through scripts/lease (#1015).
-          result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', leaseScript, ...reported?.command ?? [command, ...args]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
-          output = readFileSync(log, 'utf8').trim();
-          results = testsOf([command, ...args], cwd, { report, output, status: result.status });
         } catch (error) {
           result = { status: null, error };
         } finally {
@@ -1018,7 +1081,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
         // A run the throttle refused ran nothing to list, and listing it would ask the throttle again (#3333).
         if (command === 'cargo' && args[0] === 'test' && !results?.noGrant) {
           cargoRan = true;
-          const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment) : undefined;
+          const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment, grantWait) : undefined;
           if (listing) {
             listedCargo ??= {};
             for (const [target, names] of Object.entries(listing)) listedCargo[target] = [...new Set([...listedCargo[target] ?? [], ...names])];
@@ -1047,6 +1110,16 @@ export function runLanes(lanes, { cwd = root } = {}) {
         const found = { state: worst(platformRead.map(({ state }) => state)), error: absentIds.size ? `${absentIds.size} of the Mac's cargo tests are absent on this platform` : platformRead[0].message };
         if (stands(found, failure)) failure = found;
       }
+      if (kept) {
+        const files = testFiles.flat(), ran = new Set(tests.filter(({ id, state }) => !id.endsWith(' › (file)') || state === 'FAIL').map(({ id }) => id.split(' › ')[0]));
+        const unrun = files.filter((file) => !ran.has(file));
+        if (unrun.length) {
+          const found = { state: 'INCONCLUSIVE', error: `${unrun.length} of ${files.length} test files have no result on this tree: ${unrun.slice(0, 10).join(', ')}${unrun.length > 10 ? ', …' : ''}` };
+          console.log(`UNRUN ${lane.name}: ${found.error}`);
+          findings.push({ state: found.state, note: found.error });
+          if (stands(found, failure)) failure = found;
+        }
+      }
       const elapsed = ((performance.now() - started) / 1000).toFixed(2);
       for (const { id, note, reason } of listedTests) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
       const platform = failure?.state === 'INCONCLUSIVE' && unproven.some(({ message }) => isPlatform(message)) ? ' (platform)' : '';
@@ -1054,7 +1127,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
       else console.log(`PASS ${lane.name} (${elapsed} s)`);
       try {
-        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, findings.length ? { ...more, findings } : more);
+        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, { ...more, ...findings.length && { findings }, ...kept && { kept: { read: keptRead, of: testFiles.flat().length } } });
       } catch (error) {
         // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
         if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);

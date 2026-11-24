@@ -12,7 +12,10 @@
 //! (or `y2`), a path and an area as one line through the rows in order (an area down to the
 //! zero), symbols, and images from an `asset` column with its `alt`. A key is unique across rows.
 
+pub mod holds;
 mod series_rows;
+
+use series_rows::{series_box, series_len, series_numbers, series_window};
 
 use serde_json::{json, Map, Value};
 
@@ -138,7 +141,8 @@ pub(crate) fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refus
             _ => f64::from(b[0]),
         })
         .collect();
-    if values.iter().any(|v| !v.is_finite()) {
+    // #3236: a NaN is a missing value (Scale and encode), whose row doesn't draw; not an infinity.
+    if values.iter().any(|v| v.is_infinite()) {
         return refuse("out_of_range", format!("{path}/data"));
     }
     Ok(Column::Numbers(values))
@@ -973,6 +977,7 @@ pub fn rows(
             let column = column_of(c, rows.keys.len(), &format!("{path}/columns/{name}"))?;
             rows.columns.insert(name.clone(), column);
         }
+        rows.hide_missing(columns.keys(), p.get("encode"), &path)?;
         return Ok(rows);
     }
     if p.get("transforms").is_none() {
@@ -1067,13 +1072,15 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
             })
             .collect()
     };
-    Ok(Rows {
+    let mut rows = Rows {
         keys,
         columns: decoded,
         precision,
         hidden,
         ..Rows::default()
-    })
+    };
+    rows.hide_missing(columns.keys(), p.get("encode"), &path)?;
+    Ok(rows)
 }
 
 /// A mark set's rows as marks, each named `<id>#<key>`; `bound` holds its cells' bound readings.
@@ -1497,58 +1504,6 @@ pub fn decimated(id: &str, item: &Value, how: Decimate) -> Result<Decimated, Ref
         v,
         columns,
         window: (t0, t1),
-    })
-}
-
-fn series_len(p: &Map<String, Value>, path: &str) -> Result<usize, Refused> {
-    Ok(p.get("t")
-        .and_then(|t| t.get("len"))
-        .and_then(Value::as_u64)
-        .filter(|n| *n <= MAX_ROWS)
-        .ok_or(Refused {
-            code: "bad_column",
-            path: format!("{path}/t"),
-        })? as usize)
-}
-
-fn series_numbers(
-    p: &Map<String, Value>,
-    name: &str,
-    n: usize,
-    path: &str,
-) -> Result<Option<Vec<f64>>, Refused> {
-    match p.get(name) {
-        None => Ok(None),
-        Some(c) => match column_of(c, n, &format!("{path}/{name}"))? {
-            Column::Numbers(v) => Ok(Some(v)),
-            _ => refuse("bad_column", format!("{path}/{name}")),
-        },
-    }
-}
-
-fn series_box(p: &Map<String, Value>, path: &str) -> Result<[f64; 4], Refused> {
-    match p.get("box").and_then(Value::as_array).and_then(|b| {
-        let b: Option<Vec<f64>> = b.iter().map(Value::as_f64).collect();
-        <[f64; 4]>::try_from(b?.as_slice()).ok()
-    }) {
-        Some(b) => Ok(b),
-        None => refuse("bad_doc", format!("{path}/box")),
-    }
-}
-
-fn series_window(p: &Map<String, Value>, t: &[f64], path: &str) -> Result<(f64, f64), Refused> {
-    let n = t.len();
-    Ok(match p.get("window") {
-        Some(Value::Array(w)) => match w.as_slice() {
-            [a, b] => (a.as_f64().unwrap_or(0.0), b.as_f64().unwrap_or(0.0)),
-            _ => return refuse("bad_doc", format!("{path}/window")),
-        },
-        Some(Value::Object(w)) if n > 0 => {
-            let last = w.get("last").and_then(Value::as_u64).unwrap_or(n as u64) as usize;
-            (t[n.saturating_sub(last.max(1))], t[n - 1])
-        }
-        None if n > 0 => (t[0], t[n - 1]),
-        _ => (0.0, 0.0),
     })
 }
 

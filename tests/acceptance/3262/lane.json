@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: the ac1 and ac2 files run #3222's harness, which starts a hub that runs deep-show from this checkout's target/ and reads each call's service time; the ac3 files each hold canvas sides and fresh hubs for minutes" }

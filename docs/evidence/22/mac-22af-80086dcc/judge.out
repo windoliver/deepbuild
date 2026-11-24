@@ -1,0 +1,1 @@
+{"issue":22,"commit":"80086dcc65d0221c46af3b1066c0625abf2fd2e6","verdict":"INVALID","criteria":[{"id":"#22.48b6696b","outcome":"PASS"},{"id":"#22.1f14a778","outcome":"INCONCLUSIVE"},{"id":"#22.f57a814c","outcome":"PASS"},{"id":"#22.3d85284a","outcome":"INVALID"}],"reopen":{"criterion":"#22.3d85284a"}}

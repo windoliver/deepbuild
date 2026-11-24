@@ -214,7 +214,7 @@ impl Terrain {
 
 /// Each vertex's normal from the first `tris` triangles that meet it, weighted by their areas
 /// and turned to face +Y.
-fn smooth(m: &mut Mesh, tris: usize) {
+pub(crate) fn smooth(m: &mut Mesh, tris: usize) {
     let mut acc = vec![[0.0; 3]; m.positions.len()];
     for t in 0..tris {
         let [a, b, c] = [0, 1, 2].map(|j| m.indices[3 * t + j] as usize);

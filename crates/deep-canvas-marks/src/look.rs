@@ -1217,6 +1217,22 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
     Ok(look)
 }
 
+/// A look@1's roles in its light theme, as [`resolve_in`] resolves them, its fonts checked and the
+/// status guard left out: what a frame that shows no status draws in (#1719).
+pub fn light_roles(def: &Value, bundled: &[&str]) -> Result<Palette, Refusal> {
+    let Value::Object(def) = def else {
+        return Err(Refusal::Bad(String::new()));
+    };
+    fonts(def, bundled)?;
+    let (light, ..) = theme(def, "light")?;
+    for role in ["ground", "ink"] {
+        if !light.contains_key(role) {
+            return Err(Refusal::Bad(format!("roles/{role}")));
+        }
+    }
+    Ok(light)
+}
+
 /// The first role of `look` within the status distance of a status color (`min`, or the look's
 /// own): an opaque role but the ground, which sits behind them, or a role at an alpha over the
 /// ground and the raised ground, in light then dark (The status-color rule).
