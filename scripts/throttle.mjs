@@ -1,6 +1,6 @@
 // The per-machine throttle table (docs/parallel-proof.md, section 6): a host-local lock table under the user's
 // ~/.deepbuild/throttle/, whatever HOME says, that grants build, bay pair, test and timed by class, so a neighbour's build never runs
-// while a budget is timed. `throttle.mjs <class> [--wait <min>] -- <command>` acquires, runs, releases and exits
+// while a budget is timed. `throttle.mjs <class> [--wait <min> | --stall <min>] -- <command>` acquires, runs, releases and exits
 // with the child's status, or ends a command held past its `--hold` bound while another request waits; acquire and release serve the scripts that hold a grant themselves. `throttle.mjs window`
 // opens a budget window (section 12a): a timed grant that waits for every slot to empty, around budget-window.mjs.
 // `throttle.mjs load [--report]` reads the machine's load by who made it (#3067), its GPU time and the cores idle beside
@@ -348,23 +348,25 @@ function grantable(table, procs, request, seen) {
   return request.nested || loadavg()[0] < cpus().length;
 }
 
-// The holders the last timed request to time out waited on, for its INCONCLUSIVE line.
+// The holders the last timed request to time out waited on, or a stalled one's of its class, for its INCONCLUSIVE line.
 let blocked = [];
 
 /**
  * Takes a grant of `cls`, waiting at most `wait` minutes; null when none came, or an ENOSPC marked `waited` thrown when
- * the wait ran out on a full disk (#2869). A build or test request from a chain
+ * the wait ran out on a full disk (#2869). With `stall`, the wait has no clock: the request keeps its place for as long
+ * as grants of its class change hands, and runs out only once none has for `stall` minutes (#3334). A build or test request from a chain
  * that holds a grant, and a timed request from one that holds timed, passes through: it holds its ancestor's grant
  * and is released with it. With `turns` false it takes no turn of the pool inside an admitted run either, as
  * scripts/lease asks (#3238). The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
  * run down while a window is open: a window outlasts a wait, and only its end decides when the next build starts.
  */
-export function acquire(cls, { wait = 30, window = false, run, turns = true } = {}) {
+export function acquire(cls, { wait = 30, stall, window = false, run, turns = true } = {}) {
   if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
   const pid = process.pid;
   // A readings variable the table can't take is refused before anything is asked.
   readings();
-  let deadline = Date.now() + wait * 60_000, polled = Date.now();
+  const bound = (stall ?? wait) * 60_000;
+  let deadline = Date.now() + bound, polled = Date.now(), hands;
   const request = locked((table, procs) => {
     const held = inherited(table, procs, chain(procs, pid));
     const id = randomBytes(8).toString('hex'), start = procs.get(pid).start, seq = () => (table.seq = (table.seq ?? 0) + 1);
@@ -413,6 +415,12 @@ export function acquire(cls, { wait = 30, window = false, run, turns = true } = 
       const now = Date.now();
       if ([...table.grants, ...table.requests].some((other) => other.window && other.id !== request.id)) deadline += now - polled;
       polled = now;
+      // A grant of the class taken or given back since the last look starts a stall's bound again.
+      if (stall !== undefined) {
+        const held = table.grants.filter((other) => other.class === cls).map((other) => other.id).sort().join();
+        if (held !== hands) deadline = now + bound;
+        hands = held;
+      }
       const seen = pending.class === 'test' ? readings() : undefined;
       if (!grantable(table, procs, pending, seen)) {
         if (now <= deadline) return null;
@@ -420,9 +428,11 @@ export function acquire(cls, { wait = 30, window = false, run, turns = true } = 
         // A drain that timed out names what it waited on. A top-level one marks it too, so the next drain doesn't stop
         // the machine on it, but only while nothing is marked: a holder that started while drains were off isn't one
         // that blocked a drain, and once the marked ones end, drains stop new grants again.
-        const named = cls === 'timed' ? blockers(table, procs, pending) : [];
+        // A stalled request names the holders of its class, and a timed one, outside its chain.
+        const mine = chain(procs, pid);
+        const named = cls === 'timed' ? blockers(table, procs, pending) : stall !== undefined ? table.grants.filter((grant) => (grant.class === cls || grant.class === 'timed') && !mine.includes(grant.pid)) : [];
         const lines = named.length ? commands(named.map((grant) => grant.pid)) : new Map();
-        if (!pending.window && !pending.nested && !table.grants.some((grant) => grant.blocked)) for (const grant of named) grant.blocked = true;
+        if (cls === 'timed' && !pending.window && !pending.nested && !table.grants.some((grant) => grant.blocked)) for (const grant of named) grant.blocked = true;
         blocked = named.map(({ class: held, id, pid: holder, at }) => ({ class: held, id, pid: holder, at: at ? new Date(at).toISOString() : 'an unknown time', command: lines.get(holder) ?? '' }));
         return 'timeout';
       }
@@ -438,13 +448,13 @@ export function acquire(cls, { wait = 30, window = false, run, turns = true } = 
       const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now, ...pending.run && { run: true, used: 0 } };
       table.grants.push(entry);
       const load = loadavg()[0], cores = cpus().length;
-      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, wait, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
+      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, ...stall !== undefined ? { stall } : { wait }, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
       return entry;
     });
     if (grant === 'timeout') {
       // The request is out of the table, so a log line a full disk refuses changes nothing.
       try {
-        log({ event: 'timeout', class: cls, id: request.id, pid, wait, ...blocked.length ? { blockers: blocked } : {} });
+        log({ event: 'timeout', class: cls, id: request.id, pid, ...stall !== undefined ? { stall } : { wait }, ...blocked.length ? { blockers: blocked } : {} });
       } catch (error) {
         if (error.code !== 'ENOSPC') throw error;
       }
@@ -791,10 +801,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   const cls = window ? 'timed' : named;
   const command = window ? [process.execPath, fileURLToPath(new URL('budget-window.mjs', import.meta.url))] : split < 0 ? [] : args.slice(split + 1);
   const given = new Map(Array.from({ length: options.length / 2 | 0 }, (_, k) => [options[2 * k], Number(options[2 * k + 1])]));
-  const wait = given.get('--wait') ?? (window ? 60 : 30), hold = given.get('--hold') ?? HOLD;
-  const flags = window ? ['--wait'] : ['--wait', '--hold', '--turns'];
-  if (!LIMITS[cls] || !command.length || options.length !== 2 * given.size || ![...given].every(([flag, value]) => flags.includes(flag) && value >= 0)) {
-    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min>] [--hold <min>] [--turns 0] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
+  const wait = given.get('--wait') ?? (window ? 60 : 30), stall = given.get('--stall'), hold = given.get('--hold') ?? HOLD;
+  const flags = window ? ['--wait'] : ['--wait', '--stall', '--hold', '--turns'];
+  if (!LIMITS[cls] || !command.length || options.length !== 2 * given.size || (given.has('--wait') && given.has('--stall')) || ![...given].every(([flag, value]) => flags.includes(flag) && value >= 0)) {
+    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min> | --stall <min>] [--hold <min>] [--turns 0] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
     process.exit(2);
   }
   // A run's admission names the free disk its shards need (#3221); its command doesn't inherit the mark.
@@ -806,7 +816,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   }
   let grant;
   try {
-    grant = acquire(cls, { wait, window, run, turns: given.get('--turns') !== 0 });
+    grant = acquire(cls, { wait, stall, window, run, turns: given.get('--turns') !== 0 });
   } catch (error) {
     // A wait that ran out on a full disk is no grant (#2869).
     if (error.waited) grant = null;
@@ -818,9 +828,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   }
   if (!grant) {
     // The marker a job's report reads by: its output is the test run's too, so a line there proves nothing.
-    if (process.env.DEEP_PROOF_VITEST_REPORT) appendFileSync(process.env.DEEP_PROOF_VITEST_REPORT, `${JSON.stringify({ type: 'no-grant', message: `no ${cls} grant came within ${wait} min` })}\n`);
+    const none = stall === undefined ? `no ${cls} grant came within ${wait} min` : `no ${cls} grant changed hands within ${stall} min`;
+    if (process.env.DEEP_PROOF_VITEST_REPORT) appendFileSync(process.env.DEEP_PROOF_VITEST_REPORT, `${JSON.stringify({ type: 'no-grant', message: none })}\n`);
     const why = blocked.map((holder) => `; blocked by ${holder.class} grant ${holder.id} held by pid ${holder.pid} since ${holder.at} (${holder.command})`).join('');
-    console.log(`INCONCLUSIVE no grant: no ${cls} grant came within ${wait} min${why}\n  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.`);
+    console.log(`INCONCLUSIVE no grant: ${none}${why}\n  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.`);
     process.exit(3);
   }
   if (window) log({ event: 'window-open', id: grant.id, pid: process.pid });
