@@ -125,7 +125,7 @@ test('a pack killed outright alone, its clone writing on into the folder after i
   const hung = join(root, 'hung');
   const release = join(root, 'release');
   const wrote = join(root, 'wrote');
-  writeFileSync(join(bin, 'git'), `#!/bin/sh\nif [ "$1" = clone ]; then "${realGit}" "$@" || exit $?; : > "${hung}"; while [ ! -e "${release}" ]; do sleep 0.05; done; for last; do :; done; mkdir -p "$last/late"; : > "${wrote}"; exit 0; fi\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+  writeFileSync(join(bin, 'git'), `#!/bin/sh\nif [ "$1" = clone ]; then "${realGit}" "$@" || exit $?; : > "${hung}"; n=0; while [ ! -e "${release}" ] && [ $n -lt 1200 ]; do sleep 0.05; n=$((n+1)); done; for last; do :; done; mkdir -p "$last/late"; : > "${wrote}"; exit 0; fi\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
   writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'planted', version: '1.0.0' }));
   const env = { PATH: `${bin}:${process.env.PATH ?? ''}`, HOME: root, TMPDIR: temp, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
   const git = (...args) => execFileSync(realGit, args, { cwd: repo, env, encoding: 'utf8' }).trim();
@@ -174,7 +174,7 @@ test('a pack sent SIGTERM alone while its child runs on stops once the child ret
   // child never sees it and returns normally, and the pack must still act on the stop rather than finish the pack.
   const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
   const [hung, release] = [join(root, 'hung'), join(root, 'release')];
-  writeFileSync(join(bin, 'git'), `#!/bin/sh\nif [ "$1" = clone ]; then "${realGit}" "$@" || exit $?; : > "${hung}"; while [ ! -e "${release}" ]; do sleep 0.05; done; exit 0; fi\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+  writeFileSync(join(bin, 'git'), `#!/bin/sh\nif [ "$1" = clone ]; then "${realGit}" "$@" || exit $?; : > "${hung}"; n=0; while [ ! -e "${release}" ] && [ $n -lt 1200 ]; do sleep 0.05; n=$((n+1)); done; exit 0; fi\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
   writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'planted', version: '1.0.0' }));
   const env = { PATH: `${bin}:${process.env.PATH ?? ''}`, HOME: root, TMPDIR: temp, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
   const git = (...args) => execFileSync(realGit, args, { cwd: repo, env, encoding: 'utf8' }).trim();

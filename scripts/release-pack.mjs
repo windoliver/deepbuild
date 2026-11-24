@@ -88,8 +88,9 @@ const drop = () => { rmSync(dir, { recursive: true, force: true }); process.exit
 const named = () => {
   try {
     return execFileSync('ps', ['-axww', '-o', 'pid=,command='], { encoding: 'utf8', maxBuffer: 1 << 28 }).split('\\n').some((l) => l.includes(dir) && Number.parseInt(l, 10) !== process.pid);
-  } catch {
-    return false; // no ps to ask: only the pack is waited for
+  } catch (error) {
+    if (error.code === 'ENOENT') return false; // no ps to ask: only the pack is waited for
+    throw error; // one that failed this time is asked again on the next poll
   }
 };
 process.on('SIGTERM', drop);
