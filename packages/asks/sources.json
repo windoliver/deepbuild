@@ -1529,6 +1529,42 @@
     }
   },
   {
+    "source": "extension.choice",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "Show the weather for home or for work?",
+        "options": [
+          {
+            "id": "home",
+            "label": "Home",
+            "decision": "none"
+          },
+          {
+            "id": "work",
+            "label": "Work",
+            "decision": "none"
+          }
+        ],
+        "recommended": "home",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "home",
+        "provisional": false,
+        "owner": "you",
+        "key": "0b68e2ff8a1045d156e9951dd26f8eea9f25a65e1a0ec365cf0a65364ad31b03",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "f99b1a47a7b50a87a18927c5d036025fb3dd80eb3de61100ac280b79467654ac"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "action.change",
     "kind": "authority",
     "fixture": {

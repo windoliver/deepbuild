@@ -968,7 +968,7 @@ export class Core {
       : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' || this.options.plant === 'reads-files-at-start-only' ? { plant: this.options.plant } : {};
     // No package is in the hub's own release yet; a test may hand it one, which then loads in the hub (#2402).
     const release = this.options.release ? (JSON.parse(readFileSync(this.options.release, 'utf8')) as ReleaseEntry[]) : [];
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, asks: this.asks, point: () => this.durable.point('terminals_rewrite'),
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
       // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
       // (#518) goes the same way, with the tools it names in the world.
