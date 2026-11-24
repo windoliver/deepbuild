@@ -3,6 +3,7 @@
 Redrafted blind at origin/main 678622403 from the issue, its comments, `docs/technical-design.md` and this folder only.
 Second redraft (2026-11-22), of the first one at 7c8d9a28d, for two disputes a review raised against it.
 Third redraft (2026-11-23), of the second at a6bcb6351, for a dispute from a Mac run (below, Third redraft).
+Fourth redraft (2026-11-23), of the third at 0560a1718, for a dispute from a Mac run on AC1's and AC2's row count (below, Fourth redraft).
 
 ## Why
 
@@ -145,3 +146,83 @@ inside its loop. The copy is the cost of changing no existing line.
 The Mac tests need the Mac (Accessibility, Screen Recording, the real `deep-app`); they were typechecked only
 (`npx tsc -p tests/acceptance/1172/tsconfig.json`, clean). `judges.test.ts` ran here (16 passed), after
 `node packages/evidence/build-patterns.mjs`, which writes the `dist/patterns.json` the suite's imports need.
+
+## Fourth redraft (2026-11-23)
+
+Redrafted blind at 0560a1718 from the issue, its comments, `docs/technical-design.md` and this folder only; no
+implementation code and no PR was read.
+
+### The dispute
+
+A Mac run at e1468a920 with this folder at 0560a1718 failed AC1's main test and AC2 (before its answer) on `Needs you should
+show 1 row for ask:… ("Which header colour on the login page?"); it has 2`. The run's own probe, 15 s after launch, read
+one window: three sidebar rows, each an `AXButton` named with its question and holding it, its kind and its time; and on
+the session page an `AXGroup` named `armed` holding the first ask's kind, its question, `Blue header` and `Green header` as
+`AXButton`s, its default and "Answering saves it for this task". The other two asks appeared only in their rows. So the 2
+is the first ask's row plus its open card's question. `shellFailures` and `shellFailuresCut` count every outermost node
+holding a question across the window and want exactly 1, so a card on the page counts as a second row.
+
+The design puts that card there: Needs-you view, "One list and one page": "The page shows what's selected: an ask's
+question card, …" and "The window opens on the first open ask". The owner decision of 2026-11-21 (above) says the main
+window's page keeps the selected ask's card. So a right program fails the third redraft's AC1 reading at launch.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| A node holding an ask's question is that ask's card's when the nearest node at or above it holding both the ask's options as `AXButton`s holds no other ask's question (`askNodes`). Every other such node is a row | A card is told by its two options as `AXButton`s: README, Pinned item 2; AC3's judge in `rows.test.ts`; `cardOpen` in `popout.test.ts`. "Holds no other ask's question" keeps the list itself, which holds every row, from reading as a card: the design's card is on the page, apart from the list ("One list and one page") |
+| A wanted ask has exactly 1 row outside its card. Its card is not counted (`askRowFailures`) | AC1 "Needs you with 3 rows"; design: "a row per open ask"; the decision's kept card |
+| While a wanted ask's options are on the tree as `AXButton`s, at least one node holding its question must sit in its card, or the reading fails as unable to tell row from card | Invariant 2: a reading that can't tell a row from a card never passes. Without it, a card laid flat beside the list with its row gone would read as the one row |
+| An unwanted ask (AC2's answered one) has no row **and no card** on the tree | AC2: "makes the window … read 2"; design, "An item leaves Needs you only on your answer" and "an answer clears it everywhere" (States people see); invariant 4, "never the same question twice": an answered ask's card still offering its options would put the question to you again. The design's receipt is "the answered card's receipt" (Asks), for an answer made on the card; here the answer comes from `deep inbox answer`, which the design gives no receipt in the window |
+| `shellFailuresCard` in `helpers.ts`: `shellFailuresCut` with its per-ask tree count replaced by `askRowFailures`. Everything else, the pixel reading (`drawsRow`) and the menu bar's reading included, is `shellFailuresCut`'s own, unchanged | The dispute is the tree's row count only; the menu reading is a separate finding still being diagnosed and is left as it was |
+| `shell.test.ts` calls `shellFailuresCard` where it called `shellFailuresCut` (AC1's main test, its spike plant, its proof test's settle, AC2 before and after the answer) | As the third redraft did |
+| `judges.test.ts`: 12 cases of `askRowFailures` on built trees, no app | AGENTS.md, Proof: a judge must fail a wrong program; these run anywhere |
+
+AC2's timing loop is unchanged: it stops the clock when the menu bar reads 2 and no node holds the answered ask's
+question. That matches the rule above, that an answered ask keeps neither row nor card.
+
+### Which wrong programs fail (pinned in `judges.test.ts`)
+
+Controls that pass: the disputed launch reading (three rows and the first ask's card, which the old reading counted 2);
+three rows and no card; after the first ask is answered, two rows and the next ask's card; a card named with its question
+that holds its options.
+
+Wrong programs that fail, naming the ask:
+- two rows for one ask beside its card;
+- a wanted ask whose card stays but whose row is gone (0 rows outside its card);
+- a "card" whose options are `AXStaticText`, not buttons: no card, so its question counts as a second row;
+- a group holding the question and no options: no card, a second row;
+- a card's question and options laid flat beside the list with the ask's row gone: the row can't be told from the card;
+- an answered ask whose row stays;
+- an answered ask whose card stays with its options, its row gone;
+- a "card" that also holds another ask's question: not apart from the list, so a second row.
+
+### Still not settled
+
+1. **An answered ask's card.** The rule wants none on the tree. A right program that keeps a receipt naming the answered
+   question on the page would fail AC2. The design gives a receipt to an answer made on the card, and is silent on an
+   answer made elsewhere while the card shows; this redraft took the strict reading from AC2's "read 2", invariant 4 and
+   "an answer clears it everywhere". The pixel reading agrees: `drawsRow` reads the whole question on a receipt's line, so
+   a kept receipt fails there too.
+2. **A row holding both its options as `AXButton`s** (row controls that "show on hover and selection and stay in the
+   tree", design) would read as a card, leaving its ask 0 rows. No source gives a row its options; the probe's rows hold
+   none. A false failure, never a false pass.
+3. **A flat tree.** A card whose question and options are not under a node of their own, apart from the list, fails
+   (as unable to tell row from card). The probe's card is its own `AXGroup`.
+4. **The pixels.** With a card open, the card's line holds the whole question, so `drawsRow` passes a wanted ask on the
+   pixels whether or not its row is drawn. The tree reading still fails a missing row; the pixels alone don't. Telling a
+   row's line from a card's on the pixels would need frames matched between the tree and the capture, which no source
+   pins. Left as the third redraft had it.
+5. **The menu bar's `[]`.** Not revisited (the dispute's separate finding).
+
+### The guard's constraint
+
+As in the third redraft: `helpers.ts` changes by added lines only. `askNodes`, `askRowFailures` and `shellFailuresCard`
+(with two private helpers) are appended after `shellFailuresCut`; no existing line, `shellFailures` and `shellFailuresCut`
+included, changes. `shellFailuresCard` copies `shellFailuresCut` instead of calling it, since the row count sits inside its
+loop. `shell.test.ts`, which only #1172's tests read, switches its calls.
+
+### Run here (Linux, no Mac)
+
+`node node_modules/vitest/vitest.mjs run --root tests/acceptance/1172 judges`: 1 file, 28 passed (16 before, 12 new).
+`npx tsc -p tests/acceptance/1172/tsconfig.json`: clean. The Mac tests (`shell.test.ts` AC1, AC2) were not run.

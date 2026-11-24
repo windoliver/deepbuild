@@ -2,7 +2,7 @@
 // judge AC1, AC2, AC4 and AC5 lean on must pass a right reading and fail the wrong ones, so a failure on the real app is
 // the app's, not the judge's.
 import { describe, expect, it } from 'vitest';
-import { drawsRow, gridLaw, groundAndInk, hex, type Line, type Picture, type Rgb } from './helpers.ts';
+import { askRowFailures, drawsRow, gridLaw, groundAndInk, hex, type Ask, type Line, type Node, type Picture, type Rgb } from './helpers.ts';
 
 const GROUND: Rgb = [255, 255, 255];
 const FIVE: Rgb = [216, 27, 154];
@@ -65,5 +65,66 @@ describe('#1172 (judges) a list row drawn on the pixels', () => {
     ['an ellipsis after text that isn\'t the question\'s start', 'Header colour on the login... How it looks'],
   ])('wrong program: %s fails', (_, text) => {
     expect(drawsRow(lines('Needs you 3', text), question)).toBe(false);
+  });
+});
+
+describe('#1172 (judges) a Needs you row apart from an open card, on the tree', () => {
+  const ask = (n: number, question: string, one: string, two: string): Ask => ({
+    handle: `ask:0${n}`, question, option: { id: 'one', label: one }, other: two, session: 's', task: 't',
+  });
+  const asks = [
+    ask(1, 'Which header colour on the login page?', 'Blue header', 'Green header'),
+    ask(2, 'Which font for the printed receipt?', 'Serif receipt', 'Sans receipt'),
+    ask(3, 'Which layout for the changelog?', 'Keep a list', 'Write prose'),
+  ];
+  const [first, second, third] = asks as [Ask, Ask, Ask];
+  const node = (role: string, name: string, ...children: Node[]): Node => ({ role, name, frame: [0, 0, 1, 1], children });
+  /** A row as the disputed Mac run's probe read it: a button named with the question, holding it, the kind and the time. */
+  const row = (a: Ask): Node => node('AXButton', a.question, node('AXStaticText', a.question), node('AXStaticText', 'How it looks'), node('AXStaticText', 'in 1 d'));
+  /** The card as that probe read it: a group named "armed" holding the kind, the question and both options as buttons. */
+  const card = (a: Ask, optionRole = 'AXButton'): Node => node('AXGroup', 'armed', node('AXStaticText', 'How it looks'), node('AXStaticText', a.question),
+    node(optionRole, a.option.label), node(optionRole, a.other), node('AXStaticText', 'Answering saves it for this task'));
+  const list = (...rows: Node[]): Node => node('AXGroup', '', node('AXStaticText', 'Needs you'), ...rows);
+  const win = (...children: Node[]): Node => node('AXWindow', '', ...children);
+
+  it('control: the disputed launch reading, every ask\'s row and the first ask\'s card, passes (the old reading counted 2)', () => {
+    expect(askRowFailures([win(list(row(first), row(second), row(third)), card(first))], asks, asks)).toEqual([]);
+  });
+  it('control: three rows and no card pass', () => {
+    expect(askRowFailures([win(list(row(first), row(second), row(third)))], asks, asks)).toEqual([]);
+  });
+  it('control: after the first is answered, two rows and the next ask\'s card pass for those two', () => {
+    expect(askRowFailures([win(list(row(second), row(third)), card(second))], asks, [second, third])).toEqual([]);
+  });
+  it('control: a card named with its question, holding its options, is the card', () => {
+    const named = node('AXGroup', first.question, node('AXStaticText', first.question), node('AXButton', first.option.label), node('AXButton', first.other));
+    expect(askRowFailures([win(list(row(first), row(second), row(third)), named)], asks, asks)).toEqual([]);
+  });
+  it('wrong program: two rows for one ask, beside its card, fail, naming the ask', () => {
+    expect(askRowFailures([win(list(row(first), row(first), row(second), row(third)), card(first))], asks, asks).join('\n')).toMatch(/1 row for ask:01 .* it has 2/);
+  });
+  it('wrong program: a wanted ask whose card stays but whose row is gone fails, naming the ask', () => {
+    expect(askRowFailures([win(list(row(second), row(third)), card(first))], asks, asks).join('\n')).toMatch(/1 row for ask:01 .* it has 0/);
+  });
+  it('wrong program: a "card" whose options aren\'t buttons is no card, so its question counts as a second row', () => {
+    expect(askRowFailures([win(list(row(first), row(second), row(third)), card(first, 'AXStaticText'))], asks, asks).join('\n')).toMatch(/1 row for ask:01 .* it has 2/);
+  });
+  it('wrong program: a group holding the question and no options is no card, so its question counts as a second row', () => {
+    const bare = node('AXGroup', 'armed', node('AXStaticText', first.question));
+    expect(askRowFailures([win(list(row(first), row(second), row(third)), bare)], asks, asks).join('\n')).toMatch(/1 row for ask:01 .* it has 2/);
+  });
+  it('wrong program: a row gone and its card\'s question laid flat beside the list fails: the card can\'t be told from a row', () => {
+    const flat = win(node('AXStaticText', 'Needs you'), row(second), row(third), node('AXStaticText', first.question), node('AXButton', first.option.label), node('AXButton', first.other));
+    expect(askRowFailures([flat], asks, asks).join('\n')).toMatch(/ask:01's options are on the tree, but no node holding its question sits in a card/);
+  });
+  it('wrong program: an answered ask whose row stays fails, naming it', () => {
+    expect(askRowFailures([win(list(row(first), row(second), row(third)))], asks, [second, third]).join('\n')).toMatch(/0 rows for ask:01 .* it has 1/);
+  });
+  it('wrong program: an answered ask whose card stays with its options, its row gone, fails, naming it', () => {
+    expect(askRowFailures([win(list(row(second), row(third)), card(first))], asks, [second, third]).join('\n')).toMatch(/still shows ask:01's card/);
+  });
+  it('wrong program: a card holding another ask\'s question is no card apart from the list', () => {
+    const mixed = node('AXGroup', 'armed', node('AXStaticText', first.question), node('AXStaticText', second.question), node('AXButton', first.option.label), node('AXButton', first.other));
+    expect(askRowFailures([win(list(row(first), row(second), row(third)), mixed)], asks, asks).join('\n')).toMatch(/1 row for ask:01 .* it has 2/);
   });
 });
