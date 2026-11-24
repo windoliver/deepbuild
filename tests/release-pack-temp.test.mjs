@@ -3,7 +3,7 @@
 // checkout behind in the temp folder (6-7 GB each on a Mac); a stop the pack's synchronous run never read let it finish.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -127,7 +127,26 @@ test('a pack stopped while it writes its out folder removes the archive and mani
     await new Promise((r) => setImmediate(r));
   }
   process.kill(child.pid, 'SIGTERM');
-  assert.match(readFileSync(manifest, 'utf8'), /"planted"/);
+  // Read without blocking: a blocking open that pairs with the pack's open as the stop interrupts it reads EOF at once
+  // (macOS), and the pack's retried open then waits for a reader that has gone. Until the pack writes, a read finds no
+  // writer or no bytes; the manifest is read once its writer has closed it.
+  const fd = openSync(manifest, constants.O_RDONLY | constants.O_NONBLOCK);
+  const chunk = Buffer.alloc(1 << 16);
+  let written = '';
+  try {
+    // deadline: bounds the wait for the stopped pack to write its manifest
+    for (const end = Date.now() + 30_000; ; ) {
+      let n = -1;
+      try { n = readSync(fd, chunk); } catch (e) { if (e.code !== 'EAGAIN') throw e; }
+      if (n > 0) written += chunk.toString('utf8', 0, n);
+      else if (n === 0 && written) break;
+      assert.ok(Date.now() < end, 'the stopped pack never wrote its manifest');
+      await new Promise((r) => setImmediate(r));
+    }
+  } finally {
+    closeSync(fd);
+  }
+  assert.match(written, /"planted"/);
   const { code, sig } = await exited;
   assert.ok(code !== 0 || sig !== null, `a pack stopped by SIGTERM reported success (code ${code})`);
   assert.deepEqual(readdirSync(out), [], 'the stopped pack left what it wrote to its out folder');
