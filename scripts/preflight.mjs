@@ -10,6 +10,9 @@ import { acquire, release } from './throttle.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 // Parity and budgets run ./target/debug binaries; a shared Cargo target directory would misplace them.
 delete process.env.CARGO_TARGET_DIR;
+// The checks' builds are the budget's, so they run bare by this run's own setting, never by the machine's: an empty
+// RUSTC_WRAPPER is no wrapper over any cargo config, and the machine may run a compile cache for every other build.
+process.env.RUSTC_WRAPPER = '';
 // Tests that give a child a temporary HOME would leave rustup and Cargo homeless: with no toolchain
 // found, rustup downloads rust-toolchain.toml's pin into that HOME on every run. Named here, they stay put.
 process.env.RUSTUP_HOME ??= join(homedir(), '.rustup');
