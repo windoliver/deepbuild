@@ -1,0 +1,173 @@
+{
+  "name": "familiar",
+  "version": "1.1.0",
+  "license": "Apache-2.0",
+  "description": "Familiar names (#433, #3032): the geometry, light, camera, material and fog words agents know from web 3D libraries, with their parameter names and defaults, each a recipe over scene3d's trusted builders and kinds with its conversion stated. A word or value with no mapping is refused, never guessed.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "scene3d": ">=0.0.0"
+    }
+  },
+  "census": "census.json",
+  "recipes": {
+    "familiar.box@1": "box@1.json",
+    "familiar.rounded_box@1": "rounded_box@1.json",
+    "familiar.sphere@1": "sphere@1.json",
+    "familiar.cylinder@1": "cylinder@1.json",
+    "familiar.cone@1": "cone@1.json",
+    "familiar.capsule@1": "capsule@1.json",
+    "familiar.torus@1": "torus@1.json",
+    "familiar.circle@1": "circle@1.json",
+    "familiar.ring@1": "ring@1.json",
+    "familiar.plane@1": "plane@1.json",
+    "familiar.shape@1": "shape@1.json",
+    "familiar.tetrahedron@1": "tetrahedron@1.json",
+    "familiar.octahedron@1": "octahedron@1.json",
+    "familiar.icosahedron@1": "icosahedron@1.json",
+    "familiar.dodecahedron@1": "dodecahedron@1.json",
+    "familiar.lathe@1": "lathe@1.json",
+    "familiar.tube@1": "tube@1.json",
+    "familiar.extrude@1": "extrude@1.json",
+    "familiar.point_light@1": "point_light@1.json",
+    "familiar.spot_light@1": "spot_light@1.json",
+    "familiar.perspective_camera@1": "perspective_camera@1.json",
+    "familiar.standard_material@1": "standard_material@1.json",
+    "familiar.directional_light@1": "directional_light@1.json",
+    "familiar.ambient_light@1": "ambient_light@1.json",
+    "familiar.hemisphere_light@1": "hemisphere_light@1.json",
+    "familiar.rect_area_light@1": "rect_area_light@1.json",
+    "familiar.orthographic_camera@1": "orthographic_camera@1.json",
+    "familiar.basic_material@1": "basic_material@1.json",
+    "familiar.lambert_material@1": "lambert_material@1.json",
+    "familiar.physical_material@1": "physical_material@1.json",
+    "familiar.fog_exp2@1": "fog_exp2@1.json"
+  },
+  "aliases": {
+    "BoxGeometry": {
+      "target": "familiar.box@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot",
+      "renamed_from": "CubeGeometry"
+    },
+    "SphereGeometry": {
+      "target": "familiar.sphere@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "CylinderGeometry": {
+      "target": "familiar.cylinder@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "ConeGeometry": {
+      "target": "familiar.cone@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "TorusGeometry": {
+      "target": "familiar.torus@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "CapsuleGeometry": {
+      "target": "familiar.capsule@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "PlaneGeometry": {
+      "target": "familiar.plane@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "CircleGeometry": {
+      "target": "familiar.circle@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "RingGeometry": {
+      "target": "familiar.ring@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "TetrahedronGeometry": {
+      "target": "familiar.tetrahedron@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "OctahedronGeometry": {
+      "target": "familiar.octahedron@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "IcosahedronGeometry": {
+      "target": "familiar.icosahedron@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "DodecahedronGeometry": {
+      "target": "familiar.dodecahedron@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "TubeGeometry": {
+      "target": "familiar.tube@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "LatheGeometry": {
+      "target": "familiar.lathe@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "ExtrudeGeometry": {
+      "target": "familiar.extrude@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "ShapeGeometry": {
+      "target": "familiar.shape@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "RoundedBoxGeometry": {
+      "target": "familiar.rounded_box@1",
+      "conversion": "its parameters by name; angles in degrees; Object3D's rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx), its pivot to our position plus that pivot"
+    },
+    "MeshStandardMaterial": {
+      "target": "familiar.standard_material@1",
+      "conversion": "Color sRGB to linear base_color; roughness kept; metalness to metallic"
+    },
+    "PointLight": {
+      "target": "familiar.point_light@1",
+      "conversion": "power = 4π × intensity (cd), kept in lumens; Color sRGB to linear; decay 2 only"
+    },
+    "SpotLight": {
+      "target": "familiar.spot_light@1",
+      "conversion": "power × 4 (the library's spot counts π × cd, ours 4π × cd); angle the outer half angle; penumbra to inner"
+    },
+    "PerspectiveCamera": {
+      "target": "familiar.perspective_camera@1",
+      "conversion": "vertical fov to ours across the wider side, 2·atan(tan(fov/2)·aspect) when aspect ≥ 1; local −Z forward to our target"
+    },
+    "DirectionalLight": {
+      "target": "familiar.directional_light@1",
+      "conversion": "illuminance = intensity, kept in lux: the library lights a surface that faces the light with color × intensity as its irradiance; Color sRGB to linear; it shines from position, (0, 1, 0) unwritten, toward target"
+    },
+    "AmbientLight": {
+      "target": "familiar.ambient_light@1",
+      "conversion": "ambient_top = ambient_low = color × intensity ÷ π: the library's intensity is an irradiance in lux, ours the radiance a white surface reflects; Color sRGB to linear; one sky a document, the first sky@1 it holds"
+    },
+    "HemisphereLight": {
+      "target": "familiar.hemisphere_light@1",
+      "conversion": "ambient_top = skyColor × intensity ÷ π and ambient_low = groundColor × intensity ÷ π, mixed by the normal's height as the library mixes them; Colors sRGB to linear; position straight up only, the library's default; one sky a document, the first sky@1 it holds"
+    },
+    "RectAreaLight": {
+      "target": "familiar.rect_area_light@1",
+      "conversion": "power = π × intensity × width × height: the library's intensity is the face's luminance in cd/m², ours the lumens the face sends out; size [width, height] in metres; Color sRGB to linear; it shines along its local −Z, its rotation (XYZ) through the rotation matrix to ours (Rz·Ry·Rx)"
+    },
+    "OrthographicCamera": {
+      "target": "familiar.orthographic_camera@1",
+      "conversion": "view_width = right − left; the frustum's centre, ((left + right) ÷ 2, (top + bottom) ÷ 2), moves the position and target in the view's plane; the view's height follows the frame, as the library's does when the frustum's aspect is the frame's; local −Z forward to our target"
+    },
+    "MeshBasicMaterial": {
+      "target": "familiar.basic_material@1",
+      "conversion": "unlit: true, so it draws its color whatever lights it; Color sRGB to linear base_color"
+    },
+    "MeshLambertMaterial": {
+      "target": "familiar.lambert_material@1",
+      "conversion": "specular_level 0, so it reflects by its diffuse lobe alone; Color sRGB to linear base_color; emissive × emissiveIntensity to emission × emission_strength"
+    },
+    "MeshPhysicalMaterial": {
+      "target": "familiar.physical_material@1",
+      "conversion": "color, roughness, metalness to metallic and emissive as MeshStandardMaterial's; clearcoat to coat; sheen to sheen.weight; thickness and attenuation to absorption, an attenuationDistance of 0 for the library's Infinity; iridescenceThicknessRange's upper end to the film's thickness in nm; anisotropyRotation in degrees; specularIntensity ÷ 2 to specular_level; Colors sRGB to linear"
+    },
+    "FogExp2": {
+      "target": "familiar.fog_exp2@1",
+      "conversion": "fog_density = density in 1/m under fog_curve exp2, a share of 1 − exp(−(density × d)²) in both; ours reads d from the eye and mixes in linear light, the library reads depth along the view axis and mixes the encoded picture; Color sRGB to linear; one sky a document, the first sky@1 it holds"
+    }
+  }
+}

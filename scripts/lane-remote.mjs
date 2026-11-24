@@ -157,7 +157,8 @@ function far() {
   if (built === false) blocked("the packages' build failed or the throttle could not be used, as the line above says, so the lane was not run");
   // A record an earlier run of this tree left is not this run's.
   rmSync(record(tree), { force: true });
-  runLanes([lane], { cwd });
+  // The lane's own commands wait on the same stall (#3350).
+  runLanes([lane], { cwd, stall });
   if (!existsSync(record(tree))) blocked(`${lane.name} wrote no record of tree ${tree}`);
   const { state } = amend(record(tree), { bundle: manifest.bundle, recipe: manifest });
   console.log(`RECORD ${record(tree)}`);

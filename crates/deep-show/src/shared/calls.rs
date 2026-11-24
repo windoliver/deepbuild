@@ -783,10 +783,11 @@ impl Hub<'_> {
         }
         let shared = &self.shared[doc];
         if let Some(state) = &self.scenario.state {
-            // The layers it changed: its items' layers before and after, and every layer whose
-            // entry in `layers` or whose other entries it changed.
+            // The layers it changed: its items' layers before and after (those it migrated
+            // included, which only `before` lists), and every layer whose entry in `layers` or
+            // whose other entries it changed.
             let mut layers: BTreeSet<String> = BTreeSet::new();
-            for id in &next.changed {
+            for id in next.changed.iter().chain(next.before.keys()) {
                 let now = shared.doc["items"][id]["layer"].as_str();
                 let was = next.before.get(id).and_then(|w| w.as_ref());
                 for l in [now, was.and_then(|w| w["layer"].as_str())]
@@ -808,10 +809,26 @@ impl Hub<'_> {
                     }
                 }
             }
+            let mut files: Vec<Vec<u8>> = layers
+                .iter()
+                .map(|layer| layer_file(doc, &shared.doc, &shared.owners, layer))
+                .collect();
+            // #1412: what no layer file holds, the document's own fields and the entries no
+            // layer owns, when it changed them.
+            let own_before = next
+                .envelope_before
+                .as_ref()
+                .map(|(fields, owners)| own_fields(fields, owners));
+            let own_now = shared
+                .doc
+                .as_object()
+                .map(|f| own_fields(f, &shared.owners));
+            if own_before.is_some_and(|was| own_now.as_ref() != Some(&was)) {
+                files.push(envelope_file(doc, own_now.unwrap_or_default()));
+            }
             let mut written = Vec::new();
-            for layer in &layers {
-                let bytes = layer_file(doc, &shared.doc, &shared.owners, layer);
-                match evidence::put(&state.join("layers"), &bytes) {
+            for bytes in &files {
+                match evidence::put(&state.join("layers"), bytes) {
                     Ok(sha) => written.push(sha),
                     Err(_) => return false,
                 }
@@ -823,11 +840,16 @@ impl Hub<'_> {
             let record = state.join("record.jsonl");
             let log_pos = fs::read_to_string(&record).map_or(0, |t| t.lines().count()) + 1;
             let writer = next.writer.as_ref().expect("a commit has a writer");
+            // #1412: the event carries the revision's hash, which a restart checks it against.
+            let hash = canonical_in(&shared.doc, &self.startup.sealed.kinds())
+                .map_or(String::new(), |c| c.sha256);
+            let _ = next.hash.set(hash.clone());
+            let thread = (writer.kind == WriterKind::Agent).then(|| writer.id.clone());
             let ts = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_millis() as u64);
             let event = json!({
-                "v": 1,
+                "v": 2,
                 "id": ulid_of(&format!("{doc}|{}|{patch}", next.rev)),
                 "kind": "doc.patched",
                 "subject": format!("doc:{doc}"),
@@ -842,6 +864,9 @@ impl Hub<'_> {
                     "patch": patch,
                     "writer": writer.kind.name(),
                     "achieved": achieved,
+                    "hash": hash,
+                    "layer": writer.layer_id(),
+                    "thread": thread,
                 },
                 "evidence": written,
             });
@@ -1143,7 +1168,11 @@ impl Hub<'_> {
         let issues: Vec<Value> = shared.revs[k]
             .issues
             .iter()
-            .filter(|i| reader.is_none() || i.ids.iter().any(in_layer))
+            .filter(|i| {
+                reader.is_none()
+                    || i.ids.iter().any(in_layer)
+                    || shared.stopped.as_ref() == Some(*i)
+            })
             .map(Issue::to_json)
             .collect();
         let mut reply = Map::new();
