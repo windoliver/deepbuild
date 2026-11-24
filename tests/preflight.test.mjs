@@ -15,7 +15,8 @@ function entry(t, { checks, perf = '', limit = 300_000 }) {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'deep-preflight-entry-')));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   for (const directory of ['scripts', 'benchmarks']) mkdirSync(join(cwd, directory));
-  for (const file of readdirSync(scripts)) copyFileSync(new URL(file, scripts), join(cwd, 'scripts', file));
+  // Only the files: a folder of scripts/, as agents-page-shots, is no part of the entry.
+  for (const file of readdirSync(scripts, { withFileTypes: true })) if (file.isFile()) copyFileSync(new URL(file.name, scripts), join(cwd, 'scripts', file.name));
   writeFileSync(join(cwd, 'scripts/checks.mjs'), checks);
   writeFileSync(join(cwd, 'scripts/perf.mjs'), perf);
   writeFileSync(join(cwd, 'benchmarks/budgets.json'), JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: limit }, initialReason: 'Fixture.' }, tasks: [] }));
@@ -131,6 +132,39 @@ test('the check budget comes from budgets.json and excludes the perf comparison'
   assert.match(slowChecks.stdout, /FAIL preflight budget/);
   const slowPerf = preflight(entry(t, { checks: '', perf: sleep, limit: 2000 }));
   assert.equal(slowPerf.status, 0, slowPerf.stdout);
+});
+
+// A check that hangs, as one did for hours on the Spark holding the machine's timed grant, is stopped with its
+// children once the checks pass the budget with its margin, perf's allowance for the same workload.
+test('hung checks are stopped at the budget with its margin, their children too', (t) => {
+  const cwd = entry(t, { limit: 1000, checks: `
+    import { spawn } from 'node:child_process';
+    import { writeFileSync } from 'node:fs';
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    writeFileSync('pids', JSON.stringify([process.pid, child.pid]));
+    setInterval(() => {}, 1000);
+  ` });
+  const alive = (pid) => {
+    try {
+      return process.kill(pid, 0);
+    } catch {
+      return false;
+    }
+  };
+  const file = join(cwd, 'pids');
+  // A hung run under the merge base's preflight is stopped here, by the PIDs it wrote, read before the folder goes.
+  let pids = [];
+  t.after(() => { for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL'); });
+  const started = Date.now();
+  const result = spawnSync(process.execPath, [join(cwd, 'scripts/preflight.mjs')], { encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL' });
+  if (existsSync(file)) pids = JSON.parse(readFileSync(file, 'utf8'));
+  assert.equal(result.error, undefined, `preflight never ended: ${result.stdout}`);
+  assert.ok(Date.now() - started < 30_000);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /FAIL preflight budget: the checks ran past 1\.50 s, the budget with its margin, and were stopped\n\s+Fix: .+/);
+  assert.match(result.stdout, /BLOCKED perf: /);
+  assert.equal(pids.length, 2, 'the checks started their child');
+  assert.deepEqual(pids.filter(alive), [], 'the checks and their child were stopped');
 });
 
 test('the unit lane runs every tooling test file', (t) => {
