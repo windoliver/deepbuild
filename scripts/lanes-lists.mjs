@@ -1537,3 +1537,10 @@ byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/
 // shown.test.ts takes AC5's pictures for a person's call.
 timed.push('tests/acceptance/1815/budget.test.ts');
 byHand.push('tests/acceptance/1815/shown.test.ts');
+
+// #96's AC6, AC9, AC14 and Proof run as their blind redraft, 96-redraft-1412/, on the owner's ruling ("Use the
+// redraft", Nov 24): the first draft validates every recorded event as doc.patched@1, which can't carry the revision
+// hash the design's Revision text and #1412 require, so no program passes both (96-redraft-1412/DISPUTE.md). Its
+// commit.test.ts (AC6, AC14), proof.test.ts and AC9, moved unchanged into undo-ac9-first-draft.test.ts, are kept by hand.
+alone.push('tests/acceptance/96-redraft-1412/');
+byHand.push('tests/acceptance/96/commit.test.ts', 'tests/acceptance/96/proof.test.ts', 'tests/acceptance/96/undo-ac9-first-draft.test.ts');
