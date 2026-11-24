@@ -4,9 +4,10 @@ Type-check: `npx tsc --noEmit -p tests/acceptance/3257` passes.
 
 == The suite at the base: not run ==
 
-The base run (README: Run them) was queued once under scripts/throttle.mjs build, behind 20 to 26 other requests on a Mac
-with a load average of 200 to 430, and had no grant when this record was written. Nothing was built and no test of this
-folder was run; what follows is what needs no build. How each test fails at the base, by reading:
+The base run (README: Run them) was queued once under scripts/throttle.mjs build on a Mac with a load average of 75 to
+430. After about 43 minutes it had no grant, eight build requests were still ahead of it and the one holding the slot had
+held it 19 minutes, so it was withdrawn. Nothing was built and no test of this folder was run; what follows is what needs
+no build. How each test should fail at the base, by reading (not observed):
 
   ac1  shareFaults: levels 1 to 4 keep 43.75%, 0, 0 and 0, and kept is not a list of 9 shares
   ac2  quadrantFaults: each quadrant of levels 1 to 4 (1,792 texels of 960 at level 1, 0 of 240, 60 and 15 below)
