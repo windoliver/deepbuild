@@ -109,11 +109,20 @@ const THREAD_REPLY = /\/pulls\/\d+\/comments\/\d+\/replies\b/;
 export class Holds {
   constructor(private readonly o: HoldOptions) {}
 
-  /** The planted sorter's rule and questions; none unless a test named a file. */
+  /**
+   * The planted sorter's rule for a question; none unless a test set one. A file names its rule and the questions it
+   * answers "proceed"; a value that names no file is the rule itself, and answers every question so (#321 AC1's redraft).
+   */
   private sorted(question: string): string | undefined {
     if (!this.o.sorter || !question) return undefined;
+    let text: string;
     try {
-      const s = JSON.parse(readFileSync(this.o.sorter, 'utf8')) as { rule?: unknown; proceed?: unknown };
+      text = readFileSync(this.o.sorter, 'utf8');
+    } catch (e) {
+      return (e as NodeJS.ErrnoException).code === 'ENOENT' ? this.o.sorter : undefined;
+    }
+    try {
+      const s = JSON.parse(text) as { rule?: unknown; proceed?: unknown };
       return Array.isArray(s.proceed) && s.proceed.includes(question.trim()) && typeof s.rule === 'string' ? s.rule : undefined;
     } catch {
       return undefined;
