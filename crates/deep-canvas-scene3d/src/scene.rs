@@ -931,6 +931,8 @@ pub struct Scene {
     pub exposure: Option<f64>,
     /// The view's water (#166; Material: water), which its own pass draws after the mirror's.
     pub water: Option<Arc<crate::water::Water>>,
+    /// #3034: under water, the height below which what the frame sees lies in the water.
+    pub under: Option<f64>,
     /// #166: whether the view reads back each mirror part's lookup (view3d's `reflection`).
     pub read_reflection: bool,
     /// #268: whether the view reads back the water's foam share (view3d's `foam`).
@@ -2890,6 +2892,7 @@ pub(crate) fn evaluate_compiled(
         optics,
         exposure,
         water: None,
+        under: None,
         read_reflection: false,
         read_foam: false,
         read_normal: false,
@@ -2942,10 +2945,7 @@ pub(crate) fn evaluate_compiled(
             let plates: Vec<[f64; 4]> = w.plates.iter().map(|(_, p)| *p).collect();
             flow.grid = Some(crate::flow::grid(map, &w.material, flow, &plates)?);
         }
-        if scene.mirror.is_none() {
-            scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &w);
-        }
-        scene.water = Some(Arc::new(w));
+        w.seen_in(&mut scene);
     }
     labels.places = memo.into_inner();
     Ok(scene)
