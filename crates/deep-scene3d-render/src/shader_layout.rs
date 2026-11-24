@@ -28,16 +28,6 @@ const HOST_ONLY: &[(&str, &str, &str)] = &[
 /// declares it, the struct, and why.
 const GPU_ONLY: &[(&str, &str, &str)] = &[
     (
-        "scene3d.wgsl",
-        "OitInfo",
-        "the per-pixel lists' counter, which the shaders count in; oit.rs resets it as four u32, with no host struct",
-    ),
-    (
-        "mask_dump.wgsl",
-        "MaskDump",
-        "the mask dump's key and code, which lib.rs writes as four u32, with no host struct",
-    ),
-    (
         "mirror.wgsl",
         "Params",
         "the mirror's flip, which mirror.rs writes as one [f32; 4], with no host struct",

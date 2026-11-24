@@ -143,6 +143,17 @@ fn mask_dump_source(scene: &str) -> Option<String> {
     Some(format!("{}\n{MASK_DUMP}", &scene[start..end]))
 }
 
+deep_gpu::paired! { mask_dump: "mask_dump.wgsl", MaskDump;
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct MaskDump {
+    key: u32,
+    code: u32,
+    pad0: u32,
+    pad1: u32,
+}
+}
+
 /// A pass whose band masks [`Renderer::mask_dump`] reports (#425).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaskPass {
@@ -8288,9 +8299,15 @@ impl Renderer {
             level,
             lower: false,
         }));
+        let dump = MaskDump {
+            key,
+            code,
+            pad0: 0,
+            pad1: 0,
+        };
         device
             .queue
-            .write_buffer(&uniform, 0, bytemuck::cast_slice(&[key, code, 0, 0]));
+            .write_buffer(&uniform, 0, bytemuck::bytes_of(&dump));
         let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("scene3d mask dump"),
             layout: &layout,
