@@ -1,0 +1,33 @@
+Runs of tests/acceptance/25-redraft-3243 at base 118ec119f (origin/main), macOS, Node 24.22.0, 2026-11-23.
+Setup: fresh git clone, npm ci, npm run build --workspaces, cargo build --locked -p deep-hook (the helpers then
+build target/debug/deep-hook with --features env-plants themselves).
+
+== Base: PATH=<node 24>:... npx vitest run --reporter=verbose tests/acceptance/25-redraft-3243
+== base start Mon Nov 23 20:01:34 PST 2026 load: 111.72 90.28 88.19
+ ✓ tests/acceptance/25-redraft-3243/held.test.ts > AC1 #25.0215da31 A held stop continues with the answer > AC1 #25.0215da31 an answer given while the stop is held comes back as that Stop's decision: block, and the turn goes on with it 6297ms
+ ✓ tests/acceptance/25-redraft-3243/one-route.test.ts > AC4 #25.1eae4ef9 An answer that lands while the session's stop is held and its waiter is alive goes back through the Stop hold only > AC4 #25.1eae4ef9 with the stop held and the waiter alive, the answer goes back by the Stop hold only, the waiter exits without waking, and the transcript shows its ID once 6381ms
+      Tests  2 passed (2)
+exit 0 end Mon Nov 23 20:01:44 PST 2026 load: 117.01 92.14 88.87
+
+== Twins: each laid over an APFS clone of the built clone (cp -cR), the twin's whole-file
+   packages/hub/src/plant.ts copied in, npm run build -w packages/hub, then
+   npx vitest run --reporter=verbose <its test file>. Each tagged test fails at its own expect.
+
+-- twin answer-skips-held-stop, held.test.ts (#25.0215da31)
+== twin-answer-skips-held-stop start Mon Nov 23 19:59:27 PST 2026 load: 80.62 84.93 86.60
+ × tests/acceptance/25-redraft-3243/held.test.ts > AC1 #25.0215da31 A held stop continues with the answer > AC1 #25.0215da31 an answer given while the stop is held comes back as that Stop's decision: block, and the turn goes on with it 9040ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: AC1 the held stop must continue with the answer: Claude Code's Stop must get decision: block whose reason carries Green header 5e4b70fd (green5e4b70fd) for ask:01M85VB4HTC3MQD189WGD7RXR3; it got no decision: block: {"runs":[{"command":"exec '
+      Tests  1 failed (1)
+exit 1 end Mon Nov 23 19:59:42 PST 2026 load: 79.69 84.49 86.41
+
+-- twin both-routes, one-route.test.ts (#25.1eae4ef9)
+== twin-both-routes start Mon Nov 23 20:01:10 PST 2026 load: 77.56 82.49 85.46
+ × tests/acceptance/25-redraft-3243/one-route.test.ts > AC4 #25.1eae4ef9 An answer that lands while the session's stop is held and its waiter is alive goes back through the Stop hold only > AC4 #25.1eae4ef9 with the stop held and the waiter alive, the answer goes back by the Stop hold only, the waiter exits without waking, and 
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: AC4 ask:01M85VE5HCBG5MY1R4XCKMPD9D must go back through exactly one route, the Stop hold; it went by the Stop hold (decision: block) and the waiter (exit 2 with the answer): {"blocked":"says done · next: DeepBuild · session/e433438b/01M85VE5PW8523DCGXBCJWDF6D\nDeepBuild delivers your answers:\nYour answer to as
+      Tests  1 failed (1)
+exit 1 end Mon Nov 23 20:01:19 PST 2026 load: 98.36 86.76 86.94
+
+Wait ratchet: node scripts/wait-ratchet.mjs reports no finding in tests/acceptance/25-redraft-3243 (it exits 1 at
+base for 10 findings in packages/hub/test and packages/record/test, none of this folder's).

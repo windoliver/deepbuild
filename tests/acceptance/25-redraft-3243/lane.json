@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: each file starts a hub whose Claude Code stand-in runs deep-hook from target/ and deep mcp from the built CLI, which a parallel lane may rebuild" }

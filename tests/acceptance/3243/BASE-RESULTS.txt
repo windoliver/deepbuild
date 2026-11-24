@@ -1,0 +1,78 @@
+Base 118ec119f (origin/main), fresh GitHub clone, macOS, Node v24.22.0. Setup: npm ci, npm run build --workspaces,
+cargo build --locked -p deep-hook (the #25 helpers then build deep-hook with --features env-plants themselves).
+Each file run alone from the checkout root:
+
+  node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/3243/<file>.test.ts
+
+Load averages (1/5/15 min) were 80-152 throughout on this Mac, from other sessions; not waited on.
+
+== The base, 2026-11-23
+
+provisional.test.ts  19:58:41-19:58:44, load 85.5   PASS (1/1). #84's rule holds at the base: deep_ask returned
+                     {"status":"provisional","answer":"green…"} (the second option), ask.created has provisional: true
+                     and recommended green…, nothing closed it, inbox.read row entry needs_you, waits_on you.
+                     (Earlier run 19:56:29, load 81.7: PASS.) Needs its twin, below.
+held.test.ts         19:58:43-19:59:02, load 80.7   FAIL at the assertion "#3243.53a4911b #25.0215da31's tests
+                     (tests/acceptance/25/routes/held.test.ts, unchanged) pass; these failed:". The child Vitest
+                     (exit 1) reported, as issue #3243 says:
+                       - AC1 main test: "Error: AC1 the Stop of a session whose ask ask:01M85V9P1QQ0GEDAR16TNARXYG is
+                         open must be held for your answer; it ended before you answered" (Stop output
+                         "says done · next: DeepBuild · session/…")
+                       - AC1 (wrong program) answer-skips-held-stop: "AssertionError: the held-stop check must fail on
+                         answer-skips-held-stop: expected 'AC1 the Stop of a session whose ask a…' to match
+                         /AC1 the held stop didn't continue wit…/"
+one-route.test.ts    19:59:04-19:59:25, load 81.5   FAIL at the assertion "#3243.53a4911b #25.1eae4ef9's tests
+                     (tests/acceptance/25/routes/one-route.test.ts, unchanged) pass; these failed:":
+                       - AC4 main test: "AC4 the Stop of a session whose ask ask:… is open must be held for your
+                         answer; it ended before you answered"
+                       - AC4 (wrong program) both-routes: the same error instead of "AC4 ask:… went back by both
+                         routes".
+
+== Twins (each laid over an APFS clone of the built base, cp -cR, then npm run build -w packages/hub)
+
+never-provisional    provisional.test.ts 20:01:05-20:01:12, load 74.2-86.6   FAIL at the assertion "#3243.48cf467d deep_ask
+                     returns provisional with the recommended option green…, not the first": deep_ask replied
+                     {"status":"waiting","answer":null,…}. Hub tsc passed (built and --noEmit).
+stop-not-held        held.test.ts 20:04:54-20:05:26, load 131-144   FAIL at the "#25.0215da31's tests … pass" assertion
+                     (AC1: "the Stop … must be held for your answer; it ended before you answered").
+                     one-route.test.ts 20:05:26-20:05:53, load 142-144   FAIL at the "#25.1eae4ef9's tests … pass" assertion.
+                     Hub tsc passed. At the base this half fails anyway; the twin is for a fix that makes it pass.
+
+== Scratch checks of the pass and redraft paths (not deliverables; nothing here is a claim about the fix)
+
+stand-in fix         stop-judging.ts with `AND provisional = 0` dropped from questionHolds and stopHold's open(),
+                     so a stop is held for a provisional ask too. In that clone: held.test.ts PASS (25.5 s),
+                     one-route.test.ts PASS (25.1 s), provisional.test.ts PASS (4.3 s), load 145-152. So the decide
+                     path, the wrong-program name check and the exit-0 check pass when #25's files pass.
+redraft simulation   (first version of helpers.ts, which read the wrong program from test names on both paths)
+redraft simulation   in the stand-in clone: byHand.push('tests/acceptance/25/routes/held.test.ts') appended to
+                     scripts/lanes.mjs and a copy of held.test.ts at tests/acceptance/25-redraft-3243/held.test.ts
+                     (imports from ../25/routes/helpers.ts): held.test.ts PASS (17.3 s), deciding by the redraft.
+                     A first try whose redraft folder had a broken tsconfig (the child Vitest couldn't transform the
+                     file, so no test ran) made held.test.ts skip, INCONCLUSIVE, as an unrun check must.
+
+== Other checks
+
+tsc -p tests/acceptance/3243/tsconfig.json --noEmit: exit 0.
+node scripts/wait-ratchet.mjs: no finding in tests/acceptance/3243/. It exits 1 on this checkout for 10 findings in
+files the base already holds (packages/hub/test/provisional-decided.test.ts, replay-sync.test.ts,
+short-rule-sync.test.ts, transcript-path.test.ts, packages/record/test/sync-order.test.ts, until-sync.test.ts).
+
+== Revised redraft branch (helpers.ts now reads a redraft's wrong program from its twins.json), 2026-11-23
+
+Same stand-in clone, same simulated redraft (held.test.ts in byHand, a copy at tests/acceptance/25-redraft-3243/
+held.test.ts), the revised suite copied in. No twin is laid over anything here: only twins.json and the twin folder's
+contents are read.
+  20:12:06-20:12:24, load 85-95   no tests/acceptance/25-redraft-3243/twins.json: held.test.ts FAIL at the assertion
+                     "the redraft deciding #25.0215da31 must prove its wrong program answer-skips-held-stop through
+                     its twins.json" ("…/twins.json doesn't exist"), after the redraft's tagged tests passed.
+  20:12:24-20:12:44, load 87-95   twins.json {"#25.0215da31": ["answer-skips-held-stop"]} and
+                     twins/answer-skips-held-stop/packages/hub/src/stop-judging.ts: held.test.ts PASS.
+  20:12:45-20:13:02, load 79-87   the same, plus twins/answer-skips-held-stop/tests/acceptance/25/routes/held.test.ts:
+                     held.test.ts FAIL at the same assertion ("replaces files under tests/, not product source").
+  20:13:02-20:13:23, load 78-79   one-route.test.ts in that clone (not by hand, so the named-file path): PASS.
+Base again with the revised suite (named-file path):
+  20:13:23-20:13:38, load 70-78   held.test.ts FAIL at "#25.0215da31's tests (…held.test.ts, unchanged) pass", as before.
+  20:13:38-20:13:51, load 70-84   one-route.test.ts FAIL at "#25.1eae4ef9's tests (…one-route.test.ts, unchanged)
+                     pass", as before.
+tsc --noEmit on the folder: exit 0. wait-ratchet: no finding in tests/acceptance/3243/ (the 10 base findings remain).
