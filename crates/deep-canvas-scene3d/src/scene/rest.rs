@@ -751,7 +751,7 @@ pub fn mesh_of(
 ) -> Result<crate::geom::Mesh, Refused> {
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
     let built = if crate::building::KINDS.contains(&kind) {
-        crate::building::build(doc, id, item)
+        crate::building::build(doc, id, item, outlines.planted)
     } else {
         // #1929: a host that keeps a memo between its frames keeps each deform's bind there.
         let memo = outlines.memo;

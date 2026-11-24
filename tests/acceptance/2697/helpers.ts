@@ -3,18 +3,20 @@
 // the merge base's skill (fixtures/base-SKILL.md), `deep-show` built once per file and its `deep_kinds` calls through
 // `deep-show run`, the guide's name read from the skill's craft line, the guide read in pages, the check that the guide
 // holds each craft check's description, threshold and fix after its name, a copy of the checkout for adding a check
-// to craft.json, and the agent eval's recorded film sessions. Nothing here stands in for the skill, the generator,
-// deep_kinds or a session: every text judged is the checkout's own or a recording's. Each `...Failures` function is a
+// to craft.json, and AC4's film sessions, built from deep-show's real replies and scored by the agent eval's CLI.
+// Nothing here stands in for the skill, the generator, deep_kinds, a reply or the scorer: every text judged is the
+// checkout's own or deep-show's. Each `...Failures` function is a
 // criterion's check: it returns sentences naming what failed, so a test runs it on the program and, where the
 // criterion names one, on a planted input (a failure naming what the criterion says).
 
 import { spawnSync } from 'node:child_process';
-import { constants, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { constants, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { countTokens } from 'gpt-tokenizer/encoding/o200k_base';
 import { afterAll, beforeAll, expect } from 'vitest';
+import { agentShow, briefOf, claimId, docId, named, scenarioOf, shotLengthFilm, storeLooks, type Check as CraftName, type Film } from '../409/helpers.ts';
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
@@ -32,7 +34,7 @@ export const AC = {
   ceiling: 'AC1 #2697.588cc8a0',
   guide: 'AC2 #2697.5bf72d0a',
   source: 'AC3 #2697.09d255e9',
-  sessions: 'AC4 #2697.1f9af6f6',
+  sessions: 'AC4 #2697.6cec48c3',
   bytes: 'AC5 #2697.2d464f5e',
 } as const;
 
@@ -138,7 +140,12 @@ export function useCleanup(): void {
 
 /** The replies to `calls`, in one scenario; `gallery` is a folder of guides and examples read in place of the installed. */
 export function kindsReplies(bin: string, calls: JsonObject[], gallery?: string): JsonObject[] {
-  const scenario: JsonObject = { evidence: tempDir('ev'), ...(gallery ? { gallery } : {}), calls };
+  return scenarioReplies(bin, { evidence: tempDir('ev'), ...(gallery ? { gallery } : {}), calls });
+}
+
+/** The replies to a whole scenario's calls, one `deep-show run` line. */
+export function scenarioReplies(bin: string, scenario: JsonObject): JsonObject[] {
+  const calls = Array.isArray(scenario['calls']) ? scenario['calls'] : [];
   const r = spawnSync(bin, ['run'], { cwd: REPO, input: `${JSON.stringify(scenario)}\n`, encoding: 'utf8', maxBuffer: 1024 * 1024 * 1024, timeout: 1_800_000, killSignal: 'SIGKILL' });
   expect(r.error, `deep-show run finishes within its timeout: ${r.error?.message ?? ''}`).toBeUndefined();
   expect(r.status, `deep-show run exits 0 (${r.signal ?? 'no signal'}); stdout: ${(r.stdout ?? '').slice(0, 1500)}; stderr: ${(r.stderr ?? '').slice(-1500)}`).toBe(0);
@@ -328,91 +335,123 @@ export function clonedTarget(copy: string): string {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// The agent eval's recorded sessions (README: AC4): every `run.json` in the checkout that the scorer reads as a run
-// (scripts/agent-eval.mjs: prompt, skill, tools, calls, manifest and answer), outside node_modules, target, .git and
-// any twins folder. A film session is one whose recorded `brief` holds a `craft` list: the checks its brief names.
+// AC4: a film session in the recorded run's shape (scripts/agent-eval-run.mjs writes it, scripts/agent-eval.mjs reads
+// it), built offline from one `deep-show run` scenario: the agent's calls are deep-show's real replies, in the order the
+// session makes them, and the agent eval's scorer judges it through its CLI (README: AC4). No model is called.
 
-export interface Recording { file: string; run: JsonObject }
+/** The tools a skill names, read as the scorer reads them (`deep_<name>` words), the session's live tool list. */
+export const toolsOf = (skill: string): string[] => [...new Set(skill.match(/\bdeep_[a-z_]*[a-z]\b/g) ?? [])];
+/** Where `name` stands as a word in `text`. */
+export const namesWord = (text: string, name: string): boolean => mentions(text, name).length > 0;
 
-export function recordings(): Recording[] {
-  const out: Recording[] = [];
-  const walk = (d: string): void => {
-    let entries: string[];
-    try { entries = readdirSync(d); } catch { return; }
-    for (const name of entries) {
-      if (SKIP.has(name) || name === 'twins') continue;
-      const path = join(d, name);
-      let st;
-      try { st = lstatSync(path); } catch { continue; }
-      if (st.isDirectory()) walk(path);
-      else if (name === 'run.json' && st.isFile()) {
-        let run: unknown;
-        try { run = JSON.parse(readFileSync(path, 'utf8')); } catch { continue; }
-        if (isObject(run) && typeof run['prompt'] === 'string' && Array.isArray(run['calls']) && isObject(run['skill']) && isObject(run['manifest'])) out.push({ file: relative(REPO, path), run });
-      }
-    }
-  };
-  walk(REPO);
+/** The planted skill: the skill with every line that names the guide removed. */
+export function plantedSkill(skill: string, guide: string): string {
+  const lines = skill.split('\n');
+  const kept = lines.filter((l) => !namesWord(l, guide));
+  expect(lines.length - kept.length, `the skill has a line naming the guide ${guide}, which the plant removes`).toBeGreaterThan(0);
+  return kept.join('\n');
+}
+
+/** The session's task: no value the manifest expects (the scorer fails a prompt that holds one). */
+export const FILM_PROMPT = 'Make a short film about a kettle to the brief this session was given, show it with DeepBuild\'s tools following the deepbuild skill, and say what the claim on it was judged. Finish your reply with one line of JSON and nothing after it: {"claims":[{"id":"film-verdict","value":"<the result of the claim\'s verdict>","evidence":"<a hash its verdict names>"}]}';
+
+export interface FilmSession {
+  /** The run's id, which every failure reason must name. */
+  run: string;
+  /** The skill text the session was given. */
+  skill: string;
+  /** The guide the session reads with deep_kinds, if it reads one. */
+  guide: string;
+  /** When it reads the guide: before its first deep_show, after it, or never. */
+  read: 'before' | 'after' | 'never';
+  /** The checks the brief recorded in the run names. */
+  brief: CraftName[];
+  /** The checks the claim's brief in the scenario names, so its verdict rows report these (the brief's by default). */
+  ran?: CraftName[];
+}
+
+const mcpResult = (reply: JsonObject): JsonObject => ({ isError: false, content: [{ type: 'text', text: JSON.stringify(reply) }] });
+const argumentsOf = (call: JsonObject): JsonObject => {
+  const out = { ...call };
+  delete out['call'];
+  delete out['session'];
   return out;
-}
-
-/** The checks a film session's brief names: `brief.craft`, each a name or `{check: name}` (#409's brief). */
-export function namedChecks(run: JsonObject): string[] | undefined {
-  const brief = run['brief'];
-  if (!isObject(brief) || !Array.isArray(brief['craft'])) return undefined;
-  return brief['craft'].map((e) => (typeof e === 'string' ? e : isObject(e) && typeof e['check'] === 'string' ? e['check'] : '')).filter((n) => n !== '');
-}
-export const isFilm = (r: Recording): boolean => namedChecks(r.run) !== undefined;
-export const runId = (r: Recording): string => (typeof r.run['run'] === 'string' ? r.run['run'] : r.file);
-export const skillOf = (r: Recording): string => (isObject(r.run['skill']) && typeof r.run['skill']['text'] === 'string' ? r.run['skill']['text'] : '');
-
-/** A session's deep_* calls in order: `{tool, arguments, result}`. */
-const callsOf = (r: Recording): JsonObject[] => (r.run['calls'] as JsonValue[]).filter(isObject);
-const argsOf = (c: JsonObject): JsonObject => (isObject(c['arguments']) ? c['arguments'] : {});
-
-/** Every value a result holds, a string that is JSON text read as its value too (MCP results carry text content). */
-function values(v: JsonValue, out: JsonValue[]): void {
-  out.push(v);
-  if (Array.isArray(v)) for (const x of v) values(x, out);
-  else if (isObject(v)) for (const x of Object.values(v)) values(x, out);
-  else if (typeof v === 'string' && /^\s*[[{]/.test(v)) {
-    try { values(JSON.parse(v) as JsonValue, out); } catch { /* not JSON text */ }
-  }
-}
-/** The craft checks a session's results report a row from: every `{from: {craft: <name>}}` its calls delivered. */
-export function craftRows(r: Recording): string[] {
-  const all: JsonValue[] = [];
-  for (const c of callsOf(r)) values(c['result'] ?? null, all);
-  return [...new Set(all.filter(isObject).map((o) => (isObject(o['from']) && typeof o['from']['craft'] === 'string' ? o['from']['craft'] : '')).filter((n) => n !== ''))].sort();
-}
+};
+/** The craft checks a verdict's rows come from (`from: {craft}`), sorted. */
+const rowChecks = (verdict: JsonObject): string[] =>
+  [...new Set((Array.isArray(verdict['requirements']) ? verdict['requirements'] : []).filter(isObject).map((r) => (isObject(r['from']) && typeof r['from']['craft'] === 'string' ? r['from']['craft'] : '')).filter((n) => n !== ''))].sort();
+/** Every string in a value that looks like a hash, 64 hex digits: a handle the verdict names. */
+const hashesIn = (v: JsonValue): string[] => [...JSON.stringify(v).matchAll(/[0-9a-f]{64}/g)].map((m) => m[0]);
 
 /**
- * AC4's first check on one session: its first `deep_kinds {op: read, guide: <guide>}` comes before its first
- * `deep_show`, the first render. Each failure names the session.
+ * A film session, run.json's object: one `deep-show run` scenario (#409's world: the agent's session, a panel, a claim
+ * whose brief names `ran`) whose calls are the agent's deep_kinds read of the guide, its deep_show of the film and the
+ * claim's verdict, in the session's order, each recorded with deep-show's reply as its MCP result. The verdict reaches
+ * the agent as deep_status's reply on the claim. Its manifest's first tool is the session's first call and its one
+ * claim is the verdict's result, citing a hash the verdict delivered, so every rule the scorer had before passes.
  */
-export function readBeforeRenderFailures(r: Recording, guide: string): string[] {
-  const calls = callsOf(r);
-  const read = calls.findIndex((c) => c['tool'] === 'deep_kinds' && argsOf(c)['op'] === 'read' && argsOf(c)['guide'] === guide);
-  const render = calls.findIndex((c) => c['tool'] === 'deep_show');
-  if (render < 0) return [`${runId(r)}: INCONCLUSIVE, the session never rendered (no deep_show call), so it can't show the guide read before its first render`];
-  if (read < 0) return [`${runId(r)}: the session never read the guide ${guide} (no deep_kinds op: read, guide: ${guide}) before its first render, call ${render + 1}`];
-  if (read > render) return [`${runId(r)}: the session read the guide ${guide} at call ${read + 1}, after its first render at call ${render + 1}`];
-  return [];
+export function filmSession(bin: string, s: FilmSession): JsonObject {
+  const ran = s.ran ?? s.brief;
+  const evidence = tempDir('film');
+  storeLooks(evidence);
+  const doc = docId(1);
+  const film: Film = { name: 'the kettle film', doc, document: shotLengthFilm(doc, false), brief: briefOf(...ran.map((c) => named(c))) };
+  const scenario = scenarioOf(evidence, [film]);
+  const read: JsonObject = { call: 'deep_kinds', op: 'read', guide: s.guide };
+  const present = agentShow(doc, film.document);
+  const verdict: JsonObject = { call: 'verdict', claim: claimId(1) };
+  const calls = s.read === 'before' ? [read, present, verdict] : s.read === 'after' ? [present, read, verdict] : [present, verdict];
+  const replies = scenarioReplies(bin, { ...scenario, calls });
+  const at = (c: JsonObject): JsonObject => replies[calls.indexOf(c)]!;
+  expect(at(present)['outcome'], `BLOCKED: the agent's deep_show presents the film: ${show(at(present), 1500)}`).toBe('presented');
+  if (s.read !== 'never') expect(served(at(read)), `BLOCKED: deep_kinds read guide: ${s.guide} answers text: ${show(at(read), 800)}`).toBe(true);
+  const judged = at(verdict);
+  expect(rowChecks(judged), `BLOCKED: the verdict's rows come from the checks the claim's brief names: ${show(judged, 1500)}`).toEqual([...ran].sort());
+  const result = String(judged['result']);
+  const handle = hashesIn(judged)[0];
+  expect(handle, `BLOCKED: the verdict names a hash the session's claim can cite: ${show(judged, 1500)}`).toBeDefined();
+  expect(FILM_PROMPT.toLowerCase().includes(result.toLowerCase()), `the prompt doesn't hold the verdict's result ${result}`).toBe(false);
+  const recorded = calls.map((c) => ({
+    tool: c === verdict ? 'deep_status' : String(c['call']),
+    arguments: c === verdict ? { claim: claimId(1) } : argumentsOf(c),
+    result: mcpResult(at(c)),
+  }));
+  return {
+    v: 1, run: s.run, agent: 'claude-code', repo: 'kettle-film', exit: 0,
+    prompt: FILM_PROMPT,
+    skill: { loaded: true, text: s.skill },
+    tools: toolsOf(s.skill).map((name) => ({ name })),
+    calls: recorded,
+    manifest: { first_tool: recorded[0]!.tool, claims: [{ id: 'film-verdict', expected: result }] },
+    answer: { claims: [{ id: 'film-verdict', value: result, evidence: handle! }] },
+    transcript: null,
+    brief: briefOf(...s.brief.map((c) => named(c))),
+  };
 }
 
-/** AC4's second check: the checks the brief names are the ones the session ran, and the ones the merge base's session of the same repo ran. */
-export function checksRunFailures(r: Recording, base: Recording | undefined): string[] {
-  const named = [...new Set(namedChecks(r.run) ?? [])].sort();
-  const ran = craftRows(r);
-  const out: string[] = [];
-  const unrun = named.filter((n) => !ran.includes(n));
-  const unnamed = ran.filter((n) => !named.includes(n));
-  if (unrun.length) out.push(`${runId(r)}: its brief names ${unrun.join(', ')}, which no row of its verdicts reports`);
-  if (unnamed.length) out.push(`${runId(r)}: its verdicts report rows from ${unnamed.join(', ')}, which its brief doesn't name`);
-  if (!base) out.push(`${runId(r)}: INCONCLUSIVE, no recorded session of repo ${show(r.run['repo'] ?? null)} on the merge base's skill to compare with`);
-  else {
-    const was = craftRows(base);
-    if (was.join(',') !== ran.join(',')) out.push(`${runId(r)}: ran craft checks [${ran.join(', ')}], where the merge base's session ${runId(base)} ran [${was.join(', ')}]`);
-  }
-  return out;
+export interface Scored { status: number | null; outcome: string; reasons: { code: string; detail: string }[]; out: string }
+/** `node scripts/agent-eval.mjs score <run.json>` on the session: its exit code and its stdout's verdict. */
+export function scoreSession(run: JsonObject): Scored {
+  const file = join(tempDir('run'), 'run.json');
+  writeFileSync(file, `${JSON.stringify(run, null, 2)}\n`);
+  const r = spawnSync(process.execPath, ['scripts/agent-eval.mjs', 'score', file], { cwd: REPO, encoding: 'utf8', timeout: 600_000 });
+  const out = `exit ${r.status}; stdout: ${(r.stdout ?? '').slice(0, 3000)}; stderr: ${(r.stderr ?? '').slice(-1500)}`;
+  let v: unknown;
+  try { v = JSON.parse((r.stdout ?? '').trim().split('\n').at(-1) ?? ''); } catch { v = undefined; }
+  const reasons = isObject(v) && Array.isArray(v['reasons']) ? v['reasons'].filter(isObject).map((x) => ({ code: String(x['code']), detail: String(x['detail']) })) : [];
+  return { status: r.status, outcome: isObject(v) ? String(v['outcome']) : '', reasons, out };
+}
+
+/** The scorer passes the session: exit 0, PASS, no reason. */
+export function scoredPass(s: Scored, what: string): void {
+  expect(s.outcome, `${what} is scored PASS: ${s.out}`).toBe('PASS');
+  expect(s.status, `${what}: the scorer exits 0: ${s.out}`).toBe(0);
+  expect(s.reasons, `${what}: no reason: ${s.out}`).toEqual([]);
+}
+/** The scorer fails the session: exit 1, FAIL, and a reason whose text names the run and each of `also`. */
+export function scoredFailNaming(s: Scored, run: string, also: string[], what: string): void {
+  expect(s.outcome, `${what} is scored FAIL: ${s.out}`).toBe('FAIL');
+  expect(s.status, `${what}: the scorer exits 1: ${s.out}`).toBe(1);
+  const named = s.reasons.filter((r) => [run, ...also].every((n) => `${r.code} ${r.detail}`.includes(n)));
+  expect(named.length, `${what}: a reason names the session ${run}${also.length ? ` and ${also.join(', ')}` : ''}; the reasons: ${show(s.reasons, 2000)}`).toBeGreaterThan(0);
 }
