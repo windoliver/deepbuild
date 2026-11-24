@@ -467,8 +467,13 @@ impl RowDrawn {
             if title.chars().count() > TITLE_LEAST {
                 least.push('…');
             }
-            let timed = ask || row.id.starts_with("session:") || width - fixed - time >= wide(&least, weight);
-            (timed, width - fixed - if timed { time } else { px(0.) })
+            // The title's slot is laid out at whole points too, so it gets the room's whole points: a list dragged to a
+            // fractional width never fits a title to room its slot doesn't have.
+            let timed = ask || row.id.starts_with("session:") || (width - fixed - time).floor() >= wide(&least, weight);
+            (
+                timed,
+                (width - fixed - if timed { time } else { px(0.) }).floor(),
+            )
         });
         let timed = roomy.is_none_or(|(timed, _)| timed);
         // #1808's planted rows: a title drawn whole over the slots to its right, and one cut at 8 characters whatever
