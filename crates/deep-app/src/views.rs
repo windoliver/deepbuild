@@ -2214,7 +2214,7 @@ impl Render for Shipped {
                     && matches!(empty, crate::empties::Empty::Unreachable { .. });
                 let mut drawn: Vec<AnyElement> = Vec::new();
                 // #3282's planted list draws its topmost ask row's time 0 wide.
-                let mut time_planted = !crate::plain::planted("ask-time-0-wide");
+                let mut plant_left = crate::plain::planted("ask-time-0-wide");
                 // What's drawn above the rows that scroll: Needs you's heading and what goes under it.
                 let mut heading_ends = None;
                 for (n, item) in items.iter().enumerate() {
@@ -2302,8 +2302,11 @@ impl Render for Shipped {
                                 still: cx.reduce_motion(),
                                 width: self.list_room.get().map(|area| area.width),
                             };
-                            let mut drawn_row = RowDrawn::of(row, selected, ring, shape, now, window);
-                            if row.id.starts_with("ask:") && !std::mem::replace(&mut time_planted, true) {
+                            let mut drawn_row =
+                                RowDrawn::of(row, selected, ring, shape, now, window);
+                            if row.id.starts_with("ask:")
+                                && std::mem::replace(&mut plant_left, false)
+                            {
                                 drawn_row.timed = false;
                             }
                             drawn.push(self.row_in_view(row, drawn_row, window, cx));
