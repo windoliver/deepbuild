@@ -8,8 +8,8 @@
 // - clean with differ 0.9 passes, 20 runs read, distinct {1: 20};
 // - blind with no differ passes (no default: a hand-made level's brief sets none);
 // - blind with differ 0.9 fails, with grid.same alone, naming depth 1, 20 runs and 1 floor, distinct {1: 1}.
-// The plug-in's manifest lists the code, as it lists each code its kinds raise.
-// The wrong programs: the base, which reads no differ (blind passes: BASE-FAILURE.txt shows that run), a check with a
+// The plug-in's manifest lists the code, as it lists each code its kinds raise, and holds its files' digest.
+// The wrong programs: the base, which reads no differ (blind passes; its run goes in BASE-FAILURE.txt), a check with a
 // default (blind without differ fails), one that counts runs and not floors.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -38,7 +38,8 @@ describe(`${AC[1]} a generator whose 20 runs give 20 floors passes differ 0.9, a
     expect(sameWrong(same, 1, RUNS, 1), 'with grid.same, naming depth 1, 20 runs and 1 floor').toEqual([]);
     expect(same.failures.filter((f) => !f.message.startsWith('grid.same')).map((f) => f.message), 'and nothing else fails').toEqual([]);
     expect([reachOf(same).coverage, reachOf(same).distinct], 'its result counts 1 distinct floor in 20 runs').toEqual([{ 1: RUNS }, { 1: 1 }]);
-    const manifest = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json'), 'utf8')) as { codes: string[] };
+    const manifest = JSON.parse(readFileSync(join(PLAYTEST_DIR, 'deepbuild.json'), 'utf8')) as { codes: string[]; digest: string };
     expect(manifest.codes, 'the plug-in\'s manifest lists the code').toContain('grid.same');
+    expect(manifest.digest, 'and its digest is its files\', so the host installs the plug-in as it ships').toBe((await import('../../../packages/extension-host/src/index.ts')).packageDigest(PLAYTEST_DIR));
   }, TIMEOUT);
 });

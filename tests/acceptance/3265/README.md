@@ -22,21 +22,26 @@ a blind redraft of this job (design: Dogfooding). Lean: one test file per criter
   (how a check kind reports INCONCLUSIVE, #832); `crates/deep-logic` (`play.rs`'s `seeded`, `piece.rs`'s `step_seed`).
 
 What the base does, which these tests don't credit: `grid.reach` reads no `differ`, so a generator that gives every run
-one floor passes (BASE-FAILURE.txt shows it), `differ` with `piece_seed: own` is played and passes, a depth one run
-reached passes, and the plug-in's manifest lists no `grid.same`. What it already does, which they rely on: #184's replica
+one floor passes, `differ` with `piece_seed: own` is played and passes, a depth one run
+reached passes, and the plug-in's manifest lists no `grid.same`. The base's manifest also holds an older digest than its
+files' (`run.ts` changed in a4eb329a5 and the digest wasn't refilled), so the host refuses to install the shipped folder
+("envelope digest … isn't its files' digest") and every hub of #556's suite fails there. So that a test fails for what it
+asserts, this suite's hub (`helpers.ts`, `openHub`, otherwise #556's) installs a copy of the folder whose manifest holds
+its files' digest, every other byte the folder's, and AC1 ends by holding the shipped manifest to its files' digest. What
+it already does, which they rely on: #184's replica
 and #556's grid.reach, whose result holds `floors` (with each floor's `hash`), `coverage` and `distinct`.
 
 ## Run them
 
 ```sh
 npm ci                          # once, in a fresh worktree
+npm run build --workspaces      # once, as #556's suite has it
 PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
   node scripts/throttle.mjs test --wait 60 -- npx vitest run --root tests/acceptance/3265 --testTimeout=600000 --no-file-parallelism
 npx tsc -p tests/acceptance/3265/tsconfig.json
 ```
 
-The workspace packages are read from their sources, so no package is built. The builds, each once a file and honoring
-`CARGO_TARGET_DIR`: `deep-drive` debug with `env-plants` (#184's helper), `deep-logic` (#533's: the layout probe) and
+The builds, each once a file and honoring `CARGO_TARGET_DIR`: `deep-drive` debug with `env-plants` (#184's helper), `deep-logic` (#533's: the layout probe) and
 #533's assembler from a copy (#555's). A clean target takes minutes for the first. The folder runs alone by its own
 `lane.json`, reason `binary`, as #556's does: its files build binaries into this checkout's `target/` and start replicas
 and hubs. Nothing depends on time or load.
@@ -101,15 +106,15 @@ one-run plays recorded (`helpers.ts`, `counted`), never the check's numbers, and
 
 | ID | Criterion (short) | Test, and the wrong program it fails on |
 |---|---|---|
-| AC1 #3265.757907b5 | 20 runs give 20 floors and differ 0.9 passes; the twin that reads no seed gives 1 and fails grid.same; it passes on the base | `ac01-differ.test.ts`: clean passes, 20 runs, distinct {1: 20}; blind passes with no differ; blind fails grid.same alone, naming depth 1, 20 runs, 1 floor, distinct {1: 1}; the manifest lists the code. Fails on the base (blind passes), a check with a default share, one that counts runs |
+| AC1 #3265.757907b5 | 20 runs give 20 floors and differ 0.9 passes; the twin that reads no seed gives 1 and fails grid.same; it passes on the base | `ac01-differ.test.ts`: clean passes, 20 runs, distinct {1: 20}; blind passes with no differ; blind fails grid.same alone, naming depth 1, 20 runs, 1 floor, distinct {1: 1}; the manifest lists the code and its files' digest. Fails on the base (blind passes), a check with a default share, one that counts runs |
 | AC2 #3265.e9560b44 | two floors by the low bit: 2 of 20, fails at 0.9; the planted previous-run check passes alternating floors and fails this test | `ac02-two-floors.test.ts`: lowbit fails grid.same naming depth 1, 20 runs, 2 floors with `depths` left out, and passes differ 0.1; on the alternating seed `previous-run` passes, this criterion's judge (`sameWrong`) faults it, the kit's reference and the hub's grid.reach fail it, and the kit catches `previous-run` by `grid.same`. Fails on the base, a check that compares neighbouring runs, one that ignores the ratio, one that judges listed depths alone |
 | AC3 #3265.5fc6d08d | differ with piece_seed own refused, naming both; a depth one run reached INCONCLUSIVE, naming it | `ac03-own-and-single.test.ts`: own and left out, each refused before any run, naming both; stairs reads `uncounted`, one failure, INCONCLUSIVE naming depth 2, coverage and distinct 1, the verdict never PASS. Fails on the base (all pass), a check that plays the runs and fails grid.same, one that takes a missing piece_seed as run, one that passes or fails 1 of 1 |
 | AC4 #3265.db483311 | distinct equals the count of distinct hashes at each depth; the design's Result line lists it | `ac04-distinct.test.ts`: mixed's distinct {1: 2, 2: 4, 3: 11} equals this suite's count and the floors' own hashes, and depths 1 and 2 fail grid.same with those counts, depth 3 not; the Result line of Check input: `grid.reach` lists `distinct: {depth → floors}`. Fails on the base (no failure; no such field in the line), a report that counts runs, floors, or floors across depths |
 
 ## Readings where the issue leaves a choice
 
-- **"The twin passes on the merge base, and that run is shown"** is BASE-FAILURE.txt: AC1's test fails there at the
-  assertion that the twin fails, whose message holds the base's result (passed, testsRun 20, no failure, distinct 1).
+- **"The twin passes on the merge base, and that run is shown"** is BASE-FAILURE.txt's part: AC1's test fails on the base
+  at the assertion that the twin fails, whose message holds the base's result (passed, testsRun 20, distinct 1).
 - **"A planted check … fails this test"** is `sameWrong`, the function every grid.same assertion here goes through, given
   the planted check's result: it must find fault.
 - **The low bit** is the low bit of the seed the program reads, the one its `init` gets, which isn't the run's seed but a
@@ -126,6 +131,6 @@ design's other lines (the field, the code) beyond the Result line.
 
 ## Files
 
-`README.md`, `BASE-FAILURE.txt`, `tsconfig.json`, `lane.json`, `helpers.ts` (the bench, this suite's own count and the
+`README.md`, `BASE-FAILURE.txt`, `tsconfig.json`, `lane.json`, `helpers.ts` (the hub, this suite's own count and the
 message readers), `programs.ts` (the generators, their interface and inputs), and one test file per criterion:
 `ac01-differ`, `ac02-two-floors`, `ac03-own-and-single`, `ac04-distinct`.

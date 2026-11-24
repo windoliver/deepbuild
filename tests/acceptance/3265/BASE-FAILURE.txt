@@ -1,19 +1,18 @@
 The suite at the base commit 7cb1e5c4a ("Merge pull request #3330 …"), before any implementation.
 
-NOT RUN. No leg of it ran on the base: the machine's throttle gave no grant. The base run
-(`node scripts/throttle.mjs test --wait 150 -- npx vitest run --root tests/acceptance/3265 --testTimeout=600000
---no-file-parallelism --reporter=verbose`) asked for a test grant at 2026-11-24T05:12Z and the builds (deep-drive with
-env-plants, deep-logic, #533's assembler) for a build grant at 05:06Z; at 06:13Z one test request and six build requests
-were still ahead of them. Nothing was run bare. What was checked without a grant:
+NOT RUN as it stands here. Two earlier runs on the base, each under a test grant of the machine's throttle, proved
+nothing and are kept for what they showed:
 
-- `npx tsc -p tests/acceptance/3265/tsconfig.json` type-checks the suite on the base (exit 0).
-- The two check seeds (programs.ts, SEED), searched and read by a script of the seed rules alone (a run's seed is
-  hash(the check's seed, i), the seed init gets hash(it, the logic ID, 0)): the orders README: Fixtures gives.
-- The readers of a grid.same message (helpers.ts, says and sameWrong's parts) on 12 sample messages, right and wrong.
-- The verdict engine on a run whose outcome is `uncounted`, as #184's judge makes one: `pending`, never PASS.
+1. 2026-11-24T06:23Z, 2.8 s: no test ran. The worktree's packages weren't built (packages/evidence/dist/patterns.json
+   missing). They were then built under the next run's grant.
+2. 2026-11-24T06:49Z, 153 s, deep-drive built from a clean target in it: 8 failed. The design test failed at its
+   assertion (below); the 7 others failed in #556's openHub, which this suite then used, before any of their assertions:
+     Error: deepbuild/playtest's envelope digest d1:15e4c57644be831e392b65cd7715b6df7793c7012eb202592c87032ad84968d7
+     isn't its files' digest d1:207a54283aa7650532b71583d4812f59d2f019242c9ee028770a6ce50408d403: it changed since it was
+     built, so it isn't installed
+   The base's manifest holds an older digest than its files' (README: What was read), so this suite now opens its own
+   hub over a copy of the plug-in's folder with its files' digest. That change is what still has to run.
 
-By the base's code each test must fail as follows, which the run still has to show: AC1's at "the twin that reads no seed
-fails grid.reach with differ 0.9" (the base passes it); AC2's at "it fails grid.same at differ 0.9 …" and at "the kit
-plants a grid.reach runner named previous-run"; AC3's at "differ with piece_seed … is refused, never passed" (twice) and
-at "depth 2, which one run generated, leaves the check INCONCLUSIVE (uncounted)"; AC4's at "depths 1 and 2 fail grid.same
-with those counts" and at the design's Result line.
+  ac04-distinct.test.ts > the design's Result line lists distinct: {depth → floors}
+    AssertionError: docs/canvas-primitives.md, Check input: `grid.reach`, the Result line: expected '- Result: `{floors:
+    [{run, seed, dept…' to match /\bdistinct: ?\{ ?depth → floors ?\}/

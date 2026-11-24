@@ -1,11 +1,14 @@
 // Test-side tools for the #3265 acceptance tests (README: The surface), over #556's: its pool of `deep-drive` replicas,
-// its hub (an extension host with the playtest plug-in installed and loaded), `runCheck` and the plug-in's kit. What is
-// new here: this suite's own count of the floors a run generates, from its own plays of each run's seed, and the readers
-// of what a `grid.same` message names. Every play, floor, count and message judged is the implementation's own; nothing
-// stands in for the replica, the host or the plug-in.
-import { expect } from 'vitest';
+// `runCheck` and the plug-in's kit, and a hub as its own opens one (an extension host with the playtest plug-in installed
+// and loaded). What is new here: this suite's own count of the floors a run generates, from its own plays of each run's
+// seed, and the readers of what a `grid.same` message names. Every play, floor, count and message judged is the
+// implementation's own; nothing stands in for the replica, the host or the plug-in.
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterAll, expect } from 'vitest';
+import { tempDir } from '../184/helpers.ts';
 import {
-  DOC, Pool, failuresOf, lockPlay, macOnly, openHub, ownPlay, putPiece, runSeed, scalar, sha256, shown, valuesOf, word,
+  DOC, PLAYTEST_DIR, PLAYTEST_ID, Pool, failuresOf, lockPlay, macOnly, ownPlay, putPiece, runSeed, scalar, sha256, show, shown, valuesOf, word,
   type Hub, type Obj, type Result,
 } from '../556/helpers.ts';
 import { CELLS, DEPTH, RUNS, SPAN, generator, genPlay, piece, type Twin } from './programs.ts';
@@ -19,6 +22,45 @@ export const DIFFER = 0.9;
 
 /** The hub's documents #556's helper grants the plug-in, one a generator. */
 const AT: Record<Twin, string> = { clean: DOC.crawler, blind: DOC.walled, lowbit: DOC.vault, stairs: DOC.noturn, mixed: DOC.flow };
+const closers: (() => Promise<void>)[] = [];
+afterAll(async () => { for (const close of closers.splice(0)) await close().catch(() => undefined); }, 120_000);
+/**
+ * #556's hub (its `openHub`): an extension host whose replica is `pool`'s, the playtest plug-in installed, checked and
+ * loaded. What differs: it installs a copy of the plug-in's folder whose manifest holds its files' digest, since the
+ * base's manifest holds an older one, so the host refuses the folder itself (README: What was read). The copy's other
+ * bytes are the folder's; AC1 holds the shipped manifest to its files' digest.
+ */
+async function openHub(pool: Pool): Promise<Hub> {
+  const hostEntry = await import('../../../packages/extension-host/src/index.ts');
+  const { openRecord } = await import('../../../packages/record/src/index.ts');
+  const { openAsks } = await import('../../../packages/asks/src/index.ts');
+  const { openSupervisor } = await import('../../../packages/supervisor/src/index.ts');
+  const dir = tempDir('hub3265');
+  const home = join(dir, 'deepbuild');
+  mkdirSync(home, { recursive: true });
+  const from = join(dir, 'playtest');
+  cpSync(PLAYTEST_DIR, from, { recursive: true });
+  const manifest = JSON.parse(readFileSync(join(from, 'deepbuild.json'), 'utf8')) as Obj;
+  manifest['digest'] = hostEntry.packageDigest(from);
+  writeFileSync(join(from, 'deepbuild.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+  const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+  const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+  const trust = await hostEntry.openTrust({ record, now: Date.now });
+  const release = [{ id: PLAYTEST_ID, version: String(manifest['version']), digest: hostEntry.packageDigest(from) }];
+  const host = await hostEntry.openExtensionHost({
+    record, asks, supervisor: sup, trust, home, release, now: Date.now, replica: pool.hub,
+  } as unknown as Parameters<typeof hostEntry.openExtensionHost>[0]) as unknown as Obj;
+  closers.push(async () => { await host['close']().catch(() => undefined); await sup.close().catch(() => undefined); await record.close().catch(() => undefined); });
+  await host['ready']();
+  const installed = await host['install']({ from, builtBy: null, grant: { docs: Object.values(DOC) } });
+  const conformance = await host['check'](installed);
+  expect(conformance.passed, `${PLAYTEST_ID} passes conformance: ${show(conformance)}`).toBe(true);
+  const load = await host['load'](installed);
+  expect(load.status === 'loaded' && load.place, `${PLAYTEST_ID} loads in the hub: ${show(load)}`).toBe('hub');
+  return { host };
+}
+
 export interface Bench { pool: Pool; hub: Hub; play: Obj }
 let opened: Promise<Bench> | undefined;
 /** Two debug replicas, a hub over them and the generators' interface as locked, once a file. Off macOS: INCONCLUSIVE. */
