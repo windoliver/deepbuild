@@ -11,35 +11,33 @@ import { stripRust } from './rust-source.mjs';
 
 const STATUS = 'packages/hub/src/status.ts';
 const STATES = 'crates/deep-app/src/states.rs';
-/** A call of words in the language shown, with any path before it (`crate::copy::text`). */
-const SHOWN = /(?:\w+\s*::\s*)*(?:shown|copy\s*::\s*(?:text|fill|english))\s*$/;
-/** The side after an `==`/`!=` that opens with such a call, past any `(`, `*` or `&`. */
-const RIGHT = /^[\s(*&]*(?:\w+\s*::\s*)*(?:shown|copy\s*::\s*(?:text|fill|english))\s*\(/;
+/** A call of words in the language shown, with any path before it (`crate::copy::text`), never a method or a longer name. */
+const SHOWN = /(?<![\w.])(?:\w+\s*::\s*)*(?:shown|copy\s*::\s*(?:text|fill|english))\s*\(/;
+const OPEN = '([';
+const CLOSE = ')]';
 
-/** Whether the side before the operator at `at` in `code` ends with such a call: its closing `)` matched back to its `(`. */
-function left(code, at) {
-  let end = at;
-  while (end > 0 && /[\s)]/.test(code[end - 1])) {
-    end -= 1;
-    if (code[end] !== ')') continue;
-    let depth = 1;
-    let open = end;
-    while (open > 0 && depth > 0) {
-      open -= 1;
-      if (code[open] === ')') depth += 1;
-      else if (code[open] === '(') depth -= 1;
-    }
-    return SHOWN.test(code.slice(Math.max(0, open - 200), open));
+/**
+ * The operand of the `==`/`!=` at `at` in `code`, on the side `step` (-1 before, 1 after): up to the bracket it sits in,
+ * or the `;`, `,`, `{`, `}`, `&&`, `||` or `=>` that ends it.
+ */
+function operand(code, at, step) {
+  let depth = 0;
+  let i = step < 0 ? at - 1 : at + 2;
+  for (; i >= 0 && i < code.length; i += step) {
+    const c = code[i];
+    if ((step < 0 ? CLOSE : OPEN).includes(c)) depth += 1;
+    else if ((step < 0 ? OPEN : CLOSE).includes(c)) { if (depth === 0) break; depth -= 1; }
+    else if (depth === 0 && (';,{}'.includes(c) || /^(&&|\|\||=>)$/.test(step < 0 ? code.slice(i - 1, i + 1) : code.slice(i, i + 2)))) break;
   }
-  return false;
+  return step < 0 ? code.slice(i + 1, at) : code.slice(at + 2, i);
 }
-/** Each line of the Rust source `text` that compares against words in the language shown, across line breaks too. */
+/** Each line of the Rust source `text` holding an `==` or `!=` one of whose operands calls for shown words, across line breaks too. */
 function compared(text) {
   const code = stripRust(text);
   const lines = new Set();
   for (const m of code.matchAll(/[!=]=(?!=)/g)) {
-    if (code[m.index - 1] === '=' || code[m.index - 1] === '!' || code[m.index - 1] === '<' || code[m.index - 1] === '>') continue;
-    if (RIGHT.test(code.slice(m.index + 2, m.index + 300)) || left(code, m.index)) lines.add(code.slice(0, m.index).split('\n').length);
+    if (code[m.index - 1] === '=' || code[m.index - 1] === '!') continue;
+    if (SHOWN.test(operand(code, m.index, -1)) || SHOWN.test(operand(code, m.index, 1))) lines.add(code.slice(0, m.index).split('\n').length);
   }
   return [...lines].sort((x, y) => x - y);
 }
