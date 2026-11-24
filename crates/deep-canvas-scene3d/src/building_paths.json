@@ -1,4 +1,38 @@
 {
+  "arch.bay_frame@1": {
+    "section": "Building module",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "arch.bracket@1": {
+    "section": "Building module",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
   "arch.guard_rail@1": {
     "section": "Building module",
     "rays": {

@@ -1,0 +1,338 @@
+# #3088 acceptance suite at base b4e6a09c0 (origin/main), both after npm ci, npm run build --workspaces and cargo build --locked -p deep-hook, Node 24.22.0; checkout path shown as <checkout>, home as ~
+# Run: node node_modules/vitest/vitest.mjs run tests/acceptance/3088 --reporter=verbose (and tsc -p tests/acceptance/3088/tsconfig.json, which passes)
+# Expected on Linux: bb512932 fails (each play INCONCLUSIVE: cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64'); fa98a351 fails (no binding in the world); the three be450fed tests fail; both 301242f7 tests skip naming the platform.
+# Expected on macOS arm64: the 301242f7 play test passes (both cases already play on an arm64 Mac; "still" can't fail on the base); the 301242f7 world test fails at "no longer lists"; fa98a351 fails; the three be450fed tests fail; bb512932 skips naming the platform.
+
+## 1. Linux (Spark: aarch64 Ubuntu 24.04)
+
+uname: Linux 7.0.0-1025-nvidia aarch64; Ubuntu 24.04.5 LTS; node v24.22.0
+uptime:  14:29:31 up 3 days, 18:05,  2 users,  load average: 56.08, 102.82, 132.67
+command: node node_modules/vitest/vitest.mjs run tests/acceptance/3088 --reporter=verbose
+
+ RUN  v5.0.5 <checkout>
+
+ × tests/acceptance/3088/worlds.test.ts > a world built from a case's installs gets the checkout's platform packages > #3088.fa98a351 a world whose case installs node_modules/rolldown holds every @rolldown/binding-* folder this checkout's node_modules holds, byte for byte, and none it doesn't 76ms
+   → the world's node_modules/@rolldown holds exactly the checkout's binding-* folders: expected [] to deeply equal [ 'binding-linux-arm64-gnu', …(1) ]
+ ↓ tests/acceptance/3088/worlds.test.ts > a world built from a case's installs gets the checkout's platform packages > #3088.301242f7 on macOS arm64 (macOS arm64 only), each case's world gets @rolldown/binding-darwin-arm64, fsevents and lightningcss-darwin-arm64 though the manifest no longer lists them 0ms [macOS arm64 only (this is linux arm64)]
+ × tests/acceptance/3088/plays.test.ts > deep-conformance gate run plays reporting-vitest-setup and reporting-rewrite-on-import > #3088.bb512932 on Linux (Linux only), both cases play their claim and their twin, each to a verdict the case expects 181ms
+   → each case's claim and twin plays to a verdict the case expects (the kit's PASS line for each play): exit 3; stdout:
+INCONCLUSIVE reporting-vitest-setup claim: none — Command failed: /bin/cp -R --reflink=auto <checkout>/node_modules/@rolldown/binding-darwin-arm64 /tmp/b3088-STWaUn/gk-6rqaO4/repo/node_modules/@rolldown/binding-darwin-arm64
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No su
+INCONCLUSIVE reporting-vitest-setup twin: none — Command failed: /bin/cp -R --reflink=auto <checkout>/node_modules/@rolldown/binding-darwin-arm64 /tmp/b3088-STWaUn/gk-odBISD/repo/node_modules/@rolldown/binding-darwin-arm64
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No su
+INCONCLUSIVE reporting-rewrite-on-import claim: none — Command failed: /bin/cp -R --reflink=auto <checkout>/node_modules/@rolldown/binding-darwin-arm64 /tmp/b3088-STWaUn/gk-yn3b4S/repo/node_modules/@rolldown/binding-darwin-arm64
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No su
+INCONCLUSIVE reporting-rewrite-on-import twin: none — Command failed: /bin/cp -R --reflink=auto <checkout>/node_modules/@rolldown/binding-darwin-arm64 /tmp/b3088-STWaUn/gk-pJUOso/repo/node_modules/@rolldown/binding-darwin-arm64
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No su
+INCONCLUSIVE gate@1: 2 cases
+stderr (tail):
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No such file or directory
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No such file or directory
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No such file or directory
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No such file or directory: expected { …(4) } to deeply equal { …(4) }
+ ↓ tests/acceptance/3088/plays.test.ts > deep-conformance gate run plays reporting-vitest-setup and reporting-rewrite-on-import > #3088.301242f7 on macOS arm64 (macOS arm64 only), both cases still play their claim and their twin to expected verdicts 0ms [macOS arm64 only (this is linux arm64)]
+ × tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed refuses a case whose setup.installs names node_modules/fsevents (the lockfile marks it with os), naming the case and the install 588ms
+   → the check prints a line naming the case reporting-vitest-setup and the install node_modules/fsevents: exit 0; stdout:
+PASS gate@1 corpus: 52 cases
+stderr (tail):
+: expected [] to not deeply equal []
+ × tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed refuses a case whose setup.installs names node_modules/@unrs/resolver-binding-wasm32-wasi (the lockfile marks it with cpu only), naming the case and the install 348ms
+   → the check prints a line naming the case reporting-vitest-setup and the install node_modules/@unrs/resolver-binding-wasm32-wasi: exit 0; stdout:
+PASS gate@1 corpus: 52 cases
+stderr (tail):
+: expected [] to not deeply equal []
+ × tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed the shipped manifest names no lockfile-marked install and passes the check 77ms
+   → no case of the shipped manifest installs a package the lockfile marks with os or cpu: expected [ …(6) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed refuses a case whose setup.installs names node_modules/fsevents (the lockfile marks it with os), naming the case and the install
+AssertionError: the check prints a line naming the case reporting-vitest-setup and the install node_modules/fsevents: exit 0; stdout:
+PASS gate@1 corpus: 52 cases
+stderr (tail):
+: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ refuses tests/acceptance/3088/check.test.ts:31:115
+     29|   const r = await kit(['check', '--corpus', corpusCopy(editedWith(inst…
+     30|   const naming = r.stdout.split('\n').filter((line) => line.includes(T…
+     31|   expect(naming, `the check prints a line naming the case ${TARGET} an…
+       |                                                                                                                   ^
+     32|   expect(r.code, `the check refuses the corpus (exit 1, FAIL): ${shown…
+     33|   expect(r.stdout.trim().split('\n').at(-1), `the check's judgement is…
+ ❯ tests/acceptance/3088/check.test.ts:42:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed refuses a case whose setup.installs names node_modules/@unrs/resolver-binding-wasm32-wasi (the lockfile marks it with cpu only), naming the case and the install
+AssertionError: the check prints a line naming the case reporting-vitest-setup and the install node_modules/@unrs/resolver-binding-wasm32-wasi: exit 0; stdout:
+PASS gate@1 corpus: 52 cases
+stderr (tail):
+: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ refuses tests/acceptance/3088/check.test.ts:31:115
+     29|   const r = await kit(['check', '--corpus', corpusCopy(editedWith(inst…
+     30|   const naming = r.stdout.split('\n').filter((line) => line.includes(T…
+     31|   expect(naming, `the check prints a line naming the case ${TARGET} an…
+       |                                                                                                                   ^
+     32|   expect(r.code, `the check refuses the corpus (exit 1, FAIL): ${shown…
+     33|   expect(r.stdout.trim().split('\n').at(-1), `the check's judgement is…
+ ❯ tests/acceptance/3088/check.test.ts:48:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed the shipped manifest names no lockfile-marked install and passes the check
+AssertionError: no case of the shipped manifest installs a package the lockfile marks with os or cpu: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "reporting-vitest-setup: node_modules/@rolldown/binding-darwin-arm64",
++   "reporting-vitest-setup: node_modules/fsevents",
++   "reporting-vitest-setup: node_modules/lightningcss-darwin-arm64",
++   "reporting-rewrite-on-import: node_modules/@rolldown/binding-darwin-arm64",
++   "reporting-rewrite-on-import: node_modules/fsevents",
++   "reporting-rewrite-on-import: node_modules/lightningcss-darwin-arm64",
++ ]
+
+ ❯ tests/acceptance/3088/check.test.ts:53:108
+     51|   test(`${ID} the shipped manifest names no lockfile-marked install an…
+     52|     const marked = readManifest().cases.flatMap((c) => (c.setup?.insta…
+     53|     expect(marked, 'no case of the shipped manifest installs a package…
+       |                                                                                                            ^
+     54|     const r = await kit(['check'], KIT_MS);
+     55|     expect(r.code, `the shipped corpus passes the check (exit 0): ${sh…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/3088/plays.test.ts > deep-conformance gate run plays reporting-vitest-setup and reporting-rewrite-on-import > #3088.bb512932 on Linux (Linux only), both cases play their claim and their twin, each to a verdict the case expects
+AssertionError: each case's claim and twin plays to a verdict the case expects (the kit's PASS line for each play): exit 3; stdout:
+INCONCLUSIVE reporting-vitest-setup claim: none — Command failed: /bin/cp -R --reflink=auto <checkout>/node_modules/@rolldown/binding-darwin-arm64 /tmp/b3088-STWaUn/gk-6rqaO4/repo/node_modules/@rolldown/binding-darwin-arm64
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No su
+INCONCLUSIVE reporting-vitest-setup twin: none — Command failed: /bin/cp -R --reflink=auto <checkout>/node_modules/@rolldown/binding-darwin-arm64 /tmp/b3088-STWaUn/gk-odBISD/repo/node_modules/@rolldown/binding-darwin-arm64
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No su
+INCONCLUSIVE reporting-rewrite-on-import claim: none — Command failed: /bin/cp -R --reflink=auto <checkout>/node_modules/@rolldown/binding-darwin-arm64 /tmp/b3088-STWaUn/gk-yn3b4S/repo/node_modules/@rolldown/binding-darwin-arm64
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No su
+INCONCLUSIVE reporting-rewrite-on-import twin: none — Command failed: /bin/cp -R --reflink=auto <checkout>/node_modules/@rolldown/binding-darwin-arm64 /tmp/b3088-STWaUn/gk-pJUOso/repo/node_modules/@rolldown/binding-darwin-arm64
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No su
+INCONCLUSIVE gate@1: 2 cases
+stderr (tail):
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No such file or directory
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No such file or directory
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No such file or directory
+/bin/cp: cannot stat '<checkout>/node_modules/@rolldown/binding-darwin-arm64': No such file or directory: expected { …(4) } to deeply equal { …(4) }
+
+- Expected
++ Received
+
+  {
+-   "reporting-rewrite-on-import claim": "PASS",
+-   "reporting-rewrite-on-import twin": "PASS",
+-   "reporting-vitest-setup claim": "PASS",
+-   "reporting-vitest-setup twin": "PASS",
++   "reporting-rewrite-on-import claim": "INCONCLUSIVE",
++   "reporting-rewrite-on-import twin": "INCONCLUSIVE",
++   "reporting-vitest-setup claim": "INCONCLUSIVE",
++   "reporting-vitest-setup twin": "INCONCLUSIVE",
+  }
+
+ ❯ playBoth tests/acceptance/3088/plays.test.ts:28:147
+     26|   const r = await kit(['run', ...CASES.flatMap((id) => ['--case', id])…
+     27|   const want = Object.fromEntries(CASES.flatMap((id) => [[`${id} claim…
+     28|   expect(judgements(r.stdout), `each case's claim and twin plays to a …
+       |                                                                                                                                                   ^
+     29|   expect(r.stdout, `no play stops copying an install: ${shown(r)}`).no…
+     30|   expect(r.stdout.trim().split('\n').at(-1), `the kit's run ends PASS …
+ ❯ tests/acceptance/3088/plays.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/3088/worlds.test.ts > a world built from a case's installs gets the checkout's platform packages > #3088.fa98a351 a world whose case installs node_modules/rolldown holds every @rolldown/binding-* folder this checkout's node_modules holds, byte for byte, and none it doesn't
+AssertionError: the world's node_modules/@rolldown holds exactly the checkout's binding-* folders: expected [] to deeply equal [ 'binding-linux-arm64-gnu', …(1) ]
+
+- Expected
++ Received
+
+- [
+-   "binding-linux-arm64-gnu",
+-   "binding-linux-arm64-musl",
+- ]
++ []
+
+ ❯ tests/acceptance/3088/worlds.test.ts:46:138
+     44|     expect(error, 'makeWorld builds the world without an error').toBe(…
+     45|     expectSame(w!, 'node_modules/rolldown');
+     46|     expect(bindings(join(w!.repo, 'node_modules')), "the world's node_…
+       |                                                                                                                                          ^
+     47|     for (const name of held) expectSame(w!, `node_modules/@rolldown/${…
+     48|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed | 2 skipped (7)
+   Start at  14:29:33
+   Duration  1.26s (tests 85%, transform 10%, import 2%, setup 2%, worker 1%)
+
+EXIT 1
+
+## 2. macOS (arm64)
+
+uname: Darwin arm64; macOS 27.2.1; node v24.22.0
+uptime: 14:25  up 3 days, 18:51, 4 users, load averages: 92.85 98.97 75.84
+command: node node_modules/vitest/vitest.mjs run tests/acceptance/3088 --reporter=verbose
+
+ RUN  v5.0.5 <checkout>
+
+ ↓ tests/acceptance/3088/plays.test.ts > deep-conformance gate run plays reporting-vitest-setup and reporting-rewrite-on-import > #3088.bb512932 on Linux (Linux only), both cases play their claim and their twin, each to a verdict the case expects 1ms [Linux only (this is darwin arm64)]
+ × tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed refuses a case whose setup.installs names node_modules/fsevents (the lockfile marks it with os), naming the case and the install 1182ms
+   → the check prints a line naming the case reporting-vitest-setup and the install node_modules/fsevents: exit 0; stdout:
+PASS gate@1 corpus: 52 cases
+stderr (tail):
+: expected [] to not deeply equal []
+ × tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed refuses a case whose setup.installs names node_modules/@unrs/resolver-binding-wasm32-wasi (the lockfile marks it with cpu only), naming the case and the install 1567ms
+   → the check prints a line naming the case reporting-vitest-setup and the install node_modules/@unrs/resolver-binding-wasm32-wasi: exit 0; stdout:
+PASS gate@1 corpus: 52 cases
+stderr (tail):
+: expected [] to not deeply equal []
+ × tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed the shipped manifest names no lockfile-marked install and passes the check 94ms
+   → no case of the shipped manifest installs a package the lockfile marks with os or cpu: expected [ …(6) ] to deeply equal []
+ × tests/acceptance/3088/worlds.test.ts > a world built from a case's installs gets the checkout's platform packages > #3088.fa98a351 a world whose case installs node_modules/rolldown holds every @rolldown/binding-* folder this checkout's node_modules holds, byte for byte, and none it doesn't 345ms
+   → the world's node_modules/@rolldown holds exactly the checkout's binding-* folders: expected [] to deeply equal [ 'binding-darwin-arm64' ]
+ × tests/acceptance/3088/worlds.test.ts > a world built from a case's installs gets the checkout's platform packages > #3088.301242f7 on macOS arm64 (macOS arm64 only), each case's world gets @rolldown/binding-darwin-arm64, fsevents and lightningcss-darwin-arm64 though the manifest no longer lists them 2863ms
+   → reporting-vitest-setup's setup.installs no longer lists the macOS-only folders: expected [ …(3) ] to deeply equal []
+ ✓ tests/acceptance/3088/plays.test.ts > deep-conformance gate run plays reporting-vitest-setup and reporting-rewrite-on-import > #3088.301242f7 on macOS arm64 (macOS arm64 only), both cases still play their claim and their twin to expected verdicts 9555ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed refuses a case whose setup.installs names node_modules/fsevents (the lockfile marks it with os), naming the case and the install
+AssertionError: the check prints a line naming the case reporting-vitest-setup and the install node_modules/fsevents: exit 0; stdout:
+PASS gate@1 corpus: 52 cases
+stderr (tail):
+: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ refuses tests/acceptance/3088/check.test.ts:31:115
+     29|   const r = await kit(['check', '--corpus', corpusCopy(editedWith(inst…
+     30|   const naming = r.stdout.split('\n').filter((line) => line.includes(T…
+     31|   expect(naming, `the check prints a line naming the case ${TARGET} an…
+       |                                                                                                                   ^
+     32|   expect(r.code, `the check refuses the corpus (exit 1, FAIL): ${shown…
+     33|   expect(r.stdout.trim().split('\n').at(-1), `the check's judgement is…
+ ❯ tests/acceptance/3088/check.test.ts:42:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed refuses a case whose setup.installs names node_modules/@unrs/resolver-binding-wasm32-wasi (the lockfile marks it with cpu only), naming the case and the install
+AssertionError: the check prints a line naming the case reporting-vitest-setup and the install node_modules/@unrs/resolver-binding-wasm32-wasi: exit 0; stdout:
+PASS gate@1 corpus: 52 cases
+stderr (tail):
+: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ refuses tests/acceptance/3088/check.test.ts:31:115
+     29|   const r = await kit(['check', '--corpus', corpusCopy(editedWith(inst…
+     30|   const naming = r.stdout.split('\n').filter((line) => line.includes(T…
+     31|   expect(naming, `the check prints a line naming the case ${TARGET} an…
+       |                                                                                                                   ^
+     32|   expect(r.code, `the check refuses the corpus (exit 1, FAIL): ${shown…
+     33|   expect(r.stdout.trim().split('\n').at(-1), `the check's judgement is…
+ ❯ tests/acceptance/3088/check.test.ts:48:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/3088/check.test.ts > deep-conformance gate check refuses a platform package in a case's installs > #3088.be450fed the shipped manifest names no lockfile-marked install and passes the check
+AssertionError: no case of the shipped manifest installs a package the lockfile marks with os or cpu: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "reporting-vitest-setup: node_modules/@rolldown/binding-darwin-arm64",
++   "reporting-vitest-setup: node_modules/fsevents",
++   "reporting-vitest-setup: node_modules/lightningcss-darwin-arm64",
++   "reporting-rewrite-on-import: node_modules/@rolldown/binding-darwin-arm64",
++   "reporting-rewrite-on-import: node_modules/fsevents",
++   "reporting-rewrite-on-import: node_modules/lightningcss-darwin-arm64",
++ ]
+
+ ❯ tests/acceptance/3088/check.test.ts:53:108
+     51|   test(`${ID} the shipped manifest names no lockfile-marked install an…
+     52|     const marked = readManifest().cases.flatMap((c) => (c.setup?.insta…
+     53|     expect(marked, 'no case of the shipped manifest installs a package…
+       |                                                                                                            ^
+     54|     const r = await kit(['check'], KIT_MS);
+     55|     expect(r.code, `the shipped corpus passes the check (exit 0): ${sh…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/3088/worlds.test.ts > a world built from a case's installs gets the checkout's platform packages > #3088.fa98a351 a world whose case installs node_modules/rolldown holds every @rolldown/binding-* folder this checkout's node_modules holds, byte for byte, and none it doesn't
+AssertionError: the world's node_modules/@rolldown holds exactly the checkout's binding-* folders: expected [] to deeply equal [ 'binding-darwin-arm64' ]
+
+- Expected
++ Received
+
+- [
+-   "binding-darwin-arm64",
+- ]
++ []
+
+ ❯ tests/acceptance/3088/worlds.test.ts:46:138
+     44|     expect(error, 'makeWorld builds the world without an error').toBe(…
+     45|     expectSame(w!, 'node_modules/rolldown');
+     46|     expect(bindings(join(w!.repo, 'node_modules')), "the world's node_…
+       |                                                                                                                                          ^
+     47|     for (const name of held) expectSame(w!, `node_modules/@rolldown/${…
+     48|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/3088/worlds.test.ts > a world built from a case's installs gets the checkout's platform packages > #3088.301242f7 on macOS arm64 (macOS arm64 only), each case's world gets @rolldown/binding-darwin-arm64, fsevents and lightningcss-darwin-arm64 though the manifest no longer lists them
+AssertionError: reporting-vitest-setup's setup.installs no longer lists the macOS-only folders: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "node_modules/@rolldown/binding-darwin-arm64",
++   "node_modules/fsevents",
++   "node_modules/lightningcss-darwin-arm64",
++ ]
+
+ ❯ tests/acceptance/3088/worlds.test.ts:60:123
+     58|       expect(error, `makeWorld builds ${id}'s world without an error`)…
+     59|       for (const path of DARWIN) expectSame(w!, path);
+     60|       expect(installs.filter((p) => DARWIN.includes(p)), `${id}'s setu…
+       |                                                                                                                           ^
+     61|     }
+     62|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  5 failed | 1 passed | 1 skipped (7)
+   Start at  14:25:24
+   Duration  9.75s (tests 99%, transform 1%)
+
+EXIT 1
+
+## 3. Can the tests pass? (a hand check, not a twin or a proof-lane run)
+
+In each clone, gate-play.ts was edited by hand once (after the installs loop: for each install, copy every optional
+dependency the lockfile marks with os or cpu that the checkout holds) and the os/cpu-marked installs were taken out of
+the manifest; packages/conformance was rebuilt. Then plays.test.ts and worlds.test.ts ran:
+- Linux (Spark, load 42): fa98a351 passed, bb512932 passed (11.3 s), the two macOS tests skipped: 2 passed, 2 skipped.
+- macOS arm64: fa98a351, 301242f7 (world) and 301242f7 (plays) passed, bb512932 skipped: 3 passed, 1 skipped.
+The check tests weren't tried (no check was written by hand). The edits were reverted with git checkout and the
+package rebuilt; they aren't part of this suite.

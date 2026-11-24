@@ -1,0 +1,177 @@
+base: 0a875355b2c19e7705b1b248c9a20b85e24cbbcd
+date: Mon Nov 23 15:17:10 PST 2026
+machine: Mac18,1
+load: { 118.42 93.80 91.26 }
+command: node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/3108/
+
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/3108/ac2-installed-hub.test.ts (1 test | 1 failed) 9696ms
+   ❯ #3108 the installed tree holds what its hub reads when it loads (1)
+     × #3108.6d9cc561 the installed tree's deep hub run starts, and its deep doctor --json answers with doctor items 8769ms
+ ❯ tests/acceptance/3108/ac1-planted.test.ts (1 test | 1 failed) 681262ms
+   ❯ #3108 both AC3 tests of tests/acceptance/1720 pass (1)
+     × #3108.20c3092c planted.test.ts AC3: the planted pack is refused by the installed tree's hub and named by deep doctor, and the test passes 681136ms
+ ❯ tests/acceptance/3108/ac1-hub-listing.test.ts (1 test | 1 failed) 64283ms
+   ❯ #3108 both AC3 tests of tests/acceptance/1720 pass (1)
+     × #3108.20c3092c hub.test.ts AC3: each first-party pack is listed by deep_kinds list on a live hub, and the test passes 64215ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3108/ac1-hub-listing.test.ts > #3108 both AC3 tests of tests/acceptance/1720 pass > #3108.20c3092c hub.test.ts AC3: each first-party pack is listed by deep_kinds list on a live hub, and the test passes
+AssertionError: tests/acceptance/1720/hub.test.ts's AC3 "AC3 each folder of packs/ with a pack.json is listed by deep_kinds list with its version" runs and passes:
+  tests/acceptance/1720/hub.test.ts: "AC3 every first-party pack is listed by deep_kinds list on a live hub, with its version AC3 each folder of packs/ with a pack.json is listed by deep_kinds list with its version" failed: AssertionError: deep_kinds list answers every page through the hub and deep mcp: expected 'deep_kinds list: answered isError: un…' to be undefined
+    at <checkout>/tests/acceptance/1720/hub.test.ts:61:88
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20
+  tests/acceptance/1720/hub.test.ts: the child Vitest exited 1, not 0; it said:
+JSON report written to /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/dh3108-kQkZDP/report.json: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "tests/acceptance/1720/hub.test.ts: \"AC3 every first-party pack is listed by deep_kinds list on a live hub, with its version AC3 each folder of packs/ with a pack.json is listed by deep_kinds list with its version\" failed: AssertionError: deep_kinds list answers every page through the hub and deep mcp: expected 'deep_kinds list: answered isError: un…' to be undefined
++     at <checkout>/tests/acceptance/1720/hub.test.ts:61:88
++     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
++     at async file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20",
++   "tests/acceptance/1720/hub.test.ts: the child Vitest exited 1, not 0; it said:
++ JSON report written to /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/dh3108-kQkZDP/report.json",
++ ]
+
+ ❯ tests/acceptance/1720/hub.test.ts:61:88
+ ❯ tests/acceptance/3108/ac1-hub-listing.test.ts:17:95
+     15|   it('#3108.20c3092c hub.test.ts AC3: each first-party pack is listed …
+     16|     const failures = await namedTestFailures(FILE, TITLE, 18 * MINUTE);
+     17|     expect(failures, `${FILE}'s AC3 "${TITLE}" runs and passes:\n  ${f…
+       |                                                                                               ^
+     18|   }, 19 * MINUTE);
+     19| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/3108/ac1-planted.test.ts > #3108 both AC3 tests of tests/acceptance/1720 pass > #3108.20c3092c planted.test.ts AC3: the planted pack is refused by the installed tree's hub and named by deep doctor, and the test passes
+AssertionError: tests/acceptance/1720/planted.test.ts's AC3 "AC3 the planted pack is refused: absent from deep_kinds list beside the shipped packs, and named by deep doctor" runs and passes:
+  tests/acceptance/1720/planted.test.ts: "AC3 a planted pack folder whose recipe fails the pack check is absent from the listing and named by deep doctor AC3 the planted pack is refused: absent from deep_kinds list beside the shipped packs, and named by deep doctor" failed: Error: BLOCKED: the hub (/private/tmp/dh1720-p-fc9eYe/bin/deep) didn't start: deep hub: the core stopped: Error: ENOENT: no such file or directory, open '/private/tmp/dh1720-p-fc9eYe/lib/node_modules/deepbuild/contracts/setup-steps.json'
+    at readFileSync (node:fs:483:20)
+    at file:///private/tmp/dh1720-p-fc9eYe/lib/node_modules/deepbuild/packages/hub/dist/setup-steps.js:12:25
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+    at startHub (<checkout>/tests/acceptance/1720/helpers.ts:124:21)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at openSession (<checkout>/tests/acceptance/1720/helpers.ts:139:15)
+    at <checkout>/tests/acceptance/1720/planted.test.ts:39:18
+    at async file://<checkout>…
+  tests/acceptance/1720/planted.test.ts: the child Vitest exited 1, not 0; it said:
+JSON report written to /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/dh3108-0qBWLh/report.json: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "tests/acceptance/1720/planted.test.ts: \"AC3 a planted pack folder whose recipe fails the pack check is absent from the listing and named by deep doctor AC3 the planted pack is refused: absent from deep_kinds list beside the shipped packs, and named by deep doctor\" failed: Error: BLOCKED: the hub (/private/tmp/dh1720-p-fc9eYe/bin/deep) didn't start: deep hub: the core stopped: Error: ENOENT: no such file or directory, open '/private/tmp/dh1720-p-fc9eYe/lib/node_modules/deepbuild/contracts/setup-steps.json'
++     at readFileSync (node:fs:483:20)
++     at file:///private/tmp/dh1720-p-fc9eYe/lib/node_modules/deepbuild/packages/hub/dist/setup-steps.js:12:25
++     at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
++     at async node:internal/modules/esm/loader:647:26
++     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
++
++     at startHub (<checkout>/tests/acceptance/1720/helpers.ts:124:21)
++     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
++     at openSession (<checkout>/tests/acceptance/1720/helpers.ts:139:15)
++     at <checkout>/tests/acceptance/1720/planted.test.ts:39:18
++     at async file://<checkout>…",
++   "tests/acceptance/1720/planted.test.ts: the child Vitest exited 1, not 0; it said:
++ JSON report written to /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/dh3108-0qBWLh/report.json",
++ ]
+
+ ❯ startHub tests/acceptance/1720/helpers.ts:124:21
+    122|     child.on('exit', () => { clearTimeout(timer); resolve(false); });
+    123|   });
+    124|   if (!ready) throw Error(`BLOCKED: the hub (${deep}) didn't start: ${…
+       |                     ^
+    125|   return { pid: child.pid!, home, socket: join(t26.rootOf(home), 'hub.…
+    126| }
+ ❯ openSession tests/acceptance/1720/helpers.ts:139:15
+ ❯ tests/acceptance/1720/planted.test.ts:39:18
+ ❯ tests/acceptance/3108/ac1-planted.test.ts:17:95
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/3108/ac2-installed-hub.test.ts > #3108 the installed tree holds what its hub reads when it loads > #3108.6d9cc561 the installed tree's deep hub run starts, and its deep doctor --json answers with doctor items
+AssertionError: the installed tree's hub starts and its deep doctor answers:
+  the installed tree's hub (/private/tmp/dh1720-p-U9tMWs/bin/deep hub run) starts: BLOCKED: the hub (/private/tmp/dh1720-p-U9tMWs/bin/deep) didn't start: deep hub: the core stopped: Error: ENOENT: no such file or directory, open '/private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/contracts/setup-steps.json'
+    at readFileSync (node:fs:483:20)
+    at file:///private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/packages/hub/dist/setup-steps.js:12:25
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+  the installed tree's deep doctor --json answers with doctor items: none on stdout (exit 1); stdout ; stderr ^
+
+Error: ENOENT: no such file or directory, open '/private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/contracts/setup-steps.json'
+    at readFileSync (node:fs:483:20)
+    at file:///private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/packages/hub/dist/setup-steps.js:12:25
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async doctorCommand (file:///private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/packages/hub/dist/index.js:31:53)
+    at async file:///private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/packages/cli/dist/main.js:340:24 {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/contracts/setup-steps.json'
+}
+
+Node.js v24.22.0
+: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the installed tree's hub (/private/tmp/dh1720-p-U9tMWs/bin/deep hub run) starts: BLOCKED: the hub (/private/tmp/dh1720-p-U9tMWs/bin/deep) didn't start: deep hub: the core stopped: Error: ENOENT: no such file or directory, open '/private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/contracts/setup-steps.json'
++     at readFileSync (node:fs:483:20)
++     at file:///private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/packages/hub/dist/setup-steps.js:12:25
++     at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
++     at async node:internal/modules/esm/loader:647:26
++     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
++ ",
++   "the installed tree's deep doctor --json answers with doctor items: none on stdout (exit 1); stdout ; stderr ^
++
++ Error: ENOENT: no such file or directory, open '/private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/contracts/setup-steps.json'
++     at readFileSync (node:fs:483:20)
++     at file:///private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/packages/hub/dist/setup-steps.js:12:25
++     at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
++     at async node:internal/modules/esm/loader:647:26
++     at async doctorCommand (file:///private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/packages/hub/dist/index.js:31:53)
++     at async file:///private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/packages/cli/dist/main.js:340:24 {
++   errno: -2,
++   code: 'ENOENT',
++   syscall: 'open',
++   path: '/private/tmp/dh1720-p-U9tMWs/lib/node_modules/deepbuild/contracts/setup-steps.json'
++ }
++
++ Node.js v24.22.0
++ ",
++ ]
+
+ ❯ tests/acceptance/3108/ac2-installed-hub.test.ts:52:114
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  3 failed (3)
+   Start at  15:17:11
+   Duration  756.60s (tests 100%)
+
+exit: 1
+end: Mon Nov 23 15:29:48 PST 2026; load: { 76.63 92.67 94.54 }
+RUN-DONE
