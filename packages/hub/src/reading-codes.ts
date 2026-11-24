@@ -46,11 +46,13 @@ const LEGACY: readonly [(t: string) => string, ReadingCode][] = [
 
 /**
  * The SQL for the code of the session.reading row `alias`: its own code, or for a reading recorded with none, the code
- * its words meant (LEGACY). The planted `legacy-readings-unread` reads a reading with no code as no reading.
+ * its words meant (LEGACY). The planted `legacy-readings-unread` and `legacy-table-skipped` (tests/acceptance/1456 and
+ * its redraft) skip LEGACY, so a reading with no code reads as no reading.
  */
 export function readingCode(alias: string): string {
   const own = `json_extract(${alias}.data, '$.code')`;
-  if (activePlant() === 'legacy-readings-unread') return own;
+  const plant = activePlant();
+  if (plant === 'legacy-readings-unread' || plant === 'legacy-table-skipped') return own;
   const t = `json_extract(${alias}.data, '$.reading')`;
   return `COALESCE(${own}, CASE ${LEGACY.map(([when, code]) => `WHEN ${when(t)} THEN '${code}'`).join(' ')} ELSE 'other' END)`;
 }
