@@ -1555,6 +1555,16 @@
       "initialReason": "Issue #1425 first measurement: at the merge base a panel imports the toolkit itself and loads with no module check. One process loads each of the 12 panels in crates/deep-app/panels through `deep-panel-host run`, which runs the app's loader (the module check, then @deepbuild/panel written where gpui-shell resolves it), and updates each 20 times; p50 includes Node's and the binary's start. The issue's 4 ms per update and 1 ms the check may add to a load stay in tests/acceptance/1425/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "panel-rules-500",
+      "command": [
+        "node",
+        "benchmarks/panel-rules.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #3233 first measurement: at the merge base panel@1 has no rule on reading or reach, so the rules' time is new. One `deep-app panel-bench` run of a fresh panel host on a 500-node panel (249 rows, each a named press that takes focus, its text #595959 on the root's #ffffff) times the three rules on each of 100 updates' trees, in the app; p50 includes Node's and both binaries' start. The issue's 1 ms the rules may add to the check of a 500-node update stays in tests/acceptance/3233/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "media-soak",
       "command": [
         "node",

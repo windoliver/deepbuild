@@ -22,6 +22,8 @@ export async function panelKit(panel: string): Promise<PanelKit> {
   const copy = mkdtempSync(join(tmpdir(), 'deep-panel-'));
   try {
     cpSync(panel, copy, { recursive: true });
+    // The record of an earlier install is the installer's to write, never a package's own (#3233).
+    rmSync(join(copy, 'panel-kit.json'), { force: true });
     const out = await new Promise<string>((done) => {
       execFile(bin, ['--panel-kit', copy], { timeout: KIT_MS }, (_, stdout) => done(stdout));
     });
