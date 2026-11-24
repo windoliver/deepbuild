@@ -95,6 +95,24 @@ export async function listSource(source: string, file: string, joiner: string, h
   return result;
 }
 
+/** Whether a Vitest file's source focuses a test or suite of its own, by a call at its top or in a suite's body (`.only`, `{ only: true }`): Vitest then runs that file's focused tests alone. A focus set any other way, as in a loop, isn't seen. */
+export async function focusesTests(source: string, file: string): Promise<boolean> {
+  if (!/\.only\b|\bonly\s*:/.test(source)) return false;
+  const ts = (loaded ??= (await import('typescript')).default);
+  const only = (p: import('typescript').ObjectLiteralElementLike): boolean =>
+    ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === 'only' && p.initializer.kind === ts.SyntaxKind.TrueKeyword;
+  const walk = (statements: readonly Statement[]): boolean => statements.some((s) => {
+    if (!ts.isExpressionStatement(s) || !ts.isCallExpression(s.expression)) return false;
+    const { expression, arguments: given } = s.expression;
+    const words = chain(ts, expression);
+    const body = [...given].reverse().find((a) => ts.isArrowFunction(a) || ts.isFunctionExpression(a)) as FunctionLikeDeclaration | undefined;
+    if (!words || !body?.body) return false;
+    if (words.slice(1).includes('only') || given.some((a) => ts.isObjectLiteralExpression(a) && a.properties.some(only))) return true;
+    return SUITES.has(words[0]!) && ts.isBlock(body.body) && walk(body.body.statements);
+  });
+  return walk(ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false).statements);
+}
+
 /** A run's name for a listed test: its own, or one of its parametrized cases (pytest's `test_x[1]`). */
 const runs = (listed: Listed, test: string): boolean => test === (listed.names?.at(-1) ?? listed.test) || test.startsWith(`${listed.test}[`);
 /** A test name pattern: node:test's `/source/flags` form, else the whole value as the source; null when it isn't one. */

@@ -352,7 +352,10 @@ export type Plant =
   | 'reply-cap-64kb' | 'pager-drops-edge-row' | 'refusal-schema-12000' | 'unknown-client-64kb'
   // #1576's: a sessions.read that returns every row, a page sent a frame more for each event, and an inbox.read that
   // reads each ask with a query of its own.
-  | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row';
+  | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row'
+  // #2060's: a key with no reading of the programs its check's command names, one that holds the run's own link to each,
+  // one whose base run's holds none, and a reader that skips a program it can't find.
+  | 'key-leaves-out-programs' | 'key-holds-program-link' | 'program-readings-head-only' | 'skips-absent-program';
 const PLANTS: readonly string[] = [
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
@@ -485,6 +488,7 @@ const PLANTS: readonly string[] = [
   'canvas-world-built-once',
   'reply-cap-64kb', 'pager-drops-edge-row', 'refusal-schema-12000', 'unknown-client-64kb',
   'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',
+  'key-leaves-out-programs', 'key-holds-program-link', 'program-readings-head-only', 'skips-absent-program',
   'unseen-reads-as-card', 'folds-seen-unseen', 'one-median-per-run',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {

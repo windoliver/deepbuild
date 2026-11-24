@@ -1,0 +1,32 @@
+// A (#350 AC9), first-party, loaded from the release in the hub: it uses `ext.b.feed@1` and, when its report runs, reads
+// it back to back, keeping each read's outcome: `ok` for B's value, `missing` once the use reads missing, or
+// `error: <text>` for a read that failed any other way. It writes probe.json's `reading` file at its 100th read, and ends
+// 50 reads after the test wrote probe.json's `removed` file, or at `ms`, which only bounds it.
+// Its manifest's `uses` row, a required use with the feed's schema and digest, is written by the test.
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+
+const probe: { reading: string; removed: string; ms: number } = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export default function (deep: any): void {
+  deep.use('ext.b.feed@1');
+  deep.registerCheck('ext.a.report', async () => {
+    const outcomes: string[] = [];
+    const end = Date.now() + probe.ms;
+    for (let after = 0; after < 50 && Date.now() < end;) {
+      if (existsSync(probe.removed)) after++;
+      try {
+        const read = await deep.read('ext.b.feed@1');
+        outcomes.push(read?.missing === true ? 'missing' : typeof read?.value?.n === 'number' ? 'ok' : `error: no value in ${JSON.stringify(read)}`);
+      } catch (e) {
+        outcomes.push(`error: ${String((e as Error)?.message ?? e)}`);
+      }
+      if (outcomes.length === 100) writeFileSync(probe.reading, '');
+      await sleep(1);
+    }
+    return {
+      outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+      failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ outcomes }) }],
+    };
+  });
+}

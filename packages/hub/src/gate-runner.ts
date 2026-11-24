@@ -19,7 +19,7 @@ import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { moreRuns, type BaseResult, type Result, type RunOutcome, type Verdict } from '@deepbuild/verdicts';
 import { plantedKeeps, type Plant } from './plant.js';
 import { changesOf, type Changes } from './claim-changes.js';
-import { contents, EMPTY, installsOf, keptRecord, keyId, keyPaths, namesOf, plain, repoOf, SharedRuns, stemOf, withheld, type KeptRow, type KeyFacts, type KeyRows, type Source } from './shared-runs.js';
+import { contents, EMPTY, installsOf, keptRecord, keyId, keyPaths, keyRows, missingRun, namesOf, plain, repoOf, SharedRuns, stemOf, withheld, type KeptRow, type KeyFacts, type Source } from './shared-runs.js';
 import type { StackWant } from './stacks.js';
 import type { Used } from '@deepbuild/supervisor';
 import { admitOn, CLASS_MB, cleanPeak, CLEAN_RUNS, KeyHistory, type Admission } from './admission.js';
@@ -95,6 +95,8 @@ export interface GateOptions {
   startsAtClaim?(folder: string, session: string, worktree: string): Promise<void>;
   /** Whether a checkout's done.yaml has an environment, so a journey there runs on its warm stack (#580). */
   stacked?(folder: string): boolean;
+  /** Each program a check's command names, with its reading (#2060); a runner without it reads none. */
+  programs?(command: string, checkout: string, read: Map<string, string>): Promise<[string, string][]>;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
   /** CPU slots free now. */
@@ -145,15 +147,8 @@ export const DEPENDENCIES = ['node_modules', '.venv'];
 const stackOf = (c: Pick<Claim, 'session' | 'cwd'>, check: ClaimCheck, more: Partial<Pick<StackWant, 'base' | 'fresh'>> = {}): { stack?: StackWant } => (check.depth === 'journey' ? { stack: { session: c.session, worktree: c.cwd, on_base: check.on_base, ...more } } : {});
 /** The entry that stands for a claim's definition while it hasn't locked (#322): pending, or BLOCKED by a cause outside the code. */
 const DEFINITION = 'definition';
-const EMPTY_SHA = sha256Hex(new Uint8Array());
 /** The fault the kit gate@1 plays on every verdict this hub makes (#33): DEEP_HUB_TEST_JUDGE_FAULT, which only the kit sets; the server refuses a name it doesn't know. */
 const JUDGE_FAULT = process.env.DEEP_HUB_TEST_JUDGE_FAULT as JudgeFault | undefined || undefined;
-/** The record of a run that never started for a cause outside the code: BLOCKED, naming the cause, yours to clear. */
-const missingRun = (run: string, cause: string): RecordedRun => ({
-  run, outcome: 'missing', testsRun: 0, failures: [{ test: DEFINITION, file: '', line: 0, stack: null, assertion: false, message: cause }], evidence: [], read: [], mask: null, exit: null,
-  output: { stdout: '', stderr: '', sha256: { stdout: EMPTY_SHA, stderr: EMPTY_SHA } }, attempts: [], seeded: [], contract: null,
-});
-
 /**
  * A claim's check on one snapshot: its runs, its run on the merge base and the stand-in that run had, its lane, and whether a newer claim outdated it;
  * the key its result is read from (#1018), the base run's source when another claim's, its held-out variants' runs, and whether it waits on another
@@ -177,7 +172,7 @@ const LOAD_WAIT_MS = 30 * 60_000;
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
 /** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
 interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
-interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
+interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
 /** A base run that ended as a run: what a fix is proven by, on its key as on its claim. */
@@ -229,7 +224,7 @@ export class GateRunner {
   private readonly recent = new Set<string>();
   /** Every claim's results by key, across sessions (#1018); and each kept run's key. */
   private readonly shared = new SharedRuns({
-    read: this.keyRows(),
+    read: keyRows((sql, params) => this.o.raw(sql, params)),
     used: (id) => [...this.claims.values()].some((list) => list.some((c) => [...c.entries.values()].some((e) => e.group === id))),
     gone: (id, runs) => { this.unread.delete(id); for (const { run } of runs) { this.keyOf.delete(run); this.unkeep(run); } },
     unreadable: (id) => { this.unread.add(id); },
@@ -240,7 +235,7 @@ export class GateRunner {
   /** The keys a restart can't read whole: one of their kept runs lost in the record what makes its verdict, so none carries. */
   private readonly unread = new Set<string>();
   /** Each key's clean runs' peaks (#3220), every keyed run's, one that never carries among them. */
-  private readonly keys = new KeyHistory(this.keyRows());
+  private readonly keys = new KeyHistory(keyRows((sql, params) => this.o.raw(sql, params)));
   /** The runs going on a key, by the key (a base run's) or by stem and snapshot (a head run's): a run on an equal key waits for it. */
   private readonly going = new Map<string, { done: Promise<void>; session: string }>();
   /** Each worktree's repo, git's common folder, read once: it never changes under a worktree. */
@@ -251,15 +246,6 @@ export class GateRunner {
   private readonly pinned = new Map<string, { run: string; outcome: string; base: string | null; baseFrom?: Source }>();
   constructor(private readonly o: GateOptions) {}
 
-  /** The keys' runs and path sets in the record (#1866): those of a key or a stem that left memory. */
-  private keyRows(): KeyRows {
-    return {
-      key: async (id) => ((await this.o.raw(`SELECT data FROM events INDEXED BY events_run_key WHERE kind = 'run.finished' AND json_extract(data, '$.key.id') = ? ORDER BY log_pos`, [id])) as { data?: string }[])
-        .flatMap((r) => (typeof r.data === 'string' ? [JSON.parse(r.data) as KeptRow] : [])),
-      paths: async (stem) => ((await this.o.raw(`SELECT DISTINCT json_extract(data, '$.key.paths') AS paths FROM events INDEXED BY events_run_stem WHERE kind = 'run.finished' AND json_extract(data, '$.key.stem') = ?`, [stem])) as { paths?: string }[])
-        .flatMap((r) => (typeof r.paths === 'string' ? [JSON.parse(r.paths) as string[]] : [])),
-    };
-  }
   /** Whether a claim in memory reads a run's record, or a check pinned to its commit does. */
   private reads(run: string): boolean {
     for (const list of this.claims.values()) for (const c of list) for (const e of c.entries.values()) if (runsIn(e).includes(run)) return true;
@@ -367,14 +353,24 @@ export class GateRunner {
     if (!repo) this.repos.set(cwd, repo = repoOf(cwd));
     return repo;
   }
-  /** The stem of a check's key on a claim: on the merge base when `base` names it (#1018). */
-  private async stemOf(c: Claim, e: Entry, base: string | null): Promise<string> {
+  /** The programs a check's command names in `dir`, each with the reading the claim's keys hold of it (#2060), or with what a planted key holds. */
+  private async programsOf(c: Claim, e: Entry, base: string | null, dir: string): Promise<[string, string][]> {
+    const programs = await this.o.programs?.(e.check.command, dir, c.programs) ?? [];
+    const plant = this.o.plant;
+    if (plant === 'key-leaves-out-programs' || (plant === 'program-readings-head-only' && base !== null)) return [];
+    if (plant === 'key-holds-program-link') return programs.map(([name, reading]) => [name, `${reading} ${c.claim}/bin/${name}`]);
+    // The planted reader leaves a program it can't find at whatever a claim last read of it.
+    const skipped = (name: string): string | undefined => [...this.claims.values()].flat().map((x) => x.programs.get(name)).find((r) => r !== undefined && r !== 'absent');
+    return plant === 'skips-absent-program' ? programs.map(([name, reading]) => [name, reading === 'absent' ? skipped(name) ?? reading : reading]) : programs;
+  }
+  /** The stem of a check's key on a claim, in its checkout `dir`: on the merge base when `base` names it (#1018). */
+  private async stemOf(c: Claim, e: Entry, base: string | null, dir: string): Promise<string> {
     // A base run's tree is the merge base's with the check's own files, so the snapshot's names say nothing of it. A
     // workspace's check reads its state (#67): a base run the reading pinned at the lock, a head run the one now.
     const state = base === null ? c.state?.files : c.state?.pinned;
     return stemOf({
       repo: await c.repo, check: e.check.check, approved: e.check.approved, command: e.check.command, deadline_ms: e.check.deadline_ms ?? null, held_out: e.check.held_out ?? null, references: e.check.references ?? null,
-      installs: await c.installs, names: base === null ? await c.names : null, base, ...(state ? { state } : {}),
+      installs: await c.installs, programs: await this.programsOf(c, e, base, dir), names: base === null ? await c.names : null, base, ...(state ? { state } : {}),
       ...(this.o.plant === 'keys-runs-by-session' ? { session: c.session } : {}),
     });
   }
@@ -406,7 +402,7 @@ export class GateRunner {
     // #1331's planted lander runs every check again on a moved head, so nothing carries across its judgements.
     // Nor does a check with a spent variant (#3229): which of a key's runs were on it isn't known of another hub's, so it runs its own.
     if (this.onStack(e, dir) || this.spentOf(c, e).length || this.o.plant === 'empty-commit-run-alone' || (this.o.plant === 'lander-reruns-all' && c.session.startsWith('land'))) return null;
-    const stem = await this.stemOf(c, e, null);
+    const stem = await this.stemOf(c, e, null, dir);
     for (const g of await this.shared.find(e.check.check, stem, dir, this.take)) {
       if (this.unread.has(g.id)) continue;
       await this.prune(g.id);
@@ -484,7 +480,7 @@ export class GateRunner {
    * gets one run a claim, its count filled by the claims on its key (#1018).
    */
   private async runOwn(c: Claim, e: Entry, dir: string, lane: 'fast' | 'slow', expected: number | null, ran?: (run: string) => void): Promise<void> {
-    const stem = await this.stemOf(c, e, null);
+    const stem = await this.stemOf(c, e, null, dir);
     const key: RunKey = { check: e.check.check, stem, dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: false };
     // A timing check's result is the machine's load's as much as its files', so its runs land on no key and never carry (#352).
     const shared = !this.onStack(e, dir) && !e.check.timing;
@@ -703,7 +699,7 @@ export class GateRunner {
   /** A check whose run couldn't start, its snapshot's checkout or its start refused: one missing run, naming why (#31). */
   private cantStart(e: Entry, error: unknown): void {
     const run = `run:${ulid(this.o.now())}`;
-    this.records.set(run, missingRun(run, `${e.check.check} couldn't start: ${error instanceof Error ? error.message : String(error)}`));
+    this.records.set(run, missingRun(run, DEFINITION, `${e.check.check} couldn't start: ${error instanceof Error ? error.message : String(error)}`));
     e.runs.push(run);
   }
   /** The commit a claim's checks run on: its snapshot, once taken (#1537: what its review reads the diff to). */
@@ -742,7 +738,8 @@ export class GateRunner {
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();
     // What its keys' stems name (#1018), read beside the snapshot and checkout where it can be: its repo, once per
-    // worktree; the installs its checkouts clone from the worktree; and the names of the files its checkout holds.
+    // worktree; the installs its checkouts clone from the worktree; the names of the files its checkout holds; and the
+    // readings of the programs its checks' commands name, each taken once when first asked for (#2060).
     const repo = this.repoOf(r.cwd);
     let installs: Promise<string> | undefined;
     // Read beside the snapshot, from the same worktree: whose checks count turns on what the claim changed (#33).
@@ -797,9 +794,9 @@ export class GateRunner {
     // At the lock, the definition's checks join the claim's early run (#322): the claim is the one the spec's checks ran for.
     const joined = r.joins ? this.claimOf(r.claim) : undefined;
     const held = checkout === null ? null : Promise.resolve({ dir: checkout, commit: snapshot });
-    const facts = installs && checkout !== null ? { installs, names: namesOf(checkout) } : null;
+    const facts = installs && checkout !== null ? { installs, names: namesOf(checkout), programs: new Map<string, string>() } : null;
     const claim: Claim = joined ?? { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, tree, checkout: held, requirements: r.requirements, entries: new Map(),
-      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), state: r.state, changes: listed ?? await changes };
+      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), programs: facts?.programs ?? new Map(), state: r.state, changes: listed ?? await changes };
     const last = older.at(-1)?.tree;
     const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
     claim.ready = false;
@@ -823,7 +820,7 @@ export class GateRunner {
       if (definition === 'pending' || definition === 'waiting') claim.entries.set(DEFINITION, { check, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], base: null, outcome: null, running: true, stale: false });
       else {
         const run = `run:${DEFINITION}:${r.claim.replace(/^claim:/, '')}`;
-        this.records.set(run, missingRun(run, definition.blocked));
+        this.records.set(run, missingRun(run, DEFINITION, definition.blocked));
         claim.entries.set(DEFINITION, { check, claim: r.claim, commit: snapshot, lane: 'fast', runs: [run], base: null, outcome: 'missing', running: false, stale: false });
       }
     }
@@ -862,7 +859,7 @@ export class GateRunner {
           run, check: c.check, outcome, tests_run: 0, passed: 0, runs: 0, evidence: [], assertion: null, expected: null, actual: null, step: null,
           points_to: null, findings: [outcome === 'missing' ? `${cause}, owner you` : cause], environment: `${process.platform}-${process.arch}`,
         } });
-        const record = missingRun(run, cause);
+        const record = missingRun(run, DEFINITION, cause);
         this.records.set(run, { ...record, outcome, failures: record.failures.map((f) => ({ ...f, test: outcome === 'failed' ? `${c.check}: ${cause}` : c.check })) });
         claim.entries.set(c.check, { check: c, claim: r.claim, commit, lane: 'slow', runs: [run], base: null, outcome, running: false, stale: false });
         continue;
@@ -994,7 +991,7 @@ export class GateRunner {
     try {
       const { dir } = await this.checkoutOf(c);
       shared = !this.onStack(e, dir);
-      const stem = await this.stemOf(c, e, c.base);
+      const stem = await this.stemOf(c, e, c.base, dir);
       const paths = [...new Set(this.ownOf(e))].sort();
       key = { check, stem, dir, claim: c.claim, session: sessionOf(c.session), base: true, withheld: false, id: keyId(stem, paths, await contents(dir, paths)), paths };
     } catch {

@@ -602,6 +602,11 @@ alone.push('tests/acceptance/1962/');
 alone.push('tests/acceptance/1802/');
 // #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
 alone.push('tests/acceptance/139-redraft-1802/');
+// #139's prices file and #350's AC9 redraft are kept by hand until the owner swaps them: their packages state a digest on
+// a use beside a provider's row that keeps none, which #2062 refuses, so no program passes both; their blind redrafts,
+// 139-redraft-2062/ and 350-redraft-2062/, run in their place, the first alone as #139's suite does.
+byHand.push('tests/acceptance/139/prices.test.ts', 'tests/acceptance/350/ac9-redraft/ac9.test.ts');
+alone.push('tests/acceptance/139-redraft-2062/');
 // #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s
 // six-stem render against the reference Mac.
 alone.push('tests/acceptance/154/', 'tests/acceptance/154-oracle/');
@@ -1553,3 +1558,7 @@ timed.push('tests/acceptance/1866/budgets.long.test.ts');
 // 3295-redraft-fae86cca/ (a planted product twin for fae86cca) and 3295-redraft-byhand/ (63a9095d and 2acd3e71).
 Object.assign(redrafted, { 'tests/acceptance/3295/late-close.test.mjs': 'tests/acceptance/3295-redraft-fae86cca/' });
 byHand.push('tests/acceptance/3295/late-close.test.mjs');
+
+// #3257's folder (blind) runs alone by its lane.json: its files build deep-gpu, the merge base's too, and draw on Metal.
+// ac7-budget.test.ts times the mask map's chain against the merge base's on the reference Mac.
+timed.push('tests/acceptance/3257/ac7-budget.test.ts');

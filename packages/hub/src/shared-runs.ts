@@ -1,8 +1,8 @@
 // Results shared across sessions (#1018; design: Pinned to a commit): a run's key names everything its result depends
 // on, so any claim in the same repo on the same host whose key is equal reads that run as carried, whichever session
 // made it. The key is a stem (the repo, the host, the check's approved bytes, command, deadline, held-out variants and referenced outputs,
-// the environment's installs and Node, the names of the files the snapshot holds, and for a base run the merge base
-// instead of those names) and the contents of the files it reads: the files its runs read, or for a base run its own
+// the environment's installs and Node, the programs its command names (#2060), the names of the files the snapshot holds,
+// and for a base run the merge base instead of those names) and the contents of the files it reads: the files its runs read, or for a base run its own
 // files. A key's runs come from every claim that ran it, each counted once.
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -27,6 +27,15 @@ interface Group { id: string; key: string; stem: string; paths: string[]; runs: 
 export interface KeptRow { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts; used?: Used }
 /** What the record holds of the keys (#1866): a key's runs, oldest first, and the path sets the keys under a stem hold. */
 export interface KeyRows { key(id: string): Promise<KeptRow[]>; paths(stem: string): Promise<string[][]> }
+/** Those, read from the record by `raw`: the keys' runs and path sets of a key or a stem that left memory. */
+export function keyRows(raw: (sql: string, params: string[]) => Promise<unknown[]>): KeyRows {
+  return {
+    key: async (id) => ((await raw(`SELECT data FROM events INDEXED BY events_run_key WHERE kind = 'run.finished' AND json_extract(data, '$.key.id') = ? ORDER BY log_pos`, [id])) as { data?: string }[])
+      .flatMap((r) => (typeof r.data === 'string' ? [JSON.parse(r.data) as KeptRow] : [])),
+    paths: async (stem) => ((await raw(`SELECT DISTINCT json_extract(data, '$.key.paths') AS paths FROM events INDEXED BY events_run_stem WHERE kind = 'run.finished' AND json_extract(data, '$.key.stem') = ?`, [stem])) as { paths?: string }[])
+      .flatMap((r) => (typeof r.paths === 'string' ? [JSON.parse(r.paths) as string[]] : [])),
+  };
+}
 /** Folders of installed dependencies: the environment the key's stem names, never files hashed one by one. */
 const INSTALLS = ['node_modules', '.venv'];
 
@@ -86,8 +95,8 @@ export async function namesOf(dir: string): Promise<string> {
   return sha(out.sort().join('\0'));
 }
 /** The stem of a key: everything but the files' contents, and a workspace's state reading (#67) where a claim has one. */
-export const stemOf = (facts: { repo: string; check: string; approved: string | null; command: string; deadline_ms: number | null; held_out: unknown; references?: unknown; installs: string; names: string | null; base: string | null; session?: string; state?: Record<string, string> }): string =>
-  sha(JSON.stringify([facts.repo, hostname(), facts.check, facts.approved, facts.command, facts.deadline_ms, facts.held_out ?? null, facts.references ?? null, facts.installs, facts.names, facts.base, facts.session ?? null, ...facts.state ? [facts.state] : []]));
+export const stemOf = (facts: { repo: string; check: string; approved: string | null; command: string; deadline_ms: number | null; held_out: unknown; references?: unknown; installs: string; programs: [string, string][]; names: string | null; base: string | null; session?: string; state?: Record<string, string> }): string =>
+  sha(JSON.stringify([facts.repo, hostname(), facts.check, facts.approved, facts.command, facts.deadline_ms, facts.held_out ?? null, facts.references ?? null, facts.installs, facts.programs, facts.names, facts.base, facts.session ?? null, ...facts.state ? [facts.state] : []]));
 /** How run.finished names a failure among its findings, at most FINDINGS of them, and how a restarted hub reads one back. */
 export const FINDINGS = 20;
 const FINDING = /^(.*) \(([^()]*):(\d+)\): ([\s\S]*)$/;
@@ -199,6 +208,11 @@ export class SharedRuns {
   }
 }
 
+/** The record of a run that never started for a cause outside the code: BLOCKED, naming the cause, yours to clear. */
+export const missingRun = (run: string, test: string, cause: string): RecordedRun => ({
+  run, outcome: 'missing', testsRun: 0, failures: [{ test, file: '', line: 0, stack: null, assertion: false, message: cause }], evidence: [], read: [], mask: null, exit: null,
+  output: { stdout: '', stderr: '', sha256: { stdout: EMPTY, stderr: EMPTY } }, attempts: [], seeded: [], contract: null,
+});
 /**
  * A kept run's record as run.finished holds it, for a claim that reads it after a restart: its outcome, counts, the
  * failures its findings name and the digests of its output.
