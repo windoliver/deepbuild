@@ -30,6 +30,7 @@ export function createCore(
   const providers: CoreProviders = {
     checks: {
       command: async (...args) => (await import('@deepbuild/checks-command')).runCommandCheck(...args),
+      programs: async (...args) => (await import('@deepbuild/checks-command')).programReadings(...args),
       kinds: (o) => {
         let kinds: Promise<import('./checks-port.js').CheckKinds> | undefined;
         return () => (kinds ??= openKinds(o));
