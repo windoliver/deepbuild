@@ -328,8 +328,9 @@ pub(crate) struct RowDrawn {
     cut: Option<String>,
     /// The title reads right to left from its first strong character, so from the slot's right (#1808).
     rtl: bool,
-    /// The time is drawn: beside a long state word at the list's narrowest it leaves what's drawn (#1808).
-    timed: bool,
+    /// The time is drawn: beside a long state word at the list's narrowest a session row's leaves what's drawn
+    /// (#1808); an ask row's stays (#3282).
+    pub(crate) timed: bool,
     /// #1808's planted row draws its title whole, over the slots to its right.
     under: bool,
 }
@@ -444,8 +445,9 @@ impl RowDrawn {
         // state word; the slots keep their sides (#1808).
         let rtl = unicode_bidi::get_base_direction(title.as_str()) == unicode_bidi::Direction::Rtl;
         // Once the list's width is known, the title's room is what the row's other slots leave it (#1808). Beside a long
-        // state word at the list's narrowest the time leaves what's drawn, its slot kept in the tree with no width, so
-        // the title keeps at least 12 characters.
+        // state word at the list's narrowest a session row's time leaves what's drawn, its slot kept in the tree with no
+        // width, so the title keeps at least 12 characters. An ask row's time is when its recommended answer applies, so
+        // it stays and the title takes what's left (#3282).
         let wide = |text: &str, weight| drawn_width(window, text, weight);
         let roomy = shape.width.map(|width| {
             let flag = row.flag.as_ref().map_or(px(0.), |flag| {
@@ -457,7 +459,7 @@ impl RowDrawn {
             if title.chars().count() > TITLE_LEAST {
                 least.push('…');
             }
-            let timed = width - fixed - time >= wide(&least, weight);
+            let timed = ask || width - fixed - time >= wide(&least, weight);
             (timed, width - fixed - if timed { time } else { px(0.) })
         });
         let timed = roomy.is_none_or(|(timed, _)| timed);
