@@ -6,6 +6,7 @@
 // one device bound in (suite.ts).
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readlinkSync, statSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { HELPER } from './procs.js';
 import { markerOf, real } from './seatbelt.js';
 import type { Grant, Launch, SandboxBackend } from './types.js';
@@ -55,6 +56,32 @@ function rootBinds(): string[] {
 }
 
 /**
+ * A granted socket under a folder the sandbox has its own of (/run, /dev), put back by itself: the socket file bound
+ * at its real path, and each link on the way to it that lies in such a folder made again, so a program reaches it by
+ * the path it was granted, as /var/run/docker.sock leads to /run/docker.sock, or /run/docker.sock to podman's socket.
+ * Only a socket is bound, never a folder; the rest of the folder stays the sandbox's own.
+ */
+function socketMounts(granted: string): string[] {
+  const args: string[] = [];
+  let path = granted;
+  for (let hops = 0; hops < 40; hops++) {
+    const at = join(real(dirname(path)), basename(path));
+    const own = OWN.has(at.split('/')[1]!);
+    let link: string | undefined;
+    try { link = readlinkSync(at); } catch { /* not a link */ }
+    if (link === undefined) {
+      let socket = false;
+      try { socket = statSync(at).isSocket(); } catch { /* gone */ }
+      if (own && socket) args.push('--bind-try', at, at);
+      return args;
+    }
+    if (own) args.push('--symlink', link, at);
+    path = resolve(dirname(at), link);
+  }
+  return args;
+}
+
+/**
  * The bwrap arguments that confine one process, and its children, to `grant`, with `cwd` readable, and the helper's
  * flags, which travel in the DEEP_CONFINE variable with the program's own arguments: neither bwrap's nor the helper's
  * command line then repeats the program's, which anything counting a program's processes by its command line would count.
@@ -68,13 +95,7 @@ function bwrapArgs(run: string, cwd: string, grant: Grant, guards: readonly Guar
   for (const h of grant.listen ?? []) flags.push('--listen', port(h));
   if (grant.run_as_you) flags.push('--as-you');
   const mounts: string[] = [];
-  // A granted socket under a folder the sandbox has its own of (/run) is bound in by itself, at its real path, so a
-  // program reaches it by that path or by one that leads there, as /var/run/docker.sock leads to /run/docker.sock;
-  // the rest of the folder stays the sandbox's own.
-  for (const s of grant.sockets ?? []) {
-    const r = real(s);
-    if (OWN.has(r.split('/')[1]!) && existsSync(r)) mounts.push('--bind', r, r);
-  }
+  for (const s of grant.sockets ?? []) mounts.push(...socketMounts(s));
   for (const g of guards) {
     // Kept whole and read-only by the mount, whatever the grant: a guarded path is never written, and its parent
     // folders can't be moved aside, since the helper refuses to move anything that carries a guard.
