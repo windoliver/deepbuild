@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/gate-runner.ts": [
+    {
+      "find": [
+        "  return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts };"
+      ],
+      "wrong": [
+        "  return { changed: [...new Set([...diff, ...others, ...tracked.filter((path) => /[^\\x20-\\x7e]|[\"\\\\\\t]/.test(path))])].sort(), configs, scripts };"
+      ]
+    }
+  ]
+}
