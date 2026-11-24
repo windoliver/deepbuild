@@ -23,3 +23,45 @@
 
 Unit tests: `cargo test -p deep-canvas -p deep-canvas-input -p deep-canvas-marks -p deep-play --lib` pass (354, 29, 177 with
 `data::holds`'s range walk, 4). Not run: `node scripts/affected.mjs` and neighbouring suites (#539's and #1045's files).
+
+## Second pass (November 23, later): corrections, and the defects it fixed
+
+Three statements above were wider than what had been run. AC1, AC2, AC5 and AC6 had not been rerun after the column
+order changed or after main was merged. The library counts were from before the restructure. The web player's walk, which
+the PR described as working, had never been driven. The table below is what ran on the fixed source
+(`71a58f0a0` with main `b41a1b521` merged, the player rebuilt from that source, Mac17,10, load 40 to 280).
+
+| What | Result |
+|---|---|
+| AC1–AC7 (12 tests, four plants included) | PASS |
+| `tests/web-reading-walk.test.ts` (Chrome: the scatter, the bars, the series) | PASS 3 of 3 |
+| `picks::reading` hub tests (`crates/deep-show/src/picks/reading.rs`) | PASS 4 of 4 |
+| `cargo test --lib` deep-canvas 357, deep-canvas-input 29, deep-canvas-marks 180, deep-play 4 | PASS |
+
+Reading the change again found these. Each was seen before it was fixed, but for the one marked:
+
+| Defect | Before | After |
+|---|---|---|
+| A cell bound to a reading of 45, written as 0 | heard as `y 0 to 30`, the row said `y 0 m` | `y 10 to 45`, the row says `y 45 m` |
+| The same with no reading held | 3 rows drawn, though 2 draw | `2 rows drawn … 1 missing`, and the row is not landed on |
+| A NaN in a column nothing encodes | its row vanished with nothing said | refused, `out_of_range`, as on the base |
+| A NaN in a `rows_of` set's own column | `6 rows drawn … 1 missing`, and the row walked to | `5 rows drawn … 1 missing` |
+| A cell written NaN and bound to a reading | hidden though the reading is held | drawn |
+| The focused row stops drawing | focus jumped to the first row | the nearest drawn row by centre distance (#539) |
+| A set that draws no row | a Tab stop that says nothing | no Tab stop |
+| The page's walk on re-entry (read in the code, not run) | kept its old place and said nothing | starts over, as the app's does |
+| A series' times | `t s 0.0000000014172335600907028 to 0.00007086167800453515` | `t s 0 to 0.0000709` |
+
+The first two core tests and three of the four hub tests failed on the code as it was, for the reason given:
+`left: "3 rows drawn, x m 0 to 2, y m 0 to 30"` against `y m 10 to 45`; `left: String("s#0")` against `s#3`;
+`left: [String("gone"), String("s#0")]` against `[String("s#0"), Null]`; `left: ["s#a", "s#c"]` against three rows; and a
+NaN nothing encodes accepted. Home, End and the arrows were untested and work; with Home sent to the last row that test
+fails. A page with no walk, and one whose End does nothing, each fail all three charts in Chrome.
+
+Not proven: the value of a set whose rows come from logic arrays or an occurrence list, which the suite's README leaves
+out, and which has no walk (so no Tab stop) rather than a wrong one; caching, since a focused set costs a pointer move no
+more than an unfocused one at 1,000,000 rows in a debug build (47 ms against 112 ms), and Tab about 1.4 s once there.
+AC9 stays INCONCLUSIVE by load, as the owner accepted. AC8 is `live-window.md`'s.
+
+Blindness: the suite's job shared this session's scratchpad. Its tool calls show it writing `probe.mjs` over this
+session's file of that name without reading it, and no read of any other file of this session's there.

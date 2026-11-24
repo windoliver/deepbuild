@@ -398,7 +398,11 @@ mod tests {
             json!({"bound_values": {"b0": {"target": "items/s#b/y", "source": reading}}}),
         );
         let held = json!({reading: {"session": null, "value": 45.0, "as_of": 1}});
-        let r = run(held, &[doc.clone()], &["Tab", "ArrowRight", "ArrowRight"]);
+        let r = run(
+            held,
+            std::slice::from_ref(&doc),
+            &["Tab", "ArrowRight", "ArrowRight"],
+        );
         assert_eq!(value(&r, "s"), "3 rows drawn, x m 0 to 2, y m 10 to 45");
         assert!(
             said(&r).contains(&"x 1 m, y 45 m".to_string()),

@@ -5,8 +5,8 @@
 // put the page's focus on the same set.
 //
 // The charts are the suite's own (imported read only): the scatter, whose sixth row is missing; the bars, walked series
-// by series; and the 50,000-row series, walked by pixel columns. Wrong programs: a player whose tree has the value and no
-// walk, one that walks in row order, and one whose Home, End or Left does nothing.
+// by series; and the 50,000-row series, walked by pixel columns. Wrong programs, run: a page with no walk, and one whose
+// End does nothing, fail every chart.
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { done, play, useBrowsers, webReceiptOf, type Tab } from './acceptance/172/helpers.ts';

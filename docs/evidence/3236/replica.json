@@ -232,7 +232,7 @@
       "id": "trace",
       "role": "data",
       "name": "Sensor trace",
-      "value": "50000 rows drawn, t s 0.0000000014172335600907028 to 0.00007086167800453515, v 200 to 847"
+      "value": "50000 rows drawn, t s 0 to 0.0000709, v 200 to 847"
     },
     "landings": 400,
     "announcements": [
