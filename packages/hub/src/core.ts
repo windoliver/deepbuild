@@ -963,9 +963,10 @@ export class Core {
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
     });
     // #1922's planted hosts build a tool's digest wrongly, #2650's keep what they finished, #2402's never clears a
-    // handler's failures and #2648's reads notices once: the host's plants, selected with the hub's variable.
+    // handler's failures, #2648's reads notices once and #1853's publishes a method it has no case for:
+    // the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' }
-      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' || this.options.plant === 'reads-files-at-start-only' ? { plant: this.options.plant } : {};
+      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' || this.options.plant === 'reads-files-at-start-only' || this.options.plant === 'unwired-method' ? { plant: this.options.plant } : {};
     // No package is in the hub's own release yet; a test may hand it one, which then loads in the hub (#2402).
     const release = this.options.release ? (JSON.parse(readFileSync(this.options.release, 'utf8')) as ReleaseEntry[]) : [];
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, asks: this.asks, point: () => this.durable.point('terminals_rewrite'),
