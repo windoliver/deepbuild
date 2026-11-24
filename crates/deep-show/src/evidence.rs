@@ -34,3 +34,8 @@ pub fn read(root: &Path, sha: &str) -> Option<Vec<u8>> {
     let bytes = fs::read(file_of(root, sha)).ok()?;
     (sha256_hex(&bytes) == sha).then_some(bytes)
 }
+
+/// Whether a file is kept under `sha`, whatever its bytes.
+pub fn kept(root: &Path, sha: &str) -> bool {
+    sha.len() == 64 && sha.is_ascii() && file_of(root, sha).exists()
+}
