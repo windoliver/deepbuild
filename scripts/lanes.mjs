@@ -226,7 +226,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/154/', 'tests/acceptance/154-oracle/', 'tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/', 'tests/acceptance/155/',
     'tests/acceptance/155-oracle/', 'tests/acceptance/162/', 'tests/acceptance/184/', 'tests/acceptance/184-redraft-ac7-2/', 'tests/acceptance/555/', 'tests/acceptance/1048/',
     'tests/acceptance/556/', 'tests/acceptance/2650/retries.test.ts', 'tests/acceptance/2650/jobs.test.ts', 'tests/acceptance/2650/replay.test.ts',
-    'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/',
+    'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/', 'tests/acceptance/3035/',
   ],
   'shared: memory': ['tests/acceptance/2645/'],
   'shared: the cores': ['tests/acceptance/2227/'],
