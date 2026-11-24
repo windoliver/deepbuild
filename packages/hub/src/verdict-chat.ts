@@ -77,6 +77,8 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
   }
   // A person's call answered where none of the pictures it judges was drawn reads so beside it (#3234).
   if (verdict) state.unseen = await unseenCalls(query, JSON.parse(verdict.requirements) as Obj[]);
+  // A call that spent one of its definition's held-out variants (#3229) is named on the line, whatever the verdict.
+  if (verdict) state.spent = await spentBy(query, claim.subject_ref, requirements);
   // The receipt is the address of the claim's page, its session's page at the claim, the session's ID cut to its first
   // 8 as the app shortens it, so it fits the line (#1460); deep open takes it.
   if (claim.session_id) state.receipt = `session/${claim.session_id.slice(0, 8)}/${claim.id.replace(/^claim:/, '')}`;
@@ -107,6 +109,15 @@ async function unseenCalls(query: Query, requirements: Obj[]): Promise<string[]>
     if (pictures.length && pictures.every((p) => p.shown !== true)) unseen.push(String(r.req));
   }
   return unseen;
+}
+
+/** The calls that spent the held-out variants a task's definition names (#3229), each once, oldest first. */
+async function spentBy(query: Query, task: string, requirements: Obj[]): Promise<string[]> {
+  const kept = new Set(requirements.flatMap((r) => ((r.held_out ?? []) as { files: Record<string, string> }[]).flatMap((v) => Object.values(v.files))));
+  if (!kept.size) return [];
+  const rows = (await query(`SELECT data FROM events WHERE kind = 'variant.spent' AND json_extract(data, '$.task_ref') = '${sql(task)}' ORDER BY log_pos`)) as { data: string | Obj }[];
+  const marks = rows.map((r) => (typeof r.data === 'string' ? JSON.parse(r.data) : r.data) as { call: string; digests: string[] });
+  return [...new Set(marks.filter((m) => m.digests.some((d) => kept.has(d))).map((m) => m.call))];
 }
 
 /** The ID of a session's newest claim, or undefined. */

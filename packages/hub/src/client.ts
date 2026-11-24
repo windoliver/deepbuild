@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import net from 'node:net';
 import { dirname, join } from 'node:path';
-import { hubControl, installedRoot, rootOf } from './paths.js';
+import { hubControl, installedRoot, rootOf, rootToken } from './paths.js';
 import { checkCompat, type Hello } from './compat.js';
 import { refusedGeneration, StaleHub } from './generations.js';
 import { CONTRACT, startOf, type Refusal } from './wire.js';
@@ -131,6 +131,17 @@ export async function call(socket: string, token: string, method: string, params
       }
     });
   });
+}
+
+/** One slice or find from the hub at `root` (#3229): its answer, why it refused, or undefined when no hub answers there. */
+export async function handleRead(root: string, params: Obj): Promise<Obj | undefined> {
+  const at = rootOf(root);
+  try {
+    const reply = await call(at.socket, rootToken(at), 'handle.read', params, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+    return 'error' in reply ? { refused: reply.error.remediation } : reply.result;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Refusals that leave nothing done and nothing decided: not confirmed, an agent's command, or a hub that couldn't. */

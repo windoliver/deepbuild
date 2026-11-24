@@ -4,8 +4,8 @@
 // journal keeps each run until its finish is durable, so a start after a cut finishes or reruns it.
 import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { readFileSync, realpathSync } from 'node:fs';
-import { basename, isAbsolute, relative } from 'node:path';
+import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, isAbsolute, relative } from 'node:path';
 import { availableMb, CLASS_MB, type Admission } from './admission.js';
 import type { ChecksProvider, CommandRun } from './checks-port.js';
 import { isRecord as isObj, sha256Hex, type JsonValue } from '@deepbuild/contracts';
@@ -19,9 +19,11 @@ import type { Up } from './environment-port.js';
 import type { TimingReport } from '@deepbuild/verdicts';
 import { isRoot, type Declared, type Hosts } from './hosts.js';
 import { words } from './claude-settings.js';
+import { inCheckout } from './hub-shared.js';
 import type { RunKey } from './gate-runner.js';
 import { FINDINGS, findingOf, type KeyFacts } from './shared-runs.js';
 import type { StackWant, Stacks } from './stacks.js';
+import { HELD_OUT, type Variant, type Variants } from './variants.js';
 import { keepAside, writeSynced } from './vfs.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
 
@@ -44,10 +46,17 @@ interface Run { run: string; check: string; claim: string; commit: string; argv:
   keep?: boolean;
   /** A host your SSH config names, where it runs as the user service named by its run token (#1942), which the journal keeps so a later hub follows it again. */
   host?: string; token?: string;
+  /** The held-out variant whose files lie in its checkout while it runs (#3229). */
+  variant?: Variant;
   /** The changes a run on a host declares it makes, each with its undo as you, recorded once it ends (#1946). */
   changes?: Declared[];
   /** What it is admitted on (#3220): its expected peak memory, taken as units of the host's `mem` pool. */
   memory?: Admission }
+/**
+ * A held-out variant's run (#3229): which variant, its files' plain bytes, held in memory until the run starts, and the
+ * build its checkout needs once they lie there.
+ */
+export interface HeldOutRun { variant: Variant; files: Record<string, Uint8Array>; build?: () => Promise<void> }
 /**
  * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
  * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
@@ -89,6 +98,8 @@ interface RunsOptions {
   keyed(key: RunKey, run: string, record: CommandRun, used?: Used): Promise<KeyFacts>;
   stopping: () => boolean;
   stacks: Stacks;
+  /** Told when a held-out variant's files lie in a checkout, and when they are gone from it (#3229). */
+  variants: () => Pick<Variants, 'lies' | 'gone'>;
   store: () => EvidenceStore;
   host: () => Host;
   supervisor: () => Supervisor;
@@ -148,7 +159,7 @@ export class Runs {
   /** Each run in flight, by its handle: what it is, its end, and how to stop it. */
   private readonly live = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
   /** The held-out variants' runs still to finish (#1018), whose findings their finish withholds, keyed or not. */
-  private readonly heldOut = new Set<string>();
+  private readonly heldOut = new Map<string, HeldOutRun>();
   /** The memory reserved and used on this host by the runs that ended with a reading since the hub started, in MB (#3220). */
   private readonly memory = { reserved: 0, used: 0, runs: 0 };
   /** Each run on a host's stdout as it came, for `deep run follow` (#1942), kept a minute past its end; and who waits for more. */
@@ -222,8 +233,8 @@ export class Runs {
     this.o.point();
   }
 
-  /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and whether it's a held-out variant's (#1018); a claim's check that needs the app with its stack (#580). */
-  async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut = false, stack?: StackWant, memory?: Admission): Promise<Obj> {
+  /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and its held-out variant's files (#1018); a claim's check that needs the app with its stack (#580). */
+  async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut?: HeldOutRun, stack?: StackWant, memory?: Admission): Promise<Obj> {
     const { check, claim, commit, argv, env = {}, host, cwd = host === undefined ? process.cwd() : '', grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec, outside, keep = false, changes } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
@@ -255,17 +266,44 @@ export class Runs {
       throw new Refused(refusal('type', '/params/changes', 'Give changes only with host: a list of {does, changes, undo}, each what the run does, what it touches (files by absolute path) and its undo as you there, or null when it has none.', changes));
     }
     const handle = id ?? `run:${ulid(this.o.now())}`;
-    if (heldOut) this.heldOut.add(handle);
+    if (heldOut) this.heldOut.set(handle, heldOut);
     const run = await this.launch({
       run: handle, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment || stack ? { environment: true } : {}), ...(stack ? { stack } : {}),
       ...(keep ? { keep } : {}), ...(host !== undefined ? { host: host as string } : {}), ...(declared?.length ? { changes: declared as Declared[] } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
-      ...(key ? { key } : {}), ...(isObj(spec) && typeof command === 'string' ? { spec } : {}), ...(outside === true ? { outside: true } : {}),
+      ...(key ? { key } : {}), ...(heldOut ? { variant: heldOut.variant } : {}), ...(isObj(spec) && typeof command === 'string' ? { spec } : {}), ...(outside === true ? { outside: true } : {}),
       ...(memory ? { memory } : {}),
     }).catch((error: unknown) => { this.heldOut.delete(handle); throw error; });
     return { run };
+  }
+
+  /**
+   * A held-out variant's files (#1018), over the snapshot's in its own checkout, from the moment its run starts. Each
+   * one's folder is resolved through any link the snapshot holds and must still lie in the checkout, and a link in the
+   * file's place is removed, never written through.
+   */
+  private lay(run: Run, held: HeldOutRun): void {
+    this.o.variants().lies(run.run, held.variant, run.cwd);
+    for (const [path, bytes] of Object.entries(held.files)) {
+      const file = inCheckout(run.cwd, path, "a held-out variant's file");
+      mkdirSync(dirname(file), { recursive: true });
+      rmSync(file, { force: true });
+      writeFileSync(file, bytes, { flag: 'wx' });
+    }
+  }
+  /** They go as the run ends, before its finish is recorded (#3229); a path the run led out of the checkout isn't followed. */
+  private lift(run: Run, held: HeldOutRun): void {
+    if (this.o.plant === 'leaves-unsealed-variant') return;
+    for (const path of Object.keys(held.files)) {
+      try { rmSync(inCheckout(run.cwd, path, "a held-out variant's file"), { recursive: true, force: true }); } catch { /* it lies outside the checkout, or the checkout is gone */ }
+    }
+    this.o.variants().gone(run.run);
+  }
+  /** The held-out variants whose runs the last hub left in flight, each with the checkout it lay in (#3229). */
+  leftVariants(): { run: string; variant: Variant; dir: string }[] {
+    return Object.values(this.journal).flatMap((r) => (r.variant ? [{ run: r.run, variant: r.variant, dir: r.cwd }] : []));
   }
 
   /** The session a claim was made in, as a lease holder; the core's own for a claim the record doesn't hold. */
@@ -290,6 +328,15 @@ export class Runs {
     const leases = run.host ? [] : await admit(this.o.leases(), holder, run.run, run.lane === 'fast' ? 'fast' : 'slow', memory && {
       mb: memory.mb, ...(this.o.plant === 'admits-on-pool-only' ? {} : { available: availableMb }), waiting: (why) => this.waiting(run, memory.mb, why),
     });
+    const held = this.heldOut.get(run.run);
+    // A start that fails never ran: it leaves neither its slot, its variant's files nor the journal, and the failure is what's thrown.
+    const neverRan = async (error: unknown): Promise<never> => {
+      if (held) this.lift(run, held);
+      for (const lease of leases) await this.o.leases().release(lease.id, []).catch(() => undefined);
+      try { this.writeJournal((runs) => { delete runs[run.run]; }); } catch { /* the restart's recovery finds no start for it */ }
+      throw error;
+    };
+    if (held) await (async () => { this.lay(run, held); await held.build?.(); })().catch(neverRan);
     // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
     const ts = this.o.now();
     const { spec, withheld } = recordable(run, this.o.held);
@@ -300,18 +347,14 @@ export class Runs {
         // What it runs (#996): a journal that can't be read is rebuilt from it.
         ...spec, withheld, ...(run.environment ? { environment: true } : {}),
       },
-    }).catch(async (error: unknown) => {
-      // A start the record refused never ran: it leaves neither its slot nor the journal, and the refusal is what's thrown.
-      for (const lease of leases) await this.o.leases().release(lease.id, []).catch(() => undefined);
-      try { this.writeJournal((runs) => { delete runs[run.run]; }); } catch { /* the restart's recovery finds no start for it */ }
-      throw error;
-    });
+    }).catch(neverRan);
     const token = run.token ?? randomBytes(24).toString('base64url');
     const env = { ...run.env, DEEP_RUN_TOKEN: token };
     const values = this.o.plant === 'no-run-values' ? undefined : { env, held: [token, ...this.o.held] };
     const writer = this.o.store().connect({ role: 'deepbuild', via: 'job' });
     const label = { source: run.run, redaction: 'complete' as const, license: { name: 'local', allows: [] }, ...(values ? { run: values } : {}) };
-    const sinks = [writer.text({ kind: 'run.stdout', ...label }), writer.text({ kind: 'run.stderr', ...label })];
+    // What a held-out variant's run prints can hold the variant, so its output is sealed as its files are (#3229).
+    const sinks = ['run.stdout', 'run.stderr'].map((kind) => writer.text({ kind: held ? HELD_OUT : kind, ...label, ...(held ? { sealed: true as const } : {}) }));
     let writes = Promise.resolve();
     const tail = run.host ? { chunks: [] as Buffer[], size: 0, ended: false, wake: [] as (() => void)[] } : undefined;
     if (tail) this.tails.set(run.run, tail);
@@ -430,6 +473,7 @@ export class Runs {
       disarm?.();
       // What the run left behind is stopped and its leases released before its finish is recorded.
       if (this.o.plant !== 'run-spawns-itself' && !run.host) await this.o.supervisor().cleanup(run.run).catch(() => undefined);
+      if (held) this.lift(run, held);
       // What it used, read only off the supervisor's scan of its tree (#3220); a run on a host has no reading here.
       const used = run.host ? undefined : this.o.supervisor().used(run.run);
       // The kind's record holds the run's output, scrubbed by value: it goes to the store as the sinks' would.
