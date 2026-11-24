@@ -68,6 +68,13 @@ function bwrapArgs(run: string, cwd: string, grant: Grant, guards: readonly Guar
   for (const h of grant.listen ?? []) flags.push('--listen', port(h));
   if (grant.run_as_you) flags.push('--as-you');
   const mounts: string[] = [];
+  // A granted socket under a folder the sandbox has its own of (/run) is bound in by itself, at its real path, so a
+  // program reaches it by that path or by one that leads there, as /var/run/docker.sock leads to /run/docker.sock;
+  // the rest of the folder stays the sandbox's own.
+  for (const s of grant.sockets ?? []) {
+    const r = real(s);
+    if (OWN.has(r.split('/')[1]!) && existsSync(r)) mounts.push('--bind', r, r);
+  }
   for (const g of guards) {
     // Kept whole and read-only by the mount, whatever the grant: a guarded path is never written, and its parent
     // folders can't be moved aside, since the helper refuses to move anything that carries a guard.
