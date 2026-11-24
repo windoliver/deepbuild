@@ -39,6 +39,12 @@ timed.push('tests/acceptance/667/redraft-3178/criteria.test.ts');
 alone.push('tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-redraft-3178/', 'tests/acceptance/111/redraft-3178/');
 slow.push('tests/acceptance/3178/suites.test.ts');
 slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
+// #3243: #25's held.test.ts (AC1) and one-route.test.ts (AC4) raise a choice with a recommended option and expect the
+// session's stop held for it; it goes on at once as provisional (#84), as #3178 found for its suites
+// (tests/acceptance/25-redraft-3243/DISPUTE.md). They are kept as written, by hand only; their blind redraft runs in
+// their place, alone, as tests/acceptance/25/routes/ does.
+byHand.push('tests/acceptance/25/routes/held.test.ts', 'tests/acceptance/25/routes/one-route.test.ts');
+alone.push('tests/acceptance/25-redraft-3243/');
 
 /**
  * Why each `alone` entry is alone (#3066; docs/parallel-proof.md, section 7), one reason an entry: `binary`, a sibling's
@@ -92,7 +98,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/907/slots.test.ts', 'tests/acceptance/907/background.test.ts',
     'tests/acceptance/965/', 'packages/hub/test/loop-starters.test.ts', 'packages/hub/test/loop-transcript.test.ts', 'tests/acceptance/1175/', 'tests/acceptance/23/permissions/',
     'tests/acceptance/83/', 'tests/acceptance/352/', 'tests/acceptance/27/wake.test.ts', 'tests/acceptance/27/repeat.test.ts', 'tests/acceptance/27/waits.test.ts',
-    'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-redraft-3178/', 'tests/acceptance/111/redraft-3178/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts', 'tests/acceptance/990/',
+    'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-redraft-3178/', 'tests/acceptance/111/redraft-3178/', 'tests/acceptance/25-redraft-3243/','tests/acceptance/906/', 'packages/hub/test/drive.test.ts', 'tests/acceptance/990/',
     'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/874/redraft/', 'tests/acceptance/824/cycles.test.ts', 'tests/acceptance/824/planted.test.ts',
     'tests/acceptance/824/leftovers.test.ts', 'tests/acceptance/824/sessions/readings.test.ts', 'tests/acceptance/824/sessions/planted.test.ts', 'tests/acceptance/1294/',
     'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/', 'tests/acceptance/1868-redraft-ac2/',
