@@ -1,0 +1,108 @@
+#667 redraft-3178: runs at the base and on each wrong program
+Base 37dd3c0c84973a1ea7bbed142887c0fa094a7359 (Merge pull request #3072), a fresh GitHub clone, built (npm ci,
+npm run build --workspaces, cargo build --locked -p deep-hook). macOS, Node 24.22.0, 2026-11-22. One file at a time,
+from the clone root: npx vitest run <file> --reporter=verbose --testTimeout=600000 --silent=false
+
+npx tsc --noEmit -p tests/acceptance/667/redraft-3178   -> exit 0, no errors
+
+== criteria.test.ts at the base (18:54:42, load 20 32 44 at start, 18 31 43 at end)
+ ✓ #667.254d6157 #667.84442921 AC1 (the earlier suite's ID beside the computed one): deep inbox lists the choice ask ...
+ ✓ #667.8700acae #667.b25a1d05 AC2 (the earlier suite's ID beside the computed one): deep inbox answer on the choice ask ...
+      Tests  2 passed (2)
+   Duration  22.34s
+ AC1 reading: deep inbox first listed ask:01M8357HYPCG3E5R3F9N7VZ59A in a run from -29 to 396 ms after its append.
+ AC1 line at the base, for the record (an earlier run, same code):
+   Keep the invoices on SQLite or plain files?  choice  no repo  <session uuid>  0s  If you don't answer: SQLite, at <hh:mm>  ask:<ULID>
+ AC2 reading: deep_ask returned at once, {"status":"provisional","answer":"sqlite"}; your answer `files` was saved as
+   decision.created scope session:<session letters>; the agent got it once, in the first Stop's hold reason ("Your
+   answer to ask:<ULID> (...): Plain files (files)."), recorded as one delivery.outcome {via: stop_hold, outcome:
+   delivered}; no later PostToolUse, Stop or UserPromptSubmit named the ask; the second answer exited 2 ("was already
+   answered files from deep inbox; the first answer stands") and was recorded as one answer.refused.
+
+== plants.test.ts at the base: AC2's scenario on DEEP_HUB_PLANT=sends-shown-again (18:55:05, load 18 31 43)
+ ✓ #667.8700acae #667.b25a1d05 AC2 (wrong program) a planted hub that sends an answer again at each later route (sends-shown-again) fails this criterion
+      Tests  1 passed (1)
+   Duration  16.98s
+ The scenario's failure (an earlier run of the same file, 18:53, ask IDs differ run to run):
+   #667.8700acae: the agent that raised ask:01M8354F2D0GV24BEZQ7MQVV9Z got your answer 5 times, once expected:
+   [{"step":"after your answer: Stop", ... "Your answer to ask:01M8354F2D0GV24BEZQ7MQVV9Z (...): Plain files (files)." ...},
+    {"step":"after your answer: Stop after the hold", ... the same ...}, {"step":"the next turn: UserPromptSubmit", ...}, ...]
+
+== criteria.test.ts on the mutant inbox-drops-session (mutants.sh, an APFS clone of the base; 18:53:57, load 29 36 46)
+ diff packages/hub/dist/inbox.js:
+   <         return `${a.title}  ${kind}  ${a.project ?? 'no repo'}  ${a.session}${age}${fallback}  ${a.id}`;
+   >         return `${a.title}  ${kind}  ${a.project ?? 'no repo'}${age}${fallback}  ${a.id}`;
+ × #667.254d6157 #667.84442921 AC1 ...
+   → #667.254d6157: deep inbox lists ask:01M83566KXWTS8H3ZG7XRBG705 with its session, 474fb8cb-bf66-47c4-9da0-4c193c5d87fc:
+     Keep the invoices on SQLite or plain files?  choice  no repo  0s  If you don't answer: SQLite, at 22:53
+     ask:01M83566KXWTS8H3ZG7XRBG705: expected false to be true // Object.is equality
+ ✓ #667.8700acae #667.b25a1d05 AC2 ...   (not this mutant's criterion)
+      Tests  1 failed | 1 passed (2)
+   Duration  22.59s
+
+== criteria.test.ts on the mutant scope-all (mutants.sh, an APFS clone of the base; 18:54:26, load 21 33 44)
+ diff packages/asks/dist/decision-keys.js:
+   <         return project ? `repo:${project}` : ask.session ? `session:${letters(ask.session)}` : null;
+   >         return 'all';
+ ✓ #667.254d6157 #667.84442921 AC1 ...   (not this mutant's criterion)
+ × #667.8700acae #667.b25a1d05 AC2 ...
+   → #667.8700acae: your answer to ask:01M835751AA4M43EJ7Y5QP6XSJ is saved as one decision with its scope,
+     session:90fd7b08cbdd4088924ea5c80789eb41: expected [ [ 'decision.created', …(2) ] ] to deeply equal [ [ 'decision.created', …(2) ] ]
+     - "session:90fd7b08cbdd4088924ea5c80789eb41",  + "all",
+      Tests  1 failed | 1 passed (2)
+   Duration  4.33s
+
+Every run above used the final test files (both IDs in each name). No INCONCLUSIVE or skipped reading, and no
+first-test timeout. The two clones were removed after their runs.
+For comparison only (an input, not this folder's): ../redraft-1463/raised.test.ts at this base fails both tests BLOCKED,
+"deep_ask ... ended before the hub filed its ask", since deep_ask returns {"status":"provisional"} at once.
+
+==== AC4 and AC5 (added at the coordinator's request; same base, same clone)
+npx tsc --noEmit -p tests/acceptance/667/redraft-3178   -> exit 0, no errors (with deadlines.ts and deadlines.test.ts)
+
+== deadlines.test.ts at the base (19:44:44, load 144 131 116 at start, 146 134 117 at end)
+ ✓ #667.47e397e9 #667.ca2b4f95 AC4: with the clock moved past the choice ask's deadline ...  8814ms
+ ✓ #667.b9deefc5 #667.b1086458 AC5 (the fold): the sixth open ask from one session lands inside one ... exception  6692ms
+ ✓ #667.b9deefc5 #667.b1086458 AC5 (the bulk answer): answering that exception in bulk closes all six  9606ms
+ ✓ #667.b9deefc5 #667.b1086458 AC5 (the deadline): the folded sixth ask ... takes its own default past its deadline ...  9769ms
+      Tests  4 passed (4)
+   Duration  36.63s
+ AC4 readings: the choice ask took sqlite by ask.defaulted once the hub's clock passed its 4-hour deadline, framed on
+   the stream at its log_pos; `deep inbox undo` exited 0 ("is open again, its default undone; it now takes its default
+   tomorrow at 03:44"), it was listed again, open and unanswered, and `files` then counted once; past the 1-day
+   deadline the authority ask took decline (decision deny), closed/defaulted.
+ AC5 fold, deep inbox at the base (trimmed): five taste items, each with its "answer with" line; then
+   This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  exception  ...  ask:<exception>
+       answer with together (Answer them together), pause (Pause the session), defaults (Leave them to their defaults)
+       folded here: Keep the fold cache on SQLite or plain files?  choice  ...  ask:<sixth>
+   7 asks need you
+   (The count says 7: the five, the exception and the folded sixth. The criterion doesn't name the count; not checked.)
+
+== plants.test.ts at the base, all three plant tests (19:45:37, load 138 132 117 at start, 89 114 112 at end)
+ ✓ #667.8700acae #667.b25a1d05 AC2 (wrong program) ... (sends-shown-again) fails this criterion  21120ms
+ ✓ #667.47e397e9 #667.ca2b4f95 AC4 (wrong program) ... (skip-default-at-deadline) fails this criterion, naming the ask  64725ms
+ ✓ #667.b9deefc5 #667.b1086458 AC5 (wrong program) ... (skip-default-at-deadline) fails this criterion, naming the folded ask  68351ms
+      Tests  3 passed (3)
+   Duration  155.45s
+ The scenarios' failures on the plants:
+   #667.8700acae: the agent that raised ask:01M8384ZAEWRQW9Z00DNHPRV4H got your answer 5 times, once expected: [...]
+   #667.47e397e9: ask ask:01M8385M9RMYZ89EBKN85EXNXB (the choice ask) is still open 61 s past its deadline
+     2026-11-23T07:46:06.264Z on the hub's clock, though the hub answered every read within 70 ms (load 107 123 115):
+     past its deadline an ask takes its default
+   #667.b9deefc5: ask ask:01M8387Q3895H6X4BEQRXF6JB9 (the sixth ask, folded into the exception) is still open 61 s past
+     its deadline 2026-11-23T07:47:14.664Z on the hub's clock, though the hub answered every read within 100 ms (load
+     89 114 112): past its deadline an ask takes its default
+ (This run supersedes the earlier plants.test.ts run above for AC2; same outcome.)
+ The fold and bulk-answer tests aren't run on skip-default-at-deadline: that plant changes only defaults, which they
+ don't reach. No INCONCLUSIVE or skipped reading.
+
+==== Removed after review: the AC4 and AC5 tests above
+deadlines.ts, deadlines.test.ts and the two skip-default-at-deadline tests in plants.test.ts were removed: they
+duplicate ../redraft-2047/, which #3178's suite now lets stand in for #667 AC4 and AC5 by folder, with the computed
+IDs as aliases (AGENTS.md: no duplicate test). Their runs above are kept as history only; nothing in this folder
+carries the AC4 or AC5 tags now. world.ts gained a comment only (why it reaches Agent's private send; README, Readings 8).
+
+== Rerun after the removal (21:00, load 109 116 129 at start, 93 110 126 at end); tsc --noEmit exit 0
+ criteria.test.ts:  ✓ #667.254d6157 #667.84442921 AC1   ✓ #667.8700acae #667.b25a1d05 AC2    Tests 2 passed (2), 43.22s
+ plants.test.ts:    ✓ #667.8700acae #667.b25a1d05 AC2 (wrong program) sends-shown-again   Tests 1 passed (1), 26.56s
+ The mutant runs weren't repeated: world.ts changed by a comment only, and criteria.test.ts not at all.

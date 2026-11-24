@@ -1,0 +1,42 @@
+The base run was not taken. At base commit 5fcfb690b ("Merge pull request #3079 …"), on macOS arm64, the suite was
+queued twice under the machine's build grant, as the README runs it:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs build --wait 300 -- sh scripts/lease \
+    npx vitest run --root tests/acceptance/1834 --testTimeout=600000 --no-file-parallelism --reporter=verbose
+
+(and once more with --wait 720). Every file builds deep-show (the full set) from cold, which only a build grant may
+run, and this machine grants one build at a time: the run sat 16th of 24 build requests, other sessions' builds held
+the grant 5 to 38 minutes each, and the coordinator reported a --wait 300 request elsewhere that got no grant in its
+300 minutes. On the coordinator's word both requests were stopped (by this job's own task IDs) before either got a
+grant, so nothing was built and no test ran. `npx tsc -p tests/acceptance/1834/tsconfig.json` passes.
+
+What the base should give, read from its code and not run (README: What the base already does):
+
+- ac1 (#1834.9a12b06c), "a planted logic module that writes the fire one step late (fire_one_step_late) fails the
+  judge, naming step 412": expected to FAIL at its first assertion. `fire_one_step_late` is not a planted name at the
+  base (`grep -rn fire_one_step_late crates/ scripts/` finds nothing): it is in none of the lists deep-show's
+  scenario `planted` reaches (`crates/deep-show/src/main.rs`'s module twins, `crates/deep-show/src/logic.rs`'s logic
+  `PLANTED`, `restore_zeroes_move_count`, `check_compares_step_hashes` and `logic_reads_wall_clock`, nor
+  `deep_logic::Planted::and`), and deep-show run answers a scenario naming an unknown `planted` value
+  `{"ok":false,"code":"bad_input"}` (main.rs's header). So #1918's `runShow` fails at "deep-show run answers the
+  scenario ok", before any bake. This is the base failure the criterion's planted twin needs.
+- ac1 (#1834.9a12b06c), "the coach's launch at its step 240 (70 Hz) launches the ball at world step 412 …": expected
+  to PASS at the base, by #194's build of `fires` (not credited). The coach's slot for `kick` is the count and
+  `vertical` (`number_fields("launch")` is `vertical` alone); the logic module clears the count each step and records
+  the step-240 fire with `t` = 240 × 10,080,000 flicks (`deep-logic` `piece/fires.rs`); `deep-play` `derive.rs`
+  stamps it at ⌈t / 5,880,000⌉ = 412 for the input on `{logic: coach}`, data the input's `linear` (6, 3, 0.4) with
+  `vertical` 0, which a dynamic body ignores (`deep-physics-rapier` `inputs.rs`); `physics_bake` keeps it `from:
+  "logic:coach"` and bakes it with the same runner `deep-physics` uses. Not read closely enough to be sure: the scene
+  `eval` values within 1e-6 m of `deep-physics`'s states (#522's criterion 2 holds that tolerance for the same lab).
+- ac2 (#1834.0e85ef5d), the one test: expected to PASS at the base (not credited). `deep-play` `fires.rs`'s `expand`,
+  run whenever a document has a logic item, refuses a world input `on: {logic: <item>}` that the item's `fires`
+  doesn't list (no `fires` included) as an error `logic_refused` on the item (`ids`/`path` naming coach) whose
+  `actual.refusals[0]` is `{rule: "fires", field: "fires", input: "kick", what: "lab.kick takes what coach fires, and
+  coach's fires doesn't list it"}`; an error issue refuses the revision at check.
+
+So at the base, by this reading, one test of three fails (the planted twin's) and two pass. The two that pass have
+no planted twin of their own in twins.json: the criteria name none beyond criterion 1's, and the base already does
+what they check. Their proof against a wrong program is the judge failing `fire_one_step_late` (criterion 1) and, for
+criterion 2, a reverted or mutated `expand`, not the merge base. Run the suite once a build grant comes to replace
+this reading with the run.

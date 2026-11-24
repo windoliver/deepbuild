@@ -11,12 +11,19 @@ pub type Box4 = [f64; 4];
 /// The screen's controls in focus order, as indices into its controls; a control with no box sorts last.
 pub fn order(screen: &Screen, boxes: &[Option<Box4>]) -> Vec<usize> {
     if let Some(f) = &screen.focus {
-        let mut out: Vec<usize> = f.iter().filter_map(|id| screen.controls.iter().position(|c| &c.id == id)).collect();
-        let rest: Vec<usize> = (0..screen.controls.len()).filter(|i| !out.contains(i)).collect();
+        let mut out: Vec<usize> = f
+            .iter()
+            .filter_map(|id| screen.controls.iter().position(|c| &c.id == id))
+            .collect();
+        let rest: Vec<usize> = (0..screen.controls.len())
+            .filter(|i| !out.contains(i))
+            .collect();
         out.extend(rest);
         return out;
     }
-    let mut placed: Vec<(usize, Box4)> = (0..screen.controls.len()).filter_map(|i| Some((i, boxes.get(i).copied().flatten()?))).collect();
+    let mut placed: Vec<(usize, Box4)> = (0..screen.controls.len())
+        .filter_map(|i| Some((i, boxes.get(i).copied().flatten()?)))
+        .collect();
     placed.sort_by(|a, b| a.1[1].total_cmp(&b.1[1]).then(a.1[0].total_cmp(&b.1[0])));
     // Rows: a control joins the row above when their vertical spans overlap by half the shorter one's height.
     let mut rows: Vec<Vec<(usize, Box4)>> = Vec::new();
@@ -38,13 +45,20 @@ pub fn order(screen: &Screen, boxes: &[Option<Box4>]) -> Vec<usize> {
         row.sort_by(|a, b| a.1[0].total_cmp(&b.1[0]));
         out.extend(row.into_iter().map(|(i, _)| i));
     }
-    let rest: Vec<usize> = (0..screen.controls.len()).filter(|i| !out.contains(i)).collect();
+    let rest: Vec<usize> = (0..screen.controls.len())
+        .filter(|i| !out.contains(i))
+        .collect();
     out.extend(rest);
     out
 }
 
 /// The next enabled control from `from` in `order`, forward or back, wrapping; the first enabled one with none.
-pub fn step(order: &[usize], enabled: &[bool], from: Option<usize>, forward: bool) -> Option<usize> {
+pub fn step(
+    order: &[usize],
+    enabled: &[bool],
+    from: Option<usize>,
+    forward: bool,
+) -> Option<usize> {
     let n = order.len();
     if n == 0 {
         return None;

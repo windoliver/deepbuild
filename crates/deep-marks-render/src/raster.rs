@@ -216,83 +216,6 @@ impl Config {
     }
 }
 
-/// What a painter draws glyphs on: Vello CPU's context with the drawing's resources, or Vello
-/// GPU's scene with its own.
-pub(crate) trait Glyphs: Canvas {
-    /// `glyphs` of one face at `size`, slanted `skew` degrees (#1964: a faux italic) and (#1215)
-    /// turned a quarter clockwise when a vertical run turns them, filled in the current paint as
-    /// one glyph run.
-    fn fill_run(
-        &mut self,
-        resources: &mut Resources,
-        font: &FontData,
-        size_skew: (f32, f32, bool),
-        coords: &[i16],
-        glyphs: &[vello_cpu::Glyph],
-    );
-
-    /// #496: a glyph's outline stroked `width` px wide in the current paint.
-    fn glyph_stroke(
-        &mut self,
-        resources: &mut Resources,
-        font: &FontData,
-        size_skew: (f32, f32, bool),
-        coords: &[i16],
-        glyph: vello_cpu::Glyph,
-        width: f64,
-    );
-
-    /// #496: opens a layer blurred by `radius` px, closed by `pop_layer`; false where this canvas
-    /// can't blur, and nothing was opened.
-    fn push_blur(&mut self, _radius: f32) -> bool {
-        false
-    }
-}
-
-impl Glyphs for RenderContext {
-    fn fill_run(
-        &mut self,
-        resources: &mut Resources,
-        font: &FontData,
-        (size, skew, turn): (f32, f32, bool),
-        coords: &[i16],
-        glyphs: &[vello_cpu::Glyph],
-    ) {
-        let run = self.glyph_run(resources, font);
-        let _ = run
-            .font_size(size)
-            .hint(false)
-            .glyph_transform(deep_text::atlas::glyph_transform(skew, turn))
-            .normalized_coords(coords)
-            .fill_glyphs(glyphs.iter().copied());
-    }
-
-    fn glyph_stroke(
-        &mut self,
-        resources: &mut Resources,
-        font: &FontData,
-        (size, skew, turn): (f32, f32, bool),
-        coords: &[i16],
-        glyph: vello_cpu::Glyph,
-        width: f64,
-    ) {
-        self.set_stroke(stroke(width));
-        let run = self.glyph_run(resources, font);
-        let _ = run
-            .font_size(size)
-            .hint(false)
-            .glyph_transform(deep_text::atlas::glyph_transform(skew, turn))
-            .normalized_coords(coords)
-            .stroke_glyphs(std::iter::once(glyph));
-    }
-
-    fn push_blur(&mut self, radius: f32) -> bool {
-        use vello_cpu::filter_effects::{Filter, FilterFunction};
-        self.push_filter_layer(Filter::from_function(FilterFunction::Blur { radius }));
-        true
-    }
-}
-
 /// A rect, rounded when `radius` is above 0.
 fn fill_box(ctx: &mut impl Canvas, b: [f64; 4], radius: f64) {
     if radius > 0.0 {
@@ -821,7 +744,13 @@ impl<C: Glyphs> Painter<'_, C> {
                 adjust,
                 tile,
                 turn,
+                grid,
             } => {
+                // #269: a grid image draws its grid, rebuilt where the canvas draws.
+                if let Some(g) = grid {
+                    deep_marks_vello::grid(&mut self.ctx, item, g, *bounds, self.zoom);
+                    return Ok(());
+                }
                 let looks = (*opacity, adjust);
                 let placed = (*bounds, *fit, self.zoom);
                 let mut fresh = asset::Kept::default();
@@ -1718,30 +1647,6 @@ pub struct PathRequest {
     pub vectors: crate::Vectors,
 }
 
-/// A `path` line's planted value, or `None` for one the surface doesn't name.
-pub fn planted_path(name: &str) -> Option<Planted> {
-    const OPS: [&str; 7] = [
-        "trim",
-        "round_corners",
-        "offset_path",
-        "zigzag",
-        "pucker",
-        "twist",
-        "repeater",
-    ];
-    match name {
-        deep_canvas_marks::warp::ANCHORS_ONLY => Some(Planted::WarpAnchorsOnly),
-        "merge_zero_fills" => Some(Planted::MergeZeroFills),
-        "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
-        "light_stale_list" => Some(Planted::LightStaleList),
-        "light_stale_height" => Some(Planted::LightStaleHeight),
-        _ => {
-            let op = name.strip_prefix("moved:")?;
-            OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))
-        }
-    }
-}
-
 /// Whether a group of `doc` carries a warp (#223).
 fn has_warp(doc: &Map<String, Value>) -> bool {
     doc.get("items")
@@ -1766,6 +1671,8 @@ pub(crate) fn clock_ms() -> f64 {
 }
 
 mod composite;
+mod glyphs;
 mod path_answer;
 use composite::composite;
+pub(crate) use glyphs::Glyphs;
 pub use path_answer::*;

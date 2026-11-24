@@ -27,6 +27,7 @@ pub mod goldens;
 mod gpu;
 pub(crate) mod instance;
 mod interface;
+pub mod lease;
 pub mod ledger;
 pub mod manifest;
 mod migration;
@@ -402,7 +403,8 @@ impl<'a> Hub<'a> {
             return self.registry_kit(registries);
         }
         let gpu = call.backends.iter().any(|b| b == "gpu");
-        let lease = gpu.then(goldens::GpuLease::take);
+        let planted = self.scenario.module_planted.clone();
+        let lease = gpu.then(|| lease::kit(planted.as_deref()));
         let mut manifest = manifest::Manifest::of(self);
         if !call.twins.is_empty() {
             manifest.fixtures.retain_mut(|f| {
@@ -505,12 +507,12 @@ impl<'a> Hub<'a> {
                 let _ = std::fs::write(path, text);
             }
         }
-        drop(lease);
+        // The lease is let go once the reply that names it is made.
         json!({
             "verdict": overall.name(),
             "seed": call.seed,
             "backends": call.backends,
-            "lease": {"gpu": gpu},
+            "lease": lease.as_ref().map_or(json!({"gpu": false}), lease::GpuLease::reply),
             "modules": modules,
             "corpus": corpus_files,
             "criteria": criteria,

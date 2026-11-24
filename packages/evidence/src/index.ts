@@ -24,11 +24,16 @@ export type Peer =
   | { role: 'you'; via: 'paste' | 'drop' | 'picker' }
   | { role: 'agent'; session: string };
 
+/** Turns bytes into ones that say nothing without a key, and back. The same bytes always seal to the same ones. */
+export interface Sealer { seal(bytes: Uint8Array): Promise<Uint8Array>; unseal(sealed: Uint8Array): Promise<Uint8Array> }
+
 export interface EvidenceStoreOptions {
   root?: string;
   now?: () => number;
   /** For a caller that only gets and reads, such as `deep read`: opening makes no folder and never compacts the journal. */
   readOnly?: boolean;
+  /** Seals what asks to be kept sealed (#3229); without one, such a put is refused and nothing sealed reads back. */
+  sealer?: Sealer;
   /** Test hook: awaited by every put after its existence check and before its write. */
   hooks?: { afterExistsCheck?(sha256: string): void | Promise<void> };
 }
@@ -41,6 +46,8 @@ interface Common {
   derivedFrom?: readonly string[];
   /** Required for kind `layer.rows`: the layer, parent and level the rows are for. */
   layer?: LayerKey;
+  /** Kept sealed (#3229): the store holds the sealed bytes, by their own hash, and only `unseal` gives the plain ones back. */
+  sealed?: true;
   /** What the call claims; the stored origin comes from the connection. */
   origin?: Origin;
 }
@@ -83,6 +90,8 @@ export interface Evidence {
   missing?: string;
   layer?: LayerKey;
   steps?: readonly Step[];
+  /** Kept sealed (#3229): no read returns its bytes. */
+  sealed?: true;
 }
 
 export interface RetainInput {
@@ -109,9 +118,11 @@ export interface Receipt { sent: { sha256: string; destination: string }[]; with
 export interface EvidenceStore {
   connect(peer: Peer): Writer;
   get(sha256: string): Promise<Evidence | undefined>;
-  /** The bytes, checked against their hash. */
+  /** The bytes, checked against their hash; a sealed file's are refused (#3229). */
   read(sha256: string): Promise<Uint8Array>;
-  /** Verified bytes in order, without materializing a whole transcript. */
+  /** A sealed file's plain bytes, for the hub alone; any other file's as `read` gives them. */
+  unseal(sha256: string): Promise<Uint8Array>;
+  /** Verified bytes in order, without materializing a whole transcript; a sealed file's are refused. */
   chunks(sha256: string): AsyncIterable<Uint8Array>;
   /** A cached binary's bytes still match its hash, streamed without loading a large asset into memory. */
   verify(sha256: string): Promise<boolean>;
@@ -248,7 +259,8 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
 
   const refuse = (reason: string): PutResult => ({ status: 'refused', reason, slot: { state: 'missing', reason } });
   const unlabelled = (request: Common) =>
-    !REDACTIONS.includes(request.redaction) ? 'evidence needs a redaction label: complete, incomplete or unknown'
+    request.sealed && !options.sealer ? 'this store has no sealer, so it keeps nothing sealed'
+      : !REDACTIONS.includes(request.redaction) ? 'evidence needs a redaction label: complete, incomplete or unknown'
       : !Array.isArray(request.license?.allows) || typeof request.license.name !== 'string' ? 'evidence needs a license'
       : request.kind === 'layer.rows' && !request.layer ? 'a layer.rows file needs its layer, parent and level' : undefined;
 
@@ -287,7 +299,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         origin: fromAgent || peer.role === 'agent' || earlier?.origin === 'agent' ? 'agent' : peer.role,
         redaction: earlier && earlier.redaction !== 'complete' ? earlier.redaction : redaction,
         license: request.license, derivedFrom, intake: missing ? 'truncated' : 'captured', ...(missing && { missing }),
-        ...(request.layer && { layer: request.layer }), ...(steps && { steps }), storedAt: now(),
+        ...(request.layer && { layer: request.layer }), ...(steps && { steps }), ...((request.sealed || earlier?.sealed) && { sealed: true as const }), storedAt: now(),
       };
       index.set(sha, record);
       await note(record);
@@ -297,7 +309,13 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     });
   }
 
+  /** Why a sealed file isn't read: by what it is, never its bytes (#3229). */
+  const unsealedOnly = (sha: string): void => {
+    const record = index.get(sha);
+    if (record?.sealed) throw new EvidenceError('refused', `evidence ${sha} is ${record.source}, kept sealed: no read returns its bytes`, sha);
+  };
   async function* chunks(sha: string, parents: ReadonlySet<string> = new Set()): AsyncGenerator<Uint8Array> {
+    unsealedOnly(sha);
     if (!HASH.test(sha)) throw new EvidenceError('missing', `evidence ${sha} is missing`, sha);
     if (parents.has(sha)) throw new EvidenceError('corrupt', `evidence ${sha} has cyclic parts`, sha);
     const hash = createHash('sha256');
@@ -322,6 +340,10 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     if (hash.digest('hex') !== sha) throw new EvidenceError('corrupt', `evidence ${sha} is corrupt: its bytes no longer match its hash`, sha);
   }
   const read = async (sha: string): Promise<Uint8Array> => {
+    unsealedOnly(sha);
+    return stored(sha);
+  };
+  const stored = async (sha: string): Promise<Uint8Array> => {
     if (index.get(sha)?.parts) {
       const parts: Uint8Array[] = [];
       for await (const bytes of chunks(sha)) parts.push(bytes);
@@ -375,6 +397,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         }
         const backwards = request.steps?.find(({ startMs, endMs }) => !(startMs >= 0 && endMs >= startMs));
         if (backwards) return refuse(`step ${backwards.step} must start at 0 ms or later and end no earlier than it starts`);
+        if (request.sealed) return save(peer, request, await options.sealer!.seal(request.bytes), 'binary', request.redaction);
         if (request.declares === undefined) return save(peer, request, request.bytes, 'binary', request.redaction);
         const found = detect(request.bytes);
         if (found !== request.declares) return refuse(`the slot declares ${request.declares}, but the bytes are ${found ?? 'not png, jpeg, mp4 or webm'}`);
@@ -404,7 +427,8 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
             const raw = Buffer.concat(chunks);
             // The scrub can't find a value's forms in text that isn't UTF-8.
             const redaction = isUtf8(raw) || request.redaction !== 'complete' ? request.redaction : 'incomplete';
-            return save(peer, request, scrub(raw, scrubList(request.run)), 'text', redaction);
+            const text = scrub(raw, scrubList(request.run));
+            return request.sealed ? save(peer, request, await options.sealer!.seal(text), 'binary', redaction) : save(peer, request, text, 'text', redaction);
           },
         };
       },
@@ -426,6 +450,9 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     },
 
     read,
+    async unseal(sha) {
+      return index.get(sha)?.sealed ? options.sealer!.unseal(await stored(sha)) : read(sha);
+    },
     chunks,
 
     async verify(sha) {

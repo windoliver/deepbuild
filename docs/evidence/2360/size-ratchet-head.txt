@@ -1,0 +1,2 @@
+PASS size: 37 hand-written source files over 1500 lines, each at its ceiling
+exit 0

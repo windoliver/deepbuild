@@ -2,6 +2,7 @@
 // from the record's claims, verdicts and runs tables, never from the agent's words; a status question typed into a
 // session is answered from the same tables and the session's row, with no model call.
 import { LINE_WIDTH, verdictLine, type LineRequirement, type LineState, type Outcome, type Result } from '@deepbuild/verdicts';
+import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
 import { watched, watchWords } from './watch.js';
 
@@ -74,6 +75,10 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
     const passed = new Set(checks.filter((c) => c.outcome === 'passed' && !unproved.has(c.check)).map((c) => c.check));
     state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running, ...(held.length ? { held } : {}), ...(tests ? { tests } : {}) };
   }
+  // A person's call answered where none of the pictures it judges was drawn reads so beside it (#3234).
+  if (verdict) state.unseen = await unseenCalls(query, JSON.parse(verdict.requirements) as Obj[]);
+  // A call that spent one of its definition's held-out variants (#3229) is named on the line, whatever the verdict.
+  if (verdict) state.spent = await spentBy(query, claim.subject_ref, requirements);
   // The receipt is the address of the claim's page, its session's page at the claim, the session's ID cut to its first
   // 8 as the app shortens it, so it fits the line (#1460); deep open takes it.
   if (claim.session_id) state.receipt = `session/${claim.session_id.slice(0, 8)}/${claim.id.replace(/^claim:/, '')}`;
@@ -88,6 +93,31 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
     }
   }
   return { task: claim.subject_ref, session: claim.session_id, created: claim.created, state, checks, verdictAt: verdict?.created ?? null };
+}
+
+/**
+ * The requirements whose call was answered unseen (#3234): its answer's record lists the pictures the call judges, and
+ * none of them was shown. The planted line reads as an answer from the card does.
+ */
+async function unseenCalls(query: Query, requirements: Obj[]): Promise<string[]> {
+  if (activePlant() === 'unseen-reads-as-card') return [];
+  const unseen: string[] = [];
+  for (const r of requirements) {
+    if (typeof r.ask !== 'string') continue;
+    const [answered] = (await query(`SELECT json_extract(data, '$.pictures') AS pictures FROM events WHERE kind = 'ask.answered' AND subject = '${sql(r.ask)}' ORDER BY log_pos DESC LIMIT 1`)) as { pictures: string | null }[];
+    const pictures = JSON.parse(answered?.pictures ?? '[]') as { shown?: unknown }[];
+    if (pictures.length && pictures.every((p) => p.shown !== true)) unseen.push(String(r.req));
+  }
+  return unseen;
+}
+
+/** The calls that spent the held-out variants a task's definition names (#3229), each once, oldest first. */
+async function spentBy(query: Query, task: string, requirements: Obj[]): Promise<string[]> {
+  const kept = new Set(requirements.flatMap((r) => ((r.held_out ?? []) as { files: Record<string, string> }[]).flatMap((v) => Object.values(v.files))));
+  if (!kept.size) return [];
+  const rows = (await query(`SELECT data FROM events WHERE kind = 'variant.spent' AND json_extract(data, '$.task_ref') = '${sql(task)}' ORDER BY log_pos`)) as { data: string | Obj }[];
+  const marks = rows.map((r) => (typeof r.data === 'string' ? JSON.parse(r.data) : r.data) as { call: string; digests: string[] });
+  return [...new Set(marks.filter((m) => m.digests.some((d) => kept.has(d))).map((m) => m.call))];
 }
 
 /** The ID of a session's newest claim, or undefined. */

@@ -1,0 +1,41 @@
+// A planted tool's entry (issue #3035 acceptance; README: The planted programs). The hub runs it as it runs any job
+// tool of this machine: `node <entry>` in the tool's own folder, one JSON object on stdin, {params, inputs}, each
+// input's bytes in base64, and one on stdout, {outputs}, the same way. It runs the right tool's own entry, which lies
+// beside it in this folder, on the same request, and hands on what that wrote: byte for byte under the plan `as_is`,
+// and otherwise with the one thing its plan names made wrong in the `document` or the `report` (deep-3035-spoil.mjs).
+// What the right tool writes that is no {outputs} with those two, a refusal say, is handed on as it is.
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spoil } from './deep-3035-spoil.mjs';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const plan = JSON.parse(readFileSync(join(here, 'deep-3035-plan.json'), 'utf8'));
+const chunks = [];
+for await (const chunk of process.stdin) chunks.push(chunk);
+const ran = spawnSync(process.execPath, [join(here, plan.entry)], { cwd: here, input: Buffer.concat(chunks), maxBuffer: 256 * 1024 * 1024 });
+if (ran.stderr?.length) process.stderr.write(ran.stderr);
+const said = ran.stdout ?? Buffer.alloc(0);
+if (ran.error || ran.status !== 0) {
+  if (said.length) process.stdout.write(said);
+  process.exitCode = ran.status || 1;
+} else {
+  let answer;
+  try { answer = JSON.parse(said.toString('utf8')); } catch { answer = undefined; }
+  const outputs = answer?.outputs;
+  const both = typeof outputs === 'object' && outputs !== null && typeof outputs.document === 'string' && typeof outputs.report === 'string';
+  if (plan.spoil === 'as_is' || !both) {
+    process.stdout.write(said);
+  } else {
+    const text = (b64) => Buffer.from(b64, 'base64').toString('utf8');
+    const before = { document: text(outputs.document), report: text(outputs.report) };
+    const after = spoil(plan.spoil, before);
+    if (after.document === before.document && after.report === before.report) {
+      process.stdout.write(said);
+    } else {
+      const b64 = (t) => Buffer.from(t, 'utf8').toString('base64');
+      process.stdout.write(`${JSON.stringify({ ...answer, outputs: { ...outputs, document: b64(after.document), report: b64(after.report) } })}\n`);
+    }
+  }
+}

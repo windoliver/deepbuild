@@ -1,0 +1,42 @@
+
+ RUN  v5.0.5 <worktree>/packages/asks
+
+ ❯ test/asks.test.ts (29 tests | 1 failed | 28 skipped) 69ms
+   ❯ an answer that saves a decision (#319.43d13eb3, #22) (1)
+     × syncs the record once: the answer and its decision are durable together, before the agent hears it 68ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/asks.test.ts > an answer that saves a decision (#319.43d13eb3, #22) > syncs the record once: the answer and its decision are durable together, before the agent hears it
+AssertionError: one FULL commit for the answer and the decision it saves: expected [ { …(2) }, { …(2) } ] to deeply equal [ { …(2) } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "file": "<tmp>",
+      "mode": "full",
+    },
++   {
++     "file": "<tmp>",
++     "mode": "full",
++   },
+  ]
+
+ ❯ test/asks.test.ts:451:103
+    449|     const before = storage.syncs().length;
+    450|     await asks.answer(card, handle, { option: 'green' });
+    451|     expect(storage.syncs().slice(before), 'one FULL commit for the ans…
+       |                                                                                                       ^
+    452|     expect(heard, 'the agent hears the answer once it is durable').toE…
+    453|     storage.cutPower();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 skipped (29)
+   Start at  21:46:21
+   Duration  541ms (transform 70%, tests 15%, import 14%)
+

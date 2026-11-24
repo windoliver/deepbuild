@@ -123,7 +123,15 @@ export type Plant = 'kept-in-service-cgroup' | 'sandbox-left-to-caller' | 'stops
   // one where another process than the kernel writes them too.
   | 'reports-other-subsystem' | 'reports-other-process'
   // #2399's: a filter's refusals never recorded, one kept per operation whatever the target, and a set kept without the run.
-  | 'egress-refusals-unrecorded' | 'egress-refusal-once-per-operation' | 'egress-refusals-seen-without-run';
+  | 'egress-refusals-unrecorded' | 'egress-refusal-once-per-operation' | 'egress-refusals-seen-without-run'
+  // #3220's: a scan that keeps a run's first sample as its peak.
+  | 'scan-keeps-first-sample';
+/**
+ * What a run used, read only off the supervisor's scan of its tree (#3220): the highest sum of its processes' memory one
+ * scan read, in MiB, and the CPU seconds they used. A tree no scan read, as a run in a sandbox of its own, has neither:
+ * null, never 0.
+ */
+export interface Used { memory_peak_mb: number | null; cpu_s: number | null }
 export interface SupervisorOptions {
   /** Ownership records, leases, denials and cleanup outcomes go here, written as `core`. */
   record: RecordStore;
@@ -160,6 +168,14 @@ export interface Supervisor extends Host {
   status(run: string): Promise<RunStatus>;
   /** Whether any process the run owns still runs, as it can prove: what an adopted run has in place of its exit. */
   lives(run: string): Promise<boolean>;
+  /** What the run used, as its scans read it (#3220); undefined for a run this supervisor neither started nor follows. */
+  used(run: string): Used | undefined;
+  /**
+   * Reads a process group as a run's tree on each scan, for what it used (#3220): a leased command's, which the
+   * supervisor neither owns nor stops. `unfollow` ends that and gives what the scans read.
+   */
+  follow(run: string, pgid: number): void;
+  unfollow(run: string): Promise<Used | undefined>;
   /** While an unblock ask is open or a key is out of its pool: ticks the asks core, reads what the record gained (an answer, a default) and acts on it. */
   tick(): Promise<void>;
   close(): Promise<void>;

@@ -1,0 +1,16 @@
+Mac18,1
+Apple M6
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B7131
+Now drawing from 'AC Power'
+ lowpowermode         0
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+node v24.22.0
+          Resolution: 3024 x 1964 Retina
+          Resolution: 3840 x 2160 (2160p/4K UHD 1 - Ultra High Definition)
+          UI Looks like: 1920 x 1080 @ 30.00Hz
+free disk before 16780196 KB
+start 2026-11-20 01:22:37  1:22  up  5:49, 3 users, load averages: 47.42 57.02 50.22
+free disk after 9692352 KB
+end 2026-11-20 03:22:02  3:22  up  7:48, 3 users, load averages: 19.17 43.99 72.05
