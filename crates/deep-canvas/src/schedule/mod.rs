@@ -1692,7 +1692,8 @@ impl Session {
             if reached.iter().any(|k| l.doc.get(k) != doc.get(k)) {
                 return None;
             }
-            debug_assert!(
+            #[cfg(test)]
+            assert!(
                 doc.as_object().is_some_and(|d| d
                     .iter()
                     .all(|(k, v)| k == "items" || l.doc.get(k) == Some(v))),
