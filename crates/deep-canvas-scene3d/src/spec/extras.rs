@@ -138,6 +138,7 @@ pub(super) fn extras(kind: &str) -> Vec<P> {
                 json!([]),
             )
             .takes("[{grid: <logic>.<name>, size: [cols, rows: u16], origin?: [m, m], cell?: m, roles: [role | none] ≤ 16, opacity?: 0..1}] ≤ 2"),
+            crate::tracks::param(),
         ],
         _ => Vec::new(),
     }

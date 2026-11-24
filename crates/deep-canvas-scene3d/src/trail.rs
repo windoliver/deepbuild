@@ -109,12 +109,24 @@ pub struct Memo {
     at: HashMap<String, BTreeMap<i64, Vec3>>,
 }
 
-/// Whether any of `items` reads a source at earlier times: a line's trail or a material's wake.
+/// Whether any of `items` reads a source at earlier times: a line's trail, a material's wake or
+/// a plate's tracks (#3036).
 pub(crate) fn samples(items: &Map<String, Value>) -> bool {
     items.values().any(|i| {
         i.pointer("/params/trail").is_some_and(|t| !t.is_null())
             || i.pointer("/params/water/wake/item").is_some()
+            || i.pointer("/params/tracks/items").is_some()
     })
+}
+
+/// The document's frame interval in flicks: its transport's `frame_rate`, 60/1 by default.
+pub(crate) fn frame_interval(map: &Map<String, Value>) -> i64 {
+    let (p, q) = map
+        .get("transport")
+        .and_then(deep_canvas::document::frame_rate_of)
+        .filter(|(p, q)| *p > 0 && *q > 0)
+        .unwrap_or((60, 1));
+    deep_canvas::camera::FLICKS_PER_SECOND * i64::from(q) / i64::from(p)
 }
 
 /// The most places a memo keeps before it lets them all go together.

@@ -60,18 +60,18 @@ export default class DeepCheckReporter {
     if (update && update !== 'none') write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `snapshots are written, not compared (updateSnapshot ${update})`, stack: null, frames: [] }] });
     // A run that replays the blob reports of earlier runs runs nothing.
     const merged = vitest?.config?.mergeReports;
-    if (merged) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `results replayed from earlier runs, not run (mergeReports ${merged})`, stack: null, frames: [] }] });
+    if (merged) write({ type: 'run:error', file: null, by: `mergeReports ${merged}`, replayed: true, errors: [{ name: 'Error', message: `results replayed from earlier runs, not run (mergeReports ${merged})`, stack: null, frames: [] }] });
     // Type tests are judged from tsc's incremental build info, which the checkout holds: errors it leaves out never show.
     const configs = [vitest?.config, ...(vitest?.projects ?? []).map((p) => p?.config)];
     if (configs.some((c) => c?.typecheck?.enabled)) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: 'type tests are judged from tsc\'s build info in the checkout (typecheck)', stack: null, frames: [] }] });
     // A name filter leaves tests of a file out while the file still runs: the runner keeps it only when the check's command names it.
     const filter = configs.map((c) => c?.testNamePattern).find(Boolean);
-    if (filter) write({ type: 'run:error', file: null, filter: String(filter.source ?? filter), errors: [{ name: 'Error', message: `tests left out by name (${filter}) that the check's command doesn't name`, stack: null, frames: [] }] });
+    if (filter) write({ type: 'run:error', file: null, filter: String(filter.source ?? filter), by: `testNamePattern ${filter}`, errors: [{ name: 'Error', message: `tests left out by name (${filter}) that the check's command doesn't name`, stack: null, frames: [] }] });
     // Tag filters leave tests out the same way.
-    for (const tag of configs.flatMap((c) => c?.tagsFilter ?? [])) write({ type: 'run:error', file: null, filter: String(tag), errors: [{ name: 'Error', message: `tests left out by tag (${tag}) that the check's command doesn't name`, stack: null, frames: [] }] });
+    for (const tag of configs.flatMap((c) => c?.tagsFilter ?? [])) write({ type: 'run:error', file: null, filter: String(tag), by: `tagsFilter ${tag}`, errors: [{ name: 'Error', message: `tests left out by tag (${tag}) that the check's command doesn't name`, stack: null, frames: [] }] });
     // A tag's options in the config skip its tests, mark them todo, run them alone, or pass them when they fail.
     const turned = configs.flatMap((c) => c?.tags ?? []).find((t) => t?.skip || t?.fails || t?.todo || t?.only);
-    if (turned) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `the config's options for tag ${turned.name} change which of its tests run or how they end`, stack: null, frames: [] }] });
+    if (turned) write({ type: 'run:error', file: null, by: `the config's options for tag ${turned.name}`, errors: [{ name: 'Error', message: `the config's options for tag ${turned.name} change which of its tests run or how they end`, stack: null, frames: [] }] });
     // Vite's dependency optimizer reuses bundles from its cache in the checkout, checked only against the lockfile and
     // the config: code no source holds. A run that bundles afresh (optimizeDeps.force) may use it.
     const servers = [vitest?.vite, ...(vitest?.projects ?? []).map((p) => p?.vite)];

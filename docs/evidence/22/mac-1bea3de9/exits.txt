@@ -1,0 +1,2 @@
+step1 head 1bea3de9d6fb705db8f60c86791e35f71973240e 08:29:22 load { 10.54 7.76 5.85 }
+step1 done; script stopped after step 1 by spark control's hold (steps 2-4 not run) 08:34:31

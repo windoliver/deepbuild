@@ -69,6 +69,7 @@ pub mod sweep;
 pub mod terrain;
 pub mod tiles;
 pub mod tints;
+pub mod tracks;
 pub mod trail;
 pub mod tree;
 pub mod uv;
@@ -78,7 +79,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 64] = [
+pub const PLANTED: [&str; 67] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -107,6 +108,11 @@ pub const PLANTED: [&str; 64] = [
     // in metres.
     terrain::OTHER_DIAGONAL,
     terrain::CAP_IN_METRES,
+    // #3036: a plate whose tracks lower about each place alone, read no height, or reach its
+    // physics shape.
+    tracks::AT_SAMPLES_ONLY,
+    tracks::GROUND_POSITION,
+    tracks::FEEDS_PHYSICS,
     // #224: grid lines counted from the range's start, a mesher numbering vertices by thread,
     // an octree dropping cells by their corners' signs or stopping mid-level, and a build that
     // keeps its first mesh.

@@ -1,0 +1,3 @@
+foley alone	1014 ms	installed	load 18
+foley alone	981 ms	installed	load 18
+foley alone	947 ms	installed	load 18
