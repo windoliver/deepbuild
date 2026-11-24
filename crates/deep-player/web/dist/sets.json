@@ -67,16 +67,16 @@
         "text",
         "vector"
       ],
-      "module_set_digest": "7a8030106abbc24667dd8271cb06a67502337051939f05c99f9e6961056339a2",
+      "module_set_digest": "4ba3b45e3ad460b33f0bdc9f1106ffc3d6109d5d0742879720107fadf9a7a16c",
       "wasm": {
         "path": "crates/deep-player/web/dist/full/player_bg.wasm",
-        "sha256": "845744d72368a6001bad55a3b4fb16b1d689ab563f12afbe7eae9e4980573d43"
+        "sha256": "07c5ef54bf0feacbd1b80ea7338c41cb757d3c98d73d949d6babca906f3614e0"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/full/player.js",
-        "sha256": "c0fe9f017e88f91d9b8b1476a17cd565203446cded97f9d108ff716bb3795a52"
+        "sha256": "9800d444968c8caab66ff10c43fcb36d34e2372053e02b2f09e28728fd099ea7"
       },
-      "compressed": 7802458
+      "compressed": 7834810
     }
   }
 }
