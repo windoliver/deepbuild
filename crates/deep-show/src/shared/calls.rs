@@ -554,7 +554,13 @@ impl Hub<'_> {
         let mut refusals = blocking(&issues, &allowed, &shared.doc, &layer, &changed, planted);
         if !refusals.is_empty() {
             // #1801: a removed item that rows still name: its refusal lists every one of them.
-            let removed: Vec<&str> = patched.removed.iter().map(|(id, _)| id.as_str()).collect();
+            // #3379: so does a removed control a logic item still reads.
+            let removed: Vec<&str> = patched
+                .removed
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .chain(entries.iter().map(|(_, id)| id.as_str()))
+                .collect();
             name_referrers(
                 &mut refusals,
                 &shared.doc,
@@ -1011,6 +1017,10 @@ impl Hub<'_> {
             planted,
         ));
         issues.extend(carried(&result.issues, &last, planted));
+        // #3379: an ID the revision removes that rows still name, such as a control a logic item
+        // still reads: its refusal lists every one of them, as a patch's does (#1801).
+        let removed: Vec<&str> = show.removes.iter().map(String::as_str).collect();
+        name_referrers(&mut issues, &doc, &removed, &self.startup.sealed, planted);
         issues.extend(foreign_writes(&doc, &owners, &layer));
         let mine = |id: &String| {
             ["bound_values", "status_bindings"]

@@ -24,6 +24,7 @@ use std::sync::OnceLock;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas::kinds::{Entry as KindEntry, Param, ParamType, Version};
+use deep_canvas::refs::{self, Decl, Holds};
 use deep_canvas::registry::{
     Dependency, Equivalence, Implementation, Manifest, Module, Pin, Raised, Range, Registrar,
     Report, Semver, StateClass, StepInput, Stepper,
@@ -188,6 +189,12 @@ fn kind() -> KindEntry {
 fn register(r: &mut Registrar) {
     // The kind keeps the module's name, as the design writes it.
     r.kind(kind(), &[], "");
+    // #3379: the controls an item reads, so refs_to lists each read and a removed control's
+    // reads are refused at check.
+    r.refs(&[
+        Decl::new("params/reads", Holds::Control, refs::kind::CONTROL),
+        Decl::new("params/preview/reads", Holds::Control, refs::kind::CONTROL),
+    ]);
     r.array(STATE, "logic.state", "document", "time", "simulate");
     r.carried("checkpoint", STATE, 4 << 20);
     r.operator("step", "simulate", &["refs"], &[STATE])

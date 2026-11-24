@@ -1,6 +1,7 @@
 //! What names what (issue #1801; canvas primitives: Registry and seal: registries; Document
 //! envelope, its maps keyed by ID; Object; Item and kind: relations). Every field of a document
-//! that names an item, a table row, a pack entry or an asset, with the kind of reference it is.
+//! that names an item, a control, a table row, a pack entry or an asset, with the kind of
+//! reference it is.
 //! The core declares its own fields here (an item's parent, material and relations, and the
 //! fields of the sections keyed by ID); a canvas module declares its kinds' params when it
 //! registers them (`Registrar::refs`), and the kit fails a module whose fixture names an ID in a
@@ -36,6 +37,8 @@ pub mod kind {
     pub const ASSET: &str = "asset";
     /// An item of a pack's kind or recipe.
     pub const ENTRY: &str = "pack_entry";
+    /// A document control an item reads (#3379).
+    pub const CONTROL: &str = "control";
 }
 
 /// What a declared field holds.
@@ -49,6 +52,11 @@ pub enum Holds {
     Asset,
     /// A keyed copy, `<table>[<key>]` (Text `text@1`: keyed copy).
     CopyKey,
+    /// A document control's ID, as a logic item's reads hold it among other reads (#3379): a
+    /// value the document's `controls` hold, or a bare ID (no `.`, `:`, `#` or `/`) naming a
+    /// control the document no longer holds. A reading, another item's array or a world's read
+    /// names no control.
+    Control,
 }
 
 /// One declared field: where it sits in its row (`params/of`; a `*` takes every key of an
@@ -70,6 +78,7 @@ impl Decl {
 /// What a field names.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Name {
+    /// An item's ID, or a control's (#3379): a whole revision's `removes` names both by ID alone.
     Item(String),
     /// A table's row: a keyed copy's table and key.
     Row(String, String),
@@ -81,7 +90,7 @@ pub enum Name {
 
 impl Name {
     /// What a read's `target` names: an asset by its SHA-256 (64 hex), a keyed copy's table row
-    /// as `<table>[<key>]`, a pack entry as `name@major`, else an item by its ID.
+    /// as `<table>[<key>]`, a pack entry as `name@major`, else an item or a control by its ID.
     pub fn of_target(target: &str) -> Name {
         if target.len() == 64 && target.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Name::Asset(target.to_ascii_lowercase());
@@ -109,7 +118,7 @@ pub struct Ref {
     pub name: Name,
 }
 
-use Holds::{Asset, CopyKey, Item, Path};
+use Holds::{Asset, Control, CopyKey, Item, Path};
 
 /// The fields every item may hold that name something (Item and kind; Object; relations).
 const ITEM_FIELDS: &[Decl] = &[
@@ -247,6 +256,11 @@ fn named(doc: &Value, holds: Holds, value: &Value) -> Option<Name> {
             let key = rest.strip_suffix(']')?;
             Some(Name::Row(table.trim().to_string(), key.trim().to_string()))
         }
+        Control => {
+            let held = doc.get("controls").and_then(|c| c.get(s)).is_some();
+            let bare = !s.is_empty() && !s.contains(['.', ':', '#', '/']);
+            (held || bare).then(|| Name::Item(s.to_string()))
+        }
     }
 }
 
@@ -362,6 +376,24 @@ pub fn refs_to(doc: &Value, sealed: &Sealed, name: &Name) -> Vec<Ref> {
         .collect();
     out.sort_by(|a, b| a.path.cmp(&b.path));
     out
+}
+
+/// Each declared control field of `doc` that names no control the document holds, a read left
+/// dangling by the control's removal or rename (#3379): `(row's ID, path, control ID)`.
+pub fn unresolved_controls(doc: &Value, sealed: &Sealed) -> Vec<(String, String, String)> {
+    let controls = doc.get("controls").and_then(Value::as_object);
+    refs(doc, sealed)
+        .into_iter()
+        .filter(|r| r.kind == kind::CONTROL)
+        .filter_map(|r| {
+            let Name::Item(id) = r.name else { return None };
+            if controls.is_some_and(|c| c.contains_key(&id)) {
+                return None;
+            }
+            let row = r.row.rsplit('/').next().unwrap_or(&r.row).to_string();
+            Some((row, r.path, id))
+        })
+        .collect()
 }
 
 /// Each field of the items of a kind `sealed` knows whose value names an item of `doc` or one of
