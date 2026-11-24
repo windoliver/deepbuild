@@ -1,6 +1,6 @@
 # #3238 acceptance tests, the runs recorded so far on the base f8c6cff82 (macOS, 18 cores, 1-minute load 100 to 130),
 # 2026-11-23, but for admitted.test.mjs, below, on the base b87494f02, which carries #3221: the branch merged it as
-# 138fe266b on 2026-11-24, and the runs still to come (cli and hub) are on it too. scripts/lease is the same in both.
+# 138fe266b on 2026-11-24, and for cli and hub, which are on it too. scripts/lease is the same in both.
 # Each file run once: nice -n 10 node --test --test-concurrency=1 --test-reporter=spec <file>. Paths redacted: the
 # user's home and each test's own HOME as ~, temp folders as <tmp>.
 #
@@ -22,8 +22,12 @@
 #   admitted.test.mjs  #3238.664c776d  (b87494f02, 2026-11-24T03:40Z, under a test grant, as were the twins and the
 #                                      reference run against it) both tests: no passed entry
 #
-# NOT RUN YET, on any base: cli.test.mjs (#3238.f2323033) and hub.test.ts (#3238.8320a246). Both need the packages
-# built (npm ci, npm run build --workspaces; hub.test.ts also deep-hook), and no build grant came on this Mac that day.
+#   cli.test.mjs       #3238.f2323033  (b87494f02, 2026-11-24T03:42Z, under a test grant) the command ran under no throttle
+#                                      grant (DEEP_THROTTLE null)
+#
+# NOT A BASE FAILURE: hub.test.ts's first draft (#3238.8320a246), run on b87494f02 at 2026-11-24T03:42Z. deep-hook denied
+# the session's call, so the script never ran and no assertion of the criterion was reached. Its run is below for the
+# record. NOT RUN YET: the redraft of hub.test.ts, whose session reaches the script through a process it starts.
 #
 # After the base runs: each twin once against its test (the file named), each failing at the assertion its run shows.
 # own-test-grant was added and run after the first commit of this suite, at 19:58 UTC; own-grant waits behind the build
@@ -270,6 +274,76 @@ test at tests/acceptance/3238/admitted.test.mjs:78:1
     operator: '==',
     diff: 'simple'
   }
+=== exit 1
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/cli.test.mjs
+=== base b87494f02, scripts/lease unchanged; 2026-11-24T03:42:17.129Z; load 19 38 77
+✖ #3238.f2323033 with the CLI built and no hub, the command scripts/lease runs holds the throttle's build grant and runs once (144.567042ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 188.339625
+
+✖ failing tests:
+
+test at tests/acceptance/3238/cli.test.mjs:12:1
+✖ #3238.f2323033 with the CLI built and no hub, the command scripts/lease runs holds the throttle's build grant and runs once (144.567042ms)
+  AssertionError [ERR_ASSERTION]: the command ran under no throttle grant (DEEP_THROTTLE null)
+  events:
+  {"name":"npm-run-build","event":"start","at":1795491737289,"pid":54906,"ppid":54900,"throttle":null}
+  table: null
+  the throttle's log:
+  
+  lease (`~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/scripts/lease node <tmp>/stub.mjs npm-run-build`, pid 54900): still running
+  started npm-run-build
+  The hub isn't answering; set this home up with deep setup. `node <tmp>/stub.mjs npm-run-build` runs with no lease.
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/tests/acceptance/3238/cli.test.mjs:23:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'null',
+    expected: /^build:[0-9a-f]+$/,
+    operator: 'match',
+    diff: 'simple'
+  }
+=== exit 1
+
+=== nice -n 10 node node_modules/vitest/vitest.mjs run --testTimeout=1200000 tests/acceptance/3238/hub.test.ts
+=== base b87494f02, scripts/lease unchanged; 2026-11-24T03:42:17.355Z; load 19 38 77
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e
+
+ ❯ tests/acceptance/3238/hub.test.ts (1 test | 1 failed) 1961ms
+   ❯ #3238 AC5: scripts/lease with a hub answering (1)
+     × #3238.8320a246 with a hub answering on a test's own root, the hub's lease table shows the command under its session and the throttle's log shows its grant 1455ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:42:17
+   Duration  2.07s (tests 98%, transform 2%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3238/hub.test.ts > #3238 AC5: scripts/lease with a hub answering > #3238.8320a246 with a hub answering on a test's own root, the hub's lease table shows the command under its session and the throttle's log shows its grant
+AssertionError: the session's call `scripts/lease node <tmp>/lease-3238/stub.mjs hub-job` was denied: exit 2, stdout "", stderr "DeepBuild blocked this: DeepBuild's product store is read-only to every session: each worktree gets copy-on-write clones of its entries, and only the hub builds them, from the default branch. Change the product in your own worktree, whose clone is yours; if a kept entry is wrong, fix its build on the default branch and the hub builds it again. This call couldn't be read: the program node runs is a value the line computes, in scripts/lease node <tmp>/lease-3238/stub.mjs hub-job. It may be one this guard holds. Write the command out plainly and it can be read. (guard no-prod"
+ ❯ tests/acceptance/3238/hub.test.ts:50:58
+     48|       const began = Date.now();
+     49|       const call = await claudeCall(s, command);
+     50|       if (call.pre.decision.denied || !call.bash) expect.fail(`the ses…
+       |                                                          ^
+     51|       await until(() => Boolean(noted('start')) || call.bash!.finished…
+     52|       const job = noted('start');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
 === exit 1
 
 === nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/admitted.test.mjs

@@ -1,10 +1,12 @@
 // #3238 AC5: with a hub answering on a test's own root, a command run through `scripts/lease` shows in the hub's lease
-// table under its session, as #1015's seventh criterion has it (a cpu.slot lease held by `session:<its ID>` while the
-// command runs, taken after the call began, released only after the command ended), and the throttle's log shows its
-// grant: a top-level `granted` of class build whose ID is the one the command holds. The world is #1015's (its
-// helpers, imported): a temp home with `deep hub run`, `deep` (the built CLI) on the PATH, and a scripted Claude Code
-// session in this checkout whose shell call goes through the real deep-hook. The throttle's table is a folder of the
-// world's own (DEEP_THROTTLE_TABLE), which holds inside a test run. The base leases the command and takes no grant.
+// table under its session, as #1015's seventh criterion has it (its blocks: commands a process the session started runs
+// through the script, each holding a cpu.slot lease of `session:<its ID>` while it runs, taken after the call began and
+// released only after the command ended), and the throttle's log shows its grant: a top-level `granted` of class build
+// whose ID is the one the command holds. The world is #1015's (its helpers, imported): a temp home with `deep hub run`,
+// `deep` (the built CLI) on the PATH, and a scripted Claude Code session in this checkout whose shell call goes through
+// the real deep-hook. The session types `node .../fixtures/session-build.mjs`, which holds no grant and starts the command
+// through scripts/lease (README: The first draft). A denied call is BLOCKED here, never a failure. The throttle's table is
+// a folder of the world's own (DEEP_THROTTLE_TABLE), which holds inside a test run. The base leases and takes no grant.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -12,6 +14,8 @@ import { claudeCall, heldNow, leaseRows, REPO, Session, shownHook, shownLeases, 
 
 const AC5 = '#3238.8320a246';
 const JOB = 'hub-job';
+/** What the session types: a program of this suite's that starts the command through scripts/lease. */
+const CALL = 'node tests/acceptance/3238/fixtures/session-build.mjs';
 /** Clock slack between the stub's clock and the hub's (both the system's), in ms. */
 const SLACK = 50;
 
@@ -44,14 +48,13 @@ describe('#3238 AC5: scripts/lease with a hub answering', () => {
     try {
       const s = new Session(w, 'claude', REPO, { T3238_DIR: dir, DEEP_THROTTLE_TABLE: table });
       await s.begin('Build the workspace.');
-      const command = `scripts/lease node ${join(dir, 'stub.mjs')} ${JOB}`;
       const began = Date.now();
-      const call = await claudeCall(s, command);
-      if (call.pre.decision.denied || !call.bash) expect.fail(`the session's call \`${command}\` was denied: ${shownHook(call.pre.hooked)}`);
+      const call = await claudeCall(s, CALL);
+      if (call.pre.decision.denied || !call.bash) throw Error(`BLOCKED: the session's call \`${CALL}\` was denied: ${shownHook(call.pre.hooked)}`);
       await until(() => Boolean(noted('start')) || call.bash!.finished(), 600_000);
       const job = noted('start');
       const shown = () => `notes: ${JSON.stringify(notes())}\nthe throttle's log: ${jsonLines<Entry>(join(table, 'log')).map((e) => JSON.stringify(e)).join('\n') || '(none)'}\nthe call's output: ${JSON.stringify(call.bash!.output().slice(-1500))}`;
-      expect(job, `the command \`${command}\` never started\n${shown()}`).toBeDefined();
+      if (!job) throw Error(`BLOCKED: the command of \`${CALL}\` never started, so no assertion was reached\n${shown()}`);
       const atStart = heldNow(await leaseRows(hub));
       writeFileSync(join(dir, `${JOB}.stop`), '');
       await until(() => call.bash!.finished(), 120_000);
@@ -62,18 +65,18 @@ describe('#3238 AC5: scripts/lease with a hub answering', () => {
 
       // The hub's lease table: a cpu.slot lease of the session, held when the command started, taken after the call
       // began, released only after the command ended or not yet.
-      const own = slotsOf(atStart, s).filter((l) => l.at >= began - SLACK && l.at <= job!.at + SLACK).find((l) => {
+      const own = slotsOf(atStart, s).filter((l) => l.at >= began - SLACK && l.at <= job.at + SLACK).find((l) => {
         const after = rows.find((r) => r.id === l.id)?.released;
         return after === undefined || (end !== undefined && after >= end.at - SLACK);
       });
-      expect(own, `\`${command}\` ran with no cpu.slot lease of its session (session:${s.id}): when it started the hub's table held ${shownLeases(atStart)}; its cpu.slot leases in all: ${shownLeases(slotsOf(rows, s))}\n${shown()}`).toBeDefined();
+      expect(own, `the command run through scripts/lease ran with no cpu.slot lease of its session (session:${s.id}): when it started the hub's table held ${shownLeases(atStart)}; its cpu.slot leases in all: ${shownLeases(slotsOf(rows, s))}\n${shown()}`).toBeDefined();
 
       // The throttle's log: the build grant the command holds, granted at top level.
-      const token = String(job!.throttle);
-      expect(token, `\`${command}\` ran under no throttle grant (DEEP_THROTTLE ${token})\n${shown()}`).toMatch(/^build:[0-9a-f]+$/);
+      const token = String(job.throttle);
+      expect(token, `the command run through scripts/lease ran under no throttle grant (DEEP_THROTTLE ${token})\n${shown()}`).toMatch(/^build:[0-9a-f]+$/);
       const id = token.slice('build:'.length);
       const granted = jsonLines<Entry>(join(table, 'log')).find((e) => e.event === 'granted' && e.id === id);
-      expect(granted && granted.class === 'build' && granted.grant === 'top-level', `the throttle's log shows no top-level build grant ${id} for \`${command}\`\n${shown()}`).toBe(true);
+      expect(granted && granted.class === 'build' && granted.grant === 'top-level', `the throttle's log shows no top-level build grant ${id} for the command\n${shown()}`).toBe(true);
     } finally {
       writeFileSync(join(dir, 'all.stop'), '');
       await w.stopHub();

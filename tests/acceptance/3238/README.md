@@ -46,12 +46,12 @@ and `hub.test.ts` under the same wrapper around its vitest command.
 | `inherited.test.mjs` | AC2 | nothing built: a copy of `scripts/` | about 2 s |
 | `no-grant.test.mjs` | AC3 | nothing built: a copy of `scripts/` | about 2 s |
 | `admitted.test.mjs` | AC2, the admission case | nothing built: a copy of `scripts/` | about 2 s |
-| `cli.test.mjs` | AC4 | the built CLI (`npm ci`, `npm run build --workspaces`); BLOCKED without it | not run yet |
-| `hub.test.ts` | AC5 | the built CLI, and deep-hook (`cargo build --locked -p deep-hook --features env-plants`, which #18's helper runs when it is missing) | not run yet |
-
-The times are at a 1-minute load of 100 to 130 on 18 cores; a test whose program leaves a command waiting adds up to
-10 s, the time its cleanup gives every process to end before it kills their groups.
+| `cli.test.mjs` | AC4 | the built CLI (`npm ci`, `npm run build --workspaces`); BLOCKED without it | under 1 s |
+| `hub.test.ts` | AC5 | the built CLI, and deep-hook (`cargo build --locked -p deep-hook --features env-plants`, which #18's helper runs when it is missing) | the redraft has not run yet |
 | `design.test.mjs` | AC6 | nothing | under 1 s |
+
+The first three files' times are at a 1-minute load of 100 to 130 on 18 cores, and `admitted` and `cli` at 19 to 36; a test whose program leaves a command waiting adds up to
+10 s, the time its cleanup gives every process to end before it kills their groups.
 
 The `.mjs` files must run under `node --test` and `hub.test.ts` under vitest: only inside a test run does a request use
 a table of a test's own (section 6). `hub.test.ts` starts a hub, which runs deep-hook from this checkout's `target/`,
@@ -170,14 +170,17 @@ Runs the checkout's own `scripts/lease node stub.mjs npm-run-build` in place, so
 `HOME` (no hub there: `deep lease` reads the hub's address and token under `HOME`) and no `deep` on the `PATH`. Without
 a built CLI it is BLOCKED, never a pass. While the stub holds, its `DEEP_THROTTLE` is `build:<id>` and the table holds
 that grant; once it ends, it started exactly once and the log has a top-level `granted` of class build with that ID.
-On the base `deep lease` finds no hub and runs the command with no grant, so it should fail at the grant assertion
-(read from the base's code; not run yet, see Wrong programs).
+On the base `deep lease` finds no hub and runs the command with no grant, and it fails at the grant assertion, "the
+command ran under no throttle grant (DEEP_THROTTLE null)" (run on `b87494f02`).
 
 ## AC5 `#3238.8320a246`: with a hub answering (`hub.test.ts`)
 
 #1015's world (`World`, `Session`, `claudeCall`, `leaseRows`): a temp home with `deep hub run` answering on it, `deep`
-(the built CLI) on the `PATH`, and one scripted Claude Code session in this checkout, whose shell call `scripts/lease
-node <world>/lease-3238/stub.mjs hub-job` goes through the real deep-hook and runs whatever the hook decides. When the
+(the built CLI) on the `PATH`, and one scripted Claude Code session in this checkout, whose shell call is
+`node tests/acceptance/3238/fixtures/session-build.mjs`, through the real deep-hook, and runs whatever the hook decides.
+That program holds no throttle grant and starts the command, `scripts/lease node <world>/lease-3238/stub.mjs hub-job`,
+as its child, which is how #1015's seventh criterion reaches the script: its blocks are commands a process the session
+started runs through it. A typed `scripts/lease ...` can't be the call (The first draft, below). When the
 stub starts, the hub's lease rows are read; then the stub is let end and the rows read again once the session's slots
 are released (a minute at most).
 
@@ -187,7 +190,17 @@ are released (a minute at most).
   that ID.
 
 On the base the command runs through `deep lease` and holds a slot, but no grant, so it should fail at the grant
-assertion (read from the base's code; not run yet, see Wrong programs).
+assertion (read from the base's code; the redraft has not run yet). A denied call, or a command that never starts, is
+a thrown `BLOCKED` error and not an assertion, so a world that doesn't start can't read as a base failure.
+
+**The first draft couldn't reach its assertions.** Its session typed `scripts/lease node <path>/stub.mjs hub-job`, and
+its one run on `b87494f02` (2026-11-24T03:42Z, under a test grant) ended at the test's own `expect.fail` because deep-hook
+had denied the call: "This call couldn't be read: the program node runs is a value the line computes" (guard
+`no-product-store-write`). The command was never started, so that is no base failure of the criterion though it stood on
+an assertion. The session that asked for this redraft reported that the guard, evaluated with `deep-hook check` on the
+base's script, matches `scripts/lease node ...`, `scripts/lease cargo test --workspace` and `./scripts/lease cargo build`,
+and not `node <stub> hub-job` alone; I haven't evaluated it myself. A second draft that typed `scripts/lease hub-job` was
+written and replaced before it ran. Both were wrong about the same thing: what the session types is not the command.
 
 ## AC6 `#3238.b9ec371a`: the design (`design.test.mjs`)
 
@@ -204,8 +217,9 @@ scripts the criteria name, and `own-grant` beside AC2's, are twins (`twins.json`
 against its test, failing as recorded at the end of `BASE-FAILURE.txt`. A throwaway reference script, the twins' source without their planted line,
 passed the tests of AC1, AC2 and AC3 here and was never committed.
 
-**`cli.test.mjs` (AC4) and `hub.test.ts` (AC5) have not run yet, on the base or anywhere.** Both need the packages built, and on the day these were drafted no build grant came on this Mac: a preflight held the machine's exclusive
-`timed` grant for over 10 hours. Their expected base failures above are read from the base's code, not seen. The
+**`hub.test.ts`'s redraft (AC5) has not run yet, on the base or anywhere;** its expected base failure above is read from the
+base's code, not seen. `cli.test.mjs` (AC4) ran once, on `b87494f02`, once a build grant came: on the day these were
+drafted a preflight held the machine's exclusive `timed` grant for over 10 hours. The
 runs of `serial`, `inherited`, `no-grant` and `design`, of the reference and of the twins were made with no machine
 grant, while that preflight held `timed` (`BASE-FAILURE.txt` has the times). They should have had a `test` grant:
 section 7a's no-grant rule is for lint scripts, and `node --test` is the `test` class.
