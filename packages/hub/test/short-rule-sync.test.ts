@@ -25,6 +25,8 @@ it('a short prompt typing a rule during another session\'s evidence sync replies
   const resumed = a.prompt(longText('Before you go on, read this through.'));
   resumed.catch(() => undefined);
   await written;
+  // The slowed sync follows the write at once: a call's round trip through the hub is longer.
+  await c.tool('before');
   const line = 'Name every branch after its issue number';
   const typed = b.prompt(`rule: ${line}.\nSound good?`);
   // The call's second hook is sent once its first is answered, after B's prompt reached the hub.
