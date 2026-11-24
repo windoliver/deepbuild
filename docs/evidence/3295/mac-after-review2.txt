@@ -1,0 +1,22 @@
+# #3295 on the Mac (MacBook Pro), 2026-11-23, the late-close test after review round 2 (killed hooks go through the control check).
+# 1: #17's read reverted in a copy, under the edited test. 2-4: the change.
+== 1. #17 read reverted (main.rs reads to stdin's close), the edited test, load { 132.08 101.41 96.69 }
+test a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it ... FAILED
+thread 'a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it' (163957906) panicked at crates/deep-hook/tests/cli.rs:302:5:
+the call is spooled: ""
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.72s
+== 2. cli target on the change, load { 135.19 103.59 97.55 }
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.50s
+== 3. blind suite tests/acceptance/3295 on the change, load { 82.98 97.42 97.36 }
+✔ #3295.63a9095d the late-close test still fails on a deep-hook that decides only once its agent closes stdin: killed at the one-second deadline (279648.959292ms)
+✔ #3295.2acd3e71 the late-close test still fails on a deep-hook that allows the call and never spools it (5761.286292ms)
+✔ #3295.fae86cca the late-close test reads INCONCLUSIVE, never FAIL or PASS, on a deep-hook given no time to read its call (14156.897167ms)
+ℹ pass 3
+ℹ fail 0
+ℹ skipped 0
+== 4. redraft tests/acceptance/3295-redraft-fae86cca on the change, load { 89.73 92.27 94.53 }
+✔ #3295.fae86cca the late-close test reads INCONCLUSIVE, never FAIL or PASS, on a deep-hook given no time to read its call (209910.305625ms)
+ℹ pass 1
+ℹ fail 0
+ℹ skipped 0
+== ALL DONE Mon Nov 23 20:29:28 PST 2026

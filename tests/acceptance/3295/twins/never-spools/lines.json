@@ -1,0 +1,15 @@
+{
+  "crates/deep-hook/src/main.rs": [
+    {
+      "find": [
+        "fn spool_by(request: String, id: &str, start: Instant) {"
+      ],
+      "wrong": [
+        "fn spool_by(request: String, id: &str, start: Instant) {",
+        "    if !request.is_empty() {",
+        "        return;",
+        "    }"
+      ]
+    }
+  ]
+}

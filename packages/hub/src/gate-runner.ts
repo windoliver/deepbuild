@@ -95,6 +95,8 @@ export interface GateOptions {
   startsAtClaim?(folder: string, session: string, worktree: string): Promise<void>;
   /** Whether a checkout's done.yaml has an environment, so a journey there runs on its warm stack (#580). */
   stacked?(folder: string): boolean;
+  /** Each program a check's command names, with its reading (#2060); a runner without it reads none. */
+  programs?(command: string, checkout: string, read: Map<string, string>): Promise<[string, string][]>;
   /** Resolves with the run's outcome once it has finished. */
   ended(run: string): Promise<string>;
   /** CPU slots free now. */
@@ -173,7 +175,7 @@ const LOAD_WAIT_MS = 30 * 60_000;
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
 /** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
 interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
-interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
+interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
 /** What a claim's worktree changed against its merge base when its snapshot was taken, and the test runners' configs it held, each with its text (#33). */
 interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean }
 async function changesOf(cwd: string, base: string): Promise<Changes> {
@@ -325,14 +327,24 @@ export class GateRunner {
     if (!repo) this.repos.set(cwd, repo = repoOf(cwd));
     return repo;
   }
-  /** The stem of a check's key on a claim: on the merge base when `base` names it (#1018). */
-  private async stemOf(c: Claim, e: Entry, base: string | null): Promise<string> {
+  /** The programs a check's command names in `dir`, each with the reading the claim's keys hold of it (#2060), or with what a planted key holds. */
+  private async programsOf(c: Claim, e: Entry, base: string | null, dir: string): Promise<[string, string][]> {
+    const programs = await this.o.programs?.(e.check.command, dir, c.programs) ?? [];
+    const plant = this.o.plant;
+    if (plant === 'key-leaves-out-programs' || (plant === 'program-readings-head-only' && base !== null)) return [];
+    if (plant === 'key-holds-program-link') return programs.map(([name, reading]) => [name, `${reading} ${c.claim}/bin/${name}`]);
+    // The planted reader leaves a program it can't find at whatever a claim last read of it.
+    const skipped = (name: string): string | undefined => [...this.claims.values()].flat().map((x) => x.programs.get(name)).find((r) => r !== undefined && r !== 'absent');
+    return plant === 'skips-absent-program' ? programs.map(([name, reading]) => [name, reading === 'absent' ? skipped(name) ?? reading : reading]) : programs;
+  }
+  /** The stem of a check's key on a claim, in its checkout `dir`: on the merge base when `base` names it (#1018). */
+  private async stemOf(c: Claim, e: Entry, base: string | null, dir: string): Promise<string> {
     // A base run's tree is the merge base's with the check's own files, so the snapshot's names say nothing of it. A
     // workspace's check reads its state (#67): a base run the reading pinned at the lock, a head run the one now.
     const state = base === null ? c.state?.files : c.state?.pinned;
     return stemOf({
       repo: await c.repo, check: e.check.check, approved: e.check.approved, command: e.check.command, deadline_ms: e.check.deadline_ms ?? null, held_out: e.check.held_out ?? null, references: e.check.references ?? null,
-      installs: await c.installs, names: base === null ? await c.names : null, base, ...(state ? { state } : {}),
+      installs: await c.installs, programs: await this.programsOf(c, e, base, dir), names: base === null ? await c.names : null, base, ...(state ? { state } : {}),
       ...(this.o.plant === 'keys-runs-by-session' ? { session: c.session } : {}),
     });
   }
@@ -364,7 +376,7 @@ export class GateRunner {
     // #1331's planted lander runs every check again on a moved head, so nothing carries across its judgements.
     // Nor does a check with a spent variant (#3229): which of a key's runs were on it isn't known of another hub's, so it runs its own.
     if (this.onStack(e, dir) || this.spentOf(c, e).length || this.o.plant === 'empty-commit-run-alone' || (this.o.plant === 'lander-reruns-all' && c.session.startsWith('land'))) return null;
-    const stem = await this.stemOf(c, e, null);
+    const stem = await this.stemOf(c, e, null, dir);
     for (const g of await this.shared.find(e.check.check, stem, dir)) {
       if (this.unread.has(g.id)) continue;
       await this.prune(g.id);
@@ -442,7 +454,7 @@ export class GateRunner {
    * gets one run a claim, its count filled by the claims on its key (#1018).
    */
   private async runOwn(c: Claim, e: Entry, dir: string, lane: 'fast' | 'slow', expected: number | null, ran?: (run: string) => void): Promise<void> {
-    const stem = await this.stemOf(c, e, null);
+    const stem = await this.stemOf(c, e, null, dir);
     const key: RunKey = { check: e.check.check, stem, dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: false };
     // A timing check's result is the machine's load's as much as its files', so its runs land on no key and never carry (#352).
     const shared = !this.onStack(e, dir) && !e.check.timing;
@@ -700,7 +712,8 @@ export class GateRunner {
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();
     // What its keys' stems name (#1018), read beside the snapshot and checkout where it can be: its repo, once per
-    // worktree; the installs its checkouts clone from the worktree; and the names of the files its checkout holds.
+    // worktree; the installs its checkouts clone from the worktree; the names of the files its checkout holds; and the
+    // readings of the programs its checks' commands name, each taken once when first asked for (#2060).
     const repo = this.repoOf(r.cwd);
     let installs: Promise<string> | undefined;
     // Read beside the snapshot, from the same worktree: whose checks count turns on what the claim changed (#33).
@@ -755,9 +768,9 @@ export class GateRunner {
     // At the lock, the definition's checks join the claim's early run (#322): the claim is the one the spec's checks ran for.
     const joined = r.joins ? this.claimOf(r.claim) : undefined;
     const held = checkout === null ? null : Promise.resolve({ dir: checkout, commit: snapshot });
-    const facts = installs && checkout !== null ? { installs, names: namesOf(checkout) } : null;
+    const facts = installs && checkout !== null ? { installs, names: namesOf(checkout), programs: new Map<string, string>() } : null;
     const claim: Claim = joined ?? { claim: r.claim, session: r.session, task: r.task, cwd: r.cwd, base: r.base, snapshot, tree, checkout: held, requirements: r.requirements, entries: new Map(),
-      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), state: r.state, changes: listed ?? await changes };
+      repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), programs: facts?.programs ?? new Map(), state: r.state, changes: listed ?? await changes };
     const last = older.at(-1)?.tree;
     const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
     claim.ready = false;
@@ -952,7 +965,7 @@ export class GateRunner {
     try {
       const { dir } = await this.checkoutOf(c);
       shared = !this.onStack(e, dir);
-      const stem = await this.stemOf(c, e, c.base);
+      const stem = await this.stemOf(c, e, c.base, dir);
       const paths = [...new Set(this.ownOf(e))].sort();
       key = { check, stem, dir, claim: c.claim, session: sessionOf(c.session), base: true, withheld: false, id: keyId(stem, paths, await contents(dir, paths)), paths };
     } catch {

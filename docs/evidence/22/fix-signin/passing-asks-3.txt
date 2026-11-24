@@ -1,0 +1,10 @@
+head cd42d4517d95aec98d8d68672b444057d5b0fc4f + the fix (uncommitted at run); Sun Nov 15 05:22:14 PM PST 2026
+
+ RUN  v5.0.5 <worktree>
+
+
+ Test Files  6 passed (6)
+      Tests  84 passed (84)
+   Start at  17:19:19
+   Duration  168.08s (tests 99%, transform 1%)
+
