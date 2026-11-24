@@ -292,6 +292,7 @@
   "question.back_sends": "{0} · {1}",
   "question.default_at": "Default: {0} · at {1}",
   "question.field": "{0}: {1}",
+  "question.holds_escapes": "This holds characters you can't see, each drawn as its escape",
   "question.look_first": "Look at each picture first",
   "question.more_options": {
     "one": "{0} more options",

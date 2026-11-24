@@ -25,6 +25,7 @@ use crate::{
     states,
 };
 
+mod escapes;
 mod faults;
 pub use faults::Faults;
 
@@ -662,7 +663,7 @@ impl Controller {
 
     /// Everything the card draws, in reading order, each row's words through [`visible`].
     pub fn rows(&self) -> Vec<Row> {
-        self.unmarked_rows().into_iter().map(Row::marked).collect()
+        escapes::drawn(self.model.kind, self.unmarked_rows())
     }
 
     fn unmarked_rows(&self) -> Vec<Row> {
