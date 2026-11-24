@@ -396,8 +396,8 @@ impl Hub<'_> {
     fn id_table(&mut self, doc: &Value, f: &Frame, size: [u16; 2]) -> Vec<String> {
         if crate::probe::draws_3d(doc) {
             let posed = crate::film::posed(doc, f.t).unwrap_or_else(|| doc.clone());
-            if let Ok((scene, _)) = self.evaluate3d(&posed, f.t, size) {
-                return crate::snapshot::visible(scene.boxes(), 1.0, size)
+            if let Ok(frame) = self.evaluate3d(&posed, f.t, size) {
+                return crate::snapshot::visible(frame.staged.scene.boxes(), 1.0, size)
                     .as_array()
                     .into_iter()
                     .flatten()
