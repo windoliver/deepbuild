@@ -991,11 +991,20 @@ pub(crate) fn name_referrers(
     sealed: &Sealed,
     planted: Option<Planted>,
 ) {
+    if !refusals.iter().any(|i| i.code == "ref_unresolved") {
+        return;
+    }
     for name in removed {
-        let (Name::Item(id) | Name::Control(id)) = name else {
-            continue;
+        // The other kind of name the ID may also be: its fields are never this name's.
+        let (id, other) = match name {
+            Name::Item(id) => (id, Name::Control(id.clone())),
+            Name::Control(id) => (id, Name::Item(id.clone())),
+            _ => continue,
         };
-        let refs = deep_canvas::refs::refs_to(doc, sealed, name);
+        let (refs, others): (Vec<_>, Vec<_>) =
+            deep_canvas::refs::refs_to_any(doc, sealed, &[name, &other])
+                .into_iter()
+                .partition(|r| &r.name == name);
         if refs.is_empty() {
             continue;
         }
@@ -1006,11 +1015,13 @@ pub(crate) fn name_referrers(
         if planted == Some(Planted::RefusalNamesFirstRef) {
             rows.truncate(1);
         }
+        let at = |r: &deep_canvas::refs::Ref, issue: &Issue| {
+            issue.path == r.path || issue.path.starts_with(&format!("{}/", r.path))
+        };
         for issue in refusals.iter_mut().filter(|i| i.code == "ref_unresolved") {
-            let at_field = refs
-                .iter()
-                .any(|r| issue.path == r.path || issue.path.starts_with(&format!("{}/", r.path)));
-            if at_field || issue.actual == json!(id) {
+            let at_field = refs.iter().any(|r| at(r, issue));
+            let others = others.iter().any(|r| at(r, issue));
+            if at_field || (issue.actual == json!(id) && !others) {
                 issue.actual = Value::Array(rows.clone());
                 if !issue.ids.iter().any(|x| x == id) {
                     issue.ids.push(id.to_string());

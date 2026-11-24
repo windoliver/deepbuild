@@ -1024,12 +1024,16 @@ impl Hub<'_> {
         issues.extend(carried(&result.issues, &last, planted));
         // #3379: an ID the revision removes that rows still name, such as a control a logic item
         // still reads: its refusal lists every one of them, as a patch's does (#1801).
+        // Each by the map it left, both when it left both.
+        let gone =
+            |map: &str, id: &str| was_doc[map].get(id).is_some() && doc[map].get(id).is_none();
         let removed: Vec<Name> = show
             .removes
             .iter()
-            .map(|id| match was_doc["controls"].get(id.as_str()) {
-                Some(_) => Name::Control(id.clone()),
-                None => Name::Item(id.clone()),
+            .flat_map(|id| {
+                let item = gone("items", id).then(|| Name::Item(id.clone()));
+                let control = gone("controls", id).then(|| Name::Control(id.clone()));
+                item.into_iter().chain(control)
             })
             .collect();
         name_referrers(&mut issues, &doc, &removed, &self.startup.sealed, planted);

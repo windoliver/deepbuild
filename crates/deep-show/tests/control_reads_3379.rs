@@ -170,3 +170,40 @@ fn removing_a_read_control_lists_its_readers_and_not_an_items_of_the_same_id() {
         &json!([{"row": "items/counter", "path": "items/counter/params/reads/0", "kind": "control"}]),
     );
 }
+
+#[test]
+fn a_shared_revision_removing_an_item_lists_its_readers_and_not_a_controls_of_the_same_id() {
+    let seed = json!({"format": 1, "profile": "board", "title": "Counter", "description": "A counter that reads a press.",
+        "size": [320, 200], "requires": {"modules": {"logic": "^1"}},
+        "layers": {"alpha-main": {"writer": WRITER, "title": "Alpha", "order": "a0"}}, "items": {}});
+    let with_group = |sha: &str, group: bool| {
+        let mut doc = board(sha, press());
+        if group {
+            doc["items"]["press"] = json!({"id": "press", "kind": "group@1", "name": "Press", "order": "a1", "params": {}});
+        }
+        doc["items"]["dot"] = json!({"id": "dot", "kind": "circle@1", "name": "Dot", "order": "a2", "parent": "press",
+            "params": {"center": [40, 60], "r": 8, "paint": {"fill": {"role": "accent"}}}});
+        doc
+    };
+    let replies = run("shared-item", json!({"document": seed}), |sha| {
+        vec![
+            show(with_group(sha, true)),
+            json!({"call": "deep_show", "session": "sess-alpha", "doc": DOC, "document": with_group(sha, false),
+                "removes": ["press"], "include": ["issues"]}),
+        ]
+    });
+    assert_eq!(replies[0]["outcome"], "presented", "{}", replies[0]);
+    let reply = &replies[1];
+    assert_eq!(reply["outcome"], "refused", "{reply}");
+    let at = reply["issues"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|i| i["code"] == "ref_unresolved" && i["path"] == "items/dot/parent")
+        .unwrap_or_else(|| panic!("a ref_unresolved at the dot's parent: {reply}"));
+    assert_eq!(
+        at["actual"],
+        json!([{"row": "items/dot", "path": "items/dot/parent", "kind": "parent"}]),
+        "the item's refusal lists the item's rows, not the control's read: {reply}"
+    );
+}
