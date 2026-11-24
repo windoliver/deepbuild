@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: the late-close test it runs reads deep-hook's exit against 500 ms and 1 s, so a busy machine starves the control and stand-in hooks; each run also builds deep-hook with cargo" }

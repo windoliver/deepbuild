@@ -33,7 +33,7 @@
 // the selection without running it. A test that starts a package's build is selected when the change is in that
 // package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below).
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { availableParallelism, constants, homedir, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, resolve, sep } from 'node:path';
@@ -429,6 +429,18 @@ const lintLabel = (rest) => {
 // no job: each reads as run by none.
 const live = new Set();
 let stopped = null;
+// What a stopped run's tests leave in the shared temporary folder, their clean-up skipped (#2857): 605's repo copies
+// and 305's deep-show copies, about 1 GB each. A run removes those a day old before it starts any job: no test of
+// either runs that long, and what other tests keep there on purpose, such as 1455's base trees, stays.
+const LEFTOVER = /^deep-(?:605|305)-/;
+function sweepLeftovers() {
+  for (const name of readdirSync(tmpdir()).filter((entry) => LEFTOVER.test(entry))) {
+    const path = join(tmpdir(), name);
+    try {
+      if (Date.now() - statSync(path).mtimeMs > 86_400_000) rmSync(path, { recursive: true, force: true });
+    } catch {}
+  }
+}
 // A test job whose log and report have both stood still for IDLE minutes is stopped (#2627): a test that starves its
 // worker's event loop defeats vitest's own limit (#2783), and a handle a test leaks keeps its file from exiting (#2804),
 // either for ever. The bound is above the longest stretch a test may write nothing: #1781's 120 min build hook runs
@@ -727,6 +739,7 @@ async function main(args) {
     for (const child of live) child.kill(signal === 'SIGINT' ? 'SIGTERM' : signal);
   });
 
+  sweepLeftovers();
   // What the run made before its test grant (prepare): its logs, binaries, shards and package build.
   const { logs, binRoot } = held.prep;
   const binaries = new Map(held.prep.binaries);

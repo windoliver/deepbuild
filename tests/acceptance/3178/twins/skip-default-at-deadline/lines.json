@@ -1,0 +1,21 @@
+{
+  "packages/hub/src/plant.ts": [
+    {
+      "find": [
+        "  if (!value) return undefined;"
+      ],
+      "wrong": [
+        "  // The twin skip-default-at-deadline (tests/acceptance/3178/README.md): the hub acts as this plant whatever DEEP_HUB_PLANT says.",
+        "  if (value !== 'skip-default-at-deadline') return 'skip-default-at-deadline';"
+      ]
+    },
+    {
+      "find": [
+        "export const activePlant = (): string | undefined => process.env.DEEP_HUB_PLANT || undefined;"
+      ],
+      "wrong": [
+        "export const activePlant = (): string | undefined => 'skip-default-at-deadline';"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 18:20:58 load { 14.33 12.53 15.40 } thermal 0 free KB 56742244
+head 97fffed505149c3d93599549b0a32d2e1e7494c0; origin/main a6e742ed0519eda4ddd3236fbae2eaa83fd7078d; merge-base b1fc9abb20d2fd9a5fd46c323e861726fcd62a28 18:21:31 load { 10.20 11.69 14.99 } thermal 0 free KB 55794132
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 18:21:34 load { 10.26 11.68 14.97 } thermal 0 free KB 55793992
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261 18:21:34 load { 10.26 11.68 14.97 } thermal 0 free KB 55793992
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720 18:21:34 load { 10.26 11.68 14.97 } thermal 0 free KB 55793900
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733 18:21:34 load { 10.26 11.68 14.97 } thermal 0 free KB 55793896
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711 18:21:34 load { 10.26 11.68 14.97 } thermal 0 free KB 55793716
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305 18:21:34 load { 10.26 11.68 14.97 } thermal 0 free KB 55793716
+judge copy checks: sha256 9257a6f60b757e4c957f8898f4ad54791ff6e7a8b51e77f988b9e6c63ee9886a diff-lines=4 reopen-early-return=1 row22=1 other-gh-calls=0 18:21:35 load { 10.26 11.68 14.97 } thermal 0 free KB 55793716
+part 3 start: Now drawing from 'AC Power'; front app [Claude]; screen-lock flag 0 18:21:35 load { 10.26 11.68 14.97 } thermal 0 free KB 55793712
+setup at C (npm ci, workspace build, deep-hook) exit=0 18:22:33 load { 17.02 13.43 15.40 } thermal 0 free KB 54701780
+part 3 app run: vitest exit=0; PNGs 3; front app [Claude] 18:28:19 load { 27.13 35.01 26.27 } thermal 0 free KB 44258800
+part 4 start: Now drawing from 'AC Power'; front app [Claude]; screen-lock flag 0 18:28:19 load { 27.13 35.01 26.27 } thermal 0 free KB 44258672
+part 4 signin at head: vitest exit=0 (expected PASS); PNGs 1; front app [Claude] 18:28:35 load { 23.88 33.91 26.03 } thermal 0 free KB 44251096
+part 5 start: Now drawing from 'AC Power'; front app [Claude]; screen-lock flag 0 18:28:35 load { 23.88 33.91 26.03 } thermal 0 free KB 44251092
+tests/acceptance/1459/identifier.test.ts exit=0; front app [Windows App] 18:41:54 load { 53.99 85.92 61.96 } thermal 1 free KB 36276944
+tests/acceptance/1459/panel.test.ts exit=0; front app [Windows App] 18:42:19 load { 41.75 81.08 60.78 } thermal 0 free KB 36226008
+tests/acceptance/1172/rows.test.ts exit=0; front app [Windows App] 18:43:52 load { 16.19 61.74 55.43 } thermal 0 free KB 35671640
+tests/acceptance/1172/panel.test.ts exit=0; front app [Windows App] 18:44:14 load { 14.61 58.44 54.39 } thermal 0 free KB 35669316
+tests/acceptance/1460/cli.test.ts exit=0; front app [Windows App] 18:44:39 load { 11.83 54.27 53.01 } thermal 0 free KB 35374472
+part 6 start: Now drawing from 'Battery Power'; front app [Windows App]; screen-lock flag 0 18:44:39 load { 11.83 54.27 53.01 } thermal 0 free KB 35374264
+1345 exit=0; front app [Windows App] 18:54:55 load { 1.51 9.49 27.61 } thermal 0 free KB 34520220
+1349 exit=1; front app [Windows App] 18:59:38 load { 2.95 5.63 20.67 } thermal 0 free KB 30051712
+319-budgets exit=0; front app [Windows App] 18:59:39 load { 2.95 5.63 20.67 } thermal 0 free KB 30051520
+83-redraft-319 exit=0; front app [Windows App] 18:59:53 load { 3.04 5.52 20.37 } thermal 0 free KB 30048176
+part 7 start: Now drawing from 'Battery Power'; front app [Windows App]; screen-lock flag 0 18:59:53 load { 3.04 5.52 20.37 } thermal 0 free KB 30048172
+readIssue pre-check exit=0, lines 5, 'blocked' count 0 18:59:54 load { 3.04 5.52 20.37 } thermal 0 free KB 30048160
+BLOCKED: not on AC power at the judge's start; judge not run 18:59:54 load { 3.04 5.52 20.37 } thermal 0 free KB 30048160
+login-name hits after redaction: 0 18:59:54 load { 3.04 5.52 20.37 } thermal 0 free KB 30048104
+secret scan hits=0 18:59:54 load { 3.04 5.52 20.37 } thermal 0 free KB 30047924

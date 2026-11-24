@@ -1,0 +1,38 @@
+
+ RUN  v5.0.5 <tree>
+
+ ❯ packages/asks/test/timing.test.ts (39 tests | 1 failed | 38 skipped) 1866ms
+   ❯ the fold (11)
+     × an inbox row names the exception holding it, another session's on the same thread included, and no other row names one (#22) 1806ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/asks/test/timing.test.ts > the fold > an inbox row names the exception holding it, another session's on the same thread included, and no other row names one (#22)
+AssertionError: expected { …(12) } to match object { session: 'S2', …(2) }
+(10 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "folded": "ask:01M5CJXHG0V94T9K94BEG45F06",
+    "session": "S2",
+    "status": "folded",
+  }
+
+ ❯ packages/asks/test/timing.test.ts:175:47
+    173|     const later = await asks.raise(core('S2'), sourceOf('taste'), ask(…
+    174|     const rows = await asks.inbox();
+    175|     expect(rows.find((r) => r.ask === later)).toMatchObject({ session:…
+       |                                               ^
+    176|     for (const r of rows) expect(r.folded, r.ask).toBe(r.ask === folde…
+    177|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 38 skipped (39)
+   Start at  18:09:31
+   Duration  3.86s (tests 53%, transform 41%, import 6%)
+
