@@ -7,7 +7,7 @@
 // one the gate recorded, or the one the stop's reply shows when the record can't take it.
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
@@ -91,6 +91,33 @@ export function filesOf(root: string): Map<string, Buffer> {
   return out;
 }
 
+interface Locked { os?: string[]; cpu?: string[]; optionalDependencies?: Record<string, string> }
+/** This checkout's package-lock.json packages, by path (`node_modules/...`). */
+export const lockedPackages = (): Record<string, Locked> => (JSON.parse(readFileSync(join(REPO, 'package-lock.json'), 'utf8')) as { packages: Record<string, Locked> }).packages;
+/** Whether the lockfile marks a package as one platform's own: npm installs it only where its `os` and `cpu` match. */
+export const platformOnly = (p: Locked | undefined): boolean => p?.os !== undefined || p?.cpu !== undefined;
+
+/**
+ * A case's installs and, after each, the optional dependencies the lockfile marks with `os` or `cpu` that this
+ * checkout's node_modules holds (#3088): npm already chose this machine's variants, so a case lists only what every
+ * platform installs. Each is found where Node would resolve it from the install, its own node_modules first.
+ */
+function withPlatformPackages(installs: string[]): string[] {
+  const locked = lockedPackages();
+  const out = new Set<string>();
+  for (const path of installs) {
+    out.add(path);
+    for (const name of Object.keys(locked[path]?.optionalDependencies ?? {})) {
+      for (let at = path; ; at = at.slice(0, Math.max(0, at.lastIndexOf('/node_modules/')))) {
+        const dep = `${at ? `${at}/` : ''}node_modules/${name}`;
+        if (locked[dep]) { if (platformOnly(locked[dep]) && existsSync(join(REPO, dep)) && !installs.some((i) => dep.startsWith(`${i}/`))) out.add(dep); break; }
+        if (!at) break;
+      }
+    }
+  }
+  return [...out];
+}
+
 export interface World { tmp: string; home: string; root: string; repo: string; drafts: string; work: string; github: string; confirm: string }
 /** A world from a case's base folder, its repo committed once on main and trusted in Claude Code. */
 export function makeWorld(owned: Owned, base: string, o: { drafts?: unknown[] | undefined; readings?: unknown[] | undefined; installs?: string[] | undefined; files?: Record<string, string> }): World {
@@ -105,9 +132,10 @@ export function makeWorld(owned: Owned, base: string, o: { drafts?: unknown[] | 
   const repo = join(tmp, 'repo');
   cpSync(base, repo, { recursive: true });
   for (const [path, bytes] of Object.entries(o.files ?? {})) { mkdirSync(dirname(join(repo, path)), { recursive: true }); writeFileSync(join(repo, path), bytes); }
-  for (const path of o.installs ?? []) {
+  for (const path of withPlatformPackages(o.installs ?? [])) {
     mkdirSync(dirname(join(repo, path)), { recursive: true });
-    execFileSync('/bin/cp', ['-cR', join(REPO, path), join(repo, path)]);
+    // A clone where the file system makes one: -c is macOS's clonefile flag, which GNU cp refuses (#2955).
+    execFileSync('/bin/cp', [...(process.platform === 'darwin' ? ['-cR'] : ['-R', '--reflink=auto']), join(REPO, path), join(repo, path)]);
   }
   git(repo, ['init', '-q', '-b', 'main']);
   git(repo, ['add', '-A']);

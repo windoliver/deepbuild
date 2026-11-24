@@ -1,0 +1,124 @@
+Base run of the #2748 acceptance tests, on base commit 5fcfb690 (main), Node 24.22.0, vitest 5.0.5, macOS (arm64),
+after `npm ci --ignore-scripts`, `npm run build --workspaces` and `cargo build --locked -q -p deep-hook`, from the
+worktree root (<checkout>), each file once under the machine's test grant.
+
+== passes.test.ts (AC1 to AC5) ==
+
+  node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run tests/acceptance/2748/passes.test.ts --testTimeout=600000 --no-file-parallelism
+
+Asked for the grant on 2026-11-22 at 23:31:14 EST (1-minute load 102.8); the grant came about 39 minutes later; vitest
+started at 00:25:14 and ended at 00:26:44.
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Duration  89.37s
+
+What the base does: nothing reads a passes page and nothing runs a pass. Every claim of the story started its unit
+check, the definition's check and the review, and one runner job, the review's, which held no pass's prompt and was
+given its own commit's change. Every claim was PASS, the last one too, whose change adds an unchecked JSON.parse at
+src/ui/cart.ts:10.
+
+The setup held, and no test was BLOCKED by it: the definition locked; each commit was allowed and left the worktree
+clean; each stop made its claim on its commit; the first claim's unit check and the definition's check passed (the
+definition's check failed on the merge base, as a fix's check does); each round's review job got past the runner's
+plan-window gate (the world reports a window reading of 5%) and finished. The story's steps:
+
+  1s the hub; first: 21s claim PASS, 1 job; second: 38s claim PASS, 1 job; 38s you changed the audit's prompt on the
+  passes page; changed prompt: 55s claim PASS, 1 job; net: 72s claim PASS, 1 job; finding: 89s claim PASS, 1 job
+
+Each test's first failing assertion, all node:assert's (helpers.ts:41, `holds`):
+
+passes.test.ts (AC1 #2748.3f7a93db), at helpers.ts:418 (onePassRun, from passes.test.ts:25), no pass run
+  x AssertionError: AC1 #2748.3f7a93db claim:01M83DV6M0MJAHD27C9QMD1DJ1, whose diff touches only src/ui/cart.ts and
+    whose pull request (PR 21) would say Closes, starts one pass run, audit, read from the record: no pass runs for
+    claim:01M83DV6M0MJAHD27C9QMD1DJ1 on its commit 0d5509bc810f. Its runs: run:01M83DV6RJ16K0AWJTMVST8HKD (unit) on
+    0d5509bc810f passed; run:01M83DV6RVX2D83QR9XAZF6F7C (review) on 0d5509bc810f passed;
+    run:01M83DV6TYGBZZWHN00QGAJ3XP (.deepbuild/checks/cart-total.sh) on 0d5509bc810f passed;
+    run:01M83DV9XTV6G71QTNCJTVFJ8Z (.deepbuild/checks/cart-total.sh) on 86c65ec6ac05 failed. The runner's jobs in its
+    round: run:01M83DV6T5T8C0EQRNVX3ZH46P (review, finished) asked as no pass on a diff touching ["src/ui/cart.ts"],
+    answering []
+  (The base is the issue's wrong program for AC1: no pass runs, and the test fails naming the claim. The planted half,
+  runs-every-pass, was not reached.)
+
+passes.test.ts (AC2 #2748.313eecff), at helpers.ts:432 (bothPasses, from passes.test.ts:34)
+  x AssertionError: AC2 #2748.313eecff claim:01M83DWV8HQ68QJ815J105JENT, whose diff touches src/net/fetch.ts, starts
+    both passes, research (scoped src/net/**) and audit (no scope), read from the record: it starts none (none). Its
+    runs: run:01M83DWVBTXNH3P6NS2JN3B31A (review) on 79e80011e13c passed; run:01M83DWVDC3EPTAFST6RY52YM9 (unit) on
+    79e80011e13c passed; run:01M83DWVDRQMXWC4TWAXXT4T6X (.deepbuild/checks/cart-total.sh) on 79e80011e13c passed;
+    run:01M83DWVQV63SE0PQ4KWFPP17E (.deepbuild/checks/cart-total.sh) on 86c65ec6ac05 failed. The runner's jobs in its
+    round: run:01M83DWVCYMYD96WC3M2ZW3F3Z (review, finished) asked as no pass on a diff touching ["src/net/fetch.ts"],
+    answering []
+
+passes.test.ts (AC3 #2748.b9e47f36), at helpers.ts:441 (wikiPrompt, from passes.test.ts:39), the wiki's prompt
+  x AssertionError: AC3 #2748.b9e47f36 the prompt in the request of claim:01M83DV6M0MJAHD27C9QMD1DJ1's audit run is
+    the wiki's, "Audit the change for unchecked input and unit mistakes." (review-passes.md): no request sent to the
+    second model in its round holds it. The runner's jobs in its round: run:01M83DV6T5T8C0EQRNVX3ZH46P (review,
+    finished) asked as no pass on a diff touching ["src/ui/cart.ts"], answering []
+  (Its first assertion, that no request holds the checkout file's prompt, holds on the base, which sends no pass's
+  prompt at all. The planted half, passes-from-checkout, was not reached.)
+
+passes.test.ts (AC4 #2748.03e37d58), at helpers.ts:456 (sentBack, from passes.test.ts:48), the first case
+  x AssertionError: AC4 #2748.03e37d58 claim:01M83DXBXVXPTZH55A754PP2YS adds an unchecked JSON.parse at
+    src/ui/cart.ts:10, and the planted reviewer was never asked as audit on that diff, so the claim is sent back as one
+    item naming the pass: the record of its round holds no send-back item, {…, sites: [{file, line, quote}]}, with a
+    site at src/ui/cart.ts:10. Its verdict: PASS [".deepbuild/checks/cart-total.sh: PASS on 1 clean run","unit: PASS
+    on 5 clean runs","review: PASS on 1 clean run","unit carried run:01M83DV6RJ16K0AWJTMVST8HKD from
+    claim:01M83DV6M0MJAHD27C9QMD1DJ1 in session:…", …]. Its pass runs: none. The runner's jobs in its round:
+    run:01M83DXC21PBAP1A73CQ0JKW9V (review, finished) asked as no pass on a diff touching ["src/ui/cart.ts"],
+    answering []
+  (The second case and both planted halves, pass-findings-sent-nowhere and pass-sends-back-context, were not reached.)
+
+passes.test.ts (AC5 #2748.9b366141), at helpers.ts:497 (asksThree, from passes.test.ts:62), the first claim's asks
+  x AssertionError: AC5 #2748.9b366141 with no replay of the pass in the record yet,
+    claim:01M83DV6M0MJAHD27C9QMD1DJ1 asks the planted reviewer as audit three times, with the prompt "Audit the change
+    for unchecked input and unit mistakes.": once for its own diff (src/ui/cart.ts) and once for each PR the pass found
+    bugs in (PR 12, src/orders/load.ts; PR 17, src/orders/cache.ts): it asks 0 (none)
+  (The second claim's one ask, the carried replays, the changed prompt and the planted half, replays-every-claim, were
+  not reached.)
+
+The planted hubs: none was started in this run, since each test failed at its reading of the story first. At the base
+a planted hub refuses to start (`DEEP_HUB_PLANT=<value> names no planted program`, packages/hub/src/plant.ts), so each
+planted half is BLOCKED until the implementer builds its plant; that is not the plant's failure.
+
+== budgets.test.ts (AC6) ==
+
+  node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run tests/acceptance/2748/budgets.test.ts --testTimeout=600000 --no-file-parallelism
+
+Asked for the grant on 2026-11-23 at 00:27:10 EST (1-minute load 18.7); vitest ran at 00:29:35 (load 23.8).
+
+ Test Files  1 passed (1)
+      Tests  1 skipped (1)
+   Duration  196ms
+
+budgets.test.ts (AC6 #2748.8023bb4b), INCONCLUSIVE at the machine gate (budgets.test.ts, `environmentProblem`)
+  - skipped: INCONCLUSIVE AC6 #2748.8023bb4b <the gate's reason>: a budget counts only on a reference Mac on mains power
+  (vitest's default reporter prints a skip without its note, so the gate's reason was not captured: not a reference
+  Mac, not on mains power, Low Power Mode, or a thermal warning. "1 passed" is vitest's count of a file whose only
+  test skipped; the criterion is INCONCLUSIVE here, not passed. No hub was started and no sample was taken.)
+
+== Other runs made while the suite was written ==
+
+No file of the suite was changed after its run, and neither file was run twice. No change was made to the hub's build
+output or to any tracked file.
+
+The planted reviewer was run by itself on a made-up prompt: handed the audit's prompt and a diff whose hunk shows
+`const saved = JSON.parse(raw);` at src/ui/cart.ts:6 as context, it answered that one finding under unchecked-parse;
+handed the review's own prompt and the same diff, it answered none.
+
+A throwaway copy of budgets.test.ts with its machine gate removed (one line dropped, nothing else) was run once under
+the test grant, from 00:32:26, and deleted: 1 failed, 228.11s. Its story held: the warm-up pair and five sample
+pairs, each claim PASS with its one review job and no pass run, so the "starts no job" assertion held on all five
+samples; then the last step:
+
+  x Error: BLOCKED: AC6 #2748.8023bb4b the budget is read on a hub that runs the wiki's passes:
+    claim:01M83EERTNEYRMNHWVQ0FA1GJS, whose diff touches src/net/fetch.ts, must start the research pass run, and it
+    started none, so no sample above measured a pass's scope being read. Its runs: run:01M83EERZ8CV3ND15AW0T6NT8M
+    (review) on f7ec3087ecc7 passed; run:01M83EES0RM05P4VXQ2RYEHZYY (unit) on f7ec3087ecc7 passed;
+    run:01M83EES18MC74NMJTJV6M8XSW (.deepbuild/checks/cart-total.sh) on f7ec3087ecc7 passed;
+    run:01M83EESDPAAH7K3HCBXR4B1JC (.deepbuild/checks/cart-total.sh) on 2fc282606b67 failed
+
+So on a reference Mac the base reads BLOCKED for AC6, never passed: it runs no pass, and nothing was measured. The
+timing judgment itself (five differences against 5 ms) was not reached in any run.
+
+No right program was run against this suite: every reading after each test's first failing assertion, and every
+planted half, is type-checked and unrun.

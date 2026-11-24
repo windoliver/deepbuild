@@ -10,10 +10,13 @@ use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Instant;
 
+use deep_canvas_effects::particles::spec::Refusal;
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
 use deep_canvas_scene3d::contributed::Fills;
 use deep_canvas_scene3d::scene::Labels;
+use deep_effects_render::frame::{Effects, Shared as Post};
+use deep_effects_render::scene::staged;
 use deep_gpu::device::{Backend, Gpu};
 use deep_gpu::encode::Pool;
 use deep_gpu::surface::Path;
@@ -28,8 +31,8 @@ const FLICKS: u128 = 705_600_000;
 /// The handoff every view takes (GPU surface: `path`).
 pub(crate) const PATH: Path = Path::ZeroCopy;
 
-/// The canvas modules the view draws a document with.
-const HELD: [&str; 2] = ["scene3d", "motion"];
+/// The canvas modules the view draws a document with: effects through the post stage (#1719).
+const HELD: [&str; 3] = ["scene3d", "motion", "effects"];
 
 /// The app's one device for its GPU-layer views (GPU surface: `device: one per app`), opened with the first 3D layer.
 static GPU: OnceLock<Result<Arc<Gpu>, String>> = OnceLock::new();
@@ -164,10 +167,19 @@ impl SceneView {
     }
 }
 
+/// A view, what it shares with its renderer, and the effects of its post stage.
+type Opened = (View, Arc<Mutex<Shared>>, Arc<Mutex<Effects>>);
+
 /// The view on the app's device: three slots handed off zero copy, drawn by scene3d's render module.
-fn open() -> Result<(View, Arc<Mutex<Shared>>), String> {
+fn open() -> Result<Opened, String> {
     let gpu = GPU.get_or_init(|| Gpu::open(Backend::Gpu)).clone()?;
     let (module, shared) = Module3::new(Default::default());
+    // #1719: the post stage render-back draws its frame through.
+    let fx = Arc::new(Mutex::new(Effects::new(
+        Default::default(),
+        Default::default(),
+    )));
+    lock(&shared).post = Some(Box::new(Post(fx.clone())));
     let config = Config {
         path: PATH,
         slots: 3,
@@ -177,6 +189,7 @@ fn open() -> Result<(View, Arc<Mutex<Shared>>), String> {
     Ok((
         View::new(gpu, config, Box::new(module), Pool::new(1))?,
         shared,
+        fx,
     ))
 }
 
@@ -234,7 +247,7 @@ fn load(bytes: Option<Vec<u8>>) -> Result<(Value, Program), String> {
 /// The render thread: the view, its renderer and each frame's evaluation, off the UI thread, until the panel lets
 /// the view go.
 fn render(evidence: PathBuf, asks: mpsc::Receiver<Ask>, told: Arc<Mutex<Told>>) {
-    let (mut view, shared) = match open() {
+    let (mut view, shared, fx) = match open() {
         Ok(opened) => opened,
         Err(why) => {
             lock(&told).reason = Some(why);
@@ -283,9 +296,17 @@ fn render(evidence: PathBuf, asks: mpsc::Receiver<Ask>, told: Arc<Mutex<Told>>) 
                     memo: None,
                 };
                 let px = size.map(|side| u16::try_from(side).unwrap_or(u16::MAX));
-                let (evaluated, look) =
+                let frame_at = staged(doc, t, &Value::Null, &mut |doc, t| {
                     deep_play::scene::evaluate(doc, t, &palette, px, &mut labels, &read, fills)
-                        .map_err(|r| format!("{}: {}", r.code, r.path))?;
+                        .map_err(|r| Refusal::new(r.code, r.path, ""))
+                })
+                .map_err(|r| format!("{}: {}", r.code, r.path))?;
+                let moves = frame_at.moves();
+                lock(&fx).stage(&frame_at);
+                if let Some(renderer) = lock(&shared).renderer.as_mut() {
+                    renderer.core.want = frame_at.want;
+                }
+                let (evaluated, look) = (frame_at.scene, frame_at.look);
                 // What render-back's host draws into or over the frame: a map's texels, an inset's picture, a readout.
                 let maps = !deep_canvas_scene3d::light::map_uses(&evaluated).is_empty();
                 let hosted = [
@@ -322,7 +343,9 @@ fn render(evidence: PathBuf, asks: mpsc::Receiver<Ask>, told: Arc<Mutex<Told>>) 
                 }
                 let mut state = program.state();
                 program.evaluate(t, Validity::Full, &mut state);
-                Ok((drawn.map(|d| (d.frame, d.size)), state.valid_until))
+                // A frame whose effects move with t is due again as soon as it shows.
+                let until = if moves { Some(t) } else { state.valid_until };
+                Ok((drawn.map(|d| (d.frame, d.size)), until))
             });
         let mut told = lock(&told);
         told.answered += 1;
@@ -362,6 +385,9 @@ mod tests {
     #[test]
     fn a_document_the_view_cannot_draw_whole_gives_its_reason() {
         assert_eq!(lacks(&scene(json!({}))), None);
+        let effects = json!({"scene3d": "^1", "effects": "^1"});
+        let particles = json!({"requires": {"modules": effects}});
+        assert_eq!(lacks(&scene(particles)), None);
         let physics = json!({"scene3d": "^1", "physics": "^1"});
         let cases = [
             (
@@ -386,5 +412,50 @@ mod tests {
         for (more, why) in cases {
             assert_eq!(lacks(&scene(more)).as_deref(), Some(why));
         }
+    }
+
+    /// #1719: the panel's frame draws through the post stage render-back's does: a sun's shadow over
+    /// solids with no material, and particles. Each fixture draws the same twice, and without the
+    /// part it names draws otherwise.
+    #[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
+    #[test]
+    fn a_frame_draws_through_the_post_stage() {
+        let dir = std::env::temp_dir().join(format!("deep-1719-panel-{}", std::process::id()));
+        let drawn = |shadow: bool, count: u32| {
+            let item = |id: &str, kind: &str, params: Value| json!({"id": id, "kind": kind, "layer": "main", "name": id, "order": "a0", "params": params});
+            let mut items = json!({
+                "cam": item("cam", "camera@1", json!({"position": [4, 6, 8], "target": [0, 0, 0], "fov": 40})),
+                "sun": item("sun", "light.sun@1", json!({"illuminance": 3, "shadow": shadow})),
+                "box": item("box", "mark.box@1", json!({"size": [1, 2, 1]})),
+                "slab": item("slab", "mark.box@1", json!({"size": [6, 0.2, 6]})),
+            });
+            items["sun"]["at"] = json!({"rot": [-40, 30, 0]});
+            items["slab"]["at"] = json!({"pos": [0, -1.1, 0]});
+            if count > 0 {
+                let emit = json!({"count": count, "emit": {"rate": 1000}, "life": [1, 2]});
+                items["sparks"] = item("sparks", "particles@1", emit);
+            }
+            let doc = json!({"size": [160, 120], "camera": "cam", "seed": 7, "items": items,
+                "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+                "requires": {"modules": {"scene3d": "^1", "effects": "^1"}}});
+            let sha = "a".repeat(64);
+            let kept = dir.join(&sha[..2]);
+            std::fs::create_dir_all(&kept).expect("a folder");
+            std::fs::write(kept.join(&sha[2..]), doc.to_string()).expect("the document is kept");
+            let mut view = super::SceneView::new(dir.clone());
+            view.show(&sha);
+            let frame = super::Ask::Frame {
+                t: 705_600_000,
+                room: [160, 120],
+            };
+            view.asks.send(frame).expect("the render thread runs");
+            let bytes = view.read(1).map(|(bytes, _)| bytes);
+            bytes.unwrap_or_else(|| panic!("no frame: {:?}", view.reason()))
+        };
+        let plain = drawn(false, 0);
+        assert_eq!(plain, drawn(false, 0), "a still frame draws the same twice");
+        assert_ne!(plain, drawn(true, 0), "the sun's shadow draws nothing");
+        assert_ne!(plain, drawn(false, 400), "the particles draw nothing");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

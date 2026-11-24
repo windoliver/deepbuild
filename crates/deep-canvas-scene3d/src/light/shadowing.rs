@@ -33,6 +33,9 @@ pub struct Shadowing {
     pub cache: bool,
     /// `per_cluster` (#1634): the fill lights a cluster shades at most.
     pub per_cluster: usize,
+    /// Shadow tiles (#2034): `shadowed.local: auto` past the fixed counts, decided once per
+    /// document from its declared lights. Every shaded key light with a shadow keeps one.
+    pub tiles: bool,
 }
 
 /// The most spots a policy may shadow; points take four, which the budget class never raises.
@@ -50,6 +53,7 @@ impl Default for Shadowing {
             local_map: 512,
             cache: true,
             per_cluster: PER_CLUSTER,
+            tiles: false,
         }
     }
 }

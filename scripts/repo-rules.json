@@ -1321,7 +1321,7 @@
         },
         "deep-effects-render": {
           "spec": "* path=../deep-effects-render",
-          "why": "Issue #411: the test-machines feature's GPU operators compile and dispatch through it; in no shipped build. Already in the workspace tree."
+          "why": "Issue #1719: the post stage render-back draws a 3D frame through. Issue #411's test-machines feature compiles and dispatches its GPU operators through it too. Already in the workspace tree."
         },
         "deep-canvas-seams": {
           "spec": "* path=../deep-canvas-seams",
@@ -1863,6 +1863,14 @@
     },
     "crates/deep-effects-render/Cargo.toml": {
       "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #1719: a document's frame rate and the flick its frame's post stage is staged at, and the content hash a closed-form particles bake is kept by. Already in the workspace tree."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #1719: the evaluated scene and look a 3D frame's post stage reads, in view3d, render-back and the app's canvas panel. Already in the workspace tree."
+        },
         "deep-canvas-effects": {
           "spec": "* path=../deep-canvas-effects",
           "why": "Issue #380: the operator check, the WGSL the core writes and the CPU reference interpreter."
@@ -2180,6 +2188,10 @@
         "image": {
           "spec": "^0.25",
           "why": "Issue #498: PNG images decoded in the worker; already in the tree (deep-show, deep-app)."
+        },
+        "png": {
+          "spec": "^0.18",
+          "why": "Issue #1488: a still converted at intake is written as a PNG tagged sRGB; already in the tree (image's PNG codec)."
         },
         "basisu_c_sys": {
           "spec": "^0.9.1",
@@ -2806,6 +2818,30 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #162: reads the Lottie file and writes the document, its look and its issues. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-urdf/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #3035: the canonical bytes and hash the import writes with, and the ops module its angles go through."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #3035: the shipped clean look an imported robot's document names."
+        },
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #3035: the physics check a written world passes before any byte is kept."
+        },
+        "roxmltree": {
+          "spec": "=0.21.1",
+          "why": "Issue #3035: reads a robot description's XML, with no DTD and no entity a file declares; already in the workspace tree."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #3035: writes the document and its report. Already in the workspace tree."
         }
       }
     },

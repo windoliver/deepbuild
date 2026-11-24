@@ -15,6 +15,20 @@ fn of_building(kind: &str) -> Option<Spec> {
         Value::Object(m)
     };
     let rect = json!([[-1, -1], [9, -1], [9, 7], [-1, 7]]);
+    // #1219: two bay frames, for the kinds that name one.
+    let frame = |bays: [f64; 2]| {
+        item(
+            "arch.bay_frame@1",
+            json!({"bays": bays, "depth_bays": [3, 3], "eave_height": 3, "column": {"diameter": 0.4}}),
+        )
+    };
+    let framed = |extra: Value| {
+        let mut m = Map::new();
+        m.insert("f1".into(), frame([4.0, 4.0]));
+        m.insert("f2".into(), frame([4.0, 5.0]));
+        m.extend(extra.as_object().cloned().unwrap_or_default());
+        Value::Object(m)
+    };
     Some(match kind {
         "arch.wall@1" => Spec {
             kind: "arch.wall@1",
@@ -194,7 +208,7 @@ fn of_building(kind: &str) -> Option<Spec> {
             params: vec![
                 p(
                     "type",
-                    "gable | hip | shed | flat | mansard | gambrel | dutch | conical",
+                    "gable | hip | shed | flat | mansard | gambrel | dutch | conical | hip_ridge | hip_gable | overhang_gable | flush_gable | pyramid",
                     "",
                     json!("gable"),
                     G,
@@ -225,10 +239,158 @@ fn of_building(kind: &str) -> Option<Spec> {
                     0.0,
                     100.0,
                 ),
+                // #1219: what a roof on a bay frame reads.
+                p(
+                    "frame",
+                    "frame ID",
+                    "",
+                    Value::Null,
+                    G,
+                    json!("f1"),
+                    json!("f2"),
+                ),
+                ranged(
+                    p(
+                        "raise",
+                        "f32",
+                        "",
+                        Value::Null,
+                        G,
+                        json!(0.25),
+                        json!(0.3333),
+                    ),
+                    0.0,
+                    10.0,
+                ),
+                p(
+                    "profile",
+                    "straight | folded",
+                    "",
+                    json!("straight"),
+                    G,
+                    json!("straight"),
+                    json!("folded"),
+                ),
+                ranged(
+                    p("corner_rise", "m", "m", json!(0), G, json!(0), json!(0.3)),
+                    0.0,
+                    100.0,
+                ),
+                ranged(
+                    p("corner_reach", "m", "m", Value::Null, G, json!(3), json!(2)),
+                    0.0,
+                    1000.0,
+                ),
+                ranged(
+                    p("eave_reach", "m", "m", Value::Null, G, json!(1), json!(1.2)),
+                    0.0,
+                    100.0,
+                ),
+                paint(),
+            ],
+            reads: Some(&["refs", "siblings"]),
+            fixture: framed(
+                json!({"it": item("arch.roof@1", json!({"type": "gable", "size": [4.4, 3.4], "pitch": 30, "overhang": 0.2}))}),
+            ),
+        },
+        "arch.bay_frame@1" => Spec {
+            kind: "arch.bay_frame@1",
+            module: "building",
+            params: vec![
+                p(
+                    "bays",
+                    "[m] ≤ 15",
+                    "m",
+                    Value::Null,
+                    G,
+                    json!([4, 4]),
+                    json!([4, 5]),
+                ),
+                p(
+                    "depth_bays",
+                    "[m] ≤ 8",
+                    "m",
+                    Value::Null,
+                    G,
+                    json!([3, 3]),
+                    json!([3, 4]),
+                ),
+                ranged(
+                    p("eave_height", "m", "m", Value::Null, G, json!(3), json!(3.5)),
+                    0.0,
+                    1000.0,
+                ),
+                p(
+                    "column",
+                    "{diameter: m, sides?: round | 8, taper?: 0..0.1, plinth?: {height: m, width: m}}",
+                    "m",
+                    Value::Null,
+                    G,
+                    json!({"diameter": 0.4}),
+                    json!({"diameter": 0.5, "sides": 8, "taper": 0.05, "plinth": {"height": 0.2, "width": 0.8}}),
+                ),
+                p(
+                    "omit",
+                    "[[u8, u8]]",
+                    "",
+                    json!([]),
+                    G,
+                    json!([]),
+                    json!([[1, 0]]),
+                ),
+                ranged(
+                    p("purlins_per_bay", "u8", "", json!(1), G, json!(1), json!(2)),
+                    1.0,
+                    4.0,
+                ),
                 paint(),
             ],
             reads: Some(&[]),
-            fixture: json!({"it": item("arch.roof@1", json!({"type": "gable", "size": [4.4, 3.4], "pitch": 30, "overhang": 0.2}))}),
+            fixture: json!({"it": frame([4.0, 4.0])}),
+        },
+        "arch.bracket@1" => Spec {
+            kind: "arch.bracket@1",
+            module: "building",
+            params: vec![
+                p(
+                    "on",
+                    "`column` | between",
+                    "",
+                    Value::Null,
+                    G,
+                    json!("column"),
+                    json!("between"),
+                ),
+                p(
+                    "frame",
+                    "frame ID",
+                    "",
+                    Value::Null,
+                    G,
+                    json!("f1"),
+                    json!("f2"),
+                ),
+                ranged(
+                    p("steps", "u8", "", Value::Null, G, json!(2), json!(3)),
+                    1.0,
+                    4.0,
+                ),
+                ranged(
+                    p("reach", "m", "m", Value::Null, G, json!(0.45), json!(0.5)),
+                    0.0,
+                    100.0,
+                ),
+                ranged(
+                    p("height", "m", "m", Value::Null, G, json!(0.3), json!(0.35)),
+                    0.0,
+                    100.0,
+                ),
+                paint(),
+            ],
+            reads: Some(&["refs", "siblings"]),
+            fixture: framed(
+                json!({"it": item("arch.bracket@1", json!({"on": "column", "frame": "f1", "steps": 2, "reach": 0.45, "height": 0.3}))}),
+            ),
         },
         "arch.stair@1" => Spec {
             kind: "arch.stair@1",

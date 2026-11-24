@@ -12,8 +12,10 @@ use serde_json::{json, Map, Value};
 use crate::builders::{self, outline, prism, Ctx, Fault};
 use crate::geom::{area2, Mesh, V2, V3};
 
+pub mod timber;
+
 /// The building module's kinds.
-pub const KINDS: [&str; 8] = [
+pub const KINDS: [&str; 10] = [
     "arch.wall@1",
     "arch.opening@1",
     "arch.slab@1",
@@ -22,6 +24,8 @@ pub const KINDS: [&str; 8] = [
     "arch.zone@1",
     "arch.level@1",
     "arch.guard_rail@1",
+    timber::FRAME,
+    timber::BRACKET,
 ];
 
 /// A stair's riser is at most this tall (Building module).
@@ -71,9 +75,11 @@ fn register(r: &mut Registrar) {
         let name = &spec.kind["arch.".len()..spec.kind.len() - "@1".len()];
         r.kind(crate::spec::entry(&spec, "arch", name), &[], "")
             // #1801: the wall an opening cuts, and the items a slab's or a roof's holes take.
+            // #1219: the frame a bracket set or a roof stands on.
             .refs(&[
                 Decl::new("params/wall", Holds::Item, names::TARGET),
                 Decl::new("params/holes", Holds::Item, names::TARGET),
+                Decl::new("params/frame", Holds::Item, names::TARGET),
             ]);
     }
     // #2776: every arch kind draws in 3D, and says what each path does with it.
@@ -235,6 +241,28 @@ fn keyed(doc: &Value, id: &str, item: &Value, planted: Option<&str>) -> Value {
                 }
             }
         }
+        // #1219: a bracket set reads its frame and the type of each roof that names it; a roof
+        // its frame and the sets that name it.
+        timber::BRACKET | "arch.roof@1" => {
+            if let Some(f) = item.pointer("/params/frame").and_then(Value::as_str) {
+                if let Some(v) = get(f) {
+                    add(&f.to_string(), v);
+                }
+                for (k, v) in items(doc) {
+                    if v.pointer("/params/frame").and_then(Value::as_str) != Some(f) {
+                        continue;
+                    }
+                    match (kind, kind_of(v)) {
+                        ("arch.roof@1", timber::BRACKET) => add(k, v),
+                        // A set stands only under an eave, so it reads its roofs' types.
+                        (timber::BRACKET, "arch.roof@1") => {
+                            add(k, &json!({"type": v.pointer("/params/type")}))
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
         "arch.guard_rail@1" => {
             if let Some(a) = item.pointer("/params/around").and_then(Value::as_str) {
                 if let Some(v) = get(a) {
@@ -257,14 +285,20 @@ fn keyed(doc: &Value, id: &str, item: &Value, planted: Option<&str>) -> Value {
            "at": item.get("at"), "refs": refs})
 }
 
-/// Builds a building kind; its outputs ride on the mesh.
-pub fn build(doc: &Value, id: &str, item: &Value) -> Result<Mesh, Fault> {
+/// Builds a building kind, as `planted` makes it; its outputs ride on the mesh.
+pub fn build(doc: &Value, id: &str, item: &Value, planted: Option<&str>) -> Result<Mesh, Fault> {
     let p = item.get("params").cloned().unwrap_or(json!({}));
+    let on_frame = p.get("type").and_then(Value::as_str);
     let mut m = match kind_of(item) {
         "arch.wall@1" => wall(doc, id, &p)?,
         "arch.opening@1" => opening(doc, &p)?,
         "arch.slab@1" => slab(doc, item, &p)?,
+        "arch.roof@1" if on_frame.is_some_and(|t| timber::ROOFS.contains(&t)) => {
+            timber::roof(doc, item, &p, planted)?
+        }
         "arch.roof@1" => roof(&p)?,
+        timber::FRAME => timber::frame(&p, planted)?,
+        timber::BRACKET => timber::bracket(doc, item, &p, planted)?,
         "arch.stair@1" => stair(item, &p)?.0,
         "arch.zone@1" => zone(doc, item, &p)?,
         "arch.level@1" => {
@@ -998,7 +1032,7 @@ mod tests {
         for (sill, height) in [(0.0, 2.1), (0.9, 1.2)] {
             let item = json!({"kind": "arch.opening@1",
                 "params": {"wall": "wa", "type": "door", "at_along": 1, "width": 0.9, "height": height, "sill": sill}});
-            let b = build(&doc, "door", &item).unwrap().bounds();
+            let b = build(&doc, "door", &item, None).unwrap().bounds();
             assert!(
                 (b[0][1] - sill).abs() < 1e-9 && (b[1][1] - (sill + height)).abs() < 1e-9,
                 "leaf y runs {}..{}, the hole {}..{}",

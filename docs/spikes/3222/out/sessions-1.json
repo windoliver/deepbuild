@@ -1,0 +1,2223 @@
+{
+ "date": "2026-11-23T09:37:00.021Z",
+ "machine": {
+  "model": "Mac17,10",
+  "chip": "Apple M5 Max",
+  "cpus": 18,
+  "memory_gb": 64,
+  "os": "Darwin 27.2.0 (macOS 27.2)",
+  "node": "v24.22.0",
+  "canvas_core": "target/debug/deep-show",
+  "commit": "dfe3ebe3ac594e5ac7c32865cf9b0f8bf85865f1"
+ },
+ "load": {
+  "start": [
+   45.96,
+   53.34,
+   60.08
+  ],
+  "end": [
+   23.99,
+   45.53,
+   56.55
+  ]
+ },
+ "calls": [
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426621467.1792,
+   "startedMs": 1795426621676.8318,
+   "repliedMs": 1795426621686.1555,
+   "outcome": "presented",
+   "code": null,
+   "held": 1,
+   "parts": {
+    "hub": 6.693359375,
+    "behind": 0.4658203125,
+    "world": 202.2783203125
+   },
+   "sentMs": 1795426621428.7705,
+   "answeredMs": 1795426621687.4702
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426621688.13,
+   "startedMs": 1795426621688.8547,
+   "repliedMs": 1795426622055.0203,
+   "outcome": "presented",
+   "code": null,
+   "held": 2,
+   "parts": {
+    "hub": 0.601806640625,
+    "behind": 0.123046875,
+    "world": 0
+   },
+   "sentMs": 1795426621687.4785,
+   "answeredMs": 1795426622074.9556
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426622169.1824,
+   "startedMs": 1795426622169.5608,
+   "repliedMs": 1795426622605.9304,
+   "outcome": "applied",
+   "code": null,
+   "held": 3,
+   "parts": {
+    "hub": 0.33203125,
+    "behind": 0.04638671875,
+    "world": 0
+   },
+   "sentMs": 1795426622159.2407,
+   "answeredMs": 1795426622607.9253
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426622709.0369,
+   "startedMs": 1795426622757.0444,
+   "repliedMs": 1795426623032.7942,
+   "outcome": "presented",
+   "code": null,
+   "held": 4,
+   "parts": {
+    "hub": 47.947265625,
+    "behind": 0.060302734375,
+    "world": 0
+   },
+   "sentMs": 1795426622640.4646,
+   "answeredMs": 1795426623040.2458
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426623180.7349,
+   "startedMs": 1795426623181.512,
+   "repliedMs": 1795426623519.6448,
+   "outcome": "presented",
+   "code": null,
+   "held": 5,
+   "parts": {
+    "hub": 0.684814453125,
+    "behind": 0.09228515625,
+    "world": 0
+   },
+   "sentMs": 1795426623179.3652,
+   "answeredMs": 1795426623520.3665
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426623541.0278,
+   "startedMs": 1795426623541.543,
+   "repliedMs": 1795426623863.73,
+   "outcome": "presented",
+   "code": null,
+   "held": 6,
+   "parts": {
+    "hub": 0.437744140625,
+    "behind": 0.077392578125,
+    "world": 0
+   },
+   "sentMs": 1795426623540.21,
+   "answeredMs": 1795426623898.7856
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426624144.8584,
+   "startedMs": 1795426624145.2366,
+   "repliedMs": 1795426624472.0479,
+   "outcome": "presented",
+   "code": null,
+   "held": 7,
+   "parts": {
+    "hub": 0.303466796875,
+    "behind": 0.07470703125,
+    "world": 0
+   },
+   "sentMs": 1795426624143.43,
+   "answeredMs": 1795426624472.9348
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426624476.3113,
+   "startedMs": 1795426624476.6938,
+   "repliedMs": 1795426624896.5854,
+   "outcome": "presented",
+   "code": null,
+   "held": 8,
+   "parts": {
+    "hub": 0.318603515625,
+    "behind": 0.06396484375,
+    "world": 0
+   },
+   "sentMs": 1795426624475.5857,
+   "answeredMs": 1795426624897.4233
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426625079.8237,
+   "startedMs": 1795426625080.1934,
+   "repliedMs": 1795426625386.095,
+   "outcome": "applied",
+   "code": null,
+   "held": 9,
+   "parts": {
+    "hub": 0.313232421875,
+    "behind": 0.056396484375,
+    "world": 0
+   },
+   "sentMs": 1795426625075.2688,
+   "answeredMs": 1795426625387.8562
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426625463.964,
+   "startedMs": 1795426625513.6003,
+   "repliedMs": 1795426625866.5222,
+   "outcome": "presented",
+   "code": null,
+   "held": 10,
+   "parts": {
+    "hub": 49.572265625,
+    "behind": 0.06396484375,
+    "world": 0
+   },
+   "sentMs": 1795426625398.8262,
+   "answeredMs": 1795426625871.9412
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426625970.8276,
+   "startedMs": 1795426625971.3838,
+   "repliedMs": 1795426626333.7434,
+   "outcome": "presented",
+   "code": null,
+   "held": 11,
+   "parts": {
+    "hub": 0.473388671875,
+    "behind": 0.082763671875,
+    "world": 0
+   },
+   "sentMs": 1795426625966.2239,
+   "answeredMs": 1795426626335.7507
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426626390.1748,
+   "startedMs": 1795426626390.6482,
+   "repliedMs": 1795426626847.5132,
+   "outcome": "presented",
+   "code": null,
+   "held": 12,
+   "parts": {
+    "hub": 0.403564453125,
+    "behind": 0.06982421875,
+    "world": 0
+   },
+   "sentMs": 1795426626389.4797,
+   "answeredMs": 1795426626867.8174
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426627103.4575,
+   "startedMs": 1795426627103.848,
+   "repliedMs": 1795426627521.7708,
+   "outcome": "presented",
+   "code": null,
+   "held": 13,
+   "parts": {
+    "hub": 0.328125,
+    "behind": 0.062255859375,
+    "world": 0
+   },
+   "sentMs": 1795426627097.903,
+   "answeredMs": 1795426627522.6887
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426627698.4348,
+   "startedMs": 1795426627698.99,
+   "repliedMs": 1795426628084.6277,
+   "outcome": "presented",
+   "code": null,
+   "held": 14,
+   "parts": {
+    "hub": 0.46044921875,
+    "behind": 0.0947265625,
+    "world": 0
+   },
+   "sentMs": 1795426627697.8057,
+   "answeredMs": 1795426628085.6587
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426628195.1152,
+   "startedMs": 1795426628195.6562,
+   "repliedMs": 1795426628610.1416,
+   "outcome": "applied",
+   "code": null,
+   "held": 15,
+   "parts": {
+    "hub": 0.463623046875,
+    "behind": 0.077392578125,
+    "world": 0
+   },
+   "sentMs": 1795426628194.1013,
+   "answeredMs": 1795426628611.118
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426628899.9321,
+   "startedMs": 1795426628935.699,
+   "repliedMs": 1795426629289.0134,
+   "outcome": "presented",
+   "code": null,
+   "held": 16,
+   "parts": {
+    "hub": 35.677001953125,
+    "behind": 0.08984375,
+    "world": 0
+   },
+   "sentMs": 1795426628843.1223,
+   "answeredMs": 1795426629295.2695
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426629425.7197,
+   "startedMs": 1795426629426.3794,
+   "repliedMs": 1795426629782.154,
+   "outcome": "presented",
+   "code": null,
+   "held": 17,
+   "parts": {
+    "hub": 0.555908203125,
+    "behind": 0.103759765625,
+    "world": 0
+   },
+   "sentMs": 1795426629423.7385,
+   "answeredMs": 1795426629786.2236
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426629811.853,
+   "startedMs": 1795426629812.318,
+   "repliedMs": 1795426630260.1042,
+   "outcome": "presented",
+   "code": null,
+   "held": 18,
+   "parts": {
+    "hub": 0.357421875,
+    "behind": 0.107666015625,
+    "world": 0
+   },
+   "sentMs": 1795426629811.0957,
+   "answeredMs": 1795426630279.4917
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426630524.2778,
+   "startedMs": 1795426630524.7898,
+   "repliedMs": 1795426630899.3965,
+   "outcome": "presented",
+   "code": null,
+   "held": 19,
+   "parts": {
+    "hub": 0.44189453125,
+    "behind": 0.070068359375,
+    "world": 0
+   },
+   "sentMs": 1795426630523.6155,
+   "answeredMs": 1795426630905.993
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426631053.3433,
+   "startedMs": 1795426631053.9502,
+   "repliedMs": 1795426631495.4084,
+   "outcome": "presented",
+   "code": null,
+   "held": 20,
+   "parts": {
+    "hub": 0.511962890625,
+    "behind": 0.094970703125,
+    "world": 0
+   },
+   "sentMs": 1795426631045.0881,
+   "answeredMs": 1795426631496.7847
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426631563.8894,
+   "startedMs": 1795426631564.3772,
+   "repliedMs": 1795426632066.1611,
+   "outcome": "applied",
+   "code": null,
+   "held": 21,
+   "parts": {
+    "hub": 0.42041015625,
+    "behind": 0.0673828125,
+    "world": 0
+   },
+   "sentMs": 1795426631562.915,
+   "answeredMs": 1795426632068.6628
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426632188.8818,
+   "startedMs": 1795426632232.9666,
+   "repliedMs": 1795426632691.8496,
+   "outcome": "presented",
+   "code": null,
+   "held": 22,
+   "parts": {
+    "hub": 43.9560546875,
+    "behind": 0.128662109375,
+    "world": 0
+   },
+   "sentMs": 1795426632117.3708,
+   "answeredMs": 1795426632697.4421
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426632902.9956,
+   "startedMs": 1795426632903.4617,
+   "repliedMs": 1795426633292.9827,
+   "outcome": "presented",
+   "code": null,
+   "held": 23,
+   "parts": {
+    "hub": 0.383544921875,
+    "behind": 0.08251953125,
+    "world": 0
+   },
+   "sentMs": 1795426632901.4636,
+   "answeredMs": 1795426633294.0925
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426633314.018,
+   "startedMs": 1795426633314.4272,
+   "repliedMs": 1795426633742.923,
+   "outcome": "presented",
+   "code": null,
+   "held": 24,
+   "parts": {
+    "hub": 0.342529296875,
+    "behind": 0.066650390625,
+    "world": 0
+   },
+   "sentMs": 1795426633313.27,
+   "answeredMs": 1795426633764.3953
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426634005.2336,
+   "startedMs": 1795426634005.8252,
+   "repliedMs": 1795426634480.026,
+   "outcome": "presented",
+   "code": null,
+   "held": 25,
+   "parts": {
+    "hub": 0.412353515625,
+    "behind": 0.17919921875,
+    "world": 0
+   },
+   "sentMs": 1795426634004.495,
+   "answeredMs": 1795426634480.9968
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426634702.1584,
+   "startedMs": 1795426634702.4822,
+   "repliedMs": 1795426635136.5762,
+   "outcome": "presented",
+   "code": null,
+   "held": 26,
+   "parts": {
+    "hub": 0.275146484375,
+    "behind": 0.048583984375,
+    "world": 0
+   },
+   "sentMs": 1795426634701.4316,
+   "answeredMs": 1795426635137.3733
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426635260.3892,
+   "startedMs": 1795426635260.8599,
+   "repliedMs": 1795426635719.929,
+   "outcome": "applied",
+   "code": null,
+   "held": 27,
+   "parts": {
+    "hub": 0.380126953125,
+    "behind": 0.090576171875,
+    "world": 0
+   },
+   "sentMs": 1795426635259.5244,
+   "answeredMs": 1795426635721.9897
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426635818.295,
+   "startedMs": 1795426635877.7075,
+   "repliedMs": 1795426636314.5305,
+   "outcome": "presented",
+   "code": null,
+   "held": 28,
+   "parts": {
+    "hub": 59.263671875,
+    "behind": 0.14892578125,
+    "world": 0
+   },
+   "sentMs": 1795426635753.6187,
+   "answeredMs": 1795426636322.6328
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426636418.105,
+   "startedMs": 1795426636418.415,
+   "repliedMs": 1795426636980.1306,
+   "outcome": "presented",
+   "code": null,
+   "held": 29,
+   "parts": {
+    "hub": 0.268310546875,
+    "behind": 0.041748046875,
+    "world": 0
+   },
+   "sentMs": 1795426636417.5447,
+   "answeredMs": 1795426636980.9143
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426637071.352,
+   "startedMs": 1795426637071.9026,
+   "repliedMs": 1795426637537.3076,
+   "outcome": "presented",
+   "code": null,
+   "held": 30,
+   "parts": {
+    "hub": 0.492431640625,
+    "behind": 0.05810546875,
+    "world": 0
+   },
+   "sentMs": 1795426637070.209,
+   "answeredMs": 1795426637555.204
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426637737.6382,
+   "startedMs": 1795426637737.9175,
+   "repliedMs": 1795426638299.0183,
+   "outcome": "presented",
+   "code": null,
+   "held": 31,
+   "parts": {
+    "hub": 0.231201171875,
+    "behind": 0.048095703125,
+    "world": 0
+   },
+   "sentMs": 1795426637732.88,
+   "answeredMs": 1795426638299.789
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426638547.5369,
+   "startedMs": 1795426638548.051,
+   "repliedMs": 1795426639003.633,
+   "outcome": "presented",
+   "code": null,
+   "held": 32,
+   "parts": {
+    "hub": 0.421630859375,
+    "behind": 0.092529296875,
+    "world": 0
+   },
+   "sentMs": 1795426638546.8674,
+   "answeredMs": 1795426639004.6028
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426639089.252,
+   "startedMs": 1795426639089.7468,
+   "repliedMs": 1795426639630.738,
+   "outcome": "applied",
+   "code": null,
+   "held": 33,
+   "parts": {
+    "hub": 0.375244140625,
+    "behind": 0.11962890625,
+    "world": 0
+   },
+   "sentMs": 1795426639088.4338,
+   "answeredMs": 1795426639632.0615
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426639830.789,
+   "startedMs": 1795426639870.4207,
+   "repliedMs": 1795426640385.2402,
+   "outcome": "presented",
+   "code": null,
+   "held": 34,
+   "parts": {
+    "hub": 39.552978515625,
+    "behind": 0.07861328125,
+    "world": 0
+   },
+   "sentMs": 1795426639755.6255,
+   "answeredMs": 1795426640389.9675
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426640613.3628,
+   "startedMs": 1795426640613.8489,
+   "repliedMs": 1795426641051.6426,
+   "outcome": "presented",
+   "code": null,
+   "held": 35,
+   "parts": {
+    "hub": 0.42431640625,
+    "behind": 0.061767578125,
+    "world": 0
+   },
+   "sentMs": 1795426640612.592,
+   "answeredMs": 1795426641052.5454
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426641132.1313,
+   "startedMs": 1795426641132.528,
+   "repliedMs": 1795426641652.0347,
+   "outcome": "presented",
+   "code": null,
+   "held": 36,
+   "parts": {
+    "hub": 0.347412109375,
+    "behind": 0.04931640625,
+    "world": 0
+   },
+   "sentMs": 1795426641129.2568,
+   "answeredMs": 1795426641654.7078
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426641660.0537,
+   "startedMs": 1795426641660.5134,
+   "repliedMs": 1795426642211.3936,
+   "outcome": "presented",
+   "code": null,
+   "held": 37,
+   "parts": {
+    "hub": 0.35986328125,
+    "behind": 0.099853515625,
+    "world": 0
+   },
+   "sentMs": 1795426641658.6123,
+   "answeredMs": 1795426642212.1814
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426642414.1472,
+   "startedMs": 1795426642414.721,
+   "repliedMs": 1795426642881.3457,
+   "outcome": "presented",
+   "code": null,
+   "held": 38,
+   "parts": {
+    "hub": 0.49072265625,
+    "behind": 0.0830078125,
+    "world": 0
+   },
+   "sentMs": 1795426642413.3135,
+   "answeredMs": 1795426642882.096
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426642916.364,
+   "startedMs": 1795426642917.9097,
+   "repliedMs": 1795426643568.9312,
+   "outcome": "applied",
+   "code": null,
+   "held": 39,
+   "parts": {
+    "hub": 0.423583984375,
+    "behind": 1.1220703125,
+    "world": 0
+   },
+   "sentMs": 1795426642915.2236,
+   "answeredMs": 1795426643569.89
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426643681.7139,
+   "startedMs": 1795426643736.7322,
+   "repliedMs": 1795426644203.7334,
+   "outcome": "presented",
+   "code": null,
+   "held": 40,
+   "parts": {
+    "hub": 54.965087890625,
+    "behind": 0.05322265625,
+    "world": 0
+   },
+   "sentMs": 1795426643620.7288,
+   "answeredMs": 1795426644208.333
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426644273.2263,
+   "startedMs": 1795426644273.5205,
+   "repliedMs": 1795426644766.4565,
+   "outcome": "presented",
+   "code": null,
+   "held": 41,
+   "parts": {
+    "hub": 0.252685546875,
+    "behind": 0.04150390625,
+    "world": 0
+   },
+   "sentMs": 1795426644271.4988,
+   "answeredMs": 1795426644769.232
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426644907.09,
+   "startedMs": 1795426644907.5674,
+   "repliedMs": 1795426645437.7625,
+   "outcome": "presented",
+   "code": null,
+   "held": 42,
+   "parts": {
+    "hub": 0.40576171875,
+    "behind": 0.071533203125,
+    "world": 0
+   },
+   "sentMs": 1795426644906.3464,
+   "answeredMs": 1795426645439.9294
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426645646.462,
+   "startedMs": 1795426645646.9185,
+   "repliedMs": 1795426646224.516,
+   "outcome": "presented",
+   "code": null,
+   "held": 43,
+   "parts": {
+    "hub": 0.392822265625,
+    "behind": 0.063720703125,
+    "world": 0
+   },
+   "sentMs": 1795426645632.1245,
+   "answeredMs": 1795426646225.1423
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426646452.8694,
+   "startedMs": 1795426646453.2166,
+   "repliedMs": 1795426646920.278,
+   "outcome": "presented",
+   "code": null,
+   "held": 44,
+   "parts": {
+    "hub": 0.2529296875,
+    "behind": 0.09423828125,
+    "world": 0
+   },
+   "sentMs": 1795426646452.236,
+   "answeredMs": 1795426646921.112
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426646950.7717,
+   "startedMs": 1795426646951.2217,
+   "repliedMs": 1795426647421.5732,
+   "outcome": "applied",
+   "code": null,
+   "held": 45,
+   "parts": {
+    "hub": 0.38330078125,
+    "behind": 0.066650390625,
+    "world": 0
+   },
+   "sentMs": 1795426646948.3076,
+   "answeredMs": 1795426647422.4211
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426647636.5334,
+   "startedMs": 1795426647670.289,
+   "repliedMs": 1795426648152.9673,
+   "outcome": "presented",
+   "code": null,
+   "held": 46,
+   "parts": {
+    "hub": 33.696533203125,
+    "behind": 0.05908203125,
+    "world": 0
+   },
+   "sentMs": 1795426647576.5286,
+   "answeredMs": 1795426648157.7102
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426648333.7195,
+   "startedMs": 1795426648334.1777,
+   "repliedMs": 1795426648781.3457,
+   "outcome": "presented",
+   "code": null,
+   "held": 47,
+   "parts": {
+    "hub": 0.39111328125,
+    "behind": 0.067138671875,
+    "world": 0
+   },
+   "sentMs": 1795426648332.7869,
+   "answeredMs": 1795426648782.0269
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426648927.122,
+   "startedMs": 1795426648927.5737,
+   "repliedMs": 1795426649393.6733,
+   "outcome": "presented",
+   "code": null,
+   "held": 48,
+   "parts": {
+    "hub": 0.396240234375,
+    "behind": 0.055419921875,
+    "world": 0
+   },
+   "sentMs": 1795426648926.1511,
+   "answeredMs": 1795426649395.6113
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426649550.2847,
+   "startedMs": 1795426649550.7112,
+   "repliedMs": 1795426649996.624,
+   "outcome": "presented",
+   "code": null,
+   "held": 49,
+   "parts": {
+    "hub": 0.32373046875,
+    "behind": 0.102783203125,
+    "world": 0
+   },
+   "sentMs": 1795426649549.7087,
+   "answeredMs": 1795426649997.3098
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426650229.103,
+   "startedMs": 1795426650229.5532,
+   "repliedMs": 1795426650680.979,
+   "outcome": "presented",
+   "code": null,
+   "held": 50,
+   "parts": {
+    "hub": 0.376220703125,
+    "behind": 0.073974609375,
+    "world": 0
+   },
+   "sentMs": 1795426650228.4512,
+   "answeredMs": 1795426650681.7327
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426650770.1172,
+   "startedMs": 1795426650770.477,
+   "repliedMs": 1795426651232.7715,
+   "outcome": "applied",
+   "code": null,
+   "held": 51,
+   "parts": {
+    "hub": 0.317626953125,
+    "behind": 0.042236328125,
+    "world": 0
+   },
+   "sentMs": 1795426650769.467,
+   "answeredMs": 1795426651233.7507
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426651302.3738,
+   "startedMs": 1795426651329.7656,
+   "repliedMs": 1795426651780.8745,
+   "outcome": "presented",
+   "code": null,
+   "held": 52,
+   "parts": {
+    "hub": 27.335693359375,
+    "behind": 0.05615234375,
+    "world": 0
+   },
+   "sentMs": 1795426651251.28,
+   "answeredMs": 1795426651785.3384
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426651856.1023,
+   "startedMs": 1795426651856.5688,
+   "repliedMs": 1795426652306.5364,
+   "outcome": "presented",
+   "code": null,
+   "held": 53,
+   "parts": {
+    "hub": 0.3408203125,
+    "behind": 0.125732421875,
+    "world": 0
+   },
+   "sentMs": 1795426651855.4846,
+   "answeredMs": 1795426652307.3228
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426652557.126,
+   "startedMs": 1795426652557.5046,
+   "repliedMs": 1795426653064.9922,
+   "outcome": "presented",
+   "code": null,
+   "held": 54,
+   "parts": {
+    "hub": 0.2998046875,
+    "behind": 0.078857421875,
+    "world": 0
+   },
+   "sentMs": 1795426652556.517,
+   "answeredMs": 1795426653068.1055
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426653185.032,
+   "startedMs": 1795426653185.413,
+   "repliedMs": 1795426653666.252,
+   "outcome": "presented",
+   "code": null,
+   "held": 55,
+   "parts": {
+    "hub": 0.32177734375,
+    "behind": 0.059326171875,
+    "world": 0
+   },
+   "sentMs": 1795426653184.2305,
+   "answeredMs": 1795426653667.13
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426653851.9233,
+   "startedMs": 1795426653852.4558,
+   "repliedMs": 1795426654315.2942,
+   "outcome": "presented",
+   "code": null,
+   "held": 56,
+   "parts": {
+    "hub": 0.40869140625,
+    "behind": 0.123779296875,
+    "world": 0
+   },
+   "sentMs": 1795426653851.241,
+   "answeredMs": 1795426654316.2874
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426654475.8176,
+   "startedMs": 1795426654476.2798,
+   "repliedMs": 1795426654913.6865,
+   "outcome": "applied",
+   "code": null,
+   "held": 57,
+   "parts": {
+    "hub": 0.38671875,
+    "behind": 0.075439453125,
+    "world": 0
+   },
+   "sentMs": 1795426654475.114,
+   "answeredMs": 1795426654914.4
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426654980.4634,
+   "startedMs": 1795426655005.566,
+   "repliedMs": 1795426655509.7383,
+   "outcome": "presented",
+   "code": null,
+   "held": 58,
+   "parts": {
+    "hub": 25.02685546875,
+    "behind": 0.07568359375,
+    "world": 0
+   },
+   "sentMs": 1795426654932.3809,
+   "answeredMs": 1795426655520.39
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426655531.2297,
+   "startedMs": 1795426655533.1519,
+   "repliedMs": 1795426656211.3862,
+   "outcome": "presented",
+   "code": null,
+   "held": 59,
+   "parts": {
+    "hub": 1.75048828125,
+    "behind": 0.171630859375,
+    "world": 0
+   },
+   "sentMs": 1795426655527.3289,
+   "answeredMs": 1795426656212.0715
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426656347.571,
+   "startedMs": 1795426656347.8665,
+   "repliedMs": 1795426656938.4333,
+   "outcome": "presented",
+   "code": null,
+   "held": 60,
+   "parts": {
+    "hub": 0.259033203125,
+    "behind": 0.036376953125,
+    "world": 0
+   },
+   "sentMs": 1795426656346.5842,
+   "answeredMs": 1795426656940.2317
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426657020.0186,
+   "startedMs": 1795426657020.3564,
+   "repliedMs": 1795426657544.3865,
+   "outcome": "presented",
+   "code": null,
+   "held": 61,
+   "parts": {
+    "hub": 0.29052734375,
+    "behind": 0.04736328125,
+    "world": 0
+   },
+   "sentMs": 1795426657018.9019,
+   "answeredMs": 1795426657545.3203
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426657678.2112,
+   "startedMs": 1795426657678.6643,
+   "repliedMs": 1795426658621.779,
+   "outcome": "presented",
+   "code": null,
+   "held": 62,
+   "parts": {
+    "hub": 0.385009765625,
+    "behind": 0.068115234375,
+    "world": 0
+   },
+   "sentMs": 1795426657676.383,
+   "answeredMs": 1795426658622.7805
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426658727.8413,
+   "startedMs": 1795426658728.255,
+   "repliedMs": 1795426659471.2983,
+   "outcome": "applied",
+   "code": null,
+   "held": 63,
+   "parts": {
+    "hub": 0.345703125,
+    "behind": 0.06787109375,
+    "world": 0
+   },
+   "sentMs": 1795426658726.8767,
+   "answeredMs": 1795426659472.2844
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426659744.42,
+   "startedMs": 1795426659776.8325,
+   "repliedMs": 1795426660253.5269,
+   "outcome": "presented",
+   "code": null,
+   "held": 64,
+   "parts": {
+    "hub": 32.3427734375,
+    "behind": 0.06982421875,
+    "world": 0
+   },
+   "sentMs": 1795426659690.7366,
+   "answeredMs": 1795426660257.089
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426660315.9543,
+   "startedMs": 1795426660316.192,
+   "repliedMs": 1795426660825.2646,
+   "outcome": "presented",
+   "code": null,
+   "held": 65,
+   "parts": {
+    "hub": 0.203369140625,
+    "behind": 0.0341796875,
+    "world": 0
+   },
+   "sentMs": 1795426660315.1902,
+   "answeredMs": 1795426660826.2834
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426660923.1091,
+   "startedMs": 1795426660923.7146,
+   "repliedMs": 1795426661400.4485,
+   "outcome": "presented",
+   "code": null,
+   "held": 66,
+   "parts": {
+    "hub": 0.465576171875,
+    "behind": 0.139892578125,
+    "world": 0
+   },
+   "sentMs": 1795426660922.415,
+   "answeredMs": 1795426661404.2158
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426661539.905,
+   "startedMs": 1795426661540.2349,
+   "repliedMs": 1795426662197.3667,
+   "outcome": "presented",
+   "code": null,
+   "held": 67,
+   "parts": {
+    "hub": 0.254150390625,
+    "behind": 0.07568359375,
+    "world": 0
+   },
+   "sentMs": 1795426661539.3496,
+   "answeredMs": 1795426662198.349
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426662441.8381,
+   "startedMs": 1795426662445.0093,
+   "repliedMs": 1795426662982.6772,
+   "outcome": "presented",
+   "code": null,
+   "held": 68,
+   "parts": {
+    "hub": 3.112060546875,
+    "behind": 0.05908203125,
+    "world": 0
+   },
+   "sentMs": 1795426662440.8674,
+   "answeredMs": 1795426662986.315
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426663135.0562,
+   "startedMs": 1795426663135.37,
+   "repliedMs": 1795426663680.1582,
+   "outcome": "applied",
+   "code": null,
+   "held": 69,
+   "parts": {
+    "hub": 0.261962890625,
+    "behind": 0.052001953125,
+    "world": 0
+   },
+   "sentMs": 1795426663134.411,
+   "answeredMs": 1795426663680.8257
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426663961.2725,
+   "startedMs": 1795426663986.7866,
+   "repliedMs": 1795426664465.156,
+   "outcome": "presented",
+   "code": null,
+   "held": 70,
+   "parts": {
+    "hub": 25.39697265625,
+    "behind": 0.1171875,
+    "world": 0
+   },
+   "sentMs": 1795426663916.934,
+   "answeredMs": 1795426664468.9604
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426664511.156,
+   "startedMs": 1795426664511.5254,
+   "repliedMs": 1795426664997.4412,
+   "outcome": "presented",
+   "code": null,
+   "held": 71,
+   "parts": {
+    "hub": 0.317626953125,
+    "behind": 0.0517578125,
+    "world": 0
+   },
+   "sentMs": 1795426664510.5823,
+   "answeredMs": 1795426664998.0376
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426665079.6174,
+   "startedMs": 1795426665079.9558,
+   "repliedMs": 1795426665599.6267,
+   "outcome": "presented",
+   "code": null,
+   "held": 72,
+   "parts": {
+    "hub": 0.29052734375,
+    "behind": 0.0478515625,
+    "world": 0
+   },
+   "sentMs": 1795426665079.1208,
+   "answeredMs": 1795426665601.7153
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426665603.3384,
+   "startedMs": 1795426665603.734,
+   "repliedMs": 1795426666106.2678,
+   "outcome": "presented",
+   "code": null,
+   "held": 73,
+   "parts": {
+    "hub": 0.334228515625,
+    "behind": 0.061279296875,
+    "world": 0
+   },
+   "sentMs": 1795426665602.902,
+   "answeredMs": 1795426666110.653
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426666150.9604,
+   "startedMs": 1795426666151.5117,
+   "repliedMs": 1795426666676.2039,
+   "outcome": "presented",
+   "code": null,
+   "held": 74,
+   "parts": {
+    "hub": 0.464599609375,
+    "behind": 0.086669921875,
+    "world": 0
+   },
+   "sentMs": 1795426666150.3748,
+   "answeredMs": 1795426666677.6245
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426666858.0007,
+   "startedMs": 1795426666858.4302,
+   "repliedMs": 1795426667392.6284,
+   "outcome": "applied",
+   "code": null,
+   "held": 75,
+   "parts": {
+    "hub": 0.307861328125,
+    "behind": 0.12158203125,
+    "world": 0
+   },
+   "sentMs": 1795426666857.3076,
+   "answeredMs": 1795426667393.5654
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426667649.7341,
+   "startedMs": 1795426667674.7578,
+   "repliedMs": 1795426668178.5903,
+   "outcome": "presented",
+   "code": null,
+   "held": 76,
+   "parts": {
+    "hub": 24.877685546875,
+    "behind": 0.14599609375,
+    "world": 0
+   },
+   "sentMs": 1795426667599.6694,
+   "answeredMs": 1795426668182.3718
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426668411.0432,
+   "startedMs": 1795426668411.4019,
+   "repliedMs": 1795426668903.9119,
+   "outcome": "presented",
+   "code": null,
+   "held": 77,
+   "parts": {
+    "hub": 0.308837890625,
+    "behind": 0.0498046875,
+    "world": 0
+   },
+   "sentMs": 1795426668410.4597,
+   "answeredMs": 1795426668904.5574
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426669108.3093,
+   "startedMs": 1795426669108.7393,
+   "repliedMs": 1795426669643.9348,
+   "outcome": "presented",
+   "code": null,
+   "held": 78,
+   "parts": {
+    "hub": 0.36376953125,
+    "behind": 0.066162109375,
+    "world": 0
+   },
+   "sentMs": 1795426669107.6543,
+   "answeredMs": 1795426669646.9814
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426669867.848,
+   "startedMs": 1795426669868.2295,
+   "repliedMs": 1795426670376.089,
+   "outcome": "presented",
+   "code": null,
+   "held": 79,
+   "parts": {
+    "hub": 0.31591796875,
+    "behind": 0.065673828125,
+    "world": 0
+   },
+   "sentMs": 1795426669867.1057,
+   "answeredMs": 1795426670376.9932
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426670548.2505,
+   "startedMs": 1795426670548.5786,
+   "repliedMs": 1795426671074.2585,
+   "outcome": "presented",
+   "code": null,
+   "held": 80,
+   "parts": {
+    "hub": 0.2802734375,
+    "behind": 0.0478515625,
+    "world": 0
+   },
+   "sentMs": 1795426670547.7495,
+   "answeredMs": 1795426671075.163
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426671307.2068,
+   "startedMs": 1795426671307.8894,
+   "repliedMs": 1795426671804.4988,
+   "outcome": "applied",
+   "code": null,
+   "held": 81,
+   "parts": {
+    "hub": 0.560791015625,
+    "behind": 0.121826171875,
+    "world": 0
+   },
+   "sentMs": 1795426671305.5117,
+   "answeredMs": 1795426671805.1377
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426671905.0881,
+   "startedMs": 1795426671928.3071,
+   "repliedMs": 1795426672425.0984,
+   "outcome": "presented",
+   "code": null,
+   "held": 82,
+   "parts": {
+    "hub": 23.173095703125,
+    "behind": 0.0458984375,
+    "world": 0
+   },
+   "sentMs": 1795426671864.2373,
+   "answeredMs": 1795426672428.9756
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426672495.533,
+   "startedMs": 1795426672496.4197,
+   "repliedMs": 1795426672974.8699,
+   "outcome": "presented",
+   "code": null,
+   "held": 83,
+   "parts": {
+    "hub": 0.781005859375,
+    "behind": 0.105712890625,
+    "world": 0
+   },
+   "sentMs": 1795426672494.0596,
+   "answeredMs": 1795426672975.571
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426673189.1787,
+   "startedMs": 1795426673189.5142,
+   "repliedMs": 1795426673716.1624,
+   "outcome": "presented",
+   "code": null,
+   "held": 84,
+   "parts": {
+    "hub": 0.24951171875,
+    "behind": 0.0859375,
+    "world": 0
+   },
+   "sentMs": 1795426673188.66,
+   "answeredMs": 1795426673726.53
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426673951.2039,
+   "startedMs": 1795426673951.83,
+   "repliedMs": 1795426674524.08,
+   "outcome": "presented",
+   "code": null,
+   "held": 85,
+   "parts": {
+    "hub": 0.4521484375,
+    "behind": 0.174072265625,
+    "world": 0
+   },
+   "sentMs": 1795426673950.383,
+   "answeredMs": 1795426674524.7144
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426674670.3232,
+   "startedMs": 1795426674670.6616,
+   "repliedMs": 1795426675194.405,
+   "outcome": "presented",
+   "code": null,
+   "held": 86,
+   "parts": {
+    "hub": 0.293701171875,
+    "behind": 0.044677734375,
+    "world": 0
+   },
+   "sentMs": 1795426674669.7969,
+   "answeredMs": 1795426675195.0461
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426675256.578,
+   "startedMs": 1795426675256.9182,
+   "repliedMs": 1795426675836.9539,
+   "outcome": "applied",
+   "code": null,
+   "held": 87,
+   "parts": {
+    "hub": 0.29345703125,
+    "behind": 0.046875,
+    "world": 0
+   },
+   "sentMs": 1795426675256.1335,
+   "answeredMs": 1795426675837.5198
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426676088.2344,
+   "startedMs": 1795426676112.1763,
+   "repliedMs": 1795426676621.3066,
+   "outcome": "presented",
+   "code": null,
+   "held": 88,
+   "parts": {
+    "hub": 23.890625,
+    "behind": 0.05126953125,
+    "world": 0
+   },
+   "sentMs": 1795426676043.22,
+   "answeredMs": 1795426676624.9739
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426676835.5498,
+   "startedMs": 1795426676835.8618,
+   "repliedMs": 1795426677371.098,
+   "outcome": "presented",
+   "code": null,
+   "held": 89,
+   "parts": {
+    "hub": 0.270751953125,
+    "behind": 0.041259765625,
+    "world": 0
+   },
+   "sentMs": 1795426676835.069,
+   "answeredMs": 1795426677371.8135
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426677414.082,
+   "startedMs": 1795426677414.4187,
+   "repliedMs": 1795426677977.404,
+   "outcome": "presented",
+   "code": null,
+   "held": 90,
+   "parts": {
+    "hub": 0.284423828125,
+    "behind": 0.05224609375,
+    "world": 0
+   },
+   "sentMs": 1795426677413.3643,
+   "answeredMs": 1795426677978.7622
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426678096.3594,
+   "startedMs": 1795426678096.6514,
+   "repliedMs": 1795426678649.551,
+   "outcome": "presented",
+   "code": null,
+   "held": 91,
+   "parts": {
+    "hub": 0.23779296875,
+    "behind": 0.05419921875,
+    "world": 0
+   },
+   "sentMs": 1795426678095.847,
+   "answeredMs": 1795426678650.3481
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426678775.97,
+   "startedMs": 1795426678776.2712,
+   "repliedMs": 1795426679300.713,
+   "outcome": "presented",
+   "code": null,
+   "held": 92,
+   "parts": {
+    "hub": 0.26220703125,
+    "behind": 0.0390625,
+    "world": 0
+   },
+   "sentMs": 1795426678775.4868,
+   "answeredMs": 1795426679301.3894
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426679379.9717,
+   "startedMs": 1795426679380.2502,
+   "repliedMs": 1795426679941.8418,
+   "outcome": "applied",
+   "code": null,
+   "held": 93,
+   "parts": {
+    "hub": 0.238525390625,
+    "behind": 0.0400390625,
+    "world": 0
+   },
+   "sentMs": 1795426679379.4753,
+   "answeredMs": 1795426679942.5566
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426680211.2878,
+   "startedMs": 1795426680235.2104,
+   "repliedMs": 1795426680780.5405,
+   "outcome": "presented",
+   "code": null,
+   "held": 94,
+   "parts": {
+    "hub": 23.873046875,
+    "behind": 0.049560546875,
+    "world": 0
+   },
+   "sentMs": 1795426680163.6545,
+   "answeredMs": 1795426680784.5686
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426680796.1418,
+   "startedMs": 1795426680796.484,
+   "repliedMs": 1795426681330.2407,
+   "outcome": "presented",
+   "code": null,
+   "held": 95,
+   "parts": {
+    "hub": 0.297607421875,
+    "behind": 0.04443359375,
+    "world": 0
+   },
+   "sentMs": 1795426680795.657,
+   "answeredMs": 1795426681330.792
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426681412.6245,
+   "startedMs": 1795426681412.94,
+   "repliedMs": 1795426681964.5532,
+   "outcome": "presented",
+   "code": null,
+   "held": 96,
+   "parts": {
+    "hub": 0.271728515625,
+    "behind": 0.043701171875,
+    "world": 0
+   },
+   "sentMs": 1795426681412.0933,
+   "answeredMs": 1795426681966.0334
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426682155.8215,
+   "startedMs": 1795426682156.1208,
+   "repliedMs": 1795426682711.1,
+   "outcome": "presented",
+   "code": null,
+   "held": 97,
+   "parts": {
+    "hub": 0.255615234375,
+    "behind": 0.043701171875,
+    "world": 0
+   },
+   "sentMs": 1795426682155.3665,
+   "answeredMs": 1795426682711.7073
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426682937.3833,
+   "startedMs": 1795426682937.733,
+   "repliedMs": 1795426683506.4377,
+   "outcome": "presented",
+   "code": null,
+   "held": 98,
+   "parts": {
+    "hub": 0.248779296875,
+    "behind": 0.100830078125,
+    "world": 0
+   },
+   "sentMs": 1795426682936.7913,
+   "answeredMs": 1795426683507.0327
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426683563.8354,
+   "startedMs": 1795426683564.077,
+   "repliedMs": 1795426684121.3806,
+   "outcome": "applied",
+   "code": null,
+   "held": 99,
+   "parts": {
+    "hub": 0.2080078125,
+    "behind": 0.033447265625,
+    "world": 0
+   },
+   "sentMs": 1795426683563.3777,
+   "answeredMs": 1795426684122.0571
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426684262.25,
+   "startedMs": 1795426684285.1467,
+   "repliedMs": 1795426684884.737,
+   "outcome": "presented",
+   "code": null,
+   "held": 100,
+   "parts": {
+    "hub": 22.794189453125,
+    "behind": 0.1025390625,
+    "world": 0
+   },
+   "sentMs": 1795426684219.1812,
+   "answeredMs": 1795426684888.645
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426685025.4712,
+   "startedMs": 1795426685025.7827,
+   "repliedMs": 1795426685590.0256,
+   "outcome": "presented",
+   "code": null,
+   "held": 101,
+   "parts": {
+    "hub": 0.261962890625,
+    "behind": 0.049560546875,
+    "world": 0
+   },
+   "sentMs": 1795426685024.8086,
+   "answeredMs": 1795426685590.8826
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426685681.727,
+   "startedMs": 1795426685682.065,
+   "repliedMs": 1795426686302.636,
+   "outcome": "presented",
+   "code": null,
+   "held": 102,
+   "parts": {
+    "hub": 0.29296875,
+    "behind": 0.044921875,
+    "world": 0
+   },
+   "sentMs": 1795426685681.0513,
+   "answeredMs": 1795426686304.4197
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426686535.1826,
+   "startedMs": 1795426686535.6333,
+   "repliedMs": 1795426687137.9458,
+   "outcome": "presented",
+   "code": null,
+   "held": 103,
+   "parts": {
+    "hub": 0.3701171875,
+    "behind": 0.08056640625,
+    "world": 0
+   },
+   "sentMs": 1795426686534.5334,
+   "answeredMs": 1795426687138.8518
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426687238.3057,
+   "startedMs": 1795426687238.691,
+   "repliedMs": 1795426687844.989,
+   "outcome": "presented",
+   "code": null,
+   "held": 104,
+   "parts": {
+    "hub": 0.327392578125,
+    "behind": 0.057861328125,
+    "world": 0
+   },
+   "sentMs": 1795426687237.6924,
+   "answeredMs": 1795426687845.8083
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426687969.086,
+   "startedMs": 1795426687969.5056,
+   "repliedMs": 1795426688531.2861,
+   "outcome": "applied",
+   "code": null,
+   "held": 105,
+   "parts": {
+    "hub": 0.362548828125,
+    "behind": 0.05712890625,
+    "world": 0
+   },
+   "sentMs": 1795426687968.4922,
+   "answeredMs": 1795426688532.016
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426688783.7966,
+   "startedMs": 1795426688804.9758,
+   "repliedMs": 1795426689375.498,
+   "outcome": "presented",
+   "code": null,
+   "held": 106,
+   "parts": {
+    "hub": 21.13232421875,
+    "behind": 0.046875,
+    "world": 0
+   },
+   "sentMs": 1795426688744.1067,
+   "answeredMs": 1795426689379.0928
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426689424.3523,
+   "startedMs": 1795426689424.672,
+   "repliedMs": 1795426690027.355,
+   "outcome": "presented",
+   "code": null,
+   "held": 107,
+   "parts": {
+    "hub": 0.251220703125,
+    "behind": 0.068603515625,
+    "world": 0
+   },
+   "sentMs": 1795426689423.7832,
+   "answeredMs": 1795426690027.9236
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426690211.566,
+   "startedMs": 1795426690212.017,
+   "repliedMs": 1795426690796.4084,
+   "outcome": "presented",
+   "code": null,
+   "held": 108,
+   "parts": {
+    "hub": 0.401123046875,
+    "behind": 0.050048828125,
+    "world": 0
+   },
+   "sentMs": 1795426690211.0222,
+   "answeredMs": 1795426690798.024
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426690900.5837,
+   "startedMs": 1795426690905.0515,
+   "repliedMs": 1795426691509.7422,
+   "outcome": "presented",
+   "code": null,
+   "held": 109,
+   "parts": {
+    "hub": 4.3740234375,
+    "behind": 0.09375,
+    "world": 0
+   },
+   "sentMs": 1795426690900.1282,
+   "answeredMs": 1795426691510.4006
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426691562.0964,
+   "startedMs": 1795426691562.4568,
+   "repliedMs": 1795426692167.645,
+   "outcome": "presented",
+   "code": null,
+   "held": 110,
+   "parts": {
+    "hub": 0.300537109375,
+    "behind": 0.059814453125,
+    "world": 0
+   },
+   "sentMs": 1795426691561.4878,
+   "answeredMs": 1795426692168.4287
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426692232.7878,
+   "startedMs": 1795426692233.3418,
+   "repliedMs": 1795426692854.351,
+   "outcome": "applied",
+   "code": null,
+   "held": 111,
+   "parts": {
+    "hub": 0.40234375,
+    "behind": 0.151611328125,
+    "world": 0
+   },
+   "sentMs": 1795426692231.2588,
+   "answeredMs": 1795426692854.989
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426693005.1658,
+   "startedMs": 1795426693027.8552,
+   "repliedMs": 1795426693652.4565,
+   "outcome": "presented",
+   "code": null,
+   "held": 112,
+   "parts": {
+    "hub": 22.630615234375,
+    "behind": 0.058837890625,
+    "world": 0
+   },
+   "sentMs": 1795426692964.0754,
+   "answeredMs": 1795426693664.6792
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426693818.4927,
+   "startedMs": 1795426693818.8347,
+   "repliedMs": 1795426694406.193,
+   "outcome": "presented",
+   "code": null,
+   "held": 113,
+   "parts": {
+    "hub": 0.267822265625,
+    "behind": 0.07421875,
+    "world": 0
+   },
+   "sentMs": 1795426693817.855,
+   "answeredMs": 1795426694406.7456
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426694449.246,
+   "startedMs": 1795426694449.5708,
+   "repliedMs": 1795426695044.7227,
+   "outcome": "presented",
+   "code": null,
+   "held": 114,
+   "parts": {
+    "hub": 0.284423828125,
+    "behind": 0.040283203125,
+    "world": 0
+   },
+   "sentMs": 1795426694448.782,
+   "answeredMs": 1795426695047.9673
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426695225.8367,
+   "startedMs": 1795426695226.2473,
+   "repliedMs": 1795426695855.2756,
+   "outcome": "presented",
+   "code": null,
+   "held": 115,
+   "parts": {
+    "hub": 0.32861328125,
+    "behind": 0.08203125,
+    "world": 0
+   },
+   "sentMs": 1795426695225.0498,
+   "answeredMs": 1795426695856.0125
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426695931.7065,
+   "startedMs": 1795426695932.1086,
+   "repliedMs": 1795426696534.659,
+   "outcome": "presented",
+   "code": null,
+   "held": 116,
+   "parts": {
+    "hub": 0.28564453125,
+    "behind": 0.116455078125,
+    "world": 0
+   },
+   "sentMs": 1795426695931.1045,
+   "answeredMs": 1795426696535.2559
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426696728.8062,
+   "startedMs": 1795426696729.1836,
+   "repliedMs": 1795426697329.435,
+   "outcome": "applied",
+   "code": null,
+   "held": 117,
+   "parts": {
+    "hub": 0.31982421875,
+    "behind": 0.0576171875,
+    "world": 0
+   },
+   "sentMs": 1795426696728.358,
+   "answeredMs": 1795426697330.0564
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "check",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426697533.4504,
+   "startedMs": 1795426697555.7656,
+   "repliedMs": 1795426698188.5554,
+   "outcome": "presented",
+   "code": null,
+   "held": 118,
+   "parts": {
+    "hub": 22.27294921875,
+    "behind": 0.042236328125,
+    "world": 0
+   },
+   "sentMs": 1795426697489.1384,
+   "answeredMs": 1795426698192.1165
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_2d",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426698386.683,
+   "startedMs": 1795426698386.9114,
+   "repliedMs": 1795426699025.5154,
+   "outcome": "presented",
+   "code": null,
+   "held": 119,
+   "parts": {
+    "hub": 0.193603515625,
+    "behind": 0.03466796875,
+    "world": 0
+   },
+   "sentMs": 1795426698386.2146,
+   "answeredMs": 1795426699026.3254
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426699039.9292,
+   "startedMs": 1795426699040.286,
+   "repliedMs": 1795426699668.6475,
+   "outcome": "presented",
+   "code": null,
+   "held": 120,
+   "parts": {
+    "hub": 0.302490234375,
+    "behind": 0.05419921875,
+    "world": 0
+   },
+   "sentMs": 1795426699039.3513,
+   "answeredMs": 1795426699670.0447
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "render_back_3d",
+   "doc": "01JC3200000000000000000002",
+   "arrivedMs": 1795426699858.771,
+   "startedMs": 1795426699859.1748,
+   "repliedMs": 1795426700519.2324,
+   "outcome": "presented",
+   "code": null,
+   "held": 121,
+   "parts": {
+    "hub": 0.362060546875,
+    "behind": 0.041748046875,
+    "world": 0
+   },
+   "sentMs": 1795426699858.1526,
+   "answeredMs": 1795426700519.813
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795426700743.4104,
+   "startedMs": 1795426700743.6968,
+   "repliedMs": 1795426701380.839,
+   "outcome": "presented",
+   "code": null,
+   "held": 122,
+   "parts": {
+    "hub": 0.248779296875,
+    "behind": 0.03759765625,
+    "world": 0
+   },
+   "sentMs": 1795426700742.9,
+   "answeredMs": 1795426701381.4805
+  }
+ ]
+}

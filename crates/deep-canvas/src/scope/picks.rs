@@ -83,3 +83,41 @@ fn label_of(doc: &Value, control: &Value, option: &str) -> String {
         .unwrap_or(option)
         .to_string()
 }
+
+/// #3236: the option a reading stop holds in place of a target's: the stop is `(set, READING)`.
+pub const READING: &str = "#rows";
+
+/// The items a reading focus walks (Mark set: a set with no pick control still takes one Tab stop,
+/// its drawn rows walked by key): each mark set or series heard (not decoration, drawn and not
+/// hidden) that no pick control names in its `rows`, in reading order: its layer's `order`, then
+/// its own, then its ID.
+pub fn reading_sets(doc: &Value, hidden: &[String]) -> Vec<String> {
+    let picked: Vec<&str> = member(doc, "controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter_map(|(_, c)| member(c, "rows")?.as_array())
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let text = |v: Option<&Value>| v.and_then(Value::as_str).unwrap_or("").to_string();
+    let mut out: Vec<(String, String, String)> = member(doc, "items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(id, item)| {
+            matches!(text(member(item, "kind")).as_str(), "marks@1" | "series@1")
+                && !matches!(text(member(item, "role")).as_str(), "" | "decoration")
+                && member(item, "visible") != Some(&Value::Bool(false))
+                && !hidden.iter().any(|h| h == *id)
+                && !picked.contains(&id.as_str())
+        })
+        .map(|(id, item)| {
+            let layer = text(member(item, "layer"));
+            let layer = text(doc.pointer(&format!("/layers/{layer}/order")));
+            (layer, text(member(item, "order")), id.clone())
+        })
+        .collect();
+    out.sort();
+    out.into_iter().map(|(_, _, id)| id).collect()
+}

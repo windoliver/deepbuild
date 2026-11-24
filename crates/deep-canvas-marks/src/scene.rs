@@ -38,39 +38,6 @@ use crate::story;
 use deep_canvas::schedule::{Key, KeyTree};
 use deep_canvas::template;
 
-/// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
-pub const KINDS: &[&str] = &[
-    "rect@1",
-    "circle@1",
-    "path@1",
-    "text@1",
-    "image@1",
-    "marks@1",
-    "axis@1",
-    "scale@1",
-    "mask@1",
-    "group@1",
-    "star@1",
-    "frame@1",
-    "series@1",
-    "matte@1",
-    "axes3d@1",
-    "vector_field@1",
-];
-
-/// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
-/// draws for it (the data module's manifest). A build without the data module lacks them.
-pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1", "axes3d@1", "vector_field@1"];
-
-/// The canvas module that owns one of [`KINDS`]: the data module's, or marks2d's.
-pub fn module_of(kind: &str) -> &'static str {
-    if DATA_KINDS.contains(&kind) {
-        "data"
-    } else {
-        "marks2d"
-    }
-}
-
 /// An sRGB-encoded color, 0–255 per channel, as the look's roles resolve for a 2D writer layer.
 pub type Rgb = [u8; 3];
 
@@ -632,8 +599,7 @@ impl ImageFit {
     }
 }
 
-/// How an image's pixels are sampled when it is drawn at another size (Image `image@1`:
-/// `sampling`).
+/// How an image's pixels are sampled when drawn at another size (Image `image@1`: `sampling`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ImageSampling {
     #[default]
@@ -1153,12 +1119,13 @@ pub enum Mark {
         tile: Option<AtlasCell>,
         /// #535: degrees it turns about the centre of `bounds`, x toward y.
         turn: f64,
+        /// #269: a grid image's grid at the frame's step, drawn in place of an asset's pixels.
+        grid: Option<Arc<crate::grid_image::Drawn>>,
     },
 }
 
 /// A stroke as drawn (Paint: stroke): its width in u, its paint, its opacity (the paint's times the
-/// stroke's), and the dashes each sub-path holds (`dash: {count}`), equal dashes and gaps from
-/// the sub-path's start.
+/// stroke's), and each sub-path's dashes (`dash: {count}`), equal dashes and gaps from its start.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Line {
     pub width: f64,
@@ -3659,7 +3626,7 @@ pub fn text_at(
 
 /// The readings bound to mark sets' cells (`items/<set>#<key>/<column>`): set ID → its cells'
 /// readings.
-fn bound_rows(doc: &Map<String, Value>, record: &Record) -> BTreeMap<String, data::BoundRows> {
+pub fn bound_rows(doc: &Map<String, Value>, record: &Record) -> BTreeMap<String, data::BoundRows> {
     let mut out: BTreeMap<String, data::BoundRows> = BTreeMap::new();
     let Some(Value::Object(bound)) = doc.get("bound_values") else {
         return out;
@@ -4898,8 +4865,10 @@ pub(crate) fn shaped_text(spec: &TextSpec) -> Option<Arc<deep_text::Shaped>> {
     Some(LAYOUT_SHAPER.with(|shaper| shaper.borrow_mut().shape(&s)))
 }
 
+mod kinds;
 mod placed;
 mod scopes;
+pub use kinds::{module_of, DATA_KINDS, KINDS};
 use placed::*;
 use scopes::{ancestor_scope, is_under, scopes_of};
 
@@ -5394,15 +5363,17 @@ fn build(
             slot.2
                 .push((Cow::Borrowed(&placed.rank), k, id, drawn, key));
         }
-        let later = placed.rank.after_children();
-        for (k, drawn) in placed.after.iter().enumerate() {
-            slot.2.push((
-                Cow::Owned(later.clone()),
-                placed.drawn.len() + k,
-                id,
-                drawn,
-                drawn.key(bucket),
-            ));
+        if !placed.after.is_empty() {
+            let later = placed.rank.after_children();
+            for (k, drawn) in placed.after.iter().enumerate() {
+                slot.2.push((
+                    Cow::Owned(later.clone()),
+                    placed.drawn.len() + k,
+                    id,
+                    drawn,
+                    drawn.key(bucket),
+                ));
+            }
         }
     }
     layers.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));

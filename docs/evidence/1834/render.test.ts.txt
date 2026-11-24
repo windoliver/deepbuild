@@ -7,7 +7,7 @@ import { it } from 'vitest';
 import {
   BALL_PATH, DOC, FIRES, LATE, coachProgram, evalCall, labScene, physicsBakeCall, plantedScenario, prebuild, prebuildShows,
   putEvidence, runShow, showCall, showWith, useTemp, valuesOf, type JsonObject,
-} from '/Users/taofeng/dev/claude-worktrees/doneright/github-issue-1834-7630f6/tests/acceptance/1834/helpers.ts';
+} from '~/dev/claude-worktrees/doneright/github-issue-1834-7630f6/tests/acceptance/1834/helpers.ts';
 
 const OUT = process.env['EVIDENCE_OUT']!;
 prebuild();

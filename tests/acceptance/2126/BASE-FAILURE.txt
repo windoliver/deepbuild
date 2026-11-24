@@ -1,0 +1,91 @@
+# #2126 blind acceptance suite, run on the base commit
+base: 0a875355b2c19e7705b1b248c9a20b85e24cbbcd (origin/main)
+node: v24.22.0
+platform: macOS (darwin, arm64)
+load: { 87.13 85.75 89.67 }
+date: 2026-11-23T23:10:44Z
+command (repository root): npx vitest run tests/acceptance/2126 --reporter=verbose
+paths: the clone root is written <clone>, home folders as ~
+
+
+ RUN  v5.0.5 <clone>
+
+ × tests/acceptance/2126/epipe.test.ts > #2126 a child that exits before it reads its input > #2126.67cc88df A git stopped before it reads its input fails its call and never takes the hub down 29657ms
+   → expected [ 'EPIPE write EPIPE' ] to deeply equal []
+ × tests/acceptance/2126/epipe.test.ts > #2126 a child that exits before it reads its input > #2126.74588985 A probe that exits before it reads its input reads as a failed check, never an uncaught error in the hub 181ms
+   → expected [ 'EPIPE write EPIPE' ] to deeply equal []
+ × tests/acceptance/2126/epipe.test.ts > #2126 a child that exits before it reads its input > #2126.1680fcd2 A judge or agent CLI that exits before reading its prompt ends as a failed call, never a crashed eval 328ms
+   → expected [ 'EPIPE write EPIPE' ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2126/epipe.test.ts > #2126 a child that exits before it reads its input > #2126.67cc88df A git stopped before it reads its input fails its call and never takes the hub down
+AssertionError: expected [ 'EPIPE write EPIPE' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "EPIPE write EPIPE",
++ ]
+
+ ❯ tests/acceptance/2126/epipe.test.ts:59:29
+     57|     expect(report.stoppedAt).toMatch(/ --stdin$/);
+     58|     // The hub's process sees no uncaught exception (today: `EPIPE wri…
+     59|     expect(report.uncaught).toEqual([]);
+       |                             ^
+     60|     // The call rejects as over budget.
+     61|     expect(report.settled.rejected).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/2126/epipe.test.ts > #2126 a child that exits before it reads its input > #2126.74588985 A probe that exits before it reads its input reads as a failed check, never an uncaught error in the hub
+AssertionError: expected [ 'EPIPE write EPIPE' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "EPIPE write EPIPE",
++ ]
+
+ ❯ tests/acceptance/2126/epipe.test.ts:73:29
+     71|     expect(report.inputBytes).toBeGreaterThanOrEqual(2_000_000);
+     72|     // No uncaught error in the process that ran the check (today: `EP…
+     73|     expect(report.uncaught).toEqual([]);
+       |                             ^
+     74|     // runProbe resolves, with outcome failed.
+     75|     expect(report.settled.resolved).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/2126/epipe.test.ts > #2126 a child that exits before it reads its input > #2126.1680fcd2 A judge or agent CLI that exits before reading its prompt ends as a failed call, never a crashed eval
+AssertionError: expected [ 'EPIPE write EPIPE' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "EPIPE write EPIPE",
++ ]
+
+ ❯ tests/acceptance/2126/epipe.test.ts:86:29
+     84|     expect(report.promptBytes).toBeGreaterThanOrEqual(300_000);
+     85|     // The eval's process sees no uncaught error (today: `EPIPE write …
+     86|     expect(report.uncaught).toEqual([]);
+       |                             ^
+     87|     // runCli resolves with no lines.
+     88|     expect(report.settled.resolved).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  15:10:49
+   Duration  32.06s (tests 100%)
+
+exit 1

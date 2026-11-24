@@ -11,6 +11,20 @@ import { runCli } from '../src/launcher.js';
 const roots: string[] = [];
 afterEach(() => { for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true }); });
 
+/** The judge: the control's no change 0.1 and its right change 0.9, and a task's two outputs `a` and `b`. */
+const codex = (a: string, b: string): string => `#!/bin/sh
+p=$(cat)
+a=${a} b=${b}
+case "$p" in
+*"=== Output A ===
+(no change)"*) a=0.1 b=0.9 ;;
+*"=== Output B ===
+(no change)"*) a=0.9 b=0.1 ;;
+esac
+echo '{"type":"item.completed","item":{"type":"agent_message","text":"{\\"grades\\":[{\\"label\\":\\"A\\",\\"score\\":'$a'},{\\"label\\":\\"B\\",\\"score\\":'$b'}]}"}}'
+echo '{"type":"turn.completed","usage":{"input_tokens":5,"output_tokens":5}}'
+`;
+
 function world(sleep: number) {
   const box = realpathSync(mkdtempSync(join(tmpdir(), 'dce-launch-')));
   roots.push(box);
@@ -28,11 +42,7 @@ echo '{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","rateLimi
 echo fixed > fix.txt
 echo '{"type":"result","subtype":"success","is_error":false,"result":"Fixed it.","usage":{"input_tokens":100,"cache_read_input_tokens":30,"output_tokens":20}}'
 `);
-  writeFileSync(join(bin, 'codex'), `#!/bin/sh
-cat > /dev/null
-echo '{"type":"item.completed","item":{"type":"agent_message","text":"{\\"grades\\":[{\\"label\\":\\"A\\",\\"score\\":0.9},{\\"label\\":\\"B\\",\\"score\\":0.8}]}"}}'
-echo '{"type":"turn.completed","usage":{"input_tokens":5,"output_tokens":5}}'
-`);
+  writeFileSync(join(bin, 'codex'), codex('0.9', '0.8'));
   for (const f of ['claude', 'codex']) chmodSync(join(bin, f), 0o755);
   const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=Dev', '-c', 'user.email=dev@shop.test', ...args], { cwd: repo, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null' } }).trim();
   git('init', '-q');
@@ -64,11 +74,7 @@ it('keeps a grade the judge left null missing, never a zero', async () => {
   // Failed on a launcher that read `"score": null` as the number 0: an output the judge could not score counted
   // as a measured zero against its side.
   const w = world(0);
-  writeFileSync(join(w.box, 'bin', 'codex'), `#!/bin/sh
-cat > /dev/null
-echo '{"type":"item.completed","item":{"type":"agent_message","text":"{\\"grades\\":[{\\"label\\":\\"A\\",\\"score\\":0.9},{\\"label\\":\\"B\\",\\"score\\":null}]}"}}'
-echo '{"type":"turn.completed","usage":{"input_tokens":5,"output_tokens":5}}'
-`);
+  writeFileSync(join(w.box, 'bin', 'codex'), codex('0.9', 'null'));
   const report = await runEval({ plan: w.plan(600_000), tasks: w.tasks, root: join(w.box, 'work'), env: w.env });
   const grades = report.runs.map((r) => r.metrics.grade);
   expect(grades).toContain(0.9);
@@ -102,7 +108,7 @@ it('stops a run at the eval\'s deadline, so an eval ends within its stated time'
   // Failed on a launcher that let each run go on for its own 30 minutes.
   const w = world(30);
   const t0 = performance.now();
-  const report = await runEval({ plan: w.plan(2_000), tasks: w.tasks, root: join(w.box, 'work'), env: w.env });
+  const report = await runEval({ plan: w.plan(8_000), tasks: w.tasks, root: join(w.box, 'work'), env: w.env });
   expect(performance.now() - t0).toBeLessThan(15_000);
   expect(report.runs.map((r) => r.ok)).toEqual([false, false]);
 }, 60_000);

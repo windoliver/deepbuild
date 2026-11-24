@@ -222,7 +222,7 @@ impl Hub<'_> {
             return Ok(None);
         };
         let px = self.frame_px(panel, &scene, pos);
-        let Some((_, drawn)) = self.gpu3().and_then(|g| g.draw_scene(&scene, &look, false)) else {
+        let Some(drawn) = self.gpu3().and_then(|g| g.draw_ids(&scene, &look)) else {
             return Ok(None);
         };
         let ids = pointer::Ids {
