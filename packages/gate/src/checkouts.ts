@@ -92,6 +92,9 @@ function runGit(cwd: string, args: string[], env: NodeJS.ProcessEnv, input: stri
       else resolve(stdout.trim());
     });
     w?.children.add(child);
+    // A git stopped before it reads its input (the budget's SIGKILL) fails the write with EPIPE; the callback above
+    // already settles the call, so the pipe's error must not end the hub (#2126).
+    child.stdin!.on('error', () => undefined);
     if (input !== undefined) child.stdin!.end(input);
   });
 }

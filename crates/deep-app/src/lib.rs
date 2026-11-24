@@ -15,6 +15,7 @@ compile_error!("the env-plants feature is for test builds only, never a release 
 
 pub mod actions;
 pub mod address;
+mod agents;
 pub mod answer;
 pub mod arming;
 pub mod bound;
@@ -40,6 +41,7 @@ pub mod device;
 pub mod empties;
 #[cfg(feature = "fixtures")]
 pub mod events;
+pub mod find;
 pub mod footprint;
 pub mod frame;
 pub mod gpu_view;
@@ -55,6 +57,7 @@ pub mod installed;
 /// #1606: the device key in the OS secret store.
 mod keystore;
 pub mod kinds;
+mod lines;
 pub mod list;
 pub mod notice;
 pub mod notify;
@@ -66,9 +69,11 @@ pub mod panel_keys;
 pub mod panel_module;
 pub mod panel_tree;
 pub mod panel_values;
+pub mod pictures;
 pub mod plain;
 pub mod question;
 pub mod record;
+mod rows;
 pub mod rules;
 /// #2494: a 3D writer layer in the canvas panel, drawn through a GPU-layer view.
 #[cfg(target_os = "macos")]

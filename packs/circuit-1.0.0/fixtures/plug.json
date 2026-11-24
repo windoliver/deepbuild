@@ -1,0 +1,223 @@
+{
+  "name": "plug",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "c28220fdc04178d9fc195c7e45112a47ed960c124570fd9d4bfa7a72c92d8a4e",
+      "step_rate": 1000,
+      "reads": [
+        "plug_in"
+      ],
+      "writes": {
+        "v": {
+          "type": "f64",
+          "count": 3
+        },
+        "i_rms": {
+          "type": "f64",
+          "count": 4
+        },
+        "i": {
+          "type": "f64",
+          "count": 4
+        },
+        "p": {
+          "type": "f64",
+          "count": 4
+        },
+        "r": {
+          "type": "f64",
+          "count": 4
+        },
+        "on": {
+          "type": "i32",
+          "count": 4
+        },
+        "energy": {
+          "type": "f64",
+          "count": 4
+        },
+        "kwh": {
+          "type": "f64",
+          "count": 4
+        },
+        "drift": {
+          "type": "f64",
+          "count": 4
+        },
+        "drift_x": {
+          "type": "f64",
+          "count": 4
+        }
+      },
+      "circuit": {
+        "nodes": [
+          "neutral",
+          "live",
+          "pin"
+        ],
+        "parts": [
+          {
+            "id": "mains",
+            "kind": "source_ac",
+            "from": "neutral",
+            "to": "live",
+            "v_rms": 230,
+            "f": 50
+          },
+          {
+            "id": "plug",
+            "kind": "connector",
+            "from": "live",
+            "to": "pin",
+            "closed_by": "plug_in"
+          },
+          {
+            "id": "lamp",
+            "kind": "load",
+            "from": "pin",
+            "to": "neutral",
+            "p_rated": 4.6,
+            "v_rated": 230
+          },
+          {
+            "id": "meter",
+            "kind": "meter",
+            "on": "lamp"
+          }
+        ]
+      },
+      "budget": {
+        "fuel": 10000000
+      }
+    }
+  },
+  "controls": {
+    "plug_in": {
+      "kind": "slider"
+    }
+  },
+  "track": [
+    {
+      "t": 0,
+      "seq": 1,
+      "control": "plug_in",
+      "value": 1,
+      "writer": "you",
+      "player": 1
+    },
+    {
+      "t": 2116800,
+      "seq": 2,
+      "control": "plug_in",
+      "value": 0,
+      "writer": "you",
+      "player": 1
+    }
+  ],
+  "steps": 6,
+  "expect": {
+    "arrays": {
+      "0": {
+        "i_rms": [
+          0.02,
+          0.02,
+          0.02,
+          0
+        ],
+        "i": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "p": [
+          4.6,
+          0,
+          4.6,
+          0
+        ],
+        "r": [
+          0,
+          0,
+          11500,
+          0
+        ],
+        "on": [
+          1,
+          1,
+          1,
+          0
+        ],
+        "energy": [
+          0,
+          0,
+          0,
+          0.0046
+        ]
+      },
+      "2": {
+        "i": [
+          0.016625077511098138,
+          0.016625077511098138,
+          0.016625077511098138,
+          0
+        ],
+        "v": [
+          0,
+          191.1883913776286,
+          191.1883913776286
+        ],
+        "energy": [
+          0,
+          0,
+          0,
+          0.0138
+        ]
+      },
+      "3": {
+        "i_rms": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "i": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "p": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "on": [
+          1,
+          0,
+          1,
+          0
+        ],
+        "energy": [
+          0,
+          0,
+          0,
+          0.0138
+        ],
+        "kwh": [
+          0,
+          0,
+          0,
+          3.833333333333333e-9
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 1e-15,
+      "rel": 1e-9
+    }
+  },
+  "answer": "R = 230² ÷ 4.6 = 11,500 Ω; with the plug in, I = 230 ÷ 11,500 = 0.02 A rms in the source, the plug and the lamp, and P = 4.6 W in the source and the lamp (the plug has no resistance and takes none). At step k, t = k ÷ 1,000 s, each current is 0.02 × √2 × sin(2π × 50 × t): 0 at step 0, 0.02√2 sin(0.2π) = 0.016625 A at step 2, and the live and pin nodes 230√2 sin(0.2π) = 191.17 V. The meter counts 4.6 W × 1 ms a step, this step's included: 4.6 mJ at step 0, 13.8 mJ at step 2. The plug comes out at step 3: no current, no power, the plug and the meter not conducting, the meter still 13.8 mJ (3.83 × 10⁻⁹ kWh)."
+}

@@ -63,7 +63,7 @@ const bin = join(w.tmp, 'bin');
 mkdirSync(bin, { recursive: true });
 writeFileSync(join(bin, 'claude'), FIXTURE('fake-reviewer.pl').replace('__CONFIG__', Buffer.from(JSON.stringify({ version: COVERED, model: 'claude-sonnet-5-5', findings: [] }), 'utf8').toString('base64')), { mode: 0o755 });
 writeFileSync(join(w.root, 'config.json'), `${JSON.stringify({ asks: SETTINGS, runner: { login_path: `${bin}:/usr/bin:/bin` }, plan: { reserve_pct: 10 } }, null, 2)}\n`);
-writeFileSync(join(w.home, '.claude', '.credentials.json'), `${JSON.stringify({ claudeAiOauth: { accessToken: `sk-ant-oat01-e2e1898FAKE${'x'.repeat(40)}`, refreshToken: `sk-ant-ort01-e2e1898FAKE${'y'.repeat(40)}`, expiresAt: 4102444800000, scopes: ['user:inference'], subscriptionType: 'max' } })}\n`, { mode: 0o600 });
+writeFileSync(join(w.home, '.claude', '.credentials.json'), `${JSON.stringify({ claudeAiOauth: { accessToken: `sk-ant-oat01-<made-up>${'x'.repeat(40)}`, refreshToken: `sk-ant-ort01-<made-up>${'y'.repeat(40)}`, expiresAt: 4102444800000, scopes: ['user:inference'], subscriptionType: 'max' } })}\n`, { mode: 0o600 });
 writeFileSync(join(w.home, '.claude', 'settings.json'), '{}\n');
 mkdirSync(join(w.root, 'wiki'), { recursive: true });
 writeFileSync(join(w.root, 'wiki', 'review-rubric.md'), FIXTURE('rubric.md'));

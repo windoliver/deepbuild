@@ -1,0 +1,60 @@
+# Runs of tests/acceptance/1841-redraft-ac1 at 0fffd8fcfd8eb56f7224a950cafef81cd909ff67 (main), 2026-11-22, Node v24.22.0, Darwin arm64, load averages 19.02 34.53 55.17
+# The checkouts' paths are replaced by <repo> (base) and <repo>-twin (twin).
+
+## 1. Base: node node_modules/vitest/vitest.mjs run tests/acceptance/1841-redraft-ac1/   (exit 0)
+
+ RUN  v5.0.5 <repo>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  18:45:27
+   Duration  1.14s (tests 97%, transform 2%, setup 1%)
+
+## Base: node node_modules/typescript/bin/tsc -p tests/acceptance/1841-redraft-ac1/tsconfig.json --noEmit   (exit 0, no output)
+
+## 2. Twin read-ahead-uncaught: an APFS copy of the base with twins/read-ahead-uncaught/packages/hub/src/log-reads.ts laid over it,
+##    npm run build --workspaces (exit 0), then the same vitest command   (exit 1)
+
+ RUN  v5.0.5 <repo>-twin
+
+ ❯ tests/acceptance/1841-redraft-ac1/next-page-read.test.ts (1 test | 1 failed) 995ms
+   × #1841.d29cb857 with the next page's read made to fail after events.read has replied, the hub records no unhandled rejection and keeps answering 948ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1841-redraft-ac1/next-page-read.test.ts > #1841.d29cb857 with the next page's read made to fail after events.read has replied, the hub records no unhandled rejection and keeps answering
+AssertionError: the hub recorded an unhandled rejection from the failed page read:
+Error: disk I/O error (planted by tests/acceptance/1841-redraft-ac1: the read of the next page)
+    at Statement.all (file://<repo>/tests/acceptance/1841-redraft-ac1/fixtures/page-read-fails.mjs:48:25)
+    at SqliteRecord.raw (file://<repo>/packages/record/dist/index.js:745:34)
+    at Proxy.<anonymous> (file://<repo>/packages/hub/dist/hub-shared.js:275:24)
+    at Object.raw (file://<repo>/packages/hub/dist/core.js:167:40)
+    at LogReads.page (file://<repo>/packages/hub/dist/log-reads.js:44:38)
+    at Immediate.<anonymous> (file://<repo>/packages/hub/dist/log-reads.js:83:42)
+    at process.processImmediate (node:internal/timers:574:21)
+steps: [{"step":"started"},{"step":"replied","log_pos":2,"events":[1,2]},{"step":"next-page-read-failed","after":2,"bound":3},{"step":"unhandled","message":"disk I/O error (planted by tests/acceptance/1841-redraft-ac1: the read of the next page)"},{"step":"settled"},{"step":"answered","after":2,"log_pos":4,"events":[3,4]},{"step":"log","log_pos":[1,2,3,4,5]},{"step":"health","answered":true},{"step":"stopped"}]
+status 0, signal null
+stderr:
+: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "disk I/O error (planted by tests/acceptance/1841-redraft-ac1: the read of the next page)",
++ ]
+
+ ❯ Statement.all <repo>/tests/acceptance/1841-redraft-ac1/fixtures/page-read-fails.mjs:48:25
+ ❯ tests/acceptance/1841-redraft-ac1/next-page-read.test.ts:76:200
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  18:45:29
+   Duration  1.11s (tests 97%, transform 2%, setup 1%)
+

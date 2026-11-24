@@ -1,0 +1,119 @@
+Base and twin runs for #3170's third criterion (#3170.618b6b1f), on the Spark, 2026-11-22.
+
+Where: a scratch clone of github.com/windoliver/deepbuild at the base 61aa8eb06, with this folder copied in, nothing
+else changed (git status shows only tests/acceptance/3170-redraft-ac3/). RUSTC_WRAPPER empty, -j 4, DEEP_TEST_COW_DIR
+unset in the shell. deep-hook's cli target was built first with `cargo test -p deep-hook --test cli --locked -j 4
+--no-run`.
+
+Found on the way: the Spark's own ~/.cargo/config.toml already has `[env] DEEP_TEST_COW_DIR = "/home/<user>/deepbuild-cow"`
+(a comment there calls it an XFS loop image for #3170). So with the variable unset the cli test passes on the Spark today,
+as the first run shows: the Spark is no longer a machine without such a folder. That is why the suite names a tmpfs folder
+itself (README: Why a tmpfs folder stands for the machine). The second block shows today's BLOCKED on a folder without
+reflink, /var/tmp (ext4), named explicitly.
+
+######## 1. The base ########
+
+== machine: Linux 7.0.0-1025-nvidia aarch64, 61aa8eb06 Merge pull request #3127 from windoliver/claude/issue-1121-t8-spark, load 22.58 21.66 25.71, node v24.22.0, cargo 1.99.1 (5f94df478 2026-08-27)
+== /var/tmp and /dev/shm:
+Filesystem     Type   1K-blocks       Used Available Use% Mounted on
+/dev/nvme0n1p2 ext4  3937374564 3504775920 232558748  94% /
+tmpfs          tmpfs   63799348         40  63799308   1% /dev/shm
+== today, DEEP_TEST_COW_DIR unset: cargo test -p deep-hook --test cli --locked -- --exact a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running tests/cli.rs (target/debug/deps/cli-423153aaf1d4d739)
+
+running 1 test
+test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.02s
+
+exit 0
+== base: node --test tests/acceptance/3170-redraft-ac3/blocked.test.mjs
+✔ #3170.618b6b1f on a Linux machine without a reflink folder, the copy-on-write cli test still reads BLOCKED and names the fix (410.519779ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 518.590341
+exit 0
+
+######## 2. Today's BLOCKED on ext4, and the twin forced-cow-folder ########
+
+== load 23.20 22.10 25.55
+== today on a folder without reflink: DEEP_TEST_COW_DIR=/var/tmp (ext4) cargo test -p deep-hook --test cli --locked -- --exact a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s
+     Running tests/cli.rs (target/debug/deps/cli-423153aaf1d4d739)
+
+running 1 test
+cp: failed to clone '/var/tmp/deep-hook-clone-2390606/probe.copy' from '/var/tmp/deep-hook-clone-2390606/probe': Operation not supported
+test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... FAILED
+
+failures:
+
+---- a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot stdout ----
+
+thread 'a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot' (2390608) panicked at crates/deep-hook/tests/cli.rs:1362:9:
+BLOCKED: /var/tmp can't make a reflink copy; set DEEP_TEST_COW_DIR to a folder on btrfs or XFS with reflink
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p deep-hook --test cli`
+exit 101
+
+== machine: load 23.34 22.02 25.62
+drwxr-xr-x 2 root root 4096 Feb  9  2026 /srv
+ls: cannot access '/srv/deep-cow': No such file or directory
+== twin forced-cow-folder over .cargo/config.toml:
+ .cargo/config.toml | 4 ++++
+ 1 file changed, 4 insertions(+)
+ rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib/swift"]
++
++# Issue #3170: the Spark's copy-on-write folder for deep-hook's cli test, named to every test binary cargo runs on Linux.
++[target.'cfg(target_os = "linux")']
++runner = ["env", "DEEP_TEST_COW_DIR=/srv/deep-cow"]
+== twin: node --test tests/acceptance/3170-redraft-ac3/blocked.test.mjs
+✖ #3170.618b6b1f on a Linux machine without a reflink folder, the copy-on-write cli test still reads BLOCKED and names the fix (352.207061ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 414.36574
+
+✖ failing tests:
+
+test at tests/acceptance/3170-redraft-ac3/blocked.test.mjs:9:1
+✖ #3170.618b6b1f on a Linux machine without a reflink folder, the copy-on-write cli test still reads BLOCKED and names the fix (352.207061ms)
+  AssertionError [ERR_ASSERTION]: the copy-on-write test reads BLOCKED, not another failure: called `Result::unwrap()` on an `Err` value: Os { code: 13, kind: PermissionDenied, message: "Permission denied" }
+      at TestContext.<anonymous> (file:///home/<user>/scratch-3170-redraft/tests/acceptance/3170-redraft-ac3/blocked.test.mjs:30:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'called `Result::unwrap()` on an `Err` value: Os { code: 13, kind: PermissionDenied, message: "Permission denied" }',
+    expected: /^BLOCKED: /,
+    operator: 'match',
+    diff: 'simple'
+  }
+exit 1
+?? tests/acceptance/3170-redraft-ac3/
+
+The twin fails at the test's second assertion (blocked.test.mjs:30, node:assert's ERR_ASSERTION, thrown under the test
+paths): with the runner naming /srv/deep-cow, which this machine lacks and whose parent is root's, the cli test panics
+with Permission denied instead of BLOCKED and the fix.
+
+A first form of the twin, `[env] DEEP_TEST_COW_DIR = { value = "/srv/deep-cow", force = true }`, never reached the
+test on the Spark: cargo refused to merge that table with the string the Spark's ~/.cargo/config.toml gives the same key
+("expected table, but found string"), and the test threw at its setup check, which is no proof. The twin is a Linux
+target runner instead, which no user config here sets.

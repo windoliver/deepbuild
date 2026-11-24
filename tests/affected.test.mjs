@@ -145,6 +145,12 @@ test('a budget task runs when the change reaches its script or its binary\'s cra
   assert.deepEqual(run('Cargo.lock'), tasks.map(({ id }) => id));
 });
 
+test('.cargo/config.toml feeds every suite: its [patch] tables reach every crate cargo builds under the checkout', (t) => {
+  // #2359 added patches there, reached no test, and left the standalone acceptance crates' locks stale (#2469).
+  const { root, files } = repo(t, { '.cargo/config.toml': '[patch.crates-io]\n' });
+  assert.deepEqual(select(root, ['.cargo/config.toml'], { files, workspace: [] }).every, ['.cargo/config.toml']);
+});
+
 test('the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does', (t) => {
   const { root, files } = repo(t, {
     'vitest.config.ts': "import { globs } from './scripts/globs.mjs';\nexport default { test: { include: globs, setupFiles: ['./tests/boot', './tests/gone.ts'] } };\n",

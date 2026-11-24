@@ -8,13 +8,16 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use deep_canvas::document::packs::resolve;
+use deep_canvas_effects::particles::spec::Refusal;
 use deep_canvas_scene3d::light::{map_field, map_role, map_uses, Texels, DECODED_CAP};
-use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Scene;
 use deep_codecs::DECODE_WORKER;
-use serde_json::{json, Value};
+use deep_effects_render::scene::{staged, Staged};
+use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
+use crate::scene3d::Frame3d;
 use crate::snapshot::Unfit;
 
 fn unfit(code: &'static str, path: impl Into<String>) -> Unfit {
@@ -25,28 +28,53 @@ fn unfit(code: &'static str, path: impl Into<String>) -> Unfit {
 }
 
 impl Hub<'_> {
+    /// #1719: `doc` with each recipe instance's derived items in its place (#306), as its 2D frames
+    /// and `deep-gpu`'s view draw it; `None` for one with no instance left to expand.
+    pub(crate) fn expanded3d(&self, doc: &Value) -> Option<Value> {
+        let resolved = resolve(doc, &self.packs, None, &mut Vec::new());
+        let items = doc.get("items")?.as_object()?;
+        let mut kinds = items.values().filter_map(|i| i["kind"].as_str());
+        (kinds.any(|k| resolved.recipe(k).is_some())).then(|| self.drawing_form(doc).0)
+    }
+
     /// `doc` at `t` on a frame of `size`, evaluated with its assets, its maps' texels and its
-    /// pictures, and the look it draws in.
+    /// pictures, in the look it names and with the post stage it draws through (#1719).
     pub(crate) fn evaluate3d(
         &mut self,
         doc: &Value,
         t: i64,
         size: [u16; 2],
-    ) -> Result<(Scene, Look3), Unfit> {
+    ) -> Result<Frame3d, Unfit> {
         let evidence = self.scenario.evidence.clone();
         let skips = self.scenario.planted == Some(crate::hub::Planted::SkipsMissingMeshAsset);
         let skipped = skips.then(|| skip_missing_meshes(doc, &evidence));
         let doc = skipped.as_ref().unwrap_or(doc);
+        let expanded = self.expanded3d(doc);
+        let doc = expanded.as_ref().unwrap_or(doc);
         let read = move |sha: &str| crate::evidence::read(&evidence, sha);
-        let palette = self.look.light.clone();
+        let dressed = self.look3(doc)?;
         let gpu = self
             .gpu3()
             .ok_or_else(|| unfit("unsupported_platform", ""))?;
-        let (mut scene, look) = gpu.evaluate(doc, t, &palette, size, &read)?;
-        scene.texels = self.texels(doc, &scene)?;
+        let mut staged = staged(doc, t, &dressed.json, &mut |doc, t| {
+            gpu.evaluate(doc, t, dressed.look.clone(), size, &read)
+                .map_err(|u| Refusal::new(u.code, u.path, ""))
+        })
+        .map_err(|r| unfit(r.code, r.path))?;
+        staged.scene.texels = self.texels(doc, &staged.scene)?;
         // #2450: and its pictures, so every frame drawn from it shows them.
-        self.paint_pictures(&mut scene)?;
-        Ok((scene, look))
+        self.paint_pictures(&mut staged.scene)?;
+        if dressed.dirt.is_some() {
+            staged.settings.dirt = dressed.dirt;
+        }
+        let Staged { scene, look, .. } = &staged;
+        let drawn = deep_groups_render::drawn::frame3(doc, look, &Map::new(), scene, None)
+            .map_err(|r| unfit("bad_look", r["path"].as_str().unwrap_or("look/asset")))?;
+        Ok(Frame3d {
+            staged,
+            drawn,
+            finish: dressed.finish,
+        })
     }
 
     /// The texels of every map `scene` samples, by the image's hash.

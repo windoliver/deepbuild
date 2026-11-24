@@ -1,0 +1,102 @@
+#2420 acceptance suite on the base commit 0a875355b2c19e7705b1b248c9a20b85e24cbbcd (origin/main), 2026-11-23
+Machine: Mac18,1 macOS 27.2.1, node v24.22.0, vitest 5.0.5
+Load at start 74.20 80.17 89.02; at end 78.62 83.11 88.16 (other sessions' work)
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/2420 --no-file-parallelism --testTimeout=600000
+Clone path written <clone>; home written ~.
+
+Per test:
+- #2420.d74ef6aa FAILED at an assertion, ceiling.test.ts:28 (expect(rec.naming.length, ...).toBe(CEILING)): 'run <run> recorded 1000 sandbox.denied naming a target, expected 256'
+- #2420.a7473ad6 FAILED at an assertion, ceiling.test.ts:53 (expect(rec.naming.length, ...).toBe(CEILING)): 'run <run> recorded 2000 sandbox.denied naming a target, expected 256 (1000 after the first thousand; the second thousand added 1000 ...)'
+- #2420.9574047b FAILED at an assertion, long-target.test.ts:38 (expect(long.length, ...).toBe(1)): 'run <run> recorded 0 sandbox.denied whose target starts with the Host's first 512 bytes, expected 1' (the request was answered 403; the marker after it was recorded)
+- #2420.17cfe76e PASSED: the base records 3 events for 3 targets and writes no closing event; its planted twin is what proves it
+- #2420.fdfdf3b3 FAILED at an assertion, runs.test.ts:61 (expect(recs[i]!.naming.length, ...).toBe(CEILING)): 'the first run <run> recorded 300 sandbox.denied naming a target, expected 256'
+
+Full output:
+
+== date 2026-11-23T23:07:45Z load 74.20 80.17 89.02 node v24.22.0
+
+ RUN  v5.0.5 <clone>/tests/acceptance/2420
+
+ ❯ runs.test.ts (2 tests | 1 failed) 149599ms
+   ❯ runs under the ceiling, and runs side by side (2)
+     × #2420.fdfdf3b3 two runs side by side, each sent 300 requests under different names, each record 256 and a closing 44 125149ms
+ ❯ ceiling.test.ts (2 tests | 2 failed) 129503ms
+   ❯ a run past 256 different targets (2)
+     × #2420.d74ef6aa 1,000 plain HTTP requests to the run's filter port, each under a different Host, are each answered 403; the record holds 256 sandbox.denied for the run naming a target, and after the run ends one more with operation more and target 744 63974ms
+     × #2420.a7473ad6 a second thousand under other names adds no event while the run lives, and the closing event reads 1744 65527ms
+ ❯ long-target.test.ts (1 test | 1 failed) 3512ms
+   ❯ a target past 512 bytes (1)
+     × #2420.9574047b a request whose Host is 9,000 characters long is answered 403 and recorded with a target of its first 512 bytes followed by 9000 3511ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ceiling.test.ts > a run past 256 different targets > #2420.d74ef6aa 1,000 plain HTTP requests to the run's filter port, each under a different Host, are each answered 403; the record holds 256 sandbox.denied for the run naming a target, and after the run ends one more with operation more and target 744
+AssertionError: run run:01M85ASBVBV1CWKHX1EMWX0DN3 recorded 1000 sandbox.denied naming a target, expected 256: [{"operation":"egress-plain-http","target":"dh2420-first-0.invalid:443"},{"operation":"egress-plain-http","target":"dh2420-first-1.invalid:443"},{"operation":"egress-plain-http","target":"dh2420-first-2.invalid:443"},{"operation":"egress-plain-http","target":"dh2420-first-3.invalid:443"}] and 996 more: expected 1000 to be 256 // Object.is equality
+
+- Expected
++ Received
+
+- 256
++ 1000
+
+ ❯ ceiling.test.ts:28:152
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  ceiling.test.ts > a run past 256 different targets > #2420.a7473ad6 a second thousand under other names adds no event while the run lives, and the closing event reads 1744
+AssertionError: run run:01M85AVADYWB7GKWZ5N607XXKW recorded 2000 sandbox.denied naming a target, expected 256 (1000 after the first thousand; the second thousand added 1000: [{"operation":"egress-plain-http","target":"dh2420-two-0.invalid:443"},{"operation":"egress-plain-http","target":"dh2420-two-1.invalid:443"},{"operation":"egress-plain-http","target":"dh2420-two-2.invalid:443"},{"operation":"egress-plain-http","target":"dh2420-two-3.invalid:443"}] and 996 more): expected 2000 to be 256 // Object.is equality
+
+- Expected
++ Received
+
+- 256
++ 2000
+
+ ❯ ceiling.test.ts:53:225
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  long-target.test.ts > a target past 512 bytes > #2420.9574047b a request whose Host is 9,000 characters long is answered 403 and recorded with a target of its first 512 bytes followed by 9000
+AssertionError: run run:01M85AXB9H1WKTBHCV45M6X3TD recorded 0 sandbox.denied whose target starts with the Host's first 512 bytes, expected 1; the run's events: [{"operation":"egress-plain-http","target":"dh2420-after-long.invalid:443"}]: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ long-target.test.ts:38:188
+     36|       const prefix = host.slice(0, CUT);
+     37|       const long = rec.naming.filter((d) => d.target.startsWith(prefix…
+     38|       expect(long.length, `run ${u.run} recorded ${long.length} sandbo…
+       |                                                                                                                                                                                            ^
+     39|       const target = long[0]!.target;
+     40|       const rest = target.slice(CUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  runs.test.ts > runs under the ceiling, and runs side by side > #2420.fdfdf3b3 two runs side by side, each sent 300 requests under different names, each record 256 and a closing 44
+AssertionError: the first run run:01M85ANHMA0QK69MPEGDW4S5QA recorded 300 sandbox.denied naming a target, expected 256: [{"operation":"egress-plain-http","target":"dh2420-runa-0.invalid:443"},{"operation":"egress-plain-http","target":"dh2420-runa-1.invalid:443"},{"operation":"egress-plain-http","target":"dh2420-runa-2.invalid:443"},{"operation":"egress-plain-http","target":"dh2420-runa-3.invalid:443"}] and 296 more: expected 300 to be 256 // Object.is equality
+
+- Expected
++ Received
+
+- 256
++ 300
+
+ ❯ runs.test.ts:61:197
+
+ ❯ runs.test.ts:61:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed | 1 passed (5)
+   Start at  15:07:46
+   Duration  283.62s (tests 100%)
+
+== exit 1
+== end 2026-11-23T23:12:30Z load 78.62 83.11 88.16

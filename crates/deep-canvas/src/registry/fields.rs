@@ -137,10 +137,7 @@ pub struct Declared {
 
 /// The core's fill, by list name: `fields.json`, read once a seal.
 pub fn fill() -> BTreeMap<String, Result<Closure, String>> {
-    let rows: Vec<Value> = serde_json::from_str(include_str!(
-        "fields.json"
-    ))
-    .unwrap_or_default();
+    let rows: Vec<Value> = serde_json::from_str(include_str!("fields.json")).unwrap_or_default();
     rows.iter()
         .filter_map(|row| {
             Some((

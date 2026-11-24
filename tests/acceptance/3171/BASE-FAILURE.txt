@@ -1,0 +1,93 @@
+Issue: #3171
+Base: ccafae68f31cf3d814243ce7bf893409fdade62a (main, "Merge pull request #3168 ..."); the suite and its [[example]]
+      registration in crates/deep-gpu/Cargo.toml laid beside it, uncommitted, in each checkout below.
+Acceptance tests: blind draft from the issue, the design and the base.
+IDs: criterionId of scripts/proof-change.mjs over the issue body's two criterion lines: 952eea5a and 52591b24.
+Command (each checkout's root, Node 24, CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0):
+  node --test --test-concurrency=1 tests/acceptance/3171/ac1-readings.test.mjs tests/acceptance/3171/ac2-shared.test.mjs
+Twins: each run with twins/<name>/crates/deep-gpu/src/spans.rs copied over the base's, then the base's restored with
+       git checkout. Paths: <clone> is the checkout; stack frames and cargo's statistics lines are cut below.
+
+== Machines
+
+Spark: Linux 7.0.0-1025-nvidia aarch64, 20 cores, NVIDIA GB10 (driver 580.178.04, Vulkan), Node v24.22.0,
+       cargo 1.99.1; a fresh clone of github.com/windoliver/deepbuild at the base. Shared with other sessions:
+       one-minute load 17 to 18 (an earlier identical run of the base and twins at 31 to 43 read the same).
+Mac:   Mac18,1 (Apple M6, 12 cores, Metal), macOS 27.2.1, Node v24.22.0, cargo 1.99.1; this worktree at the base.
+       Shared: one-minute load 110 to 162.
+
+== Spark, the base (exit 1: 2 pass, 2 fail)
+
+✖ AC1 #3171.952eea5a alone, the span test states each trial's covered time and the passes' own (5346.869863ms)
+✔ AC1 #3171.952eea5a beside a second process that keeps the GPU busy, the span test states each trial's covered time and the passes' own (3412.879554ms)
+✖ AC2 #3171.52591b24 beside a second process that keeps the GPU busy, the span test passes or reads INCONCLUSIVE saying the GPU was shared, never FAIL (3699.539893ms)
+✔ AC2 #3171.52591b24 alone, the span test reads PASS within its bound (1546.170541ms)
+
+test at tests/acceptance/3171/ac1-readings.test.mjs:30:1
+  AssertionError [ERR_ASSERTION]: alone: the span test reads PASS and states no trial's covered time and passes' own ("trial <k>: <covered> ms covered, the passes' own <own>"):
+  test spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it ... ok
+      at stated (file:///<clone>/tests/acceptance/3171/ac1-readings.test.mjs:22:10)
+
+test at tests/acceptance/3171/ac2-shared.test.mjs:25:1
+  AssertionError [ERR_ASSERTION]: beside a load of 202 ms passes: the span test reads FAIL for another process's work:
+  test spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it ... FAILED
+  thread 'spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it' (2216290) panicked at crates/deep-gpu/src/spans.rs:508:13:
+  trial 0: 216.08166399598122 ms covered, the passes' own 13.674848020076752: the gap counted
+      at TestContext.<anonymous> (file:///<clone>/tests/acceptance/3171/ac2-shared.test.mjs:29:10)
+
+The earlier run (load 31 to 43): the same four results; AC2 beside the load: trial 0: 214.64707198739052 ms covered,
+the passes' own 14.515071988105774 (load passes 197 ms).
+By hand before the suite, the base test in the same clone: alone 3 of 3 ok (1.27 to 1.36 s); beside the load at
+14 ms passes 3 of 3 ok; beside it at 216 ms passes 3 of 3 FAILED at spans.rs:508 (229.4 to 231.3 ms covered, own 13.7);
+at 195 ms passes 3 of 3 FAILED (212.0 to 213.1 covered, own 14.3 to 14.4).
+
+== Spark, the twins
+
+silent-pass (exit 1):
+✖ AC1 alone: AssertionError: alone: the span test reads PASS and states no trial's covered time and passes' own (...)
+✖ AC1 beside: AssertionError: beside a load of 203 ms passes: the span test reads PASS and states no trial's covered time and passes' own (...)
+✔ AC2 beside, ✔ AC2 alone
+gap-counted (exit 1):
+✔ AC1 alone, ✔ AC1 beside
+✖ AC2 beside: AssertionError: beside a load of 202 ms passes: the span test reads FAIL for another process's work:
+  panicked at crates/deep-gpu/src/spans.rs:510:13: trial 0: 216.07689598202705 ms covered, the passes' own 13.680415987968445: the gap counted
+✖ AC2 alone: AssertionError: alone: the span test reads FAIL:
+  panicked at crates/deep-gpu/src/spans.rs:510:13: trial 0: 202.44873598217964 ms covered, the passes' own 13.588735967874527: the gap counted
+  'FAIL' !== 'PASS'
+bound-loosened (exit 1):
+✔ AC1 alone, ✔ AC1 beside, ✔ AC2 alone
+✖ AC2 beside: AssertionError: beside a load of 202 ms passes: the span test reads PASS with trial 0 at 228.0636480152607 ms covered, the passes' own 14.45056003332138: past the 100 ms bound, so the gap would pass
+
+== Mac, the base (exit 1: 2 pass, 2 fail)
+
+✖ AC1 #3171.952eea5a alone, the span test states each trial's covered time and the passes' own (21248.741667ms)
+✖ AC1 #3171.952eea5a beside a second process that keeps the GPU busy, the span test states each trial's covered time and the passes' own (7573.175084ms)
+✔ AC2 #3171.52591b24 beside a second process that keeps the GPU busy, the span test passes or reads INCONCLUSIVE saying the GPU was shared, never FAIL (11390.219291ms)
+✔ AC2 #3171.52591b24 alone, the span test reads PASS within its bound (4730.135667ms)
+
+test at tests/acceptance/3171/ac1-readings.test.mjs:30:1
+  AssertionError [ERR_ASSERTION]: alone: the span test reads PASS and states no trial's covered time and passes' own ("trial <k>: <covered> ms covered, the passes' own <own>"):
+  test spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it ... ok
+test at tests/acceptance/3171/ac1-readings.test.mjs:34:1
+  AssertionError [ERR_ASSERTION]: beside a load of 76 ms passes: the span test reads PASS and states no trial's covered time and passes' own ("trial <k>: <covered> ms covered, the passes' own <own>"):
+  test spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it ... ok
+
+AC2 passes at the base on the Mac: the span test passes beside the load there. By hand before the suite: alone 3 of 3
+ok; beside a load of 1,256 ms passes 3 of 3 ok; beside 76 ms passes 3 of 3 ok. AC2's failure at the base is the
+Spark's; on the Mac its twin gap-counted fails it.
+
+== Mac, the twins
+
+silent-pass (exit 1): ✖ AC1 alone (reads PASS and states no trial's ...), ✖ AC1 beside (load of 72 ms passes: reads
+  PASS and states no trial's ...); ✔ AC2 beside, ✔ AC2 alone
+gap-counted (exit 1): ✔ AC1 alone, ✔ AC1 beside; ✖ AC2 beside (load of 75 ms passes: reads FAIL for another process's
+  work), ✖ AC2 alone (reads FAIL; trial 0: 235.0758750140667 ms covered, the passes' own 83.97895801067352: the gap
+  counted)
+bound-loosened (exit 0): all four pass; this twin fails AC2 only where the load pushes a span past 100 ms (the Spark).
+
+== Each tagged test, failing at its assertion (node's AssertionError, innermost frame in the test file)
+
+#3171.952eea5a  AC1 alone        base: Spark, Mac.   silent-pass: Spark, Mac.
+#3171.952eea5a  AC1 beside       base: Mac.          silent-pass: Spark, Mac.
+#3171.52591b24  AC2 beside       base: Spark.        gap-counted: Spark, Mac.  bound-loosened: Spark.
+#3171.52591b24  AC2 alone        base: neither.      gap-counted: Spark, Mac.
