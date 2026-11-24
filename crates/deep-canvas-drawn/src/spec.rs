@@ -531,12 +531,30 @@ pub struct Line {
     pub pressure: Option<f64>,
 }
 
+/// The most px a profile's `flick` or `overshoot` runs past a line's end: each px of it is a
+/// point of the stroke.
+const MAX_REACH: f64 = 1024.0;
+
+/// A break's `every` or `gap`, above 0: at 0 the line never reaches its next break.
+fn above_zero(m: &Map<String, Value>, name: &str, or: f64, path: &str) -> Result<f64, Refused> {
+    match number(m, name, or, path)? {
+        n if n > 0.0 => Ok(n),
+        _ => Err(Refused {
+            code: "out_of_range",
+            path: format!("{path}/{name}"),
+        }),
+    }
+}
+
 fn profile(m: &Map<String, Value>, path: &str) -> Result<Profile, Refused> {
     let breaks = match object(m.get("breaks"), &format!("{path}/breaks"))? {
         None => None,
         Some(b) => {
             let at = format!("{path}/breaks");
-            Some((number(b, "every", 40.0, &at)?, number(b, "gap", 4.0, &at)?))
+            Some((
+                above_zero(b, "every", 40.0, &at)?,
+                above_zero(b, "gap", 4.0, &at)?,
+            ))
         }
     };
     let double = match object(m.get("double"), &format!("{path}/double"))? {
@@ -553,8 +571,8 @@ fn profile(m: &Map<String, Value>, path: &str) -> Result<Profile, Refused> {
         taper_in: unit(m, "taper_in", 0.0, path)?,
         taper_out: unit(m, "taper_out", 0.0, path)?,
         swell: number(m, "swell", 0.0, path)?,
-        flick: number(m, "flick", 0.0, path)?,
-        overshoot: number(m, "overshoot", 0.0, path)?,
+        flick: between(m, "flick", 0.0, (0.0, MAX_REACH), path)?,
+        overshoot: between(m, "overshoot", 0.0, (0.0, MAX_REACH), path)?,
         breaks,
         double,
         dry_tail: unit(m, "dry_tail", 0.0, path)?,
