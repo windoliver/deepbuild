@@ -62,6 +62,41 @@ impl DocOps {
         self.stepping.as_ref().is_some_and(|st| st.behind)
     }
 
+    /// #853: steps the carried state to fixed step `step` now, in submissions of its own, so what
+    /// a stepping item publishes after a step can be read before any frame draws.
+    pub fn step_to(&mut self, device: &Device, step: u64) {
+        let Some(rate) = self.stepping.as_ref().map(|st| f64::from(st.rate)) else {
+            return;
+        };
+        let t = step as f64 / rate;
+        self.clock = Some(t);
+        let frame = Frame {
+            clip: [0.0; 16],
+            inverse_clip: [0.0; 16],
+            eye: [0.0; 4],
+            t: t as f32,
+            seed: 0,
+        };
+        let params = self.channel_values(t);
+        let parts = self.steps(device, &frame, &params, &BTreeMap::new());
+        submit(device, parts);
+    }
+
+    /// #853: an export's frame draws a carried output as its bake holds it: `bytes` written
+    /// into the output, and the state taken as holding `step`, so the frame steps nothing.
+    pub fn load(&mut self, device: &Device, item: &str, output: &str, bytes: &[u8], step: u64) {
+        if let Some(b) = self.storage.get(&(item.to_string(), output.to_string())) {
+            device.queue.write_buffer(b, 0, bytes);
+        }
+        if let Some(st) = self.stepping.as_mut() {
+            st.at = Some(step);
+        }
+        // What a bake holds is data, the same bytes on any machine: its reads compare anywhere.
+        if let Some(op) = self.ops.iter_mut().find(|o| o.item == item) {
+            op.class = Class::Exact;
+        }
+    }
+
     /// What each carried output holds after the last frame planned (#252): the step, its ring's
     /// bytes, budget and checkpoints, and the checkpoint a seek restored with the steps it then
     /// ran, by `<item>.<output>`.
@@ -221,6 +256,9 @@ impl DocOps {
                 let mut f = *frame;
                 f.seed = item_seed(self.doc_seed, &op.item);
                 f.t = (step as f64 / rate) as f32;
+                if self.hooks.frame_time {
+                    f.t = t as f32;
+                }
                 let mut values = interp::inputs(c, at_step.as_ref().unwrap_or(params), roles);
                 for (n, i) in &c.op.inputs {
                     if i.from == From::Step {
