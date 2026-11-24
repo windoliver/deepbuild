@@ -1,7 +1,7 @@
 // #2315: the hub's stack runtime is the environment@1 provider the extension host loaded, not env-local hardcoded.
 // A real host, record, lease table, supervisor and Stacks: a kitted replacement installed and loaded takes deep env
 // up and down; disabled, its running handle stops once and the next up is refused naming it, with env-local's own
-// up command never run. Without a replacement, env-local still starts the stack.
+// up command never run.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -55,7 +55,7 @@ export default function (deep: any): void {
   return { folder, entry: { id: 'test/swapped-env', version: '1.0.0', digest: String(manifest.digest) } };
 }
 
-async function world(withReplacement: boolean) {
+async function world() {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-2315-')));
   const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
   const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
@@ -68,15 +68,13 @@ async function world(withReplacement: boolean) {
   const pkg = replacement(dir, log);
   const host = await openExtensionHost({ record, supervisor, trust, home: join(dir, 'home'), release: [pkg.entry], now: Date.now, leases });
   await host.ready();
-  if (withReplacement) {
-    const installed = await host.install({ from: pkg.folder, builtBy: null });
-    expect(installed.kits, 'the replacement passed environment@1 at install').toContainEqual({ slot: 'environment@1', fill: 'swapped', verdict: 'PASS' });
-    expect((await host.check(installed)).passed, 'its conformance passed').toBe(true);
-    const load = await host.load(installed);
-    expect(load, JSON.stringify(load)).toMatchObject({ status: 'loaded' });
-    // The kit's own calls at install aren't the hub's.
-    rmSync(log, { force: true });
-  }
+  const installed = await host.install({ from: pkg.folder, builtBy: null });
+  expect(installed.kits, 'the replacement passed environment@1 at install').toContainEqual({ slot: 'environment@1', fill: 'swapped', verdict: 'PASS' });
+  expect((await host.check(installed)).passed, 'its conformance passed').toBe(true);
+  const load = await host.load(installed);
+  expect(load, JSON.stringify(load)).toMatchObject({ status: 'loaded' });
+  // The kit's own calls at install aren't the hub's.
+  rmSync(log, { force: true });
   const shipped = { newRun, up: (u: Parameters<typeof upStack>[1]) => upStack(supervisor, u), down: (run: string) => downStack(supervisor, run), healthy: answers, wanted: environmentOf, keys: keysOf, warm: () => { throw Error('no warm stack in this test'); } };
   const stacks = new Stacks({
     raw: (sql, params) => record.raw(sql, params), now: Date.now, plant: undefined, held: [], scrub: () => undefined,
@@ -104,7 +102,7 @@ async function world(withReplacement: boolean) {
 const AT = { path: '/worktree', remedy: 'deep env up' };
 
 it('a loaded replacement environment@1 provider takes env up and down; disabled, its handle stops once and the next up is refused naming it', async () => {
-  const w = await world(true);
+  const w = await world();
   try {
     const up = await w.stacks.up(w.worktree);
     expect(up, JSON.stringify(up)).toMatchObject({ status: 'ready' });
@@ -114,7 +112,8 @@ it('a loaded replacement environment@1 provider takes env up and down; disabled,
     expect((await w.stacks.down(w.worktree, AT)).left).toEqual([]);
     expect(w.calls()).toEqual(['up', 'down']);
 
-    expect(await w.stacks.up(w.worktree)).toMatchObject({ status: 'ready' });
+    const second = await w.stacks.up(w.worktree);
+    expect(second, JSON.stringify(second)).toMatchObject({ status: 'ready' });
     await w.host.disable('test/swapped-env');
     expect(w.calls(), 'disabling stops the running handle').toEqual(['up', 'down', 'up', 'down']);
     const refused = await w.stacks.up(w.worktree);
@@ -127,7 +126,7 @@ it('a loaded replacement environment@1 provider takes env up and down; disabled,
 }, 120_000);
 
 it('two stacks of the replacement, up at once, lease two ports and stop each on its own', async () => {
-  const w = await world(true);
+  const w = await world();
   try {
     const other = w.tree('other');
     const [a, b] = await Promise.all([w.stacks.up(w.worktree), w.stacks.up(other)]);
@@ -142,7 +141,7 @@ it('two stacks of the replacement, up at once, lease two ports and stop each on 
 }, 120_000);
 
 it('a stack of a load that is gone is never reused, even while its server still answers', async () => {
-  const w = await world(true);
+  const w = await world();
   try {
     expect(await w.stacks.up(w.worktree)).toMatchObject({ status: 'ready' });
     w.failDown();
@@ -155,7 +154,7 @@ it('a stack of a load that is gone is never reused, even while its server still 
 }, 120_000);
 
 it('a failed down keeps its port leased: the next stack gets another', async () => {
-  const w = await world(true);
+  const w = await world();
   try {
     const a = await w.stacks.up(w.worktree);
     expect(a).toMatchObject({ status: 'ready' });
@@ -170,7 +169,7 @@ it('a failed down keeps its port leased: the next stack gets another', async () 
 }, 120_000);
 
 it('an up the provider never finishes ends BLOCKED once the environment\'s ready.within has passed', async () => {
-  const w = await world(true);
+  const w = await world();
   try {
     const stuck = w.tree('stuck', 2);
     writeFileSync(join(stuck, 'hang'), '');

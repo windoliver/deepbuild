@@ -23,7 +23,7 @@ function block(folder: string): { port: string; url: string; within: number } | 
   const url = (env?.ready as Obj | undefined)?.http;
   const within = (env?.ready as Obj | undefined)?.within ?? 60;
   if (!Array.isArray(ports) || ports.length !== 1 || typeof ports[0] !== 'string') return { cause: `${file}: environment@1 leases a stack one port, so environment.ports names exactly one` };
-  if (typeof url !== 'string' || typeof within !== 'number' || !(within > 0)) return { cause: `${file}: environment.ready names the health route's http URL and a positive within` };
+  if (typeof url !== 'string' || typeof within !== 'number' || !Number.isFinite(within) || !(within > 0)) return { cause: `${file}: environment.ready names the health route's http URL and a positive within` };
   return { port: ports[0], url, within };
 }
 
@@ -57,7 +57,7 @@ export function selectEnvironment(shipped: StackEnvironment, o: { extensions(): 
     const port = Number(got.key);
     const url = read.url.replaceAll(`\${${read.port}}`, String(port));
     try {
-      const running = await env.up({ health: new URL(url).pathname, token: options.run, warmup: 0 }, { port, token: options.run }, options.folder, read.within * 1000);
+      const running = await env.up({ health: new URL(url).pathname, token: options.run, warmup: 0 }, { port, token: options.run }, options.folder, Math.ceil(read.within * 1000));
       started.set(options.run, { provider, running });
       return { status: 'ready', stack: { run: options.run, pid: running.handle.pid, ports: { [read.port]: port }, url } };
     } catch (error) {
