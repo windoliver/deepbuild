@@ -124,7 +124,7 @@ export function buildBase(scratch: string, release = false): { bin: string; erro
 /** Builds the merge base's deep-gpu before the file's tests; a test that uses a build that failed fails with its error. */
 export function useBase(): () => string {
   let dir = ''; let built = { bin: '', error: 'the build did not run' };
-  beforeAll(() => { dir = mkdtempSync(join(tmpdir(), 'deep-3257-base-')); built = buildBase(dir); }, TIMEOUT);
+  beforeAll(() => { dir = mkdtempSync(join(tmpdir(), 'deep-3257-base-')); built = buildBase(dir); }, 3 * TIMEOUT);
   afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); dir = ''; });
   return () => { expect(built.error, `the merge base ${BASE.slice(0, 12)} builds: cargo build --locked --bin deep-gpu`).toBe(''); return built.bin; };
 }
@@ -139,7 +139,8 @@ export const FRAME: Size = [512, 512];
 /** Each criterion distance: how many px the square spans, and how far it is, m. */
 export const FAR: readonly { px: number; m: number }[] = [{ px: 256, m: 2 }, { px: 128, m: 4 }, { px: 64, m: 8 }, { px: 32, m: 16 }];
 const THICK = 0.002;
-export const camera = (z: number, fov = 90): JsonObject => ({ kind: 'camera@1', params: { projection: 'perspective', position: [0, 0, z], target: [0, 0, 0], fov, near: 0.1 } });
+/** A camera at (0, 0, z) looking along −Z. */
+export const camera = (z: number, fov = 90): JsonObject => ({ kind: 'camera@1', params: { projection: 'perspective', position: [0, 0, z], target: [0, 0, z - 1], fov, near: 0.1 } });
 export const cutout = (sha: string, cutoff?: number): JsonObject =>
   ({ kind: 'material@1', params: { base_color: [1, 1, 1, 1], unlit: true, alpha_mode: 'mask', ...(cutoff === undefined ? {} : { alpha_cutoff: cutoff }), maps: { base_color: sha } } });
 /** The square, its face centred on (x, 0, z). */
