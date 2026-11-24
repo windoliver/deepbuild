@@ -1,9 +1,13 @@
 {
   "issue": 1815,
   "criterion": "AC5",
-  "verdict": null,
-  "who": null,
-  "when": null,
-  "files": {},
-  "note": "No call recorded yet. A person fills this in once, on the pictures one check run of shown.test.ts wrote to $DA1815_SCREENS: verdict looks_right or looks_wrong, who, when, and files with each file's name and SHA-256, run.json among them."
+  "verdict": "looks_right",
+  "who": "the owner (GitHub windoliver), in the #1815 session: sent the light and dark pictures there, answered \"Looks right\" to \"Record your call on the corrected pictures as 'looks right'?\"",
+  "when": "2026-11-24T04:47:38Z",
+  "files": {
+    "find-dark-1512x982.png": "a46186ecf329abb5aeac81c15340e80c4788aeee25584b4cfaf7e0904ca46f2e",
+    "find-light-1512x982.png": "1cae838f5f6702d7b09cd6a10f5bc684f7618f63b8410641e4f4cec3ff50bbba",
+    "run.json": "8842a0a3157e65316579995280a58f319cffab2370cd0b543622615fc153d266"
+  },
+  "note": "The files as the check run wrote them on the branch's final build (docs/evidence/1815). An earlier pair, whose field text sat a point low, was replaced before this call."
 }
