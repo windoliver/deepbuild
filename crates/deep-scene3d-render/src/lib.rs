@@ -50,6 +50,7 @@ mod sway;
 pub mod targets;
 mod ties;
 mod tint;
+mod tone;
 pub mod water;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -85,6 +86,7 @@ pub use crate::planted::Planted;
 pub use crate::readouts::{lay_over, readouts_as_labels};
 use crate::set::Set;
 use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
+pub use crate::tone::tone;
 
 /// The 3D writer layers' linear target: what the output pass reads.
 pub const LINEAR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -103,6 +105,7 @@ const SHADER: &str = concat!(
     include_str!("scene3d.wgsl"),
     include_str!("scene3d_labels_sky.wgsl"),
     include_str!("tiles.wgsl"),
+    include_str!("fog.wgsl"),
     include_str!("ao_shade.wgsl"),
     include_str!("ambient.wgsl"),
     include_str!("tint.wgsl"),
@@ -471,6 +474,9 @@ struct EnvUniform {
     /// The linear fog curve's near and far, in m, and what the background draws as a scale
     /// (#1992).
     range: [f32; 4],
+    /// #3034: a frame under water, and the color deep water takes ([`water::under`]).
+    under: [f32; 4],
+    under_color: [f32; 4],
 }
 
 /// Our DFG table (#421): for 32 cosines of the view angle across and 32 roughnesses down, the
@@ -3573,6 +3579,10 @@ impl Renderer {
                 u.sun_color = v4(l.color.map(|c| c * l.intensity / omega), 0.0);
             }
         }
+        // #3034: under water, what a frame sees dims with the distance seen through the water.
+        if let Some(under) = water::under(scene, self.planted.water) {
+            [u.eye, u.under, u.under_color] = under;
+        }
         deep_gpu::alloc::outside(|| {
             device
                 .queue
@@ -4732,14 +4742,7 @@ impl Renderer {
             }
             _ => None,
         };
-        let lighting = water::Lighting {
-            toward: scene.sun.as_ref().map_or([0.0, 1.0, 0.0], |s| s.toward),
-            sun: scene
-                .sun
-                .as_ref()
-                .map_or(0.0, |s| s.illuminance / std::f64::consts::PI),
-            ambient: scene.sky.as_ref().map_or([0.3; 3], |s| s.ambient[0]),
-        };
+        let lighting = water::Lighting::of(scene);
         let reversed = self.depth_grows_nearer();
         let samples = self.families.samples;
         let Some(t) = self.targets.as_ref() else {
@@ -4755,6 +4758,7 @@ impl Renderer {
             picks: &self.picks,
             lighting,
             planted: self.planted.water,
+            above: (!self.sky).then(|| scene.ground.map(decode)),
         };
         self.waterer
             .get_or_insert_with(|| Box::new(water::Waterer::new(device, reversed, samples)))
@@ -5733,12 +5737,9 @@ impl Renderer {
                 false
             }
         };
-        self.ground = [
-            decode(scene.ground[0]),
-            decode(scene.ground[1]),
-            decode(scene.ground[2]),
-            1.0,
-        ];
+        // #3034: under water, a ray that meets nothing ends in deep water's color.
+        let [r, g, b] = water::far(scene, self.sky).unwrap_or(scene.ground.map(decode));
+        self.ground = [r, g, b, 1.0];
     }
 
     /// The subsurface share and spread while a part's subsurface spreads (#481), made at the
@@ -8718,120 +8719,6 @@ impl Renderer {
     pub fn depth_grows_nearer(&self) -> bool {
         !self.planted.forward_z
     }
-}
-
-/// The look's tone map alone (#418's `tone` call), as the output pass runs it, over `input` (f32
-/// RGBA, rows top-down, `size` px) on `device`, with no exposure and no encode; the output in the
-/// same layout, or `None` on a backend with no pixels.
-pub fn tone(
-    device: &Device,
-    map: ToneMap,
-    grade: &deep_canvas_marks::finish::Grade,
-    input: &[f32],
-    size: [u32; 2],
-) -> Option<Vec<u8>> {
-    let d = &device.device;
-    let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("scene3d tone"),
-        source: wgpu::ShaderSource::Wgsl(OUTPUT.into()),
-    });
-    let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("scene3d tone"),
-        entries: &[
-            texture_entry(),
-            buffer_entry(
-                1,
-                wgpu::ShaderStages::FRAGMENT,
-                wgpu::BufferBindingType::Uniform,
-            ),
-        ],
-    });
-    let pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("scene3d tone"),
-        bind_group_layouts: &[Some(&layout)],
-        immediate_size: 0,
-    });
-    let format = wgpu::TextureFormat::Rgba32Float;
-    let pipe = pipeline(
-        d,
-        "scene3d.tone",
-        Some(&pipeline_layout),
-        &module,
-        ("out_vs", &[]),
-        Some(("tone_fs", &[target(format, None)])),
-        None,
-    );
-    let source = texture2d(
-        d,
-        "scene3d tone input",
-        size,
-        format,
-        wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-    );
-    let bytes: Vec<u8> = input.iter().flat_map(|v| v.to_le_bytes()).collect();
-    write_texture(&device.queue, &source, 0, &bytes, size[0] * 16, size);
-    let out = texture2d(
-        d,
-        "scene3d tone output",
-        size,
-        format,
-        wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-    );
-    let (code, white, contrast) = match map {
-        ToneMap::Agx { white, contrast } => (2, white, contrast),
-        other => (other.code(), 16.29, 1.25),
-    };
-    // #464: the grade inside the pass, as the output runs it: the white balance before the curve
-    // and the CDL after it.
-    let uniform = ToneUniform {
-        exposure: 1.0,
-        map: code,
-        white: white as f32,
-        contrast: contrast as f32,
-        encode: 0,
-        deband: 0.0,
-        saturation: grade.saturation as f32,
-        graded: u32::from(!grade.is_identity()),
-        top: 1.0,
-        _pad: [0; 3],
-        wb: grade
-            .white_balance()
-            .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
-        slope: rgb4(grade.slope),
-        offset: rgb4(grade.offset),
-        power: rgb4(grade.power),
-    };
-    let buffer = d.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("scene3d tone"),
-        size: std::mem::size_of::<ToneUniform>() as u64,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-    device
-        .queue
-        .write_buffer(&buffer, 0, bytemuck::bytes_of(&uniform));
-    let view = source.create_view(&Default::default());
-    let bind = bind_group(
-        d,
-        "scene3d tone",
-        &layout,
-        [
-            wgpu::BindingResource::TextureView(&view),
-            buffer.as_entire_binding(),
-        ],
-    );
-    let mut encoder = d.create_command_encoder(&Default::default());
-    full_pass(
-        &mut encoder,
-        "scene3d.tone",
-        &out.create_view(&Default::default()),
-        wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-        &pipe,
-        &bind,
-        None,
-    );
-    device.queue.submit([encoder.finish()]);
-    read_texture(device, &out, size, 16)
 }
 
 /// An IEEE 754 half as the f32 it is exactly.

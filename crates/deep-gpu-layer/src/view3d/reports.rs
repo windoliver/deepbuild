@@ -96,3 +96,17 @@ pub(super) fn light_reports(
     }
     Ok(())
 }
+
+/// #1634: what the light policy's scoring took and what the fill lights hold, with the cost
+/// model's estimate of the frame, in a scene that holds a fill light.
+pub(super) fn fill_lights(frame: &mut Map<String, Value>, drawn: &Drawn) {
+    let c = &drawn.counts;
+    if c.lists_bytes > 0 {
+        let lights = json!({"scoring_ms": c.scoring_ms, "lists_bytes": c.lists_bytes});
+        frame.insert("lights".into(), lights);
+        let [gpu_ms, scoring_ms, lists_bytes] = c.light_estimate;
+        let estimate =
+            json!({"gpu_ms": gpu_ms, "scoring_ms": scoring_ms, "lists_bytes": lists_bytes});
+        frame.insert("estimate".into(), estimate);
+    }
+}

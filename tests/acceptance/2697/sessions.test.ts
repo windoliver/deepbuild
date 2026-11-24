@@ -1,63 +1,71 @@
-// AC4 #2697.1f9af6f6: "On the recorded film sessions of the agent eval, the agent reads the guide before its first
-// render, and each brief's named checks are run as on the merge base. A planted skill with no line naming the guide
-// fails, naming the session that never read it"
+// AC4 #2697.6cec48c3: "The agent eval scores a film session on the guide, offline: `node scripts/agent-eval.mjs
+// score`, given a film session in the recorded run's shape (its `brief` names craft checks) built from real `deep-show
+// run` replies with no model called, passes it when the first `deep_kinds` read of the guide its skill names comes
+// before its first `deep_show` and its verdict rows report exactly the checks its brief names. The same session fails,
+// each time with a reason naming the session, when the read comes after the first render, when it never reads the
+// guide, when its rows miss a check its brief names or report one it doesn't, and when its skill is a planted skill
+// with no line naming the guide"
 //
-// Reads recordings only: no session is started and no model is called (README: AC4, and what is unrun). The recorded
-// sessions are every run.json in the checkout the agent eval's scorer reads as a run (scripts/agent-eval.mjs), and a
-// film session is one whose recorded `brief` holds `craft`, the checks the brief names. By the skill each recorded:
-//   - on the change: the skill text is skills/deepbuild/SKILL.md, byte for byte;
-//   - on the merge base: it holds the merge base's section "## Craft checks a film brief names";
-//   - planted: neither, and no word of it is the guide's name (agent-eval's `--skill <file>`).
-// asserts, first test: there is at least one film session on the change, and in each the first `deep_kinds {op: read,
-// guide: <the guide>}` comes before the first `deep_show`; the checks its verdict rows report (`from: {craft: <name>}`
-// in any result it was delivered) are the ones its brief names, and the ones the merge base's film session of the same
-// `repo` reports. Second test: there is at least one planted film session, and the same first check fails on each,
-// naming it as the session that never read the guide.
-// No recording, no planted recording, no render or no merge-base counterpart is a failure, BLOCKED or INCONCLUSIVE,
-// never a pass.
+// Each session is one `deep-show run` scenario on the checkout's deep-show (#409's world and film: the agent presents
+// three 3 s shots, its claim's brief names the craft checks), recorded in run.json's shape with deep-show's replies as
+// the calls' results, and scored by the CLI (README: AC4). The good session reads the guide the skill names first and
+// its claim's brief names shot_length and ends, the checks its recorded brief names; it keeps every rule the scorer
+// had before (the skill pinned to the installed version, its tools the live list, its first call the manifest's, no
+// call twice, its one claim cited from the verdict), so only the film rules decide. Each other session changes one
+// thing.
+// asserts: the good session is PASS, exit 0, no reason. Each other is FAIL, exit 1, with a reason whose text names its
+// run id (and ends, for the rows that miss it or report it).
+// Wrong programs: the merge base's scorer, which has no film rule (it fails the five FAIL tests); for the PASS test,
+// twins/eval-fails-briefs (the merge base's scorer failing every session whose brief names a craft check).
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import {
-  AC, SKILL, TIMEOUT, checksRunFailures, guideName, isFilm, none, readBeforeRenderFailures, recordings, runId, skillOf, useCleanup, useShow,
-  type Recording,
-} from './helpers.ts';
+import { AC, SKILL, TIMEOUT, filmSession, guideName, plantedSkill, scoredFailNaming, scoredPass, scoreSession, useCleanup, useShow, type FilmSession } from './helpers.ts';
 
 const bin = useShow();
 useCleanup();
-const BASE_SECTION = '\n## Craft checks a film brief names\n';
-const namesGuide = (text: string, guide: string): boolean => new RegExp(`(?<![A-Za-z0-9_])${guide.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_])`).test(text);
 
-/** The guide's name and the recorded film sessions, by the skill they recorded. */
-function sessions(): { guide: string; change: Recording[]; base: Recording[]; planted: Recording[]; other: Recording[] } {
+/** The skill and the guide it names, read from it as every test of this suite reads it. */
+function theSkill(): { skill: string; guide: string } {
   const skill = readFileSync(SKILL, 'utf8');
   const named = guideName(bin(), skill);
   expect(named.failure, 'the skill\'s craft line names the guide deep_kinds serves').toBeUndefined();
-  const guide = named.name!;
-  const all = recordings();
-  const films = all.filter(isFilm);
-  console.log(`recorded runs: ${all.length} (${all.map((r) => r.file).join(', ') || 'none'}); film sessions: ${films.length}`);
-  const change = films.filter((r) => skillOf(r) === skill);
-  const base = films.filter((r) => skillOf(r).includes(BASE_SECTION));
-  const planted = films.filter((r) => !change.includes(r) && !base.includes(r) && !namesGuide(skillOf(r), guide));
-  const other = films.filter((r) => !change.includes(r) && !base.includes(r) && !planted.includes(r));
-  if (other.length) console.log(`film sessions on another skill, not judged: ${other.map(runId).join(', ')}`);
-  return { guide, change, base, planted, other };
+  return { skill, guide: named.name! };
+}
+/** The good session, with `change` applied. */
+function session(run: string, change: Partial<FilmSession> = {}): FilmSession {
+  const { skill, guide } = theSkill();
+  return { run, skill, guide, read: 'before', brief: ['shot_length', 'ends'], ...change };
 }
 
-describe(`${AC.sessions} on the agent eval's recorded film sessions, the guide is read before the first render`, () => {
-  it(`${AC.sessions} each recorded film session reads the guide before its first render, and runs its brief's named checks as the merge base's session did`, () => {
-    const { guide, change, base } = sessions();
-    expect(change.length, 'BLOCKED: the agent eval has no recorded film session on this skill (a run.json whose brief holds craft and whose skill is skills/deepbuild/SKILL.md)').toBeGreaterThan(0);
-    const baseOf = (r: Recording): Recording | undefined => base.find((b) => b.run['repo'] === r.run['repo']);
-    none(change.flatMap((r) => [...readBeforeRenderFailures(r, guide), ...checksRunFailures(r, baseOf(r))]), 'the recorded film sessions');
+describe(`${AC.sessions} the agent eval's scorer judges a film session on the guide, offline`, () => {
+  it(`${AC.sessions} a film session that reads the guide before its first deep_show and whose rows report exactly its brief's checks passes`, () => {
+    const s = session('eval-claude-code-kettle-film-good');
+    scoredPass(scoreSession(filmSession(bin(), s)), 'the good film session');
   }, TIMEOUT);
 
-  it(`${AC.sessions} a recorded film session on a planted skill with no line naming the guide fails, naming the session`, () => {
-    const { guide, planted } = sessions();
-    expect(planted.length, 'BLOCKED: the agent eval has no recorded film session on a planted skill that names no guide').toBeGreaterThan(0);
-    for (const r of planted) {
-      const failures = readBeforeRenderFailures(r, guide);
-      expect(failures.some((f) => f.startsWith(`${runId(r)}:`) && f.includes('never read the guide')), `the planted session ${runId(r)} fails, named as the session that never read ${guide}: ${failures.join(' | ') || 'it passed'}`).toBe(true);
-    }
+  it(`${AC.sessions} the session fails, naming it, when its read of the guide comes after its first render`, () => {
+    const s = session('eval-claude-code-kettle-film-read-after', { read: 'after' });
+    scoredFailNaming(scoreSession(filmSession(bin(), s)), s.run, [], 'the session that reads the guide after its first deep_show');
+  }, TIMEOUT);
+
+  it(`${AC.sessions} the session fails, naming it, when it never reads the guide`, () => {
+    const s = session('eval-claude-code-kettle-film-never-read', { read: 'never' });
+    scoredFailNaming(scoreSession(filmSession(bin(), s)), s.run, [], 'the session that never reads the guide');
+  }, TIMEOUT);
+
+  it(`${AC.sessions} the session fails, naming it and the check, when its rows miss a check its brief names`, () => {
+    const s = session('eval-claude-code-kettle-film-rows-miss', { brief: ['shot_length', 'ends'], ran: ['shot_length'] });
+    scoredFailNaming(scoreSession(filmSession(bin(), s)), s.run, ['ends'], 'the session whose rows miss ends, which its brief names');
+  }, TIMEOUT);
+
+  it(`${AC.sessions} the session fails, naming it and the check, when its rows report a check its brief doesn't name`, () => {
+    const s = session('eval-claude-code-kettle-film-rows-unnamed', { brief: ['shot_length'], ran: ['shot_length', 'ends'] });
+    scoredFailNaming(scoreSession(filmSession(bin(), s)), s.run, ['ends'], 'the session whose rows report ends, which its brief doesn\'t name');
+  }, TIMEOUT);
+
+  it(`${AC.sessions} the session fails, naming it, when its skill is a planted skill with no line naming the guide`, () => {
+    const good = session('eval-claude-code-kettle-film-planted-skill');
+    const s = { ...good, skill: plantedSkill(good.skill, good.guide) };
+    scoredFailNaming(scoreSession(filmSession(bin(), s)), s.run, [], 'the session on the planted skill');
   }, TIMEOUT);
 });

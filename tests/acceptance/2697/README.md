@@ -7,11 +7,17 @@ worktree, branch, PR or note was read. The implementing agent doesn't edit these
 goes to a blind redraft of this job (design: Dogfooding). #409's test that reads the skill for each check is redrafted
 by its own blind job in `tests/acceptance/409-redraft-2697/`, not here.
 
+**Criterion 4 redrafted.** The issue's criterion 4 was amended on 2026-11-23 (its Amendment: no live paid sessions),
+so its id moved from `#2697.1f9af6f6` to `#2697.6cec48c3`. Its tests in `sessions.test.ts` were redrafted blind by a
+fresh run of this job from the amended issue, the design and base commit `a288ae247` (`origin/main`, "Merge pull
+request #3176 …"), where criteria 1-3's change had landed and criterion 4's had not; the old criterion's two tests,
+which read recorded run.json files, are gone. The rest of this suite is the first draft's, unchanged.
+
 ## What was read
 
 - Issue #2697's body, read with `gh issue view 2697` (no comments). Test names start `AC<n> #2697.<id>`, the first 8
   hex digits of SHA-256 over each checkbox's text, trimmed, white space collapsed (`criterionId` in
-  `scripts/proof-change.mjs`), computed from the live body: 588cc8a0, 5bf72d0a, 09d255e9, 1f9af6f6, 2d464f5e.
+  `scripts/proof-change.mjs`), computed from the live body: 588cc8a0, 5bf72d0a, 09d255e9, 6cec48c3 (amended; 1f9af6f6 before), 2d464f5e.
 - `docs/technical-design.md`: Five ways in, all onto the same core (the MCP tools row: `deep_kinds` serves the installed
   guides, read in pages), Numbers version 0 has to hold, Agent evaluation (run by hand, never in CI), Repo guards (the
   wait ratchet; home paths written as `~`), Dogfooding. `AGENTS.md` (Proof).
@@ -34,8 +40,9 @@ From the base run (`BASE-FAILURE.txt`):
   "Craft checks a film brief names" is 1,900 of them and states the sixteen checks, one line each.
 - The installed guides are canvas-working-order, familiar-names, logic and patches. None of the words of the skill's
   craft lines names one, so `deep_kinds` serves no craft guide.
-- The agent eval records only its red-unit fixture (`tests/acceptance/26/fixtures/eval/run.json` is the one recorded run
-  in the checkout); no film session is recorded.
+- The agent eval's scorer (`scripts/agent-eval.mjs`, at `a288ae247` too) has no rule about films: it reads no `brief`,
+  so it scores a film session on its skill, tools, first call, repeated calls and claims alone, and passes the good
+  film session and every session AC4 says must fail alike.
 - `generate()` gives the same skill at two starts a minute apart, the checked-in bytes: AC5 passes on the base by
   definition, and its wrong program is the twin below.
 
@@ -75,10 +82,12 @@ rm -rf tests/acceptance/2697/node_modules      # Vitest's cache, when --root lea
 - **deep_kinds on `deep-show run`**, as #1972's suite calls it: a scenario `{"evidence", "calls"}` (with `"gallery":
   <folder>` for the copy's gallery, below), `{"call": "deep_kinds", "op": "read", "guide": <name>}`, then with `"offset":
   <next>` while a page says `truncated: true`; the guide's `text`, every page joined.
-- **The agent eval's recordings** (AC4): every `run.json` in the checkout (outside `node_modules`, `target`, `.git` and
-  any `twins` folder) with the scorer's fields (`prompt`, `skill`, `calls`, `manifest`), as
-  `scripts/agent-eval-run.mjs` writes them: `calls` is each `deep_*` call in order, `{tool, arguments, result}`, and
-  `skill.text` the skill the session was given.
+- **The agent eval's scorer** (AC4): `node scripts/agent-eval.mjs score <run.json>`, run from the checkout's root; its
+  stdout's JSON line `{outcome, reasons: [{code, detail}]}` and its exit code (0 PASS, 1 FAIL). The run.json is a film
+  session in the shape `scripts/agent-eval-run.mjs` writes (`v`, `run`, `agent`, `repo`, `exit`, `prompt`, `skill:
+  {loaded, text}`, `tools`, `calls: [{tool, arguments, result}]`, `manifest: {first_tool, claims}`, `answer: {claims}`,
+  `transcript`), plus a top-level `brief`, #409's brief shape `{goal, craft: [{check: <name>}]}`, holding the craft
+  checks its brief names. How each is built is under Readings.
 
 ### The guide's name *(read from the skill, never assumed)*
 
@@ -96,26 +105,36 @@ as a word (or a code span) on a skill line that says "craft", and no earlier wor
 | AC1 `#2697.588cc8a0` | `ceiling.test.ts` (1) | `skills/deepbuild/SKILL.md` is at most 1,900 tokens, a failure naming the count; the same check on the merge base's skill fails naming 3735 |
 | AC2 `#2697.5bf72d0a` | `guide.test.ts` (2) | The guide the skill names states each of the merge base's sixteen checks with its description, threshold and fix, each the merge base's skill's text (Readings); the same guide with text_led's statement cut out fails, naming text_led and nothing else |
 | AC3 `#2697.09d255e9` | `source.test.ts` (2) | In a copy of the checkout, a seventeenth check `reveal_hold` added to craft.json and `node scripts/skill.mjs` run: the copy's skill is the checkout's byte for byte, and the copy's guide states reveal_hold (and the sixteen) with its description, threshold and fix. The checkout's skill is `generate()`'s, byte for byte, and #26's drift test `#26.2d751e6d` passes |
-| AC4 `#2697.1f9af6f6` | `sessions.test.ts` (2) | On each recorded film session on this skill, the guide is read before the first `deep_show`, and the craft checks its verdict rows report are the brief's and the merge base's session's; each recorded film session on a planted skill fails, named as the session that never read the guide |
+| AC4 `#2697.6cec48c3` | `sessions.test.ts` (6) | The scorer's CLI scores a film session built from real `deep-show run` replies PASS (exit 0, no reason) when it reads the guide the skill names before its first `deep_show` and its verdict rows come from exactly the checks its brief names; FAIL (exit 1) with a reason naming the session's `run` id when the read comes after the first `deep_show`, when there is no read, when its rows miss `ends` (named too), when they report `ends`, which its brief doesn't name (named too), and when its skill is the planted skill with no line naming the guide |
 | AC5 `#2697.2d464f5e` | `bytes.test.ts` (1) | `generate()`'s skill from two fresh processes whose clocks read 61 s apart is the same text, and is the checked-in SKILL.md; the same comparison fails a planted pair of texts holding each start's clock time, naming the later time |
 
 ### Wrong programs, and where each fails
 
 | Wrong program | Fails |
 |---|---|
-| The merge base | AC1 (3735 tokens), AC2 both, AC3 both and AC4 both at the guide's name (no craft line names a guide deep_kinds serves); AC4 would fail next at "no recorded film session". AC5 passes on it |
+| The merge base | AC1 (3735 tokens), AC2 both, AC3 both at the guide's name (no craft line names a guide deep_kinds serves). AC5 passes on it |
+| The redraft's base `a288ae247`, whose scorer has no film rule (AC4) | AC4's five FAIL tests, at "is scored FAIL": each session is scored PASS. AC4's PASS test passes on it |
 | A planted guide that drops one check (AC2) | Built by the test from the real guide (text_led cut from its name to its fix); no twin needed |
 | A guide written by hand, or from another source than craft.json | AC3's first test: the check added to craft.json doesn't show |
 | A skill that lists each check | AC3's first test: the copy's skill changes when a check is added; AC1 if it lists them in full |
 | A craft line that names a deep_kinds parameter (`` `guide` ``, `op:`) | AC3's second test, through #26's drift test |
-| A planted skill with no line naming the guide (AC4) | AC4's second test, on the recorded session run with it (below) |
+| A planted skill with no line naming the guide (AC4) | Built by the test from the skill (every line where the guide's name stands as a word removed); the scorer must fail the session given it |
+| A scorer that reads rows, or the read, but names no session in its reason | AC4's FAIL tests, at "a reason names the session" |
+| `twins/eval-fails-briefs` (AC4) | AC4's PASS test, at "is scored PASS": it fails every film session |
 | `twins/skill-names-its-time` (AC5) | AC5 at its first comparison: the two starts' texts part at the craft line's clock time |
 
 `twins.json` maps `#2697.2d464f5e` to `skill-names-its-time`: `twins/skill-names-its-time/scripts/skill.mjs` is the
 merge base's `scripts/skill.mjs` with one change, the craft section's first line ending "Generated at <the clock's
 HH:MM:SS>." Laid over the change it replaces the change's generator with one whose skill holds the clock time, so the
 first comparison fails. Checked by hand at the base: two processes 61 s apart print "Generated at 06:29:55" and
-"Generated at 06:30:56". The other tags need no twin: each of their tests fails at an assertion on the merge base.
+"Generated at 06:30:56".
+
+`twins.json` maps `#2697.6cec48c3` to `eval-fails-briefs`: `twins/eval-fails-briefs/scripts/agent-eval.mjs` is
+`scripts/agent-eval.mjs` at `a288ae247` with one rule added, failing every session whose `brief` names a craft check
+(`film_brief`, naming the run). Laid over the change it replaces the change's scorer with one that fails the good film
+session, so AC4's PASS test fails at "is scored PASS". Checked by hand at `a288ae247`: AC4's PASS test passes there,
+and with the twin laid over `scripts/agent-eval.mjs` it fails at that assertion (`BASE-FAILURE.txt`). The other tags
+need no twin: each of their tests fails at an assertion on the base.
 
 ## Readings of what the criteria leave open
 
@@ -143,19 +162,33 @@ first comparison fails. Checked by hand at the base: two processes 61 s apart pr
 - **"tests/acceptance/26/ finds no drift"**: its drift test, `#26.2d751e6d` in `tools.test.ts`, run from the checkout's
   root as its README runs it (`node node_modules/vitest/vitest.mjs run tests/acceptance/26/tools.test.ts -t 2d751e6d`),
   exits 0 and reports that test passed. It needs `npm run build --workspaces`; without it, it fails, never passes.
-- **"The recorded film sessions of the agent eval"** (AC4): a recorded run (above) whose top-level `brief` holds a
-  `craft` list, the checks the film's brief names, each a name or `{check: <name>}` (#409's brief). This suite
-  chooses that field: today's recordings carry no brief. A session is on the change when its `skill.text` is
-  `skills/deepbuild/SKILL.md`, byte for byte; on the merge base when its skill holds the section
-  "## Craft checks a film brief names"; planted when neither and no word of its skill is the guide's name (agent-eval's
-  `--skill <file>` with the change's skill less its line naming the guide). Others are listed and not judged.
-- **"Reads the guide before its first render"**: its first call `deep_kinds` with arguments `op: read, guide: <the
-  guide>` comes before its first `deep_show` call (every deep_show draws or renders the document back). A session with
-  no deep_show is INCONCLUSIVE, a failure.
-- **"Each brief's named checks are run as on the merge base"**: the craft checks the session's results report rows from
-  (any object with `from: {craft: <name>}` in a result, JSON text inside a string read too: #409's rows) are exactly the
-  checks its brief names, and the same set as the merge base's film session of the same `repo` reports. No merge-base
-  session of that repo is INCONCLUSIVE, a failure. Results aren't compared; which checks run is.
+- **"A film session in the recorded run's shape (its `brief` names craft checks) built from real `deep-show run`
+  replies"** (AC4): one `deep-show run` scenario on the checkout's deep-show, #409's world (`scenarioOf`: the agent's
+  session `sess-alpha`, a panel, one claim of the agent's whose one deliverable is the film and whose brief names the
+  checks the verdict runs) and #409's film "Three 3 s shots" (`shotLengthFilm`), its looks stored first. Its calls are
+  the session's, in its order: `deep_kinds {op: read, guide: <the guide>}`, the agent's `deep_show` of the film, and
+  the claim's `verdict`. Each is recorded as `{tool, arguments, result}`: the call's fields less `call` and `session`
+  as its arguments, deep-show's reply as its MCP result (`{isError: false, content: [{type: text, text: <the reply's
+  JSON>}]}`, as `agent-eval-run.mjs` records Claude Code's). The verdict reaches the agent as `deep_status`'s reply on
+  `{claim}`. Before scoring, the test requires (`BLOCKED` otherwise) that deep_show presented the film, that the read
+  answered the guide's text and that the verdict's rows (`requirements[].from.craft`) come from exactly the checks
+  the claim's brief named. The run's `brief` is `{goal, craft: [{check}]}`, #409's brief.
+- **"Its verdict rows"**: the craft checks the rows in its calls' results come from (`from: {craft: <name>}`, JSON
+  text inside a result's string read as its value); the scorer finds them there however it reads them.
+- **The good session keeps every rule the scorer had** so only the film rules decide: `skill.loaded` true and
+  `skill.text` the checkout's `skills/deepbuild/SKILL.md` (pinned to the installed version), `tools` the `deep_*`
+  names that skill text gives (as the scorer reads them), `manifest.first_tool` the session's first call's tool, no
+  call made twice, and one claim `film-verdict` whose expected value is the verdict's `result`, cited by the first
+  64-hex hash the verdict reply holds, with a prompt that holds no such value. Its brief and its claim's brief both
+  name `shot_length` and `ends`.
+- **The five sessions that fail** each change one thing from the good one: the read moved after the `deep_show`; the
+  read left out; the claim's brief naming `shot_length` alone (so rows miss `ends`, which the run's brief names); the
+  run's brief naming `shot_length` alone (so rows report `ends`, which it doesn't name); and the skill text replaced by
+  the planted skill (every line of the skill where the guide's name stands as a word removed; its `tools` are the
+  names the planted text gives, and it still reads the guide first). Each has its own `run` id
+  (`eval-claude-code-kettle-film-<case>`), and "a reason naming the session" is a reason whose `code` and `detail`,
+  joined, hold that id. Where the criterion names a check (rows that miss one or report one), the same reason names
+  `ends` too. No reason code is fixed: the issue names none.
 - **"Two sessions started a minute apart"** (AC5): two fresh Node processes each import `scripts/skill.mjs` and take
   `generate().skill`; the second's `Date` reads 61 s ahead, moved by a `--import` preload. The tests move time and never
   wait for it (Repo guards: the wait ratchet counts every fixed wait, and a new file starts at zero). A generator that
@@ -163,15 +196,11 @@ first comparison fails. Checked by hand at the base: two processes 61 s apart pr
 
 ## What is unrun, and why
 
-- **AC4 has no recordings to judge.** No film session of the agent eval is recorded at the base, and recording one
-  starts a real Claude Code or Codex session that spends plan usage (`scripts/agent-eval-run.mjs`); this job makes no
-  live model call. Both AC4 tests fail on the base, and will fail on the change, `BLOCKED`, until the change records,
-  in the checkout, at least: one film session on the change's skill and one on the merge base's skill of the same
-  `repo` (a fixture repo whose task is a film with a brief naming craft checks, the brief written into the run's
-  `brief`), and one film session of the same task on a planted skill (the change's skill with its line naming the guide
-  removed). The agent eval's red-unit fixture and its scorer don't record films today; the implementer adds the film
-  fixture to the agent eval or records the sessions by hand, as the design's Agent evaluation says (by hand, never in
-  CI). This suite only reads what is recorded.
+- **No live agent session.** AC4's sessions are built from deep-show's replies; no Claude Code or Codex session runs and
+  no model is called. Whether a live agent follows the skill's line stays a hand run under the design's Agent
+  evaluation (the issue's Amendment), not a test here.
+- **AC4 on the change** wasn't run: no change exists. On the base its PASS test passes and its five FAIL tests fail at
+  "is scored FAIL" (`BASE-FAILURE.txt`).
 - **#26's drift test** needs the built workspaces; it wasn't run at the base, since the base fails before it.
 - **The build in the copy** (AC3) wasn't run at the base, which fails before it; how long it takes on the change
   depends on where the change prints the guide.
@@ -181,11 +210,12 @@ first comparison fails. Checked by hand at the base: two processes 61 s apart pr
 ## Files
 
 - `helpers.ts`: the skill, its tokens, the merge base's checks, the deep-show build, deep_kinds on `deep-show run`, the
-  guide's name and text, AC2's check and the plant, the generator in a fresh process, the checkout's copy, and the
-  recordings with AC4's checks.
+  guide's name and text, AC2's check and the plant, the generator in a fresh process, the checkout's copy, and AC4's
+  film sessions (built on #409's `helpers.ts`), the planted skill and the scorer's CLI.
 - `ceiling.test.ts` (AC1), `guide.test.ts` (AC2), `source.test.ts` (AC3), `sessions.test.ts` (AC4), `bytes.test.ts`
   (AC5).
 - `fixtures/base-SKILL.md`: the merge base's skill, `skills/deepbuild/SKILL.md` at `4aa543da7`.
-- `twins.json` and `twins/skill-names-its-time/scripts/skill.mjs`: AC5's wrong program.
+- `twins.json`, `twins/skill-names-its-time/scripts/skill.mjs` (AC5's wrong program) and
+  `twins/eval-fails-briefs/scripts/agent-eval.mjs` (AC4's).
 - `tsconfig.json`: type-checks the suite under the root's strict options with `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the run at the base, home folders written as `~`.

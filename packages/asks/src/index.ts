@@ -27,16 +27,14 @@
 // continues each of its sessions (session.continued, because task_closed). A transient the service owns, or a context
 // overflow, gets one automatic continue per turn you started, while the stop is the session's newest, under 10 minutes
 // old by deep-hook's stamp, with nothing typed since. The core reads the stop's structure alone, never the agent's text.
-import { execFile } from 'node:child_process';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { ADAPTERS } from '@deepbuild/adapters';
 import { canonicalize, sha256Hex, validate } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import { asCore, ulid } from '@deepbuild/record';
 import type { Connection, Event } from '@deepbuild/record';
 import { KINDS, place, remotesOf, targetsOf, type CardTarget } from './targets.js';
-import { AskRefused, bare, CANT_UNDO, cantUndo, HOLD_MS, isObj, letters } from './model.js';
+import { AskRefused, bare, CANT_UNDO, cantUndo, HOLD_MS, isObj, letters, normalize } from './model.js';
 import type { Ask, AskKind, BatchCard, BudgetLeft, Card, Decision, HeldDecision, InboxStatus, Obj, Option, PlanStep, Refusal, Resolver, ResolverAsk, RuleState, Subject } from './model.js';
 import { blockKey, BLOCK_SOURCE, boundFor, DecisionKeys, foldKey, FOLD_SOURCE, linesOf, nearOf, needsPerson, requestKey, REQUEST_SOURCE, subjectKey, SUBJECT_KINDS } from './decision-keys.js';
 import { ResolverGate } from './resolver-gate.js';
@@ -55,7 +53,9 @@ import { askSources, doneYamlAsks, over, readJson } from './settings.js';
 export { askSources, draftAskSettings } from './settings.js';
 import { blockText, chatThread, CONTINUE_WINDOW, isTheirs, MOOT_V2, newer, shippedErrorTurnHook, SIGN_IN, signInProbe, signInSignature, signInText, TRANSIENT, type Continued, type Stop } from './stops.js';
 export { signInAgentOf, signInSignature } from './stops.js';
-import { ANSWER_ALONE, ANSWER_FIELDS, isAgent, PROVISIONAL_KINDS, SHA256, TRUSTED, TYPED_KINDS } from './answers.js';
+import { ANSWER_ALONE, ANSWER_FIELDS, docOf, isAgent, picturesOf, PROVISIONAL_KINDS, SHA256, TRUSTED, TYPED_KINDS } from './answers.js';
+import { markStep, sameStep } from './steps.js';
+import { changedSince, type GitSaid } from './changes.js';
 
 /** Once a thread holds this many open asks, its further asks fold into one exception, unless settings say otherwise. */
 const FOLD_AT = 5;
@@ -71,15 +71,11 @@ const CORE = { writer: 'core' } as const;
  */
 const PAGE = 100;
 /** The kinds `apply` reads, which the core's reads of the log name: an event of any other kind is never decoded (#2646). */
-const APPLIED = ['session.start', 'agent.stop', 'session.continued', 'session.end', 'task.closed', 'ask.created', 'plan.proposed', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'decision.applied', 'ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'default.undone', 'deadline.moved', 'ask.moved', 'ask.batched', 'ask.later', 'approval.held', 'approval.started', 'approval.withdrawn', 'tool.before', 'user.ask', 'verdict.made', 'claim.made', 'tool.after'];
+const APPLIED = ['session.start', 'agent.stop', 'session.continued', 'session.end', 'task.closed', 'ask.created', 'plan.proposed', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'decision.applied', 'ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'default.undone', 'deadline.moved', 'doc.patched', 'ask.batched', 'ask.later', 'approval.held', 'approval.started', 'approval.withdrawn', 'tool.before', 'user.ask', 'verdict.made', 'claim.made', 'tool.after'];
 /** Time the hub didn't run, down or with the Mac asleep, moves deadlines once it is longer than this (#908). */
 const AWAY = 10_000;
 /** How many ended sessions' closed asks stay in memory; the record keeps them all. */
 const ENDED_KEPT = 64;
-
-const git = promisify(execFile);
-/** What git said to each command in a worktree, by the command: shared by the cards of one Needs you load. */
-type GitSaid = Map<string, Promise<string>>;
 
 const CLOSING: Readonly<Record<string, string>> = {
   'ask.answered': 'answered', 'ask.defaulted': 'defaulted', 'ask.escalated': 'escalated', 'ask.cancelled': 'cancelled',
@@ -118,6 +114,8 @@ class AsksCore implements Asks {
   private readonly signInAgents = new Map<string, string>();
   /** Each agent's newest sign-in probe reading. */
   private readonly probed = new Map<string, { signedIn: boolean | null; account: string | null; at: number }>();
+  /** Each document's newest recorded revision, `doc:<id>` → its rev and canonical document's hash (#3234). */
+  private readonly revisions = new Map<string, { rev: number; hash: string }>();
   /** The stops a task covers, so a session's stop raises or joins one task once. */
   private readonly covered = new Set<string>();
   /** Sessions whose newest stop the core hasn't read yet, and block tasks closed on their check whose sessions resume. */
@@ -314,21 +312,22 @@ class AsksCore implements Asks {
   }
 
   /**
-   * What the answer records of the pictures a taste call judges (#3234): the card's entries, one per picture its
-   * evidence lists, in that order; from anywhere nothing is drawn, every picture not shown. Undefined when the call
-   * judges no pictures.
+   * What `ask` shows now (#3234): its pin, or for a pin to a document's revision that document's newest recorded one, so
+   * an answer after the document moved says which revision it was given on.
    */
-  private picturesOf(ask: Ask, via: 'card' | 'inbox' | 'channel', given: unknown): JsonValue[] | undefined {
-    const pin = ask.data.pinned_to as { kind?: unknown; ref?: unknown } | undefined;
-    const listed = ask.data.kind === 'taste' && pin?.kind === 'evidence' && typeof pin.ref === 'string' ? this.options.pictures?.(pin.ref) : undefined;
-    if (given === undefined) return listed?.length ? listed.map((sha256) => ({ sha256, shown: false, scale: 0, ms: 0 })) : undefined;
-    if (via !== 'card') throw new AskRefused('only the question card draws pictures: an answer from anywhere else records them not shown', { field: 'pictures' });
-    const entry = (p: unknown): boolean => isObj(p) && Object.keys(p).length === 4 && typeof p.sha256 === 'string' && SHA256.test(p.sha256) && typeof p.shown === 'boolean'
-      && typeof p.scale === 'number' && p.scale >= 0 && p.scale <= 1000 && Number.isInteger(p.ms) && (p.ms as number) >= 0;
-    if (!Array.isArray(given) || !given.every(entry)) throw new AskRefused('pictures are entries of {sha256, shown, scale, ms}', { field: 'pictures' });
-    const shas = (given as { sha256: string }[]).map((p) => p.sha256);
-    if (listed && shas.join() !== listed.join()) throw new AskRefused(`${ask.handle}'s evidence lists ${listed.length} pictures, and the answer's entries name others`, { field: 'pictures' });
-    return given.length ? given as JsonValue[] : undefined;
+  private pinNow(ask: Ask): JsonValue | undefined {
+    const pin = ask.data.pinned_to;
+    const doc = docOf(pin as { kind?: unknown; ref?: unknown } | undefined);
+    const newest = doc ? this.revisions.get(doc) : undefined;
+    return newest ? { kind: 'doc_revision', ref: `${doc}@${newest.rev}` } : pin;
+  }
+
+  /** The pictures a taste call's pin lists: an evidence pin names its manifest; a document revision's, its document's newest revision's canonical document. */
+  private pictured(ask: Ask): string[] | undefined {
+    const pin = this.pinNow(ask) as { kind?: unknown; ref?: unknown } | undefined;
+    const doc = docOf(pin);
+    const manifest = pin?.kind === 'evidence' && typeof pin.ref === 'string' ? pin.ref : doc ? this.revisions.get(doc)?.hash : undefined;
+    return ask.data.kind === 'taste' && manifest ? this.options.pictures?.(manifest) : undefined;
   }
 
   async answer(connection: Connection, handle: string, input: unknown): Promise<void> {
@@ -351,7 +350,7 @@ class AsksCore implements Asks {
       if (option === undefined && words === undefined && image === undefined) throw new AskRefused('an answer chooses an option or says something', { field: 'option' });
       if (token !== undefined && (typeof token !== 'string' || !token)) throw new AskRefused('the click token is text', { field: 'token' });
       if (steps !== undefined && (!Array.isArray(steps) || !steps.every((i) => Number.isInteger(i) && (i as number) >= 0))) throw new AskRefused('steps are the indices of the batch to run', { field: 'steps' });
-      const pictures = this.picturesOf(ask, via, input.pictures);
+      const pictures = picturesOf(ask, via, input.pictures, this.pictured(ask));
       const now = this.options.now();
       if (via === 'channel') {
         if (ask.closed) throw new AskRefused(`${ask.handle} closed as ${ask.closed.outcome}`, { ask: ask.handle, outcome: ask.closed.outcome });
@@ -426,7 +425,7 @@ class AsksCore implements Asks {
       for (const { a, option: o } of together) {
         await this.options.record.append(asCore(connection), {
           v, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now,
-          data: { answer: o.id, option: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null },
+          data: { answer: o.id, option: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: this.pinNow(a)!, token: null, words: null, image: null },
         });
         await this.sync();
         this.hand(a, o.id, null, false, o.decision);
@@ -438,7 +437,7 @@ class AsksCore implements Asks {
         v: pictures ? 7 : v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
           answer: option ?? (words as string | undefined) ?? (image as string), option: chosen?.id ?? null, plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
-          via, verified: true, on: ask.data.pinned_to!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
+          via, verified: true, on: this.pinNow(ask)!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
           ...(pictures ? { pictures } : {}),
         },
       });
@@ -451,7 +450,7 @@ class AsksCore implements Asks {
       for (const rider of riders) {
         await this.options.record.append(asCore({ ...connection, ...rider.who }), {
           v, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
-          data: { answer: chosen!.id, option: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null, words: null, image: null },
+          data: { answer: chosen!.id, option: chosen!.id, plan_hash: null, decision, via, verified: true, on: this.pinNow(rider)!, token: null, words: null, image: null },
         });
         await this.sync();
         // The same question through this card is held with it.
@@ -463,7 +462,7 @@ class AsksCore implements Asks {
       for (const { member, allow } of others) {
         await this.options.record.append(asCore({ ...connection, ...member.who }), {
           v, id: ulid(now), kind: 'ask.answered', subject: member.handle, ts: now,
-          data: { answer: allow.id, option: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: member.data.pinned_to!, token: token ?? null, words: null, image: null },
+          data: { answer: allow.id, option: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: this.pinNow(member)!, token: token ?? null, words: null, image: null },
         });
         await this.sync();
         const run = (): void => this.hand(member, allow.id, null, false, allow.decision);
@@ -684,7 +683,7 @@ class AsksCore implements Asks {
           for (const a of held) {
             const no = a.options.find((o) => o.decision === 'deny');
             if (!no || a.closed) continue;
-            await this.options.record.append(asCore({ ...connection, ...a.who }), { v: 6, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now, data: { answer: no.id, option: no.id, plan_hash: null, decision: 'deny', via: TRUSTED[connection.writer]!, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null } });
+            await this.options.record.append(asCore({ ...connection, ...a.who }), { v: 6, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now, data: { answer: no.id, option: no.id, plan_hash: null, decision: 'deny', via: TRUSTED[connection.writer]!, verified: true, on: this.pinNow(a)!, token: null, words: null, image: null } });
             await this.sync();
             this.hand(a, no.id, null, false, 'deny');
           }
@@ -825,7 +824,7 @@ class AsksCore implements Asks {
         if (!chosen.length) continue;
         await this.options.record.append(asCore({ ...connection, ...ask.who }), {
           v: 3, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
-          data: { answer: allow.id, plan_hash: ask.plan.hash, decision: 'allow', via, verified: true, on: ask.data.pinned_to!, token: input.token, steps: chosen },
+          data: { answer: allow.id, plan_hash: ask.plan.hash, decision: 'allow', via, verified: true, on: this.pinNow(ask)!, token: input.token, steps: chosen },
         });
         await this.sync();
         this.hand(ask, allow.id, null, false, 'allow');
@@ -1149,7 +1148,7 @@ class AsksCore implements Asks {
       options: ask.options.map((o) => ({ id: o.id, label: o.label, decision: o.decision })),
       plan: ask.plan ? structuredClone(ask.plan) : null,
       words: [...ask.words],
-      changed: await this.changed(ask, said),
+      changed: await changedSince(ask.data.pinned_to as Obj, this.sessions.get(ask.session)?.worktree, said),
       folded: ask.fold ? this.openIn(ask.thread).filter((a) => a.folded === ask.handle && (a.shown || !a.unread)).map((a) => a.handle) : [],
       undo: ask.closed?.outcome === 'defaulted',
       cost_usd: typeof ask.data.cost_usd === 'number' ? ask.data.cost_usd : null,
@@ -1174,33 +1173,6 @@ class AsksCore implements Asks {
     const words = scope.startsWith('repo:') && project ? `Answering saves it for this repo (${project})` : 'Answering saves it for this session';
     const also = this.open().filter((a) => a !== ask && !a.theirs && !a.fold && a.data.key === ask.data.key && this.scopeCovers(scope, a)).length;
     return { scope: words, also };
-  }
-
-  /**
-   * What changed since the commit an ask showed, when its session's worktree has moved on from it. `said` holds what
-   * git said to each command in a worktree, for one read of several cards; by default, this card's own.
-   */
-  private async changed(ask: Ask, said: GitSaid = new Map()): Promise<Card['changed']> {
-    const pin = ask.data.pinned_to as Obj;
-    const worktree = this.sessions.get(ask.session)?.worktree;
-    if (pin.kind !== 'commit' || worktree === undefined) return null;
-    const from = pin.ref as string;
-    try {
-      const run = (...args: string[]): Promise<string> => {
-        const key = JSON.stringify([worktree, ...args]);
-        const known = said.get(key);
-        if (known) return known;
-        const out = git('git', ['-C', worktree, ...args], { maxBuffer: 1 << 24 }).then((r) => r.stdout);
-        said.set(key, out);
-        return out;
-      };
-      const to = (await run('rev-parse', 'HEAD')).trim();
-      if (to === from) return null;
-      const files = (await run('diff', '--name-only', from, to)).split('\n').filter(Boolean);
-      return { from, to, files, diff: await run('diff', from, to) };
-    } catch {
-      return null;
-    }
   }
 
   /**
@@ -1532,11 +1504,12 @@ class AsksCore implements Asks {
         target.data = { ...target.data, deadline: d.deadline };
         if (d.because !== 'away') target.due = d.deadline;
         return;
-      case 'ask.moved':
-        // It shows another revision of what it's pinned to, as a taste call's evidence with a picture replaced (#3234).
-        if (!target || target.closed || e.writer !== 'core' || !isObj(d.pinned_to)) return;
-        target.data = { ...target.data, pinned_to: d.pinned_to };
+      case 'doc.patched': {
+        // A document's next revision: a taste call pinned to it judges the pictures this one lists (#3234).
+        const kept = typeof d.doc === 'string' ? this.revisions.get(d.doc) : undefined;
+        if (typeof d.doc === 'string' && Number.isInteger(d.rev) && typeof d.hash === 'string' && (!kept || (d.rev as number) >= kept.rev)) this.revisions.set(d.doc, { rev: d.rev as number, hash: d.hash });
         return;
+      }
       case 'ask.batched':
         this.showing.apply(e, d);
         return;
@@ -1657,7 +1630,7 @@ class AsksCore implements Asks {
           // Typed in the session: the answer to that question only, unverified, never a decision.
           await this.options.record.append(as, {
             ...base, v: 4, kind: 'ask.answered',
-            data: { answer: ask.pending.typed, plan_hash: null, decision: 'none', via: 'session', verified: false, on: ask.data.pinned_to!, token: null, words: ask.pending.typed, image: null },
+            data: { answer: ask.pending.typed, plan_hash: null, decision: 'none', via: 'session', verified: false, on: this.pinNow(ask)!, token: null, words: ask.pending.typed, image: null },
           });
         } else if (ask.fold && !this.openIn(ask.thread).some((a) => a.folded === ask.handle)) {
           // An exception that holds no open ask has nothing left to ask, as when the ask it was raised for never landed.
@@ -2003,7 +1976,7 @@ class AsksCore implements Asks {
   /** A provisional choice is offered again, pinned to the new commit, once a change touches what it decided. */
   private async reoffer(ask: Ask, as: Connection, now: number): Promise<boolean> {
     if (ask.data.kind !== 'choice' || ask.data.provisional !== true || !ask.decided.size) return false;
-    const changed = await this.changed(ask);
+    const changed = await changedSince(ask.data.pinned_to as Obj, this.sessions.get(ask.session)?.worktree);
     if (!changed?.files.some((file) => ask.decided.has(file))) return false;
     const data: Obj = { ...ask.data, pinned_to: { kind: 'commit', ref: changed.to } };
     await this.options.record.append(as, { v: 1, id: ulid(now), kind: 'ask.created', ts: now, data });
@@ -2039,14 +2012,6 @@ class AsksCore implements Asks {
     await this.sync();
   }
 }
-
-/** A step as a plan holds it: one with no undo marked can't undo. */
-const markStep = (step: PlanStep): PlanStep => (isObj(step) && (step.undo === null || step.undo === '') ? { ...step, undo: CANT_UNDO } : step);
-/** Two steps are the same step when every field is. */
-const sameStep = (a: PlanStep, b: PlanStep): boolean => sha256Hex(canonicalize(a as unknown as JsonValue)) === sha256Hex(canonicalize(b as unknown as JsonValue));
-
-/** A question's text as it compares: NFC, case folded, white space collapsed, trailing punctuation dropped. */
-const normalize = (text: string): string => text.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[\s.,;:!?]+$/u, '');
 
 /** A standing rule's states, and what each verdict moves it to. */
 const STATES = new Set<string>(['active', 'frozen', 'revoked']);

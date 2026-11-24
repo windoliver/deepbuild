@@ -483,6 +483,8 @@ pub struct Scenario {
     pub at: Vec<i64>,
     /// The shared documents as a release stored them, by doc ID (#96).
     pub seeds: BTreeMap<String, Value>,
+    /// #1721: the minted documents the hub's record holds, each with its revisions, by doc ID.
+    pub recorded: std::sync::Arc<BTreeMap<String, Vec<shared::Recorded>>>,
     /// The hub's state folder: layer files by hash and the record.
     pub state: Option<PathBuf>,
     /// Each session's quota (Writer connection).
