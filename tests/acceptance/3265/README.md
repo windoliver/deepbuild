@@ -41,10 +41,11 @@ PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PRO
 npx tsc -p tests/acceptance/3265/tsconfig.json
 ```
 
-The builds, each once a file and honoring `CARGO_TARGET_DIR`: `deep-drive` debug with `env-plants` (#184's helper), `deep-logic` (#533's: the layout probe) and
-#533's assembler from a copy (#555's). A clean target takes minutes for the first. The folder runs alone by its own
-`lane.json`, reason `binary`, as #556's does: its files build binaries into this checkout's `target/` and start replicas
-and hubs. Nothing depends on time or load.
+The builds, each once a file and honoring `CARGO_TARGET_DIR`: `deep-drive` debug with `env-plants` (#184's helper),
+`deep-logic` (#533's: the layout probe) and #533's assembler from a copy (#555's). A clean target takes minutes for the
+first; with the binaries built a file takes about 5 s. The folder runs alone by its own `lane.json`, reason `binary`, as
+#556's does: its files build binaries into this checkout's `target/` and start replicas and hubs. Nothing depends on time
+or load.
 
 Gates. Off macOS every test that plays fails `INCONCLUSIVE:` first thing (the replica's binaries exit on any other OS),
 never a pass; criterion 4's design test runs anywhere. Cargo that can't run is `BLOCKED:`. Folders are temporary and

@@ -1,18 +1,56 @@
-The suite at the base commit 7cb1e5c4a ("Merge pull request #3330 …"), before any implementation.
+The suite at the base commit 7cb1e5c4a ("Merge pull request #3330 …"), before any implementation, on macOS, under a test
+grant of the machine's throttle, with the workspace packages built (2026-11-24T08:49Z):
 
-NOT RUN as it stands here. Two earlier runs on the base, each under a test grant of the machine's throttle, proved
-nothing and are kept for what they showed:
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/3265 --testTimeout=600000 --no-file-parallelism --reporter=verbose
 
-1. 2026-11-24T06:23Z, 2.8 s: no test ran. The worktree's packages weren't built (packages/evidence/dist/patterns.json
-   missing). They were then built under the next run's grant.
-2. 2026-11-24T06:49Z, 153 s, deep-drive built from a clean target in it: 8 failed. The design test failed at its
-   assertion (below); the 7 others failed in #556's openHub, which this suite then used, before any of their assertions:
-     Error: deepbuild/playtest's envelope digest d1:15e4c57644be831e392b65cd7715b6df7793c7012eb202592c87032ad84968d7
-     isn't its files' digest d1:207a54283aa7650532b71583d4812f59d2f019242c9ee028770a6ce50408d403: it changed since it was
-     built, so it isn't installed
-   The base's manifest holds an older digest than its files' (README: What was read), so this suite now opens its own
-   hub over a copy of the plug-in's folder with its files' digest. That change is what still has to run.
+Test Files  4 failed (4)
+     Tests  8 failed (8)        (163 s: 147 s of them AC1's, which builds deep-logic and the assembler; the rest 5 s a file)
 
-  ac04-distinct.test.ts > the design's Result line lists distinct: {depth → floors}
-    AssertionError: docs/canvas-primitives.md, Check input: `grid.reach`, the Result line: expected '- Result: `{floors:
-    [{run, seed, dept…' to match /\bdistinct: ?\{ ?depth → floors ?\}/
+Every test fails at an assertion it names, after this suite's own plays gave each generator the floors its test says. The
+twin that reads no seed PASSES grid.reach on the base, with differ 0.9 as without it, over 20 runs that gave 1 distinct
+floor (AC1; the same runs' result the assertion's message holds):
+
+ac01-differ.test.ts > 20 distinct floors at depth 1 pass; 1 floor in 20 runs fails grid.same, naming depth 1, 20 runs and
+1 floor
+  AssertionError: the twin that reads no seed fails grid.reach with differ 0.9: passed, testsRun 20; failures: (none);
+  coverage {"1":20}, distinct {"1":1}: expected 'passed' to be 'failed'
+  (after the generator passed with 20 distinct floors in 20 runs, and the twin passed with no differ)
+
+ac02-two-floors.test.ts > one of two floors by the seed's low bit: 2 distinct of 20, grid.same at 0.9, and a pass at 0.1
+  AssertionError: it fails grid.same at differ 0.9, naming depth 1, 20 runs and 2 floors: expected [ Array(1) ] to deeply
+  equal []: "the outcome is passed, not failed: passed, testsRun 20; failures: (none); coverage {"1":20}, distinct
+  {"1":2}"
+
+ac02-two-floors.test.ts > a planted check that compares each run only with the run before it passes the alternating
+generator, and fails this test
+  AssertionError: the kit plants a grid.reach runner named previous-run: ["offset-even","stacked-layers","opens-locks",
+  "ignores-flow"]: expected undefined to be defined
+  (after the 20 runs of the alternating check seed gave two floors in turn)
+
+ac03-own-and-single.test.ts > differ with piece_seed own: refused before any run, naming both fields
+  AssertionError: differ with piece_seed own is refused, never passed: passed, testsRun 20; failures: (none); coverage
+  {"1":20}, distinct {"1":1}: expected 'passed' not to be 'passed'
+
+ac03-own-and-single.test.ts > differ with piece_seed left out, which is own: refused before any run, naming both fields
+  AssertionError: differ with piece_seed left out, which is own is refused, never passed: passed, testsRun 20; failures:
+  (none); coverage {"1":20}, distinct {"1":1}: expected 'passed' not to be 'passed'
+
+ac03-own-and-single.test.ts > a depth only one run generated reads INCONCLUSIVE, naming the depth, never PASS
+  AssertionError: depth 2, which one run generated, leaves the check INCONCLUSIVE (uncounted): passed, testsRun 20;
+  failures: (none); coverage {"1":20,"2":1}, distinct {"1":20,"2":1}: expected 'passed' to be 'uncounted'
+
+ac04-distinct.test.ts > distinct equals this suite's own count at each depth, and each depth under the share fails with
+its counts
+  AssertionError: depths 1 and 2 fail grid.same with those counts: expected [ …(2) ] to deeply equal []: "the outcome is
+  passed, not failed: passed, testsRun 20; failures: (none); coverage {"1":20,"2":20,"3":11}, distinct
+  {"1":2,"2":4,"3":11}" (twice)
+  (after the result's distinct, which the base already returns, equalled this suite's count at each depth)
+
+ac04-distinct.test.ts > the design's Result line lists distinct: {depth → floors}
+  AssertionError: docs/canvas-primitives.md, Check input: `grid.reach`, the Result line: expected '- Result: `{floors:
+  [{run, seed, dept…' to match /\bdistinct: ?\{ ?depth → floors ?\}/
+
+The kit, hub and verdict parts behind those assertions can't run on the base. Two earlier runs proved nothing: one with no
+package built (no test ran), one through #556's own hub, where the 7 tests that play failed at the plug-in's install, the
+base's manifest holding an older digest than its files' (README: What was read), not at what they assert.
