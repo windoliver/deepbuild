@@ -527,10 +527,11 @@ fn heavy_entry() -> ExitCode {
     let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
     match heavy::matched(&command, cwd.as_deref(), &home, None) {
         Some(hit) => println!(
-            "{{\"name\":{},\"jobs\":{},\"jobs_flag\":{}}}",
+            "{{\"name\":{},\"jobs\":{},\"jobs_flag\":{},\"memory_mb\":{}}}",
             quoted(&hit.name),
             quoted(&hit.jobs),
-            hit.jobs_flag.as_deref().map_or("null".to_string(), quoted)
+            hit.jobs_flag.as_deref().map_or("null".to_string(), quoted),
+            hit.memory_mb.map_or("null".to_string(), |m| m.to_string())
         ),
         None => println!("null"),
     }

@@ -24,6 +24,7 @@ export async function removalPlan(reader: RecordReader, read: (sha: string) => P
   return {
     plan: {
       id: change.id, cutoff, tasks: tasks.map((t) => t.id), fitted: fitted.map((t) => t.id),
+      words: [...tasks, ...fitted].filter((t) => !t.work).map((t) => t.id),
       variants: { base: { name: 'current rule file', files: { [change.file]: change.before } }, change: { name: 'removal', files: { [change.file]: change.after } } },
       models: { agent: 'claude-haiku-5-5', judge: 'gpt-reserve' }, repeats: 3, measures: [{ name: 'grade', better: 'higher' }],
       rule: 'paired-mean-one-sided-95', budget: { ms: 110 * 60_000, plan_share: 0.5 },

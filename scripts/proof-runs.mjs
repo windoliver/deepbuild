@@ -8,6 +8,7 @@ import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { claimPair, isBay } from './bays.mjs';
+import { listed } from './lanes.mjs';
 import { buildBinaries, placeHubBinaries, selectBinaries } from './proof-binaries.mjs';
 import { acquire, release } from './throttle.mjs';
 import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
@@ -502,19 +503,21 @@ function runTests(directory, files, { env = {}, timed = [] } = {}) {
 }
 
 /**
- * The files of `files` in the timed list the checkout's lanes.mjs exports (`timed`: files, or folders ending in /),
- * which run only under a timed grant. A checkout with no lanes.mjs has no list; when one can't be read, every file
- * is timed, so none runs ungranted.
+ * The timed and by-hand lists the checkout's lanes.mjs exports (`timed`, `byHand`: files, or folders ending in /).
+ * A timed file runs only under a timed grant; a by-hand file never runs here. A checkout with no lanes.mjs has no
+ * lists; when they can't be read this returns null: every file is then timed, so none runs ungranted, and none is
+ * by hand, so none goes unrun.
  */
-function timedSet(root, files) {
-  if (!existsSync(join(root, 'scripts/lanes.mjs'))) return [];
-  const code = `const { timed = [] } = await import(${JSON.stringify(pathToFileURL(join(root, 'scripts/lanes.mjs')).href)}); console.log(JSON.stringify(timed));`;
+function laneLists(root) {
+  if (!existsSync(join(root, 'scripts/lanes.mjs'))) return { timed: [], byHand: [] };
+  const code = `const { timed = [], byHand = [] } = await import(${JSON.stringify(pathToFileURL(join(root, 'scripts/lanes.mjs')).href)}); console.log(JSON.stringify({ timed, byHand }));`;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: root, env: childEnv(), encoding: 'utf8' });
   try {
-    const list = JSON.parse(result.stdout.trim().split('\n').at(-1));
-    return files.filter((file) => list.some((entry) => (entry.endsWith('/') ? file.startsWith(entry) : file === entry)));
+    const lists = JSON.parse(result.stdout.trim().split('\n').at(-1));
+    const shaped = (list) => Array.isArray(list) && list.every((entry) => typeof entry === 'string');
+    return shaped(lists.timed) && shaped(lists.byHand) ? lists : null;
   } catch {
-    return files;
+    return null;
   }
 }
 
@@ -612,11 +615,18 @@ function twinOverlay(root, folder, own, all) {
 export function prepareRuns({ root, change, issue }, { coverage = false } = {}) {
   const touched = new Set(change.whole.map(({ path }) => path));
   const counts = (tag, path) => (issue?.number ? tag.startsWith(`#${issue.number}.`) : touched.has(path));
-  const files = listFiles(root).filter(isTestFile).filter((path) => tagsWithImports(root, null, path).some((tag) => counts(tag, path)));
+  const tagged = listFiles(root).filter(isTestFile).filter((path) => tagsWithImports(root, null, path).some((tag) => counts(tag, path)));
+  // A person runs each file the by-hand list names, never a lane (#3310); a first draft that a blind redraft replaced
+  // is one. It runs nowhere here, so its tests prove nothing, and a criterion only it tags stays open in trace.
+  const lists = tagged.length ? laneLists(root) : null;
+  const byHand = lists ? tagged.filter((path) => listed(lists.byHand, path)) : [];
+  const files = tagged.filter((path) => !byHand.includes(path));
   const empty = () => ({ results: new Map(), fileErrors: new Map(), unrunnable: new Map() });
-  const runs = { files, tests: [], twins: new Map(), head: empty(), base: empty() };
+  // Its tags still go to trace, which fails one that names no criterion of the issue, as it does for a file that runs.
+  const byHandTags = new Map(byHand.map((path) => [path, tagsIn(show(root, null, path) ?? '').filter((tag) => counts(tag, path))]));
+  const runs = { files, byHand, byHandTags, tests: [], twins: new Map(), head: empty(), base: empty() };
   if (!files.length) return runs;
-  const timed = runs.timed = timedSet(root, files);
+  const timed = runs.timed = lists ? files.filter((file) => listed(lists.timed, file)) : files;
   runs.coverage = coverage ? temporary('deep-proof-coverage-') : null;
   // The merge base, with the change's test code: every file under the test paths (tests, helpers
   // wherever they are and however they're imported, fixtures, goldens, twins and setup files), never
@@ -758,6 +768,7 @@ function wrongProgram(runs, test) {
 /** The before lane's lines; returns the tests that failed on a wrong program. */
 export function before(runs, kills, say, print) {
   const proven = new Set();
+  for (const path of runs.byHand ?? []) print(`before: ${path}: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing`);
   if (runs.timed?.length) print(`before: the timed set, from the timed list in scripts/lanes.mjs, run only under a timed grant (${runs.timed.length}): ${runs.timed.join(' ')}`);
   for (const [path, cause] of runs.head.fileErrors) say('FAIL', 'before', `${path}: fails on the change outside its tests (${cause})`, BEFORE_FIX);
   const unrunState = (cause) => cause.startsWith('INCONCLUSIVE no grant:') ? 'INCONCLUSIVE' : 'BLOCKED';
@@ -810,7 +821,7 @@ export function before(runs, kills, say, print) {
     else if (base?.status === 'pass') say('FAIL', 'before', `${test.key}: passed on the merge base`, BEFORE_FIX);
     else say('FAIL', 'before', `${test.key}: failed on the base before its assertion (${base?.failure?.cause ?? runs.base.fileErrors.get(test.path) ?? (base ? `${base.status} there` : 'not collected there')})`, BEFORE_FIX);
   }
-  if (!runs.tests.length && !runs.head.fileErrors.size && !runs.unrun?.length && !runs.only?.length) say('PASS', 'before', 'no tagged test to run on the merge base');
+  if (!runs.tests.length && !runs.head.fileErrors.size && !runs.unrun?.length && !runs.only?.length) say('PASS', 'before', `no tagged test to run on the merge base${runs.byHand?.length ? ` (${runs.byHand.length} tagged file${runs.byHand.length === 1 ? '' : 's'} by hand, not run)` : ''}`);
   return proven;
 }
 

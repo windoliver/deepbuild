@@ -13,8 +13,10 @@ export interface Answer {
 type DeliveryOutcome = 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting';
 interface AnswersOptions {
   raw: RecordStore['raw'];
-  /** Settles once every append in flight has, but the one of event `except`. */
+  /** Settles once every append in flight whose kind `readsAnswer` names has, but the one of event `except`. */
   settled(except?: string): Promise<unknown>;
+  /** A session's thread as the core knows it, for a session whose start isn't in the record yet. */
+  thread?(session: string): string | undefined;
   /** Already in flight or owned by a permission prompt: neither is offered by another route. */
   excluded(id: string): boolean;
   /** A delivered answer is also input to the session's loop, unless a planted program drops it. */
@@ -22,6 +24,11 @@ interface AnswersOptions {
   append(data: { delivery: string; via: string; outcome: DeliveryOutcome }, version: 1 | 2): Promise<void>;
 }
 const sql = (text: string): string => text.replace(/'/g, "''");
+/**
+ * The kinds whose events change which answers wait (#2539): the asks' projection and the deliveries'. A reply waits
+ * for these in flight, never for another event's commit and the evidence sync a FULL one waits for.
+ */
+export const readsAnswer = (kind: string): boolean => kind.startsWith('ask.') || kind === 'default.undone' || kind === 'approval.withdrawn' || kind === 'delivery.outcome';
 
 export class Answers {
   constructor(private readonly o: AnswersOptions) {}
@@ -32,7 +39,8 @@ export class Answers {
    */
   async waitingFor(session: string, scope?: string, hook?: string): Promise<Answer[]> {
     await this.o.settled(hook);
-    const thread = `COALESCE((SELECT thread_id FROM sessions WHERE id = '${sql(session)}'), '${sql(session)}')`;
+    // The record's thread, else the core's: the session's start may still be on its way to the record (#2539).
+    const thread = `COALESCE((SELECT thread_id FROM sessions WHERE id = '${sql(session)}'), '${sql(this.o.thread?.(session) ?? session)}')`;
     const mine = scope ?? `COALESCE((SELECT thread_id FROM sessions WHERE id = a.session_id), a.session_id) = ${thread}`;
     const rows = ((await this.o.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer, iif(a.provisional = 1, a.recommended, NULL) AS undoes FROM asks a WHERE a.status = 'answered' AND ${mine}
       AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Omit<Answer, 'words' | 'image'>[])
