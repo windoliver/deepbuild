@@ -746,7 +746,7 @@ pub(super) fn asset_scene(
             let holder = serde_json::json!({"material": mat_id});
             let named = |n: &str| (n == mat_id).then_some(&mat_item);
             let material = light::material(&holder, named, look, id)?;
-            let maps = light::maps(&holder, named)?;
+            let maps = light::maps(&holder, named, named, material.as_ref())?;
             let mut h = deep_canvas::schedule::Hasher::new("scene3d.mesh");
             match &skinned {
                 // A skinned mesh is drawn as what it holds, as a built item's is.

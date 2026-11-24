@@ -17,7 +17,7 @@ use deep_marks_raster::Renderer;
 
 use crate::play::Played;
 
-/// The texture maps made ready at load, by SHA-256 (the 3D module's; a set without it has none).
+/// The texture maps made ready at load, by key (the 3D module's; a set without it has none).
 #[cfg(feature = "full")]
 pub type Maps = std::collections::BTreeMap<String, Arc<Texels>>;
 #[cfg(not(feature = "full"))]
@@ -51,7 +51,7 @@ impl Draw {
     }
 
     /// The frame the session last evaluated, at `size` pixels, a 3D frame's maps from `maps` (by
-    /// SHA-256, as the player made them ready at load).
+    /// their keys, as the player made them ready at load).
     pub fn frame(
         &mut self,
         p: &Played,
@@ -109,9 +109,10 @@ impl Draw {
         )
         .ok()?;
         let mut scene = scene;
-        for (sha, _) in map_uses(&scene) {
-            if let Some(t) = maps.get(&sha) {
-                scene.texels.insert(sha, t.clone());
+        for (map, of) in map_uses(&scene) {
+            // A mode the document's own material doesn't name draws the image's own chain.
+            if let Some(t) = maps.get(&map).or_else(|| maps.get(&of.sha)) {
+                scene.texels.insert(map, t.clone());
             }
         }
         let over = self.layers(p, px, None).unwrap_or_else(clear);
