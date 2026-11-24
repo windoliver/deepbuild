@@ -233,3 +233,29 @@ Two tests in `hub.test.ts` were disputed and went to one blind redraft, `../45-r
 The redraft's two tests first carried tags of its own, which named no criterion of #45, and its AC6 test needed a hook no proof lane's checkout has. The owner approved both corrections on PR #844: the criterion's tags, and a build when the hook is missing. Nothing it asserts changed.
 
 AC16 `#45.5f772137`, in `lifecycle.test.ts`, was disputed later and went to a second blind redraft, `../45-redraft/lifecycle.test.ts`. The first draft seeds `check.held@1` and `check.held_start@1` in the shape this README's table defines. Main's #965 then published its own `check.held@1`, a whole record appended again on each change, with no separate start record, so the work reads 0 places from the first draft's seed. The redraft seeds main's record and passes. The owner chose it on PR #844. Its twins went with it, and the table's two `check.held` rows describe only the retired draft.
+
+## Redraft of #45.9177880c (from transcripts, a card that prices the model)
+
+A fresh run of this job redrafted one disputed test in `usage.test.ts` in place, against base commit `64e215030`.
+
+**Read:** issue #45 (its text as given, updatedAt 2026-11-09T23:11:34Z) and the criterion "Every cost shows whether it was
+reported, estimated (naming its rate card) or unpriced"; `AGENTS.md`; a search of `docs/technical-design.md` for its rate card
+text (the adapter section's "a cost says whether it was reported, estimated from a named rate card, or unpriced"); this
+README, `BASE-FAILURE.txt`, `usage.test.ts`, `events.ts` and the fixture's assistant lines; a grep of the public entry
+`packages/readings/src/index.ts` that returned nothing, and `packages/readings/src/usage.ts` read whole as the source of the
+surface (`countUsage` and `RateCard`); the
+base run's failure, `expected 'unpriced' to be 'estimated'` at line 49. Beyond those: reading `usage.ts` whole showed its shipped
+card's prices and its counting code, not only the type. No git history, diff, branch, PR or other suite was read.
+
+**What changed, and why.** The base's `RateCard` row holds two write prices, `cache_write` for the five-minute write and
+`cache_write_1h` for the one-hour write, and its doc comment says a row lacking either reads unpriced, so no write is priced by
+the other kind's. The first draft's card had only `cache_write`, so the base read it unpriced. The card now also gives
+`cache_write_1h: 6` (twice the $3 input, the one-hour write's ratio to input), with a comment saying why. The scenario, the
+card's name, the hand count, the assertions and their messages are unchanged; one comment line was added under the hand count.
+
+**The amount is unchanged.** No fixture line gives a `cache_creation` split, so every write is priced as a five-minute one:
+635 x 3 + 195 x 15 + 1,160 x 3.75 + 0 x 6 + 3,200 x 0.30 = 1,905 + 2,925 + 4,350 + 0 + 960 = 10,140 per million, $0.01014.
+
+**Run**, once at HEAD: `npx vitest run tests/acceptance/45/usage.test.ts --reporter=verbose` in `<checkout>`, Node v24.22.0,
+one-minute load 9.82. All 5 tests passed: both `#45.2a583af6` tests, and the three `#45.9177880c` tests (from the record; a
+card that prices the model, $0.01014; a card that doesn't, unpriced).

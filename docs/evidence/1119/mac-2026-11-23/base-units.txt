@@ -1,0 +1,5 @@
+a1	before verdict: 3505 units in 55 base calls; after: 1229 units in 331 base calls
+a2	before verdict: 50 units in 80 base calls; after: 57 units in 302 base calls
+a3	before verdict: 111 units in 147 base calls; after: 34 units in 230 base calls
+a4	before verdict: 51 units in 65 base calls; after: 87 units in 223 base calls
+b	before verdict: 64 units in 96 base calls; after: 0 units in 5 base calls

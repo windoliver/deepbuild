@@ -1,0 +1,312 @@
+#3170 acceptance suite on the base 61aa8eb06 (origin/main), 2026-11-22.
+
+Summary
+- The Mac (darwin arm64): all three skip, INCONCLUSIVE (platform). They need Linux, and two of them the Spark.
+- The Spark (Linux aarch64, ext4), cold scratch clone at the base, RUSTC_WRAPPER empty, -j 4, load about 10, run one file at a time:
+  - #3170.f6002c7f (lane-folder.test.mjs) FAILS at its assertion: the unit lane's cargo test --workspace runs with no DEEP_TEST_COW_DIR.
+  - #3170.4db366cf (cli-target.test.mjs) FAILS at its assertion: the copy-on-write test is FAILED, its panic BLOCKED: /var/tmp can't make a reflink copy.
+    The other 29 tests of the cli target pass.
+  - #3170.618b6b1f (blocked.test.mjs) PASSES, as the criterion says it does today.
+- The Spark has no folder that makes a reflink copy: /var/tmp and /tmp are ext4 (stat says ext2/ext3), /dev/shm tmpfs; findmnt lists no btrfs or XFS.
+
+Twins, each run on the Spark at the base with its file laid over the base's and put back after:
+- blocked-reads-pass FAILS #3170.618b6b1f at its first assertion: the test line reads ... ok, not ... FAILED. This is the twin's own fault.
+- lane-names-var-tmp FAILS #3170.f6002c7f at the reflink assertion (/var/tmp named, cp --reflink=always: Operation not supported), a later one than the base's.
+- clone-drops-mode FAILS #3170.4db366cf, but for the base's reason (BLOCKED), since the Spark has no reflink folder: its own fault is unshown until it has one.
+
+A stand-in for the machine's setting (a reading, not proof of a criterion): a cargo home whose config.toml holds
+[env] DEEP_TEST_COW_DIR = "/var/tmp", its registry, git and bin linked from the real one, as CARGO_HOME:
+- #3170.f6002c7f then fails at the reflink assertion, not the unset one: cargo's [env] in the machine's cargo home reaches the lane's cargo test through the real runLanes.
+- #3170.618b6b1f still passes, its panic naming the test's own folder: the variable in the process's environment wins over the config's [env].
+
+Paths under the Spark user's home are written ~ below.
+
+==================== mac-run
+Darwin arm64
+61aa8eb06
+v24.22.0
+﹣ #3170.618b6b1f on Linux, given a folder that can't make a reflink copy, the copy-on-write test reads BLOCKED and names the fix (2.207625ms) # INCONCLUSIVE (platform): this needs Linux, and this machine is darwin-arm64; it is unrun here
+﹣ #3170.4db366cf cargo test -p deep-hook --test cli --locked passes on the Spark, the copy-on-write test with it (1.635042ms) # INCONCLUSIVE (platform): this needs the Spark, Linux on aarch64, and this machine is darwin-arm64; it is unrun here
+﹣ #3170.f6002c7f a lane's cargo test on the Spark runs with DEEP_TEST_COW_DIR naming a folder that makes a reflink copy (3.5805ms) # INCONCLUSIVE (platform): this needs the Spark, Linux on aarch64, and this machine is darwin-arm64; it is unrun here
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 1578.641334
+
+==================== spark-base
+Linux aarch64
+61aa8eb06
+?? tests/acceptance/3170/
+v24.22.0
+cargo 1.99.1 (5f94df478 2026-08-27)
+load: 10.09 7.30 6.79
+/var/tmp ext2/ext3 cp: failed to clone '/var/tmp/tmp.WYt851NTCM.copy' from '/var/tmp/tmp.WYt851NTCM': Operation not supported
+/tmp ext2/ext3 cp: failed to clone '/tmp/tmp.lMJVM75J93.copy' from '/tmp/tmp.lMJVM75J93': Operation not supported
+/dev/shm tmpfs cp: failed to clone '/dev/shm/tmp.AGQDPFgbJj.copy' from '/dev/shm/tmp.AGQDPFgbJj': Operation not supported
+✔ #3170.618b6b1f on Linux, given a folder that can't make a reflink copy, the copy-on-write test reads BLOCKED and names the fix (313.923665ms)
+✖ #3170.4db366cf cargo test -p deep-hook --test cli --locked passes on the Spark, the copy-on-write test with it (2762.471669ms)
+✖ #3170.f6002c7f a lane's cargo test on the Spark runs with DEEP_TEST_COW_DIR naming a folder that makes a reflink copy (600.820869ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3805.487123
+
+✖ failing tests:
+
+test at tests/acceptance/3170/cli-target.test.mjs:8:1
+✖ #3170.4db366cf cargo test -p deep-hook --test cli --locked passes on the Spark, the copy-on-write test with it (2762.471669ms)
+  AssertionError [ERR_ASSERTION]: cargo test -p deep-hook --test cli --locked on linux-arm64 runs a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot to a pass:
+  failures:
+  
+  ---- a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot stdout ----
+  
+  thread 'a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot' (1675886) panicked at crates/deep-hook/tests/cli.rs:1362:9:
+  BLOCKED: /var/tmp can't make a reflink copy; set DEEP_TEST_COW_DIR to a folder on btrfs or XFS with reflink
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  
+  
+  failures:
+      a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot
+  
+  test result: FAILED. 29 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.02s
+  
+  error: test failed, to rerun pass `-p deep-hook --test cli`
+  FAIL unit: cargo -p deep-hook --test cli › a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot
+    INCONCLUSIVE cargo test: ran on linux-arm64, not the Mac's platform, so it says nothing of the macOS branch
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 2.71 s
+  
+  + actual - expected
+  
+  + 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... FAILED'
+  - 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... ok'
+  
+      at TestContext.<anonymous> (file://~/scratch-3170-blind/tests/acceptance/3170/cli-target.test.mjs:15:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... FAILED',
+    expected: 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3170/lane-folder.test.mjs:10:1
+✖ #3170.f6002c7f a lane's cargo test on the Spark runs with DEEP_TEST_COW_DIR naming a folder that makes a reflink copy (600.820869ms)
+  AssertionError [ERR_ASSERTION]: the lane's cargo test runs with no DEEP_TEST_COW_DIR, where the Spark's copy-on-write folder must be named
+      at TestContext.<anonymous> (file://~/scratch-3170-blind/tests/acceptance/3170/lane-folder.test.mjs:17:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '<unset>',
+    expected: '<unset>',
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+node --test exit 1
+
+==================== spark-twin-blocked-reads-pass
+Linux aarch64
+61aa8eb06
+ M crates/deep-hook/tests/cli.rs
+?? tests/acceptance/3170/
+v24.22.0
+cargo 1.99.1 (5f94df478 2026-08-27)
+load: 8.67 7.27 6.79
+/var/tmp ext2/ext3 cp: failed to clone '/var/tmp/tmp.75ErzjwORH.copy' from '/var/tmp/tmp.75ErzjwORH': Operation not supported
+/tmp ext2/ext3 cp: failed to clone '/tmp/tmp.DUuBBCovLj.copy' from '/tmp/tmp.DUuBBCovLj': Operation not supported
+/dev/shm tmpfs cp: failed to clone '/dev/shm/tmp.wQoj71l1CN.copy' from '/dev/shm/tmp.wQoj71l1CN': Operation not supported
+✖ #3170.618b6b1f on Linux, given a folder that can't make a reflink copy, the copy-on-write test reads BLOCKED and names the fix (691.814452ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 743.040308
+
+✖ failing tests:
+
+test at tests/acceptance/3170/blocked.test.mjs:8:1
+✖ #3170.618b6b1f on Linux, given a folder that can't make a reflink copy, the copy-on-write test reads BLOCKED and names the fix (691.814452ms)
+  AssertionError [ERR_ASSERTION]: with DEEP_TEST_COW_DIR=/var/tmp/deep-3170-plain-TZWxMX, which can't reflink, a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot never passes or skips:
+  Compiling deep-hook v0.0.0 (~/scratch-3170-blind/crates/deep-hook)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 0.63s
+       Running tests/cli.rs (target/debug/deps/cli-423153aaf1d4d739)
+  
+  running 1 test
+  cp: failed to clone '/var/tmp/deep-3170-plain-TZWxMX/deep-hook-clone-1683412/probe.copy' from '/var/tmp/deep-3170-plain-TZWxMX/deep-hook-clone-1683412/probe': Operation not supported
+  test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.00s
+  + actual - expected
+  
+  + 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... ok'
+  - 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... FAILED'
+  
+      at TestContext.<anonymous> (file://~/scratch-3170-blind/tests/acceptance/3170/blocked.test.mjs:15:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... ok',
+    expected: 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... FAILED',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+node --test exit 1
+
+==================== spark-twin-lane-names-var-tmp
+Linux aarch64
+61aa8eb06
+ M scripts/lanes.mjs
+?? tests/acceptance/3170/
+v24.22.0
+cargo 1.99.1 (5f94df478 2026-08-27)
+load: 8.67 7.27 6.79
+/var/tmp ext2/ext3 cp: failed to clone '/var/tmp/tmp.nMC2glp17Q.copy' from '/var/tmp/tmp.nMC2glp17Q': Operation not supported
+/tmp ext2/ext3 cp: failed to clone '/tmp/tmp.NnTMqOZjPc.copy' from '/tmp/tmp.NnTMqOZjPc': Operation not supported
+/dev/shm tmpfs cp: failed to clone '/dev/shm/tmp.uC5HHJSPeW.copy' from '/dev/shm/tmp.uC5HHJSPeW': Operation not supported
+✖ #3170.f6002c7f a lane's cargo test on the Spark runs with DEEP_TEST_COW_DIR naming a folder that makes a reflink copy (582.109648ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 616.235744
+
+✖ failing tests:
+
+test at tests/acceptance/3170/lane-folder.test.mjs:10:1
+✖ #3170.f6002c7f a lane's cargo test on the Spark runs with DEEP_TEST_COW_DIR naming a folder that makes a reflink copy (582.109648ms)
+  AssertionError [ERR_ASSERTION]: cp --reflink=always fails in /var/tmp, the folder the lane's cargo test is given (file system ext2/ext3): cp: failed to clone '/var/tmp/.deep-3170-probe-fWT539/probe.copy' from '/var/tmp/.deep-3170-probe-fWT539/probe': Operation not supported
+      at TestContext.<anonymous> (file://~/scratch-3170-blind/tests/acceptance/3170/lane-folder.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+node --test exit 1
+
+==================== spark-twin-clone-drops-mode
+Linux aarch64
+61aa8eb06
+ M crates/deep-hook/src/main.rs
+?? tests/acceptance/3170/
+v24.22.0
+cargo 1.99.1 (5f94df478 2026-08-27)
+load: 8.67 7.27 6.79
+/var/tmp ext2/ext3 cp: failed to clone '/var/tmp/tmp.K6BCF80Emt.copy' from '/var/tmp/tmp.K6BCF80Emt': Operation not supported
+/tmp ext2/ext3 cp: failed to clone '/tmp/tmp.Y57ZGvOeSj.copy' from '/tmp/tmp.Y57ZGvOeSj': Operation not supported
+/dev/shm tmpfs cp: failed to clone '/dev/shm/tmp.ZgtyBq63l5.copy' from '/dev/shm/tmp.ZgtyBq63l5': Operation not supported
+✖ #3170.4db366cf cargo test -p deep-hook --test cli --locked passes on the Spark, the copy-on-write test with it (5076.417245ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5131.837321
+
+✖ failing tests:
+
+test at tests/acceptance/3170/cli-target.test.mjs:8:1
+✖ #3170.4db366cf cargo test -p deep-hook --test cli --locked passes on the Spark, the copy-on-write test with it (5076.417245ms)
+  AssertionError [ERR_ASSERTION]: cargo test -p deep-hook --test cli --locked on linux-arm64 runs a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot to a pass:
+  failures:
+  
+  ---- a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot stdout ----
+  
+  thread 'a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot' (1686347) panicked at crates/deep-hook/tests/cli.rs:1362:9:
+  BLOCKED: /var/tmp can't make a reflink copy; set DEEP_TEST_COW_DIR to a folder on btrfs or XFS with reflink
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  
+  
+  failures:
+      a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot
+  
+  test result: FAILED. 29 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.03s
+  
+  error: test failed, to rerun pass `-p deep-hook --test cli`
+  FAIL unit: cargo -p deep-hook --test cli › a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot
+    INCONCLUSIVE cargo test: ran on linux-arm64, not the Mac's platform, so it says nothing of the macOS branch
+    Fix: Repair the behavior named by the failing test.
+    Elapsed: 5.01 s
+  
+  + actual - expected
+  
+  + 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... FAILED'
+  - 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... ok'
+  
+      at TestContext.<anonymous> (file://~/scratch-3170-blind/tests/acceptance/3170/cli-target.test.mjs:15:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... FAILED',
+    expected: 'test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... ok',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+node --test exit 1
+
+==================== spark-standin
+Linux aarch64
+61aa8eb06
+?? tests/acceptance/3170/
+v24.22.0
+cargo 1.99.1 (5f94df478 2026-08-27)
+load: 8.94 7.37 6.83
+/var/tmp ext2/ext3 cp: failed to clone '/var/tmp/tmp.88UiKrLKws.copy' from '/var/tmp/tmp.88UiKrLKws': Operation not supported
+/tmp ext2/ext3 cp: failed to clone '/tmp/tmp.LpL8ELgS4x.copy' from '/tmp/tmp.LpL8ELgS4x': Operation not supported
+/dev/shm tmpfs cp: failed to clone '/dev/shm/tmp.zGRX78cPWm.copy' from '/dev/shm/tmp.zGRX78cPWm': Operation not supported
+✔ #3170.618b6b1f on Linux, given a folder that can't make a reflink copy, the copy-on-write test reads BLOCKED and names the fix (6334.487398ms)
+✖ #3170.f6002c7f a lane's cargo test on the Spark runs with DEEP_TEST_COW_DIR naming a folder that makes a reflink copy (599.381345ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7014.20852
+
+✖ failing tests:
+
+test at tests/acceptance/3170/lane-folder.test.mjs:10:1
+✖ #3170.f6002c7f a lane's cargo test on the Spark runs with DEEP_TEST_COW_DIR naming a folder that makes a reflink copy (599.381345ms)
+  AssertionError [ERR_ASSERTION]: cp --reflink=always fails in /var/tmp, the folder the lane's cargo test is given (file system ext2/ext3): cp: failed to clone '/var/tmp/.deep-3170-probe-oQRQbC/probe.copy' from '/var/tmp/.deep-3170-probe-oQRQbC/probe': Operation not supported
+      at TestContext.<anonymous> (file://~/scratch-3170-blind/tests/acceptance/3170/lane-folder.test.mjs:20:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+node --test exit 1

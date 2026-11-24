@@ -22,6 +22,24 @@ export const testGlobs = (extension) => testPaths
 // The lane lists, in lanes-lists.mjs.
 export { alone, byHand, exclusive, LANE_FILE, ownLane, redrafted, slow, timed };
 
+// #3178: these files expect deep_ask to wait on a choice with a recommended option, which goes on at once as
+// provisional (#84; the design's "Work goes on while you decide"), so they stop BLOCKED on main, and
+// 27-redraft-2073/waits.test.ts's stop is never held for its ask, nor 27/outcomes-redraft/outcomes.test.ts's while a
+// subagent runs. Their blind redrafts run in their place
+// (tests/acceptance/667/redraft-3178/DISPUTE.md), and they are kept as written, by hand only. 27/waits.test.ts has been
+// by hand since #2073 (above); its redraft-3178 also stands in for 27-redraft-2073's.
+byHand.push('tests/acceptance/667/fold.test.ts', 'tests/acceptance/667/plants.test.ts', 'tests/acceptance/667/redraft-1463/',
+  'tests/acceptance/27/repeat.test.ts', 'tests/acceptance/27-redraft-2073/waits.test.ts', 'tests/acceptance/27/outcomes-redraft/outcomes.test.ts',
+  'tests/acceptance/111/revive.test.ts');
+// #667's redraft reads `deep inbox` within a second (criteria.test.ts), INCONCLUSIVE under load, as the redrafts it
+// stands beside do;
+// #27's two and #111's run deep-hook from target/, whose 50 ms wait on the hub lets a call through under load, and #27's
+// waits file takes over two minutes, as the file it replaces does; #3178's suite runs those folders.
+timed.push('tests/acceptance/667/redraft-3178/criteria.test.ts');
+alone.push('tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-redraft-3178/', 'tests/acceptance/111/redraft-3178/');
+slow.push('tests/acceptance/3178/suites.test.ts');
+slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
+
 /**
  * Why each `alone` entry is alone (#3066; docs/parallel-proof.md, section 7), one reason an entry: `binary`, a sibling's
  * cargo build rewrites a binary under it (its files start cargo, read target/, or start a hub, which runs deep-hook
@@ -45,10 +63,12 @@ export const aloneReasons = {};
 for (const [reason, entries] of Object.entries({
   binary: [
     'tests/acceptance/2386/', 'tests/acceptance/2086-redraft-2047/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
+    'tests/acceptance/2700/heap.test.mjs', 'tests/acceptance/2700/equal.test.mjs', 'tests/acceptance/2700/data-row.test.mjs', 'tests/acceptance/2700/as-given.test.mjs', 'tests/acceptance/2700/reached.test.mjs',
     'tests/acceptance/1523/', 'tests/acceptance/84/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/',
     'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/',
     'tests/acceptance/389/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/1487/',
     'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/',
+    'tests/acceptance/3234-redraft-ac3/', 'tests/acceptance/3234-redraft-ac6/',
     'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/492/', 'tests/acceptance/492-gaps/', 'tests/acceptance/493/',
     'tests/acceptance/493-redraft-ac7/', 'tests/acceptance/493-redraft-ac12/', 'tests/acceptance/493-redraft-ac18/', 'tests/acceptance/494/', 'tests/acceptance/496/',
     'tests/acceptance/497/', 'tests/acceptance/388/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/670/', 'tests/acceptance/138/',
@@ -72,7 +92,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/907/slots.test.ts', 'tests/acceptance/907/background.test.ts',
     'tests/acceptance/965/', 'packages/hub/test/loop-starters.test.ts', 'packages/hub/test/loop-transcript.test.ts', 'tests/acceptance/1175/', 'tests/acceptance/23/permissions/',
     'tests/acceptance/83/', 'tests/acceptance/352/', 'tests/acceptance/27/wake.test.ts', 'tests/acceptance/27/repeat.test.ts', 'tests/acceptance/27/waits.test.ts',
-    'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts', 'tests/acceptance/990/',
+    'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-redraft-3178/', 'tests/acceptance/111/redraft-3178/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts', 'tests/acceptance/990/',
     'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/874/redraft/', 'tests/acceptance/824/cycles.test.ts', 'tests/acceptance/824/planted.test.ts',
     'tests/acceptance/824/leftovers.test.ts', 'tests/acceptance/824/sessions/readings.test.ts', 'tests/acceptance/824/sessions/planted.test.ts', 'tests/acceptance/1294/',
     'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/', 'tests/acceptance/1868-redraft-ac2/',
@@ -121,7 +141,9 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/2776/listing.test.ts', 'tests/acceptance/2457/', 'tests/acceptance/2500/', 'tests/acceptance/211/', 'tests/acceptance/981/', 'tests/acceptance/189/saves/',
     'tests/acceptance/189-oracle/', 'tests/acceptance/189/lab-redraft/', 'tests/acceptance/276/record/', 'tests/acceptance/276/match/', 'tests/acceptance/2109/',
     'tests/acceptance/953/', 'tests/acceptance/953-oracle/', 'tests/acceptance/1250/', 'tests/acceptance/1576/', 'tests/acceptance/2661/', 'tests/acceptance/980/',
-    'tests/acceptance/1861/', 'tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/',
+    'tests/acceptance/1861/', 'tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/', 'tests/acceptance/2697/', 'tests/acceptance/409-redraft-2697/',
+    'tests/acceptance/1181/', 'tests/acceptance/1834/', 'tests/acceptance/2035/', 'tests/acceptance/2288/', 'tests/acceptance/2748/', 'tests/acceptance/1500/',
+    'tests/acceptance/1500-oracle/', 'tests/acceptance/3234/', 'tests/acceptance/3234-redraft-ac3/',
   ],
   timing: [
     'tests/acceptance/2513-redraft-2047/',
@@ -143,6 +165,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1427-redraft-1830/', 'tests/acceptance/311-redraft-1830/', 'tests/acceptance/1018-redraft-1830/', 'tests/acceptance/166-redraft-1830/',
     'tests/acceptance/268-redraft-1830/', 'tests/acceptance/465-redraft-1830/', 'tests/acceptance/968-redraft-1830/', 'tests/acceptance/1830/ac2-timing.test.ts',
     'tests/acceptance/1801/', 'tests/acceptance/2760-redraft-ac8/', 'tests/acceptance/2777/', 'tests/acceptance/553/',
+    'tests/acceptance/980-redraft-ac9/', 'tests/acceptance/2317/', 'tests/acceptance/2740/',
   ],
   'shared: Docker': [
     'tests/acceptance/580/', 'tests/acceptance/238/', 'tests/acceptance/1255/', 'tests/acceptance/194/', 'tests/acceptance/531/', 'tests/acceptance/532/', 'tests/acceptance/190/',
@@ -185,6 +208,8 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/971/', 'tests/acceptance/1992/', 'tests/acceptance/1992-redraft-ac5/', 'tests/acceptance/1831/', 'tests/acceptance/2760/', 'tests/acceptance/732/',
     'tests/acceptance/1484/', 'tests/acceptance/806-redraft-ac3/', 'tests/acceptance/1215/', 'tests/acceptance/1489/', 'tests/acceptance/189/carry/', 'tests/acceptance/276/web/',
     'tests/acceptance/2738/', 'tests/acceptance/265/', 'tests/acceptance/3016/', 'tests/acceptance/552/', 'tests/acceptance/298/',
+    'tests/acceptance/1488/', 'tests/acceptance/161/', 'tests/acceptance/2034/', 'tests/acceptance/2054/', 'tests/acceptance/3171/', 'tests/acceptance/290/',
+    'tests/acceptance/2215/', 'tests/acceptance/2215-redraft-ac5/', 'tests/acceptance/3034/',
   ],
   'shared: the Lima VMs': [
     'tests/acceptance/1942/', 'tests/acceptance/1945/', 'tests/acceptance/1946/', 'tests/acceptance/1943/', 'tests/acceptance/1942-redraft-2073/',
@@ -192,6 +217,7 @@ for (const [reason, entries] of Object.entries({
   "shared: the checkout's source files": [
     'tests/acceptance/1901/', 'tests/acceptance/2497/', 'tests/acceptance/2173-redraft-2047/',
   ],
+  "shared: the checkout's built packages": ['tests/acceptance/2696/'],
   'shared: the sandbox log stream': [
     'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/',
     'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/37/',
@@ -200,7 +226,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/154/', 'tests/acceptance/154-oracle/', 'tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/', 'tests/acceptance/155/',
     'tests/acceptance/155-oracle/', 'tests/acceptance/162/', 'tests/acceptance/184/', 'tests/acceptance/184-redraft-ac7-2/', 'tests/acceptance/555/', 'tests/acceptance/1048/',
     'tests/acceptance/556/', 'tests/acceptance/2650/retries.test.ts', 'tests/acceptance/2650/jobs.test.ts', 'tests/acceptance/2650/replay.test.ts',
-    'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/',
+    'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/', 'tests/acceptance/3035/',
   ],
   'shared: memory': ['tests/acceptance/2645/'],
   'shared: the cores': ['tests/acceptance/2227/'],
@@ -580,6 +606,10 @@ function cargoTarget(line, targets) {
 
 /** The results in cargo test's output, each test by the target that reruns it, and a target that failed in no test. */
 export function cargoResults(output, status, workspace) {
+  // #3333: a run the throttle gave no build grant never started cargo. The throttle's first line and its exit 3 say so,
+  // as its marker in a vitest report does, so the run reads as that missing grant, never as a failed test.
+  const refused = status === 3 ? output.split('\n')[0].match(/^INCONCLUSIVE no grant: (.+)$/)?.[1] : undefined;
+  if (refused) return { failures: [], passed: [], noGrant: refused };
   const targets = rerunTargets(workspace);
   const failures = [], passed = [], skips = [], failed = new Set();
   // #3100: a failed test reads as the state its own failure message names, so one that panics with INCONCLUSIVE: or
@@ -587,6 +617,9 @@ export function cargoResults(output, status, workspace) {
   // the test's own thread there (lines the test printed can look like one, so the last). A custom harness that runs its
   // cases on the main thread prints a case's panic just before its result line, or its message first in a
   // `---- <test> ----` block after it.
+  // #3172: a custom harness that runs nothing says why in its last line, of its own name, as
+  // `card_size: INCONCLUSIVE; <reason>`.
+  const said = new Map(), reported = new Set();
   let target = null, block = null, next = null, uncaught = null;
   for (const line of output.split('\n')) {
     const test = line.match(/^test (.+?) \.\.\. (ok|FAILED|BLOCKED|INVALID|INCONCLUSIVE)$/);
@@ -603,6 +636,12 @@ export function cargoResults(output, status, workspace) {
     if (thread && (block ? block.captured && thread === block.test : thread === 'main')) next = 'panic';
     const started = cargoTarget(line, targets);
     if (started !== undefined) target = started;
+    if (/^test /.test(line)) reported.add(target);
+    // cargo names each failed target by the arguments that rerun it.
+    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
+    const own = line.match(/^(\w+): (INCONCLUSIVE|BLOCKED); (.+)$/);
+    if (own && target?.split(' ').at(-1) === own[1]) said.set(target, { state: own[2], message: own[3] });
+    else if (line.trim() && !rerun) said.delete(target);
     if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
     if (test && test[2] !== 'ok') failures.push({ id: `cargo ${target} › ${test[1]}`, ...test[2] === 'FAILED' ? { state: stateOf(uncaught ?? ''), message: uncaught ?? '' } : { state: test[2], message: '' } }), failed.add(target);
     if (test || started !== undefined) uncaught = null;
@@ -611,9 +650,7 @@ export function cargoResults(output, status, workspace) {
     // Custom harnesses report unrun cases too; a listed target must not turn those into passes.
     const unproven = line.match(/^test result: (BLOCKED|INVALID|INCONCLUSIVE)\b/)?.[1];
     if (unproven) failures.push({ id: `cargo ${target}`, state: unproven, message: line.slice(13) }), failed.add(target);
-    // cargo names each failed target by the arguments that rerun it.
-    const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
-    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, state: 'FAIL', message: 'the target failed outside any test it reported' }), failed.add(rerun);
+    if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, ...((!reported.has(rerun) && said.get(rerun)) || { state: 'FAIL', message: 'the target failed outside any test it reported' }) }), failed.add(rerun);
   }
   if (status !== 0 && !failed.size) failures.push({ id: 'cargo test', state: 'FAIL', message: output.split('\n').find((line) => /^error/.test(line)) ?? `exited ${status}` });
   return { failures, passed, ...(skips.length && { skips }) };
@@ -831,16 +868,44 @@ export function exactTree(cwd) {
 }
 
 /**
- * A tree's lane records merged as remote lanes merge (parallel-proof §8): the worst state among them stands, so a lane's
- * FAIL wins over another's pass, and `lanes` names each lane whose own state is that state.
+ * A tree's lane records merged as remote lanes merge (parallel-proof §8): each lane's records, a Mac's and any other
+ * machine's, merge per test ID. A row that ran stands over a skipped row of the same ID, and among the rows that ran the
+ * worst state stands, so a Spark FAIL wins over a Mac pass. A record's `findings`, and a state its rows and findings
+ * don't explain, count as they are. A lane with no Mac record is never PASS, and another machine's lint record is a reading, left out. The
+ * tree's state is the worst of its lanes' (`states`), and `lanes` names each lane holding it.
  */
 export function mergeRecords(tree) {
   const folder = join(homedir(), '.deepbuild', 'lanes');
   const records = (existsSync(folder) ? readdirSync(folder) : [])
     .filter((name) => name.startsWith(`${tree}-`) && name.endsWith('.json'))
     .map((name) => JSON.parse(readFileSync(join(folder, name), 'utf8')));
-  const state = worst(records.map((r) => r.state)) ?? 'PASS';
-  return { tree, state, lanes: records.filter((r) => r.state === state).map((r) => r.lane) };
+  // A state the lanes don't write is no pass.
+  const read = (state) => (['PASS', 'LISTED', 'FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE'].includes(state) ? state : 'INVALID');
+  const states = {};
+  for (const lane of new Set(records.map((r) => r.lane))) {
+    const mac = records.filter((r) => r.lane === lane && String(r.platform).startsWith('darwin'));
+    const group = lane === 'lint' ? mac : records.filter((r) => r.lane === lane);
+    // A lane only Macs ran reads as it did before any merge: its records' own states.
+    if (mac.length && group.length === mac.length) {
+      states[lane] = worst(mac.map((r) => read(r.state))) ?? 'PASS';
+      continue;
+    }
+    // Each record's rows by ID first: within one record a skipped row and a row that ran stay what that lane read.
+    const rows = new Map(), own = [];
+    for (const r of group) {
+      const tests = (r.tests ?? []).map((row) => ({ ...row, state: read(row.state) })), findings = (r.findings ?? []).map((found) => read(found.state));
+      for (const id of new Set(tests.map((row) => row.id))) {
+        const same = tests.filter((row) => row.id === id);
+        rows.set(id, [...(rows.get(id) ?? []), { state: worst(same.map((row) => row.state)), skipped: same.every((row) => row.skipped) }]);
+      }
+      // What a lane found outside any test, and a state neither that nor its rows explain, count whatever the rows merge to.
+      own.push(...findings, ...(read(r.state) === (worst([...tests.map((row) => row.state), ...findings]) ?? 'PASS') ? [] : [read(r.state)]));
+    }
+    const merged = [...rows.values()].map((same) => worst((same.some((row) => !row.skipped) ? same.filter((row) => !row.skipped) : same).map((row) => row.state)));
+    states[lane] = worst([...merged, ...own, ...(mac.length ? [] : ['INCONCLUSIVE'])]) ?? 'PASS';
+  }
+  const state = worst(Object.values(states)) ?? 'PASS';
+  return { tree, state, lanes: Object.keys(states).filter((lane) => states[lane] === state), states };
 }
 
 /** A lane's evidence record, which T7 and T8 read: its state, where it ran, on what tree, and each test's state. */
@@ -889,7 +954,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
       const started = performance.now();
       console.log(`RUN ${lane.name}`);
       let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
-      const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [];
+      const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
       // The tests the lane's whole cargo test commands list, or null once a listing failed; whether any cargo test ran.
       let listedCargo, cargoRan = false;
       for (const [command, ...args] of lane.commands.map(runOf)) {
@@ -944,10 +1009,14 @@ export function runLanes(lanes, { cwd = root } = {}) {
           // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
           // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
           const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
-          found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error };
+          found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error, lone: !failed };
         }
+        // What no test's row carries, as a missing grant or a runner that died, is the lane's own finding: the record
+        // names it, so a merge with another machine's rows (parallel-proof §8) can't lose it.
+        if (found && (found.lone || (results?.noGrant && found.error === results.noGrant) || !run.tests.some(({ state }) => state === found.state))) findings.push({ state: found.state, note: found.error });
         if (stands(found, failure)) failure = found;
-        if (command === 'cargo' && args[0] === 'test') {
+        // A run the throttle refused ran nothing to list, and listing it would ask the throttle again (#3333).
+        if (command === 'cargo' && args[0] === 'test' && !results?.noGrant) {
           cargoRan = true;
           const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment) : undefined;
           if (listing) {
@@ -985,7 +1054,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
       else console.log(`PASS ${lane.name} (${elapsed} s)`);
       try {
-        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, more);
+        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, findings.length ? { ...more, findings } : more);
       } catch (error) {
         // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
         if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);
