@@ -1,0 +1,139 @@
+#2750's acceptance suite, run at the base 5fcfb690ba6592ad567c303ecf67054dbcbdfc3c. The checkout, <checkout> below, is
+this job's own git worktree under ~, detached at that commit: no implementation, only tests/acceptance/2750/ untracked.
+
+Built first (the job's build log):
+  npm run build --workspaces           exit 0, done 2026-11-23 08:44:23 UTC
+  cargo build --locked -p deep-hook    exit 0, done 2026-11-24 03:02:51 UTC
+
+Run: each of the six test files once, one command per file, through the machine's test slot:
+  node scripts/throttle.mjs test --wait 900 -- node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/2750 --no-file-parallelism <file>
+Each log (p2-<name>.log, kept outside the repo) holds Vitest's output (v5.0.5, root tests/acceptance/2750) and the
+exit code. It holds no command line, and no line from the throttle: no BLOCKED and no "INCONCLUSIVE no grant".
+
+When: 2026-11-24, 03:37 to 04:06 UTC, starting about 35 minutes after the cargo build ended. Vitest prints a clock
+with no date or zone ("Start at"); each log file's last write, in the machine's zone (UTC-5), is that clock plus the
+run's duration, which gives both.
+
+  file              Start at   duration   log last written (UTC)   result
+  landed.test.ts    22:37:26    3.89 s    2026-11-24 03:37:30      1 test, 1 failed, exit 1
+  revert.test.ts    22:52:43    4.00 s    2026-11-24 03:52:47      1 test, 1 failed, exit 1
+  missing.test.ts   22:54:16    3.65 s    2026-11-24 03:54:20      1 test, 1 failed, exit 1
+  rebuild.test.ts   22:54:34    2.99 s    2026-11-24 03:54:37      1 test, 1 failed, exit 1
+  quiet.test.ts     22:56:57    2.96 s    2026-11-24 03:57:00      1 test, 1 failed, exit 1
+  budgets.test.ts   23:05:57   12.56 s    2026-11-24 04:06:09      1 test, 1 failed, exit 1
+
+Machine: the logs name no machine, no Node version and no load. The job's brief names the Mac: a 16-inch MacBook Pro,
+Mac17,10, one of the design's reference Macs, on mains power, shared with about twenty other agent sessions.
+
+Result: 6 files, 6 tests: 6 failed, none passed, none skipped. No test reached a timeout, and none read BLOCKED or
+INCONCLUSIVE.
+
+Every test fails at an assertion in its own file, because the reading is missing. The one finding in each is
+  numbers.read lists no landed.none reading for acme/shop
+None fails at load: each file collected its one test. None fails in a helper: each failure is an AssertionError whose
+one stack frame is the test file's own expect(...).toEqual([]), with no frame in helpers.ts, judges.ts, fixture.ts or
+forge.ts. The line and column each log gives are that expect's in the file as delivered (checked for all six), and
+the suite's files were all last written before the first run. Each assertion ends
+  : expected [ Array(1) ] to deeply equal []
+with the finding above as the array's one entry.
+
+What ran cleanly before the failing assertion, in every test: the fixture was built and the record seeded with the hub
+stopped; the hub started on that record (helpers.ts:164); `deep numbers refresh --json` exited 0 and named acme/shop
+among the repos it read (:290, :291); the hub's socket gave its hello and took the control token (:201, :204);
+numbers.read answered with rows (:223, :224, :236). The lines named are the helpers' own guards, each a throw that
+starts BLOCKED: none was thrown, and no other error was.
+
+Failures, each at its assertion:
+
+AC1 #2750.8eb13c6b  landed.test.ts:37:202
+  Title: AC1 #2750.8eb13c6b the fixture's ten commits the default branch gained, each with how it was judged >
+    AC1 #2750.8eb13c6b the reading is 6 PASS, 1 FAIL and 3 none: gate off; no session, naming the pusher; and tree
+    not judged, naming the head's PASS and its commit
+  AssertionError: after `deep numbers refresh`, numbers.read must list the reading of acme/shop's ten commits,
+    6 PASS, 1 FAIL and 3 none, each none with its cause:
+    numbers.read lists no landed.none reading for acme/shop
+  Before it, the fixture's own two assertions held (lines 27 and 28): ten commits, 6 PASS, 1 FAIL and 3 none, and
+  the three with none, each with its cause.
+
+AC2 #2750.230902ce  revert.test.ts:30:167
+  Title: AC2 #2750.230902ce a revert of a commit that read none is counted apart, as never judged >
+    AC2 #2750.230902ce the revert of the commit pushed while the gate was off counts as one revert of a commit never
+    judged, and the escapes after PASS stay at zero
+  AssertionError: the revert efdd7eea783c24eaac4c3d2aedf336d707f0549a of e0a71e60be12d4cdb2293e8ce66906f3305dd350
+    must count as one revert of a commit never judged, with no escape after PASS:
+    numbers.read lists no landed.none reading for acme/shop
+  The two SHAs are that run's fixture commits. Before it, the fixture's own two assertions held (lines 23 and 24):
+  the fixture holds the revert and the commit it reverts, which reads none, gate off.
+
+AC3 #2750.8f4da496  missing.test.ts:29:228
+  Title: AC3 #2750.8f4da496 a span the push readings don't cover reads missing, with its dates, never zero >
+    AC3 #2750.8f4da496 with the forge refusing the push readings for three of the thirty days, the reading says
+    missing for those dates and gives no share for them
+  AssertionError: the reading must say missing for 2026-11-18 to 2026-11-20, give no number for those dates, and
+    still read the ten commits the forge answers for:
+    numbers.read lists no landed.none reading for acme/shop
+  Before it, the fixture's own two assertions held (lines 22 and 23): three refused dates; ten commits the forge
+  lets be read and six it refuses to name.
+
+AC4 #2750.6b561f56  rebuild.test.ts:26:153
+  Title: AC4 #2750.6b561f56 the reading is rebuilt from the event log >
+    AC4 #2750.6b561f56 rebuilding the reading from the event log twice gives byte-identical rows, and they are the
+    fixture's ten commits
+  AssertionError: before any rebuild, the reading must be there and be the fixture's, or two rebuilds that agree
+    prove nothing:
+    numbers.read lists no landed.none reading for acme/shop
+  This is the test's first assertion. Lines 28 to 36 did not run: the hub's stop, the forge closed and the
+  repositories removed, the two rebuilds from the event log, and the comparison of their bytes.
+
+AC5 #2750.099939a8  quiet.test.ts:26:153
+  Title: AC5 #2750.099939a8 it is a reading: it posts nothing to GitHub, raises no ask and sends no notification >
+    AC5 #2750.099939a8 making and listing the reading posts no status, raises no ask and sends no notification, read
+    from the forge's recorded calls and the record
+  AssertionError: the reading must have been made in this run, three of its commits unjudged, or posting nothing
+    shows nothing:
+    numbers.read lists no landed.none reading for acme/shop
+  This is the test's first assertion; before it, events.read answered on the hub's socket (line 24). Lines 28 to 36
+  did not run: the second listing, the quiet 5 s, the judging of the forge's calls and the record's events, and the
+  test's own POST of a status. So the base was not shown posting nothing: no reading was made there to show it on.
+
+AC6 #2750.e41e681f  budgets.test.ts:45:206
+  Title: AC6 #2750.e41e681f budgets, on the reference Mac in the local preflight, compared with the merge base >
+    AC6 #2750.e41e681f 30 days with 2,000 landed commits recompute in under 2 s: a rebuild from the event log up to
+    the first numbers.read, less the same without the month, five runs on the reference Mac
+  AssertionError: before anything is timed, the reading must list the month's 2,000 commits as the fixture says
+    (1 failures, the first here):
+    numbers.read lists no landed.none reading for acme/shop
+
+What budgets.test.ts read at the base: nothing of the machine, and no time. It built the month (the fixture's own
+tally held, line 40: 1,800 PASS, 100 FAIL and 100 none), copied the seeded log's files (line 41), started the hub,
+ran the refresh, read numbers.read and failed at line 45 on the missing reading, 12.09 s into the test. Lines 46 to
+70 did not run: the machine was not asked whether a timing could count there (machineProblem), no rebuild was made
+or timed, and no INCONCLUSIVE was reached. The base has no such reading, so it has nothing to time.
+
+The probe. A throwaway file, probe.test.ts, was run once the same way after the six (Start at 23:06:54, 45 s after
+budgets.test.ts ended; 2 tests, 2 failed, exit 1) and has been removed. It was to run the steps the failing
+assertions never reach. It confirmed:
+  - Both of its tests built their fixture and seeded the record. The month's is 6,080 events: "PROBE month built and
+    seeded (6080 events) in 10311 ms". The month's seeded log's files were copied.
+  - Without deep-hook the suite reads BLOCKED, never a pass. Both tests stopped at the hub's start, in the helper and
+    at no assertion (helpers.ts:164, from probe.test.ts:13 and :47): "BLOCKED: the hub didn't start: deep hub: the
+    core stopped: Error: no deep-hook is built under <checkout>/target; run cargo build -p deep-hook first". By then
+    deep-hook was no longer where the six runs' hubs had found it 45 s before; <checkout>/target is absent now.
+It could not confirm anything of the base hub, which it never started. Of what it set out to print, nothing at the
+base shows: whether the base hub writes ask.created or notice.* of its own after its start; which kinds it writes at
+all; what `deep numbers refresh --json` prints beyond the repos it read; how many rows numbers.read lists, and their
+ids; the calls the forge received; that the forge takes the test's own status (201); the hub's stop and the log's
+files after it; a rebuild from the event log alone, twice, and how long it takes; the machine's own verdict and the
+five-run judge. Of the base hub, only what the six runs show stands: its start on the seeded record, the refresh, and
+the socket's hello, numbers.read and events.read, as said above.
+
+An earlier run, not the base's result: landed.test.ts was run once on 2026-11-22, about 19:07 UTC, before anything
+was built. It failed at load (0 tests): "ENOENT: no such file or directory, open
+'<checkout>/packages/evidence/dist/patterns.json'". README's How to run names the build that file comes from.
+
+Passing at the base: none.
+
+Not run: nothing was rerun to write this file (with <checkout>/target gone a run would read BLOCKED). The five twins
+were not run at the base (twins/README.md). No type check is among these logs. No implementation exists, so no
+test's passing path, and no line after a failing assertion above, has run on a hub.
