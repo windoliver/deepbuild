@@ -1,0 +1,463 @@
+# #3221's suite on the merge base, each test file run once with `node --test --test-reporter=spec <file>`, one after
+# another, on the Mac (18 cores) while other sessions held the 1-minute load at 124 to 178. The worktree stood at
+# 6bed8c627, one merge past the named base f8c6cff82: that merge adds tests/acceptance/1841-redraft-ac1/ and three lines
+# of scripts/lanes-lists.mjs for it, and changes nothing this suite reads (scripts/throttle.mjs, docs/parallel-proof.md).
+# Home folders read ~ (a test's own HOME too), temp folders <tmp>.
+#
+# 8 fail and 1 passes, each failure at an assertion and for the expected reason (README: On the base):
+#   turns.test.mjs     #3221.2a179649  8 jobs ran at once on the pool of 4: the base has no pool. The timeline shows
+#                                      the base claim: the second run's first job started after the first run ended.
+#   compiles.test.mjs  #3221.cbe8556f  16 planted compilers at once (8 for each of two runs): each cargo runs its own count.
+#   no-grant.test.mjs  #3221.9bee972a  the first fails: the job started at once, with no turn to wait for. The second,
+#                                      a run not admitted within its wait, passes: it reads as today.
+#   killed.test.mjs    #3221.300249e2  the other run's jobs started at once, so no token waits to be given back.
+#   drain.test.mjs     #3221.c7e55b61  all 4 jobs started at once on a pool of 2, so none waits for a turn.
+#   design.test.mjs    #3221.14b7a581  sections 6, 7a and 13 don't state the pool, its turns or the trust they give up.
+
+# base 6bed8c627, darwin, 18 cores, node v24.22.2
+
+## node --test tests/acceptance/3221/turns.test.mjs (1-minute load 124 at its start, exit 1)
+
+✖ #3221.2a179649 on a pool of 4 tokens, a run of 4 jobs that asks 30 s after a run of 40 ends within 60 s of asking, and no more than 4 jobs ever run at once (62884.076375ms)
+ℹ the first run asked at +0 s and ended at +52.4 s; its 40 jobs started from +0.7 s
+the second run asked at +30.0 s, its first job started at +52.7 s, and it ended at +62.8 s, 32.8 s after asking
+the second run's first job started after the first run ended
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 62946.885125
+
+✖ failing tests:
+
+test at tests/acceptance/3221/turns.test.mjs:15:1
+✖ #3221.2a179649 on a pool of 4 tokens, a run of 4 jobs that asks 30 s after a run of 40 ends within 60 s of asking, and no more than 4 jobs ever run at once (62884.076375ms)
+  AssertionError [ERR_ASSERTION]: 8 jobs ran at once at +0.7 s, more than the pool's 4 tokens
+  the first run asked at +0 s and ended at +52.4 s; its 40 jobs started from +0.7 s
+  the second run asked at +30.0 s, its first job started at +52.7 s, and it ended at +62.8 s, 32.8 s after asking
+  the second run's first job started after the first run ended
+  notes:
+  …":54175}
+  {"run":"first","job":18,"at":1795427632175,"pid":50089,"event":"end"}
+  {"run":"first","at":1795427632184,"event":"job-asked","job":26,"pid":54270}
+  {"run":"first","job":20,"at":1795427632184,"pid":50096,"event":"end"}
+  {"run":"first","job":19,"at":1795427632185,"pid":50091,"event":"end"}
+  {"run":"first","job":23,"at":1795427632185,"pid":50097,"event":"end"}
+  {"run":"first","job":21,"at":1795427632197,"pid":50098,"event":"end"}
+  {"run":"first","at":1795427632200,"event":"job-asked","job":27,"pid":54287}
+  {"run":"first","at":1795427632202,"event":"job-asked","job":28,"pid":54288}
+  {"run":"first","at":1795427632206,"event":"job-asked","job":29,"pid":54292}
+  {"run":"first","job":22,"at":1795427632209,"pid":50110,"event":"end"}
+  {"run":"first","at":1795427632211,"event":"job-asked","job":30,"pid":54296}
+  {"run":"first","at":1795427632225,"event":"job-asked","job":31,"pid":54298}
+  {"run":"first","job":24,"at":1795427632302,"pid":54361,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":25,"at":1795427632312,"pid":54372,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":26,"at":1795427632491,"pid":54537,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":29,"at":1795427632550,"pid":54559,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":30,"at":1795427632564,"pid":54566,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":28,"at":1795427632571,"pid":54568,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":31,"at":1795427632571,"pid":54569,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":27,"at":1795427632580,"pid":54573,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":24,"at":1795427642304,"pid":54361,"event":"end"}
+  {"run":"first","at":1795427642311,"event":"job-asked","job":32,"pid":57965}
+  {"run":"first","job":25,"at":1795427642314,"pid":54372,"event":"end"}
+  {"run":"first","at":1795427642319,"event":"job-asked","job":33,"pid":57974}
+  {"run":"first","job":32,"at":1795427642487,"pid":58058,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":33,"at":1795427642492,"pid":58060,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":26,"at":1795427642493,"pid":54537,"event":"end"}
+  {"run":"first","at":1795427642500,"event":"job-asked","job":34,"pid":58066}
+  {"run":"first","job":29,"at":1795427642552,"pid":54559,"event":"end"}
+  {"run":"first","at":1795427642560,"event":"job-asked","job":35,"pid":58106}
+  {"run":"first","job":30,"at":1795427642567,"pid":54566,"event":"end"}
+  {"run":"first","job":28,"at":1795427642573,"pid":54568,"event":"end"}
+  {"run":"first","job":31,"at":1795427642573,"pid":54569,"event":"end"}
+  {"run":"first","at":1795427642575,"event":"job-asked","job":36,"pid":58117}
+  {"run":"first","at":1795427642579,"event":"job-asked","job":37,"pid":58118}
+  {"run":"first","at":1795427642579,"event":"job-asked","job":38,"pid":58119}
+  {"run":"first","job":27,"at":1795427642583,"pid":54573,"event":"end"}
+  {"run":"first","at":1795427642588,"event":"job-asked","job":39,"pid":58125}
+  {"run":"first","job":34,"at":1795427642644,"pid":58137,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":35,"at":1795427642818,"pid":58293,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":37,"at":1795427642876,"pid":58340,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":39,"at":1795427642885,"pid":58343,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":36,"at":1795427642889,"pid":58344,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":38,"at":1795427642897,"pid":58364,"event":"start","throttle":"test:72f2ea1299017afa","makeflags":null}
+  {"run":"first","job":32,"at":1795427652489,"pid":58058,"event":"end"}
+  {"run":"first","job":33,"at":1795427652495,"pid":58060,"event":"end"}
+  {"run":"first","job":34,"at":1795427652647,"pid":58137,"event":"end"}
+  {"run":"first","job":35,"at":1795427652822,"pid":58293,"event":"end"}
+  {"run":"first","job":37,"at":1795427652879,"pid":58340,"event":"end"}
+  {"run":"first","job":39,"at":1795427652889,"pid":58343,"event":"end"}
+  {"run":"first","job":36,"at":1795427652890,"pid":58344,"event":"end"}
+  {"run":"first","job":38,"at":1795427652898,"pid":58364,"event":"end"}
+  {"run":"first","at":1795427652905,"event":"run-end","statuses":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
+  {"run":"second","at":1795427653019,"event":"run-start","pid":62114,"throttle":"test:a9a327b817ec690f"}
+  {"run":"second","at":1795427653020,"event":"job-asked","job":0,"pid":62122}
+  {"run":"second","at":1795427653021,"event":"job-asked","job":1,"pid":62123}
+  {"run":"second","at":1795427653021,"event":"job-asked","job":2,"pid":62124}
+  {"run":"second","at":1795427653022,"event":"job-asked","job":3,"pid":62126}
+  {"run":"second","job":0,"at":1795427653316,"pid":62297,"event":"start","throttle":"test:a9a327b817ec690f","makeflags":null}
+  {"run":"second","job":1,"at":1795427653365,"pid":62313,"event":"start","throttle":"test:a9a327b817ec690f","makeflags":null}
+  {"run":"second","job":3,"at":1795427653368,"pid":62320,"event":"start","throttle":"test:a9a327b817ec690f","makeflags":null}
+  {"run":"second","job":2,"at":1795427653372,"pid":62318,"event":"start","throttle":"test:a9a327b817ec690f","makeflags":null}
+  {"run":"second","job":0,"at":1795427663317,"pid":62297,"event":"end"}
+  {"run":"second","job":3,"at":1795427663370,"pid":62320,"event":"end"}
+  {"run":"second","job":1,"at":1795427663371,"pid":62313,"event":"end"}
+  {"run":"second","job":2,"at":1795427663375,"pid":62318,"event":"end"}
+  {"run":"second","at":1795427663380,"event":"run-end","statuses":[0,0,0,0]}
+  log:
+  {"at":"2026-11-23T09:53:20.731Z","event":"granted","class":"test","grant":"top-level","id":"72f2ea1299017afa","pid":42597,"index":1,"load":123.95458984375,"cores":18,"wait":30,"readings":{"memory":1099511627776,"load":50,"cores":5}}
+  {"at":"2026-11-23T09:53:21.239Z","event":"passed","class":"test","pid":42703,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:21.247Z","event":"passed","class":"test","pid":42702,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:21.249Z","event":"passed","class":"test","pid":42699,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:21.254Z","event":"passed","class":"test","pid":42704,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:21.256Z","event":"passed","class":"test","pid":42698,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:21.260Z","event":"passed","class":"test","pid":42705,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:21.263Z","event":"passed","class":"test","pid":42700,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:21.271Z","event":"passed","class":"test","pid":42701,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:31.701Z","event":"passed","class":"test","pid":46789,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:31.708Z","event":"passed","class":"test","pid":46791,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:31.727Z","event":"passed","class":"test","pid":46790,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:31.731Z","event":"passed","class":"test","pid":46799,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:31.739Z","event":"passed","class":"test","pid":46794,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:31.742Z","event":"passed","class":"test","pid":46805,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:31.745Z","event":"passed","class":"test","pid":46793,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:31.747Z","event":"passed","class":"test","pid":46792,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:42.058Z","event":"passed","class":"test","pid":49782,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:42.066Z","event":"passed","class":"test","pid":49783,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:42.136Z","event":"passed","class":"test","pid":49793,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:42.143Z","event":"passed","class":"test","pid":49800,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:42.145Z","event":"passed","class":"test","pid":49802,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:42.147Z","event":"passed","class":"test","pid":49819,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:42.154Z","event":"passed","class":"test","pid":49803,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:42.167Z","event":"passed","class":"test","pid":49814,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:52.263Z","event":"passed","class":"test","pid":54174,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:52.271Z","event":"passed","class":"test","pid":54175,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:52.451Z","event":"passed","class":"test","pid":54270,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:52.500Z","event":"passed","class":"test","pid":54292,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:52.512Z","event":"passed","class":"test","pid":54296,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:52.523Z","event":"passed","class":"test","pid":54288,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:52.528Z","event":"passed","class":"test","pid":54298,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:53:52.540Z","event":"passed","class":"test","pid":54287,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:54:02.452Z","event":"passed","class":"test","pid":57965,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:54:02.458Z","event":"passed","class":"test","pid":57974,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:54:02.608Z","event":"passed","class":"test","pid":58066,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:54:02.782Z","event":"passed","class":"test","pid":58106,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:54:02.836Z","event":"passed","class":"test","pid":58118,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:54:02.845Z","event":"passed","class":"test","pid":58125,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:54:02.853Z","event":"passed","class":"test","pid":58117,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:54:02.860Z","event":"passed","class":"test","pid":58119,"through":"test:72f2ea1299017afa"}
+  {"at":"2026-11-23T09:54:12.958Z","event":"released","class":"test","id":"72f2ea1299017afa","pid":42597}
+  {"at":"2026-11-23T09:54:12.969Z","event":"granted","class":"test","grant":"top-level","id":"a9a327b817ec690f","pid":53382,"index":1,"load":148.57373046875,"cores":18,"wait":30,"readings":{"memory":1099511627776,"load":50,"cores":5}}
+  {"at":"2026-11-23T09:54:13.276Z","event":"passed","class":"test","pid":62122,"through":"test:a9a327b817ec690f"}
+  {"at":"2026-11-23T09:54:13.315Z","event":"passed","class":"test","pid":62123,"through":"test:a9a327b817ec690f"}
+  {"at":"2026-11-23T09:54:13.319Z","event":"passed","class":"test","pid":62124,"through":"test:a9a327b817ec690f"}
+  {"at":"2026-11-23T09:54:13.331Z","event":"passed","class":"test","pid":62126,"through":"test:a9a327b817ec690f"}
+  {"at":"2026-11-23T09:54:23.417Z","event":"released","class":"test","id":"a9a327b817ec690f","pid":53382}
+  run first: exit 0
+  
+  run second: exit 0
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3221-ba809f/agent-a61cc747a589fbd97/tests/acceptance/3221/turns.test.mjs:43:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+## node --test tests/acceptance/3221/compiles.test.mjs (1-minute load 135 at its start, exit 1)
+
+✖ #3221.cbe8556f three runs whose jobs each start a cargo build that must compile never have more compiler processes between them than the pool's 4 tokens, sampled once a second (10944.745417ms)
+ℹ planted compiler processes, read once a second (11 readings, 0 failed): +1 s: 16 (third 8, second 8), +2 s: 16 (third 8, second 8), +3 s: 16 (third 8, second 8), +4 s: 16 (third 8, second 8), +5 s: 16 (third 8, second 8), +6 s: 1 (third 1), +7 s: 8 (first 8), +8 s: 8 (first 8), +9 s: 8 (first 8), +10 s: 8 (first 8)
+ℹ peak: +1 s: 16 (third 8, second 8)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11003.715292
+
+✖ failing tests:
+
+test at tests/acceptance/3221/compiles.test.mjs:98:1
+✖ #3221.cbe8556f three runs whose jobs each start a cargo build that must compile never have more compiler processes between them than the pool's 4 tokens, sampled once a second (10944.745417ms)
+  AssertionError [ERR_ASSERTION]: 16 compiler processes ran at once at +1 s: 16 (third 8, second 8), more than the pool's 4 tokens; 9 of 11 readings were above 4
+  planted compiler processes, read once a second (11 readings, 0 failed): +1 s: 16 (third 8, second 8), +2 s: 16 (third 8, second 8), +3 s: 16 (third 8, second 8), +4 s: 16 (third 8, second 8), +5 s: 16 (third 8, second 8), +6 s: 1 (third 1), +7 s: 8 (first 8), +8 s: 8 (first 8), +9 s: 8 (first 8), +10 s: 8 (first 8)
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3221-ba809f/agent-a61cc747a589fbd97/tests/acceptance/3221/compiles.test.mjs:136:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+## node --test tests/acceptance/3221/no-grant.test.mjs (1-minute load 162 at its start, exit 1)
+
+✖ #3221.9bee972a an admitted run whose job waits its turn longer than its --wait prints no INCONCLUSIVE no grant line, and the job runs once a token frees (8950.890792ms)
+✔ #3221.9bee972a a run that isn't admitted within its wait prints INCONCLUSIVE no grant as today, exits 3 and has started no job (6605.100584ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15630.276209
+
+✖ failing tests:
+
+test at tests/acceptance/3221/no-grant.test.mjs:10:1
+✖ #3221.9bee972a an admitted run whose job waits its turn longer than its --wait prints no INCONCLUSIVE no grant line, and the job runs once a token frees (8950.890792ms)
+  AssertionError [ERR_ASSERTION]: the second run's job started while the pool's one token was held by the first run's job: it didn't wait its turn, so the test can't show what a long wait prints
+  notes:
+  {"run":"holder-run","at":1795427674842,"event":"run-start","pid":71067,"throttle":"test:fcc7cb9d1168979b"}
+  {"run":"holder-run","at":1795427674844,"event":"job-asked","job":0,"pid":71079}
+  {"run":"holder-run","job":0,"at":1795427675017,"pid":71164,"event":"start","throttle":"test:fcc7cb9d1168979b","makeflags":null}
+  {"run":"waiter","at":1795427675409,"event":"run-start","pid":71352,"throttle":"test:802c624cf227fa06"}
+  {"run":"waiter","at":1795427675411,"event":"job-asked","job":0,"pid":71369}
+  {"run":"waiter","job":0,"at":1795427675577,"pid":71500,"event":"start","throttle":"test:802c624cf227fa06","makeflags":null}
+  {"run":"waiter","job":0,"at":1795427675577,"pid":71500,"event":"end"}
+  {"run":"waiter","at":1795427675582,"event":"run-end","statuses":[0]}
+  log:
+  {"at":"2026-11-23T09:54:34.793Z","event":"granted","class":"test","grant":"top-level","id":"fcc7cb9d1168979b","pid":70998,"index":1,"load":161.9423828125,"cores":18,"wait":30,"readings":{"memory":1099511627776,"load":0,"cores":2}}
+  {"at":"2026-11-23T09:54:34.977Z","event":"passed","class":"test","pid":71079,"through":"test:fcc7cb9d1168979b"}
+  {"at":"2026-11-23T09:54:35.370Z","event":"granted","class":"test","grant":"top-level","id":"802c624cf227fa06","pid":71202,"index":2,"load":161.9423828125,"cores":18,"wait":30,"readings":{"memory":1099511627776,"load":0,"cores":2}}
+  {"at":"2026-11-23T09:54:35.537Z","event":"passed","class":"test","pid":71369,"through":"test:802c624cf227fa06"}
+  {"at":"2026-11-23T09:54:35.586Z","event":"released","class":"test","id":"802c624cf227fa06","pid":71202}
+  run holder-run: still running
+  
+  run waiter: exit 0
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3221-ba809f/agent-a61cc747a589fbd97/tests/acceptance/3221/no-grant.test.mjs:23:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+## node --test tests/acceptance/3221/killed.test.mjs (1-minute load 178 at its start, exit 1)
+
+✖ #3221.300249e2 a run whose process is killed gives its 2 tokens back within 2 s, and the other run's 2 waiting jobs take them (5791.873583ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5853.654542
+
+✖ failing tests:
+
+test at tests/acceptance/3221/killed.test.mjs:13:1
+✖ #3221.300249e2 a run whose process is killed gives its 2 tokens back within 2 s, and the other run's 2 waiting jobs take them (5791.873583ms)
+  AssertionError [ERR_ASSERTION]: the other run's jobs started while the doomed run's jobs held the pool's 2 tokens, so no token waits to be given back
+  notes:
+  {"run":"doomed","at":1795427690507,"event":"run-start","pid":77174,"throttle":"test:e539a083fdf5f3e2"}
+  {"run":"doomed","at":1795427690509,"event":"job-asked","job":0,"pid":77186}
+  {"run":"doomed","at":1795427690510,"event":"job-asked","job":1,"pid":77188}
+  {"run":"doomed","job":1,"at":1795427690732,"pid":77282,"event":"start","throttle":"test:e539a083fdf5f3e2","makeflags":null}
+  {"run":"doomed","job":0,"at":1795427690732,"pid":77284,"event":"start","throttle":"test:e539a083fdf5f3e2","makeflags":null}
+  {"run":"other","at":1795427690917,"event":"run-start","pid":77379,"throttle":"test:d24638ed7f2cb210"}
+  {"run":"other","at":1795427690919,"event":"job-asked","job":0,"pid":77387}
+  {"run":"other","at":1795427690920,"event":"job-asked","job":1,"pid":77388}
+  {"run":"other","job":1,"at":1795427691135,"pid":77517,"event":"start","throttle":"test:d24638ed7f2cb210","makeflags":null}
+  {"run":"other","job":1,"at":1795427691135,"pid":77517,"event":"end"}
+  {"run":"other","job":0,"at":1795427691136,"pid":77511,"event":"start","throttle":"test:d24638ed7f2cb210","makeflags":null}
+  {"run":"other","job":0,"at":1795427691137,"pid":77511,"event":"end"}
+  {"run":"other","at":1795427691141,"event":"run-end","statuses":[0,0]}
+  log:
+  {"at":"2026-11-23T09:54:50.464Z","event":"granted","class":"test","grant":"top-level","id":"e539a083fdf5f3e2","pid":77085,"index":1,"load":177.521484375,"cores":18,"wait":30,"readings":{"memory":1099511627776,"load":0,"cores":3}}
+  {"at":"2026-11-23T09:54:50.683Z","event":"passed","class":"test","pid":77188,"through":"test:e539a083fdf5f3e2"}
+  {"at":"2026-11-23T09:54:50.691Z","event":"passed","class":"test","pid":77186,"through":"test:e539a083fdf5f3e2"}
+  {"at":"2026-11-23T09:54:50.873Z","event":"granted","class":"test","grant":"top-level","id":"d24638ed7f2cb210","pid":77314,"index":2,"load":177.521484375,"cores":18,"wait":30,"readings":{"memory":1099511627776,"load":0,"cores":3}}
+  {"at":"2026-11-23T09:54:51.083Z","event":"passed","class":"test","pid":77387,"through":"test:d24638ed7f2cb210"}
+  {"at":"2026-11-23T09:54:51.090Z","event":"passed","class":"test","pid":77388,"through":"test:d24638ed7f2cb210"}
+  {"at":"2026-11-23T09:54:51.144Z","event":"released","class":"test","id":"d24638ed7f2cb210","pid":77314}
+  run doomed: still running
+  
+  run other: exit 0
+  
+  
+  2 !== 0
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3221-ba809f/agent-a61cc747a589fbd97/tests/acceptance/3221/killed.test.mjs:24:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+## node --test tests/acceptance/3221/drain.test.mjs (1-minute load 174 at its start, exit 1)
+
+✖ #3221.c7e55b61 a timed request waits for both jobs in flight on a pool of 2, and neither of the run's 2 waiting jobs starts while it waits (5483.037625ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5546.392583
+
+✖ failing tests:
+
+test at tests/acceptance/3221/drain.test.mjs:12:1
+✖ #3221.c7e55b61 a timed request waits for both jobs in flight on a pool of 2, and neither of the run's 2 waiting jobs starts while it waits (5483.037625ms)
+  AssertionError [ERR_ASSERTION]: 4 of the run's 4 jobs started at once on a pool of 2 tokens, so none waits for a turn
+  notes:
+  {"run":"busy","at":1795427696386,"event":"run-start","pid":78821,"throttle":"test:2531faa1bd33fb04"}
+  {"run":"busy","at":1795427696388,"event":"job-asked","job":0,"pid":78828}
+  {"run":"busy","at":1795427696388,"event":"job-asked","job":1,"pid":78829}
+  {"run":"busy","at":1795427696388,"event":"job-asked","job":2,"pid":78830}
+  {"run":"busy","at":1795427696389,"event":"job-asked","job":3,"pid":78831}
+  {"run":"busy","job":0,"at":1795427696660,"pid":78974,"event":"start","throttle":"test:2531faa1bd33fb04","makeflags":null}
+  {"run":"busy","job":1,"at":1795427696672,"pid":78975,"event":"start","throttle":"test:2531faa1bd33fb04","makeflags":null}
+  {"run":"busy","job":3,"at":1795427696690,"pid":78976,"event":"start","throttle":"test:2531faa1bd33fb04","makeflags":null}
+  {"run":"busy","job":2,"at":1795427696699,"pid":78979,"event":"start","throttle":"test:2531faa1bd33fb04","makeflags":null}
+  log:
+  {"at":"2026-11-23T09:54:56.348Z","event":"granted","class":"test","grant":"top-level","id":"2531faa1bd33fb04","pid":78756,"index":1,"load":173.5556640625,"cores":18,"wait":30,"readings":{"memory":1099511627776,"load":0,"cores":3}}
+  {"at":"2026-11-23T09:54:56.620Z","event":"passed","class":"test","pid":78828,"through":"test:2531faa1bd33fb04"}
+  {"at":"2026-11-23T09:54:56.637Z","event":"passed","class":"test","pid":78829,"through":"test:2531faa1bd33fb04"}
+  {"at":"2026-11-23T09:54:56.648Z","event":"passed","class":"test","pid":78831,"through":"test:2531faa1bd33fb04"}
+  {"at":"2026-11-23T09:54:56.660Z","event":"passed","class":"test","pid":78830,"through":"test:2531faa1bd33fb04"}
+  run busy: still running
+  
+  
+  4 !== 2
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3221-ba809f/agent-a61cc747a589fbd97/tests/acceptance/3221/drain.test.mjs:23:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 4,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+## node --test tests/acceptance/3221/design.test.mjs (1-minute load 169 at its start, exit 1)
+
+✖ #3221.14b7a581 docs/parallel-proof.md section 6 states the pool and its turns, and the trust they give up (1.740625ms)
+✖ #3221.14b7a581 docs/parallel-proof.md section 7a states the pool and its turns, and the trust they give up (0.680708ms)
+✖ #3221.14b7a581 docs/parallel-proof.md section 13 states the pool and its turns, and the trust they give up (0.285875ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 60.389917
+
+✖ failing tests:
+
+test at tests/acceptance/3221/design.test.mjs:35:3
+✖ #3221.14b7a581 docs/parallel-proof.md section 6 states the pool and its turns, and the trust they give up (1.740625ms)
+  AssertionError [ERR_ASSERTION]: section 6 doesn't state: this issue, #3221, a pool, job tokens, the pool's size, a core less one, the trust given up, none in what a test proves
+  + actual - expected
+  
+  + [
+  +   'this issue, #3221',
+  +   'a pool',
+  +   'job tokens',
+  +   "the pool's size, a core less one",
+  +   'the trust given up',
+  +   'none in what a test proves'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3221-ba809f/agent-a61cc747a589fbd97/tests/acceptance/3221/design.test.mjs:38:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'this issue, #3221', 'a pool', 'job tokens', "the pool's size, a core less one", 'the trust given up', 'none in what a test proves' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3221/design.test.mjs:35:3
+✖ #3221.14b7a581 docs/parallel-proof.md section 7a states the pool and its turns, and the trust they give up (0.680708ms)
+  AssertionError [ERR_ASSERTION]: section 7a doesn't state: this issue, #3221, turns, none in what a test proves
+  + actual - expected
+  
+  + [
+  +   'this issue, #3221',
+  +   'turns',
+  +   'none in what a test proves'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3221-ba809f/agent-a61cc747a589fbd97/tests/acceptance/3221/design.test.mjs:38:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'this issue, #3221', 'turns', 'none in what a test proves' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3221/design.test.mjs:35:3
+✖ #3221.14b7a581 docs/parallel-proof.md section 13 states the pool and its turns, and the trust they give up (0.285875ms)
+  AssertionError [ERR_ASSERTION]: section 13 doesn't state: this issue, #3221, a pool, job tokens, turns, the pool's size, a core less one, the trust given up, none in what a test proves
+  + actual - expected
+  
+  + [
+  +   'this issue, #3221',
+  +   'a pool',
+  +   'job tokens',
+  +   'turns',
+  +   "the pool's size, a core less one",
+  +   'the trust given up',
+  +   'none in what a test proves'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3221-ba809f/agent-a61cc747a589fbd97/tests/acceptance/3221/design.test.mjs:38:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'this issue, #3221', 'a pool', 'job tokens', 'turns', "the pool's size, a core less one", 'the trust given up', 'none in what a test proves' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

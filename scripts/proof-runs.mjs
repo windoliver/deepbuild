@@ -3,11 +3,12 @@
 // Results come from the runner's report, never from its output. The copies are a bay pair's (#1118)
 // when the proof gets one, else temporary.
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { claimPair, isBay } from './bays.mjs';
+import { listed } from './lanes.mjs';
 import { buildBinaries, placeHubBinaries, selectBinaries } from './proof-binaries.mjs';
 import { acquire, release } from './throttle.mjs';
 import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
@@ -15,6 +16,7 @@ import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CON
 const REPORTER = pathToFileURL(fileURLToPath(new URL('./proof-reporter.mjs', import.meta.url))).href;
 const VITEST_REPORTER = fileURLToPath(new URL('./proof-vitest-reporter.mjs', import.meta.url));
 const BEFORE_FIX = 'Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.';
+const STALE_FIX = "Write the twin's lines.json again against the file as the change holds it, by a blind redraft of its suite's twin.";
 const MUTATION_FIX = 'Assert what the criterion names so a mutant of the added lines fails its tests, or name a planted wrong program in tests/acceptance/<issue>/twins.json; install the tool a BLOCKED line names.';
 
 // Every temporary folder of a run lies in one folder of its own. A run stopped by a signal can't
@@ -501,19 +503,21 @@ function runTests(directory, files, { env = {}, timed = [] } = {}) {
 }
 
 /**
- * The files of `files` in the timed list the checkout's lanes.mjs exports (`timed`: files, or folders ending in /),
- * which run only under a timed grant. A checkout with no lanes.mjs has no list; when one can't be read, every file
- * is timed, so none runs ungranted.
+ * The timed and by-hand lists the checkout's lanes.mjs exports (`timed`, `byHand`: files, or folders ending in /).
+ * A timed file runs only under a timed grant; a by-hand file never runs here. A checkout with no lanes.mjs has no
+ * lists; when they can't be read this returns null: every file is then timed, so none runs ungranted, and none is
+ * by hand, so none goes unrun.
  */
-function timedSet(root, files) {
-  if (!existsSync(join(root, 'scripts/lanes.mjs'))) return [];
-  const code = `const { timed = [] } = await import(${JSON.stringify(pathToFileURL(join(root, 'scripts/lanes.mjs')).href)}); console.log(JSON.stringify(timed));`;
+function laneLists(root) {
+  if (!existsSync(join(root, 'scripts/lanes.mjs'))) return { timed: [], byHand: [] };
+  const code = `const { timed = [], byHand = [] } = await import(${JSON.stringify(pathToFileURL(join(root, 'scripts/lanes.mjs')).href)}); console.log(JSON.stringify({ timed, byHand }));`;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: root, env: childEnv(), encoding: 'utf8' });
   try {
-    const list = JSON.parse(result.stdout.trim().split('\n').at(-1));
-    return files.filter((file) => list.some((entry) => (entry.endsWith('/') ? file.startsWith(entry) : file === entry)));
+    const lists = JSON.parse(result.stdout.trim().split('\n').at(-1));
+    const shaped = (list) => Array.isArray(list) && list.every((entry) => typeof entry === 'string');
+    return shaped(lists.timed) && shaped(lists.byHand) ? lists : null;
   } catch {
-    return files;
+    return null;
   }
 }
 
@@ -534,6 +538,75 @@ function twinsOf(root, path) {
   return shaped ? { folder, twins } : { folder, twins: {}, error: `${folder}/twins.json must map each criterion tag to a list of twin folder names` };
 }
 
+/** The first key a JSON text names twice in one object, or null; the text parses. */
+function duplicateKey(text) {
+  const objects = [];
+  let key = null;
+  for (const [token] of text.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\]:,]/g)) {
+    if (token === '{' || token === '[') objects.push(token === '{' ? new Set() : null);
+    else if (token === '}' || token === ']') objects.pop();
+    else if (token === ':' && key !== null && objects.at(-1)) {
+      if (objects.at(-1).has(key)) return key;
+      objects.at(-1).add(key);
+    }
+    key = token.startsWith('"') ? JSON.parse(token) : null;
+  }
+  return null;
+}
+
+/**
+ * What a twin lays over the change (#1832), path to source: each file of its folder whole, and for each file its
+ * lines.json names, the change's file with each edit's `find` lines, matched at exactly one place, replaced by its
+ * `wrong` lines. `paths` are the paths it names; `stale` is why its lines don't apply, when they don't: then nothing of
+ * it is laid, as laid in part it could fail a test where its wrong program never ran.
+ */
+function twinOverlay(root, folder, own, all) {
+  const file = `${folder}/lines.json`;
+  const overlay = new Map(own.filter((path) => path !== file).map((path) => [path.slice(folder.length + 1), join(root, path)]));
+  const paths = [...overlay.keys()], whole = paths.length;
+  if (!own.includes(file)) return { overlay, paths };
+  if (lstatSync(join(root, file)).isSymbolicLink()) return { overlay, paths, stale: `${file} is a link, not the twin's own file` };
+  let edits, text;
+  try {
+    text = readFileSync(join(root, file), 'utf8');
+    edits = JSON.parse(text);
+  } catch (error) {
+    return { overlay, paths, stale: `${file} is not JSON: ${firstLine(error.message)}` };
+  }
+  // JSON.parse keeps the last of two equal keys, which would lay a twin in part.
+  const twice = duplicateKey(text);
+  if (twice !== null) return { overlay, paths, stale: `${file} names the key ${twice} twice in one object` };
+  const lines = (list, least) => Array.isArray(list) && list.length >= least && list.every((line) => typeof line === 'string' && !/[\r\n]/.test(line));
+  const shaped = edits && typeof edits === 'object' && !Array.isArray(edits) && Object.keys(edits).length && Object.entries(edits).every(([path, list]) => /^[^/]/.test(path) && !path.split('/').some((part) => ['', '.', '..'].includes(part))
+    && Array.isArray(list) && list.length && list.every((edit) => edit && typeof edit === 'object' && Object.keys(edit).sort().join() === 'find,wrong' && lines(edit.find, 1) && lines(edit.wrong, 0)));
+  if (!shaped) return { overlay, paths, stale: `${file} must map each repo path to a list of edits, each { find: [lines], wrong: [lines] }` };
+  paths.push(...Object.keys(edits));
+  const written = temporary('deep-proof-twin-');
+  for (const [path, list] of Object.entries(edits)) {
+    // Folded as a disk that ignores case folds it, so a whole file and an edit never land on one file.
+    if (paths.slice(0, whole).some((held) => held.toLowerCase() === path.toLowerCase())) return { overlay, paths, stale: `${path} is both held whole and edited by its lines.json` };
+    if (!all.includes(path) || lstatSync(join(root, path)).isSymbolicLink()) return { overlay, paths, stale: `${path}, which its lines.json edits, is no file of the change` };
+    const bytes = readFileSync(join(root, path));
+    const text = bytes.toString('utf8');
+    if (!Buffer.from(text, 'utf8').equals(bytes)) return { overlay, paths, stale: `${path}, which its lines.json edits, is not UTF-8 text` };
+    const held = text.split('\n');
+    const count = held.length - (text.endsWith('\n') ? 1 : 0);
+    const places = list.map(({ find }) => [...Array(Math.max(0, count - find.length + 1)).keys()].filter((at) => find.every((line, index) => held[at + index] === line)));
+    const missed = places.findIndex((found) => found.length !== 1);
+    if (missed >= 0) return { overlay, paths, stale: `${path}: the lines of its edit ${missed + 1} match ${places[missed].length ? `at ${places[missed].length} places (lines ${places[missed].map((at) => at + 1).join(', ')})` : 'nowhere'}` };
+    const placed = list.map(({ find, wrong }, index) => ({ at: places[index][0], find, wrong })).sort((a, b) => a.at - b.at);
+    const overlap = placed.findIndex((edit, index) => index && edit.at < placed[index - 1].at + placed[index - 1].find.length);
+    if (overlap > 0) return { overlay, paths, stale: `${path}: two of its edits overlap at line ${placed[overlap].at + 1}` };
+    for (const { at, find, wrong } of placed.reverse()) held.splice(at, find.length, ...wrong);
+    const target = join(written, path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, held.join('\n'));
+    chmodSync(target, lstatSync(join(root, path)).mode & 0o777);
+    overlay.set(path, target);
+  }
+  return { overlay, paths };
+}
+
 /**
  * Every run the before, trace and mutation lanes read: the tagged tests (those of the change's issue,
  * and with no issue those in files the change touches), on the change, on the merge base, and on the
@@ -542,11 +615,18 @@ function twinsOf(root, path) {
 export function prepareRuns({ root, change, issue }, { coverage = false } = {}) {
   const touched = new Set(change.whole.map(({ path }) => path));
   const counts = (tag, path) => (issue?.number ? tag.startsWith(`#${issue.number}.`) : touched.has(path));
-  const files = listFiles(root).filter(isTestFile).filter((path) => tagsWithImports(root, null, path).some((tag) => counts(tag, path)));
+  const tagged = listFiles(root).filter(isTestFile).filter((path) => tagsWithImports(root, null, path).some((tag) => counts(tag, path)));
+  // A person runs each file the by-hand list names, never a lane (#3310); a first draft that a blind redraft replaced
+  // is one. It runs nowhere here, so its tests prove nothing, and a criterion only it tags stays open in trace.
+  const lists = tagged.length ? laneLists(root) : null;
+  const byHand = lists ? tagged.filter((path) => listed(lists.byHand, path)) : [];
+  const files = tagged.filter((path) => !byHand.includes(path));
   const empty = () => ({ results: new Map(), fileErrors: new Map(), unrunnable: new Map() });
-  const runs = { files, tests: [], twins: new Map(), head: empty(), base: empty() };
+  // Its tags still go to trace, which fails one that names no criterion of the issue, as it does for a file that runs.
+  const byHandTags = new Map(byHand.map((path) => [path, tagsIn(show(root, null, path) ?? '').filter((tag) => counts(tag, path))]));
+  const runs = { files, byHand, byHandTags, tests: [], twins: new Map(), head: empty(), base: empty() };
   if (!files.length) return runs;
-  const timed = runs.timed = timedSet(root, files);
+  const timed = runs.timed = lists ? files.filter((file) => listed(lists.timed, file)) : files;
   runs.coverage = coverage ? temporary('deep-proof-coverage-') : null;
   // The merge base, with the change's test code: every file under the test paths (tests, helpers
   // wherever they are and however they're imported, fixtures, goldens, twins and setup files), never
@@ -633,25 +713,30 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
     // A twin is a wrong program: it replaces code under test, never a test's own files, or a test
     // that asserts nothing could fail on a twin that rewrites what it compares.
     // Nor installed packages, whose frames a failure's origin passes over.
-    const tests = own.map((path) => path.slice(folder.length + 1)).filter((path) => underTestPaths(path) || path.split('/').includes('node_modules'));
+    const { overlay, paths, stale } = twinOverlay(root, folder, own, all);
+    const tests = paths.filter((path) => underTestPaths(path) || path.split('/').includes('node_modules'));
     if (!own.length || tests.length) {
       runs.twins.set(folder, { refused: own.length ? `replaces files under the test paths or node_modules (${tests.join(', ')})` : 'has no files', ...empty() });
       continue;
     }
+    if (stale) {
+      runs.twins.set(folder, { stale, ...empty() });
+      continue;
+    }
     // In the change bay, the twin is a use of its own, laid before the build as in a temporary copy.
     let directory, failed, refused;
-    if (runs.bay) ({ directory, blocked: failed, refused } = inBay(root, 'change', `twin ${folder}`, new Map(own.map((path) => [path.slice(folder.length + 1), join(root, path)])), true));
+    if (runs.bay) ({ directory, blocked: failed, refused } = inBay(root, 'change', `twin ${folder}`, overlay, true));
     else {
       directory = copyChange(root, 'deep-proof-checkout-', runs.modules);
       try {
-        for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
+        lay(directory, overlay);
       } catch (error) {
         refused = `cannot be laid over the change: ${firstLine(error.message)}`;
       }
       if (!refused) {
         failed = prepare(root, change, directory);
         undoBuild(root, directory, [], runs.modules);
-        for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
+        lay(directory, overlay);
       }
     }
     if (refused) {
@@ -663,9 +748,13 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   return runs;
 }
 
+/** The twins of a test laid for it whose lines didn't apply (#1832); none for a test that failed on the merge base at its assertion, which needs none. */
+const staleOf = (runs, test) => (failedAtAssertion(runs.base.results.get(test.key)) ? [] : (test.twins ?? []).filter(({ key }) => runs.twins.get(key)?.stale));
+
 /** How a test failed on a wrong program without a mutant, or null. */
 function wrongProgram(runs, test) {
   if (failedAtAssertion(runs.base.results.get(test.key))) return 'failed on the merge base at its assertion';
+  if (staleOf(runs, test).length) return null;
   const twin = (test.twins ?? []).find(({ key }) => failedAtAssertion(runs.twins.get(key)?.results.get(test.key)));
   if (twin) return `failed on ${twin.twin} at its assertion`;
   // A parent test fails where its subtests do, as their failure, never at an assertion of its own. It is proven when it
@@ -679,6 +768,7 @@ function wrongProgram(runs, test) {
 /** The before lane's lines; returns the tests that failed on a wrong program. */
 export function before(runs, kills, say, print) {
   const proven = new Set();
+  for (const path of runs.byHand ?? []) print(`before: ${path}: by hand, from the byHand list in scripts/lanes.mjs, so not run here and proves nothing`);
   if (runs.timed?.length) print(`before: the timed set, from the timed list in scripts/lanes.mjs, run only under a timed grant (${runs.timed.length}): ${runs.timed.join(' ')}`);
   for (const [path, cause] of runs.head.fileErrors) say('FAIL', 'before', `${path}: fails on the change outside its tests (${cause})`, BEFORE_FIX);
   const unrunState = (cause) => cause.startsWith('INCONCLUSIVE no grant:') ? 'INCONCLUSIVE' : 'BLOCKED';
@@ -686,6 +776,10 @@ export function before(runs, kills, say, print) {
   for (const key of runs.unrun ?? []) say('FAIL', 'before', `${key}: declared and not skipped, but the runner never reported it on the change`, BEFORE_FIX);
   for (const path of runs.only ?? []) say('FAIL', 'before', `${path}: a .only in the file keeps its other tagged tests from running`, BEFORE_FIX);
   for (const test of runs.tests) {
+    // A twin whose lines no longer apply was laid nowhere: its proof is missing, whatever else the test shows, so the
+    // test is proven by nothing else in this run, a mutant or another twin included.
+    const stale = staleOf(runs, test);
+    for (const { key } of stale) say('BLOCKED', 'before', `${test.key}: its planted wrong program ${key} does not apply: ${runs.twins.get(key).stale}`, STALE_FIX);
     if (quiet(test.status)) {
       // The trace lane counts it as no test. One the source declares unskipped that ran on the merge
       // base, where the test paths are the change's, was skipped by the change's code, such as a hook
@@ -702,11 +796,13 @@ export function before(runs, kills, say, print) {
       continue;
     }
     const how = wrongProgram(runs, test) ?? (kills.get(test.key) ? `killed ${kills.get(test.key)} mutant${kills.get(test.key) === 1 ? '' : 's'}` : null);
-    if (how) {
+    if (how && !stale.length) {
       proven.add(test.key);
       say('PASS', 'before', `${test.key}: ${how}`);
       continue;
     }
+    // Proven but for its stale twins, as listed above: a twin that applied failed it at its assertion, or a mutant did.
+    if (how || (stale.length && test.twins.some(({ key }) => failedAtAssertion(runs.twins.get(key)?.results.get(test.key))))) continue;
     const base = runs.base.results.get(test.key);
     const refused = test.twins.filter(({ key }) => runs.twins.get(key)?.refused);
     const unrun = test.twins.filter(({ key }) => runs.twins.get(key)?.unrunnable.has(test.path));
@@ -716,6 +812,8 @@ export function before(runs, kills, say, print) {
     else if (runs.base.unrunnable.has(test.path)) say(unrunState(runs.base.unrunnable.get(test.path)), 'before', `${test.key}: cannot run on the merge base: ${runs.base.unrunnable.get(test.path)}`, BEFORE_FIX);
     else if (unrun.length) say(unrun.every(({ key }) => unrunState(runs.twins.get(key).unrunnable.get(test.path)) === 'INCONCLUSIVE') ? 'INCONCLUSIVE' : 'BLOCKED', 'before', `${test.key}: cannot run on its planted wrong program ${unrun.map(({ twin, key }) => `${twin}: ${runs.twins.get(key).unrunnable.get(test.path)}`).join('; ')}`, BEFORE_FIX);
     // A test that no longer fails on its planted wrong program checks nothing now, edited or not.
+    // With a stale twin, its own or a subtest's, which might have proven it, only the BLOCKED lines stand.
+    else if (stale.length || runs.tests.some((subtest) => subtest.key.startsWith(`${test.key} › `) && staleOf(runs, subtest).length)) continue;
     else if (test.twins.length) say('FAIL', 'before', `${test.key}: ${[...new Set(test.twins.map(({ tag }) => tag))].join(', ')}: fails on neither the merge base nor its planted wrong program`, BEFORE_FIX);
     // A tagged test this change leaves alone, such as one an earlier change of the issue landed with
     // its fix, isn't this change's proof to fail; it proves its criterion only through a wrong program.
@@ -723,7 +821,7 @@ export function before(runs, kills, say, print) {
     else if (base?.status === 'pass') say('FAIL', 'before', `${test.key}: passed on the merge base`, BEFORE_FIX);
     else say('FAIL', 'before', `${test.key}: failed on the base before its assertion (${base?.failure?.cause ?? runs.base.fileErrors.get(test.path) ?? (base ? `${base.status} there` : 'not collected there')})`, BEFORE_FIX);
   }
-  if (!runs.tests.length && !runs.head.fileErrors.size && !runs.unrun?.length && !runs.only?.length) say('PASS', 'before', 'no tagged test to run on the merge base');
+  if (!runs.tests.length && !runs.head.fileErrors.size && !runs.unrun?.length && !runs.only?.length) say('PASS', 'before', `no tagged test to run on the merge base${runs.byHand?.length ? ` (${runs.byHand.length} tagged file${runs.byHand.length === 1 ? '' : 's'} by hand, not run)` : ''}`);
   return proven;
 }
 

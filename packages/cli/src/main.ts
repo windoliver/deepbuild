@@ -399,8 +399,15 @@ if (help) {
   });
 } else if (args[0] === 'read' || args[0] === 'find') {
   // Read-only over the hub's root (#63), with or without the hub running.
-  const { findCommand, readCommand } = await import('@deepbuild/reading');
-  process.exitCode = await (args[0] === 'read' ? readCommand : findCommand)(args.slice(1));
+  const { findCommand, NotFound, readCommand } = await import('@deepbuild/reading');
+  // A started session's sandbox closes the evidence store (#3229), so its reads by handle go to the hub.
+  const { activePlant, handleRead } = await import('@deepbuild/hub');
+  const hub = async (root: string, params: Record<string, unknown>): Promise<unknown> => {
+    const answer = await handleRead(root, params);
+    if (answer && 'refused' in answer) throw new NotFound(String(answer.refused));
+    return answer;
+  };
+  process.exitCode = await (args[0] === 'read' ? readCommand(args.slice(1), hub, activePlant() === 'answers-variant-bytes') : findCommand(args.slice(1), hub));
 } else if (args.length === 2 && args[0] === 'update' && args[1] === '--check') {
   process.exitCode = await updateCheck();
 } else if (args.length === 2 && args[0] === 'debug' && args[1] === 'bundle') {

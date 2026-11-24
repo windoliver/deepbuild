@@ -119,6 +119,9 @@ pub struct Counts {
     /// start of writing this frame's changed slot records (or overlay cells) to the return of the
     /// queue's write of them: a proof reading of the upload's cost.
     pub upload_ms: BTreeMap<String, f64>,
+    /// #290: each item whose hidden view this frame draws, in the order they draw: one depth
+    /// pass and one blended draw each.
+    pub hidden_views: Vec<String>,
 }
 
 /// What a frame hands the passes another render module adds between scene3d's geometry and its

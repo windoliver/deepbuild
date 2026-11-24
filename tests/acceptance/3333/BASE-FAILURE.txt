@@ -1,0 +1,162 @@
+# node --test tests/acceptance/3333/*.test.mjs at base 3c564bbdd (Node 24.22.0, cargo 1.99.1, darwin-arm64; load average ~160 at the run). Home paths redacted to ~.
+
+✔ #3333.5a039cd1 a real compile error in a cargo lane the throttle granted still reads FAIL (1636.512625ms)
+✔ #3333.5a039cd1 a real compile error in cargo test run without the throttle still reads FAIL (421.596084ms)
+✖ #3333.228b62b7 a cargo lane refused a build grant reads INCONCLUSIVE, naming the build grant that never came (793.91475ms)
+✖ #3333.228b62b7 no row of a cargo lane refused a build grant reads FAIL or PASS (759.975667ms)
+✖ #3333.82f286dc cargoResults reads a run the throttle refused as the missing grant, never as a FAIL (858.512ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 2
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4601.30975
+
+✖ failing tests:
+
+test at tests/acceptance/3333/no-grant.test.mjs:23:1
+✖ #3333.228b62b7 a cargo lane refused a build grant reads INCONCLUSIVE, naming the build grant that never came (793.91475ms)
+  AssertionError [ERR_ASSERTION]: readRun reads the lane INCONCLUSIVE
+  $ throttle.mjs build --wait 0 -- cargo test --workspace --locked --no-fail-fast  (exit 3)
+  INCONCLUSIVE no grant: no build grant came within 0 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo test",
+     "state": "FAIL",
+     "message": "exited 3"
+    }
+   ],
+   "passed": []
+  }
+  --- readRun
+  {
+   "tests": [
+    {
+     "id": "cargo test",
+     "state": "FAIL",
+     "note": "exited 3"
+    }
+   ],
+   "unsure": [],
+   "covered": [],
+   "explained": false
+  }
+  + actual - expected
+  
+  + undefined
+  - 'INCONCLUSIVE'
+  
+      at TestContext.<anonymous> (file://~/deepbuild-runs-3333/blind/tests/acceptance/3333/no-grant.test.mjs:25:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'INCONCLUSIVE',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3333/no-grant.test.mjs:31:1
+✖ #3333.228b62b7 no row of a cargo lane refused a build grant reads FAIL or PASS (759.975667ms)
+  AssertionError [ERR_ASSERTION]: cargo ran no test, so no row passes or fails
+  $ throttle.mjs build --wait 0 -- cargo test --workspace --locked --no-fail-fast  (exit 3)
+  INCONCLUSIVE no grant: no build grant came within 0 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo test",
+     "state": "FAIL",
+     "message": "exited 3"
+    }
+   ],
+   "passed": []
+  }
+  --- readRun
+  {
+   "tests": [
+    {
+     "id": "cargo test",
+     "state": "FAIL",
+     "note": "exited 3"
+    }
+   ],
+   "unsure": [],
+   "covered": [],
+   "explained": false
+  }
+  + actual - expected
+  
+  + [
+  +   'cargo test: FAIL'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/deepbuild-runs-3333/blind/tests/acceptance/3333/no-grant.test.mjs:34:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'cargo test: FAIL' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3333/no-grant.test.mjs:37:1
+✖ #3333.82f286dc cargoResults reads a run the throttle refused as the missing grant, never as a FAIL (858.512ms)
+  AssertionError [ERR_ASSERTION]: no failure of the refused run reads FAIL
+  $ throttle.mjs build --wait 0 -- cargo test --workspace --locked --no-fail-fast  (exit 3)
+  INCONCLUSIVE no grant: no build grant came within 0 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo test",
+     "state": "FAIL",
+     "message": "exited 3"
+    }
+   ],
+   "passed": []
+  }
+  --- readRun
+  {
+   "tests": [
+    {
+     "id": "cargo test",
+     "state": "FAIL",
+     "note": "exited 3"
+    }
+   ],
+   "unsure": [],
+   "covered": [],
+   "explained": false
+  }
+  + actual - expected
+  
+  + [
+  +   'cargo test: FAIL'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/deepbuild-runs-3333/blind/tests/acceptance/3333/no-grant.test.mjs:40:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'cargo test: FAIL' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

@@ -435,3 +435,27 @@ test('a run paused while making the takeover mark keeps it: a second run that fi
   assert.equal(spans.length, 1, `${spans.length} runs checked: ${JSON.stringify(spans)}`);
   assert.equal(existsSync(join(kept, 'lock')), false, 'a run left the lock behind');
 });
+
+// On Linux the runner count-linux.c counts instructions retired through the kernel's counter (#2960), so a Linux
+// result names it as its count's source, and a count it couldn't take points at it, not at a Mac. A cc that fails
+// leaves the count missing on any host, whatever its kernel lets a user count.
+test('a Linux result names count-linux.c as its count\'s source, and a missing count points at building it', { skip: process.platform !== 'linux' }, (t) => {
+  const { cwd, git, env } = repository(t, () => '');
+  const task = { id: 'noop', command: ['/bin/true'], margin: 0.5, limits: { instructions: 1e12 }, initialReason: 'Fixture base.' };
+  writeFileSync(join(cwd, 'benchmarks/budgets.json'), JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: 300_000 }, initialReason: 'Fixture base.' }, tasks: [task] }));
+  git('commit', '-qam', 'task');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  const bin = join(cwd, '..', 'bin');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'cc'), '#!/bin/sh\nexit 1\n');
+  chmodSync(join(bin, 'cc'), 0o755);
+  const result = spawnSync(process.execPath, ['scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })],
+    { cwd, encoding: 'utf8', env: { ...env, PATH: `${bin}:${env.PATH}` } });
+  const results = result.stdout.split('\n').filter((line) => line.startsWith('{"task":')).map((line) => JSON.parse(line));
+  assert.deepEqual(results.map(({ task }) => task), ['preflight', 'noop'], result.stdout + result.stderr);
+  for (const { task, counter } of results) assert.match(String(counter), /scripts\/count-linux\.c/, `${task} names ${counter} as its count's source`);
+  const fix = result.stdout.match(/^INCONCLUSIVE perf: noop: instructions: instructions retired are missing.*\n  Fix: (.*)/m)?.[1];
+  assert.ok(fix, result.stdout);
+  assert.doesNotMatch(fix, /macOS/);
+  assert.match(fix, /scripts\/count-linux\.c/);
+});

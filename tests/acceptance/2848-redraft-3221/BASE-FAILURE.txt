@@ -1,0 +1,48 @@
+# node --test --test-reporter=spec tests/acceptance/2848-redraft-3221/share.test.mjs at 6bed8c627 (no fix; its scripts/ are f8c6cff82's but for one byHand line of lanes-lists.mjs),
+# started 2026-11-23T09:25:41Z, Darwin 27.2.0, 18 cores (os.availableParallelism()), one-minute load 30 at the start and 24 at the end.
+# It exited 1 after 24 s. Home folders read ~ (the test's own HOME too), temporary folders <tmp>.
+✖ #2848 AC: a later build in an affected.mjs run gets its full compile share, or the run says it cannot, after a jobserver client holding tokens was SIGKILLed earlier in the run (24016.018875ms)
+ℹ tokens: the live job held 2 and its pipe was lent 12 more after the killed client's job ended (in all 14); the later job's pipe was lent 14; a lone job's share is 11, the pool 12 on the readings' 13 cores
+ℹ pipes: the live job and the killed client's job were handed one jobserver
+ℹ the run's summary: INCONCLUSIVE affected: 0 new, 0 already failing on main, 1 inconclusive or blocked, 0 listed skips, 3 passed, in 23 s at load 24; logs in <tmp>/tmp/deep-affected-zaqWks
+ℹ the run's BLOCKED, INCONCLUSIVE and JOBSERVER lines: JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848) | INCONCLUSIVE jobserver: 3 of the run's compile tokens were missing when its builds had ended, so a build may have had less than its share
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 24064.62925
+
+✖ failing tests:
+
+test at tests/acceptance/2848-redraft-3221/share.test.mjs:143:1
+✖ #2848 AC: a later build in an affected.mjs run gets its full compile share, or the run says it cannot, after a jobserver client holding tokens was SIGKILLed earlier in the run (24016.018875ms)
+  AssertionError [ERR_ASSERTION]: two jobs of the run running at once were handed one jobserver (<tmp>/tmp/deep-jobserver-gfdsyV/tokens), not each a pipe of its own lent from the pool
+  the pool: 12 tokens on the readings' 13 cores; a lone job's share: 11
+  record:
+  {"pid":9050,"ppid":9029,"cwd":"<tmp>/tree","fifo":"<tmp>/tmp/deep-jobserver-gfdsyV/tokens","makeflags":"-j --jobserver-auth=fifo:<tmp>/tmp/deep-jobserver-gfdsyV/tokens","at":1795425945094,"event":"held","count":2}
+  {"pid":9042,"ppid":9006,"cwd":"<tmp>/tree","fifo":"<tmp>/tmp/deep-jobserver-gfdsyV/tokens","makeflags":"-j --jobserver-auth=fifo:<tmp>/tmp/deep-jobserver-gfdsyV/tokens","at":1795425945456,"event":"client-held","client":9067,"count":3}
+  {"pid":9042,"ppid":9006,"cwd":"<tmp>/tree","fifo":"<tmp>/tmp/deep-jobserver-gfdsyV/tokens","makeflags":"-j --jobserver-auth=fifo:<tmp>/tmp/deep-jobserver-gfdsyV/tokens","at":1795425945460,"event":"killed","client":9067,"signal":"SIGKILL"}
+  {"pid":9050,"ppid":9029,"cwd":"<tmp>/tree","fifo":"<tmp>/tmp/deep-jobserver-gfdsyV/tokens","makeflags":"-j --jobserver-auth=fifo:<tmp>/tmp/deep-jobserver-gfdsyV/tokens","at":1795425960580,"event":"counted","held":2,"free":12,"jobEnded":true}
+  {"pid":14924,"ppid":14922,"cwd":"<tmp>/tree","fifo":"<tmp>/tmp/deep-jobserver-gfdsyV/tokens","makeflags":"-j --jobserver-auth=fifo:<tmp>/tmp/deep-jobserver-gfdsyV/tokens","at":1795425965850,"event":"later","free":14}
+  exit 2
+  stdout:
+  … tests/acceptance/311-redraft-1830/budgets.test.ts tests/acceptance/1018-redraft-1830/budgets.test.ts tests/acceptance/166-redraft-1830/budgets.test.ts tests/acceptance/268-redraft-1830/budgets.test.ts tests/acceptance/465-redraft-1830/budgets.test.ts tests/acceptance/968-redraft-1830/budgets.test.ts tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts tests/acceptance/1830/ac2-timing.test.ts tests/acceptance/568-redraft-1830/judge.test.mjs tests/acceptance/903/ac6-export.test.ts tests/acceptance/508/ac6-effects.test.ts tests/acceptance/1838/lane568.test.mjs tests/acceptance/1381/ac6-budget.test.ts tests/acceptance/971/budgets.test.ts tests/acceptance/1992/cost.test.ts tests/acceptance/2650/budgets.long.test.ts tests/acceptance/1431/ac5-cost.test.ts tests/acceptance/2760/budgets.test.ts tests/acceptance/2760-redraft-ac8/budget-timing.test.ts tests/acceptance/2386/ac6-budget.test.ts tests/acceptance/732/ac10-budgets.test.ts tests/acceptance/1484/warm.test.ts tests/acceptance/1430/ac4-budgets.test.ts tests/acceptance/2645/big.test.ts tests/acceptance/1489/ui-thread.test.ts tests/acceptance/2777/preflight.test.ts tests/acceptance/194/ac11-budgets.test.ts tests/acceptance/2402/budget.test.ts tests/acceptance/277/ac4-budgets.test.ts tests/acceptance/278/ac5-budgets.test.ts tests/acceptance/518/handoff.test.ts tests/acceptance/518/planes.test.ts tests/acceptance/211/ac8-budgets.test.ts tests/acceptance/981/ac8-budget.test.ts tests/acceptance/1255/ac5-budget.test.ts tests/acceptance/1181/ac09-budget.test.ts tests/acceptance/189/saves/ac11-budgets.test.ts tests/acceptance/189/lab-redraft/ac11-rederive-budget.test.ts tests/acceptance/1518/budget.test.ts tests/acceptance/161/ac4-measured.test.ts tests/acceptance/161/ac6-timed.test.ts tests/acceptance/265/ac6-budgets.test.ts tests/acceptance/1250/ac7-budgets.test.ts tests/acceptance/2661/ac4-tick.live.test.mjs tests/acceptance/2661/ac7-budgets.test.mjs tests/acceptance/980/ac09-budget.test.ts tests/acceptance/980-redraft-ac9/ac9-budget.test.ts tests/acceptance/1500/ac08-join-time.test.ts tests/acceptance/2740/as-on-main.test.ts tests/acceptance/269/ac6-budgets.test.ts tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts
+  INCONCLUSIVE affected: 0 new, 0 already failing on main, 1 inconclusive or blocked, 0 listed skips, 3 passed, in 23 s at load 24; logs in <tmp>/tmp/deep-affected-zaqWks
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3221-ba809f/agent-a05e7a1baee9fba74/tests/acceptance/2848-redraft-3221/share.test.mjs:184:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '<tmp>/tmp/deep-jobserver-gfdsyV/tokens',
+    expected: '<tmp>/tmp/deep-jobserver-gfdsyV/tokens',
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+EXIT 1

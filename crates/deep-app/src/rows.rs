@@ -929,16 +929,7 @@ pub(crate) fn in_lane(
                 .child(
                     match scrolls.filter(|_| !crate::plain::planted("page-clips")) {
                         // Under its title the page scrolls (#1808), each address from its top.
-                        Some(key) => div()
-                            .id(ElementId::Name(format!("lane-scroll:{key}").into()))
-                            .flex_1()
-                            .min_h_0()
-                            .w_full()
-                            .flex()
-                            .flex_col()
-                            .overflow_y_scroll()
-                            .child(content)
-                            .into_any_element(),
+                        Some(key) => crate::find::lane(key, content).into_any_element(),
                         // A page whose content scrolls inside itself, as a card's rows do.
                         None => div()
                             .flex_1()

@@ -103,6 +103,15 @@
     "decide_by": "R4"
   },
   {
+    "method": "handle.read",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#395",
+    "preview_since": "R1",
+    "decide_by": "R4",
+    "called_by": "deep read and deep find in a session whose sandbox closes the evidence store"
+  },
+  {
     "method": "eval.report",
     "since": "R1",
     "stability": "preview",
@@ -296,6 +305,18 @@
     "since": "R1",
     "stability": "stable",
     "called_by": "deep lease"
+  },
+  {
+    "method": "lease.gpu",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep-show"
+  },
+  {
+    "method": "lease.release",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep-show"
   },
   {
     "method": "extension.install",

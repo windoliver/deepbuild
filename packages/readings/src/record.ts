@@ -322,9 +322,50 @@ function foldSession(session: string, list: RecordEvent[]): Part {
 }
 
 const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) / 2)]!;
+/** The middle of `values`, the two middles' mean when their count is even; null with none. */
+const middle = (values: number[]): number | null => {
+  if (!values.length) return null;
+  const s = [...values].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+};
+/** One answer to a taste call (#3234): whether it took the recommended option, and each picture's time on screen and whether it was shown. */
+interface TasteAnswer { accepted: boolean; seen: boolean; ms: number[]; ts: number }
+/**
+ * Numbers' taste calls (#3234): accepted calls whose every picture was shown and the rest, the median time a picture of
+ * a seen call was on screen, and the longest run of accepted calls in a row (any other answer to a taste call ends one),
+ * each run of that length with the median of its first half's pictures and of its second's, so a yes getting faster shows.
+ */
+function tasteReadings(answers: TasteAnswer[]): Reading[] {
+  if (!answers.length) return [];
+  const as_of = answers.at(-1)!.ts;
+  const accepted = answers.filter((a) => a.accepted);
+  const seen = accepted.filter((a) => a.seen);
+  const runs: TasteAnswer[][] = [];
+  let run: TasteAnswer[] = [];
+  for (const a of answers) {
+    if (a.accepted) run.push(a);
+    else if (run.length) { runs.push(run); run = []; }
+  }
+  if (run.length) runs.push(run);
+  const longest = Math.max(0, ...runs.map((r) => r.length));
+  const halves = runs.filter((r) => r.length === longest).map((r) => ({
+    calls: r.length,
+    first_half_ms: middle(r.slice(0, r.length >> 1).flatMap((a) => a.ms)),
+    second_half_ms: middle(r.slice((r.length + 1) >> 1).flatMap((a) => a.ms)),
+  }));
+  const reading = (id: string, value: number | null, unit: string, detail?: Record<string, unknown>[]): Reading => ({ id, subject: null, value, unit, source: RECORD, as_of, basis: 'observed', ...(detail ? { detail } : {}) });
+  return [
+    reading('taste_calls_seen', seen.length, 'count'),
+    reading('taste_calls_unseen', accepted.length - seen.length, 'count'),
+    reading('taste_picture_ms_median', middle(seen.flatMap((a) => a.ms)), 'ms'),
+    reading('taste_calls_in_a_row', longest, 'count', halves),
+  ];
+}
 function foldAcross(list: RecordEvent[]): Reading[] {
   const readings = new Map<string, Reading>();
-  const asked = new Map<string, { kind: string; ts: number }>();
+  const asked = new Map<string, { kind: string; ts: number; recommended: unknown }>();
+  const tastes: TasteAnswer[] = [];
   const waits = new Map<string, { ms: number[]; as_of: number }>();
   const blocked = new Map<string, number>();
   let blockedMs = 0;
@@ -338,10 +379,18 @@ function foldAcross(list: RecordEvent[]): Reading[] {
       readings.set(id, { id, subject: null, value: e.data.value as number, unit: String(e.data.unit), source: String(e.data.source), as_of: num(e.data.as_of), basis: classified ? 'modeled' : 'observed', ...(classified ? { classifier: null } : {}) });
     } else if (e.kind === 'ask.created') {
       // An ask's handle is its id; only a block's event names it as a subject.
-      asked.set(e.subject ?? `ask:${e.id}`, { kind: String(e.data.kind), ts: e.ts });
+      asked.set(e.subject ?? `ask:${e.id}`, { kind: String(e.data.kind), ts: e.ts, recommended: e.data.recommended });
     } else if (e.kind === 'ask.answered' && e.subject) {
       const ask = asked.get(e.subject);
       if (!ask) continue;
+      if (ask.kind === 'taste') {
+        // A yes is the recommended option; it was seen when the answer's record says each picture was shown (#3234).
+        const pictures = Array.isArray(e.data.pictures) ? (e.data.pictures as { shown?: unknown; ms?: unknown }[]) : [];
+        tastes.push({
+          accepted: (e.data.option ?? e.data.answer) === ask.recommended, ts: e.ts,
+          seen: pictures.length > 0 && pictures.every((p) => p.shown === true), ms: pictures.map((p) => Number(p.ms) || 0),
+        });
+      }
       const w = waits.get(ask.kind) ?? { ms: [], as_of: 0 };
       w.ms.push(e.ts - ask.ts);
       w.as_of = e.ts;
@@ -356,6 +405,7 @@ function foldAcross(list: RecordEvent[]): Reading[] {
   const out = [...readings.values()];
   for (const [kind, w] of waits) out.push({ id: 'approval.wait', subject: kind, value: median(w.ms), unit: 'ms', source: RECORD, as_of: w.as_of, basis: 'observed' });
   // A claim still blocked has no end yet, so the sum is short of it.
+  out.push(...tasteReadings(tastes));
   if (blockedAt) out.push({ id: 'blocked.time', subject: null, value: closed ? blockedMs : null, unit: 'ms', source: RECORD, as_of: blockedAt, basis: 'observed', complete: blocked.size === 0 });
   return out;
 }

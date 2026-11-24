@@ -1,13 +1,19 @@
 #!/bin/sh
-# DeepBuild's own lease script (#1015; #29): runs its arguments through `deep lease`, so a block of the preflight, of
-# scripts/affected.mjs, of the perf lane or of the canvas kit holds a cpu.slot of the calling session's while it runs,
-# at a lower priority. The gate runner calls it for an agent's heavy commands. With no `deep` on PATH it uses the
-# built CLI; with neither, or with no hub, the command runs unleased and says so.
+# DeepBuild's own lease script (#1015; #29; #3238): never runs a command bare. It runs its arguments under a grant of
+# the machine's throttle table (docs/parallel-proof.md, section 6), `throttle.mjs build`: from a chain that holds a
+# grant it passes through on it, taking no turn of the pool inside an admitted run (#3221), and with none it waits for
+# a top-level build grant, at most DEEP_LEASE_WAIT minutes (30; tests set it). With no grant in the wait the command
+# never starts. Inside the grant it runs through `deep lease`, so a block of the preflight, of scripts/affected.mjs, of
+# the perf lane or of the canvas kit holds a cpu.slot of the calling session's while it runs, at a lower priority. The
+# gate runner calls it for an agent's heavy commands. With no `deep` on PATH it uses the built CLI; with neither, or
+# with no hub, the command runs under the grant alone.
 set -eu
 # The planted wrong program for #1015's AC7 runs the command directly.
 if [ "${DEEP_HUB_PLANT:-}" = lease-script-runs-directly ]; then exec "$@"; fi
-if command -v deep >/dev/null 2>&1; then exec deep lease -- "$@"; fi
-cli="$(dirname "$0")/../packages/cli/dist/main.js"
-if [ -f "$cli" ]; then exec node "$cli" lease -- "$@"; fi
-echo "scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so \`$*\` runs unleased" >&2
-exec "$@"
+here="$(dirname "$0")"
+granted() { exec node "$here/throttle.mjs" build --wait "${DEEP_LEASE_WAIT:-30}" --turns 0 -- "$@"; }
+if command -v deep >/dev/null 2>&1; then granted deep lease -- "$@"; fi
+cli="$here/../packages/cli/dist/main.js"
+if [ -f "$cli" ]; then granted node "$cli" lease -- "$@"; fi
+echo "scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so \`$*\` runs under the throttle's grant with no lease" >&2
+granted "$@"

@@ -1,0 +1,16 @@
+
+ RUN  v5.0.5 <checkout>
+
+stdout | tests/acceptance/2748/budgets-probe.test.ts > AC6 #2748.8023bb4b a claim whose diff no pass covers starts no job and gains under 5 ms on its hold, compared with the merge base
+AC6 #2748.8023bb4b ms the passes page adds to the hold of a claim whose diff no pass covers: 22.1, 11.2, -15.3, 1.5, 31.5 against 5 (margin 306%)
+
+ ↓ tests/acceptance/2748/budgets-probe.test.ts > AC6 #2748.8023bb4b a claim whose diff no pass covers starts no job and gains under 5 ms on its hold, compared with the merge base 226771ms [INCONCLUSIVE AC6 #2748.8023bb4b ms the passes page adds to the hold of a claim whose diff no pass covers: 22.1, 11.2, -15.3, 1.5, 31.5 against 5 (margin 306%)]
+stdout | tests/acceptance/2748/budgets-probe.test.ts > AC6 #2748.8023bb4b a claim whose diff no pass covers starts no job and gains under 5 ms on its hold, compared with the merge base
+Steps so far: 0s AC6 #2748.8023bb4b the hub; 1s AC6 #2748.8023bb4b warm-up, no page: commit 83f4c323, the stop; 21s AC6 #2748.8023bb4b warm-up, no page: claim:01M83RXRJ9RQ1ETH5PJE5CET5H judged PASS, 1 job(s); 21s AC6 #2748.8023bb4b warm-up, page: commit 8098b876, the stop; 38s AC6 #2748.8023bb4b warm-up, page: claim:01M83RYBYP7WCTAHNH3R4D54AP judged PASS, 1 job(s); 38s AC6 #2748.8023bb4b sample 1, no page: commit e62c4a8f, the stop; 55s AC6 #2748.8023bb4b sample 1, no page: claim:01M83RYWQWS483MW04HXZF928N judged PASS, 1 job(s); 56s AC6 #2748.8023bb4b sample 1, page: commit e283b7a1, the stop; 73s AC6 #2748.8023bb4b sample 1, page: claim:01M83RZDJTCDFS9R50VBZKEQPC judged PASS, 1 job(s); 73s AC6 #2748.8023bb4b sample 2, no page: commit 00f44715, the stop; 90s AC6 #2748.8023bb4b sample 2, no page: claim:01M83RZYEVY5FDDFNAPNNX38S2 judged PASS, 1 job(s); 90s AC6 #2748.8023bb4b sample 2, page: commit dbdc8c5e, the stop; 107s AC6 #2748.8023bb4b sample 2, page: claim:01M83S0F8MGVSKRBA8NN17YWZ5 judged PASS, 1 job(s); 107s AC6 #2748.8023bb4b sample 3, no page: commit c16ebcfa, the stop; 124s AC6 #2748.8023bb4b sample 3, no page: claim:01M83S0ZY7YXD8KD50N4DRR8EP judged PASS, 1 job(s); 124s AC6 #2748.8023bb4b sample 3, page: commit e0d4653b, the stop; 141s AC6 #2748.8023bb4b sample 3, page: claim:01M83S1GM66A14X4FE7P6PJ0H0 judged PASS, 1 job(s); 141s AC6 #2748.8023bb4b sample 4, no page: commit 4fe06377, the stop; 158s AC6 #2748.8023bb4b sample 4, no page: claim:01M83S219EXNGN7VT9H08V0B4H judged PASS, 1 job(s); 158s AC6 #2748.8023bb4b sample 4, page: commit 6c689a6f, the stop; 175s AC6 #2748.8023bb4b sample 4, page: claim:01M83S2HSQ1JYW1NYBGBAPX7EZ judged PASS, 1 job(s); 175s AC6 #2748.8023bb4b sample 5, no page: commit dc52250d, the stop; 192s AC6 #2748.8023bb4b sample 5, no page: claim:01M83S32DG3TD32N04YW2GN6ZQ judged PASS, 1 job(s); 192s AC6 #2748.8023bb4b sample 5, page: commit a04ae0f8, the stop; 210s AC6 #2748.8023bb4b sample 5, page: claim:01M83S3K6Z2BCEPWWZR5EEXVTE judged PASS, 1 job(s); 210s AC6 #2748.8023bb4b net: commit ae34a51e, the stop; 227s AC6 #2748.8023bb4b net: claim:01M83S443RST6GB1YQS06SZEMF judged PASS, 3 job(s)
+
+
+ Test Files  1 passed (1)
+      Tests  1 skipped (1)
+   Start at  03:38:52
+   Duration  227.02s (tests 100%)
+
