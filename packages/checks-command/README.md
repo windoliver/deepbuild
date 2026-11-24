@@ -8,7 +8,7 @@ The first-party command check kind (#30). It runs a check's shell command in its
 
 - `src/index.ts`: the run (`runCommandCheck`, `runAddedTests`, `commandCheckKind`), and the readings a result's key holds of the programs a command names (`programReadings`, #2060).
 - `src/report.ts`: reading a run's evidence files back; `src/listing.ts`: the tests a file holds, listed from its source; `src/shell.ts`: what a command hides (masks, untraced programs, detached children), and a shell script it runs as `sh file`, read as the command (the hub's drafted checks); `src/seeded.ts`: stand-in detection.
-- `src/controls.ts`: the control each Vitest and node:test file gets in a run's checkout, which the report must show failed at its line (#1099's part #33 needs).
+- `src/controls.ts`: the control each Vitest and node:test file gets in a run's checkout, which the report must show failed at its line (#1099's part #33 needs). A file that focuses tests gets a focused control; a control a config's or script's filter leaves out fails the run, naming the filter, or leaves it uncounted when no test was left out (#2081).
 - `runtime/`: reporters and tracers loaded into the run's processes. A new test tool's reporter goes here.
 - Tests: `test/` for regressions; the acceptance suite is `tests/acceptance/30/`.
 
