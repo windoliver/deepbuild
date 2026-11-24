@@ -78,7 +78,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 60] = [
+pub const PLANTED: [&str; 64] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -158,4 +158,10 @@ pub const PLANTED: [&str; 60] = [
     // #1217: the measure tool that ignores `shown_at`, and the one that writes an input entry.
     measure::PLANTED[0],
     measure::PLANTED[1],
+    // #1219: a bay frame that spaces its columns evenly, a folded roof built straight, an eave
+    // whose rise falls back before the corner, and a bracket set built a step short.
+    building::timber::PLANTED[0],
+    building::timber::PLANTED[1],
+    building::timber::PLANTED[2],
+    building::timber::PLANTED[3],
 ];

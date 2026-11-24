@@ -137,6 +137,8 @@ export const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== nu
 export const bare = (handle: string): string => handle.replace(/^ask:/, '');
 /** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
 export const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
+/** A question's text as it compares: NFC, case folded, white space collapsed, trailing punctuation dropped. */
+export const normalize = (text: string): string => text.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[\s.,;:!?]+$/u, '');
 
 export interface Ask {
   id: string;
