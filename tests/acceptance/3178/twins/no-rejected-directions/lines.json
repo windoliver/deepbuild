@@ -1,0 +1,15 @@
+{
+  "packages/hub/src/memory.ts": [
+    {
+      "find": [
+        "export async function rejectedDirections(raw: Raw): Promise<Rejected[]> {"
+      ],
+      "wrong": [
+        "export async function rejectedDirections(raw: Raw): Promise<Rejected[]> {",
+        "  // The twin no-rejected-directions (tests/acceptance/3178/README.md): no decision ever reads as a rejected direction,",
+        "  // so deep_propose of one goes on to your inbox and rules.json gets no rejected-* entry for deep-hook (#111 broken).",
+        "  if (raw.length >= 0) return [];"
+      ]
+    }
+  ]
+}
