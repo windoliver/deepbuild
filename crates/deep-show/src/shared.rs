@@ -142,9 +142,50 @@ pub struct Shared {
     /// Who names and who hangs from each item, as of the revision it gives (#896): a patch's
     /// recheck finds what it reaches by these, and a revision made another way rebuilds them.
     pub referrers: Option<(u64, Referrers)>,
+    /// A minted document's newest revision number, a refused whole revision's too (#1721); `None`
+    /// for a document a release stored.
+    pub numbers: Option<u64>,
+}
+
+impl Rev {
+    /// Revision `rev`, which changed nothing, made by no writer.
+    pub fn of(rev: u64, base_rev: u64, issues: Rc<Vec<Issue>>) -> Rev {
+        Rev {
+            rev,
+            base_rev,
+            writer: None,
+            patch: None,
+            reason: String::new(),
+            changed: BTreeSet::new(),
+            before: BTreeMap::new(),
+            paths: Paths::new(),
+            envelope_before: None,
+            issues,
+            notices: OnceCell::new(),
+            hash: OnceCell::new(),
+            current_at: None,
+        }
+    }
 }
 
 impl Shared {
+    /// `doc` at revision 0, with what its check found.
+    pub fn open(id: &str, doc: Value, issues: Vec<Issue>, notices: Vec<Notice>) -> Shared {
+        Shared {
+            id: id.to_string(),
+            doc,
+            owners: Owners::new(),
+            revs: vec![Rev {
+                notices: OnceCell::from(notices),
+                ..Rev::of(0, 0, Rc::new(issues))
+            }],
+            lost: BTreeMap::new(),
+            older: BTreeSet::new(),
+            referrers: None,
+            numbers: None,
+        }
+    }
+
     pub fn current(&self) -> &Rev {
         self.revs.last().expect("a shared document has revision 0")
     }
@@ -537,7 +578,10 @@ fn recorded_by(via: &Via) -> String {
 }
 
 mod calls;
+mod minted;
 pub use calls::*;
+pub(crate) use minted::hidden;
+pub use minted::{recorded, seeds, Recorded};
 
 /// Whether two revisions wrote one path: the same item, and one path the other's or below it.
 fn overlaps(a: &Paths, b: &Paths) -> bool {
@@ -698,13 +742,20 @@ fn marks(doc: &Value, items: &Map<String, Value>, palette: &Palette) -> Result<i
 /// A 2D mark lights nothing, so `lights` is 0; `cpu_ms`, `gpu_ms` and `gpu_mb` are the cost
 /// model's estimate (#379) of the items it wrote as they are now, less as they were, from the
 /// build's coefficients.
+/// A 3D document's 3D items are scene3d's to draw, as in a whole revision; and what a minted
+/// document's patch draws is checked with its form (#1721), so here it is only counted.
 fn marks_check(
     doc: &Value,
     before: &BTreeMap<String, Option<Value>>,
     palette: &Palette,
     sealed: &Sealed,
+    minted: bool,
 ) -> Result<Value, Box<Issue>> {
-    let draws_kind = |item: &Value| item["kind"].as_str().is_some_and(knows);
+    let flat = minted || deep_canvas_scene3d::scene::has_3d(doc);
+    let draws_kind = |item: &Value| {
+        let kind = item["kind"].as_str().unwrap_or_default();
+        knows(kind) && (!flat || scene::KINDS.contains(&kind))
+    };
     let mut context = referenced(doc);
     let named = |item: &Value, out: &mut BTreeSet<String>| {
         let mut stack: Vec<&Value> = vec![&item["params"]];
@@ -755,6 +806,7 @@ fn marks_check(
         (Ok(n), Ok(w)) => n - w,
         (Ok(n), Err(_)) => *n,
         (Err(e), Err(old)) if e == old => 0,
+        (Err(_), _) if minted => 0,
         (Err(Refused { code, path }), _) => return Err(Box::new(unfit_issue(code, path.clone()))),
     };
     let coefficients = &sealed.costs;
@@ -785,6 +837,52 @@ fn marks_check(
         "lights": 0,
         "gpu_mb": now_cost.gpu_mb - was_cost.gpu_mb,
     }))
+}
+
+/// `layer` of `doc` emptied, then filled with `payload`'s items and entries, each stamped into it:
+/// the entries as stamped. An ID another writer's layer holds is refused, `not_your_layer`.
+pub fn fill_layer(
+    doc: &mut Value,
+    owners: &mut Owners,
+    payload: &Map<String, Value>,
+    layer: &str,
+    issues: &mut Vec<Issue>,
+) -> Value {
+    if let Some(Value::Object(items)) = doc.get_mut("items") {
+        items.retain(|_, i| i["layer"].as_str() != Some(layer));
+    }
+    drop_owned(doc, owners, layer);
+    let mut view = Map::new();
+    let empty = Map::new();
+    for map in std::iter::once("items").chain(ID_MAPS.iter().copied()) {
+        let mut stamped = Map::new();
+        for (id, entry) in payload
+            .get(map)
+            .and_then(Value::as_object)
+            .unwrap_or(&empty)
+        {
+            let mut entry = entry.clone();
+            if map == "items" {
+                entry["layer"] = json!(layer);
+            }
+            if doc[map].get(id).is_some() {
+                let what = "another writer's layer holds this ID";
+                let path = format!("{map}/{id}");
+                issues.push(Issue::error("not_your_layer", id, path, json!(id), what));
+                continue;
+            }
+            if !doc[map].is_object() {
+                doc[map] = json!({});
+            }
+            doc[map][id] = entry.clone();
+            if map != "items" {
+                owners.insert((map.to_string(), id.clone()), layer.to_string());
+            }
+            stamped.insert(id.clone(), entry);
+        }
+        view.insert(map.to_string(), Value::Object(stamped));
+    }
+    Value::Object(view)
 }
 
 /// Drops every entry of an ID map that `layer` owns, from `doc` and from `owners`.

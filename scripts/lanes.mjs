@@ -22,6 +22,24 @@ export const testGlobs = (extension) => testPaths
 // The lane lists, in lanes-lists.mjs.
 export { alone, byHand, exclusive, LANE_FILE, ownLane, redrafted, slow, timed };
 
+// #3178: these files expect deep_ask to wait on a choice with a recommended option, which goes on at once as
+// provisional (#84; the design's "Work goes on while you decide"), so they stop BLOCKED on main, and
+// 27-redraft-2073/waits.test.ts's stop is never held for its ask, nor 27/outcomes-redraft/outcomes.test.ts's while a
+// subagent runs. Their blind redrafts run in their place
+// (tests/acceptance/667/redraft-3178/DISPUTE.md), and they are kept as written, by hand only. 27/waits.test.ts has been
+// by hand since #2073 (above); its redraft-3178 also stands in for 27-redraft-2073's.
+byHand.push('tests/acceptance/667/fold.test.ts', 'tests/acceptance/667/plants.test.ts', 'tests/acceptance/667/redraft-1463/',
+  'tests/acceptance/27/repeat.test.ts', 'tests/acceptance/27-redraft-2073/waits.test.ts', 'tests/acceptance/27/outcomes-redraft/outcomes.test.ts',
+  'tests/acceptance/111/revive.test.ts');
+// #667's redraft reads `deep inbox` within a second (criteria.test.ts), INCONCLUSIVE under load, as the redrafts it
+// stands beside do;
+// #27's two and #111's run deep-hook from target/, whose 50 ms wait on the hub lets a call through under load, and #27's
+// waits file takes over two minutes, as the file it replaces does; #3178's suite runs those folders.
+timed.push('tests/acceptance/667/redraft-3178/criteria.test.ts');
+alone.push('tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-redraft-3178/', 'tests/acceptance/111/redraft-3178/');
+slow.push('tests/acceptance/3178/suites.test.ts');
+slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
+
 /**
  * Why each `alone` entry is alone (#3066; docs/parallel-proof.md, section 7), one reason an entry: `binary`, a sibling's
  * cargo build rewrites a binary under it (its files start cargo, read target/, or start a hub, which runs deep-hook
@@ -45,10 +63,12 @@ export const aloneReasons = {};
 for (const [reason, entries] of Object.entries({
   binary: [
     'tests/acceptance/2386/', 'tests/acceptance/2086-redraft-2047/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
+    'tests/acceptance/2700/heap.test.mjs', 'tests/acceptance/2700/equal.test.mjs', 'tests/acceptance/2700/data-row.test.mjs', 'tests/acceptance/2700/as-given.test.mjs', 'tests/acceptance/2700/reached.test.mjs',
     'tests/acceptance/1523/', 'tests/acceptance/84/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/',
     'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/',
     'tests/acceptance/389/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/1487/',
     'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/',
+    'tests/acceptance/3234-redraft-ac3/', 'tests/acceptance/3234-redraft-ac6/',
     'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/492/', 'tests/acceptance/492-gaps/', 'tests/acceptance/493/',
     'tests/acceptance/493-redraft-ac7/', 'tests/acceptance/493-redraft-ac12/', 'tests/acceptance/493-redraft-ac18/', 'tests/acceptance/494/', 'tests/acceptance/496/',
     'tests/acceptance/497/', 'tests/acceptance/388/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/670/', 'tests/acceptance/138/',
@@ -72,7 +92,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/907/slots.test.ts', 'tests/acceptance/907/background.test.ts',
     'tests/acceptance/965/', 'packages/hub/test/loop-starters.test.ts', 'packages/hub/test/loop-transcript.test.ts', 'tests/acceptance/1175/', 'tests/acceptance/23/permissions/',
     'tests/acceptance/83/', 'tests/acceptance/352/', 'tests/acceptance/27/wake.test.ts', 'tests/acceptance/27/repeat.test.ts', 'tests/acceptance/27/waits.test.ts',
-    'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts', 'tests/acceptance/990/',
+    'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-redraft-3178/', 'tests/acceptance/111/redraft-3178/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts', 'tests/acceptance/990/',
     'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/874/redraft/', 'tests/acceptance/824/cycles.test.ts', 'tests/acceptance/824/planted.test.ts',
     'tests/acceptance/824/leftovers.test.ts', 'tests/acceptance/824/sessions/readings.test.ts', 'tests/acceptance/824/sessions/planted.test.ts', 'tests/acceptance/1294/',
     'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/', 'tests/acceptance/1868-redraft-ac2/',
@@ -121,7 +141,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/2776/listing.test.ts', 'tests/acceptance/2457/', 'tests/acceptance/2500/', 'tests/acceptance/211/', 'tests/acceptance/981/', 'tests/acceptance/189/saves/',
     'tests/acceptance/189-oracle/', 'tests/acceptance/189/lab-redraft/', 'tests/acceptance/276/record/', 'tests/acceptance/276/match/', 'tests/acceptance/2109/',
     'tests/acceptance/953/', 'tests/acceptance/953-oracle/', 'tests/acceptance/1250/', 'tests/acceptance/1576/', 'tests/acceptance/2661/', 'tests/acceptance/980/',
-    'tests/acceptance/1861/', 'tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/',
+    'tests/acceptance/1861/', 'tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/', 'tests/acceptance/2697/', 'tests/acceptance/409-redraft-2697/',
   ],
   timing: [
     'tests/acceptance/2513-redraft-2047/',

@@ -3,7 +3,7 @@ import { recordRefusal } from './claim-refusal.js';
 import { backgrounded } from './hub-shared.js';
 import { STOP_HOLD_MS } from './claude-settings.js';
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { liveFetch, readIssue, recordedFetch } from './github-source.js';
 import type { Outcome } from './landing.js';
 import { homedir } from 'node:os';
@@ -35,14 +35,17 @@ import { type ClaimCheck, type DefinitionState, type RunKey, type StatePin } fro
 import { partOfIssue, prUrlIn } from './forge.js';
 import { gatePrBodies } from './pr-commands.js';
 import { claimState, newestClaim, type ClaimState } from './verdict-chat.js';
-import { RUN_AS_YOU } from './runs.js';
+import { RUN_AS_YOU, type HeldOutRun } from './runs.js';
+import type { Variant } from './variants.js';
 import type { ReviewOf } from './checks-port.js';
+import { passesAt } from './review-passes.js';
 import type { CheckSpec } from '@deepbuild/conformance';
 import { type StackWant } from './stacks.js';
+import type { Admission } from './admission.js';
 import { docCheckIn, docCommand, docSpec } from './doc-checks.js';
 import { refuse, Refused, refusal, ulid, type HookMeta } from './wire.js';
 import type { Live, Counter, Routes } from './session-types.js';
-import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, isObj, misjudged, watching, waitingOn, READS, OWN_TURN, inCheckout, writeApproved } from "./hub-shared.js";
+import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, isObj, misjudged, watching, waitingOn, READS, OWN_TURN, writeApproved } from "./hub-shared.js";
 import type { StopJudgingOptions } from './stop-judging-options.js';
 export type { StopJudgingOptions } from './stop-judging-options.js';
 
@@ -1005,7 +1008,11 @@ export class StopJudging {
       const approved = r.joins ? undefined : await approvedSpec(r.cwd, r.base);
       if (approved) void this.proposeSpecDrift(r, approved.oid).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
       const spec = approved ? this.specChecks(approved) : [];
-      const releaseNames = approved && await this.prOf(r.session) ? releaseSpec(approved.spec).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
+      const pr = r.joins ? undefined : await this.prOf(r.session);
+      const releaseNames = approved && pr ? releaseSpec(approved.spec).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
+      // The wiki's review passes for a claim on a PR (#2748), those whose scope covers what it changed, read beside what follows.
+      const passes = pr && this.options.settings.plant !== 'review-without-caller' ? passesAt(this.options.services.root.dir, this.options.settings.plant, r.cwd, r.base) : undefined;
+      passes?.catch(() => undefined);
       const reads = Promise.all([r.definition === 'pending' ? undefined : this.sessionLog(r.session), hasSpec ? this.projectTrusted(r.cwd) : false]);
       reads.catch(() => undefined);
       if (!r.joins) {
@@ -1077,7 +1084,14 @@ export class StopJudging {
           checks.push({ check, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', review: true });
           kinded.set(check, { spec, of });
         };
-        if (await this.prOf(r.session) && this.options.settings.plant !== 'review-without-caller') add('review', checkKinds.reviewSpec(r.base, r.commit, this.options.services.root.dir), `review ${r.base}..${r.commit}`);
+        if (passes) {
+          const review = checkKinds.reviewSpec(r.base, r.commit, this.options.services.root.dir);
+          add('review', review, `review ${r.base}..${r.commit}`);
+          // Before the PR says Closes, each review pass in scope runs as a check of its own (#2748): its finding sends
+          // the claim back and never passes it, and its run names the passes left out of scope.
+          const { run, out } = await passes;
+          for (const pass of run) add(`review pass ${pass.id}`, review && { ...review, pass, out } as CheckSpec, `review pass ${pass.id} ${r.base}..${r.commit}`);
+        }
         for (const n of await checkKinds.claimChecks(cited, r.cwd, r.base, r.definition === 'locked' ? (await this.options.services.tasks.scopeOf(r.task)).sample : null)) { checks.push(n.check); kinded.set(n.check.check, { spec: n.spec, of }); }
       }
       if (kinded.size) this.kindChecks.set(r.claim, kinded);
@@ -1292,7 +1306,7 @@ export class StopJudging {
    * through host@1, whatever the head's trust; an untrusted head gets no hosts and no credentials, which no drafted
    * check has anyway.
    */
-  async runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; key?: RunKey; stack?: StackWant }): Promise<string> {
+  async runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant; memory?: Admission }): Promise<string> {
     // A spec check is a command alone: nothing of it is written. A drafted check and each expected output it
     // references are written from their approved bytes (#322), never through a link that leaves the checkout.
     if (r.approved !== null && this.options.settings.plant !== 'runs-disk-bytes') {
@@ -1300,15 +1314,10 @@ export class StopJudging {
         writeApproved(r.cwd, path, await this.options.services.store.read(sha256), path === r.check ? 0o500 : 0o400);
       }
     }
-    // A held-out variant's files (#1018), from the store by their digests, over the snapshot's in its own checkout.
-    // Its folder is resolved through any link the snapshot holds and must still lie in the checkout, and a link in the
-    // file's place is removed, never written through: the agent never reaches the variant's bytes.
-    for (const [path, sha] of Object.entries(r.overlay ?? {})) {
-      const file = inCheckout(r.cwd, path, "a held-out variant's file");
-      mkdirSync(dirname(file), { recursive: true });
-      rmSync(file, { force: true });
-      writeFileSync(file, await this.options.services.store.read(sha), { flag: 'wx' });
-    }
+    // A held-out variant's files (#1018), unsealed into memory from the store by their digests (#3229): its run lays them
+    // in its own checkout as it starts, and they are gone as it ends.
+    const heldOut: HeldOutRun | undefined = r.variant && { variant: r.variant, files: {} };
+    for (const [path, sha] of Object.entries(heldOut ? r.overlay ?? {} : {})) heldOut!.files[path] = await this.options.services.store.unseal(sha);
     // A stand-in's port (#874) is the one host it may reach, and its origin the one variable it gets; a command's stand-in is found by name.
     const grant: Grant = r.hosts?.length ? { ...RUN_AS_YOU, hosts: r.hosts } : RUN_AS_YOU;
     // A paid check reserves its price against the issue's budget before it starts, and is charged its cost reading
@@ -1326,10 +1335,12 @@ export class StopJudging {
     const scope = await this.claimScope(r.claim);
     const approved = scope && (await approvedSpec(scope.cwd, scope.base)).spec;
     const outside = approved && (r.approved !== null || checksIn(approved).get(r.check)?.run === r.command) ? this.outsideOf(approved, r.check) : undefined;
-    if (outside) await this.builtOutside(r.cwd, outside.build);
+    const build = outside && (() => this.builtOutside(r.cwd, outside.build));
+    if (heldOut && build) heldOut.build = build;
+    else await build?.();
     // A check of another kind runs its spec through the kinds the hub holds, within its kind's budget unless it names a deadline (#1537).
     const kinded = this.kindChecks.get(r.claim)?.get(r.check);
-    const { run } = await this.options.services.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, ...(outside ? { outside: true } : {}), env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? (await this.options.services.checkKinds()).deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.options.services.stacks.wanted(r.cwd) ? r.stack : undefined);
+    const { run } = await this.options.services.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, ...(outside ? { outside: true } : {}), env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? (await this.options.services.checkKinds()).deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, heldOut, r.stack && this.options.services.stacks.wanted(r.cwd) ? r.stack : undefined, r.memory);
     if (paid) {
       const charge = () => this.options.services.ledger.charge(this.options.events.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
       void this.options.services.runs.ended(String(run)).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
