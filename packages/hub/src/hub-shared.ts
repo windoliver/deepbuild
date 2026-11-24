@@ -15,6 +15,7 @@ import { type Connection, type EventInput, type Receipt, type RecordStore } from
 
 import { readJson } from './claude-settings.js';
 import { statKey } from './agent-files.js';
+import { claudeOnPath, loginPlan } from './mods.js';
 
 import { ownHome } from './keychain.js';
 
@@ -124,6 +125,8 @@ export const PROMPT_PLACE_MS = 3000;
 
 /** The cores the check slots are half of: this machine's, or DEEP_HUB_TEST_CORES's, which only tests set (#965). */
 export const CORES = Number(process.env.DEEP_HUB_TEST_CORES) > 0 ? Math.floor(Number(process.env.DEEP_HUB_TEST_CORES)) : availableParallelism();
+/** The `mem` pool's size in MB, DEEP_HUB_TEST_MEM_MB's, which only tests set (#3220); this machine's memory less what it keeps without it. */
+export const TEST_MEM_MB = Number(process.env.DEEP_HUB_TEST_MEM_MB) > 0 ? Math.floor(Number(process.env.DEEP_HUB_TEST_MEM_MB)) : undefined;
 
 /**
  * The machine's 1-minute load against those cores, for a timing check's failed run (#352): DEEP_HUB_TEST_LOAD names a
@@ -311,13 +314,41 @@ export function withAppend(record: RecordStore, append: RecordStore['append']): 
   });
 }
 
+/** The record's methods that read it, each counted as one query. */
+const RECORD_READS = ['raw', 'read', 'table', 'session', 'resolve', 'startSlice', 'loadLearned'];
+
+/** The queries one call runs (#1576): each read of the record made inside `counting`, its work's own and no other's. */
+const queries = new AsyncLocalStorage<{ n: number }>();
+export async function counting(call: () => Promise<Record<string, unknown>>): Promise<Record<string, unknown>> {
+  const count = { n: 0 };
+  const result = await queries.run(count, call);
+  return { ...result, queries: count.n };
+}
+/** The record, each read counted against the call it runs for, if one counts (#1576). */
+export function counted(record: RecordStore): RecordStore {
+  const reads = new Set([...RECORD_READS, 'rows']);
+  return new Proxy(record, {
+    get: (target, key) => {
+      const value = Reflect.get(target, key, target) as unknown;
+      if (typeof value !== 'function') return value;
+      const bound = (value as (...a: unknown[]) => unknown).bind(target);
+      if (typeof key !== 'string' || !reads.has(key)) return bound;
+      return (...args: unknown[]) => {
+        const count = queries.getStore();
+        if (count) count.n++;
+        return bound(...args);
+      };
+    },
+  });
+}
+
 /**
  * The record, each read it serves first logged to `file` as a JSON line: when it began, the method, and its SQL with
  * its bound values, or its arguments (DEEP_HUB_TEST_READS, #823). Only tests set it.
  */
 export function readsLogged(record: RecordStore, file: string): RecordStore {
   writeFileSync(file, '');
-  const reads = new Set(['raw', 'read', 'table', 'session', 'resolve', 'startSlice', 'loadLearned']);
+  const reads = new Set(RECORD_READS);
   return new Proxy(record, {
     get: (target, key) => {
       const value = Reflect.get(target, key, target) as unknown;
@@ -382,4 +413,74 @@ export function crashing(record: RecordStore, point: string): RecordStore {
     return event;
   };
   return withAppend(record, append);
+}
+/**
+ * A wait on `key`, woken by whoever wakes `waits` for it, by the hub stopping or after `ms`. It counts from the
+ * call, so a wake that comes while the caller still reads what it waits on isn't missed; `cancel` ends it.
+ */
+export function wakeable(waits: Map<string, Set<() => void>>, key: string, ms: number): { woken: Promise<void>; cancel: () => void } {
+  const set = waits.get(key) ?? new Set();
+  waits.set(key, set);
+  let wake = (): void => undefined;
+  const woken = new Promise<void>((done) => {
+    wake = () => {
+      clearTimeout(timer);
+      set.delete(wake);
+      if (!set.size && waits.get(key) === set) waits.delete(key);
+      done();
+    };
+  });
+  const timer = setTimeout(wake, Math.max(0, ms));
+  set.add(wake);
+  return { woken, cancel: wake };
+}
+/**
+ * The login plan of a Claude Code home (#1033), read again only after MODS_MS or once a file a sign-in rewrites
+ * changes: each read starts claude, about 175 ms of CPU, on every Claude Code session's start.
+ */
+export function planOf(plansSeen: Map<string, { key: string; at: number; plan: Promise<unknown> }>, now: () => number, home: string): Promise<unknown> {
+  const claude = claudeOnPath(process.env);
+  if (!claude) return Promise.resolve(undefined);
+  const files = [join(home, '.credentials.json'), join(home, '..', '.claude.json'), join(home, '.claude.json')];
+  const key = JSON.stringify([claude, ...files.map(statKey)]);
+  const seen = plansSeen.get(home);
+  if (seen && seen.key === key && now() - seen.at < MODS_MS) return seen.plan;
+  const plan = loginPlan(claude, { ...process.env, ...(home ? { CLAUDE_CONFIG_DIR: home } : {}) });
+  plansSeen.set(home, { key, at: now(), plan });
+  return plan;
+}
+/** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
+export function hubConfig(dir: string): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number }; acceptance: { slots: number; gateKey: string | null } } {
+  let c: Obj = {};
+  try { c = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')) as Obj; } catch { /* none yet: no binary resolves, so every job is refused saying so */ }
+  const runner = isObj(c.runner) ? c.runner : {};
+  const plan = isObj(c.plan) ? c.plan : {};
+  // Standing rules are judged at this margin over this window (#23): the design's 1.5 and 30 days unless you set them.
+  const rules = isObj(c.rules) ? c.rules : {};
+  return {
+    loginPath: typeof runner.login_path === 'string' ? runner.login_path : '',
+    reservePct: typeof plan.reserve_pct === 'number' ? plan.reserve_pct : 10,
+    rules: { margin: typeof rules.margin === 'number' ? rules.margin : 1.5, windowMs: (typeof rules.window_days === 'number' ? rules.window_days : 30) * DAY },
+    // The issues that run at once, and the gate identity's key (#1325): with none, a swap goes to you.
+    acceptance: { slots: isObj(c.acceptance) && typeof c.acceptance.slots === 'number' ? c.acceptance.slots : 1, gateKey: isObj(c.gate) && typeof c.gate.key === 'string' ? c.gate.key : null },
+  };
+}
+
+/**
+ * The pictures a taste call's evidence lists (#3234), by SHA-256 in its order: the manifest `{pictures: [{sha256, size}]}`
+ * the ask is pinned to, in the evidence store. Undefined when the pin is no such manifest.
+ */
+export function picturesListed(store: string, evidence: string): string[] | undefined {
+  try {
+    const listed = (JSON.parse(readFileSync(join(store, evidence.slice(0, 2), evidence.slice(2)), 'utf8')) as { pictures?: unknown }).pictures;
+    if (!Array.isArray(listed)) return undefined;
+    const shas = listed.map((p) => (p && typeof p === 'object' ? (p as { sha256?: unknown }).sha256 : undefined));
+    return shas.every((sha) => typeof sha === 'string' && /^[0-9a-f]{64}$/.test(sha)) ? (shas as string[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function lazyServices<T extends Record<string, () => unknown>>(read: T): { [K in keyof T]: ReturnType<T[K]> } {
+  return Object.defineProperties({}, Object.fromEntries(Object.entries(read).map(([key, get]) => [key, { get }]))) as { [K in keyof T]: ReturnType<T[K]> };
 }

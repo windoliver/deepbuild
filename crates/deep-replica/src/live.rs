@@ -248,7 +248,10 @@ mod live {
                     let mut shown = String::new();
                     loop {
                         cx.background_executor().timer(record::TICK).await;
-                        watch.tick(now(), || record::read(Duration::from_millis(5)));
+                        // #2661's planted tick stops reading the hub, in a build with the env-plants feature only.
+                        if !deep_app::plain::planted("tick-stops-reading") {
+                            watch.tick(now(), || record::read(Duration::ZERO));
+                        }
                         let reach = notify::Reach {
                             hub_down: watch.down(),
                             since: watch.since(),

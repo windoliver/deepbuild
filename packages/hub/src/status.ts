@@ -2,7 +2,7 @@
 // `session.state` and builds the list's rows from (rows.ts, #1463), and each session's detail deep status shows under
 // its row: a session whose turn finished, that turn's tool calls, failures and commits (#668), and a session with a
 // claim, its newest claim's line, the one its chat showed (#669). `deep numbers` reads the hub's readings.
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { codeWords } from '@deepbuild/contracts';
 import { billingMode } from '@deepbuild/readings';
@@ -12,7 +12,7 @@ import { CAN_RUN, CANT_RUN } from './hook-programs.js';
 import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
 import { numbersLines } from './numbers.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
 import { startOf } from './wire.js';
@@ -644,10 +644,9 @@ export async function numbersCommand(args: readonly string[]): Promise<number> {
     return 2;
   }
   try {
-    const socket = hubAddress().path;
-    const token = [join(dirname(socket), 'control.token'), rootOf(installedRoot()).token].find((p) => existsSync(p));
+    const { path: socket, token } = hubControl();
     // Named so the hub can refuse an agent's process tree what feeds your numbers.
-    const reply = await call(socket, token ? readFileSync(token, 'utf8').trim() : '', asks[0], asks[1], { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+    const reply = await call(socket, token, asks[0], asks[1], { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
     if (!('result' in reply)) {
       process.stderr.write(`deep numbers: ${reply.error.remediation}\n`);
       return 3;

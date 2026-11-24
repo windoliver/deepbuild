@@ -347,7 +347,7 @@ impl Hub<'_> {
                 .mesh
         } else if building::KINDS.contains(&kind) {
             Some(
-                building::build(drawn, id, item)
+                building::build(drawn, id, item, self.scenario.module_planted.as_deref())
                     .map_err(|p| unreadable(format!("out_of_range at items/{id}/{p}")))?,
             )
         } else if kind == super::ASSET {

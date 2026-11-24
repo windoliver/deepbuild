@@ -36,6 +36,10 @@ pub struct Plants {
     pub entry_on_change: bool,
     pub ignores_links: bool,
     pub keeps_document_seed: bool,
+    /// #552: a lone piece's bits from the host's secure source, not hash(the run's seed, the
+    /// draw's number); and the draw that hashes its step in place of its number.
+    pub alone_secure: Option<fn() -> u64>,
+    pub draw_hashes_step: bool,
 }
 
 /// A document's logic items as one piece, as the logic module checks one: its seed, its budget
@@ -76,9 +80,29 @@ pub fn piece_of(form: &Value) -> Option<Value> {
     if let Some(libraries) = form.get("libraries") {
         piece["packs"] = libraries.clone();
     }
+    // #276: a match's seats, each with its block of a profile's read entry.
+    let net = form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    if let Some(n) = net
+        .filter(|(_, i)| i["kind"] == "net@1")
+        .map(|(_, i)| i.pointer("/params/players"))
+        .next()
+    {
+        piece["players"] = n.cloned().unwrap_or(json!(2));
+    }
     // #860: the document's rewind, which the logic module checks against its items.
     if let Some(r) = form.get("rewind") {
         piece["rewind"] = r.clone();
+    }
+    // #552: the controls whose entries take a draw, from the document's net item.
+    if let Some(d) = (form["items"].as_object().into_iter().flatten())
+        .find(|(_, i)| i["kind"] == "net@1")
+        .and_then(|(_, i)| i.pointer("/params/draw_after"))
+    {
+        piece["draw_after"] = d.clone();
     }
     Some(piece)
 }
@@ -109,6 +133,15 @@ pub fn world_reads(form: &Value) -> Vec<String> {
 /// A refusal before any step, naming what.
 pub(crate) fn refused(code: &str, what: Value) -> Value {
     json!({"ok": false, "code": code, "what": what})
+}
+
+/// #552: the `draw_after` a piece (or a document's net item) names.
+fn piece_json_draw_after(piece: &Value) -> Vec<Value> {
+    piece
+        .get("draw_after")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// A u64 seed, given as a decimal string or a number.
@@ -143,7 +176,7 @@ fn track_hash(entries: &[Value]) -> String {
 }
 
 /// The piece's full state as one hash: each of its items' deep hashes, in piece order.
-fn full(hashes: &Map<String, Value>, ids: &[String]) -> String {
+pub(crate) fn full(hashes: &Map<String, Value>, ids: &[String]) -> String {
     let mut b = Vec::new();
     for id in ids {
         b.extend(id.as_bytes());
@@ -612,6 +645,16 @@ pub fn play(
         &mut rec,
         None,
     )?;
+    if plants.draw_hashes_step {
+        world.draw.wrong = crate::draws::Wrong::HashesStep;
+    }
+    let draw_after: Vec<String> = (piece_json_draw_after(document).into_iter())
+        .filter_map(|c| c.as_str().map(str::to_string))
+        .collect();
+    let mut alone_bits = |n: u64| match plants.alone_secure {
+        Some(secure) => secure(),
+        None => crate::draws::alone_bits(seed, n),
+    };
     let mut values: Vec<Vec<Value>> = vec![Vec::new(); paths.len()];
     // Each watched array's `{step, value}` at step 0 and at each step it differs from the last.
     let mut changes: Vec<(Vec<Value>, Option<Value>)> = vec![(Vec::new(), None); watched.len()];
@@ -717,6 +760,10 @@ pub fn play(
                     arrived: 0,
                 })?;
             }
+        }
+        // #552: a piece played alone writes its own bits for each drawn step at the next step.
+        if k + 1 < steps {
+            crate::draws::alone(&mut world, &draw_after, (k, step), &mut alone_bits)?;
         }
         let ns: u64 = rec
             .ns

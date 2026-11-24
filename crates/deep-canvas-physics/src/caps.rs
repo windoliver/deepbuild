@@ -67,15 +67,18 @@ impl Sweep {
 
 /// #191: the features a backend's caps may claim: swept collision for a body with `ccd`, soft
 /// bodies, a character controller, (#251) a vehicle controller, (#2241) belts, a contact
-/// material's `tangent_speed`, and (#2310) articulations, the joints of one tree placed from
-/// their own coordinates.
-pub const CLAIMS: [&str; 6] = [
+/// material's `tangent_speed`, (#2310) articulations, the joints of one tree placed from their
+/// own coordinates, and (#1931) each closed force law by name.
+pub const CLAIMS: [&str; 9] = [
     "ccd",
     "soft_bodies",
     "character_controller",
     "vehicle_controller",
     "belts",
     "articulations",
+    "inverse_square",
+    "magnetic",
+    "lennard_jones",
 ];
 
 /// Rapier 0.36.1 in 3D, as the design pins it.
@@ -101,8 +104,9 @@ pub const RAPIER3D: Caps = Caps {
         "A body with ccd on also predicts its contacts along its own move in a step, which holds a body in its path whatever that body's ccd, and reaches neither its own turn nor the other body's move.",
         "An articulated joint's turning coordinates are damped at 0.1 N·m·s/rad, the engine's own, which no world field sets; a sliding one's aren't.",
         "A body an articulated joint holds moves by its joints' coordinates alone: a velocity written on it, a launch and a poke are refused, and a grab's force moves it.",
+        "Two bodies keep their contact points while they have moved less than solver.length_unit ÷ 20 against each other; a pair that touches a kinematic body or a dynamic body a hinge's motor turns finds them anew at every step, and so does a dynamic body thinner than that distance in each step after it has moved a twentieth of its own thinnest extent.",
     ],
-    claims: &["ccd", "soft_bodies", "character_controller", "vehicle_controller", "belts", "articulations"],
+    claims: &CLAIMS,
     sweep: Sweep {
         starts: &["dynamic"],
         without_ccd: &["static"],

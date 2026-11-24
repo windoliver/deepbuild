@@ -1,0 +1,20 @@
+# main 61aa8eb06, Mac18,1, cargo test -p deep-show --bin deep-show --locked -- the_published_schedule_matches_its_committed_snapshot
+running 1 test
+test tests::the_published_schedule_matches_its_committed_snapshot ... FAILED
+thread 'tests::the_published_schedule_matches_its_committed_snapshot' (121256362) panicked at crates/deep-show/src/tests.rs:223:9:
+assertion `left == right` failed: the full schedule drifted from crates/deep-show/schedule/full.json:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 57 filtered out; finished in 4.18s
+
+# diff: < committed crates/deep-show/schedule/full.json, > the schedule the test printed (published)
+5c5
+<   "set_digest": "3a1e5d7fb380aaa28441eedbf200690fddbfa31b9071a6ae40be5d8b1af8378c",
+---
+>   "set_digest": "bb0741260c1e1fee93f7e3e8e7708c9ebc7e5a3d48d73668c99c09fbdc89d526",
+212c212
+<       "digest": "8ea81670ff36af60c3273da5c57ccf1107a428191d9bb46e9f30dd3d2db33e94",
+---
+>       "digest": "3f668143e49fc0b78f42c4e527222f3604f820879190e949df9cfdd882fdfa48",
+396c396
+<       "digest": "1effe75b78c0e162eec963d4777ba28160bc33cbc2e3452be9bb7efe3096232e",
+---
+>       "digest": "d22991713cedfb0899fe331b7b00c6c075a2676ed020864b09573bdf69e7b1ec",

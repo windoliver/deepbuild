@@ -28,6 +28,7 @@
 
 mod bytes;
 pub mod core_ops;
+mod perturb;
 mod steps;
 mod tree;
 mod view;
@@ -43,6 +44,7 @@ use crate::canon::{self, NoShape};
 use crate::registry::{Per, Sealed, TableValue};
 
 pub use bytes::Canonical;
+use perturb::{perturb_token, perturb_view};
 pub use steps::CarriedState;
 pub use tree::KeyTree;
 pub use view::View;
@@ -414,6 +416,12 @@ pub struct Planted {
     /// A seek restores the checkpoint nearest to t by distance, the earlier of two equally
     /// near, instead of the last one at or before t (#488's planted seek).
     pub checkpoint_nearest: bool,
+    /// The checkpoint ring lets go of the checkpoint at the start as if it were every second
+    /// one, and a seek before its earliest checkpoint restores that one (#2693's planted ring).
+    pub ring_drops_start: bool,
+    /// The checkpoint ring holds only its newest checkpoint, so its spacing never doubles
+    /// (#2693's planted ring).
+    pub ring_newest_only: bool,
     /// A session's own frame merges the results of nodes run on several threads in the order
     /// they finished, not the plan's node order (#857's planted merge); a revision's check and
     /// its probe frame still merge in order, so the revision is accepted.
@@ -1663,11 +1671,14 @@ impl Session {
     /// nothing else in the document changes. Those items are rekeyed and stamped by the classes
     /// their changed fields fall in, as `load` would stamp them, without compiling the plan again;
     /// then the revision's check phases run. `None` when the revision reaches further, for `load`.
+    /// `reached` names the members besides `items` its patch reached: only those are compared
+    /// with the revision before, so a patch's cost is not the other members' size (#2700).
     pub fn revise_items(
         &mut self,
         s: &mut Scheduler<'_>,
         doc: &Value,
         ids: &[&str],
+        reached: &[&str],
     ) -> Option<Vec<OpIssue>> {
         self.sync_hash(s);
         let v = s.options.hash;
@@ -1678,11 +1689,16 @@ impl Session {
             if items.len() != l.items.len() {
                 return None;
             }
-            for (k, value) in doc.as_object()? {
-                if k != "items" && l.doc.get(k) != Some(value) {
-                    return None;
-                }
+            if reached.iter().any(|k| l.doc.get(k) != doc.get(k)) {
+                return None;
             }
+            #[cfg(test)]
+            assert!(
+                doc.as_object().is_some_and(|d| d
+                    .iter()
+                    .all(|(k, v)| k == "items" || l.doc.get(k) == Some(v))),
+                "a member the patch did not name as reached changed"
+            );
             // A per-document operator's `applies` reads no item, so it is asked once, not per ID.
             let documents_alike = ids.is_empty()
                 || s.sealed
@@ -2899,44 +2915,6 @@ fn result_digest(v: HashVersion, out: &[Val], err: Option<&OpError>) -> String {
     match v {
         HashVersion::V1 => sha256_hex(&bytes),
         HashVersion::V2 => blake3::hash(&bytes).to_hex().to_string(),
-    }
-}
-
-/// Another value of a view input's type.
-fn perturb_view(k: usize, v: &Value) -> Value {
-    match k {
-        LOCALE => json!(if v.as_str() == Some("de") { "en" } else { "de" }),
-        REDUCED_MOTION => json!(!v.as_bool().unwrap_or(false)),
-        2 => json!(v.as_f64().unwrap_or(1.0) + 1.0),
-        3 => json!(if v.is_null() { "someone" } else { "" }),
-        _ => {
-            let mut out = v.clone();
-            if !perturb_number(&mut out) {
-                out = json!([1, 1]);
-            }
-            out
-        }
-    }
-}
-
-/// Another value of a look token's type: a color's first channel moves.
-fn perturb_token(v: &Value) -> Value {
-    match v {
-        Value::Array(rgb) => {
-            let mut out = rgb.clone();
-            if let Some(first) = out.first_mut() {
-                let x = first.as_u64().unwrap_or(0);
-                *first = json!((x + 64) % 256);
-            }
-            Value::Array(out)
-        }
-        other => {
-            let mut out = other.clone();
-            if !perturb_number(&mut out) && !perturb_string(&mut out) {
-                out = json!(0);
-            }
-            out
-        }
     }
 }
 

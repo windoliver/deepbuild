@@ -3,10 +3,9 @@
 // head and lands nothing; `deep land` runs one round of landings; `deep work --issues <n,...> --once` makes one pass of
 // a run over a fixed set. `deep work "<scope>"` raises a run's one approval, `deep work show` prints each issue's state
 // word and what it waits for, and `deep work pause` stops new starts while running turns finish.
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { call, notAnswered, UNDECIDED_CODES } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl } from './paths.js';
 import { startOf } from './wire.js';
 
 const LAND = 'Usage: deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes in turn';
@@ -21,7 +20,8 @@ const flag = (args: readonly string[], name: string): string | undefined => {
 async function send(method: string, params: Record<string, unknown>, print: (r: Record<string, unknown>) => string = (r) => JSON.stringify(r)): Promise<number> {
   try {
     // The CLI names its own process, so a call from inside an agent's process tree is refused as that session's.
-    const reply = await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), method, params, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+    const { path: socket, token } = hubControl();
+    const reply = await call(socket, token, method, params, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
     if ('error' in reply) {
       process.stderr.write(`${reply.error.remediation}\n`);
       return UNDECIDED_CODES.has(reply.error.code) ? 3 : 1;

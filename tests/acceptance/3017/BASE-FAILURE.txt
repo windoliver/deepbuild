@@ -1,0 +1,121 @@
+Base commit: b6b99ad8c (main on 2026-11-21, without #3017's work), checked out detached in this job's own worktree.
+Machine: macOS 27.2 on Apple silicon (Mac17,10, Apple M5 Max, 64 GB, 18 cores) and its Metal GPU: the shared Mac this
+         job ran on, one-minute load about 190 to 270 during the build and the first runs and about 18 to 40 later, so
+         no timing could be judged here.
+Build: cargo build --locked --bin deep-show --no-default-features --features full, CARGO_INCREMENTAL=0
+       CARGO_PROFILE_DEV_DEBUG=0, nice -n 10, the pinned 1.99.1 toolchain: exit 0 in 41 min, on a target folder cloned
+       from a build at the base's parent. node_modules was cloned from an install of the same package-lock.json
+       (sha256 1d83b771...); the root vitest config then needed the workspaces' dist/, so
+       npm run build --workspaces --if-present ran once (exit 0).
+Command (from the worktree root, one file at a time, each final file run once):
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 nice -n 10 node node_modules/vitest/vitest.mjs run tests/acceptance/3017/<file> --no-file-parallelism --testTimeout=600000
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/3017/tsconfig.json passes (exit 0, no output).
+
+Result: 7 files, 17 tests. 16 failed at an assertion and 1 failed INCONCLUSIVE. None passed, none was skipped, none
+failed at a load error. Every planted name is unknown at the base, so each planted test fails at its scenario's
+refusal.
+
+room.test.ts (criteria 1 to 3), started 03:30:30, 4.96 s
+  × AC1 #3017.0d5e9e4a the room rendered back at 960 × 540 lists the table and the lamp ... (2458 ms)
+      AssertionError: the room's table lists what shows and names the chair hidden:
+        the chair, wholly behind the wall, is a row of visible: {"id":"chair","box":[690,225,60,90]}
+        hidden doesn't list the chair (hidden: absent)
+      The base's table (its PROOF line): chair [690,225,60,90], lamp [450,240,30,60], pillar [464,90,56,360],
+      table [180,300,120,60], wall [630,180,180,180]; no hidden, no cut. Every box lies on whole px, where the
+      fixture puts it.
+  × AC1 #3017.0d5e9e4a the merge base's table (planted visible_table_as_boxes) ... (112 ms)
+      AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}
+  × AC2 #3017.f9dbec77 the lamp's px is exactly the count of the snapshot's px whose pick resolves to the lamp ... (904 ms)
+      AssertionError: the lamp's px is the frame's count of the lamp's picks:
+        the lamp's row reports px undefined, not a count; the frame's picks resolve 840 px to it
+      The probes (34 render-backs of up to 64 px, over the lamp's face grown by 2 px) read the deep_show's picture
+      (one SHA-256, 54df9e92...). They found 840 lamp px, 14 columns by 60 rows, as the fixture places it, and none
+      in the grown ring.
+  × AC2 #3017.f9dbec77 a planted table that counts the px of the lamp's box (planted visible_px_from_box) ... (112 ms)
+      AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}
+  × AC3 #3017.4a9dce0e each row's at is a px whose pick resolves to the row's item ... (0 ms: it reads the runs AC1 and AC2 made)
+      AssertionError: each row's at is on its item:
+        the chair's row carries no at that is a px of the 960 × 540 frame (at undefined)
+        (the lamp, the pillar, the table and the wall alike)
+  × AC3 #3017.4a9dce0e a planted table that reports the box's centre (planted visible_at_box_centre) ... (113 ms)
+      AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}
+
+doorway.test.ts (criterion 4), started 03:51:07, 4.56 s
+  × AC4 #3017.cdc4bd52 the far wall through a 1 m doorway reports at most the doorway's px ... (2823 ms)
+      AssertionError: the far wall's px says how much of it shows:
+        the far wall's row through the doorway and its row with the near wall removed are equal: {"id":"far-wall","box":[120,90,720,360]}
+        the far wall's row through the doorway reports px undefined, not a count
+        the far wall's row with the near wall removed reports px undefined, not a count
+      So on the merge base the two rows are equal, as the criterion says.
+  × AC4 #3017.cdc4bd52 the merge base's table (planted visible_table_as_boxes) ... (145 ms)
+      AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}
+
+cut.test.ts (criterion 5), started 03:51:12, 4.37 s
+  × AC5 #3017.5f877f6f 1,000 boxes in view, 300 large and near: 200 rows ... (3126 ms)
+      AssertionError: the table keeps the 200 with the most px, sorted by ID, and says it left out 800:
+        visible kept box-000 (16 px) and dropped box-204 (324 px), a larger one: 160 rows kept are not among the 200 with the most px
+        cut is absent, where 800 of the 1000 visible boxes were left out of the table
+      The base keeps box-000 to box-199, the first 200 by ID, with no px and nothing saying 800 were left out.
+  × AC5 #3017.5f877f6f a planted table that keeps the first 200 by ID (planted visible_first_200_by_id) ... (153 ms)
+      AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}
+  × AC5 #3017.5f877f6f a planted table that cuts and reports no cut (planted visible_cut_unreported) ... (154 ms)
+      AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}
+
+cutaway.test.ts (criterion 6), started 03:51:16, 3.74 s
+  × AC6 #3017.68944217 a cutaway that removes the vase's whole shape moves it from visible to hidden (2672 ms)
+      AssertionError: the cutaway moves the vase from visible to hidden:
+        with the cutaway removing its whole shape, the vase is still a row of visible: {"id":"vase","box":[600,180,60,120]}
+        with the cutaway removing its whole shape, hidden doesn't list the vase (hidden: absent)
+  × AC6 #3017.68944217 a planted table that counts picks from the frame before the cutaway (planted visible_picks_before_cutaway) ... (157 ms)
+      AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}
+
+
+sheet.test.ts (criterion 7), started 03:51:20, 3.71 s
+  × AC7 #3017.2b3c94b2 a sheet of six views returns six tables ... (2756 ms)
+      AssertionError: each view carries its own table, and only the back view hides the cube:
+        the front view's table: the row of cube carries no px count (px undefined)
+        the front view's table: the row of cube carries no visible centre at a px of the 640 × 360 frame (at undefined)
+        (px and at alike for the cube and the screen in all six views: 24 lines)
+        the back view, whose screen covers the cube, doesn't list the cube under hidden (hidden: absent)
+        the back view, whose screen covers the cube, lists the cube as a row of visible
+      The sheet returned six snapshots, one a view, each with visible rows {id, box} for the cube and the screen.
+
+budget.test.ts (criterion 8), started 07:24:28, 16.14 s
+  × AC8 #3017.c9b75e03 the table adds under 5 ms to a render-back at 1936 × 1584 ... (2801 ms)
+      Its lease leg passed first: a lease file held by a live process the test started made the timing read
+      INCONCLUSIVE, with nothing drawn and no number.
+      AssertionError: the timed render-back carries the table:
+        the render-back at 1936 × 1584: the row of box-000 carries no px count (px undefined)
+        the render-back at 1936 × 1584: the row of box-000 carries no visible centre at a px of the 1936 × 1584 frame (at undefined)
+        (the message shows its first 40 failures, px and at row by row)
+      Its PROOF line: one snapshot of 1936 × 1584 (0c649997...), 200 rows, cut null. Nothing was timed.
+
+suites.test.ts (criterion 9), started 06:13:10, 446.86 s
+  × AC9 #3017.d0ed4366 the files of 427/, 1729/ and 2293/ that read a 3D snapshot's table pass with no edit ... (446706 ms)
+      INCONCLUSIVE. The merge base was b6b99ad8c, HEAD itself, and no file under the three folders differed. In the
+      child vitest:
+        passed: 1729/models.test.ts (3 tests), 1729/maps.test.ts (2), 1729/sequence.test.ts (1),
+                2293/ac1-frame-box.test.ts (1);
+        failed INCONCLUSIVE: 427/live-redraft.test.ts, both tests: deep-show live could not show a window here
+                (no_display); the app's side needs a Mac with a display.
+      Every test that didn't pass failed INCONCLUSIVE, so this test reads INCONCLUSIVE: this session can't show a
+      window.
+  × AC9 #3017.d0ed4366 render-back's line in the design says what a row of the table holds ... (5 ms)
+      AssertionError: the Render-back section has a sentence on the table naming what a row holds, px and at among it
+      in code; its sentences on the table:
+        Each reply carries a table of visible item IDs with screen boxes, at most 200 rows sorted by ID.
+        Each render keeps its own list of what it fell back on, ... (the fallback list)
+      The lane (node scripts/design-links.mjs) wasn't reached.
+
+Earlier attempts, disclosed:
+- The first attempt at room.test.ts failed to load the root vitest config, since the workspaces' dist/ was missing.
+  No test ran. The room run above came after npm run build --workspaces.
+- budget.test.ts was first run before its structure check moved ahead of its planted run. Its lease leg passed, and it
+  then failed at the planted scenario's refusal (bad_input). The run above is the final file's one run.
+
+Scratch probes outside the repo (not kept), on the same base binary, to check the fixtures:
+- The sheet's six PNGs, decoded. The cube's colour (231,149,124) shows in front (2116 px), left (1980), right
+  (1980), top (1980) and three_quarter (3454), and not at all in back.
+- The cutaway's second revision, probed. The vase's px answer no hits; the stand's answers stand.
+- The doorway, probed. The far wall shows at x 450 to 509 and y 210 to 449 through the doorway; the near wall's parts
+  answer elsewhere, and nothing below y 450.

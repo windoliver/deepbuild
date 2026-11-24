@@ -52,7 +52,8 @@ try {
 
   const touched = change.whole.map(({ path }) => path);
   if (lanes.has('lifecycle')) {
-    const tables = (release ? listFiles(root) : touched.filter((path) => listFiles(root).includes(path))).filter((path) => TABLES.test(path));
+    const files = new Set(listFiles(root));
+    const tables = (release ? [...files] : touched.filter((path) => files.has(path))).filter((path) => TABLES.test(path));
     if (tables.length) lifecycle(root, tables, say);
     else print(release ? 'lifecycle: no lifecycle table in the repository' : 'lifecycle: not run, the change touches no lifecycle table');
   }
@@ -95,6 +96,7 @@ function trace(issue, runs, proven, tree) {
     const tags = runs.tests.filter((test) => test.path === path).flatMap(({ tags: list }) => list);
     for (const tag of new Set(tags)) if (tag.startsWith(prefix) && !ids.has(tag)) fail(`${tag} names no criterion of #${issue.number} (${path})`);
   }
+  for (const [path, tags] of runs.byHandTags ?? []) for (const tag of tags) if (tag.startsWith(prefix) && !ids.has(tag)) fail(`${tag} names no criterion of #${issue.number} (${path}, by hand)`);
   const open = issue.criteria.filter(({ id }) => !runs.tests.some((test) => test.tags.includes(id) && proven.has(test.key))).map(({ id }) => id);
   if (issue.word === 'Closes' && open.length) fail(`Closes #${issue.number} refused: this change is Part of #${issue.number}; open: ${open.join(', ')}`);
   else if (open.length) say('PASS', 'trace', `Part of #${issue.number}; open: ${open.join(', ')}`);

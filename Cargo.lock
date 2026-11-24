@@ -2193,11 +2193,13 @@ dependencies = [
  "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-marks",
+ "deep-canvas-motion",
  "deep-canvas-scene3d",
  "deep-effects-render",
  "deep-gpu",
  "deep-images",
  "deep-marks-gpui",
+ "deep-play",
  "deep-scene3d-render",
  "deep-text",
  "deep-text-gpui",
@@ -2432,6 +2434,7 @@ dependencies = [
  "libc",
  "libm",
  "opus-rs",
+ "png 0.18.1",
  "rusty_aac",
  "serde_json",
  "sha2 0.10.9",
@@ -2446,8 +2449,10 @@ version = "0.0.0"
 name = "deep-effects-render"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas",
  "deep-canvas-effects",
  "deep-canvas-motion",
+ "deep-canvas-scene3d",
  "deep-gpu",
  "deep-scene3d-render",
  "naga 30.0.1",
@@ -2532,6 +2537,7 @@ dependencies = [
  "deep-marks-render",
  "deep-scene3d-render",
  "image",
+ "naga 30.0.1",
  "serde_json",
  "wgpu 30.0.1",
 ]
@@ -2858,6 +2864,7 @@ name = "deep-show"
 version = "0.0.0"
 dependencies = [
  "blake3",
+ "crc32fast",
  "deep-canvas",
  "deep-canvas-cells",
  "deep-canvas-effects",
@@ -2895,13 +2902,17 @@ dependencies = [
  "deep-scene3d-render",
  "deep-text",
  "deep-text-gpui",
+ "gif 0.14.2",
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-pre-macos",
+ "ignore",
  "image",
  "libc",
+ "miniz_oxide 0.9.1",
  "objc2 0.6.5",
  "objc2-foundation 0.3.2",
+ "png 0.18.1",
  "rav1e",
  "raw-window-handle",
  "serde_json",
@@ -2968,6 +2979,17 @@ dependencies = [
  "ttf-parser",
  "typst",
  "typst-layout",
+]
+
+[[package]]
+name = "deep-urdf"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-physics",
+ "roxmltree 0.21.1",
+ "serde_json",
 ]
 
 [[package]]

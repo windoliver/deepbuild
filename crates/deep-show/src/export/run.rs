@@ -91,6 +91,10 @@ impl Hub<'_> {
         if job.codec == "gltf" {
             return self.export_gltf(job, &doc);
         }
+        // #1250: an indexed look's GIF, each frame its index target (clip.rs).
+        if job.codec == "gif" {
+            return self.export_gif(job, &doc);
+        }
         // #518: a named tool is one the brief pins, or the export is refused at check.
         self.pinned(job)?;
         // Planted: whatever is at the destination goes before the export finds its tool.
@@ -261,6 +265,10 @@ impl Hub<'_> {
             // Planted (#539): the frames evaluate hover as the panel's live hover, not none.
             self.hover_into(&job.doc, &mut doc);
         }
+        if self.scenario.module_planted.as_deref() == Some("export_keeps_live_hover_at") {
+            // Planted (#298): the frames evaluate `hover_at` as the panel's live hover.
+            self.hover_at_kept(&job.doc, &mut doc);
+        }
         // #507: a film whose markers wait or branch exports one path, each hold as long as the
         // film audit's hold rule asks for what it shows.
         let path = match (&job.range, doc_span(&doc)) {
@@ -276,6 +284,8 @@ impl Hub<'_> {
         };
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
+        // #552: the side it draws, a view value its frames read through `match.me`.
+        doc["match.me"] = job.me.clone();
         self.inline_occurrences(&mut doc, &job.track)
             .map_err(|i| json!({"code": i.code, "issues": [i.to_json()]}))?;
         let _ = self.column_view(&mut doc, 0);
@@ -546,8 +556,14 @@ impl Hub<'_> {
             .map(|b| f32::from_le_bytes(*b))
             .collect();
         drop(pcm);
-        // #157: the machine's GPU lease, held while the export draws and reads its frames.
-        let lease = Lease::take();
+        // #157, #3219: the machine's GPU lease, exclusive, held while the export draws and reads its frames.
+        let planted = self.scenario.module_planted.clone();
+        let lease = crate::kit::lease::GpuLease::take(
+            crate::kit::lease::Mode::Exclusive,
+            "deep-show export",
+            None,
+            planted.as_deref(),
+        );
         let first = start_number + frames.start as u64;
         let tc_start = match self.scenario.planted {
             Some(Planted::RangeRestartsTimecode) => start_number,
@@ -714,12 +730,7 @@ impl Hub<'_> {
             .session
             .clone()
             .unwrap_or_else(|| format!("process {}", std::process::id()));
-        let key = adapter
-            .as_ref()
-            .and_then(|a| a["name"].as_str())
-            .unwrap_or("gpu")
-            .to_string();
-        let lease = lease.release(&holder, &key);
+        let lease = lease.release(&holder, planted.as_deref());
         let hidden: Vec<&String> = match entry["hidden"].as_str() {
             Some("listed") => doc["items"]
                 .as_object()
@@ -871,6 +882,7 @@ impl Hub<'_> {
                 },
                 |r| r.writer.clone(),
             ),
+            patch: None,
             hash,
             state: "current",
             doc: baked,

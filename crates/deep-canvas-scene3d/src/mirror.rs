@@ -187,6 +187,13 @@ fn plane_of(part: &crate::scene::Solid, eye: Vec3) -> Option<(Vec3, f64)> {
 /// mirror in it draws its fallback, since the pass it draws in has no mirror of its own.
 pub fn view(scene: &Scene, m: &Mirror, size: [u32; 2]) -> Scene {
     let mut s = scene.clone();
+    view_into(&mut s, scene, m, size);
+    s
+}
+
+/// [`view`] written into `s`, the view the frame before drew (#3016): what holds is kept where it
+/// is, so a frame copies nothing new for the mirror.
+pub fn view_into(s: &mut Scene, scene: &Scene, m: &Mirror, size: [u32; 2]) {
     // The plane where its part stands at t, seen from the eye at t.
     let (n, offset) = scene
         .layers
@@ -203,6 +210,8 @@ pub fn view(scene: &Scene, m: &Mirror, size: [u32; 2]) -> Scene {
         let d = 2.0 * dot(n, v);
         [v[0] - d * n[0], v[1] - d * n[1], v[2] - d * n[2]]
     };
+    crate::refresh::shared(s, scene);
+    s.camera.clone_from(&scene.camera);
     let c = &mut s.camera;
     let k = f64::from(size[0]) / f64::from(scene.size[0]);
     c.eye = point(c.eye);
@@ -214,29 +223,40 @@ pub fn view(scene: &Scene, m: &Mirror, size: [u32; 2]) -> Scene {
     c.scale *= k;
     c.centre = [c.centre[0] * k, c.centre[1] * k];
     s.size = size;
-    s.jitter = [s.jitter[0] * k, s.jitter[1] * k];
+    s.jitter = [scene.jitter[0] * k, scene.jitter[1] * k];
     s.overlays.clear();
     s.readouts.clear();
     s.motion = None;
     s.velocity = None;
-    // #506: a view inset's window draws nothing in a mirror, which views one level deep.
-    let windows: BTreeSet<&str> = scene.views.iter().map(|v| v.id.as_str()).collect();
+    // #506: a view inset's window draws nothing in a mirror, which views one level deep. The
+    // mirror draws no label.
+    let window = |id: &str| scene.views.iter().any(|v| v.id == id);
+    let keeps = crate::refresh::Keeps {
+        solid: &|id| !m.parts.contains(id) && !window(id),
+        item: &|_| true,
+        labels: false,
+    };
+    crate::refresh::layers(&mut s.layers, &scene.layers, &keeps);
     s.views.clear();
-    for layer in &mut s.layers {
-        layer.labels.clear();
-        layer
-            .solids
-            .retain(|p| !m.parts.contains(&p.id) && !windows.contains(p.id.as_str()));
-    }
+    crate::refresh::same(&mut s.light_cut, &scene.light_cut);
+    s.sources.clone_from(&scene.sources);
+    (s.read_foam, s.read_normal) = (scene.read_foam, scene.read_normal);
     // Nothing behind the plane: the cutaway hides where n·p < offset, beside any planes the
     // scene's own cutaway has when it hides past any of them.
+    crate::refresh::same(&mut s.cutaway, &scene.cutaway);
     let clip = (n.map(|v| -v), -offset);
-    crate::views::clip(&mut s, clip, format!("{}#mirror", m.material));
+    crate::views::clip(s, clip, format!("{}#mirror", m.material));
     s.mirror = None;
+    // #3034: under water the mirrored eye stands for the path from the eye to the surface, so
+    // all of what this view sees lies in the water; and its points are measured from the
+    // target mirrored with it, which a camera aimed past the surface holds off the plane.
+    s.under = scene.under.map(|_| f64::INFINITY);
+    if scene.under.is_some() {
+        s.camera.target = point(s.camera.target);
+    }
     s.read_reflection = false;
     // A flare is the lens's, not the reflection's.
     s.flare = None;
-    s
 }
 
 #[cfg(test)]
@@ -295,5 +315,39 @@ mod tests {
             (b[0] * 2.0 - (2.0 * c.centre[0] - seen[0])).abs() < 1e-6
                 && (b[1] * 2.0 - seen[1]).abs() < 1e-6
         );
+    }
+
+    /// #3016: the mirrored view the frame before drew, made this frame's in place, is the view
+    /// this frame makes, whether the scene gained items, lost them or moved them.
+    #[test]
+    fn a_kept_mirrored_view_made_again_in_place_is_the_frames_view() {
+        let look =
+            Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap();
+        let doc = |cubes: usize, y: f64| {
+            let mut items = json!({
+                "cam": {"id": "cam", "kind": "camera@1", "name": "C", "order": "a0", "layer": "main", "params": {"projection": "perspective", "target": [0, 0, 0], "orbit": {"azimuth": 20, "elevation": 25, "distance": 8}, "fov": 40}},
+                "glass": {"id": "glass", "kind": "material@1", "name": "M", "order": "a1", "layer": "main", "params": {"roughness": 0, "mirror": {"strength": 1, "plane": "floor"}}},
+                "floor": {"id": "floor", "kind": "mark.box@1", "name": "F", "order": "b0", "layer": "main", "material": "glass", "params": {"size": [6, 0.02, 6]}, "at": {"pos": [0, -0.01, 0]}},
+                "tag": {"id": "tag", "kind": "mark.text@1", "name": "T", "order": "b9", "layer": "main", "params": {"text": "hi", "size": 0.3, "size_space": "world", "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [0, 2, 0]}}
+            });
+            for k in 0..cubes {
+                items[format!("cube{k}")] = json!({"id": format!("cube{k}"), "kind": "mark.box@1", "name": "B", "order": format!("c{k}"), "layer": "main", "params": {"size": 0.5, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [k as f64 - 1.0, y, 0]}});
+            }
+            let doc = json!({
+                "format": 1, "profile": "scene", "title": "T", "size": [320, 180], "camera": "cam",
+                "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+                "items": items,
+            });
+            crate::scene::evaluate(&doc, 0, &look, &mut Labels::new()).unwrap()
+        };
+        let (few, many, moved) = (doc(1, 1.0), doc(3, 1.0), doc(3, 2.0));
+        let half = [160, 90];
+        for (before, now) in [(&few, &many), (&many, &moved), (&moved, &few)] {
+            let m = now.mirror.clone().expect("the floor mirrors");
+            let was = before.mirror.clone().expect("the floor mirrors");
+            let mut kept = view(before, &was, half);
+            view_into(&mut kept, now, &m, half);
+            assert!(kept == view(now, &m, half), "kept {kept:?}");
+        }
     }
 }

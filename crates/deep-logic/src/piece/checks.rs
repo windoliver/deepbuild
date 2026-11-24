@@ -1,5 +1,45 @@
 use super::*;
 
+/// The fields each item declares, before its program is checked.
+pub(super) struct Declared {
+    program: String,
+    debug: Option<String>,
+    step: i64,
+    turn: bool,
+    due: Option<String>,
+    reads: Vec<String>,
+    writes: Vec<Write>,
+    fuel: i64,
+    memory: u64,
+    stack: i32,
+    every: i64,
+    ring: u64,
+    assets: Vec<String>,
+    links: Vec<(String, String)>,
+    saves: Option<Value>,
+    pages: Option<Value>,
+    carry: Option<Value>,
+    carry_in: Option<crate::carry::CarryIn>,
+    profile: Option<Value>,
+    /// #276: the seats a profile's read entry has a block for: the piece's `players`, else 1.
+    seats: u32,
+    emits: Vec<Emit>,
+    fires: Vec<fires::Fire>,
+    services: Vec<(String, u32)>,
+    mirrors: Vec<(String, String)>,
+    preview: Option<(Vec<String>, Vec<Write>)>,
+    /// `lanes`: its lane graph and vehicle kind, built at check (#981).
+    lanes: Option<Value>,
+    /// `process`: process@1's kind names (#980).
+    process: Option<Vec<String>>,
+    /// `separation`: its movers and minima, built into a table at check (#1255).
+    separation: Option<Value>,
+    /// `circuit`: its nodes and parts, built into a table at check (#1181).
+    circuit: Option<Value>,
+    /// The item's fields as given, for its bake key.
+    given: String,
+}
+
 pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> {
     let bad = |field: &str, what: String| {
         logic_refused(id, vec![refusal("field", what, json!({"field": field}))])
@@ -14,6 +54,8 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "step_rate",
             "clock",
             "due",
+            "open",
+            "finish",
             "reads",
             "writes",
             "budget",
@@ -21,12 +63,21 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "assets",
             "links",
             "saves",
+            "carry",
+            "carry_in",
+            "profile",
             "emits",
             "fires",
             "services",
             "mirrors",
             "preview",
+            "pages",
             "lanes",
+            // #552: a fog grid, which gates its occurrences' readers on each copy.
+            "fog",
+            "process",
+            "separation",
+            "circuit",
         ]
         .contains(&k.as_str())
         {
@@ -98,6 +149,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
                 ty,
                 count: count as u32,
                 linear: i == "linear",
+                cut: w.get("cut").map(|c| c.as_str().unwrap_or_default().to_string()),
             }),
             _ => refused.push(refusal(
                 "write",
@@ -105,6 +157,20 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
                 json!({"write": name}),
             )),
         }
+    }
+    // #2035: a linear write's cut names a bool write of its count in this item.
+    for w in &writes {
+        let Some(cut) = &w.cut else { continue };
+        let fits = |c: &Write| &c.name == cut && c.ty == Ty::Bool && c.count == w.count;
+        let what = match (w.linear, writes.iter().any(fits)) {
+            (true, true) => continue,
+            (false, _) => format!("{} holds, so it never blends: a cut is only for a linear write", w.name),
+            (true, false) => format!(
+                "{}'s cut {cut} isn't a bool write of {} elements in this item: a cut marks each element that jumps on a step, so it names a bool write with one element for each",
+                w.name, w.count
+            ),
+        };
+        refused.push(refusal("write", what, json!({"write": w.name})));
     }
     // Sized in u64 and held to the largest memory, so no region's size or offset passes a u32.
     let total: u64 = writes
@@ -170,6 +236,21 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             Some(name.to_string())
         }
     };
+    // #278: `open` names one of the item's own bool arrays of count 1 (joins after the start only
+    // while it's true), and `finish` one of its i32 arrays of count 1 (nonzero ends the match).
+    for (field, ty, word) in [("open", Ty::Bool, "bool"), ("finish", Ty::I32, "i32")] {
+        let Some(v) = params.get(field) else { continue };
+        let name = v.as_str().unwrap_or_default();
+        if !writes
+            .iter()
+            .any(|w| w.name == name && w.ty == ty && w.count == 1)
+        {
+            return Err(bad(
+                field,
+                format!("{field} names one of the item's own {word} arrays of count 1; {v} isn't"),
+            ));
+        }
+    }
     fn get<'a>(o: Option<&'a Value>, k: &str) -> Option<&'a Value> {
         o.and_then(|b| b.get(k))
     }
@@ -221,6 +302,36 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
     let services =
         crate::services::declared(params.get("services")).map_err(|e| bad("services", e))?;
     let mirrors = crate::mirrors::declared(params.get("mirrors")).map_err(|e| bad("mirrors", e))?;
+    // #980: process@1's kinds, by name; a kind is its index here.
+    let process = match params.get("process") {
+        None => None,
+        Some(p) => {
+            let what = || {
+                bad(
+                    "process",
+                    "process is {kinds: [name]}, 1 to 16 unique kind names".into(),
+                )
+            };
+            let kinds: Vec<String> = p
+                .get("kinds")
+                .and_then(Value::as_array)
+                .and_then(|a| a.iter().map(|k| k.as_str().map(str::to_string)).collect())
+                .ok_or_else(what)?;
+            let unique = kinds
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                == kinds.len();
+            if kinds.is_empty()
+                || kinds.len() > 16
+                || !unique
+                || p.as_object().is_some_and(|o| o.len() != 1)
+            {
+                return Err(what());
+            }
+            Some(kinds)
+        }
+    };
     Ok(Declared {
         links,
         program,
@@ -237,12 +348,29 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         ring,
         assets,
         saves: params.get("saves").cloned(),
+        pages: params.get("pages").cloned(),
+        carry: params.get("carry").cloned(),
+        carry_in: match params.get("carry_in") {
+            None => None,
+            Some(v) => Some(crate::carry::carry_in_of(v).map_err(|r| logic_refused(id, vec![r]))?),
+        },
+        // #276: a profile past its cap is refused here, naming its size.
+        profile: match params.get("profile") {
+            None => None,
+            Some(v) => crate::profile::shape_of(v)
+                .map(|_| Some(v.clone()))
+                .map_err(|r| logic_refused(id, vec![r]))?,
+        },
+        seats: 1,
         emits,
         fires,
         services,
         mirrors,
         preview,
         lanes: params.get("lanes").cloned(),
+        process,
+        separation: params.get("separation").cloned(),
+        circuit: params.get("circuit").cloned(),
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -285,7 +413,7 @@ pub(super) fn preview_of(v: &Value) -> Result<(Vec<String>, Vec<Write>), Vec<Val
             .any(|(k, _)| k != "type" && k != "count");
         match (ty, count) {
             (Some(ty), Some(count)) if own_name(name) && ty != Ty::Quat && !extra => {
-                writes.push(Write { name: name.clone(), ty, count: count as u32, linear: false })
+                writes.push(Write { name: name.clone(), ty, count: count as u32, linear: false, cut: None })
             }
             _ => refused.push(what(format!(
                 "preview write {name} is an own name with a type of bool, i32, f64, vec2 or vec3 and a count of at least 1"
@@ -328,7 +456,19 @@ pub(super) fn region_map(
         reads.sort();
     }
     for r in &reads {
-        let (size, ty, read) = if r == crate::world::seats::READ {
+        // #552: this copy's player is a view value, like the camera: logic never reads it, so
+        // every copy's state and hashes stay the same while each draws its own side.
+        if r == "match.me" {
+            refused.push(refusal(
+                "read",
+                "match.me is this copy's player, a view value no logic step reads: every copy's state must stay the same".into(),
+                json!({"read": r}),
+            ));
+            continue;
+        }
+        let (size, ty, read) = if r == crate::draws::READ {
+            (crate::draws::SIZE, "draws".to_string(), Read::Draws)
+        } else if r == crate::world::seats::READ {
             (crate::world::seats::SIZE, "seats".to_string(), Read::Seats)
         } else if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)
@@ -459,6 +599,34 @@ pub(super) fn region_map(
         ty: "i64".into(),
         read: Read::Seed,
     });
+    // #189: the carry record's entry, after the item's other reads.
+    if let Some(ci) = &d.carry_in {
+        entries.push(Region {
+            region: "reads",
+            name: "carry_in".into(),
+            offset: at + 8,
+            size: ci.size(),
+            ty: "carry".into(),
+            read: Read::Carry,
+        });
+    }
+    // #276: the profile record's entry, after those, a block for each seat.
+    if let Some(shape) = d
+        .profile
+        .as_ref()
+        .and_then(|v| crate::profile::shape_of(v).ok())
+    {
+        let at = entries.last().map_or(at, |e| align8(e.offset + e.size));
+        let size = d.seats * crate::profile::block(&shape);
+        entries.push(Region {
+            region: "reads",
+            name: "profile".into(),
+            offset: at,
+            size,
+            ty: "profile".into(),
+            read: Read::Profile,
+        });
+    }
     let mut at = 0u32;
     for w in &d.writes {
         entries.push(Region {
@@ -555,7 +723,13 @@ pub(super) fn declarations(piece: &Value) -> Result<Declarations, Refused> {
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
-        decls.push((id.clone(), declared(id, &params)?));
+        let mut d = declared(id, &params)?;
+        // #276: a match's seats, which the logic piece of a document with a net item names.
+        d.seats = piece
+            .get("players")
+            .and_then(Value::as_u64)
+            .map_or(1, |n| n.clamp(1, 8) as u32);
+        decls.push((id.clone(), d));
     }
     Ok((controls, decls, machine))
 }
@@ -873,6 +1047,32 @@ pub fn check_in(
                 Some(std::sync::Arc::new(g))
             }
         };
+        // #1255: the table `separation` declares, its movers and minima, is asset 0.
+        let separation = match &d.separation {
+            None => None,
+            Some(v) => {
+                let t = crate::separation::build(v).map_err(|r| logic_refused(id, r))?;
+                assets.push((rewrite::hash(&t.bytes), t.bytes.clone()));
+                Some(std::sync::Arc::new(t))
+            }
+        };
+        // #1181: the table `circuit` declares, its nodes and parts, is asset 0; each input that
+        // closes a part is found by its slot in the item's read region.
+        let circuit = match &d.circuit {
+            None => None,
+            Some(v) => {
+                let slot = |name: &str| {
+                    layout
+                        .entries
+                        .iter()
+                        .find(|e| e.region == "reads" && e.name == name && e.ty == "control")
+                        .map(|e| e.offset)
+                };
+                let c = crate::circuit::build(v, &slot).map_err(|r| logic_refused(id, r))?;
+                assets.push((rewrite::hash(&c.bytes), c.bytes.clone()));
+                Some(std::sync::Arc::new(c))
+            }
+        };
         for sha in &d.assets {
             assets.push((sha.clone(), asset(sha).ok_or_else(|| missing("data", sha))?));
         }
@@ -922,6 +1122,41 @@ pub fn check_in(
                 None
             }
         };
+        // #211: the page region, after every other region, and init's pages.
+        let pages = match &d.pages {
+            None => None,
+            Some(v) => match crate::pages::of(v, &given, memory, &regions, &segments, &asset) {
+                Ok(p) => Some(p),
+                Err(r) => {
+                    refused.push(r);
+                    None
+                }
+            },
+        };
+        let carry = match d
+            .carry
+            .as_ref()
+            .map(|v| crate::carry::carry_of(v, &layout, &d.writes))
+        {
+            None => None,
+            Some(Ok(c)) => Some(c),
+            Some(Err(r)) => {
+                refused.push(r);
+                None
+            }
+        };
+        let profile = match d
+            .profile
+            .as_ref()
+            .map(|v| crate::profile::profile_of(v, &layout, &d.writes, d.seats))
+        {
+            None => None,
+            Some(Ok(p)) => Some(p),
+            Some(Err(r)) => {
+                refused.push(r);
+                None
+            }
+        };
         if !refused.is_empty() {
             return Err(logic_refused(id, refused));
         }
@@ -939,6 +1174,8 @@ pub fn check_in(
             id: id.clone(),
             program: d.program.clone(),
             bytes,
+            #[cfg(not(target_arch = "wasm32"))]
+            compiled: Default::default(),
             hash,
             given,
             step: d.step,
@@ -971,6 +1208,9 @@ pub fn check_in(
             fixtures: BTreeMap::new(),
             interfaces: BTreeMap::new(),
             saves,
+            carry,
+            carry_in: d.carry_in.clone(),
+            profile,
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
             fires: d.fires.clone(),
@@ -979,7 +1219,11 @@ pub fn check_in(
             services_at: services_at.unwrap_or(0),
             mirrors,
             preview,
+            pages,
             lanes,
+            process: d.process.clone(),
+            separation,
+            circuit,
         });
     }
     // A save holds every item at one instant, so a piece with saves steps at one rate.

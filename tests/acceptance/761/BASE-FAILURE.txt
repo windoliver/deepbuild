@@ -130,7 +130,7 @@ exit 1
 == the base with twin secret-words-inside-names laid over packages/evidence/src/scrub.ts
 $ node node_modules/vitest/vitest.mjs run --root tests/acceptance/761 redaction.test.ts --reporter=verbose
 
- RUN  v5.0.5 /private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/twin-copy/tests/acceptance/761
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/twin-copy/tests/acceptance/761
 
 stdout | redaction.test.ts > AC1 #761.609597be each of the nine lines, with values the hub never injected, is stored with every value replaced and every field name kept > AC1 each line stored alone loses its whole value and keeps its field name, in the stored bytes and in every file under the root
 printed: Authorization: Bearer q7Zp2LmX9vR4tY8w
@@ -253,17 +253,17 @@ exit 1
 == base b7bccf9 (export, no .git), v24.22.0, Mac15,12
 $ node node_modules/vitest/vitest.mjs run tests/acceptance/761/budgets.test.ts --reporter=verbose
 
- RUN  v5.0.5 /private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/redraft-761/base
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/redraft-761/base
 
  × tests/acceptance/761/budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac in the local preflight, compared with the merge base > AC3 the perf lane still has #15's evidence-redact-text task, unchanged, and the budgets are valid against the merge base's 70ms
-   → BLOCKED: no merge base to compare with (git merge-base HEAD origin/main in /private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/redraft-761/base/): Command failed: git merge-base HEAD origin/main
+   → BLOCKED: no merge base to compare with (git merge-base HEAD origin/main in /private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/redraft-761/base/): Command failed: git merge-base HEAD origin/main
  × tests/acceptance/761/budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac in the local preflight, compared with the merge base > AC3 with the field rules, redaction adds under 10 ms per MB of text (five runs after a warm-up) 841ms
    → field values kept in the stored text: 3257 of 3980, first in the line "Authorization: Bearer v7_c1KevCzRDktKb99S"; the field rules didn't run, so the time measured isn't redaction with the field rules: expected 3257 to be +0 // Object.is equality
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
 
  FAIL  tests/acceptance/761/budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac in the local preflight, compared with the merge base > AC3 the perf lane still has #15's evidence-redact-text task, unchanged, and the budgets are valid against the merge base's
-Error: BLOCKED: no merge base to compare with (git merge-base HEAD origin/main in /private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/redraft-761/base/): Command failed: git merge-base HEAD origin/main
+Error: BLOCKED: no merge base to compare with (git merge-base HEAD origin/main in /private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/redraft-761/base/): Command failed: git merge-base HEAD origin/main
  ❯ tests/acceptance/761/budgets.test.ts:109:13
     107|       baseBudgets = JSON.parse(execFileSync('git', ['show', `${base}:b…
     108|     } catch (e) {

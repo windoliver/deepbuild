@@ -18,7 +18,7 @@ import { alive, HELPER, scan, sha256, startNow, table, tokenOf, type Proc } from
 import { bubblewrapWith } from './bubblewrap.js';
 import type { Egress } from './egress.js';
 import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
-import type { Cleanup, Exit, Grant, HostFacts, LimitStop, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions } from './types.js';
+import type { Cleanup, Exit, Grant, HostFacts, LimitStop, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions, Used } from './types.js';
 
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
 const DAY = 86_400_000;
@@ -31,8 +31,10 @@ const REPORTS = 'sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.ru
 const REPORTS_BY_SUBSYSTEM = `subsystem == "com.apple.sandbox.reporting" AND ${REPORTS}`;
 /** The same reports by the process that writes them, the kernel, whose sandbox extension is their sender: the log sends the stream the kernel's messages alone. */
 const REPORTS_BY_KERNEL = `process == "kernel" AND ${REPORTS}`;
-/** The stream's filters, the cheapest for `log` first: the next is tried when one shows no report of a canary's. */
+/** The stream's filters, the cheapest for `log` first: each is warmed at once, and the cheapest that shows a canary's report is kept. */
 const FILTERS: readonly string[] = [REPORTS_BY_SUBSYSTEM, REPORTS_BY_KERNEL, REPORTS];
+/** How long after a dearer filter's stream shows a canary's report a cheaper one still running may show it too, before the dearer one is kept. */
+const SHOWN_MS = 1000;
 /** The planted world of the fallback's test: a macOS whose reports carry another subsystem than the filter names. */
 const REPORTS_ELSEWHERE = `subsystem == "com.apple.sandbox.elsewhere" AND ${REPORTS}`;
 /** And the planted world of the last fallback's: one whose reports another process than the filter names writes. */
@@ -49,6 +51,19 @@ const MIB = 1024 * 1024;
 const LIMIT_KIND = 'run.stopped_at_limit';
 /** How long a run's end waits for the watcher to write the ends before it: it never holds an exit longer. */
 const SYNC_MS = 1000;
+/** A run's sandbox.denied events naming a target, at most (#2420, a starting value); past it each new one is counted. */
+const DENIED_MAX = 256;
+/** A target's bytes as recorded, at most (#2420, a starting value): the schema's 8,192 is never reached. */
+const TARGET_BYTES = 512;
+/** A target as recorded: whole up to TARGET_BYTES, else its first TARGET_BYTES cut at a character boundary, then its full length in bytes. */
+const cut = (target: string): string => {
+  const bytes = Buffer.from(target, 'utf8');
+  if (bytes.length <= TARGET_BYTES) return target;
+  let end = TARGET_BYTES;
+  // A UTF-8 continuation byte is 10xxxxxx: the cut moves back to the start of its character.
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end--;
+  return `${bytes.subarray(0, end).toString('utf8')}…${bytes.length}`;
+};
 /** Whether a lease event is one of the supervisor's runs' (the core's, or a writer a run named as its holder), not a session's or a package's own. */
 const ours = (holder: unknown): boolean => holder === 'core' || (typeof holder === 'string' && holder.startsWith('mcp:'));
 /** The kinds `open` and a tick read: both read them as this type, so a kind either names that the list leaves out fails to compile. */
@@ -82,6 +97,8 @@ interface Run {
   cleaning?: Promise<Cleanup>;
   /** It keeps running when the hub stops: an open adopts it rather than reaping it (StartSpec.keep). */
   kept?: boolean;
+  /** On Linux, its sandbox parent's refusals: settles once the parent is gone and they are counted and recorded. */
+  refusing?: Promise<void>;
   /** Its egress filter, while it holds a credential by stand-in; closed by its cleanup. */
   egress?: Egress;
   /** What it may take (StartSpec.limits). */
@@ -92,12 +109,21 @@ interface Run {
   stopping?: Promise<void>;
   /** Its first process, as the watcher names its ends: a run with a file limit on macOS. */
   watched?: number;
+  /** What its scans read of its use (#3220). */
+  usage: Usage;
   child?: ChildProcess;
   exit?: Promise<Exit>;
   state: RunStatus['state'];
 }
+/** What a tree's scans read (#3220): the highest sum of its processes' memory one scan read, in bytes, and each process's CPU nanoseconds as last read. */
+interface Usage { peak?: number; cpu: Map<number, number> }
 /** A run with nothing of it recorded yet: sandboxed, no token, no process, no lease. */
-const blank = (run: string, cwd: string, state: Run['state']): Run => ({ run, cwd, sandboxed: true, token: null, tracked: new Map(), ended: new Set(), gone: [], leases: [], state });
+const blank = (run: string, cwd: string, state: Run['state']): Run => ({ run, cwd, sandboxed: true, token: null, tracked: new Map(), ended: new Set(), gone: [], leases: [], state, usage: { cpu: new Map() } });
+/** What a tree used, from its scans' readings: null for what no scan read, never 0. */
+const usedOf = (u: Usage): Used => {
+  const ns = u.cpu.size ? [...u.cpu.values()].reduce((a, b) => a + b, 0) : undefined;
+  return { memory_peak_mb: u.peak === undefined ? null : Math.round(u.peak / MIB), cpu_s: ns === undefined ? null : Math.round(ns / 1e6) / 1000 };
+};
 /** A pool key's name, `kind:key`, as its kind and key. */
 const parts = (name: string): { kind: string; key: string } => {
   const at = name.indexOf(':');
@@ -110,12 +136,16 @@ interface Waiter { spec: StartSpec; on: string[]; resolve(started: Started | Pro
 class LocalSupervisor implements Supervisor {
   readonly name = 'local';
   private readonly runs = new Map<string, Run>();
+  /** Leased commands' process groups each scan reads as their runs' trees (#3220), by run: never owned or stopped here. */
+  private readonly followed = new Map<string, { pgid: number; usage: Usage }>();
   private readonly kinds = new Map<string, ResourceKind>();
   private readonly keys = new Map<string, Key>();
   private readonly waiters: Waiter[] = [];
   /** Each unblock ask the supervisor raised, by handle: the key it is about. */
   private readonly asked = new Map<string, string>();
   private readonly denied = new Set<string>();
+  /** Each run's sandbox.denied naming a target so far, and the new ones left out past DENIED_MAX (#2420). */
+  private readonly refusals = new Map<string, { named: number; left: number; closed: boolean }>();
   /** With a lease table: each key's lease there, by `kind:key`. */
   private readonly leaseIds = new Map<string, string>();
   /** A run's table leases the record holds before its process.starting: the table grants them first. */
@@ -128,12 +158,17 @@ class LocalSupervisor implements Supervisor {
   private beatFrom = 0;
   /** The timer's scan while it is queued or runs. */
   private timed: Promise<void> | undefined;
+  /** The denial stream kept, once one showed a canary's report. */
   private log: ChildProcess | undefined;
-  /** The canary run whose report shows the denial stream is live, and when it last came through. */
+  /** The streams being warmed, one per filter, until one is kept: then that one alone. */
+  private streams: Stream[] = [];
+  /** The canary run whose report shows the denial stream is live, and when it last came through the kept stream. */
   private canary = '';
-  private warmAt = 0;
+  private warmAt = -Infinity;
   /** The first warm-up of the denial stream; a sandboxed launch waits for it, opening doesn't. */
   private warming: Promise<unknown> = Promise.resolve();
+  /** Each warm-up's canary probe while it runs, and its end: reaped, so nothing this process started outlives it (#2998). */
+  private readonly probes = new Map<ChildProcess, Promise<unknown>>();
   private ticking: Promise<void> | undefined;
   private readonly cleaning = new Set<Promise<unknown>>();
   /** Each run between leaving the queue and its launch settling. */
@@ -348,7 +383,7 @@ class LocalSupervisor implements Supervisor {
     // One timed scan at a time: on a loaded machine a scan outlasts the interval, and queued ones would pile up
     // without end in front of a cleanup's own scan.
     const beat = (): void => {
-      if (!this.scanned().length) {
+      if (!this.scanned().length && !this.followed.size) {
         clearInterval(this.timer);
         this.timer = undefined;
         return;
@@ -370,13 +405,30 @@ class LocalSupervisor implements Supervisor {
    * and after a while idle macOS drops the first reports of a program that isn't Apple's, so it counts as ready
    * only once it has seen a denial of its own: the helper, refused a write in a canary's sandbox, until its report
    * comes through. A macOS whose reports carry another subsystem, or none, shows the canary's through that filter
-   * never: the stream then starts again on the next filter, the kernel's messages, and only where that shows none
-   * either on the sender alone. The stream writes nothing while no report matches, so no closed pipe tells it that
-   * this process has gone: it runs on the helper's leash, which ends it when this process ends, however it ends.
+   * never, so a stream starts on each filter at once, the wider ones too: the kernel's messages, then the sender
+   * alone. The cheapest that shows a canary's report is kept and the others end, so such a macOS waits for the first
+   * report, not out a whole warm-up per filter (#2977). The stream writes nothing while no report matches, so no
+   * closed pipe tells it that this process has gone: it runs on the helper's leash, which ends it when this process
+   * ends, however it ends.
    */
-  private watchDenials([filter, ...wider]: readonly string[]): void {
-    const log = spawn(HELPER, ['leash', '/usr/bin/log', 'stream', '--style', 'ndjson', '--predicate', filter!], { stdio: ['ignore', 'pipe', 'ignore'] });
-    this.log = log;
+  private watchDenials(filters: readonly string[]): void {
+    const streams = filters.map((filter) => this.stream(filter));
+    this.streams = streams;
+    this.warming = this.warm(10_000).then((shown) => {
+      // With none shown the widest stays, unwarmed: a later sandboxed start warms it again.
+      const kept = shown ?? streams.at(-1)!;
+      if (!shown && !this.closed) process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
+      for (const s of streams) if (s !== kept && s.log.pid) try { process.kill(s.log.pid, 'SIGTERM'); } catch { /* gone */ }
+      this.streams = [kept];
+      this.log = kept.log;
+      this.warmAt = kept.shownAt;
+    });
+  }
+
+  /** A denial stream on one filter. */
+  private stream(filter: string): Stream {
+    const log = spawn(HELPER, ['leash', '/usr/bin/log', 'stream', '--style', 'ndjson', '--predicate', filter], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const s: Stream = { log, shownAt: -Infinity };
     log.unref();
     (log.stdout as unknown as { unref?: () => void }).unref?.();
     let buffer = '';
@@ -389,22 +441,18 @@ class LocalSupervisor implements Supervisor {
         let message = '';
         try { message = String((JSON.parse(line) as { eventMessage?: unknown }).eventMessage ?? ''); } catch { continue; }
         const m = /deny\(\d+\) (\S+) (.*?)\s*\ndev\.deepbuild\.(run:[0-9A-Za-z]+)/.exec(message);
-        if (m) this.warmAt = Date.now();
+        if (m) s.shownAt = performance.now();
+        if (m && log === this.log) this.warmAt = s.shownAt;
+        // Any stream still running records, each refusal once: a run kept from before a restart may be refused mid-warm.
         if (!m || !this.runs.has(m[3]!)) continue;
-        const [, operation, target, run] = m as unknown as [string, string, string, string];
-        const seen = `${run} ${operation} ${target}`;
-        if (this.denied.has(seen)) continue;
-        this.denied.add(seen);
-        void this.recordDenial(run, operation, target || '(none)').catch(() => undefined);
+        const [, operation, said, run] = m as unknown as [string, string, string, string];
+        const whole = said || '(none)';
+        const seen = `${run} ${operation} ${sha256(whole)}`;
+        if (!this.admit(run, seen)) continue;
+        void this.recordDenial(run, operation, cut(whole)).catch(() => this.unadmit(run, seen));
       }
     });
-    this.warming = this.warm(10_000).then((live) => {
-      if (live || this.closed) return undefined;
-      if (!wider.length) return void process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
-      if (log.pid) try { process.kill(log.pid, 'SIGTERM'); } catch { /* gone */ }
-      this.watchDenials(wider);
-      return this.warming;
-    });
+    return s;
   }
 
   /** A refusal on the run's record, naming who holds the port it tried, when another run holds it (#580). */
@@ -418,15 +466,68 @@ class LocalSupervisor implements Supervisor {
    * What a run's egress filter refused, recorded as the sandbox's refusals are: once for the run, operation and target,
    * in the one set, so a request refused in a loop adds one event (#2399).
    */
-  private filterRefused(run: string, { operation, target }: { operation: string; target: string }): void {
+  private filterRefused(run: string, refusal: { operation: string; target: string }): void {
     // The planted wrong programs: no refusal of the filter's recorded, one kept per operation, and a set without the run.
     if (this.options.plant === 'egress-refusals-unrecorded') return;
+    const { operation } = refusal;
+    const target = cut(refusal.target);
+    // Two long targets alike in their first bytes are still two: the key is the whole target's digest.
+    const whole = sha256(refusal.target);
     const seen = this.options.plant === 'egress-refusal-once-per-operation' ? `${run} ${operation}`
-      : this.options.plant === 'egress-refusals-seen-without-run' ? `${operation} ${target}` : `${run} ${operation} ${target}`;
-    if (this.denied.has(seen)) return;
-    this.denied.add(seen);
+      : this.options.plant === 'egress-refusals-seen-without-run' ? `${operation} ${whole}` : `${run} ${operation} ${whole}`;
+    if (!this.admit(run, seen)) return;
     // One the record didn't take isn't recorded: the next try is.
-    void this.append('sandbox.denied', { run, operation, target }, run).catch(() => void this.denied.delete(seen));
+    void this.append('sandbox.denied', { run, operation, target }, run).catch(() => this.unadmit(run, seen));
+  }
+
+  /**
+   * Whether a run's refusal is one to record: a key not seen before, while the run has fewer than DENIED_MAX events
+   * naming a target. Past that a refusal not among those is counted for the closing event and not kept, so the set
+   * stops growing (#2420); with nothing kept, the same target refused again past the ceiling is counted again.
+   */
+  private admit(run: string, seen: string): boolean {
+    if (this.denied.has(seen)) return false;
+    const tally = this.refusals.get(run) ?? { named: 0, left: 0, closed: false };
+    this.refusals.set(run, tally);
+    if (tally.named >= DENIED_MAX) {
+      tally.left++;
+      return false;
+    }
+    tally.named++;
+    this.denied.add(seen);
+    return true;
+  }
+  /**
+   * A refusal the record didn't take: its key and its place under the ceiling are free again, so the next try is
+   * recorded. Once the run has had refusals counted past the ceiling, a later try would be counted, not recorded, so
+   * this one is counted now and its key kept, and it is in the closing count rather than in neither.
+   */
+  private unadmit(run: string, seen: string): void {
+    const tally = this.refusals.get(run);
+    if (!tally || !this.denied.has(seen)) return;
+    if (tally.left) {
+      tally.left++;
+      return;
+    }
+    this.denied.delete(seen);
+    tally.named--;
+  }
+
+  /**
+   * A run past the ceiling says how many it was refused that the record leaves out, once its processes are gone
+   * (#2420). A Linux run's sandbox parent goes with them, and what it reported is counted first: bounded, so a pipe
+   * some unrecorded holder keeps open never holds the cleanup.
+   */
+  private async closeRefusals(r: Run): Promise<void> {
+    if (r.refusing) {
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([r.refusing, new Promise<void>((done) => { timer = setTimeout(done, SYNC_MS); })]);
+      clearTimeout(timer);
+    }
+    const tally = this.refusals.get(r.run);
+    if (!tally?.left || tally.closed) return;
+    await this.append('sandbox.denied', { run: r.run, operation: 'more', target: String(tally.left) }, r.run);
+    tally.closed = true;
   }
 
   /**
@@ -453,28 +554,49 @@ class LocalSupervisor implements Supervisor {
             continue;
           }
           if (typeof said.operation !== 'string' || typeof said.target !== 'string') continue;
-          const seen = `${run} ${said.operation} ${said.target}`;
-          if (this.denied.has(seen)) continue;
-          this.denied.add(seen);
-          const { operation, target } = said;
-          recorded = recorded.then(() => this.recordDenial(run, operation, target || '(none)')).catch(() => undefined);
+          const { operation } = said;
+          const whole = said.target || '(none)';
+          const seen = `${run} ${operation} ${sha256(whole)}`;
+          // A run already forgotten keeps nothing here: what it holds was freed with it.
+          if (!this.runs.has(run) || !this.admit(run, seen)) continue;
+          recorded = recorded.then(() => this.recordDenial(run, operation, cut(whole))).catch(() => this.unadmit(run, seen));
         }
       }).on('error', () => undefined).on('close', () => void recorded.then(resolve));
     });
   }
 
-  /** Until the stream shows a canary's report, or `ms` pass; whether it did. */
-  private async warm(ms: number): Promise<boolean> {
-    const since = Date.now();
+  /**
+   * Until a stream shows a canary's report and no cheaper one still running can, or `ms` pass: the cheapest stream
+   * that showed it. A report reaches every stream at once, so a cheaper one that hasn't shown it within SHOWN_MS of
+   * a dearer one's showing it never will.
+   */
+  private async warm(ms: number): Promise<Stream | undefined> {
+    const since = performance.now();
+    const streams = this.streams;
+    const shown = (): Stream | undefined => streams.find((s) => s.shownAt >= since);
+    // When a stream first showed one: each later report moves a stream's shownAt on.
+    let first = 0;
+    const settled = (): boolean => {
+      const best = shown();
+      if (!best) return false;
+      first ||= performance.now();
+      return performance.now() >= first + SHOWN_MS || !streams.slice(0, streams.indexOf(best)).some((s) => s.log.exitCode === null);
+    };
     this.canary = `run:canary${randomBytes(8).toString('hex')}`;
     const profile = `(version 1)\n(deny default (with message "dev.deepbuild.${this.canary}"))\n(import "system.sb")\n(allow file-read* process-exec)`;
     // Each try refused on a path of its own: the kernel folds identical reports into one, later.
-    for (let n = 0; this.warmAt < since && this.log?.exitCode === null && Date.now() < since + ms; n++) {
+    // A closed supervisor starts no probe: one started as the hub stops would outlive it, never reaped (#2998).
+    for (let n = 0; !settled() && !this.closed && streams.some((s) => s.log.exitCode === null) && performance.now() < since + ms; n++) {
       const target = `/tmp/deep-canary-${this.canary.slice(4)}-${n}`;
-      await new Promise((done) => spawn('/usr/bin/sandbox-exec', ['-p', profile, HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' }).on('close', done).on('error', done));
-      for (let i = 0; i < 10 && this.warmAt < since; i++) await sleep(25);
+      const child = spawn('/usr/bin/sandbox-exec', ['-p', profile, HELPER, 'probe', '/dev/null', 'write', target], { stdio: 'ignore' });
+      const ended = new Promise((done) => child.on('close', done).on('error', done));
+      // Launches that start together re-warm side by side, each loop with a probe of its own.
+      this.probes.set(child, ended);
+      await ended;
+      this.probes.delete(child);
+      for (let i = 0; i < 10 && !settled(); i++) await sleep(25);
     }
-    return this.warmAt >= since;
+    return shown();
   }
 
   // ---- host@1.
@@ -664,7 +786,7 @@ class LocalSupervisor implements Supervisor {
       : { argv: spec.argv, cwd, env };
     // After a minute with no report, the stream is shown live again before a process can be refused anything.
     if (sandboxed) await this.warming;
-    if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
+    if (sandboxed && this.log && performance.now() - this.warmAt > WARM_MS) await this.warm(2000);
     const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}), ...(egress ? { egress } : {}), ...(spec.limits ? { limits: spec.limits } : {}) };
     this.runs.set(spec.run, r);
     this.scanSoon();
@@ -724,7 +846,7 @@ class LocalSupervisor implements Supervisor {
       // The report can be read before the program's last output is, so the digests wait for both pipes, which `drain`
       // closes in time if a background process still holds them.
       const output = Promise.all([child.stdout, child.stderr].flatMap((pipe) => (pipe ? [new Promise((done) => { pipe.once('close', done); })] : [])));
-      const parentGone = this.readDenials(spec.run, child.stdio[3] as NodeJS.ReadableStream, (code, signal) => { if (r.state === 'running') r.state = 'exited'; drain(); void output.then(() => ended(code, signal)); });
+      const parentGone = r.refusing = this.readDenials(spec.run, child.stdio[3] as NodeJS.ReadableStream, (code, signal) => { if (r.state === 'running') r.state = 'exited'; drain(); void output.then(() => ended(code, signal)); });
       child.on('close', (code, signal) => void parentGone.then(() => output).then(() => ended(code, signal)));
     } else child.on('close', ended);
     const pid = child.pid;
@@ -752,14 +874,19 @@ class LocalSupervisor implements Supervisor {
     if (this.options.plant === 'records-only-started' || this.closed) return this.scanning;
     const next = this.scanning.then(async () => {
       const live = this.scanned();
-      if (!live.length) return;
+      const groups = [...this.followed.values()];
+      if (!live.length && !groups.length) return;
       const bytes = new Map<number, number>();
-      const found = await scan(live.map((r) => markerOf(r.run)), bytes);
-      // A run past its memory is stopped: the sum over every process its sandbox holds, the scan's own reading.
+      const cpu = new Map<number, number>();
+      // A leased command's group in the same helper call: following it starts no process of its own (#3220).
+      const found = await scan([...live.map((r) => markerOf(r.run)), ...groups.map((g) => `pgid:${g.pgid}`)], bytes, cpu);
+      for (const g of groups) this.sample(g.usage, found.get(`pgid:${g.pgid}`) ?? [], bytes, cpu);
       for (const r of live) {
+        const pids = found.get(markerOf(r.run)) ?? [];
+        const reading = r.state === 'cleaned' ? 0 : this.sample(r.usage, pids, bytes, cpu);
+        // A run past its memory is stopped: the sum over every process its sandbox holds, the scan's own reading.
         const cap = r.limits?.memory_mb;
         if (cap === undefined || r.limited || r.state === 'cleaned') continue;
-        const reading = (found.get(markerOf(r.run)) ?? []).reduce((sum, pid) => sum + (bytes.get(pid) ?? 0), 0);
         if (reading > cap * MIB) this.stopAtLimit(r, 'memory_mb', reading / MIB);
       }
       const held = live.flatMap((r) => (found.get(markerOf(r.run)) ?? []).map((pid) => ({ r, pid })));
@@ -773,6 +900,19 @@ class LocalSupervisor implements Supervisor {
     });
     this.scanning = next.catch(() => undefined);
     return next;
+  }
+
+  /**
+   * One scan's reading of a tree into what it used (#3220): the sum of its processes' memory, kept when it is the highest
+   * yet, and each process's CPU as last read. A scan that found none of its processes reads nothing. The planted wrong
+   * program keeps the first sample as the peak.
+   */
+  private sample(u: Usage, pids: readonly number[], bytes: Map<number, number>, cpu: Map<number, number>): number {
+    const reading = pids.reduce((sum, pid) => sum + (bytes.get(pid) ?? 0), 0);
+    if (!pids.length) return reading;
+    if (u.peak === undefined || (reading > u.peak && this.options.plant !== 'scan-keeps-first-sample')) u.peak = reading;
+    for (const pid of pids) { const ns = cpu.get(pid); if (ns !== undefined && ns >= (u.cpu.get(pid) ?? 0)) u.cpu.set(pid, ns); }
+    return reading;
   }
 
   /** What the run owns that it can prove now: each tracked process by its start time (and token), and its group's members. */
@@ -882,6 +1022,24 @@ class LocalSupervisor implements Supervisor {
     // Its process group at once, as the group's own members see a group signal; then each proven process outside it.
     if (r.pgid !== undefined && proven.some((p) => p.pgid === r.pgid)) try { process.kill(-r.pgid, signal); } catch { /* gone */ }
     for (const p of proven) if (p.pgid !== r.pgid) try { process.kill(p.pid, signal); } catch { /* gone */ }
+  }
+
+  used(run: string): Used | undefined {
+    const u = this.runs.get(run)?.usage ?? this.followed.get(run)?.usage;
+    return u && usedOf(u);
+  }
+  follow(run: string, pgid: number): void {
+    if (this.closed || !Number.isInteger(pgid) || pgid < 2) return;
+    this.followed.set(run, { pgid, usage: { cpu: new Map() } });
+    this.scanSoon();
+  }
+  async unfollow(run: string): Promise<Used | undefined> {
+    const g = this.followed.get(run);
+    if (!g) return undefined;
+    // The scan in flight lands first, so a reading taken just before the group ended still counts.
+    await this.scanning;
+    this.followed.delete(run);
+    return usedOf(g.usage);
   }
 
   async lives(run: string): Promise<boolean> {
@@ -1007,6 +1165,9 @@ class LocalSupervisor implements Supervisor {
     const outcome = left.length ? 'unfinished' : 'clean';
     await r.egress?.close();
     delete r.egress;
+    // A run that left a process still refuses: its closing event waits for the recheck that finds them gone. One
+    // that left only a key unclean refuses nothing more. A closing event the record didn't take is the recheck's too.
+    if (!this.lingering.has(r)) await this.closeRefusals(r).catch(() => { this.lingering.add(r); this.scanSoon(); });
     if (r.watched !== undefined && this.watchedRuns.get(r.watched) === r) this.watchedRuns.delete(r.watched);
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';
@@ -1030,6 +1191,7 @@ class LocalSupervisor implements Supervisor {
     for (const r of done.slice(0, Math.max(0, done.length - CLEANED_KEPT))) {
       this.runs.delete(r.run);
       for (const seen of this.denied) if (seen.startsWith(`${r.run} `)) this.denied.delete(seen);
+      this.refusals.delete(r.run);
     }
   }
 
@@ -1092,7 +1254,12 @@ class LocalSupervisor implements Supervisor {
     // A run its cleanup left running is checked again: each of its processes found gone gets its end recorded, which
     // is what ends a lease the lease table holds for the run. Its sandbox is scanned once they are found gone and
     // before their ends are recorded, so what they forked is recorded first: a gone process forks nothing more.
-    for (const r of this.closed ? [] : [...this.lingering]) if (!(await this.leftovers(r, this.recheck)).length) this.lingering.delete(r);
+    for (const r of this.closed ? [] : [...this.lingering]) {
+      if ((await this.leftovers(r, this.recheck)).length) continue;
+      // A closing event the record didn't take is tried again at the next tick.
+      if (!(await this.closeRefusals(r).then(() => true, () => false))) continue;
+      this.lingering.delete(r);
+    }
     // Nothing to read for until an unblock ask is open, a key is out of its pool or a run waits: a tick then costs nothing.
     if (!this.asked.size && !this.waiters.length && ![...this.keys.values()].some((k) => k.retired)) return;
     if (this.asked.size) await this.options.asks.tick();
@@ -1145,13 +1312,19 @@ class LocalSupervisor implements Supervisor {
   async close(): Promise<void> {
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
+    // The warm-ups' probes in flight are ended and waited for, so they are reaped here, not left to whoever outlives us.
+    for (const child of this.probes.keys()) child.kill('SIGKILL');
+    await Promise.all(this.probes.values());
     await Promise.allSettled([this.scanning, this.pumping, this.ticking, ...this.cleaning]);
     await Promise.allSettled([...this.runs.values()].map((r) => r.egress?.close()));
-    if (this.log?.pid) try { process.kill(this.log.pid, 'SIGTERM'); } catch { /* gone */ }
+    for (const { log } of this.streams) if (log.pid) try { process.kill(log.pid, 'SIGTERM'); } catch { /* gone */ }
     // The watcher ends at the end of its input.
     this.watcher?.stdin?.end();
   }
 }
+
+/** A `log stream` on one filter, and when it last showed a canary's report. */
+interface Stream { log: ChildProcess; shownAt: number }
 
 /** The SHA-256 of a kept run's output file. */
 function sha256File(file: string): Promise<string> {

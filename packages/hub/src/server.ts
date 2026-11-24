@@ -22,7 +22,7 @@ import { registry } from './socket-adapters.js';
 import { agentReply, allowReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, withWaits } from './hook-replies.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
-import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
+import { handleOf as ruleHandle, noticeText } from './rules.js';
 import { dropTestSettings, installedRoot, real, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { processHealth } from './process-health.js';
@@ -36,11 +36,10 @@ import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse
 import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { writeSynced } from './vfs.js';
 import { budgetFile, readBudget, spend, spentWhy } from './restart-budget.js';
+import { parserInline, parserPool, type Parsers } from './parser-pool.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
-/** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
-const BIG = 1 << 20;
 const MAX_LINE = 64 << 20;
 /**
  * A consumer more than this many frames behind is cut off with fell_behind, never dropped silently (#34): the
@@ -49,7 +48,7 @@ const MAX_LINE = 64 << 20;
  */
 const BEHIND = 10_000;
 const BEHIND_BYTES = 8 << 20;
-/** A restart's exit (#1865): not 0, so the login service (KeepAlive's SuccessfulExit false, Restart=on-failure) starts the hub again. */
+/** A restart's exit (#1865): not 0 to launchd (KeepAlive's SuccessfulExit false) and forced to restart by systemd (RestartForceExitStatus), so the login service starts the hub again. */
 const RESTART_EXIT = 75;
 /** How long a hub stays up before a restart (#1865): past launchd's 10 s throttle and systemd's 10 s start-limit window. */
 const RESTART_AFTER_MS = 15_000;
@@ -61,7 +60,9 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.drain', ['cli']], ['hub.check', ['cli']], ['build.rolled_back', ['cli']],
   ['hub.health', ['app', 'cli', 'person']], ['health', ['app', 'cli', 'person']], ['events.read', ['app', 'cli', 'person']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['ask.confirm', ['app']], ['views.installed', ['app']], ['command.run', ['app']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
-  ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli', 'person']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
+  ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli', 'person']], ['session.page', ['app', 'cli', 'person']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
+  // One slice of what a handle names, or one find, for a session whose sandbox closes the evidence store (#3229).
+  ['handle.read', ['cli']],
   ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['race.start', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['ask.take_over', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
@@ -85,7 +86,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
-  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['extension.restart', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
+  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['lease.gpu', ['cli']], ['lease.release', ['cli']], ['extension.install', ['cli']], ['extension.restart', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['mcp.tools', ['mcp']], ['evidence.paste', ['app']], ['eval.report', ['cli']],
   // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
   ['wiki.build', ['cli']], ['setup.report', ['cli']],
@@ -146,7 +147,7 @@ const STAGED_MATCHES: unknown[] = [STAGED_MATCH, PAST_MATCH, DISCARD_MATCH, STAS
 /** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
 const DENYING_MODES = new Set(['dontAsk', 'plan']);
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
-const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.read', 'numbers.read']);
+const READS = new Set(['inbox.read', 'sessions.read', 'session.page', 'changes.read', 'evidence.read', 'numbers.read']);
 
 type Obj = Record<string, unknown>;
 /**
@@ -181,12 +182,6 @@ interface CoreLink {
   started: Promise<{ hooks: string[] }>;
   close(): Promise<void>;
 }
-/**
- * `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded); `count` is
- * the parser workers the pool holds, for hub.health (#2043).
- */
-interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; count(): number; close(): Promise<void> }
-
 /** A frame from the core: its event's JSON text, or, `caught` set, the head its subscriber's replay reached (#1575). */
 type OnFrame = (sub: string, event: string, caught?: boolean) => void;
 
@@ -242,78 +237,6 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
       else core.unsubscribe(message.sub);
     },
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
-    close: async () => undefined,
-  };
-}
-
-function parserPool(given: readonly string[], plant: Plant | undefined, dir: string): Parsers {
-  // The pool's own list: each scrub's values join it, so a parser started later begins with all its elder was sent.
-  const held = [...given];
-  // Each line a parser holds, until that parser answers it or ends.
-  const pending = new Map<number, { resolve: (parsed: Parsed) => void; worker: Worker }>();
-  let n = 0;
-  let closing = false;
-  const make = (): Worker => {
-    const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, dir, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
-    worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
-      pending.get(id)?.resolve(parsed);
-      pending.delete(id);
-    });
-    if (plant === 'parser-pool-messages-only') return worker;
-    // A parser that throws on a line ends, and takes neither the hub nor a line with it (#2043): each line it held is
-    // refused, and another parser takes its place.
-    worker.on('error', (error) => process.stderr.write(`deep hub: a parser failed: ${error.stack ?? error.message}\n`));
-    worker.on('exit', () => {
-      for (const [id, line] of pending) {
-        if (line.worker !== worker || plant === 'parser-pool-leaves-line-waiting') continue;
-        pending.delete(id);
-        line.resolve({ kind: 'refused', id: null, error: refusal('unavailable', '', 'The hub failed while it read this line, so nothing of it was recorded.') });
-      }
-      if (closing) return;
-      if (worker === small) small = make();
-      else if (worker === big) big = make();
-    });
-    return worker;
-  };
-  // One parser for small lines, and one for large ones, started at the first: an idle hub holds one thread fewer.
-  let small = make();
-  let big: Worker | undefined;
-  return {
-    parse(chunks, first) {
-      const size = chunks.reduce((sum, c) => sum + c.length, 0);
-      const worker = size > BIG ? (big ??= make()) : small;
-      return new Promise((resolve) => {
-        pending.set(++n, { resolve, worker });
-        // A line in a buffer of its own is handed to the parser's thread, not copied to it; a short one sits in Node's shared pool, which stays here.
-        worker.postMessage({ n, chunks, first }, [...new Set(chunks.filter((c) => plant === 'hands-over-socket-chunk' || c.buffer.byteLength === c.byteLength).map((c) => c.buffer as ArrayBuffer))]);
-      });
-    },
-    scrub(values) {
-      held.push(...values);
-      for (const worker of [small, big]) worker?.postMessage({ scrub: values });
-    },
-    count: () => (big ? 2 : 1),
-    close: async () => {
-      closing = true;
-      await Promise.all([small, big].map((w) => w?.terminate()));
-    },
-  };
-}
-/** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
-async function parserInline(held: string[], plant: Plant, dir: string): Promise<Parsers> {
-  const { parseLine } = await import('./hookmap.js');
-  const { scrubText } = await import('@deepbuild/evidence');
-  return {
-    parse: async (chunks, first) => {
-      const line = Buffer.concat(chunks);
-      const parsed = parseLine(line, first, held, plant);
-      // A hook line is scrubbed whole, as a hub that scrubs what it reads before keeping any field would.
-      if (parsed.kind === 'hook') scrubText(line.toString('utf8'), { held });
-      const scoped = parsed.kind === 'hook' ? scopedAt(parsed.meta, dir) : undefined;
-      return scoped ? { ...parsed, scoped } : parsed;
-    },
-    scrub(values) { held.push(...values); },
-    count: () => 0,
     close: async () => undefined,
   };
 }
@@ -1302,7 +1225,7 @@ class Hub {
         const stopping = () => { conn.write({ id, result: { stopping: true } }); void this.stop('requested', conn.sock); };
         // A dev hub stops on its token; the installed hub only once the OS confirms you inside the hub, as gates.off
         // does (#1865), since a command's child holds the token too, and a stop exits 0, which no login service undoes.
-        if (real(this.root.dir) !== real(rootOf(installedRoot()).dir)) return stopping();
+        if (!this.installed()) return stopping();
         const command = params.command ?? 'deep hub stop';
         if (command !== 'deep hub stop' && command !== 'deep setup --undo') return conn.write({ id, error: refusal('enum', '/params/command', 'Name deep hub stop or deep setup --undo.', command) });
         this.confirming++;
@@ -1312,7 +1235,7 @@ class Hub {
         );
       }
       case 'hub.restart': {
-        // The token alone only restarts (#1865): a failed exit, which the login service starts again at once. A hub up
+        // The token alone only restarts (#1865): an exit the login service restarts. A hub up
         // under RESTART_AFTER_MS waits that out first, so restarts asked back to back can't keep it down between the
         // login service's throttled starts, nor spend systemd's start limit.
         if (this.confirming) return conn.write({ id, error: refusal('unavailable', '/method', 'A deep hub stop is waiting for you to answer the OS; restart once it is answered.', method, true) });
@@ -1396,8 +1319,9 @@ class Hub {
         if (method === 'events.read') {
           // The page's events come as one JSON array's text, written as it is, with the start ID beside its log_pos.
           return void this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then((result) => {
-            const { log_pos, events } = result as { log_pos: number; events: string };
-            if (!conn.done && conn.sock.writable) conn.sock.write(`{"v":${VERSION},"id":${JSON.stringify(id)},"result":{"start":${JSON.stringify(this.start)},"log_pos":${log_pos},"events":${events}}}\n`);
+            const { log_pos, events, more } = result as { log_pos: number; events: string; more: boolean };
+            // A page the byte cap ended says so (#1576): more follows it however few events it holds.
+            if (!conn.done && conn.sock.writable) conn.sock.write(`{"v":${VERSION},"id":${JSON.stringify(id)},"result":{"start":${JSON.stringify(this.start)},"log_pos":${log_pos},"events":${events}${more ? ',"more":true' : ''}}}\n`);
           }, (error: unknown) => reply(Promise.reject(error)));
         }
         if (READS.has(method)) {
@@ -1410,6 +1334,11 @@ class Hub {
           return void reply(call ? work.finally(() => conn.calls.delete(call)) : work);
         }
     }
+  }
+
+  /** Whether this is the installed hub, of `~/.deepbuild`, rather than a dev hub started with `--root`. */
+  installed(): boolean {
+    return real(this.root.dir) === real(rootOf(installedRoot()).dir);
   }
 
   /** The restart budget as hub.health reports it (#2973), for deep hub promote: restarts left, when the next frees up. */
@@ -1532,7 +1461,10 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   process.stdout.on('error', () => undefined);
   process.stderr.on('error', () => undefined);
   const hub = new Hub(root, writeToken(root), lock, plant, vfs, options.safe === true);
-  for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void hub.stop(`signal:${signal}`));
+  // On the installed hub a signal is a restart, not a stop (#2975): a command's child can send one with no confirmation,
+  // and an exit 0 would keep the hub down till your next login. Logout and shutdown send it too, so it doesn't wait.
+  const onSignal = hub.installed() ? RESTART_EXIT : 0;
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void hub.stop(`signal:${signal}`, undefined, onSignal));
   await hub.open(clock);
   process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start, ...(options.safe ? { safe: true } : {}) })}\n`);
   shedStartup();

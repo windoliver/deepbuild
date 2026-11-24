@@ -52,6 +52,7 @@ pub fn fixture(
         steps,
         track: json!([]),
         moves: Vec::new(),
+        ramps: Vec::new(),
         measure,
         answer,
         tolerance,
@@ -578,6 +579,7 @@ pub fn all() -> Vec<Fixture> {
         belt_tilted(),
     ]);
     out.extend(super::small::all());
+    out.push(super::turns::turntable());
     out.extend(super::sensors::all());
     out.extend(super::walks::all());
     out.extend(super::vehicles::all());
@@ -592,6 +594,7 @@ pub fn all() -> Vec<Fixture> {
         articulated(hinge_limit()),
         articulated(hinge_motor()),
     ]);
+    out.extend(super::laws::all());
     out
 }
 

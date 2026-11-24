@@ -27,6 +27,7 @@ impl Groups {
         layer: &Layer<'_>,
     ) -> Result<(wgpu::Texture, Vec<BlendInputs>, Vec<Value>), Value> {
         self.free.append(&mut self.taken);
+        self.ran.clear();
         // A frame isolates at most 32 groups (Frame and group).
         let drawn = layer
             .layers
@@ -42,7 +43,7 @@ impl Groups {
                     item,
                     effect: Some(e),
                     ..
-                } if e.light.is_some() => item.strip_suffix("#light"),
+                } if e.light.is_some() => deep_canvas_marks::light::group_of(item),
                 _ => None,
             };
             if let Some(group) = group {

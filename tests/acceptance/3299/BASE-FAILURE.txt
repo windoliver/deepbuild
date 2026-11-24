@@ -1,0 +1,172 @@
+# #3299 acceptance suite at the base a288ae247 (main), macOS (Apple silicon), load ~75-100, cargo 1.99.1, Node 24.22.0, 2026-11-23.
+# Each file run as: node --test --test-concurrency=1 tests/acceptance/3299/<file>, after a cold cargo build --locked -p deep-show (26 min).
+# Paths: the checkout is '.', home '~'. Expected at the base: AC1's three tests fail at their assertions (cargo reruns deep-show's build script, stale: changed "./crates/deep-app"; the digest moves); AC2 and AC3 pass (their twins fail them at assertions: the twin section at the end).
+
+Mon Nov 23 13:27:51 PST 2026
+✖ AC1 #3299.44ab2e7a: writing gpui-kit.d.ts, jsconfig.json and @deepbuild/panel into the panel folders leaves the next build of deep-show fresh (84116.483041ms)
+✖ AC1 #3299.44ab2e7a: deleting them leaves the next build of deep-show fresh (0.221541ms)
+✖ AC1 #3299.44ab2e7a: deep-show's source digest is the same with and without them (0.10925ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 84181.582417
+
+✖ failing tests:
+
+test at tests/acceptance/3299/ac1-panel-files.test.mjs:14:1
+✖ AC1 #3299.44ab2e7a: writing gpui-kit.d.ts, jsconfig.json and @deepbuild/panel into the panel folders leaves the next build of deep-show fresh (84116.483041ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   `after writing gpui-kit.d.ts, jsconfig.json, @deepbuild/panel.js into every folder of crates/deep-app/panels, the next build of deep-show ran deep-show's build script and compiled 1 unit(s): 0.0.0 bin deep-show; cargo's reasons: deep-show deep-show: stale: changed "./crates/deep-app" | deep-show deep-show: dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(250) }) | deep-show build-script-build: dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "./target/debug/build/deep-show-be8afbe251578a8c/output", reference_mtime: FileTime { seconds: 1795469274, nanos: 795638778 }, stale: "./crates/deep-app", stale_mtime: FileTime { seconds: 1795469292, nanos: 872800563 } }))`
+  + ]
+  - []
+  
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ `after writing gpui-kit.d.ts, jsconfig.json, @deepbuild/panel.js into every folder of crates/deep-app/panels, the next build of deep-show ran deep-show's build script and compiled 1 unit(s): 0.0.0 bin deep-show; cargo's reasons: deep-show deep-show: stale: changed "./crates/deep-app" | deep-show deep-show: dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(250) }) | deep-show build-script-build: dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "./target/debug/build/deep-show-be8afbe251578a8c/output", reference_mtime: FileTime { seconds: 1795469274, nanos: 795638778 }, stale: "./crates/deep-app", stale_mtime: FileTime { seconds: 1795469292, nanos: 872800563 } }))` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3299/ac1-panel-files.test.mjs:18:1
+✖ AC1 #3299.44ab2e7a: deleting them leaves the next build of deep-show fresh (0.221541ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   `after deleting gpui-kit.d.ts, jsconfig.json, @deepbuild/panel.js from every folder of crates/deep-app/panels, the next build of deep-show ran deep-show's build script and compiled 1 unit(s): 0.0.0 bin deep-show; cargo's reasons: deep-show deep-show: stale: changed "./crates/deep-app" | deep-show deep-show: dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(250) }) | deep-show build-script-build: dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "./target/debug/build/deep-show-be8afbe251578a8c/output", reference_mtime: FileTime { seconds: 1795469324, nanos: 317932807 }, stale: "./crates/deep-app", stale_mtime: FileTime { seconds: 1795469339, nanos: 125613657 } }))`
+  + ]
+  - []
+  
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ `after deleting gpui-kit.d.ts, jsconfig.json, @deepbuild/panel.js from every folder of crates/deep-app/panels, the next build of deep-show ran deep-show's build script and compiled 1 unit(s): 0.0.0 bin deep-show; cargo's reasons: deep-show deep-show: stale: changed "./crates/deep-app" | deep-show deep-show: dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(250) }) | deep-show build-script-build: dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "./target/debug/build/deep-show-be8afbe251578a8c/output", reference_mtime: FileTime { seconds: 1795469324, nanos: 317932807 }, stale: "./crates/deep-app", stale_mtime: FileTime { seconds: 1795469339, nanos: 125613657 } }))` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3299/ac1-panel-files.test.mjs:22:1
+✖ AC1 #3299.44ab2e7a: deep-show's source digest is the same with and without them (0.10925ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   'the source digest differs with the panel files there: ff0b62f2e703a330daf81c806ec907bd992a11d10677afa8439eef13614dfdb0 with them, 46760b6f7a76cfbad09f7663ba37e22e301d02ef8d6799972f8455c5310d4409 without'
+  + ]
+  - []
+  
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'the source digest differs with the panel files there: ff0b62f2e703a330daf81c806ec907bd992a11d10677afa8439eef13614dfdb0 with them, 46760b6f7a76cfbad09f7663ba37e22e301d02ef8d6799972f8455c5310d4409 without' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+real 84.42
+user 37.15
+sys 11.37
+Mon Nov 23 13:29:15 PST 2026
+✔ AC2 #3299.57c89932: a change to crates/deep-canvas-loop/src/lib.rs runs deep-show's build script again and gives another source digest (16200.85875ms)
+✔ AC2 #3299.57c89932: a change to crates/deep-app/panels/claude-code/main.js runs deep-show's build script again and gives another source digest (42597.622916ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 58850.778209
+real 59.07
+user 32.82
+sys 10.39
+Mon Nov 23 13:30:14 PST 2026
+✔ AC3 #3299.acbee1fc: a build script that watches the whole crates/deep-app folder fails the first criterion, naming cargo's rerun for it (89995.077667ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 90047.6755
+real 90.29
+user 46.32
+sys 15.71
+DONE
+
+# Twins over the base: each twin's crates/deep-show/build.rs laid over the base checkout in place (restored with git checkout after), the criterion's file run alone.
+=== twin digest-lock-only over the base, ac2-source-change
+Mon Nov 23 13:32:09 PST 2026
+✖ AC2 #3299.57c89932: a change to crates/deep-canvas-loop/src/lib.rs runs deep-show's build script again and gives another source digest (26584.780959ms)
+✖ AC2 #3299.57c89932: a change to crates/deep-app/panels/claude-code/main.js runs deep-show's build script again and gives another source digest (6771.356791ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33412.795208
+
+✖ failing tests:
+
+test at tests/acceptance/3299/ac2-source-change.test.mjs:25:3
+✖ AC2 #3299.57c89932: a change to crates/deep-canvas-loop/src/lib.rs runs deep-show's build script again and gives another source digest (26584.780959ms)
+  AssertionError [ERR_ASSERTION]: after a change to crates/deep-canvas-loop/src/lib.rs, the next build of deep-show did not run its build script; cargo's reasons: deep-show deep-show: stale: changed "./crates/deep-canvas-loop/src/lib.rs" | deep-show deep-show: dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(213) }) | deep-canvas-loop deep_canvas_loop: dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "./target/debug/.fingerprint/deep-canvas-loop-a4cd7995b14d2693/dep-lib-deep_canvas_loop", reference_mtime: FileTime { seconds: 1795469373, nanos: 560800404 }, stale: "./crates/deep-canvas-loop/src/lib.rs", stale_mtime: FileTime { seconds: 1795469547, nanos: 854100458 } }))
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3299/ac2-source-change.test.mjs:25:3
+✖ AC2 #3299.57c89932: a change to crates/deep-app/panels/claude-code/main.js runs deep-show's build script again and gives another source digest (6771.356791ms)
+  AssertionError [ERR_ASSERTION]: after a change to crates/deep-app/panels/claude-code/main.js, the next build of deep-show did not run its build script; cargo's reasons: none logged
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+real 33.63
+user 25.58
+sys 8.63
+=== twin plant-misses-main over the base, ac3-planted-watch
+Mon Nov 23 13:32:43 PST 2026
+✖ AC3 #3299.acbee1fc: a build script that watches the whole crates/deep-app folder fails the first criterion, naming cargo's rerun for it (26940.541542ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26990.395916
+
+✖ failing tests:
+
+test at tests/acceptance/3299/ac3-planted-watch.test.mjs:14:1
+✖ AC3 #3299.acbee1fc: a build script that watches the whole crates/deep-app folder fails the first criterion, naming cargo's rerun for it (26940.541542ms)
+  AssertionError [ERR_ASSERTION]: with the planted watch, the first criterion holds
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+real 27.16
+user 25.74
+sys 6.65
+DONE

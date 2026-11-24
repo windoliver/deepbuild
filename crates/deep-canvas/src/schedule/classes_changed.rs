@@ -34,7 +34,7 @@ pub fn classes_changed(old: &Value, new: &Value) -> Vec<Class> {
         let class = match k.as_str() {
             "at" => Class::Transform,
             "visible" => Class::Presence,
-            "adjust" => Class::Shading,
+            "adjust" | "hidden_view" => Class::Shading,
             "params" => {
                 let mut names: Vec<&String> = a
                     .and_then(Value::as_object)

@@ -21,7 +21,7 @@ import type { ChildProcess, SpawnSyncReturns } from 'node:child_process';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { subscribe } from 'node:diagnostics_channel';
 import { Worker } from 'node:worker_threads';
-import { YOUNG } from './settle.js';
+import { YOUNG } from './settle.ts';
 
 /** What execFile's callback gets, as plain data: its error's code and message, and the output as text. */
 interface Ran { error: { code?: number | string; message: string } | null; stdout: string; stderr: string; threw?: true }
@@ -125,7 +125,7 @@ let n = 0;
 const waiting = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>();
 function ask(job: ChildJob): Promise<unknown> {
   if (!worker) {
-    const started = worker = new Worker(new URL('./children-worker.js', import.meta.url), { resourceLimits: YOUNG });
+    const started = worker = new Worker(new URL(import.meta.url.endsWith('.ts') ? './children-worker.ts' : './children-worker.js', import.meta.url), { execArgv: [], resourceLimits: YOUNG });
     started.on('message', (m: { n: number; result: unknown }) => {
       const w = waiting.get(m.n);
       waiting.delete(m.n);
@@ -188,6 +188,14 @@ export const parents = async (): Promise<Map<number, number>> => {
   const map = new Map<number, number>();
   if (!r.error) for (const row of r.stdout.split('\n')) { const [pid, ppid] = row.trim().split(/\s+/).map(Number); if (pid && ppid) map.set(pid, ppid); }
   return map;
+};
+/** A process and every process above it, nearest first, from one read of the table: who a `deep lease` covers (#3219). */
+export const ancestorsOf = async (peer: { pid: number } | undefined): Promise<number[]> => {
+  if (!peer) return [];
+  const up = await parents();
+  const out: number[] = [];
+  for (let pid: number | undefined = peer.pid; pid !== undefined && pid > 1 && !out.includes(pid); pid = up.get(pid)) out.push(pid);
+  return out;
 };
 /**
  * The process group of the newest process under `ancestor` whose arguments hold `text`, apart from the ancestor's own

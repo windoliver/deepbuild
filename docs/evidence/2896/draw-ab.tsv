@@ -1,0 +1,12 @@
+# #2896: the walk's 10,000-item draw through deep mcp (55 s answer wait), merge base 768bb6051 vs the change, alternating, on the Mac18,1, 2026-11-21.
+# Why: the before lane at load 106 refused this draw with 'unavailable' (did not answer in time) in the change's copy.
+side	ms	outcome	load1
+base	53481	presented	88.6
+change	54042	presented	89.2
+base	44520	presented	135.5
+change	37117	presented	137.1
+base	43238	presented	101.6
+change	46699	presented	105.5
+base	45828	presented	74.1
+change	28255	presented	91.0
+

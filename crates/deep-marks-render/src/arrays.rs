@@ -25,11 +25,11 @@ pub fn sets(doc: &Map<String, Value>) -> (BTreeSet<String>, Vec<Issue>) {
             .into_iter()
             .flatten()
             .map(|(name, c)| (format!("items/{id}/params/columns/{name}"), c))
-            .chain(
+            .chain(["alive", "seen"].into_iter().filter_map(|k| {
                 params
-                    .and_then(|p| p.get("alive"))
-                    .map(|a| (format!("items/{id}/params/alive"), a)),
-            )
+                    .and_then(|p| p.get(k))
+                    .map(|a| (format!("items/{id}/params/{k}"), a))
+            }))
             .filter(|(_, c)| c.get("array").is_some())
             .collect();
         if readers.is_empty() {

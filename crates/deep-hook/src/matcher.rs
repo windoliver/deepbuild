@@ -64,7 +64,10 @@ use std::path::{Path, PathBuf};
 use crate::shell::{self, glob, lexical, real, same_name, Arg, Run, Unread};
 
 mod deps;
+mod forge;
 mod paths;
+
+use forge::{gh, merge_read, merges, opens_pr, posts_comment, pushes};
 
 /// What deep-hook reads from one call: the runs of its shell command and the paths it writes.
 pub struct Call {
@@ -614,6 +617,145 @@ impl Call {
         }
     }
 
+    /// The runs that create a cloud resource, as `effect:cloud-resource` reads them; None when a run the reader couldn't
+    /// read whole may create one too (#2134).
+    pub fn cloud_creates(&self) -> Option<Vec<&Run>> {
+        if self.runs.iter().any(|r| r.unread.is_some()) {
+            return None;
+        }
+        Some(self.runs.iter().filter(|r| creates_cloud(r)).collect())
+    }
+
+    /// The AWS profile the one run that creates a cloud resource signs in with, when the reader can know it: a
+    /// standing rule for its account may cover the call (#2134). None when no single aws run creates one, or the
+    /// account could be another than the profile names: a word the line computes or a shortened `--profile`, a `HOME`
+    /// or an `AWS_` variable besides `AWS_PROFILE` in its environment, a builtin that changes what later programs get,
+    /// or a wrapper that changes who runs it.
+    pub fn aws_profile(&self) -> Option<String> {
+        let creates = self.cloud_creates()?;
+        let [run] = creates.as_slice() else {
+            return None;
+        };
+        // The CLI takes a long option by any prefix of it, so a shortened valued one hides its value from `first_two`.
+        let shortened = |w: &&str| {
+            let name = w.split('=').next().unwrap_or_default();
+            name.len() > 2
+                && name.starts_with("--")
+                && !AWS_VALUED.contains(&name)
+                && AWS_VALUED.iter().any(|o| o.starts_with(name))
+        };
+        let words = run.words();
+        let line = self.command.as_deref().unwrap_or_default();
+        // The line's words as a program would be named by them: quotes taken out, a path's last part.
+        let tokens: Vec<String> = line
+            .split(|c: char| c.is_whitespace() || ";&|()<>`".contains(c))
+            .map(|w| {
+                let w: String = w.chars().filter(|c| !"'\"\\".contains(*c)).collect();
+                same_name(w.rsplit('/').next().unwrap_or_default())
+            })
+            .collect();
+        // The line with its quotes taken out, so a name split by quotes reads whole, and what it holds outside quotes,
+        // where the shell expands braces and defines functions.
+        let bare: String = line.chars().filter(|c| !"'\"\\".contains(*c)).collect();
+        let mut unquoted = String::new();
+        let mut quote: Option<char> = None;
+        let mut escaped = false;
+        for c in line.chars() {
+            match (quote, c) {
+                _ if escaped => escaped = false,
+                (Some('\''), '\'') => quote = None,
+                (Some('\''), _) => {}
+                (_, '\\') => escaped = true,
+                (Some('"'), '"') => quote = None,
+                (Some(_), _) => {}
+                (None, '\'' | '"') => quote = Some(c),
+                (None, _) => unquoted.push(c),
+            }
+        }
+        let pattern = |p: &Path| p.to_string_lossy().contains(['*', '?', '[']);
+        let assignment = |w: &&str| {
+            w.split_once('=').is_some_and(|(n, _)| {
+                n.chars()
+                    .next()
+                    .is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
+                    && n.chars().all(|c| c == '_' || c.is_ascii_alphanumeric())
+            })
+        };
+        let own_profile = run.env.iter().any(|(n, _)| n == "AWS_PROFILE");
+        let aws_words = bare.matches("AWS_").count();
+        if !run.is("aws")
+            || run.glob
+            || run.args.iter().any(|a| a.text.is_none() || a.glob)
+            || self.runs.iter().filter(|r| r.is("aws")).any(|r| {
+                let words = r.words();
+                words.iter().any(shortened) || words.contains(&"--")
+            })
+            // What the shell would expand, split or decode, the reader may read otherwise than it runs.
+            || line.contains(['$', '`', '\\', '~'])
+            || unquoted.contains(['*', '?', '['])
+            || run.env.iter().any(|(n, _)| n != "AWS_PROFILE")
+            // The only AWS_ setting it reads is the creating run's own AWS_PROFILE.
+            || aws_words > usize::from(own_profile)
+            || (aws_words == 1 && bare.matches("AWS_PROFILE=").count() != 1)
+            // What picks the program aws runs as, or the files it reads its account from.
+            || ["HOME", "BASH_ENV", "PATH", "PYTHON", "DYLD_", "LD_"].iter().any(|w| bare.contains(w))
+            || bare.to_lowercase().contains(".aws")
+            // Brace expansion, and a function that may stand in for aws.
+            || unquoted.contains(['{', '}'])
+            || unquoted.replace(char::is_whitespace, "").contains("()")
+            || tokens
+                .iter()
+                .any(|t| AS_ANOTHER.contains(&t.as_str()))
+            || self
+                .runs
+                .iter()
+                .any(|r| !std::ptr::eq(r, *run) && !reads_only(r))
+            // A write can reach what decides the account: the CLI's files, its program, the interpreter it runs on.
+            || !self.writes.is_empty()
+            // A disk that ignores case folds letters beyond ASCII onto those names, and the reader breaks words at a
+            // carriage return where bash doesn't.
+            || !line.chars().all(|c| c == '\t' || c == '\n' || (' '..='~').contains(&c))
+            // An aws named by a path may be any program.
+            || bare
+                .split(|c: char| c.is_whitespace() || ";&|()<>".contains(c))
+                .any(|w| w != "aws" && w.rsplit('/').next() == Some("aws"))
+            // An assignment of its own changes what every later program gets, an exported one as a prefix doesn't. Each
+            // statement runs aws or a read-only program, named bare.
+            // Read with its quotes dropped, never its quoted words, so a quoted wrapper is still its program.
+            || bare.split([';', '&', '|', '\n', '(', ')']).any(|statement| {
+                let words: Vec<&str> = statement.split_whitespace().collect();
+                let assigns = words.iter().take_while(|w| assignment(w)).count();
+                (assigns > 0 && assigns == words.len())
+                    || words[..assigns].iter().any(|w| !w.starts_with("AWS_PROFILE="))
+                    // Its program by its bare name, never a wrapper, a shell word or a path, which may be any program
+                    // or run it with another environment.
+                    || words
+                        .get(assigns)
+                        .is_some_and(|w| *w != "aws" && !READ_ONLY.contains(w))
+            })
+            || self.runs.iter().any(|r| r.cwd.as_deref().is_none_or(pattern))
+        {
+            return None;
+        }
+        // The CLI keeps the last --profile it's given.
+        let named = words
+            .iter()
+            .enumerate()
+            .filter_map(|(k, w)| match *w {
+                "--profile" => Some(words.get(k + 1).copied().unwrap_or("")),
+                _ => w.strip_prefix("--profile="),
+            })
+            .next_back();
+        let env = || {
+            run.env
+                .iter()
+                .rev()
+                .find(|(n, _)| n == "AWS_PROFILE")
+                .map(|(_, v)| v.as_str())
+        };
+        Some(named.or_else(env).unwrap_or("default").to_string()).filter(|p| plain_profile(p))
+    }
+
     /// A `kill` of the hub's process or its group, the hub's PID read from its socket's peer.
     fn kills_hub(&self) -> Option<Hit> {
         let kills: Vec<&Run> = self.runs.iter().filter(|r| r.is("kill")).collect();
@@ -660,6 +802,46 @@ impl Call {
             })?;
             return Some(Hit {
                 detail: Some(format!("It makes the top-level folder {}.", new.display())),
+            });
+        }
+        // The hub reads the owner of a create from this note, as deep-hook reads it (#2134): only the first two
+        // forms name one, and the profile is said whole, so the hub never splits the command again.
+        if class == "cloud-resource" {
+            let creates: Vec<&Run> = self.runs.iter().filter(|r| creates_cloud(r)).collect();
+            let lines = || {
+                creates
+                    .iter()
+                    .map(|r| command_of(r))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            };
+            let detail = match (self.cloud_creates().as_deref(), creates.as_slice()) {
+                (_, []) => return None,
+                (Some([run]), _) if !run.is("aws") => {
+                    format!("It creates a cloud resource: {}", command_of(run))
+                }
+                (Some([run]), _) => match self.aws_profile() {
+                    Some(profile) => format!(
+                        "It creates a cloud resource under the AWS profile {profile}: {}",
+                        command_of(run)
+                    ),
+                    None => format!(
+                        "It creates a cloud resource with AWS settings its line sets: {}",
+                        command_of(run)
+                    ),
+                },
+                (Some(several), _) => format!(
+                    "It runs {} commands that create cloud resources: {}",
+                    several.len(),
+                    lines()
+                ),
+                (None, _) => format!(
+                    "It creates cloud resources beside a command it couldn't read: {}",
+                    lines()
+                ),
+            };
+            return Some(Hit {
+                detail: Some(detail),
             });
         }
         let found = self.runs.iter().find(|r| self.has_effect(r, class));
@@ -755,6 +937,113 @@ fn command_of(run: &Run) -> String {
     let mut line = vec![run.program.clone()];
     line.extend(run.words().iter().map(|w| quote(w)));
     line.join(" ")
+}
+
+/// The account a profile signs into by an ~/.aws/config's text and ~/.aws/credentials': its section's `sso_account_id`, else none (#2134). A
+/// config holding anything but printable ASCII, tabs and line ends, an indented line, or a quote or backslash, is read
+/// as naming no account:
+/// readers split such text into lines and words differently, the hub's and the CLI's among them.
+pub fn aws_account<'a>(config: &'a str, credentials: &str, profile: &str) -> Option<&'a str> {
+    // The CLI lays ~/.aws/credentials over the config, an account named there over the config's.
+    if credentials.to_ascii_lowercase().contains("sso_account_id")
+        || !config
+        .replace("\r\n", "\n")
+        .chars()
+        .all(|c| c == '\t' || c == '\n' || (' '..='~').contains(&c))
+        // The CLI reads an indented line as going on with the value above it, and a header's quotes and escapes away.
+        || config.lines().any(|l| l.starts_with([' ', '\t']))
+        || config.contains(['\'', '"', '\\'])
+    {
+        return None;
+    }
+    // The CLI's profile is its last section to name it, read whole: one header's words are `profile <name>`, after
+    // any word that starts with profile, or `default`.
+    // A `[DEFAULT]` key is every profile's that doesn't set it.
+    let (mut section, mut shared, mut found) = (None, false, false);
+    let (mut own, mut fallback) = (None, None);
+    for line in config.lines().map(str::trim) {
+        // A header is read as the CLI's parser reads it: up to its last `]`, whatever follows.
+        if let Some(head) = line
+            .strip_prefix('[')
+            .and_then(|l| l.rfind(']').map(|k| &l[..k]))
+            .filter(|h| !h.is_empty())
+        {
+            let words: Vec<&str> = head.split_whitespace().collect();
+            shared = head == "DEFAULT";
+            section = match words[..] {
+                _ if head == "default" => Some("default"),
+                [_, name] if head.starts_with("profile") => Some(name),
+                _ => None,
+            };
+            if section == Some(profile) {
+                (own, found) = (None, true);
+            }
+        } else if shared || section == Some(profile) {
+            // A key ends at its first `=` or `:`, in any case.
+            if let Some(k) = line.find(['=', ':']) {
+                if line[..k].trim().eq_ignore_ascii_case("sso_account_id") {
+                    let value = Some(line[k + 1..].trim());
+                    if shared {
+                        fallback = value;
+                    } else {
+                        own = value;
+                    }
+                }
+            }
+        }
+    }
+    own.or(fallback)
+        .filter(|v| found && !v.is_empty() && !v.contains(char::is_whitespace))
+}
+
+/// Whether a run beside the one a standing rule covers only reads: one of READ_ONLY, or an aws run that lists,
+/// describes or says who you are (#2134).
+fn reads_only(run: &Run) -> bool {
+    if run.is("aws") {
+        let [service, op] = first_two(&run.words(), AWS_VALUED);
+        return op == "ls"
+            || op.starts_with("list-")
+            || op.starts_with("describe-")
+            || (service == "sts" && op == "get-caller-identity");
+    }
+    READ_ONLY.iter().any(|p| run.is(p))
+}
+
+/// The programs a line may run beside the one aws run a standing rule covers: none changes the account that run
+/// signs in with (#2134).
+const READ_ONLY: &[&str] = &["echo", "cd", "pwd", "true", "ls", "sleep", "date"];
+
+/// The words that change what a run is given or who runs it: a wrapper that changes its user, its environment or its
+/// words, the aws command that rewrites a profile, and the shell words that assign a variable or guard a statement, so
+/// an assignment in it is no statement's own.
+const AS_ANOTHER: &[&str] = &[
+    "sudo",
+    "doas",
+    "su",
+    "runuser",
+    "pkexec",
+    "env",
+    "xargs",
+    "parallel",
+    "configure",
+    "for",
+    "select",
+    "if",
+    "while",
+    "until",
+    "case",
+    "!",
+    "read",
+    "let",
+    "getopts",
+    "mapfile",
+    "readarray",
+    "coproc",
+];
+
+/// Whether a profile can be said in a note and read back whole: printable ASCII with no space and no colon.
+fn plain_profile(profile: &str) -> bool {
+    !profile.is_empty() && profile.chars().all(|c| c.is_ascii_graphic() && c != ':')
 }
 
 /// A match on a run, naming it: the command for you to run yourself, if you mean it.
@@ -1118,363 +1407,43 @@ fn creates_cloud(run: &Run) -> bool {
     }
     (run.is("gsutil") && op(0) == "mb")
         || ((run.is("terraform") || run.is("tofu")) && op(0) == "apply")
-        || (run.is("pulumi") && op(0) == "up")
-        || ((run.is("cdk") || run.is("sam") || run.is("serverless") || run.is("sls"))
-            && op(0) == "deploy")
+        || (run.is("pulumi") && first_two(&words, PULUMI_VALUED)[0] == "up")
+        || (run.is("cdk") && first_two(&words, CDK_VALUED)[0] == "deploy")
+        || ((run.is("sam") || run.is("serverless") || run.is("sls")) && op(0) == "deploy")
 }
 
-/// A `gh` run whose first two plain words are one of `subs`.
-/// A `gh api` call that posts in your name: a POST (by `--method` or `-X`, or by a field, which makes gh post) to an
-/// issue's, a pull request's or a commit's comments, a review comment's replies, or a pull request's reviews (#323).
-fn posts_comment(run: &Run) -> bool {
-    let words = run.words();
-    let plain = plain(&words);
-    if !run.is("gh") || plain.first() != Some(&"api") {
-        return false;
-    }
-    api_method(&words) == "POST"
-        && plain[1..].iter().any(|w| {
-            let path = w
-                .trim_start_matches("https://api.github.com")
-                .trim_start_matches('/');
-            let parts: Vec<&str> = path.split('?').next().unwrap_or("").split('/').collect();
-            parts.first() == Some(&"repos")
-                && matches!(
-                    parts.get(3..).unwrap_or(&[]),
-                    ["issues" | "pulls" | "commits", _, "comments"]
-                        | ["pulls", _, "reviews"]
-                        | ["pulls", _, "comments", _, "replies"]
-                )
-        })
-}
-
-/// The method of a `gh api` call: the one `--method` or `-X` names, or POST once a field or `--input` makes gh post,
-/// else GET.
-fn api_method(words: &[&str]) -> String {
-    let method = words.iter().enumerate().find_map(|(k, w)| match *w {
-        "-X" | "--method" => words.get(k + 1).copied(),
-        _ => w
-            .strip_prefix("--method=")
-            .or(w.strip_prefix("-X"))
-            .filter(|m| !m.is_empty() && !m.starts_with('-')),
-    });
-    match method {
-        Some(m) => m.to_uppercase(),
-        None if !fields(words).is_empty() || words.contains(&"--input") => "POST".into(),
-        None => "GET".into(),
-    }
-}
-
-/// A run's subcommand and what follows it, past the global options its program takes before one: git's, jj's,
-/// sl's, gt's, glab's and git town's. `git town` reads as git-town.
-fn sub(run: &Run) -> (&'static str, Vec<&str>) {
-    const TOOLS: &[(&str, &[&str])] = &[
-        ("git", GIT_VALUED),
-        (
-            "jj",
-            &[
-                "-R",
-                "--repository",
-                "--at-op",
-                "--at-operation",
-                "--config",
-                "--config-toml",
-                "--config-file",
-                "--color",
-            ],
-        ),
-        (
-            "sl",
-            &[
-                "-R",
-                "--repository",
-                "--cwd",
-                "--config",
-                "--configfile",
-                "--color",
-                "--pager",
-                "--encoding",
-                "--encodingmode",
-            ],
-        ),
-        ("gt", &["--cwd"]),
-        ("glab", &["-R", "--repo"]),
-        ("git-town", &[]),
-    ];
-    let Some((name, valued)) = TOOLS.iter().find(|(name, _)| run.is(name)) else {
-        return ("", Vec::new());
-    };
-    let rest = past(&run.words(), valued);
-    match (*name, rest.first()) {
-        ("git", Some(&"town")) => ("git-town", rest[1..].to_vec()),
-        _ => (name, rest),
-    }
-}
-
-/// A push by any of the tools that push: `git push`, `jj git push`, `sl push`, `gt submit` and its stack forms, and
-/// git town's commands that push.
-fn pushes(run: &Run) -> bool {
-    match sub(run) {
-        ("git", rest) => rest.first() == Some(&"push"),
-        ("jj", rest) => rest.starts_with(&["git", "push"]),
-        ("sl", rest) => rest.first() == Some(&"push"),
-        _ => submits(run) || town(run, &["propose", "new-pull-request", "ship", "sync"]),
-    }
-}
-
-/// What opens a pull request: `gh pr create`, `glab mr create`, `gt submit`, `git town propose`, `sl pr submit`.
-fn opens_pr(run: &Run) -> bool {
-    gh(run, &[&["pr", "create"]])
-        || submits(run)
-        || town(run, &["propose", "new-pull-request"])
-        || match sub(run) {
-            ("glab", rest) => {
-                rest.starts_with(&["mr", "create"]) || rest.starts_with(&["mr", "new"])
-            }
-            ("sl", rest) => rest.starts_with(&["pr", "submit"]),
-            _ => false,
-        }
-}
-
-/// `gt submit` and its stack forms, which push the stack's branches and open or update their pull requests.
-fn submits(run: &Run) -> bool {
-    let ("gt", rest) = sub(run) else { return false };
-    let submit = |w: Option<&&str>| matches!(w, Some(&"submit" | &"s"));
-    submit(rest.first())
-        || rest.first() == Some(&"ss")
-        || matches!(
-            rest.first(),
-            Some(&"stack" | &"upstack" | &"us" | &"downstack" | &"ds" | &"branch" | &"b")
-        ) && submit(rest.get(1))
-}
-
-/// A git town command among `commands`, as `git town <command>` or `git-town <command>`.
-fn town(run: &Run, commands: &[&str]) -> bool {
-    matches!(sub(run), ("git-town", rest) if rest.first().is_some_and(|c| commands.contains(c)))
-}
-
-/// A merge by any of the tools that merge, and a GraphQL mutation that merges or arms one.
-fn merges(run: &Run) -> bool {
-    gh(run, &[&["pr", "merge"]])
-        || merge_endpoint(run).is_some_and(|_| api_method(&run.words()) != "GET")
-        || glab_merge_endpoint(run).is_some_and(|_| api_method(&run.words()) != "GET")
-        || graphql_merge(run).is_some()
-        || gt_merge(run)
-        || town(run, &["ship"])
-        || matches!(sub(run), ("glab", rest) if rest.starts_with(&["mr", "merge"]) || rest.starts_with(&["mr", "accept"]))
-}
-
-/// The word of `glab api` naming a merge request's merge endpoint, `projects/<id>/merge_requests/<n>/merge`.
-fn glab_merge_endpoint(run: &Run) -> Option<&str> {
-    let ("glab", rest) = sub(run) else {
-        return None;
-    };
-    if rest.first() != Some(&"api") {
-        return None;
-    }
-    rest[1..].iter().copied().find(|w| {
-        let parts: Vec<&str> = w.trim_matches('/').split('/').collect();
-        parts.len() >= 3
-            && parts[parts.len() - 1] == "merge"
-            && parts[parts.len() - 3] == "merge_requests"
-            && parts[parts.len() - 2].parse::<u64>().is_ok()
-    })
-}
-
-fn gt_merge(run: &Run) -> bool {
-    matches!(sub(run), ("gt", rest) if rest.first() == Some(&"merge"))
-}
-
-/// The mutations of a `gh api graphql` call that merge, arm (auto-merge or the merge queue) or disarm a merge.
-const MUTATIONS: &[&str] = &[
-    "mergePullRequest",
-    "enablePullRequestAutoMerge",
-    "enqueuePullRequest",
-    "disablePullRequestAutoMerge",
-    "dequeuePullRequest",
+/// pulumi's options that take a value before its subcommand (#2134).
+const PULUMI_VALUED: &[&str] = &[
+    "-C",
+    "--cwd",
+    "-s",
+    "--stack",
+    "--color",
+    "-v",
+    "--verbose",
+    "--tracing",
+    "--tracing-header",
+    "--profiling",
+    "--memprofilerate",
 ];
-const ARMS: &[&str] = &["enablePullRequestAutoMerge", "enqueuePullRequest"];
-const DISARMS: &[&str] = &["disablePullRequestAutoMerge", "dequeuePullRequest"];
 
-/// The query of a `gh api graphql` call that merges, arms or disarms a merge, with its fields. A mutation's name
-/// anywhere in it counts, a comment's too, so none hides behind a `#`. A query deep-hook can't read, from a file
-/// (`@`), `--input`, a variable or none at all, is a merge with no head: the empty query.
-fn graphql_merge(run: &Run) -> Option<(String, Vec<(String, String)>)> {
-    let words = run.words();
-    let at = api_at(run, &words)?;
-    if !words[at..].contains(&"graphql") {
-        return None;
-    }
-    let fields = fields(&words);
-    let query = fields
-        .iter()
-        .find(|(k, _)| k == "query")
-        .map(|(_, v)| v.clone());
-    let Some(query) = query.filter(|q| !q.is_empty() && !q.starts_with('@') && !q.starts_with('$'))
-    else {
-        return Some((String::new(), fields));
-    };
-    MUTATIONS
-        .iter()
-        .any(|m| holds_word(&query, m))
-        .then_some((query, fields))
-}
-
-/// A GraphQL argument's literal value for `name`, or the field a `$variable` in its place names; none unless the
-/// query names it exactly once, as one merge's input does. A `$name` is a variable, not the argument.
-fn graphql_value(query: &str, fields: &[(String, String)], name: &str) -> Option<String> {
-    let args: Vec<usize> = words_at(query, name)
-        .filter(|&at| !query[..at].ends_with('$'))
-        .collect();
-    let [at] = args[..] else { return None };
-    let rest = query[at + name.len()..]
-        .trim_start()
-        .strip_prefix(':')?
-        .trim_start();
-    if let Some(var) = rest.strip_prefix('$') {
-        // gh keeps the last field of a name; one given twice names no head.
-        let var: String = var
-            .chars()
-            .take_while(|c| c.is_alphanumeric() || *c == '_')
-            .collect();
-        let values: Vec<&String> = fields
-            .iter()
-            .filter(|(k, _)| *k == var)
-            .map(|(_, v)| v)
-            .collect();
-        let [value] = values[..] else { return None };
-        return Some(value.clone());
-    }
-    let value = rest.strip_prefix('"')?;
-    value.find('"').map(|end| value[..end].to_string())
-}
-
-fn gh(run: &Run, subs: &[&[&str]]) -> bool {
-    let two = first_two(&run.words(), GH_VALUED);
-    run.is("gh") && subs.iter().any(|s| two[..] == **s)
-}
-
-/// Where a `gh api` call's words past `api` start, gh's own options before it skipped; none for another call.
-fn api_at(run: &Run, words: &[&str]) -> Option<usize> {
-    if !run.is("gh") {
-        return None;
-    }
-    let at = words.iter().position(|w| !w.starts_with('-'))?;
-    (words[at] == "api").then_some(at + 1)
-}
-
-/// The word of `gh api` naming a pull request's merge endpoint, `repos/<owner>/<repo>/pulls/<n>/merge`.
-fn merge_endpoint(run: &Run) -> Option<&str> {
-    let words = run.words();
-    let at = api_at(run, &words)?;
-    words[at..].iter().copied().find(|w| {
-        let parts: Vec<&str> = w.trim_matches('/').split('/').collect();
-        parts.len() >= 3
-            && parts[parts.len() - 1] == "merge"
-            && parts[parts.len() - 3] == "pulls"
-            && parts[parts.len() - 2].parse::<u64>().is_ok()
-    })
-}
-
-/// What a merge names, as the hub reads it from the entry's note (#84): `merge pr=12 head=<sha> auto disable blind`,
-/// each part only when the call has it. One commit, for `--match-head-commit`, the API's `sha` field, GraphQL's
-/// `expectedHeadOid` or `glab mr merge --sha`; `blind` for `gt merge` and `git town ship`, which can't name one.
-fn merge_read(run: &Run) -> String {
-    let words = run.words();
-    let value = |flag: &str| {
-        words.iter().enumerate().find_map(|(k, w)| {
-            w.strip_prefix(&format!("{flag}="))
-                .or_else(|| (*w == flag).then(|| words.get(k + 1).copied()).flatten())
-        })
-    };
-    let (sub_name, rest) = sub(run);
-    let mut disable = words.contains(&"--disable-auto");
-    let (pr, head, auto) = if let Some(path) = merge_endpoint(run) {
-        let pr = path
-            .trim_matches('/')
-            .rsplit('/')
-            .nth(1)
-            .map(str::to_string);
-        (
-            pr,
-            words
-                .iter()
-                .find_map(|w| w.strip_prefix("sha="))
-                .map(str::to_string),
-            false,
-        )
-    } else if let Some((query, fields)) = graphql_merge(run) {
-        // A head covers one merge: a query that holds more than one names none.
-        let one = MUTATIONS
-            .iter()
-            .map(|m| words_at(&query, m).count())
-            .sum::<usize>()
-            == 1;
-        let any = |names: &[&str]| names.iter().any(|m| holds_word(&query, m));
-        // A query that disarms and also merges or arms is read as the merge, since `disable` alone skips the head rule.
-        if any(DISARMS) && !any(ARMS) && !holds_word(&query, "mergePullRequest") {
-            disable = true;
-        }
-        // A head only a comment names is none: the argument must be there with the comments taken out too.
-        let bare: String = query
-            .lines()
-            .map(|l| l.split('#').next().unwrap_or(""))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let head = graphql_value(&query, &fields, "expectedHeadOid")
-            .filter(|_| one && holds_word(&bare, "expectedHeadOid"));
-        (
-            graphql_value(&query, &fields, "pullRequestId"),
-            head,
-            any(ARMS),
-        )
-    } else if let Some(path) = glab_merge_endpoint(run) {
-        let pr = path
-            .trim_matches('/')
-            .rsplit('/')
-            .nth(1)
-            .map(str::to_string);
-        (
-            pr,
-            words
-                .iter()
-                .find_map(|w| w.strip_prefix("sha="))
-                .map(str::to_string),
-            false,
-        )
-    } else if sub_name == "glab" {
-        (
-            plain(&rest).get(2).map(|p| p.to_string()),
-            value("--sha").map(str::to_string),
-            false,
-        )
-    } else {
-        // The repository `-R` names is no pull request.
-        let named: Vec<&str> = (0..words.len())
-            .filter(|&k| k == 0 || !GH_VALUED.contains(&words[k - 1]))
-            .map(|k| words[k])
-            .collect();
-        let pr = plain(&named).get(2).map(|p| p.to_string());
-        (pr, value("--match-head-commit").map(str::to_string), false)
-    };
-    if gt_merge(run) || town(run, &["ship"]) {
-        return "merge blind".into();
-    }
-    let mut read = String::from("merge");
-    if let Some(pr) = pr {
-        read.push_str(&format!(" pr={pr}"));
-    }
-    if let Some(head) = head {
-        read.push_str(&format!(" head={head}"));
-    }
-    if auto || words.contains(&"--auto") {
-        read.push_str(" auto");
-    }
-    if disable {
-        read.push_str(" disable");
-    }
-    read
-}
+/// cdk's options that take a value before its subcommand (#2134).
+const CDK_VALUED: &[&str] = &[
+    "--profile",
+    "--app",
+    "-a",
+    "-o",
+    "--output",
+    "-c",
+    "--context",
+    "-r",
+    "--role-arn",
+    "-p",
+    "--plugin",
+    "--proxy",
+    "--build",
+    "--ca-bundle-path",
+];
 
 /// A command that starts a long-running service.
 fn starts_service(run: &Run) -> bool {

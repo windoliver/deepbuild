@@ -11,6 +11,7 @@
 //! times that surface's handoff frame by frame; `vello_gpu` answers the gate.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -37,7 +38,7 @@ use serde_json::{json, Map, Value};
 use crate::drawn::Page;
 use crate::groups::{self, Clock, Groups, Picture};
 use crate::session3::On;
-use crate::view3d::{pair, png, write_named};
+use crate::view3d::{pair, png, write_named, FLICKS_PER_SECOND};
 use crate::{effects, frames, parity, refused, status, App, Planted};
 
 /// One writer layer as the live view sees it.
@@ -65,6 +66,8 @@ struct Evaluated {
     packs: Arc<Vec<Named>>,
     /// #149: where the frame's pixels land on its look's paper.
     page: Option<Arc<Page>>,
+    /// The content-addressed store the call's images and normal pages are read from (#2053).
+    store: Option<PathBuf>,
 }
 
 /// The named operators of the packs a call installs, a folder or `{id, dir}` each.
@@ -84,7 +87,7 @@ pub(crate) fn packs_of(call: &Value) -> Result<Vec<Named>, Value> {
 
 fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     let bad = |what: &str| refused("bad_input", what);
-    let doc = call["doc"]
+    let mut doc = call["doc"]
         .as_object()
         .cloned()
         .ok_or_else(|| bad("doc is an object"))?;
@@ -106,6 +109,9 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
         }
     }
     let t = call["t"].as_i64().unwrap_or(0);
+    // #269: the document's logic items run from the call's assets through t.
+    let frames = [t.max(0) as u64];
+    crate::grids2d::bake(&mut doc, call, (&frames, FLICKS_PER_SECOND), app.planted)?;
     let record = Record {
         pinned: t,
         ..deep_marks_render::record(call.as_object().expect("a call is an object"))
@@ -115,6 +121,7 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     let mut state = program.state();
     program.evaluate(t, eval::Validity::Full, &mut state);
     let mut items = eval::items(&doc, &program, &state);
+    crate::grids2d::fill(&doc, &mut items, t);
     // #149: a 2D film's camera places its items, and no 3D layer comes of it.
     let view = deep_canvas_marks::drawn::view_of(&doc, &mut items);
     if let Some(v) = &view {
@@ -170,8 +177,11 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
         Some(Planted::SectorsSourceOver) => scene::Planted::SectorsSourceOver,
         _ => crate::lightfx::scene_plant(app.composed()).unwrap_or(scene::Planted::None),
     };
-    let frame = scene::frame_planted(&flat_doc, &flat, (&palette, &ty), &record, 1.0, planted)
+    let mut frame = scene::frame_planted(&flat_doc, &flat, (&palette, &ty), &record, 1.0, planted)
         .map_err(|r| refused(r.code, r.path))?;
+    // #2053: each lit image's normal page, read from the call's store as stored.
+    let store = call["store"].as_str().map(PathBuf::from);
+    gpu::pages(&mut frame, store.as_deref())?;
     let layers = frame
         .layers
         .iter()
@@ -226,6 +236,7 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
         gpu,
         roles: Arc::new(roles),
         page,
+        store,
     })
 }
 
@@ -296,6 +307,17 @@ fn path_of(app: &App, l: &Layer2) -> Value {
         return missing(&item);
     }
     gpu::refusal(marks()).unwrap_or_else(|| json!("gpu_layer"))
+}
+
+/// The GPU layer's drawing options a planted program sets.
+fn options_of(planted: Option<Planted>) -> Options {
+    Options {
+        shifts_fill: planted == Some(Planted::ShiftsFillTwoCodes),
+        multiply_as_screen: planted == Some(Planted::GpuLayerMultiplyAsScreen),
+        grid_picks_first: planted == Some(Planted::GridRoleBeforeRebuild),
+        grid_keeps_previous: planted == Some(Planted::GridKeepsPreviousStep),
+        ..Options::default()
+    }
 }
 
 /// What a drawing on the app's device asks beyond its marks.
@@ -408,11 +430,7 @@ fn draw2(
         "vello_cpu" => layer::vello(marks, size),
         "gpu_layer" => {
             gate(app, marks)?;
-            let options = Options {
-                shifts_fill: app.planted == Some(Planted::ShiftsFillTwoCodes),
-                multiply_as_screen: app.planted == Some(Planted::GpuLayerMultiplyAsScreen),
-                ..Options::default()
-            };
+            let options = options_of(app.planted);
             let asks = Asks {
                 options,
                 ..Asks::default()
@@ -423,22 +441,32 @@ fn draw2(
             if let Some(item) = layer::gpui_lacks(marks.iter().map(|m| &**m)) {
                 return Err(missing(&item));
             }
-            gpui2(app, marks, size)
+            gpui2(app, marks, size, ev.store.as_deref())
         }
     }
 }
 
 #[cfg(target_os = "macos")]
-fn gpui2(app: &mut App, marks: &[Arc<Drawn>], size: [u32; 2]) -> Result<image::RgbaImage, Value> {
+fn gpui2(
+    app: &mut App,
+    marks: &[Arc<Drawn>],
+    size: [u32; 2],
+    store: Option<&std::path::Path>,
+) -> Result<image::RgbaImage, Value> {
     let planted = layer::Planted {
         shifts_glyphs: app.planted == Some(Planted::ShiftsGlyphQuads),
         paths_apart: app.planted == Some(Planted::SectorsSourceOver),
     };
-    layer::gpui(&mut app.cx, marks, size, planted)
+    layer::gpui(&mut app.cx, marks, size, planted, store)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn gpui2(_: &mut App, _: &[Arc<Drawn>], _: [u32; 2]) -> Result<image::RgbaImage, Value> {
+fn gpui2(
+    _: &mut App,
+    _: &[Arc<Drawn>],
+    _: [u32; 2],
+    _: Option<&std::path::Path>,
+) -> Result<image::RgbaImage, Value> {
     Err(refused(
         "unsupported_platform",
         "GPUI draws a 2D writer layer on its Metal renderer, on macOS",
@@ -642,117 +670,7 @@ fn draw3(app: &App, ev: &Evaluated, l: &Layer2, keep: bool) -> Result<Picture, V
     })
 }
 
-/// Compositing in linear light, inside a 3D writer layer (Frame and group: blend modes).
-mod linear {
-    use super::*;
-
-    fn decode(c: u8) -> f64 {
-        deep_canvas::color::srgb_decode(f64::from(c) / 255.0)
-    }
-
-    fn encode(v: f64) -> u8 {
-        (deep_canvas::color::srgb_encode(v.clamp(0.0, 1.0)) * 255.0).round() as u8
-    }
-
-    /// A straight sRGB-encoded pixel as linear light, premultiplied.
-    fn lin(p: &image::Rgba<u8>) -> [f64; 4] {
-        let a = f64::from(p[3]) / 255.0;
-        [decode(p[0]) * a, decode(p[1]) * a, decode(p[2]) * a, a]
-    }
-
-    /// `source` (straight sRGB-encoded) composited into `acc` (linear light, premultiplied) at
-    /// `alpha`, in `mode`.
-    fn blend_into(acc: &mut [[f64; 4]], source: &image::RgbaImage, alpha: f64, mode: Blend) {
-        for (d, p) in acc.iter_mut().zip(source.pixels()) {
-            let s = lin(p).map(|v| v * alpha);
-            let (ab, as_) = (d[3], s[3]);
-            if mode == Blend::Add {
-                *d = [0, 1, 2, 3].map(|i| (d[i] + s[i]).min(1.0));
-                continue;
-            }
-            if as_ == 0.0 {
-                continue;
-            }
-            let un = |c: &[f64; 4], a: f64| {
-                [0, 1, 2].map(|i| if a > 0.0 { (c[i] / a).min(1.0) } else { 0.0 })
-            };
-            let number = deep_canvas::blend::index(mode.name()).unwrap_or(0);
-            let b = deep_canvas::blend::mix(number, un(d, ab), un(&s, as_));
-            let mut out = [0.0; 4];
-            for i in 0..3 {
-                out[i] = s[i] * (1.0 - ab) + d[i] * (1.0 - as_) + as_ * ab * b[i];
-            }
-            out[3] = as_ + ab * (1.0 - as_);
-            *d = out;
-        }
-    }
-
-    /// A 3D writer layer's 2D `marks` over its 3D pixels `base`, every composite in linear light:
-    /// each run of marks outside a blended group drawn by Vello CPU and laid over source-over, and
-    /// each blended group's content blended in its mode.
-    pub fn over(
-        base: &image::RgbaImage,
-        marks: &[&Drawn],
-        size: [u32; 2],
-    ) -> Result<image::RgbaImage, Value> {
-        let mut acc: Vec<[f64; 4]> = base.pixels().map(lin).collect();
-        let picture = |run: Vec<Drawn>| {
-            layer::vello(&run.into_iter().map(Arc::new).collect::<Vec<_>>(), size)
-        };
-        let mut i = 0;
-        while i < marks.len() {
-            let found = marks[i..].iter().enumerate().find_map(|(k, d)| {
-                d.scopes.iter().enumerate().find_map(|(at, s)| match s {
-                    Scope::Opacity {
-                        item,
-                        alpha,
-                        blend: Some(b),
-                        ..
-                    } => Some((i + k, at, item.clone(), *alpha, *b)),
-                    _ => None,
-                })
-            });
-            let (start, end) = match &found {
-                Some((start, _, group, ..)) => (
-                    *start,
-                    marks[*start..]
-                        .iter()
-                        .position(|d| !d.scopes.iter().any(|s| s.item() == group))
-                        .map_or(marks.len(), |n| start + n),
-                ),
-                None => (marks.len(), marks.len()),
-            };
-            if start > i {
-                let before = picture(marks[i..start].iter().map(|d| (*d).clone()).collect())?;
-                blend_into(&mut acc, &before, 1.0, Blend::Normal);
-            }
-            if let Some((_, at, _, alpha, blend)) = found {
-                let inside = marks[start..end]
-                    .iter()
-                    .map(|d| Drawn {
-                        scopes: d.scopes[at + 1..].to_vec(),
-                        ..(*d).clone()
-                    })
-                    .collect();
-                blend_into(&mut acc, &picture(inside)?, alpha, blend);
-            }
-            i = end;
-        }
-        let mut out = image::RgbaImage::new(size[0], size[1]);
-        for (o, p) in out.pixels_mut().zip(&acc) {
-            let a = p[3];
-            if a > 0.0 {
-                *o = image::Rgba([
-                    encode(p[0] / a),
-                    encode(p[1] / a),
-                    encode(p[2] / a),
-                    (a * 255.0).round() as u8,
-                ]);
-            }
-        }
-        Ok(out)
-    }
-}
+mod linear;
 
 /// The marks a 2D surface draws, which the film's frames replace (#417).
 pub(crate) type Marks2 = Arc<Mutex<Arc<Frame2>>>;
@@ -772,6 +690,8 @@ pub(crate) struct Frame2 {
     pub indexed: Option<Arc<crate::indexed::IndexFrame>>,
     /// #462: the other looks this frame mixes with its own, through its shot's look regions.
     pub mix: Option<Arc<Mix2>>,
+    /// #2053: the store its images are read from, if the call names one.
+    pub store: Option<PathBuf>,
 }
 
 /// #462: a 2D frame's look regions: each other look's frame, in the mix's key order after this
@@ -840,6 +760,13 @@ impl Painter {
         taps: crate::print2d::Taps,
     ) -> Draw {
         let vello = vello.clone();
+        // #2053: images read from the call's store; with one, a frame ends once it is drawn.
+        let store = frame.store.clone();
+        let ends = store.is_some();
+        vello
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .set_store(store);
         let (dev, queue) = (device.device.clone(), device.queue.clone());
         // A composited group's passes record ahead of the frame, on their own command buffers.
         let on_paper = frame
@@ -953,6 +880,12 @@ impl Painter {
                         Some((t.clone(), size));
                 }
             }
+            if ends {
+                vello
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .frame_ended();
+            }
             drawn
         })
     }
@@ -1007,6 +940,12 @@ impl RenderModule for Module2 {
             let vello = vello.clone();
             move || vello.lock().unwrap_or_else(|e| e.into_inner()).fills() - before
         };
+        // #269: a film's grid images timed as it asks, and what they did handed over.
+        if let Some(enc) = &encoded {
+            let mut v = vello.lock().unwrap_or_else(|e| e.into_inner());
+            v.time_grids(&device.device, &device.queue, enc.grid_timings);
+        }
+        let grids = vello.clone();
         let Some(mix) = frame.mix.clone() else {
             let draw = self.painter.draw(
                 device,
@@ -1023,6 +962,8 @@ impl RenderModule for Module2 {
                 if let Some(enc) = &encoded {
                     *enc.at.lock().unwrap_or_else(|e| e.into_inner()) =
                         Some((Instant::now(), fills()));
+                    let did = grids.lock().unwrap_or_else(|e| e.into_inner()).grid_frame();
+                    *enc.grids.lock().unwrap_or_else(|e| e.into_inner()) = Some(did);
                 }
                 *error.lock().unwrap_or_else(|e| e.into_inner()) = drawn.err();
             });
@@ -1131,11 +1072,7 @@ pub(crate) fn open2(
         planted: app.planted,
         vello: None,
         built: None,
-        options: Options {
-            shifts_fill: app.planted == Some(Planted::ShiftsFillTwoCodes),
-            multiply_as_screen: app.planted == Some(Planted::GpuLayerMultiplyAsScreen),
-            ..Options::default()
-        },
+        options: options_of(app.planted),
         error: error.clone(),
         encoded,
         taps,
@@ -1239,13 +1176,14 @@ pub fn window2d(app: &mut App, out: &str, call: &Value) -> Value {
             print: None,
             indexed: None,
             mix: None,
+            store: ev.store.clone(),
         };
         for l in &ev.layers {
             let path = path_of(app, l);
             paths.push(json!({"layer": l.id, "path": path}));
             match path.as_str() {
                 Some("gpui") => {
-                    let picture = picture_of(&gpui2(app, &l.marks, ev.size)?);
+                    let picture = picture_of(&gpui2(app, &l.marks, ev.size, ev.store.as_deref())?);
                     if surface.is_some() {
                         &mut over
                     } else {
@@ -1435,6 +1373,7 @@ pub fn spike2d(app: &mut App, out: &str, call: &Value) -> Value {
             print: None,
             indexed: None,
             mix: None,
+            store: ev.store.clone(),
         };
         let (ui, error) = open2(
             app,

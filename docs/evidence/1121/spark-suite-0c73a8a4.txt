@@ -1,0 +1,129 @@
+$ node --test tests/acceptance/1121/record.test.mjs
+﹣ #1121.95fa4a52 the Mac's cargo test writes each target's `cargo test -- --list` into its evidence record (0.441125ms) # INCONCLUSIVE (platform): this needs the reference list's machine, a Mac, and this machine is linux-arm64; it is unrun here
+✔ #1121.95fa4a52 a Spark run's record lists each test absent by platform against the Mac's list, and its lane is INCONCLUSIVE (platform), not PASS (1971.757278ms)
+✔ #1121.95fa4a52 a Spark run with no reference list from the Mac is never PASS (1550.596792ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 3599.367395
+exit 0
+$ node --test tests/acceptance/1121/spool.test.mjs
+✔ #1121.23cb368c deep-hook on aarch64 refuses a symlinked spool path: the file it leads to is never written (9904.006667ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9940.374881
+exit 0
+$ node --test tests/acceptance/1121/lsof.test.mjs
+✔ #1121.301969cb env-local finds a free port on Linux, by an lsof that is there (13932.054556ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13971.799803
+exit 0
+$ node --test tests/acceptance/1121/build.test.mjs
+✔ #1121.73d8f179 every crate of the workspace builds on the Spark, 27 of 27 when the issue was written (34919.589712ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 34961.324323
+exit 0
+$ node --test tests/acceptance/1121/cargo-test.test.mjs
+✖ #1121.b915783e the workspace's cargo test on the Spark has no FAIL and no BLOCKED (224329.15013ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 224384.541979
+
+✖ failing tests:
+
+test at tests/acceptance/1121/cargo-test.test.mjs:18:1
+✖ #1121.b915783e the workspace's cargo test on the Spark has no FAIL and no BLOCKED (224329.15013ms)
+  AssertionError [ERR_ASSERTION]: cargo test on linux-arm64 has 49 FAIL or BLOCKED among 1868 results
+  + actual - expected
+  
+  + [
+  +   'FAIL cargo -p deep-app --test acceptance_1141 › ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases',
+  +   'FAIL cargo -p deep-app --test acceptance_1141 › ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count',
+  +   'FAIL cargo -p deep-app --test acceptance_1141_memory › ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb',
+  +   'FAIL cargo -p deep-app --test acceptance_34 › ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them',
+  +   'FAIL cargo -p deep-app --test acceptance_995 › the_pictures_no_shown_revision_uses_are_freed_from_the_gpu',
+  +   'FAIL cargo -p deep-app --test spike_402: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-canvas --lib › document::packs::tests::the_pack_schema_holds_the_checks_keys_and_lists',
+  +   'FAIL cargo -p deep-gpu --lib › spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it',
+  +   'FAIL cargo -p deep-hook --test cli › a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot',
+  +   'FAIL cargo -p deep-motion --test acceptance_1468 › ac1_a_million_bangs_are_refused_in_a_child_in_under_50_ms',
+  +   'FAIL cargo -p deep-motion --test acceptance_1468 › ac1_a_million_minus_signs_are_refused_in_a_child_in_under_50_ms',
+  +   'FAIL cargo -p deep-motion --test acceptance_1468 › ac1_a_million_opening_parens_are_refused_in_a_child_in_under_50_ms',
+  +   'FAIL cargo -p deep-motion --test acceptance_1468 › ac1_a_million_abs_calls_are_refused_in_a_child_in_under_50_ms',
+  +   'FAIL cargo -p deep-motion --test acceptance_1468 › ac1_a_million_conditionals_are_refused_in_a_child_in_under_50_ms',
+  +   'FAIL cargo -p deep-replica --test acceptance_1425: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_1425_ac3: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_1454_panel_redraft: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_1620_planted_loader: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_326_panels: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_326_panels_planted: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_326_panels_planted_redraft: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_326_panels_redraft: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_326_surfaces: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_327_card: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_327_planted: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_883: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_883_ac3_redraft: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_992_app: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_994_sound: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test acceptance_994_window: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test card_size: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-replica --test headless: the target failed outside any test it reported',
+  +   'FAIL cargo -p deep-scene3d-render --test acceptance_2657_maps_lookup › ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200',
+  +   'FAIL cargo -p deep-scene3d-render --test acceptance_2657_sway › ac6_on_metal_frames_where_the_tree_moves_differ_and_equal_the_base_by_hash',
+  +   'FAIL cargo -p deep-scene3d-render --test acceptance_2657_sway › ac6_on_metal_planted_sway_first_frame_only_fails_naming_the_frame',
+  +   'FAIL cargo -p deep-scene3d-render --test acceptance_3016_metal › ac5_a_view_insets_frame_hashes_as_on_the_merge_base',
+  +   'FAIL cargo -p deep-scene3d-render --test acceptance_3016_metal › ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets',
+  +   'FAIL cargo -p deep-scene3d-render --test acceptance_3016_metal › ac7_the_estimate_counts_what_each_view_holds',
+  +   'FAIL cargo -p deep-scene3d-render --test acceptance_3016_views › ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame',
+  +   'FAIL cargo -p deep-scene3d-render --test acceptance_3016_views › ac7_planted_estimate_counting_the_maps_per_view_fails_naming_the_bytes',
+  +   'FAIL cargo -p deep-scene3d-render --test acceptance_3024_pixels › ac2_on_metal_a_renderer_that_keeps_its_first_mirrored_picture_fails_naming_the_frame',
+  +   'FAIL cargo -p deep-scene3d-render --test acceptance_3024_pixels › ac2_on_metal_a_lakes_frames_equal_the_base_by_hash_and_its_reflection_moves',
+  +   'FAIL cargo -p deep-scene3d-render --test held_memory › a_frame_no_post_module_reads_the_key_lights_map_in_holds_no_map',
+  +   'FAIL cargo -p deep-scene3d-render --test held_memory › a_scene_that_stopped_using_them_holds_none_of_their_memory',
+  +   'FAIL cargo -p deep-scene3d-render --test held_memory › a_scene_with_no_label_holds_no_glyph_atlas',
+  +   'FAIL cargo -p deep-show --bin deep-show › kinds::tests::every_structured_field_prints_forms_that_take_its_own_values',
+  +   'FAIL cargo -p deep-show --bin deep-show › tests::the_published_schedule_matches_its_committed_snapshot',
+  +   'FAIL cargo -p deep-show --test recipe_frames › an_export_draws_a_recipe_instance_like_the_items_it_derives',
+  +   'FAIL cargo -p deep-show --test render_back_pipeline › render_back_draws_the_sprite_as_the_base_commit_did'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<clone>/tests/acceptance/1121/cargo-test.test.mjs:35:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'FAIL cargo -p deep-app --test acceptance_1141 › ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases', 'FAIL cargo -p deep-app --test acceptance_1141 › ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count', 'FAIL cargo -p deep-app --test acceptance_1141_memory › ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb', 'FAIL cargo -p deep-app --test acceptance_34 › ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them', 'FAIL cargo -p deep-app --test acceptance_995 › the_pictures_no_shown_revision_uses_are_freed_from_the_gpu', 'FAIL cargo -p deep-app --test spike_402: the target failed outside any test it reported', 'FAIL cargo -p deep-canvas --lib › document::packs::tests::the_pack_schema_holds_the_checks_keys_and_lists', 'FAIL cargo -p deep-gpu --lib › spans::tests::a_span_holds_its_submission_and_not_the_gap_after_it', 'FAIL cargo -p deep-hook --test cli › a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot', 'FAIL cargo -p deep-motion --test acceptance_1468 › ac1_a_million_bangs_are_refused_in_a_child_in_under_50_ms', 'FAIL cargo -p deep-motion --test acceptance_1468 › ac1_a_million_minus_signs_are_refused_in_a_child_in_under_50_ms', 'FAIL cargo -p deep-motion --test acceptance_1468 › ac1_a_million_opening_parens_are_refused_in_a_child_in_under_50_ms', 'FAIL cargo -p deep-motion --test acceptance_1468 › ac1_a_million_abs_calls_are_refused_in_a_child_in_under_50_ms', 'FAIL cargo -p deep-motion --test acceptance_1468 › ac1_a_million_conditionals_are_refused_in_a_child_in_under_50_ms', 'FAIL cargo -p deep-replica --test acceptance_1425: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_1425_ac3: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_1454_panel_redraft: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_1620_planted_loader: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_326_panels: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_326_panels_planted: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_326_panels_planted_redraft: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_326_panels_redraft: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_326_surfaces: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_327_card: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_327_planted: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_883: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_883_ac3_redraft: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_992_app: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_994_sound: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test acceptance_994_window: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test card_size: the target failed outside any test it reported', 'FAIL cargo -p deep-replica --test headless: the target failed outside any test it reported', 'FAIL cargo -p deep-scene3d-render --test acceptance_2657_maps_lookup › ac3_a_frame_of_2000_textured_materials_costs_at_most_1_1_times_the_instructions_per_material_of_200', 'FAIL cargo -p deep-scene3d-render --test acceptance_2657_sway › ac6_on_metal_frames_where_the_tree_moves_differ_and_equal_the_base_by_hash', 'FAIL cargo -p deep-scene3d-render --test acceptance_2657_sway › ac6_on_metal_planted_sway_first_frame_only_fails_naming_the_frame', 'FAIL cargo -p deep-scene3d-render --test acceptance_3016_metal › ac5_a_view_insets_frame_hashes_as_on_the_merge_base', 'FAIL cargo -p deep-scene3d-render --test acceptance_3016_metal › ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets', 'FAIL cargo -p deep-scene3d-render --test acceptance_3016_metal › ac7_the_estimate_counts_what_each_view_holds', 'FAIL cargo -p deep-scene3d-render --test acceptance_3016_views › ac5_planted_inset_takes_the_views_cascades_fails_naming_the_frame', 'FAIL cargo -p deep-scene3d-render --test acceptance_3016_views › ac7_planted_estimate_counting_the_maps_per_view_fails_naming_the_bytes', 'FAIL cargo -p deep-scene3d-render --test acceptance_3024_pixels › ac2_on_metal_a_renderer_that_keeps_its_first_mirrored_picture_fails_naming_the_frame', 'FAIL cargo -p deep-scene3d-render --test acceptance_3024_pixels › ac2_on_metal_a_lakes_frames_equal_the_base_by_hash_and_its_reflection_moves', 'FAIL cargo -p deep-scene3d-render --test held_memory › a_frame_no_post_module_reads_the_key_lights_map_in_holds_no_map', 'FAIL cargo -p deep-scene3d-render --test held_memory › a_scene_that_stopped_using_them_holds_none_of_their_memory', 'FAIL cargo -p deep-scene3d-render --test held_memory › a_scene_with_no_label_holds_no_glyph_atlas', 'FAIL cargo -p deep-show --bin deep-show › kinds::tests::every_structured_field_prints_forms_that_take_its_own_values', 'FAIL cargo -p deep-show --bin deep-show › tests::the_published_schedule_matches_its_committed_snapshot', 'FAIL cargo -p deep-show --test recipe_frames › an_export_draws_a_recipe_instance_like_the_items_it_derives', 'FAIL cargo -p deep-show --test render_back_pipeline › render_back_draws_the_sprite_as_the_base_commit_did' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1

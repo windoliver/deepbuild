@@ -20,6 +20,10 @@ struct One {
     ring: VecDeque<(i64, Checkpoint, u64)>,
     /// Each world step's occurrence rows.
     rows: BTreeMap<u64, Vec<Value>>,
+    /// #280: the bodies whose poses net.feel reads, and their positions after each world step,
+    /// by the world's time.
+    bodies: Vec<String>,
+    poses: BTreeMap<i64, Vec<Option<[f64; 3]>>>,
 }
 
 /// A document's worlds as a copy steps them.
@@ -32,6 +36,11 @@ pub struct Worlds {
     /// The snapshot bytes the ring wrote, and the CPU time since last read, in ns.
     pub written: u64,
     pub ns: u64,
+    /// #280: each item net.feel names: the world and the body whose pose a world output puts at
+    /// its `at`.
+    named: Vec<(String, usize, usize)>,
+    /// #280: entries came since the worlds last derived their inputs from the track.
+    stale: bool,
 }
 
 impl Worlds {
@@ -57,6 +66,8 @@ impl Worlds {
                 live,
                 ring: VecDeque::new(),
                 rows: BTreeMap::new(),
+                bodies: Vec::new(),
+                poses: BTreeMap::new(),
             });
         }
         Ok(Some(Worlds {
@@ -66,7 +77,52 @@ impl Worlds {
             size: 0,
             written: 0,
             ns: 0,
+            named: Vec::new(),
+            stale: false,
         }))
+    }
+
+    /// #280: the items of `paths` (`items/<id>`) whose `at` a world output puts a body's pose at,
+    /// from now on recorded each world step; the paths none does.
+    pub fn name(&mut self, paths: &[String]) -> Vec<String> {
+        let mut left = Vec::new();
+        for path in paths {
+            let to = format!("{path}/at");
+            let found = self.worlds.iter().enumerate().find_map(|(i, w)| {
+                let outputs = self.doc.pointer(&format!("/worlds/{}/outputs", w.id))?;
+                let o = outputs.as_object()?.values().find(|o| {
+                    o["to"].as_str() == Some(&to) && o.get("read").is_none_or(|r| r == "pose")
+                })?;
+                Some((i, o["from"].as_str()?.to_string()))
+            });
+            let Some((i, body)) = found else {
+                left.push(path.clone());
+                continue;
+            };
+            let w = &mut self.worlds[i];
+            let at = w.bodies.iter().position(|b| *b == body).unwrap_or_else(|| {
+                w.bodies.push(body);
+                w.bodies.len() - 1
+            });
+            self.named.push((path.clone(), i, at));
+        }
+        for w in &mut self.worlds {
+            let now = w.live.positions(&w.bodies);
+            w.poses.insert(w.live.steps as i64 * w.h, now);
+        }
+        left
+    }
+
+    /// #280: each named item's position at time `t`, as the last world step at or before it left
+    /// it.
+    pub fn positions(&self, t: i64) -> Vec<(String, [f64; 3])> {
+        self.named
+            .iter()
+            .filter_map(|(path, i, at)| {
+                let (_, poses) = self.worlds[*i].poses.range(..=t).next_back()?;
+                Some((path.clone(), (*poses.get(*at)?)?))
+            })
+            .collect()
     }
 
     /// The same worlds at their start, on the track they started on.
@@ -82,20 +138,29 @@ impl Worlds {
         self.size = size;
     }
 
+    /// An entry joins the track; the worlds derive their inputs from it before they next step.
     pub fn enter(&mut self, entry: &Value) {
         self.entries.push(entry.clone());
-        for w in &mut self.worlds {
-            w.live.track(&self.entries);
-        }
+        self.stale = true;
     }
 
     /// Every world step that starts before `until`.
     pub fn run(&mut self, until: i64) -> Result<(), Value> {
         let before = deep_logic::budget::cpu_ns();
+        // #280: once a match step, not once an entry: eight players' entries a step each
+        // deriving the whole track again made a match's cost grow with its length squared.
+        let stale = std::mem::take(&mut self.stale);
         for w in &mut self.worlds {
+            if stale {
+                w.live.track(&self.entries);
+            }
             while (w.live.steps as i64) * w.h < until {
                 let rows = w.live.step()?;
                 w.rows.insert(w.live.steps, rows);
+                if !w.bodies.is_empty() {
+                    let now = w.live.positions(&w.bodies);
+                    w.poses.insert(w.live.steps as i64 * w.h, now);
+                }
             }
         }
         self.ns += deep_logic::budget::cpu_ns() - before;
@@ -112,6 +177,11 @@ impl Worlds {
             while w.ring.len() > self.size.max(1) {
                 w.ring.pop_front();
             }
+            // #280: a pose no rollback can reach again goes with the checkpoint before it.
+            if let Some((_, _, oldest)) = w.ring.front() {
+                let from = (*oldest as i64 - 1) * w.h;
+                w.poses = w.poses.split_off(&from);
+            }
         }
         self.ns += deep_logic::budget::cpu_ns() - before;
     }
@@ -120,14 +190,15 @@ impl Worlds {
         let before = deep_logic::budget::cpu_ns();
         self.entries
             .retain(|e| e["t"].as_i64().is_some_and(|x| x < t));
+        self.stale = true;
         for w in &mut self.worlds {
             let Some(at) = w.ring.iter().position(|(k, _, _)| *k == step) else {
                 return Err(json!({"code": "past_window", "world": w.id, "step": step}));
             };
             let (_, c, steps) = w.ring.drain(at..).next().expect("the checkpoint");
             w.live.restore(&c, steps)?;
-            w.live.track(&self.entries);
             w.rows.retain(|k, _| *k <= steps);
+            w.poses.retain(|t, _| *t <= steps as i64 * w.h);
         }
         self.ns += deep_logic::budget::cpu_ns() - before;
         Ok(())
