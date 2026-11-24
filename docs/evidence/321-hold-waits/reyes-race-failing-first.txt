@@ -1,0 +1,5 @@
+# packages/hub/test/holds.test.ts › a push your yes holds (#1101), at fc5523437 (main ce6866e65 merged in) before the fix (Mac, 2026-11-23): with Undo and a new yes landing between askOf's check of the hold and its second read, the gate lets the push through inside the new yes's hold.
+ ✓ doesn't run once Undo withdraws your yes, even when Undo lands between the gate's read of the ask and its check of the hold 169ms
+ × doesn't run inside a new yes's hold when Undo and that yes land between the gate's check of the hold and its next read 80ms
+   → the push waits out the new yes's hold, not let through inside it: the given combination of arguments (undefined and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ ❯ test/holds.test.ts:301:87

@@ -259,4 +259,45 @@ describe('a push your yes holds (#1101)', () => {
     const after = await holds.gate(meta, push);
     expect(after, 'the push meets its ask again after Undo').toContain(handle);
   }, 60_000);
+
+  it("doesn't run inside a new yes's hold when Undo and that yes land between the gate's check of the hold and its next read", async () => {
+    dir = mkdtempSync(join(tmpdir(), 'holds-reyes-'));
+    const root = join(dir, '.deepbuild');
+    mkdirSync(root);
+    writeFileSync(join(root, 'config.json'), JSON.stringify({ asks: { deadline: { authority: '1d' }, default: { authority: 'no' } } }));
+    let t = 1_760_000_000_000;
+    const now = () => t;
+    const record = await openRecord({ path: join(dir, 'record.db'), now });
+    const asks = await openAsks({ record, now, deliver: () => undefined, home: root });
+    const as = (writer: string, session?: string): Connection => ({ writer, actor: 'you', scope: 'you', ...(session ? { session, agent: 'claude-code' } : {}) });
+    const yes = async (handle: string, token: string) => asks.answer(as('cli'), handle, { option: 'approve', plan_hash: (await asks.card(handle)).plan!.hash, token });
+    // Undo lands just before the gate asks whether the step is still held, and a new yes just after it answers.
+    let raceAt: string | undefined;
+    const racing = new Proxy(asks, {
+      get: (target, name) => name !== 'stepHeld' ? Reflect.get(target, name) : async (handle: string) => {
+        if (raceAt !== handle) return target.stepHeld(handle);
+        raceAt = undefined;
+        await target.undo(as('cli'), handle);
+        const held = await target.stepHeld(handle);
+        t += 1;
+        await yes(handle, 'click-again');
+        return held;
+      },
+    });
+    const holds = new Holds({
+      raw: (q, params) => record.raw(q, params), asks: () => racing, now, plant: undefined, sorter: undefined,
+      append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
+      archived: async () => undefined, reading: async () => undefined,
+    });
+    const meta = { session: 's1', agent: 'claude-code', cwd: dir } as HookMeta;
+    const push = { label: 'git push origin main', classes: ['push'], named: [{ rule: 'push-unnamed', effect: 'push' as const }] };
+    const first = await holds.gate(meta, push);
+    const handle = first?.match(/ask:[0-9A-Z]+/)?.[0];
+    expect(handle, `the push is held by an ask: ${first}`).toBeDefined();
+    await yes(handle!, 'click');
+    raceAt = handle;
+    const after = await holds.gate(meta, push);
+    expect(await asks.stepHeld(handle!), 'the new yes holds the push').toBe(true);
+    expect(after, "the push waits out the new yes's hold, not let through inside it").toContain(handle);
+  }, 60_000);
 });

@@ -165,13 +165,19 @@ export class Holds {
 
   /** The ask with this key, newest first: its handle, status and decision. */
   private async askOf(k: string): Promise<{ id: string; status: string; decision: string | null } | undefined> {
-    const read = async () => ((await this.o.raw(`SELECT id, status, decision FROM asks WHERE key = ? ORDER BY created DESC LIMIT 1`, [k])) as { id: string; status: string; decision: string | null }[])[0];
-    const row = await read();
-    // Your yes to a step that can't be undone lets it run only once the hub's hold is over (#1101): until then it waits.
-    if (row?.decision !== 'allow') return row;
-    if (await this.o.asks().stepHeld(`ask:${row.id}`)) return { ...row, status: 'held', decision: null };
-    // Undo may have withdrawn the yes after the read: read it again now that its hold is known over.
-    return read();
+    const read = async () => ((await this.o.raw(`SELECT id, status, decision, answered FROM asks WHERE key = ? ORDER BY created DESC LIMIT 1`, [k])) as { id: string; status: string; decision: string | null; answered: number | null }[])[0];
+    const bare = (r: Awaited<ReturnType<typeof read>>) => r && { id: r.id, status: r.status, decision: r.decision };
+    let row = await read();
+    for (;;) {
+      // Your yes to a step that can't be undone lets it run only once the hub's hold is over (#1101): until then it waits.
+      if (row?.decision !== 'allow') return bare(row);
+      if (await this.o.asks().stepHeld(`ask:${row.id}`)) return { ...bare(row)!, status: 'held', decision: null };
+      // Undo, or Undo and a new yes, may have landed after the read: the yes stands only when a read after its hold is
+      // known over finds the same answer.
+      const again = await read();
+      if (again?.id === row.id && again.decision === 'allow' && again.answered === row.answered) return bare(again);
+      row = again;
+    }
   }
   /**
    * The ask raised under `k` once a hold on your yes to it is over (#1101; design: Plans before acting): a call your yes
