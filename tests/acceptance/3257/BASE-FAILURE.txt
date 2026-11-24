@@ -1,0 +1,51 @@
+#3257's acceptance tests at the base commit b41a1b521b6bae88709338542fb304d95b841312 (main).
+
+Type-check: `npx tsc --noEmit -p tests/acceptance/3257` passes.
+
+== The suite at the base: not run ==
+
+The base run (README: Run them) was queued once under scripts/throttle.mjs build on a Mac with a load average of 75 to
+430. After about 43 minutes it had no grant, eight build requests were still ahead of it and the one holding the slot had
+held it 19 minutes, so it was withdrawn. Nothing was built and no test of this folder was run; what follows is what needs
+no build. How each test should fail at the base, by reading (not observed):
+
+  ac1  shareFaults: levels 1 to 4 keep 43.75%, 0, 0 and 0, and kept is not a list of 9 shares
+  ac2  quadrantFaults: each quadrant of levels 1 to 4 (1,792 texels of 960 at level 1, 0 of 240, 60 and 15 below)
+  ac3  the drawn shares at 128, 64 and 32 px
+  ac4  colorFaults: level 1's texel (0, 0) holds magenta, levels 2 to 4 keep no texel
+  ac5  shareFaults and storedFaults at both cutoffs (the base's one chain); the drawn squares read one share
+  ac6  map_chain is missing from the player's glue; the Linux test INCONCLUSIVE with no host named
+  ac7  scripts/lanes.mjs does not list the file in timed, and kept is not a list
+  ac8  the cards are drawn exactly as the merge base draws them
+
+== What needs no build (node, on this Mac) ==
+
+The box rule on the fence (chains.ts `boxChain`, the published rule of crates/deep-codecs/src/maps.rs), as the criterion
+works it by hand:
+
+  level 0 (256 × 256) 23.44%, level 1 (128 × 128) 43.75%, level 2 (64 × 64) 0.00%, level 3 (32 × 32) 0.00%,
+  level 4 (16 × 16) 0.00%, and 0.00% of levels 5 to 8
+
+  shareFaults on it: level 1 (128 × 128) keeps 43.75% at cutoff 0.5, not 23.44% within one percentage point; levels 2, 3
+  and 4 keep 0.00%
+  colorFaults on it (green fence): level 1 (128 × 128): texel (0, 0) is 142, 122, 145, not 46, 139, 60 within 2 codes
+
+The control chain passes shareFaults, quadrantFaults, storedFaults and colorFaults (none on the fence, the green fence and
+the tile).
+
+The planted chains:
+  firstRowChain  passes shareFaults at every level; quadrantFaults: level 1 (128 × 128): its top-left quadrant keeps 1920
+                 texels, not its share of 960.00 within two; then levels 2, 3 and 4
+  plainColorChain  colorFaults: level 1 (128 × 128): texel (0, 0) is 142, 122, 145, not 46, 139, 60 within 2 codes (3840
+                 of its 3840 texels kept); then levels 2 to 7
+
+The suite's own plumbing, against a stand-in decode worker (a scratch node script, not committed): the mask jobs' chains
+pass AC1's, AC2's and AC4's checks; a reply with no `kept`, or one that gives percentages, fails keptFaults; a held-open
+worker answers a job.
+
+The web player's committed wasm (crates/deep-player/web/dist/full/player_bg.wasm) loads in Node and its SHA-256 is the one
+player.json names; its glue has no map_chain (typeof undefined), which is how AC6's first test fails at the base.
+
+Could the criteria hold together: a scratch search over walks of row order with four fixed 16ths weights (2,907 of them,
+counting three ways to carry at the edges) found 8 that meet AC1, AC2 and AC4's green together on the fence; the 7-3-5-1
+weights with dropped edges miss AC2 at level 2 by 5 texels.

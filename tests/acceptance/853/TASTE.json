@@ -1,0 +1,15 @@
+{
+  "issue": 853,
+  "criterion": "#853.a7fb57f6",
+  "verdict": "looks_right",
+  "who": "windoliver",
+  "when": "2026-11-24T06:29:18Z",
+  "screenshots": {
+    "sand-pile-5s.png": "df50c07390e06ada25ffd5fa70b24882b22a7e3398b5594f3cc867cb29dfda21",
+    "bounce-off-moving-floor.png": "5caecfec9ac31d2389501d9b7547ec782746f13768c8215e0ef81f9fc32035cd"
+  },
+  "recordings": {
+    "pour.apng": "1fcef712253c3e993ea0090fb9ebe9fef1771ae5f7eb22ad19fb14074eca1971",
+    "bounce.apng": "c586bc4e3d1ba9721468f9eb087c2ab0d9b0e1f31d6f43ef1007c74652d4babe"
+  }
+}

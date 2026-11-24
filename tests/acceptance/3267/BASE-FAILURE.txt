@@ -1,0 +1,181 @@
+# #3267 acceptance tests: the run on the base, and the planted inputs
+
+## The base (5919c397, main, no work on the issue), in this checkout, November 23, 2026
+
+The criteria's IDs, computed from the issue's body as GitHub returned it that day (the first 8 hex digits of the SHA-256
+of each `- [ ]` text, trimmed, white space collapsed):
+
+1 #3267.5b43d7cf The decisions are written into the technical design's Privacy section and the canvas primitives' device classe…
+2 #3267.426b9145 The follow-on issues are filed, each citing this one and none changing an entry's layout: the class's mark and…
+3 #3267.c390821e #1186, #1187 and #1188 each gain a line pointing here, added by you or on your word, and none of their criteri…
+
+`node --check` passes on helpers.mjs and on the three test files.
+
+All four tests fail at their own assertion, each for the reason its criterion names: neither section holds a sentence
+it didn't hold at the base, no issue filed after #3267 cites it, and none of #1186, #1187 and #1188 cites it.
+(Stack-trace and assertion-object lines dropped.)
+
+$ node --test tests/acceptance/3267/ac1-decisions.test.mjs
+
+test at tests/acceptance/3267/ac1-decisions.test.mjs:22:1
+✖ AC1 #3267.5b43d7cf the Privacy section and the device classes section each gained text since 5919c397, and what they gained holds the five Scope decisions, each with "Not taken" and what would reopen it
+  AssertionError [ERR_ASSERTION]: the decisions are not all written into the two sections
+  + actual - expected
+
+  + [
+  +   "the technical design's Privacy section (docs/technical-design.md#privacy) holds no sentence it didn't hold at 5919c397, so no decision is written into it",
+  +   "the canvas primitives' device classes section (docs/canvas-primitives.md#seam-and-backend-device-classes) holds no sentence it didn't hold at 5919c397, so no decision is written into it"
+  + ]
+  - []
+
+test at tests/acceptance/3267/ac1-decisions.test.mjs:26:1
+✖ AC1 #3267.5b43d7cf you approve them: a tag under refs/tags/deep/approved/, signed with a touch or a biometric by a key on .deepbuild/approvers, approves the commits that added the decisions to docs/technical-design.md and docs/canvas-primitives.md
+  AssertionError [ERR_ASSERTION]: these sections hold no sentence they didn't hold at 5919c397, so there is no text for an approval to cover
+  + actual - expected
+
+  + [
+  +   "the technical design's Privacy section (docs/technical-design.md#privacy)",
+  +   "the canvas primitives' device classes section (docs/canvas-primitives.md#seam-and-backend-device-classes)"
+  + ]
+  - []
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+ℹ skipped 0
+
+The two live files, each run once the same day with gh signed in and GitHub reachable:
+
+$ node --test tests/acceptance/3267/ac2-follow-ons.live.test.mjs
+
+test at tests/acceptance/3267/ac2-follow-ons.live.test.mjs:34:1
+✖ AC2 #3267.426b9145 (live) issues filed after #3267 that cite it cover the class's mark with the named gestures on save, export and Join, the scan of everything that leaves the machine, and #1186's clip, and none names a device class at a new major
+  AssertionError [ERR_ASSERTION]: the follow-on issues are not all filed as the criterion lists them; GitHub records no issue filed after #3267 as citing it
+  + actual - expected
+
+  + [
+  +   "no follow-on issue covers the class's mark and the named gestures on save, export and Join, with a planted save that writes hand entries without the named click failing: no issue filed after #3267 cites it in its body and holds /\\bclass(?:es)?\\b/i, /\\bgestures?\\b/i, /\\bsav(?:e|es|ed|ing)\\b/i, /\\bexport/i, /\\bjoin(?:s|ed|ing)?\\b/i, /\\bhands?\\b/i, /\\bplanted\\b/i",
+  +   'no follow-on issue covers a scan of everything that leaves the machine in a round played with hands, finding no body entry, with a planted evidence writer that keeps the track failing: no issue filed after #3267 cites it in its body and holds /\\bscan(?:s|ned|ning)?\\b/i, /\\bleav(?:e|es|ing)\\b/i, /\\bmachine\\b/i, /\\bbod(?:y|ies)\\b/i, /\\bevidence\\b/i, /\\btrack\\b/i, /\\bplanted\\b/i',
+  +   "no follow-on issue covers #1186's clip replaced or its consent recorded: no issue filed after #3267 cites it in its body and holds /(?:^|[^&\\w/-])#1186(?!\\d)/m, /\\bclips?\\b/i, /\\breplac|\\bdrawn\\b|\\brendered\\b|\\bconsent|\\bagree|\\bin writing\\b/i"
+  + ]
+  - []
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+ℹ skipped 0
+
+$ node --test tests/acceptance/3267/ac3-pointers.live.test.mjs
+
+test at tests/acceptance/3267/ac3-pointers.live.test.mjs:15:1
+✖ AC3 #3267.c390821e (live) #1186, #1187 and #1188 each hold a line citing #3267 that a signed approval of docs/evidence/3267/pointing-line.txt holds, and every criterion they had on November 23 is still in them, word for word
+  AssertionError [ERR_ASSERTION]: the three issues are not as the criterion asks
+  + actual - expected
+
+  + [
+  +   '#1186 gained no line pointing here: no line of its body cites #3267',
+  +   '#1187 gained no line pointing here: no line of its body cites #3267',
+  +   '#1188 gained no line pointing here: no line of its body cites #3267'
+  + ]
+  - []
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+ℹ skipped 0
+
+That run read the three live bodies and named no criterion: all 21 IDs in saved-criteria.json are still theirs.
+
+## Planted inputs and their mutants (in memory, never in this checkout's docs/ and never on GitHub)
+
+Run as plain node scripts from the job's scratch folder, outside the repo, against the judges helpers.mjs exports:
+judgeDecisions, readApprovals, approvedIn, judgeApproved, judgeFollowOns, judgePointers and judgeWord. 61 cases, each
+as expected. A planted repository answers the git calls (commits with parents and files, tags, a merge base with its
+approvers list); its tags carry real SSH signatures from tests/fixtures/approver.mjs's stand-in for a security key, and
+the real ssh-keygen checks each.
+
+The planted design, written for the harness only: four bullets after Privacy's last one (a body's motion is personal
+data, with each way out named; a way out carries body entries only by the person's own gesture, on save, export and
+Join; what proves a hands piece is synthetic; a fixture is never a person), and three sentences after device classes'
+"never detects again." (a class says when its entries are a body's motion), each of the five ending "Not taken: …
+Reopens if …".
+
+Criterion 1, the text (judgeDecisions on what the two sections gained):
+- the base: fails, "holds no sentence it didn't hold at 5919c397", for both sections.
+- the planted design: passes.
+- the synthetic-proof decision left out: fails, "not written: what proves a hands piece is synthetic … Missing
+  /\bsynthetic hands?\b/i", and `"Not taken" 4 times`, `"reopen" … 4 times`.
+- the gesture decision left out: fails, missing `gesture` and `join`. The fixture decision left out: fails, missing
+  `fixture`, `clip`, `drawn` or `rendered`, and the consent words. The personal-data decision left out: fails, missing
+  `personal data` in what the Privacy section gained, `relay`, `debug bundle`.
+- device classes left as at the base, or Privacy left as at the base: fails, that section "holds no sentence".
+- the class's mark written under a new heading beside the section: fails the same way.
+- one "Not taken" replaced with other words: fails, `"Not taken" 4 times`. One "Reopens if" sentence removed: fails,
+  `"reopen" (Reopens if, would reopen) 4 times`.
+
+Criterion 1, the approval (readApprovals, approvedIn, judgeApproved):
+- one signed tag on the commit that planted the design, naming both docs: passes. Two tags, one for each doc: passes. The
+  design in two commits and one tag on a later commit naming each by `@<full commit ID>`: passes. Another matter's
+  unsigned tag beside the approval: passes, and isn't listed.
+- a line a later issue adds to Privacy beside the approved text: still passes.
+- no tag: fails, "no approval of docs/technical-design.md … holds "Approves: docs/technical-design.md"", and the
+  same for docs/canvas-primitives.md. A lightweight tag: the same.
+- an unsigned tag: fails, "these tags approve nothing: deep/approved/3267: not SSH-signed".
+- signed by a key the approvers list doesn't hold, or by one only the working tree's list holds, or with the message
+  edited after signing: fails, "signed by no key that .deepbuild/approvers lists at the merge base".
+- signed by the listed key with no touch: fails, "with no touch or biometric".
+- the tag names one doc only: fails, "no approval of docs/canvas-primitives.md". A tag that names only the line's
+  record: fails for both docs.
+- a tag on another branch that names the work's commit by its ID: fails, "a commit the tagged one doesn't descend
+  from". A short commit ID: fails, no approval.
+- an approval bound to other text, the fixture decision reworded after the tag: fails, "in the approved text, not
+  written: a fixture is never a person … Missing /\bconsent|\bagree|\bin writing\b/i", then the reworded sentence
+  under "which no approved commit added".
+- an approved sentence edited in the working tree after the tag: fails the same way, naming `relay` and `debug bundle`
+  and the edited sentence.
+- the approved commit added other sentences to the two docs, or is a later commit that added none, or only the second
+  of two commits is tagged: fails, "the approval of … was made on other text".
+
+Criterion 2 (judgeFollowOns), three planted issue bodies numbered 9001 to 9003, each with a `### Depends on` line
+citing #3267:
+- GitHub as it is today (no candidate): fails, three "no follow-on issue covers …" lines.
+- the three, open or closed as completed: passes. One issue that covers all three: passes. The three beside a later
+  issue that cites #3267 for another matter and names hands@2: passes.
+- the clip's follow-on without the citation, or citing another repository's #3267: fails, "no follow-on issue covers
+  #1186's clip … (#9003 holds its words and doesn't cite #3267)".
+- the mark's follow-on with `hands@2 {…}` in place of its entries keeping their size: fails, "#9001 changes an
+  entry's layout: it names hands@2, and a changed layout is a new major".
+- no scan issue; the scan's issue without its planted evidence writer; closed as not planned; a pull request: each
+  fails, "no follow-on issue covers a scan of everything that leaves the machine …".
+- the mark's follow-on without Join; or filed before #3267: fails, "no follow-on issue covers the class's mark …".
+
+Criterion 3 (judgePointers, then readApprovals, approvedIn and judgeWord), the three saved bodies with one line,
+"**Waits on:** #3267, which decides how a body's motion on the input track is held", planted before `### Scope`, and
+the same line in the record, approved by a signed tag:
+- the saved bodies as they are: fails, "gained no line pointing here" for each of the three.
+- the planted bodies: passes. With Windows line ends, a ticked box in #1186 and a criterion added to #1188: passes.
+- a criterion of #1186 reworded ("A clip recorded for this test of one hand" to "A drawn clip of one hand"): fails,
+  "#1186's criterion #1186.e2b7c88f ("A clip recorded for this test of one…") is no longer in its body as it was
+  saved: it was reworded, moved or dropped". One word of #1188's last criterion changed, #1187's fifth dropped,
+  #1186's first ending "(moved to #9003)": each fails the same way, naming its ID.
+- #1188 without the line: fails, "#1188 gained no line pointing here".
+- the lines there and no tag, an unsigned tag, or a tag by an unlisted key: fails, "no word of the owner's for the
+  lines … holds "Approves: docs/evidence/3267/pointing-line.txt"".
+- #1187 holding another line that cites #3267: fails, "#1187's line pointing here isn't one the owner approved".
+- the approved record held another line; the record edited after the tag; the tag on a later commit that didn't add
+  the line: each fails, "isn't one the owner approved … the approved lines: none that the record still holds".
+
+## Not exercised
+
+- No real tag was read. The checkout's own approval tags and `origin/main` were not touched while drafting, so
+  readApprovals ran against the planted repository only; its git calls are the ones scripts/proof-approvals.mjs makes,
+  and their shapes were checked here against a tag prefix that holds no tag and the base's own first parent.
+- No issue cites #3267 today, so the live run of criterion 2 read the timeline and found no candidate: its reading of
+  a `cross-referenced` event and its `gh issue view <n> --json number,body,state,stateReason` call did not run.
+- The second test of ac1-decisions.test.mjs and the second half of ac3-pointers.live.test.mjs stop at the base before
+  they read an approval, so their INCONCLUSIVE paths (no `origin/main`, no `ssh-keygen`) did not run either; nor did
+  the INCONCLUSIVE skip for gh signed out, since gh was signed in.
+
+## Known limits
+
+A word can sit in what was not taken rather than in the decision; the five `Not taken` and five `reopen` are counted,
+not matched to decisions; a follow-on is told by words, and a layout changed under its major shows in none of them; and
+who typed a line into an issue isn't something GitHub tells apart. The owner's approval covers the first two; the
+README lists the rest under Not asserted.
