@@ -3,8 +3,8 @@
 // network or a program, draws only inside its frame, never over the question card, and moves focus or shows a
 // toast only right after your gesture there. The app's panel runtime holds the same rules live (#35); this kit
 // is what an extension's tests and the install run on the panel's draw alone, with no app. Revision 2 (#3233) holds
-// what a person can read and reach: an element that takes a press or text has a name, text clears the look's ink
-// floor on the fill under it, and every press has a key.
+// what a person can read and reach: an element that takes a press or text has a name, text whose color the panel
+// set clears the look's ink floor on the fill under it, and every press has a key.
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Random } from '../generator.js';
 import { fail } from '../slot-types.js';
@@ -41,7 +41,7 @@ const RULES = {
   inside: { id: 'inside-its-panel', rule: 'Every element a panel draws lies inside its frame.', message: 'drew outside its panel' },
   card: { id: 'never-over-the-card', rule: 'No element a panel draws covers the question card.', message: 'drew over the question card' },
   name: { id: 'names-what-it-presses', rule: "Names what it presses. Every element that takes a press or text has a name: its own text, the text under it, or its label. A name that is only its kind's word counts as none.", message: 'took a press or text with no name' },
-  contrast: { id: 'reads-on-its-fill', rule: "Reads on its fill. Text whose color the panel set, or that sits on a fill the panel set, clears 4.5:1 against the nearest fill under it. Where the panel set one of the two, the other is the shipped look's, in light and dark, and the worse pair decides.", message: 'drew text under the ink floor' },
+  contrast: { id: 'reads-on-its-fill', rule: "Reads on its fill. Text whose color the panel set clears 4.5:1 against the nearest fill under it. Where the panel set no fill there, it is the shipped look's ground and raised, in light and dark, and the worse pair decides.", message: 'drew text under the ink floor' },
   key: { id: 'reaches-by-key', rule: 'Reaches by key. Every element that takes a press can take keyboard focus, and Enter or Space on it runs the same handler once.', message: 'took a press no key reaches' },
 };
 const rules: SlotRule[] = Object.values(RULES).map(({ id, rule }) => ({ id, rule }));
@@ -50,9 +50,9 @@ const FORBIDDEN: Record<string, keyof typeof RULES> = { network: 'network', prog
 const within = (e: Element, r: Rect): boolean => e.x >= r.x && e.y >= r.y && e.x + e.w <= r.x + r.w && e.y + e.h <= r.y + r.h;
 const overlaps = (e: Element, r: Rect): boolean => e.x < r.x + r.w && e.x + e.w > r.x && e.y < r.y + r.h && e.y + e.h > r.y;
 
-/** The look's ink floor, and the shipped look's ink, ground and raised in each theme (crates/deep-canvas-marks/looks/clean.json). */
+/** The look's ink floor, and the shipped look's ground and raised in each theme (crates/deep-canvas-marks/looks/clean.json). */
 const FLOOR = 4.5;
-const LOOK = { light: { ink: '#1b1d22', ground: '#ffffff', raised: '#f5f5f6' }, dark: { ink: '#f2f3f5', ground: '#040405', raised: '#0d0e10' } };
+const LOOK = { light: { ground: '#ffffff', raised: '#f5f5f6' }, dark: { ground: '#040405', raised: '#0d0e10' } };
 /** WCAG relative luminance of a `#rrggbb` color, or null when it isn't one. */
 function luminance(color: string): number | null {
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
@@ -60,12 +60,10 @@ function luminance(color: string): number | null {
   const [r, g, b] = m.slice(1).map((hex) => { const c = parseInt(hex, 16) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }) as [number, number, number];
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
-/** The worst pair a text is read on: its ink on its fill, each the panel's or, for the one it left unset, the look's in each theme. */
-function worstPair(ink: string | undefined, fill: string | undefined): { ink: string; fill: string; where: string; ratio: number | null } {
-  const pairs = ink !== undefined && fill !== undefined ? [{ ink, fill, where: '' }]
-    : (['light', 'dark'] as const).flatMap((theme) => (ink !== undefined
-      ? (['ground', 'raised'] as const).map((role) => ({ ink, fill: LOOK[theme][role], where: ` (the look's ${role} in ${theme})` }))
-      : [{ ink: LOOK[theme].ink, fill: fill!, where: ` (the look's ink in ${theme})` }]));
+/** The worst pair a text is read on: its ink on the fill under it, the panel's or, where it set none, the look's in each theme. */
+function worstPair(ink: string, fill: string | undefined): { ink: string; fill: string; where: string; ratio: number | null } {
+  const pairs = fill !== undefined ? [{ ink, fill, where: '' }]
+    : (['light', 'dark'] as const).flatMap((theme) => (['ground', 'raised'] as const).map((role) => ({ ink, fill: LOOK[theme][role], where: ` (the look's ${role} in ${theme})` })));
   const read = pairs.map((pair) => {
     const [a, b] = [luminance(pair.ink), luminance(pair.fill)];
     return { ...pair, ratio: a === null || b === null ? null : (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
@@ -157,10 +155,9 @@ function* judge(fill: PanelFill, c: SlotCase): Generator<() => unknown, void, un
       if (!names.some((name) => name.toLowerCase() !== String(e.kind).toLowerCase())) throw fail(RULES.name.message, ['no_name'], names.length ? `${place} is named only "${names[0]}", its kind's word` : `${place} has no text, none under it and no label`);
     }
     if (e.takes === 'press' && e.keys !== 1) throw fail(RULES.key.message, ['pointer_only'], e.keys === undefined ? `${place} can't take keyboard focus` : `Enter or Space on ${place} runs its press ${String(e.keys)} times, not once`);
-    if (!shown(e.text)) return;
+    if (!shown(e.text) || e.ink === undefined) return;
     // The nearest fill under a text: its own, or the last one drawn before it that holds it.
     const fill = e.fill ?? elements.slice(0, at).reverse().find((o) => o.fill !== undefined && within(e, o))?.fill;
-    if (e.ink === undefined && fill === undefined) return;
     const worst = worstPair(e.ink, fill);
     if (worst.ratio === null) throw fail(RULES.contrast.message, ['low_contrast'], `${place} draws ${String(worst.ink)} on ${String(worst.fill)}${worst.where}, which isn't #rrggbb, so nothing says it reads`);
     if (worst.ratio < FLOOR) throw fail(RULES.contrast.message, ['low_contrast'], `${place} draws ${worst.ink} on ${worst.fill}${worst.where} at ${worst.ratio.toFixed(2)}:1, under ${FLOOR}:1`);

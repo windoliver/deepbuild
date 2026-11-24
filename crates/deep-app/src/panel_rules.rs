@@ -1,8 +1,12 @@
 //! Issue #3233: what `panel@1` holds from revision 2, read off the tree a panel's script builds, never off its source.
-//! An element that takes a press or text has a name; text whose color or fill the panel set clears the look's ink
-//! floor on the nearest fill under it; and every press can take keyboard focus, where Enter or Space run it once. A
-//! panel whose installer recorded an earlier revision beside its script still loads, and what this revision would
-//! refuse in it is a reading.
+//! An element that takes a press has a name; text whose color the panel set clears the look's ink floor on the
+//! nearest fill under it, the panel's or the look's; and every press can take keyboard focus, where Enter or Space
+//! run it once. A panel whose installer recorded an earlier revision beside its script still loads, and what this
+//! revision would refuse in it is a reading.
+//!
+//! Two things the kit's rules name are not read here yet. A text field's name: a tree carries a field's handle and
+//! not its placeholder, so a named field would read nameless. And text on a fill the panel set whose color it left
+//! to the app: which ink that is read in is not settled.
 
 use std::path::Path;
 use std::sync::OnceLock;
@@ -40,9 +44,9 @@ pub fn held_to(dir: &Path) -> u64 {
         .unwrap_or(REVISION)
 }
 
-/// The shipped look's ink, ground and raised, in light and in dark.
-fn look() -> &'static [(&'static str, [u32; 3]); 2] {
-    static LOOK: OnceLock<[(&'static str, [u32; 3]); 2]> = OnceLock::new();
+/// The shipped look's ground and raised, in light and in dark.
+fn look() -> &'static [(&'static str, [u32; 2]); 2] {
+    static LOOK: OnceLock<[(&'static str, [u32; 2]); 2]> = OnceLock::new();
     LOOK.get_or_init(|| {
         let look = deep_canvas_marks::modules::clean();
         [("light", &look.light), ("dark", &look.dark)].map(|(theme, palette)| {
@@ -50,7 +54,7 @@ fn look() -> &'static [(&'static str, [u32; 3]); 2] {
                 let [r, g, b] = palette[name];
                 u32::from_be_bytes([0, r, g, b])
             };
-            (theme, [role("ink_primary"), role("ground"), role("raised")])
+            (theme, [role("ground"), role("raised")])
         })
     })
 }
@@ -108,7 +112,7 @@ fn walk(node: &Node, path: &str, ink: Option<u32>, fill: Option<u32>, found: &mu
     };
     let place = id.unwrap_or_else(|| path.to_owned());
     let press = node.kind == "Button" || op("on_click").is_some();
-    if press || node.kind == "Input" {
+    if press {
         let labels: Vec<String> = ["label", "accessibility_label", "aria_label"]
             .iter()
             .filter_map(|name| op(name).and_then(|op| text_arg(&op.args)))
@@ -122,8 +126,6 @@ fn walk(node: &Node, path: &str, ink: Option<u32>, fill: Option<u32>, found: &mu
             .all(|name| name.trim().eq_ignore_ascii_case(&node.kind))
         {
             // copy-exception: a refusal reason the kit and the loader report, never drawn
-            let takes = if press { "a press" } else { "text" };
-            // copy-exception: a refusal reason the kit and the loader report, never drawn
             let why = match names.first() {
                 // copy-exception: a refusal reason the kit and the loader report, never drawn
                 Some(word) => format!("is named only {word:?}, its kind's word"),
@@ -134,7 +136,7 @@ fn walk(node: &Node, path: &str, ink: Option<u32>, fill: Option<u32>, found: &mu
                 code: "no_name",
                 node: place.clone(),
                 // copy-exception: a refusal reason the kit and the loader report, never drawn
-                text: format!("no_name: {named} takes {takes} and {why}"),
+                text: format!("no_name: {named} takes a press and {why}"),
             });
         }
     }
@@ -153,24 +155,18 @@ fn walk(node: &Node, path: &str, ink: Option<u32>, fill: Option<u32>, found: &mu
         .label
         .as_deref()
         .filter(|text| node.kind == "text" && !text.trim().is_empty());
-    if let (Some(text), true) = (text, ink.is_some() || fill.is_some()) {
-        // Where the panel set one of the two, the other is the look's in each theme; the worst pair decides.
-        let pairs: Vec<(u32, u32, String)> = match (ink, fill) {
-            (Some(ink), Some(fill)) => vec![(ink, fill, String::new())],
-            (Some(ink), None) => look()
+    if let (Some(text), Some(ink)) = (text, ink) {
+        // Where the panel set no fill under it, the fill is the look's in each theme; the worst pair decides.
+        let pairs: Vec<(u32, u32, String)> = match fill {
+            Some(fill) => vec![(ink, fill, String::new())],
+            None => look()
                 .iter()
-                .flat_map(|(theme, [_, ground, raised])| {
+                .flat_map(|(theme, [ground, raised])| {
                     [("ground", *ground), ("raised", *raised)]
                         // copy-exception: a refusal reason the kit and the loader report, never drawn
                         .map(|(role, fill)| (ink, fill, format!(", the look's {role} in {theme},")))
                 })
                 .collect(),
-            (None, Some(fill)) => look()
-                .iter()
-                // copy-exception: a refusal reason the kit and the loader report, never drawn
-                .map(|(theme, [ink, ..])| (*ink, fill, format!(", in the look's ink in {theme},")))
-                .collect(),
-            (None, None) => Vec::new(),
         };
         let worst = pairs
             .into_iter()
@@ -236,9 +232,9 @@ mod tests {
             "{}",
             found[0].text
         );
-        // Only the fill is the panel's: the look's ink in dark is as light as the fill.
+        // Only the fill is the panel's: not read yet.
         let filled = format!("div .bg[Str(\"{white}\")]\n  text \"Status\"");
-        assert_eq!(codes(&filled), [("low_contrast", "0/0".to_owned())]);
+        assert!(codes(&filled).is_empty());
         assert!(codes("div\n  text \"Status\"").is_empty());
     }
 }
