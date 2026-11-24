@@ -35,14 +35,36 @@ pub enum Then {
 }
 
 /// A key's or a pad button's code in `bindings`: its place in this list, pad buttons from 1000.
-const KEYS: [&str; 14] = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Space", "Escape", "Tab", "KeyW", "KeyA", "KeyS", "KeyD", "KeyJ", "KeyK"];
-const PADS: [&str; 16] = ["south", "east", "west", "north", "l1", "r1", "l2", "r2", "select", "start", "l3", "r3", "up", "down", "left", "right"];
+const KEYS: [&str; 14] = [
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "Enter",
+    "Space",
+    "Escape",
+    "Tab",
+    "KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD",
+    "KeyJ",
+    "KeyK",
+];
+const PADS: [&str; 16] = [
+    "south", "east", "west", "north", "l1", "r1", "l2", "r2", "select", "start", "l3", "r3", "up",
+    "down", "left", "right",
+];
 
 fn code(name: &str) -> i32 {
     KEYS.iter()
         .position(|k| *k == name)
         .map(|i| i as i32)
-        .or_else(|| PADS.iter().position(|p| *p == name).map(|i| 1000 + i as i32))
+        .or_else(|| {
+            PADS.iter()
+                .position(|p| *p == name)
+                .map(|i| 1000 + i as i32)
+        })
         .unwrap_or(-1)
 }
 
@@ -100,7 +122,10 @@ impl State {
             b.extend(b"level=");
             b.extend(l.as_bytes());
         }
-        sha2::Sha256::digest(&b).iter().map(|x| format!("{x:02x}")).collect()
+        sha2::Sha256::digest(&b)
+            .iter()
+            .map(|x| format!("{x:02x}"))
+            .collect()
     }
 
     fn push(&mut self, s: i32) {
@@ -201,7 +226,12 @@ impl State {
     }
 
     /// An activation of a control on the shown screen, with its value (a slider's, a choice's index or a toggle's).
-    pub fn activate(&mut self, shell: &Shell, control: &super::Control, value: Option<f64>) -> Then {
+    pub fn activate(
+        &mut self,
+        shell: &Shell,
+        control: &super::Control,
+        value: Option<f64>,
+    ) -> Then {
         let Some(does) = &control.does else {
             return Then::Nothing;
         };
@@ -264,7 +294,10 @@ impl State {
             None if field == "text_size" => {
                 let options = &shell.settings.text_size;
                 self.text_size = match control.kind {
-                    Kind::Choice => options.get(v.max(0.0) as usize).copied().unwrap_or(options[0]) as i32,
+                    Kind::Choice => options
+                        .get(v.max(0.0) as usize)
+                        .copied()
+                        .unwrap_or(options[0]) as i32,
                     _ => v as i32,
                 };
             }

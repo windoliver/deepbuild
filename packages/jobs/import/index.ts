@@ -1,37 +1,53 @@
-// The import job (#162; canvas primitives: Asset job: Lottie import): the job kind `import`, a file people already
-// have in and a checked document out, with its first tool, lottie-import, which runs here on this machine (./tool:
-// deep-lottie built to WebAssembly). Its params are {from: lottie, look: generated | <look>@<major>}; its inputs the
+// The import job (#162; canvas primitives: Asset job: Lottie import, Asset job: imports): the job kind `import`, a file
+// people already have in and a checked document out, with a tool a format, each run here on this machine:
+// lottie-import (./tool: deep-lottie built to WebAssembly) and urdf-import (./urdf: deep-urdf built to WebAssembly,
+// #3035), which takes {from: urdf} and writes a robot description's links as items and bodies, its joints as joints,
+// and a report of the one rotation it applied and of every element that had no place. A fixture of the kind's
+// qualification runs on the tools whose own params take it, so each tool qualifies on its format's fixtures.
+// Lottie's params are {from: lottie, look: generated | <look>@<major>}; its inputs the
 // Lottie file and, declared `many` so it may be left out, at most one look@1 file the named look is read from. It writes
 // the document (canonical JSON, naming its look by hash), the report (`{issues: [{code, layer, …}], colors}`: what the
 // document can't hold, each naming its Lottie layer, and where each literal color went) and the look@1 it names. Its output checks run on those bytes before any
-// is kept: import.document (the document check a document an agent wrote passes, its look resolved), import.colors_mapped
+// is kept: import.document (the document check a document an agent wrote passes, its look resolved, and the physics
+// module's check on each world it holds), import.colors_mapped
 // (no paint holds a literal color) and import.no_expression (no expression's text anywhere in the document).
 import { readFileSync } from 'node:fs';
 import { check } from './tool/lottie.mjs';
+import { worlds } from './urdf/urdf.mjs';
 
 const TOOL = 'lottie-import@1.0.0';
+const URDF_TOOL = 'urdf-import@1.0.0';
 
 /** import's params, as the design's Fields name them. */
 const PARAMS = {
   type: 'object',
   properties: {
-    from: { enum: ['lottie'], default: 'lottie' },
+    from: { enum: ['lottie', 'urdf'], default: 'lottie' },
     look: { type: 'string', pattern: '^(generated|[a-z0-9][a-z0-9_-]*@[0-9]+)$', default: 'generated' },
   },
   additionalProperties: false,
 };
+/** The params each tool takes: the kind's for its own format; a robot description names the look the job writes. */
+const LOTTIE_PARAMS = { ...PARAMS, properties: { ...PARAMS.properties, from: { enum: ['lottie'], default: 'lottie' } } };
+const URDF_PARAMS = { ...PARAMS, properties: { from: { enum: ['urdf'] }, look: { enum: ['generated'], default: 'generated' } }, required: ['from'] };
 /** The Lottie file, and a look to map colors to, which a `many` input lets the job leave out. */
 const INPUTS = { file: { media: 'application/json' }, look: { media: 'application/json', many: true } };
 const OUTPUTS = ['document', 'report', 'look'];
 
-/** The qualification: each fixture's Lottie file and the bytes the tool must write, kept beside this file. */
-const fixture = (name: string, file: string, params: Record<string, string>) => ({
+/** The qualification: each fixture's file and the bytes its format's tool must write, kept beside this file. */
+const read = (file: string): string => readFileSync(new URL(`./fixtures/${file}`, import.meta.url), 'utf8');
+const fixture = (name: string, file: string, params: Record<string, string>, look = name) => ({
   name,
   params,
-  inputs: { file: readFileSync(new URL(`./fixtures/${file}.json`, import.meta.url), 'utf8') },
-  expect: Object.fromEntries(OUTPUTS.map((o) => [o, readFileSync(new URL(`./fixtures/${name}.${o}.json`, import.meta.url), 'utf8')])),
+  inputs: { file: read(file) },
+  expect: Object.fromEntries(OUTPUTS.map((o) => [o, read(`${o === 'look' ? look : name}.${o}.json`)])),
 });
-const FIXTURES = [fixture('loader', 'loader', { from: 'lottie', look: 'generated' }), fixture('loader-clean', 'loader', { from: 'lottie', look: 'clean@1' })];
+/** A robot description's fixture (#3035): its look is the shipped clean look, one file for the three. */
+const robot = (name: string) => fixture(name, `${name}.urdf`, { from: 'urdf' }, 'robot');
+const FIXTURES = [
+  fixture('loader', 'loader.json', { from: 'lottie', look: 'generated' }), fixture('loader-clean', 'loader.json', { from: 'lottie', look: 'clean@1' }),
+  robot('arm'), robot('axes'), robot('gripper'),
+];
 
 interface Spec { outputs?: Record<string, string> }
 
@@ -52,17 +68,18 @@ function checked(document: string, look: string): ReturnType<typeof check> {
 }
 
 /** One of the three checks, each reading its own finding off one run of the module's checks. */
-function outputCheck(name: string, finding: (found: ReturnType<typeof check>) => unknown) {
+function outputCheck(name: string, finding: (found: ReturnType<typeof check>) => unknown, more?: (document: string) => unknown) {
   return async (spec: Spec) => {
     const found = checked(text(spec, 'document'), text(spec, 'look'));
     if (found.failed) return result(name, JSON.stringify({ why: found.failed }));
-    const f = finding(found);
+    const f = finding(found) ?? more?.(text(spec, 'document'));
     return result(name, f === null || f === undefined ? undefined : JSON.stringify({ at: f }));
   };
 }
 
 export default async function (deep: any): Promise<void> {
-  await deep.registerCheck('import.document', outputCheck('import.document', (f) => f.document));
+  // A document's worlds are held to the physics module's check too, which the document check leaves to it.
+  await deep.registerCheck('import.document', outputCheck('import.document', (f) => f.document, (document) => { const w = worlds(document); return w.length ? w : null; }));
   await deep.registerCheck('import.colors_mapped', outputCheck('import.colors_mapped', (f) => f.colors_mapped));
   await deep.registerCheck('import.no_expression', outputCheck('import.no_expression', (f) => f.no_expression));
   await deep.registerJob('import', {
@@ -74,8 +91,14 @@ export default async function (deep: any): Promise<void> {
   });
   await deep.registerJobTool('import', {
     tool: TOOL,
-    params: PARAMS,
+    params: LOTTIE_PARAMS,
     run: { dir: 'tool', entry: 'lottie.mjs' },
+    qualification: { same_bytes: true },
+  });
+  await deep.registerJobTool('import', {
+    tool: URDF_TOOL,
+    params: URDF_PARAMS,
+    run: { dir: 'urdf', entry: 'urdf.mjs' },
     qualification: { same_bytes: true },
   });
 }

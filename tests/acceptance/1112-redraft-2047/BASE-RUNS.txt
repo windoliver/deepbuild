@@ -1,0 +1,332 @@
+# #1112's blind redraft (#2047's sweep) at its base 654c560c1, then on each twin laid over the base's record.
+# <checkout> stands for this checkout's path. Run on 2026-11-22 on a shared Mac, Node v24.22.0, vitest 5.0.5, with the
+# repo's own vitest.config.ts (after `npm run build --workspaces`, which that config needs). The one-minute, five-minute
+# and fifteen-minute loads read just before each run are on its `# load:` line.
+#
+#   node node_modules/vitest/vitest.mjs run tests/acceptance/1112-redraft-2047/     (NO_COLOR=1)
+#
+# A twin was laid by copying its files over docs/evidence/1112/ in this checkout for the run. After each run the base's
+# files were copied back, and at the end `diff -r` against the copy taken first found no difference and
+# `git status --porcelain` printed only `?? tests/acceptance/1112-redraft-2047/`.
+#
+# Summary (4 tests: saved and removed, for the Mac and for the Spark)
+#   base           4 pass
+#   open-branch    Mac removed fails
+#   tracked-edit   Mac removed fails
+#   edit-gone      Spark removed fails
+#   no-status      Mac saved, Mac removed, Spark saved and Spark removed fail
+#   unread-status  Spark removed fails
+# Every failure is vitest's AssertionError from `none` in worktrees-kept.test.ts, a file under the test paths.
+#
+# Type-check, at a load of 76.78 103.83 117.33:
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/1112-redraft-2047/tsconfig.json     exit 0, no output
+
+
+## base
+
+# load: 74.88 102.99 116.96
+
+ RUN  v5.0.5 <checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  03:41:08
+   Duration  409ms (transform 48%, tests 44%, setup 4%, import 2%, worker 1%)
+
+exit 0
+
+
+## twin-open-branch
+
+# load: 74.88 102.99 116.96
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts (4 tests | 1 failed) 117ms
+   × #1112.883bbf6d Mac: no worktree on an open branch and no uncommitted edit was removed between the two lists 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts > #1112.883bbf6d Mac: no worktree on an open branch and no uncommitted edit was removed between the two lists
+AssertionError: Mac: no worktree on an open branch and no uncommitted edit was removed:
+  ~/private/deepbuild-core/.claude/worktrees/agent-a0a70551f01d24191: removed (in mac-before-worktrees.txt's list, not in mac-after-worktrees.txt's); it was on branch worktree-agent-a0a70551f01d24191 at aa042769, an open branch: mac-before.txt reads its head as not in origin/main ("no"), so the branch is not merged: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "~/private/deepbuild-core/.claude/worktrees/agent-a0a70551f01d24191: removed (in mac-before-worktrees.txt's list, not in mac-after-worktrees.txt's); it was on branch worktree-agent-a0a70551f01d24191 at aa042769, an open branch: mac-before.txt reads its head as not in origin/main (\"no\"), so the branch is not merged",
++ ]
+
+ ❯ none tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:109:60
+    107|
+    108| function none(problems: readonly string[], what: string): void {
+    109|   expect(problems, `${what}:\n  ${problems.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+    110| }
+    111|
+ ❯ kept tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:156:3
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:160:112
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  03:41:13
+   Duration  424ms (tests 43%, setup 35%, import 12%, transform 9%, worker 1%)
+
+exit 1
+
+
+## twin-tracked-edit
+
+# load: 73.53 102.24 116.61
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts (4 tests | 1 failed) 176ms
+   × #1112.883bbf6d Mac: no worktree on an open branch and no uncommitted edit was removed between the two lists 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts > #1112.883bbf6d Mac: no worktree on an open branch and no uncommitted edit was removed between the two lists
+AssertionError: Mac: no worktree on an open branch and no uncommitted edit was removed:
+  ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference: removed (in mac-before-worktrees.txt's list, not in mac-after-worktrees.txt's); it held uncommitted edits: ` M packages/wiki/src/index.ts`, ` M packages/wiki/test/wiki.test.ts`: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference: removed (in mac-before-worktrees.txt's list, not in mac-after-worktrees.txt's); it held uncommitted edits: ` M packages/wiki/src/index.ts`, ` M packages/wiki/test/wiki.test.ts`",
++ ]
+
+ ❯ none tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:109:60
+    107|
+    108| function none(problems: readonly string[], what: string): void {
+    109|   expect(problems, `${what}:\n  ${problems.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+    110| }
+    111|
+ ❯ kept tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:156:3
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:160:112
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  03:41:15
+   Duration  383ms (tests 88%, setup 5%, transform 4%, worker 1%, import 1%)
+
+exit 1
+
+
+## twin-edit-gone
+
+# load: 74.88 102.99 116.96
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts (4 tests | 1 failed) 158ms
+   × #1112.883bbf6d Spark: no worktree on an open branch and no uncommitted edit was removed between the two lists 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts > #1112.883bbf6d Spark: no worktree on an open branch and no uncommitted edit was removed between the two lists
+AssertionError: Spark: no worktree on an open branch and no uncommitted edit was removed:
+  ~/deepbuild/.claude/worktrees/issue-31: it remains, but uncommitted edits in its `git status --porcelain` before are not in the one after: ` M package-lock.json`: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "~/deepbuild/.claude/worktrees/issue-31: it remains, but uncommitted edits in its `git status --porcelain` before are not in the one after: ` M package-lock.json`",
++ ]
+
+ ❯ none tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:109:60
+    107|
+    108| function none(problems: readonly string[], what: string): void {
+    109|   expect(problems, `${what}:\n  ${problems.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+    110| }
+    111|
+ ❯ kept tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:156:3
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:162:114
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  03:41:10
+   Duration  290ms (tests 86%, setup 7%, transform 3%, worker 2%, import 1%)
+
+exit 1
+
+
+## twin-no-status
+
+# load: 74.88 102.99 116.96
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts (4 tests | 4 failed) 117ms
+   × #1112.883bbf6d Mac: the before and after lists of worktrees are saved, each with git status --porcelain per worktree 5ms
+   × #1112.883bbf6d Mac: no worktree on an open branch and no uncommitted edit was removed between the two lists 2ms
+   × #1112.883bbf6d Spark: the before and after lists of worktrees are saved, each with git status --porcelain per worktree 1ms
+   × #1112.883bbf6d Spark: no worktree on an open branch and no uncommitted edit was removed between the two lists 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts > #1112.883bbf6d Mac: the before and after lists of worktrees are saved, each with git status --porcelain per worktree
+AssertionError: Mac: the before and after lists of worktrees, with `git status --porcelain` per remaining worktree, are saved:
+  ~/private/deepbuild-core/.claude/worktrees/issue-30-ac12-counting: docs/evidence/1112/mac-after-worktrees.txt lists it and saves no `git status --porcelain` for it: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "~/private/deepbuild-core/.claude/worktrees/issue-30-ac12-counting: docs/evidence/1112/mac-after-worktrees.txt lists it and saves no `git status --porcelain` for it",
++ ]
+
+ ❯ none tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:109:60
+    107|
+    108| function none(problems: readonly string[], what: string): void {
+    109|   expect(problems, `${what}:\n  ${problems.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+    110| }
+    111|
+ ❯ saved tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:129:3
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:159:121
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts > #1112.883bbf6d Mac: no worktree on an open branch and no uncommitted edit was removed between the two lists
+AssertionError: Mac: no worktree on an open branch and no uncommitted edit was removed:
+  ~/private/deepbuild-core/.claude/worktrees/issue-30-ac12-counting: it remains, and mac-after-worktrees.txt saves no `git status --porcelain` for it, so nothing shows its uncommitted edits were kept: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "~/private/deepbuild-core/.claude/worktrees/issue-30-ac12-counting: it remains, and mac-after-worktrees.txt saves no `git status --porcelain` for it, so nothing shows its uncommitted edits were kept",
++ ]
+
+ ❯ none tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:109:60
+    107|
+    108| function none(problems: readonly string[], what: string): void {
+    109|   expect(problems, `${what}:\n  ${problems.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+    110| }
+    111|
+ ❯ kept tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:156:3
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:160:112
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts > #1112.883bbf6d Spark: the before and after lists of worktrees are saved, each with git status --porcelain per worktree
+AssertionError: Spark: the before and after lists of worktrees, with `git status --porcelain` per remaining worktree, are saved:
+  ~/deepbuild/.claude/worktrees/issue-70: docs/evidence/1112/spark-after.txt lists it and saves no `git status --porcelain` for it: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "~/deepbuild/.claude/worktrees/issue-70: docs/evidence/1112/spark-after.txt lists it and saves no `git status --porcelain` for it",
++ ]
+
+ ❯ none tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:109:60
+    107|
+    108| function none(problems: readonly string[], what: string): void {
+    109|   expect(problems, `${what}:\n  ${problems.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+    110| }
+    111|
+ ❯ saved tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:129:3
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:161:123
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts > #1112.883bbf6d Spark: no worktree on an open branch and no uncommitted edit was removed between the two lists
+AssertionError: Spark: no worktree on an open branch and no uncommitted edit was removed:
+  ~/deepbuild/.claude/worktrees/issue-70: it remains, and spark-after.txt saves no `git status --porcelain` for it, so nothing shows its uncommitted edits were kept: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "~/deepbuild/.claude/worktrees/issue-70: it remains, and spark-after.txt saves no `git status --porcelain` for it, so nothing shows its uncommitted edits were kept",
++ ]
+
+ ❯ none tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:109:60
+    107|
+    108| function none(problems: readonly string[], what: string): void {
+    109|   expect(problems, `${what}:\n  ${problems.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+    110| }
+    111|
+ ❯ kept tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:156:3
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:162:114
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  03:41:12
+   Duration  342ms (tests 58%, import 20%, transform 17%, setup 4%, worker 1%)
+
+exit 1
+
+
+## twin-unread-status
+
+# load: 73.53 102.24 116.61
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts (4 tests | 1 failed) 204ms
+   × #1112.883bbf6d Spark: no worktree on an open branch and no uncommitted edit was removed between the two lists 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts > #1112.883bbf6d Spark: no worktree on an open branch and no uncommitted edit was removed between the two lists
+AssertionError: Spark: no worktree on an open branch and no uncommitted edit was removed:
+  <session scratchpad>/main-base: removed (in spark-before.txt's list, not in spark-after.txt's); its `git status --porcelain` before is not a status (`fatal: not a git repository (or any of the parent directories): .git`) and git's list doesn't mark it prunable, so nothing shows it held no uncommitted edit: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<session scratchpad>/main-base: removed (in spark-before.txt's list, not in spark-after.txt's); its `git status --porcelain` before is not a status (`fatal: not a git repository (or any of the parent directories): .git`) and git's list doesn't mark it prunable, so nothing shows it held no uncommitted edit",
++ ]
+
+ ❯ none tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:109:60
+    107|
+    108| function none(problems: readonly string[], what: string): void {
+    109|   expect(problems, `${what}:\n  ${problems.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+    110| }
+    111|
+ ❯ kept tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:156:3
+ ❯ tests/acceptance/1112-redraft-2047/worktrees-kept.test.ts:162:114
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  03:41:16
+   Duration  426ms (tests 91%, setup 3%, transform 3%, import 2%, worker 1%)
+
+exit 1

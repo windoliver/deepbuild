@@ -105,6 +105,10 @@ impl Replica {
     /// is the one the reads see.
     pub(super) fn input_drew(&mut self) {
         if self.dirty.is_some() {
+            let glyphs = self.glyphs.clone();
+            let _ = self
+                .cx
+                .update_window(self.window, |_, window, _| glyphs.keep_scene(window));
             let read = self.live_tree();
             // Typing draws a frame a character, as it is delivered.
             let drew = self.count_frames(None).max(1) as u64;
@@ -116,12 +120,22 @@ impl Replica {
 
     /// The counts' start, once the replica's own frames are drawn: the frames GPUI drew to launch are no one's, and the
     /// window read back now is what the first frame is compared with.
-    pub(super) fn start_counts(&mut self, arm: String, read_back: &'static str, accessibility: bool) {
+    pub(super) fn start_counts(
+        &mut self,
+        arm: String,
+        read_back: &'static str,
+        accessibility: bool,
+    ) {
         let root = self
             .cx
             .update_window(self.window, |root, _, _| root.entity_id())
             .expect("the replica's window is open");
-        self.counts = Some(super::counts::Counts::new(arm, read_back, accessibility, root));
+        self.counts = Some(super::counts::Counts::new(
+            arm,
+            read_back,
+            accessibility,
+            root,
+        ));
         self.drop_counts();
         let _ = self.read_tiles();
     }

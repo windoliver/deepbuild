@@ -42,6 +42,9 @@ mod suite {
 
     const SCRIPT: &str = "shell:deepbuild-panel/";
     const PLANTED: [&str; 4] = ["cap20", "drop-folded", "list-superseded", "hide-newest"];
+    /// The time zone the stored live trees were taken in, and every replica here draws in: a row writes when its
+    /// default applies in your time zone (#1458), so the parity holds whatever zone the Mac is set to (#1620).
+    const LIVE_ZONE: &str = "UTC";
 
     fn out() -> PathBuf {
         let out = std::env::var_os("DEEP_338_OUT")
@@ -99,6 +102,7 @@ mod suite {
         let mut child = Command::new(env!("CARGO_BIN_EXE_deep-replica"))
             .args(["--view", view, "--out"])
             .arg(out)
+            .env("TZ", LIVE_ZONE)
             .stdout(std::process::Stdio::piped())
             .spawn()
             .expect("deep-replica spawns");
@@ -518,7 +522,7 @@ mod suite {
         for view in SHIPPED_VIEWS {
             let live_path = repo_root().join(format!("docs/spikes/338/out/live/{view}.json"));
             let live = Snapshot::read(&live_path).unwrap_or_else(|error| {
-                panic!("the live tree for {view} is missing; run deep-live on the reference Mac: {error}")
+                panic!("the live tree for {view} is missing; run `TZ={LIVE_ZONE} deep-live --view {view} --out {}` on the reference Mac: {error}", live_path.display())
             });
             let replica = replica_snapshot(view);
             let verdict = match first_difference(&replica, &live) {

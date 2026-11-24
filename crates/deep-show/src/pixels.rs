@@ -78,7 +78,8 @@ impl Hub<'_> {
     pub(crate) fn light3d(&mut self, doc: &Value, t: i64) -> Option<Value> {
         let posed = crate::film::posed(doc, t);
         let doc = posed.as_ref().unwrap_or(doc);
-        let exposure = crate::scene3d::look_of(doc, &self.look.light).exposure;
+        let look = self.look3(doc).ok()?.look;
+        let exposure = deep_play::scene::exposed(doc, look).exposure;
         let whole = self.scenario.planted == Some(Planted::LightFromWholeFrame);
         let short = self.planted(Planted::ReductionLeavesOutLastRows);
         let gpu = self.gpu3()?;
@@ -152,11 +153,13 @@ impl Hub<'_> {
         }
         let mut frames = Vec::new();
         let cost = self.light_cost.clone();
+        let expanded = self.expanded3d(document);
+        let document = expanded.as_ref().unwrap_or(document);
         for &t in at {
             // #493: a shot writes the camera's pose the frame is drawn through.
             let doc = crate::film::posed(document, t).unwrap_or_else(|| document.clone());
             // #1729: its assets and maps from the evidence store, as render-back reads them.
-            let (scene, look) = match self.evaluate3d(&doc, t, size) {
+            let frame = match self.evaluate3d(&doc, t, size) {
                 Ok(s) => s,
                 Err(u) => {
                     return Drawn::Blocked(
@@ -168,11 +171,9 @@ impl Hub<'_> {
                 return Drawn::Blocked(json!({"code": "gpu_unavailable", "t": t}));
             };
             // #2513: the frame's light stays on the GPU, reduced there when the check reads it.
-            let drawn = gpu
-                .draw_scene(&scene, &look, false)
-                .and_then(|(rgba, targets)| {
-                    Some((rgba, targets, gpu.kept_light(short, cost.clone())?))
-                });
+            let drawn = gpu.draw_scene(&frame, false).and_then(|(rgba, targets)| {
+                Some((rgba, targets, gpu.kept_light(short, cost.clone())?))
+            });
             let Some((rgba, targets, reduce)) = drawn else {
                 return Drawn::Blocked(
                     json!({"code": "not_presented", "reason": "unsupported_platform", "t": t}),
@@ -182,11 +183,11 @@ impl Hub<'_> {
                 t,
                 size: targets.size,
                 linear: Vec::new(),
-                exposure: look.exposure,
+                exposure: frame.staged.look.exposure,
                 rgba,
                 ids: ids_of(&targets.ids),
                 picks: targets.picks,
-                roles: self.look.light.clone(),
+                roles: frame.staged.look.roles,
                 reduce: Some(reduce),
             });
         }

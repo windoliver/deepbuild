@@ -67,6 +67,9 @@ function sourceSlice(file, source, requested) {
 // package, which reaches the hub through ../src.
 const HUB_BINARIES = ['deep-hook', 'deep-show'];
 const HUB_ENTRY = /(?<![\w.@-])packages\/(?:hub|cli)(?![\w-]|\.\w)|(?<![\w./@-])@deepbuild\/(?:hub|cli)(?![\w-]|\.\w)/;
+// A test file named as a path from the checkout's root, which a test may run in a child Vitest, as #3178's meta-test
+// runs its rows (#3293): followed as an import is.
+const TEST_FILE = /^(?:tests|packages\/[^/]+\/test)\/(?:[^/]+\/)*[^/]+\.test\.(?:[cm]?[jt]s|tsx)$/;
 
 /** Selected tests' DEEP_BIN_DIR binaries, for a run in the checkout itself, which keeps its own target/. */
 export const binaryNames = (cwd, patterns) => selectBinaries(cwd, patterns, false).bin;
@@ -152,6 +155,7 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
           if (ts.isStringLiteralLike(node)) {
             own.push(node.text);
             names(node.text);
+            if (TEST_FILE.test(node.text) && existsSync(resolve(cwd, node.text))) queue.push({ path: node.text, requested: null });
           }
           ts.forEachChild(node, visit);
         };
@@ -197,12 +201,18 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
     const allowed = picked.packages.length ? picked.packages.flatMap((name) => binsOf.get(name)) : [...binsOf.values()].flat();
     return picked.bins.length + picked.packages.length > 0 && picked.bins.every((name) => allowed.includes(name));
   };
+  // What a build the run makes leaves in the checkout's target/, by binary: gone, a cleanup emptied it since (#3296).
+  const outputs = (args) => {
+    const named = (flag) => args.flatMap((arg, at) => (args[at - 1] === flag ? [arg] : []));
+    const bins = named('--bin');
+    return (bins.length ? bins : [...named('-p'), ...named('--package')].flatMap((name) => binsOf.get(name) ?? [])).map((name) => join(args.includes('--release') ? 'release' : 'debug', name));
+  };
   const builds = new Map();
   for (const { builds: calls, source } of selfBuilt) for (const { args, profile } of calls) {
     const slot = args.findIndex((arg, at) => arg === null && args[at - 1] === '--bin');
     // A variable --bin is filled only with the binaries the test names, not every binary of a package it names.
     const filled = slot < 0 ? [args] : packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && mentions(target.name, source)).map((target) => target.name)).map((name) => args.map((arg, at) => at === slot ? name : arg));
-    for (const each of filled) if (known(each)) builds.set(JSON.stringify([each, profile]), { args: each, profile });
+    for (const each of filled) if (known(each)) builds.set(JSON.stringify([each, profile]), { args: each, profile, outputs: outputs(each) });
   }
   return { bin: [...new Set(bins)], target, hub: target.length ? hubRoots : [], builds: [...builds.values()] };
 }
@@ -221,6 +231,9 @@ export function placeHubBinaries(cwd, bin, names) {
     utimesSync(join(debug, name), now, now);
   }
 }
+
+/** The files `builds` (binaryPlan) leave in `cwd`'s target/. */
+export const builtIn = (cwd, builds) => builds.flatMap(({ outputs }) => outputs.map((path) => join(cwd, 'target', path)));
 
 /**
  * The selected tests' own `cargo build`s (binaryPlan), each run in `cwd` as the test will run it, its target/, the

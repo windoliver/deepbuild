@@ -111,9 +111,10 @@ impl LevelRun {
         let Some(i) = self.piece.items.iter().position(|it| &it.id == item) else {
             return false;
         };
-        self.world
-            .array(i, array)
-            .is_some_and(|a| a.iter().any(|v| v.as_f64().is_some_and(|x| x != 0.0) || v.as_bool() == Some(true)))
+        self.world.array(i, array).is_some_and(|a| {
+            a.iter()
+                .any(|v| v.as_f64().is_some_and(|x| x != 0.0) || v.as_bool() == Some(true))
+        })
     }
 }
 
@@ -218,12 +219,20 @@ impl<'a> Run<'a> {
     /// Each control's box on screen `s`, in control order.
     pub fn control_boxes(&mut self, s: usize) -> Vec<Option<Box4>> {
         let items = self.items(s).unwrap_or_default();
-        self.shell.screens[s].controls.iter().map(|c| items.get(&c.item).copied()).collect()
+        self.shell.screens[s]
+            .controls
+            .iter()
+            .map(|c| items.get(&c.item).copied())
+            .collect()
     }
 
     /// Whether each control of screen `s` is enabled now, by its `enabled` expression over the shell's arrays.
     pub fn enabled(&self, s: usize) -> Vec<bool> {
-        self.shell.screens[s].controls.iter().map(|c| c.enabled.as_ref().is_none_or(|e| self.truth(e))).collect()
+        self.shell.screens[s]
+            .controls
+            .iter()
+            .map(|c| c.enabled.as_ref().is_none_or(|e| self.truth(e)))
+            .collect()
     }
 
     fn truth(&self, text: &str) -> bool {
@@ -236,7 +245,9 @@ impl<'a> Run<'a> {
         while let Some(at) = rest.find(&prefix) {
             out.push_str(&rest[..at]);
             let after = &rest[at + prefix.len()..];
-            let name_len = after.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(after.len());
+            let name_len = after
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .unwrap_or(after.len());
             let name = &after[..name_len];
             let mut tail = &after[name_len..];
             let mut index = 0usize;
@@ -246,7 +257,13 @@ impl<'a> Run<'a> {
                     tail = &t[close + 1..];
                 }
             }
-            let v = arrays.get(name).and_then(|a| a.get(index)).map_or(0.0, |v| v.as_f64().unwrap_or(if v.as_bool() == Some(true) { 1.0 } else { 0.0 }));
+            let v = arrays
+                .get(name)
+                .and_then(|a| a.get(index))
+                .map_or(0.0, |v| {
+                    v.as_f64()
+                        .unwrap_or(if v.as_bool() == Some(true) { 1.0 } else { 0.0 })
+                });
             out.push_str(&format!("v{}", values.len()));
             values.push(v);
             rest = tail;
@@ -254,7 +271,16 @@ impl<'a> Run<'a> {
         out.push_str(rest);
         match deep_canvas::expr::Expr::compile(&out, &deep_canvas::expr::Nothing, 4096) {
             Ok(e) => {
-                let vars: Vec<f64> = e.vars.iter().map(|n| n.strip_prefix('v').and_then(|i| i.parse::<usize>().ok()).and_then(|i| values.get(i).copied()).unwrap_or(0.0)).collect();
+                let vars: Vec<f64> = e
+                    .vars
+                    .iter()
+                    .map(|n| {
+                        n.strip_prefix('v')
+                            .and_then(|i| i.parse::<usize>().ok())
+                            .and_then(|i| values.get(i).copied())
+                            .unwrap_or(0.0)
+                    })
+                    .collect();
                 let x = e.eval_num(&vars);
                 x.is_finite() && x != 0.0
             }
@@ -275,12 +301,30 @@ impl<'a> Run<'a> {
         };
         match f.split_once('.') {
             None if f == "text_size" => match c.kind {
-                Kind::Choice => self.shell.settings.text_size.iter().position(|t| *t as i32 == self.state.text_size).unwrap_or(0) as f64,
+                Kind::Choice => self
+                    .shell
+                    .settings
+                    .text_size
+                    .iter()
+                    .position(|t| *t as i32 == self.state.text_size)
+                    .unwrap_or(0) as f64,
                 _ => f64::from(self.state.text_size),
             },
             None => f64::from(u8::from(self.state.reduced_motion)),
-            Some(("volume", bus)) => self.shell.settings.volume.iter().position(|(b, _)| b == bus).map_or(0.0, |i| self.state.volume[i]),
-            Some(("toggle", a)) => self.shell.settings.toggle.iter().position(|t| t == a).map_or(0.0, |i| f64::from(u8::from(self.state.toggle[i]))),
+            Some(("volume", bus)) => self
+                .shell
+                .settings
+                .volume
+                .iter()
+                .position(|(b, _)| b == bus)
+                .map_or(0.0, |i| self.state.volume[i]),
+            Some(("toggle", a)) => self
+                .shell
+                .settings
+                .toggle
+                .iter()
+                .position(|t| t == a)
+                .map_or(0.0, |i| f64::from(u8::from(self.state.toggle[i]))),
             _ => 0.0,
         }
     }
@@ -311,11 +355,18 @@ impl<'a> Run<'a> {
         match input {
             Input::Key(k) | Input::Pad(k) => {
                 let key = match (input, k.as_str()) {
-                    (Input::Pad(_), "up") | (Input::Key(_), "ArrowUp") | (Input::Key(_), "Shift+Tab") => "up",
-                    (Input::Pad(_), "down") | (Input::Key(_), "ArrowDown") | (Input::Key(_), "Tab") => "down",
+                    (Input::Pad(_), "up")
+                    | (Input::Key(_), "ArrowUp")
+                    | (Input::Key(_), "Shift+Tab") => "up",
+                    (Input::Pad(_), "down")
+                    | (Input::Key(_), "ArrowDown")
+                    | (Input::Key(_), "Tab") => "down",
                     (Input::Pad(_), "left") | (Input::Key(_), "ArrowLeft") => "left",
                     (Input::Pad(_), "right") | (Input::Key(_), "ArrowRight") => "right",
-                    (Input::Pad(_), "south") | (Input::Key(_), "Enter") | (Input::Key(_), "Space") | (Input::Key(_), " ") => "confirm",
+                    (Input::Pad(_), "south")
+                    | (Input::Key(_), "Enter")
+                    | (Input::Key(_), "Space")
+                    | (Input::Key(_), " ") => "confirm",
                     (Input::Pad(_), "east") | (Input::Key(_), "Escape") => "back",
                     (Input::Pad(p), _) if self.shell.pause.pad.contains(p) => "pause",
                     _ => "",
@@ -345,7 +396,11 @@ impl<'a> Run<'a> {
                     ("left" | "right", Some(Kind::Slider)) => {
                         let f = self.focus.expect("a focused slider");
                         let c = &self.shell.screens[s].controls[f];
-                        let d = if key == "right" { c.increment } else { -c.increment };
+                        let d = if key == "right" {
+                            c.increment
+                        } else {
+                            -c.increment
+                        };
                         let v = (self.value(c) + d).clamp(c.range[0], c.range[1]);
                         return self.activate(s, f, Some(v));
                     }
@@ -353,7 +408,8 @@ impl<'a> Run<'a> {
                         let f = self.focus.expect("a focused choice");
                         let c = &self.shell.screens[s].controls[f];
                         let n = c.options.len().max(1) as f64;
-                        let v = (self.value(c) + if key == "right" { 1.0 } else { -1.0 }).clamp(0.0, n - 1.0);
+                        let v = (self.value(c) + if key == "right" { 1.0 } else { -1.0 })
+                            .clamp(0.0, n - 1.0);
                         return self.activate(s, f, Some(v));
                     }
                     ("left" | "right", Some(Kind::DragAlong)) => {}
@@ -372,7 +428,9 @@ impl<'a> Run<'a> {
             Input::Tap(p) => {
                 let boxes = self.control_boxes(s);
                 let enabled = self.enabled(s);
-                let hit = (0..boxes.len()).rev().find(|i| enabled[*i] && boxes[*i].is_some_and(|b| inside(&b, *p)));
+                let hit = (0..boxes.len())
+                    .rev()
+                    .find(|i| enabled[*i] && boxes[*i].is_some_and(|b| inside(&b, *p)));
                 let Some(i) = hit else { return Then::Nothing };
                 let c = self.shell.screens[s].controls[i].clone();
                 let b = boxes[i].expect("a hit box");
@@ -388,14 +446,22 @@ impl<'a> Run<'a> {
                 }
             }
             Input::Drag(points) => {
-                let (Some(first), Some(last)) = (points.first(), points.last()) else { return Then::Nothing };
+                let (Some(first), Some(last)) = (points.first(), points.last()) else {
+                    return Then::Nothing;
+                };
                 let boxes = self.control_boxes(s);
                 let enabled = self.enabled(s);
-                let hit = (0..boxes.len()).rev().find(|i| enabled[*i] && boxes[*i].is_some_and(|b| inside(&b, *first)));
+                let hit = (0..boxes.len())
+                    .rev()
+                    .find(|i| enabled[*i] && boxes[*i].is_some_and(|b| inside(&b, *first)));
                 let Some(i) = hit else { return Then::Nothing };
                 let c = self.shell.screens[s].controls[i].clone();
                 match c.kind {
-                    Kind::Slider | Kind::DragAlong => self.activate(s, i, Some(along(&c, &boxes[i].expect("a hit box"), last[0]))),
+                    Kind::Slider | Kind::DragAlong => self.activate(
+                        s,
+                        i,
+                        Some(along(&c, &boxes[i].expect("a hit box"), last[0])),
+                    ),
                     _ => Then::Nothing,
                 }
             }
@@ -415,7 +481,9 @@ impl<'a> Run<'a> {
             self.state.pause_input();
             return Then::Nothing;
         }
-        let Some(level) = self.level.as_mut() else { return Then::Nothing };
+        let Some(level) = self.level.as_mut() else {
+            return Then::Nothing;
+        };
         let action = match input {
             Input::Key(k) => level.actions.iter().find(|a| a.keys.contains(k)),
             Input::Pad(p) => level.actions.iter().find(|a| a.pad.contains(p)),
@@ -436,48 +504,113 @@ impl<'a> Run<'a> {
     pub fn pause_button(&self) -> Box4 {
         let s = self.shell.pause.size;
         let m = 16.0;
-        let x = if self.shell.pause.corner == "top_left" { m } else { self.size[0] - m - s };
+        let x = if self.shell.pause.corner == "top_left" {
+            m
+        } else {
+            self.size[0] - m - s
+        };
         [x, m, s, s]
     }
 
     fn load(&mut self, l: usize) -> Result<(), Value> {
         let doc = &self.shell.levels[l].doc;
         let words = level_words(&self.shell.levels, l);
-        let form = piece_of(doc).ok_or_else(|| super::refused("shell.screen", format!("{words}'s document has no logic item"), json!({"level": l})))?;
+        let form = piece_of(doc).ok_or_else(|| {
+            super::refused(
+                "shell.screen",
+                format!("{words}'s document has no logic item"),
+                json!({"level": l}),
+            )
+        })?;
         let piece = Rc::new(
-            check_in(&form, &Planted::default(), &mut History::new(), self.stored, &[])
-                .map_err(|r| super::refused(r.0.get("code").and_then(Value::as_str).unwrap_or("refused"), format!("{words}: {}", r.0.get("what").map_or_else(|| r.0.to_string(), |w| w.as_str().map_or_else(|| w.to_string(), str::to_string))), json!({"level": l, "refusal": r.0})))?,
+            check_in(
+                &form,
+                &Planted::default(),
+                &mut History::new(),
+                self.stored,
+                &[],
+            )
+            .map_err(|r| {
+                super::refused(
+                    r.0.get("code").and_then(Value::as_str).unwrap_or("refused"),
+                    format!(
+                        "{words}: {}",
+                        r.0.get("what").map_or_else(
+                            || r.0.to_string(),
+                            |w| w.as_str().map_or_else(|| w.to_string(), str::to_string)
+                        )
+                    ),
+                    json!({"level": l, "refusal": r.0}),
+                )
+            })?,
         );
         // The newest carry record the level accepts enters its track at step 0, by hash.
         let taken = self
             .records
             .iter()
             .rev()
-            .find(|(_, _, _, r)| piece.items.iter().any(|i| i.carry_in.is_some()) && crate::carry::differs(&piece, r).is_empty())
+            .find(|(_, _, _, r)| {
+                piece.items.iter().any(|i| i.carry_in.is_some())
+                    && crate::carry::differs(&piece, r).is_empty()
+            })
             .cloned();
-        let entries: Vec<Entry> = taken.iter().map(|(_, _, h, r)| crate::carry::entry(h, r)).collect();
+        let entries: Vec<Entry> = taken
+            .iter()
+            .map(|(_, _, h, r)| crate::carry::entry(h, r))
+            .collect();
         let mut rec = Record::default();
-        let world = World::new(piece.clone(), track_of(&entries), false, Planted::default(), &mut rec, None)
-            .map_err(|e| super::refused("refused", format!("{words}: {e:?}"), json!({"level": l})))?;
+        let world = World::new(
+            piece.clone(),
+            track_of(&entries),
+            false,
+            Planted::default(),
+            &mut rec,
+            None,
+        )
+        .map_err(|e| super::refused("refused", format!("{words}: {e:?}"), json!({"level": l})))?;
         let step = piece.items.first().map_or(STEP, |i| i.step);
         let ids = piece.items.iter().map(|i| i.id.clone()).collect();
         let actions = actions_of(doc);
         let zones = zones_of(doc, self.size);
-        self.entered.push(json!({"level": l, "step": self.step, "carry": taken.as_ref().map(|t| t.2.clone()),
-                                 "arrays": taken.as_ref().map(|t| t.3["arrays"].clone())}));
-        self.level = Some(LevelRun { index: l, piece, world, rec, step, steps: 0, ids, actions, zones, pending: Vec::new() });
+        self.entered.push(
+            json!({"level": l, "step": self.step, "carry": taken.as_ref().map(|t| t.2.clone()),
+                                 "arrays": taken.as_ref().map(|t| t.3["arrays"].clone())}),
+        );
+        self.level = Some(LevelRun {
+            index: l,
+            piece,
+            world,
+            rec,
+            step,
+            steps: 0,
+            ids,
+            actions,
+            zones,
+            pending: Vec::new(),
+        });
         Ok(())
     }
 
     /// The level's one step: its pending entries stamped at it, then its run; its done or lost after it.
     fn level_step(&mut self) -> Result<(), Value> {
-        let Some(level) = self.level.as_mut() else { return Ok(()) };
+        let Some(level) = self.level.as_mut() else {
+            return Ok(());
+        };
         let k = level.steps;
         for (control, value) in std::mem::take(&mut level.pending) {
             let seq = level.world.track.get(&control).map_or(0, Vec::len) as u32;
             level
                 .world
-                .append(Entry { t: k * level.step, seq, control, value: Given::Number(value), writer: "you".into(), player: 1, as_of: None, arrived: 0 })
+                .append(Entry {
+                    t: k * level.step,
+                    seq,
+                    control,
+                    value: Given::Number(value),
+                    writer: "you".into(),
+                    player: 1,
+                    as_of: None,
+                    arrived: 0,
+                })
                 .map_err(|e| json!({"ok": false, "code": "refused", "what": format!("{e:?}")}))?;
         }
         level.world.run_through(k * level.step, &mut level.rec);
@@ -487,7 +620,9 @@ impl<'a> Run<'a> {
         level.rec.fuel.clear();
         level.steps += 1;
         if let Some(trap) = level.world.failed().first() {
-            return Err(json!({"ok": false, "code": "logic.trap", "what": format!("{} trapped at its step {k}: {trap}", level_words(&self.shell.levels, level.index))}));
+            return Err(
+                json!({"ok": false, "code": "logic.trap", "what": format!("{} trapped at its step {k}: {trap}", level_words(&self.shell.levels, level.index))}),
+            );
         }
         if k == 0 {
             if let Some(e) = self.entered.last_mut() {
@@ -548,7 +683,8 @@ impl<'a> Run<'a> {
             self.screen_step += 1;
         }
         let plays = self.state.screen == PLAYING && self.transition == 0;
-        let runs = self.level.is_some() && (plays || (self.plants.pause_runs_clock && self.state.paused));
+        let runs =
+            self.level.is_some() && (plays || (self.plants.pause_runs_clock && self.state.paused));
         if runs {
             self.level_step()?;
         }
@@ -569,7 +705,11 @@ impl<'a> Run<'a> {
 
     /// The glyph a prompt shows now (Recipe: shell@1 game shell: Glyphs).
     pub fn glyph(&self, action: &str) -> &'static str {
-        let device = if self.plants.prompts_keep_keys { "keys" } else { self.device.unwrap_or("keys") };
+        let device = if self.plants.prompts_keep_keys {
+            "keys"
+        } else {
+            self.device.unwrap_or("keys")
+        };
         glyph(device, action)
     }
 
@@ -581,9 +721,23 @@ impl<'a> Run<'a> {
             Some(s) => {
                 let screen = &self.shell.screens[s];
                 let en = self.enabled(s);
-                let enabled: Vec<&str> = screen.controls.iter().zip(&en).filter(|(_, e)| **e).map(|(c, _)| c.id.as_str()).collect();
-                let prompts: Map<String, Value> = screen.prompts.iter().map(|p| (p.item.clone(), json!(self.glyph(&p.action)))).collect();
-                (self.focus.map(|f| screen.controls[f].id.clone()), json!(enabled), prompts)
+                let enabled: Vec<&str> = screen
+                    .controls
+                    .iter()
+                    .zip(&en)
+                    .filter(|(_, e)| **e)
+                    .map(|(c, _)| c.id.as_str())
+                    .collect();
+                let prompts: Map<String, Value> = screen
+                    .prompts
+                    .iter()
+                    .map(|p| (p.item.clone(), json!(self.glyph(&p.action))))
+                    .collect();
+                (
+                    self.focus.map(|f| screen.controls[f].id.clone()),
+                    json!(enabled),
+                    prompts,
+                )
             }
             None => (None, json!([]), Map::new()),
         };
@@ -675,7 +829,8 @@ fn along(c: &super::Control, b: &Box4, x: f64) -> f64 {
     let f = ((x - b[0]) / b[2].max(1e-9)).clamp(0.0, 1.0);
     let raw = c.range[0] + f * (c.range[1] - c.range[0]);
     if c.increment > 0.0 {
-        (c.range[0] + ((raw - c.range[0]) / c.increment).round() * c.increment).clamp(c.range[0], c.range[1])
+        (c.range[0] + ((raw - c.range[0]) / c.increment).round() * c.increment)
+            .clamp(c.range[0], c.range[1])
     } else {
         raw
     }
@@ -684,13 +839,37 @@ fn along(c: &super::Control, b: &Box4, x: f64) -> f64 {
 /// A level's actions, over its actions controls, each in its control's declaration order.
 fn actions_of(doc: &Value) -> Vec<Action> {
     let mut out = Vec::new();
-    for (id, c) in doc.get("controls").and_then(Value::as_object).into_iter().flatten() {
+    for (id, c) in doc
+        .get("controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         if c.get("kind").and_then(Value::as_str) != Some("actions") {
             continue;
         }
-        let strs = |v: Option<&Value>| v.and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect::<Vec<_>>();
-        for (index, (name, a)) in c.get("actions").and_then(Value::as_object).into_iter().flatten().enumerate() {
-            out.push(Action { control: id.clone(), index, name: name.clone(), keys: strs(a.get("keys")), pad: strs(a.get("pad")) });
+        let strs = |v: Option<&Value>| {
+            v.and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+        for (index, (name, a)) in c
+            .get("actions")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            out.push(Action {
+                control: id.clone(),
+                index,
+                name: name.clone(),
+                keys: strs(a.get("keys")),
+                pad: strs(a.get("pad")),
+            });
         }
     }
     out
@@ -699,20 +878,51 @@ fn actions_of(doc: &Value) -> Vec<Action> {
 /// A level's touch zones laid out in the view's pixels (Control: touch zones): each zone's action and box.
 fn zones_of(doc: &Value, [w, h]: [f64; 2]) -> Vec<(String, Box4)> {
     let mut out = Vec::new();
-    for c in doc.get("controls").and_then(Value::as_object).into_iter().flatten().map(|(_, c)| c) {
+    for c in doc
+        .get("controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .map(|(_, c)| c)
+    {
         if c.get("kind").and_then(Value::as_str) != Some("touch_zones") {
             continue;
         }
-        for (_, z) in c.get("zones").and_then(Value::as_object).into_iter().flatten() {
-            let Some(action) = z.pointer("/role/action").and_then(Value::as_str) else { continue };
-            let off = z.get("offset").and_then(Value::as_array).map_or([0.0, 0.0], |a| [a.first().and_then(Value::as_f64).unwrap_or(0.0), a.get(1).and_then(Value::as_f64).unwrap_or(0.0)]);
-            let (zw, zh) = match (z.pointer("/shape/circle/radius").and_then(Value::as_f64), z.pointer("/shape/rect")) {
+        for (_, z) in c
+            .get("zones")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            let Some(action) = z.pointer("/role/action").and_then(Value::as_str) else {
+                continue;
+            };
+            let off = z
+                .get("offset")
+                .and_then(Value::as_array)
+                .map_or([0.0, 0.0], |a| {
+                    [
+                        a.first().and_then(Value::as_f64).unwrap_or(0.0),
+                        a.get(1).and_then(Value::as_f64).unwrap_or(0.0),
+                    ]
+                });
+            let (zw, zh) = match (
+                z.pointer("/shape/circle/radius").and_then(Value::as_f64),
+                z.pointer("/shape/rect"),
+            ) {
                 (Some(r), _) => (2.0 * r, 2.0 * r),
-                (None, Some(r)) => (r.get("w").and_then(Value::as_f64).unwrap_or(48.0), r.get("h").and_then(Value::as_f64).unwrap_or(48.0)),
+                (None, Some(r)) => (
+                    r.get("w").and_then(Value::as_f64).unwrap_or(48.0),
+                    r.get("h").and_then(Value::as_f64).unwrap_or(48.0),
+                ),
                 _ => (48.0, 48.0),
             };
             // The zone's center: its anchor's point in the view, moved by its offset, x right and y down.
-            let at = match z.get("anchor").and_then(Value::as_str).unwrap_or("bottom_left") {
+            let at = match z
+                .get("anchor")
+                .and_then(Value::as_str)
+                .unwrap_or("bottom_left")
+            {
                 "top_left" => [0.0, 0.0],
                 "top_right" => [w, 0.0],
                 "bottom_right" => [w, h],
@@ -723,7 +933,10 @@ fn zones_of(doc: &Value, [w, h]: [f64; 2]) -> Vec<(String, Box4)> {
                 _ => [0.0, h],
             };
             let center = [at[0] + off[0], at[1] + off[1]];
-            out.push((action.to_string(), [center[0] - zw / 2.0, center[1] - zh / 2.0, zw, zh]));
+            out.push((
+                action.to_string(),
+                [center[0] - zw / 2.0, center[1] - zh / 2.0, zw, zh],
+            ));
         }
     }
     out
@@ -754,9 +967,11 @@ pub fn play(
         Ok(s) => s,
         Err(r) => {
             let spec = call.get("shell").cloned().unwrap_or(json!({}));
-            return Ok(json!({"shell": {"journey": spec.get("journey"), "device": spec.get("device"), "size": spec.get("size"),
+            return Ok(
+                json!({"shell": {"journey": spec.get("journey"), "device": spec.get("device"), "size": spec.get("size"),
                                        "refused": {"code": r["code"], "message": r["message"], "level": r.get("level"), "array": r.get("array")},
-                                       "steps": [], "screens": {}, "entered": [], "carry": [], "track": [], "recording": null}}))
+                                       "steps": [], "screens": {}, "entered": [], "carry": [], "track": [], "recording": null}}),
+            );
         }
     };
     super::journey::play(&shell, stored, call, screens, plants)
