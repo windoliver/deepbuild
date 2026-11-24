@@ -62,6 +62,33 @@ pub const TABLE: [(&str, &str, &[&str]); 15] = [
     ("running", "running", &[]),
 ];
 
+/// The causes of the states a claim gives, and of a task not started (session.state's `cause`): the row is that state
+/// alone, with no claim beside it.
+const CLAIMED: [&str; 8] = [
+    "sent_back",
+    "blocked",
+    "invalid",
+    "inconclusive",
+    "stale",
+    "says_done",
+    "pass",
+    "queued",
+];
+
+/// A core `session.state`'s state, cause and status-map entry (#1456): the entry it carries, or for one recorded before
+/// it carried one, the entry [`TABLE`] gives its state.
+fn listed_of(data: &Value) -> (String, String, &'static str) {
+    let word = |key: &str| data[key].as_str().unwrap_or_default().to_owned();
+    let entry = match data["entry"].as_str() {
+        Some(entry) => entry_of(entry),
+        None => TABLE
+            .iter()
+            .find(|(known, ..)| *known == word("state"))
+            .map_or("running", |(_, entry, _)| entry),
+    };
+    (word("state"), word("cause"), entry)
+}
+
 /// A state word the hub sends (#2403), drawn in the language shown: every word of [`TABLE`] but the five verdict words,
 /// which stay as written, as does a word the table doesn't hold. The word itself stays the state's code: nothing
 /// decides a state by the words drawn.
@@ -536,9 +563,9 @@ struct Start {
 struct Session {
     /// The newest time its events give, but for the core's `session.state` and `session.gone` (#992).
     last_seen: Option<u64>,
-    /// The state and cause the core last recorded for it as `session.state` (#992), from the one reading over the
-    /// record that `deep status` lists.
-    listed: Option<(String, String)>,
+    /// The state, cause and status-map entry the core last recorded for it as `session.state` (#992), from the one
+    /// reading over the record that `deep status` lists.
+    listed: Option<(String, String, &'static str)>,
     /// The state its newest session.attention gives.
     attention: Option<String>,
     /// The `log_pos` of its newest activity: an attention, a tool call or a prompt.
@@ -600,12 +627,11 @@ impl Table {
                 let Some(session) = event["session"].as_str() else {
                     return false;
                 };
-                let word = |key: &str| data[key].as_str().unwrap_or_default().to_owned();
                 event["writer"] == "core"
                     && self
                         .sessions
                         .get(session)
-                        .is_some_and(|held| held.listed == Some((word("state"), word("cause"))))
+                        .is_some_and(|held| held.listed == Some(listed_of(data)))
             }
             _ => false,
         }
@@ -883,44 +909,31 @@ impl Table {
             Some(own) if !self.asks_you(session) => own.read(own.work),
             _ => self.state(session),
         };
-        let Some((listed, cause)) = self.sessions.get(session).and_then(|s| s.listed.as_ref())
+        let Some((listed, cause, entry)) =
+            self.sessions.get(session).and_then(|s| s.listed.as_ref())
         else {
             return (claim.text(now), claim.entry());
         };
         // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
         let planted = crate::plain::planted("waiting-as-working");
-        // A claim's word the core recorded as the session's state (#2018) is the row's, with the table's entry: the
-        // app adds no reading of the claim of its own beside it.
-        if let Some((word, entry, _)) = TABLE.iter().find(|(word, ..)| {
-            *word == listed
-                && ![
-                    "needs you", // copy-exception: a state code
-                    "stuck",
-                    "flagged",
-                    "working",
-                    "finished",
-                    "quiet",
-                ]
-                .contains(word)
-        }) {
-            return (shown(word).to_owned(), entry);
+        // A claim's state or a task not started, which the core recorded as the session's (#2018), is the row's, with
+        // the entry it was sent: the app adds no reading of the claim of its own beside it.
+        if CLAIMED.contains(&cause.as_str()) {
+            return (shown(listed).to_owned(), entry);
         }
-        let (word, entry) = match listed.as_str() {
-            _ if planted && cause == "waiting" => (shown("working").to_owned(), "running"),
-            "needs you" => (shown(listed).to_owned(), "needs_you"),
-            "stuck" => (shown("stuck").to_owned(), "blocked"),
-            "flagged" if cause == "gone" => (copy::text("states.flagged_gone").to_owned(), "fail"),
-            "flagged" => (shown("flagged").to_owned(), "fail"),
-            "finished" => (shown("finished").to_owned(), "idle"),
+        // The word and entry it was sent (#1456), read by its cause, a code: never by matching the word.
+        let (word, entry) = match cause.as_str() {
+            "waiting" if planted => (shown("working").to_owned(), "running"),
+            "gone" => (copy::text("states.flagged_gone").to_owned(), *entry),
             "quiet" => {
                 let last_seen = self
                     .sessions
                     .get(session)
                     .and_then(|s| s.last_seen)
                     .unwrap_or(0);
-                (State::Quiet { last_seen }.text(now), "idle")
+                (State::Quiet { last_seen }.text(now), *entry)
             }
-            _ => (shown("working").to_owned(), "running"),
+            _ => (shown(listed).to_owned(), *entry),
         };
         match claim {
             State::SaysDone { .. }
@@ -1119,8 +1132,7 @@ impl Session {
         // The core's reading of its state and its finding the process gone (#992) are no sign of the session.
         if kind == "session.state" || kind == "session.gone" {
             if kind == "session.state" && event["writer"] == "core" {
-                let word = |key: &str| data[key].as_str().unwrap_or_default().to_owned();
-                self.listed = Some((word("state"), word("cause")));
+                self.listed = Some(listed_of(data));
             }
             return;
         }

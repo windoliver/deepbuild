@@ -21,7 +21,7 @@ import { alive as running } from '@deepbuild/supervisor';
 import { sessionHomes } from './codex-settings.js';
 
 import { sessionStates, statusRows, WAITING_QUIET_MS, type StatusRow } from './status.js';
-import { buildRows, distinctTitles, jobRow, listRows, orderOf, rowVersion, settle, whyOf, type Placed, type Row, type RunningJob } from './rows.js';
+import { buildRows, distinctTitles, ENTRY, jobRow, listRows, orderOf, rowVersion, settle, whyOf, type Placed, type Row, type RunningJob } from './rows.js';
 
 import { commitsBetween, headOf } from './session-facts.js';
 
@@ -287,7 +287,7 @@ export class SessionState {
     if (meta.event === 'PreCompact') this.compacting.set(meta.session, turn);
     else if (meta.event === 'PostCompact' || meta.event === 'SessionEnd') this.compacting.delete(meta.session);
     // Kept under the hook's own ID, so the copy deep-hook spooled when the hub was late is known at its replay.
-    if (verified && meta.reading && !again) void this.options.events.appendReading(meta.session, meta.agent, meta.reading, meta.id).catch(() => undefined);
+    if (verified && meta.reading && !again) void this.options.events.appendReading(meta.session, meta.agent, meta.reading, meta.id, meta.readingCode).catch(() => undefined);
     // The agent's own title for the session (#2018), when its hook says a new one; a subagent's hook names no session.
     if (verified && meta.fields?.session_title && !meta.fields.agent_id) void this.agentTitled(meta.session, meta.agent, meta.fields.session_title).catch(() => undefined);
     // The record reads these states from the hook events themselves; only unknown, below, is the core's to append.
@@ -552,7 +552,7 @@ export class SessionState {
           const state = `${r.state}/${r.cause}`;
           if (this.states.get(r.id) === state) return;
           const ts = this.options.services.now();
-          await this.options.events.append(this.options.events.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 2, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
+          await this.options.events.append(this.options.events.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 3, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause, entry: ENTRY[r.state] } });
           this.states.set(r.id, state);
         }),
         ...changed.map(async (p) => {

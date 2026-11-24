@@ -1930,7 +1930,7 @@ class AsksCore implements Asks {
   /** Why a shared task's resume skipped a session (#85), kept as the session's reading so its row says so. */
   private async skipped(stop: Stop, task: string, why: string, now: number): Promise<void> {
     await this.options.record.append({ ...CORE, ...stop.who, session: stop.session }, {
-      v: 1, id: ulid(now), kind: 'session.reading', subject: `session:${letters(stop.session)}`, ts: now, data: { reading: `DeepBuild didn't resume this session when ${task} closed: ${why}.` },
+      v: 2, id: ulid(now), kind: 'session.reading', subject: `session:${letters(stop.session)}`, ts: now, data: { reading: `DeepBuild didn't resume this session when ${task} closed: ${why}.`, code: 'other' },
     });
   }
   /** The continue the core starts in a stopped session: recorded first; the hub reads it and takes the route (#25). */

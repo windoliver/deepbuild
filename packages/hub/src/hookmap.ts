@@ -391,6 +391,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       // What Codex says beside a turn is a reading, which is no event of its turn: it names the hook it came from.
       const said = kind === 'turn.interrupted' ? 'you interrupted this turn' : kind === 'subagent.start' ? `subagent ${str(payload.agent_id) || 'unknown'} (${str(mapped.type) || 'unknown'}) started` : `the context compacts (${str(mapped.trigger) || 'unknown'})`;
       meta.reading = `${request.event}: ${scrub(said)}`;
+      if (kind === 'turn.interrupted') meta.readingCode = 'interrupted';
       return { kind: 'hook', drafts: [], meta };
     }
     case 'agent.stop':
