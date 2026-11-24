@@ -1,0 +1,54 @@
+== head a7db2f5bf933484547094d954d1dade13d9c2cfa, Sun Nov 22 07:49:44 PM PST 2026: DEEP_TEST_COW_DIR=/var/tmp (the base's default, as before) cargo test -p deep-hook --test cli --locked
+   Compiling deep-hook v0.0.0 (<home>/scratch-3170-proof/clone/crates/deep-hook)
+    Finished `test` profile [unoptimized] target(s) in 0.55s
+     Running tests/cli.rs (target/debug/deps/cli-98237dd63eb7de05)
+
+running 30 tests
+cp: failed to clone '/var/tmp/deep-hook-clone-2319769/probe.copy' from '/var/tmp/deep-hook-clone-2319769/probe': Operation not supported
+test a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot ... FAILED
+test a_call_with_no_agent_and_event_never_claims_success ... ok
+test a_hook_the_agent_runs_through_sh_names_the_agent_as_its_parent ... ok
+test a_line_denied_for_its_nested_syntax_names_that_bound ... ok
+test a_hook_with_no_shell_call_is_spooled_whatever_rules_json_does ... ok
+test a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it ... ok
+test help_marks_the_skeleton ... ok
+test a_spool_path_that_leads_elsewhere_is_never_written ... ok
+test a_rules_json_removed_after_setup_is_denied_with_the_hub_away_and_read_again_once_a_hub_says_hello ... ok
+test a_call_naming_links_that_loop_is_ruled_by_what_matches_with_the_hub_away ... ok
+test the_mcp_servers_facts_name_a_tools_path_arguments_only_for_a_server_loaded_as_they_describe_it ... ok
+test the_shipped_rules_carry_a_workflow_dispatch_to_the_authority_gate ... ok
+test a_call_whose_guard_rules_cannot_be_read_is_denied ... ok
+test a_call_whose_guard_rules_cannot_be_read_is_denied_with_the_hub_answering_too ... ok
+test a_call_its_agent_sends_past_the_watchdog_is_still_spooled ... ok
+test inline_programs_and_shells_fed_what_the_line_cant_say_meet_the_floor_with_the_hub_away ... ok
+test runners_fetched_and_written_programs_meet_the_floor_with_the_hub_away ... ok
+test a_reply_outside_hook_reply_2_is_the_hub_away ... ok
+test a_hook_whose_stdin_never_ends_is_allowed_within_the_deadline ... ok
+test a_call_still_unread_at_the_deadline_is_denied_while_a_fail_closed_entry_is_installed ... ok
+test a_call_whose_guard_rules_stall_is_denied_within_the_deadline ... ok
+test an_entry_deep_hook_cannot_read_whole_meets_every_call_and_holds_by_its_mode ... ok
+test a_hook_given_no_time_past_the_watchdog_with_its_call_sent_is_still_spooled ... ok
+test a_line_nested_deeper_than_the_stack_holds_is_denied_as_unread ... ok
+test a_hub_that_never_says_hello_holds_a_call_for_a_removed_rules_json_no_longer_than_the_design_allows ... ok
+test a_print_runs_waiter_under_its_entrys_shell_exits_at_once ... ok
+test a_call_whose_acknowledged_hold_runs_out_is_still_spooled ... ok
+test a_print_mode_agents_waiter_exits_at_once ... ok
+test a_hold_past_the_contract_is_the_hub_away ... ok
+test an_acknowledgement_of_another_request_is_the_hub_away ... ok
+
+failures:
+
+---- a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot stdout ----
+
+thread 'a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot' (2319780) panicked at crates/deep-hook/tests/cli.rs:1362:9:
+BLOCKED: /var/tmp can't make a reflink copy; set DEEP_TEST_COW_DIR to a folder on btrfs or XFS with reflink
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot
+
+test result: FAILED. 29 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.02s
+
+error: test failed, to rerun pass `-p deep-hook --test cli`
+== exit 101

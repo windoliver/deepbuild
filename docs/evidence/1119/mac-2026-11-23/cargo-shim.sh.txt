@@ -1,0 +1,10 @@
+#!/bin/bash
+# Observation only (#1119 readings): logs each cargo call, its stderr and cargo's own fingerprint reasons
+# (CARGO_LOG, filtered out of what the caller sees), then runs the real cargo unchanged.
+real="$HOME/.cargo/bin/cargo"
+dir="$DEEP_1119_CARGO_LOG"
+if [ -z "$dir" ] || [ ! -d "$dir" ]; then exec "$real" "$@"; fi
+f="$dir/$(date +%Y%m%dT%H%M%S)-$$.log"
+{ printf 'at: %s\ncwd: %s\nCARGO_TARGET_DIR: %s\nargv: cargo' "$(date -u +%FT%TZ)" "$PWD" "${CARGO_TARGET_DIR-<unset>}"; printf ' %q' "$@"; printf '\n--- stderr ---\n'; } > "$f"
+export CARGO_LOG="${CARGO_LOG:+$CARGO_LOG,}cargo::compiler::fingerprint=info"
+exec "$real" "$@" 2> >(tee -a "$f" | /usr/bin/grep --line-buffered -v "cargo::compiler::fingerprint" >&2)

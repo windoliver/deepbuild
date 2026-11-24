@@ -2703,6 +2703,17 @@ impl Render for Shipped {
                     Option<crate::list::Doing>,
                     Option<String>,
                 );
+                // Its taste calls answered where none of their pictures was drawn (#3234), read beside the return card.
+                // #3234's planted card reads them as answers from the card.
+                let unseen: Vec<String> =
+                    crate::record::with_view(|view| view.table().unseen(&session).to_vec())
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|_| !crate::plain::planted("unseen-reads-as-card"))
+                        .map(|question| {
+                            copy::fill("views.call_unseen", &[&crate::question::visible(&question)])
+                        })
+                        .collect();
                 let (problem, readings, listed, doing, flagged): Read =
                     crate::record::with_view(|view| {
                         let table = view.table();
@@ -2811,7 +2822,13 @@ impl Render for Shipped {
                         div()
                             .flex()
                             .flex_col()
-                            .child(reads("return-card", &shown))
+                            .child(reads(
+                                "return-card",
+                                &std::iter::once(shown.clone())
+                                    .chain(unseen)
+                                    .collect::<Vec<_>>()
+                                    .join(" · "),
+                            ))
                             .children(bound_values(bound::Surface::Card, chrome, false)),
                     )
                     .children(tab)

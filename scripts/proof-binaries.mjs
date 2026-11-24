@@ -67,6 +67,9 @@ function sourceSlice(file, source, requested) {
 // package, which reaches the hub through ../src.
 const HUB_BINARIES = ['deep-hook', 'deep-show'];
 const HUB_ENTRY = /(?<![\w.@-])packages\/(?:hub|cli)(?![\w-]|\.\w)|(?<![\w./@-])@deepbuild\/(?:hub|cli)(?![\w-]|\.\w)/;
+// A test file named as a path from the checkout's root, which a test may run in a child Vitest, as #3178's meta-test
+// runs its rows (#3293): followed as an import is.
+const TEST_FILE = /^(?:tests|packages\/[^/]+\/test)\/(?:[^/]+\/)*[^/]+\.test\.(?:[cm]?[jt]s|tsx)$/;
 
 /** Selected tests' DEEP_BIN_DIR binaries, for a run in the checkout itself, which keeps its own target/. */
 export const binaryNames = (cwd, patterns) => selectBinaries(cwd, patterns, false).bin;
@@ -152,6 +155,7 @@ export function selectBinaries(cwd, patterns, hubBinaries = true, findBuilds = f
           if (ts.isStringLiteralLike(node)) {
             own.push(node.text);
             names(node.text);
+            if (TEST_FILE.test(node.text) && existsSync(resolve(cwd, node.text))) queue.push({ path: node.text, requested: null });
           }
           ts.forEachChild(node, visit);
         };

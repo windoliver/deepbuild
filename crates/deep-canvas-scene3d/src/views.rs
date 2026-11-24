@@ -307,6 +307,9 @@ pub fn seen_into(s: &mut Scene, scene: &Scene, v: &View) {
     s.camera = camera;
     s.size = size;
     s.jitter = [scene.jitter[0] * k, scene.jitter[1] * k];
+    // #3034: a view is under water by its own eye.
+    let eye = s.camera.eye;
+    s.under = scene.water.as_ref().and_then(|w| w.under(eye));
     s.views.clear();
     s.light_cut = None;
     s.overlays.clear();

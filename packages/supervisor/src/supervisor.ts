@@ -18,7 +18,7 @@ import { alive, HELPER, scan, sha256, startNow, table, tokenOf, type Proc } from
 import { bubblewrapWith } from './bubblewrap.js';
 import type { Egress } from './egress.js';
 import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
-import type { Cleanup, Exit, Grant, HostFacts, LimitStop, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions } from './types.js';
+import type { Cleanup, Exit, Grant, HostFacts, LimitStop, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions, Used } from './types.js';
 
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
 const DAY = 86_400_000;
@@ -94,12 +94,21 @@ interface Run {
   stopping?: Promise<void>;
   /** Its first process, as the watcher names its ends: a run with a file limit on macOS. */
   watched?: number;
+  /** What its scans read of its use (#3220). */
+  usage: Usage;
   child?: ChildProcess;
   exit?: Promise<Exit>;
   state: RunStatus['state'];
 }
+/** What a tree's scans read (#3220): the highest sum of its processes' memory one scan read, in bytes, and each process's CPU nanoseconds as last read. */
+interface Usage { peak?: number; cpu: Map<number, number> }
 /** A run with nothing of it recorded yet: sandboxed, no token, no process, no lease. */
-const blank = (run: string, cwd: string, state: Run['state']): Run => ({ run, cwd, sandboxed: true, token: null, tracked: new Map(), ended: new Set(), gone: [], leases: [], state });
+const blank = (run: string, cwd: string, state: Run['state']): Run => ({ run, cwd, sandboxed: true, token: null, tracked: new Map(), ended: new Set(), gone: [], leases: [], state, usage: { cpu: new Map() } });
+/** What a tree used, from its scans' readings: null for what no scan read, never 0. */
+const usedOf = (u: Usage): Used => {
+  const ns = u.cpu.size ? [...u.cpu.values()].reduce((a, b) => a + b, 0) : undefined;
+  return { memory_peak_mb: u.peak === undefined ? null : Math.round(u.peak / MIB), cpu_s: ns === undefined ? null : Math.round(ns / 1e6) / 1000 };
+};
 /** A pool key's name, `kind:key`, as its kind and key. */
 const parts = (name: string): { kind: string; key: string } => {
   const at = name.indexOf(':');
@@ -112,6 +121,8 @@ interface Waiter { spec: StartSpec; on: string[]; resolve(started: Started | Pro
 class LocalSupervisor implements Supervisor {
   readonly name = 'local';
   private readonly runs = new Map<string, Run>();
+  /** Leased commands' process groups each scan reads as their runs' trees (#3220), by run: never owned or stopped here. */
+  private readonly followed = new Map<string, { pgid: number; usage: Usage }>();
   private readonly kinds = new Map<string, ResourceKind>();
   private readonly keys = new Map<string, Key>();
   private readonly waiters: Waiter[] = [];
@@ -355,7 +366,7 @@ class LocalSupervisor implements Supervisor {
     // One timed scan at a time: on a loaded machine a scan outlasts the interval, and queued ones would pile up
     // without end in front of a cleanup's own scan.
     const beat = (): void => {
-      if (!this.scanned().length) {
+      if (!this.scanned().length && !this.followed.size) {
         clearInterval(this.timer);
         this.timer = undefined;
         return;
@@ -792,14 +803,19 @@ class LocalSupervisor implements Supervisor {
     if (this.options.plant === 'records-only-started' || this.closed) return this.scanning;
     const next = this.scanning.then(async () => {
       const live = this.scanned();
-      if (!live.length) return;
+      const groups = [...this.followed.values()];
+      if (!live.length && !groups.length) return;
       const bytes = new Map<number, number>();
-      const found = await scan(live.map((r) => markerOf(r.run)), bytes);
-      // A run past its memory is stopped: the sum over every process its sandbox holds, the scan's own reading.
+      const cpu = new Map<number, number>();
+      // A leased command's group in the same helper call: following it starts no process of its own (#3220).
+      const found = await scan([...live.map((r) => markerOf(r.run)), ...groups.map((g) => `pgid:${g.pgid}`)], bytes, cpu);
+      for (const g of groups) this.sample(g.usage, found.get(`pgid:${g.pgid}`) ?? [], bytes, cpu);
       for (const r of live) {
+        const pids = found.get(markerOf(r.run)) ?? [];
+        const reading = r.state === 'cleaned' ? 0 : this.sample(r.usage, pids, bytes, cpu);
+        // A run past its memory is stopped: the sum over every process its sandbox holds, the scan's own reading.
         const cap = r.limits?.memory_mb;
         if (cap === undefined || r.limited || r.state === 'cleaned') continue;
-        const reading = (found.get(markerOf(r.run)) ?? []).reduce((sum, pid) => sum + (bytes.get(pid) ?? 0), 0);
         if (reading > cap * MIB) this.stopAtLimit(r, 'memory_mb', reading / MIB);
       }
       const held = live.flatMap((r) => (found.get(markerOf(r.run)) ?? []).map((pid) => ({ r, pid })));
@@ -813,6 +829,19 @@ class LocalSupervisor implements Supervisor {
     });
     this.scanning = next.catch(() => undefined);
     return next;
+  }
+
+  /**
+   * One scan's reading of a tree into what it used (#3220): the sum of its processes' memory, kept when it is the highest
+   * yet, and each process's CPU as last read. A scan that found none of its processes reads nothing. The planted wrong
+   * program keeps the first sample as the peak.
+   */
+  private sample(u: Usage, pids: readonly number[], bytes: Map<number, number>, cpu: Map<number, number>): number {
+    const reading = pids.reduce((sum, pid) => sum + (bytes.get(pid) ?? 0), 0);
+    if (!pids.length) return reading;
+    if (u.peak === undefined || (reading > u.peak && this.options.plant !== 'scan-keeps-first-sample')) u.peak = reading;
+    for (const pid of pids) { const ns = cpu.get(pid); if (ns !== undefined && ns >= (u.cpu.get(pid) ?? 0)) u.cpu.set(pid, ns); }
+    return reading;
   }
 
   /** What the run owns that it can prove now: each tracked process by its start time (and token), and its group's members. */
@@ -922,6 +951,24 @@ class LocalSupervisor implements Supervisor {
     // Its process group at once, as the group's own members see a group signal; then each proven process outside it.
     if (r.pgid !== undefined && proven.some((p) => p.pgid === r.pgid)) try { process.kill(-r.pgid, signal); } catch { /* gone */ }
     for (const p of proven) if (p.pgid !== r.pgid) try { process.kill(p.pid, signal); } catch { /* gone */ }
+  }
+
+  used(run: string): Used | undefined {
+    const u = this.runs.get(run)?.usage ?? this.followed.get(run)?.usage;
+    return u && usedOf(u);
+  }
+  follow(run: string, pgid: number): void {
+    if (this.closed || !Number.isInteger(pgid) || pgid < 2) return;
+    this.followed.set(run, { pgid, usage: { cpu: new Map() } });
+    this.scanSoon();
+  }
+  async unfollow(run: string): Promise<Used | undefined> {
+    const g = this.followed.get(run);
+    if (!g) return undefined;
+    // The scan in flight lands first, so a reading taken just before the group ended still counts.
+    await this.scanning;
+    this.followed.delete(run);
+    return usedOf(g.usage);
   }
 
   async lives(run: string): Promise<boolean> {

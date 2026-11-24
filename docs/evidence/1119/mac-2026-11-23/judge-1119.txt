@@ -1,0 +1,4 @@
+issue #1119 is OPEN; origin/main = 2fb3fe996c4ae1b1e3989ece30a8024a78042186
+held   AC1 #1119.a84127b8 [ ] A perf run from a second worktree on the same machine compiles 0 crate… <- tests/acceptance/1119/warm.test.mjs
+held   AC2 #1119.d33bc868 [ ] The one exception: deep-show and its dependents rebuild when the canva… <- tests/acceptance/1119/ledger.test.mjs
+UNHELD AC3 #1119.d289b927 [ ] perf wall time before and after is a reading… <- no test on main names it
