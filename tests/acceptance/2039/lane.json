@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: each file builds deep-canvas-render or deep-show with cargo into this checkout's target/ and copies it out; ac4-budget.test.ts is a timed file" }
