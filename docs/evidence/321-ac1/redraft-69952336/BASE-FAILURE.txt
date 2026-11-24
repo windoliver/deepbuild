@@ -1,0 +1,99 @@
+#321.69952336 at the base debda22a6ef976bd7ce20a92e005272406accf23 (no implementation of #321)
+
+Run on Linux (Node v24.22.0), 2026-11-24, after
+  npm ci && npm run build --workspaces && CARGO_BUILD_JOBS=1 RUSTC_WRAPPER= cargo build --locked -q -p deep-hook
+with
+  CARGO_BUILD_JOBS=1 RUSTC_WRAPPER= npx vitest run --root tests/acceptance/321-redraft-ac1 --no-file-parallelism
+
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/321-redraft-ac1/tsconfig.json exits 0 with no
+errors (the suite imports no package code; it reaches the hub and deep-hook as processes).
+
+Result: 3 of 3 tests fail, each for the expected reason:
+
+1. The push: the stop ending on "want me to push to main?" gets an empty reply (exit 0, no decision), so the turn
+   ends: the base has no sorter for questions at the stop and ignores DEEP_HUB_TEST_SORTER, so nothing answers
+   "proceed" and nothing records one.
+2. The tests: the same, for "want me to run the tests?".
+3. The wrong program: the hub refuses DEEP_HUB_PLANT=proceed-covers-turn ("names no planted program"), so the test
+   fails at the hub's start, never passes.
+
+A probe of the harness at the base (a throwaway test, deleted after) showed the rest of the path working: the
+session's SessionStart, prompt, Edit and Stop all reach the record (session.start, user.ask, tool.before/after,
+agent.stop with did_work true, turn 1), and the turn's `git push origin main` PreToolUse is allowed (exit 0, empty
+stdout) and recorded as tool.before kind shell, with no ask in inbox.read. So at the base the push would also run
+with no authority ask: once a proceed exists, the push judgement is what catches a core that lets it cover the turn.
+
+---- vitest output ----
+
+ RUN  v5.0.5 <repo>/tests/acceptance/321-redraft-ac1
+
+ ❯ proceed.test.ts (3 tests | 3 failed) 4194ms
+   ❯ #321.69952336 a proceed never covers a call that needs authority (2)
+     × #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer 412ms
+     × #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask 290ms
+   ❯ #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts (1)
+     × #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call 497ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer
+Error: the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 29 ms, stdout "", stderr "")
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:52:3
+ ❯ judgePush proceed.test.ts:74:9
+ ❯ proceed.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask
+Error: the stop ending on "want me to run the tests?" was not answered proceed: its reply let the turn end (exit 0 after 6 ms, stdout "", stderr "")
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:52:3
+ ❯ judgeTests proceed.test.ts:105:9
+ ❯ proceed.test.ts:125:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call
+Error: BLOCKED: the hub with DEEP_HUB_PLANT=proceed-covers-turn (the planted wrong program) did not start: file://<repo>/packages/hub/dist/plant.js:24
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=proceed-covers-turn names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:24:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:718:19)
+    at hubCommand (file://<repo>/packages/hub/dist/index.js:41:28)
+    at file://<repo>/packages/cli/dist/main.js:166:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:177:11
+    175|   ]);
+    176|   if (!ready || ready.ready !== true) {
+    177|     throw Error(`BLOCKED: the hub${o.plant ? ` with DEEP_HUB_PLANT=${o…
+       |           ^
+    178|   }
+    179|   return { home, socket: String(ready.socket), pid: Number(ready.pid),…
+ ❯ world proceed.test.ts:33:15
+ ❯ proceed.test.ts:133:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  00:23:09
+   Duration  4.68s (tests 97%, transform 2%, import 1%)
+

@@ -1,0 +1,73 @@
+[build seam 0]
+ 01:06:08 up 4 days,  4:42,  5 users,  load average: 162.74, 175.00, 166.67
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-ac1-70212996
+
+ ✓ wrong.test.ts > #321.70212996 a "proceed" never covers a call that needs authority: the wrong program > #321.70212996 a core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails this test, naming the call 3763ms
+ × proceed.test.ts > #321.70212996 a "proceed" never covers a call that needs authority > #321.70212996 the planted sorter proceeds on "want me to push to main?", recorded with its rule; the push in its turn is held at PreToolUse with an authority ask until your yes and its 10 s hold, a try during the hold is refused, the push then runs; after its proceed on "want me to run the tests?", npm test runs with no ask 4737ms
+   → `git push origin main` was let through at PreToolUse before any answer of yours, in the turn the "proceed" for "Want me to push to main?" started: a push needs authority whatever a sorter answered, so it must be held with an authority ask until your yes and its hold end. deep-hook said: exit 0, stdout "", stderr "deep-hook: spooled 01M86CWNJ4ZTM7V2DD8542QY83, but its sync didn't finish within the hook's 50 ms\n"
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.70212996 a "proceed" never covers a call that needs authority > #321.70212996 the planted sorter proceeds on "want me to push to main?", recorded with its rule; the push in its turn is held at PreToolUse with an authority ask until your yes and its 10 s hold, a try during the hold is refused, the push then runs; after its proceed on "want me to run the tests?", npm test runs with no ask
+AssertionError: `git push origin main` was let through at PreToolUse before any answer of yours, in the turn the "proceed" for "Want me to push to main?" started: a push needs authority whatever a sorter answered, so it must be held with an authority ask until your yes and its hold end. deep-hook said: exit 0, stdout "", stderr "deep-hook: spooled 01M86CWNJ4ZTM7V2DD8542QY83, but its sync didn't finish within the hook's 50 ms\n"
+ ❯ pushedEarly scenario.ts:95:46
+
+ ❯ scenario scenario.ts:108:7
+ ❯ proceed.test.ts:12:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 1 passed (2)
+   Start at  01:06:10
+   Duration  8.99s (tests 99%, import 1%)
+
+[seam run 1 exit 1] Tue Nov 24 01:06:19 AM PST 2026
+ 01:06:19 up 4 days,  4:42,  5 users,  load average: 163.00, 174.65, 166.65
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-ac1-70212996
+
+ × proceed.test.ts > #321.70212996 a "proceed" never covers a call that needs authority > #321.70212996 the planted sorter proceeds on "want me to push to main?", recorded with its rule; the push in its turn is held at PreToolUse with an authority ask until your yes and its 10 s hold, a try during the hold is refused, the push then runs; after its proceed on "want me to run the tests?", npm test runs with no ask 3561ms
+   → the stop that ends on "Want me to push to main?" must be answered "proceed" by the planted sorter (DEEP_HUB_TEST_SORTER=planted-proceed-every-question), in the stop's reply that keeps the agent working (decision block, its reason saying proceed); deep-hook said: exit 0, stdout "", stderr "deep-hook: spooled 01M86CWTJKSM8Q39V45YJAR26S, but its sync didn't finish within the hook's 50 ms\n": expected false to be true // Object.is equality
+ ✓ wrong.test.ts > #321.70212996 a "proceed" never covers a call that needs authority: the wrong program > #321.70212996 a core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails this test, naming the call 3221ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.70212996 a "proceed" never covers a call that needs authority > #321.70212996 the planted sorter proceeds on "want me to push to main?", recorded with its rule; the push in its turn is held at PreToolUse with an authority ask until your yes and its 10 s hold, a try during the hold is refused, the push then runs; after its proceed on "want me to run the tests?", npm test runs with no ask
+AssertionError: the stop that ends on "Want me to push to main?" must be answered "proceed" by the planted sorter (DEEP_HUB_TEST_SORTER=planted-proceed-every-question), in the stop's reply that keeps the agent working (decision block, its reason saying proceed); deep-hook said: exit 0, stdout "", stderr "deep-hook: spooled 01M86CWTJKSM8Q39V45YJAR26S, but its sync didn't finish within the hook's 50 ms\n": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectProceed scenario.ts:35:249
+
+ ❯ scenario scenario.ts:87:3
+ ❯ proceed.test.ts:12:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 1 passed (2)
+   Start at  01:06:20
+   Duration  7.29s (tests 98%, import 1%, transform 1%)
+
+[seam run 2 exit 1] Tue Nov 24 01:06:27 AM PST 2026
+ 01:06:27 up 4 days,  4:42,  5 users,  load average: 167.19, 175.10, 166.88
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-ac1-70212996
+
+ ✓ proceed.test.ts > #321.70212996 a "proceed" never covers a call that needs authority > #321.70212996 the planted sorter proceeds on "want me to push to main?", recorded with its rule; the push in its turn is held at PreToolUse with an authority ask until your yes and its 10 s hold, a try during the hold is refused, the push then runs; after its proceed on "want me to run the tests?", npm test runs with no ask 20061ms
+ ✓ wrong.test.ts > #321.70212996 a "proceed" never covers a call that needs authority: the wrong program > #321.70212996 a core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails this test, naming the call 3580ms
+
+ Test Files  2 passed (2)
+      Tests  2 passed (2)
+   Start at  01:06:28
+   Duration  24.05s (tests 100%)
+
+[seam run 3 exit 0] Tue Nov 24 01:06:53 AM PST 2026

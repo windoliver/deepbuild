@@ -1,0 +1,138 @@
+tree dc8625b09d2148426167adce0d5346d21d26f820 + holds.ts seam Tue Nov 24 12:35:21 AM PST 2026
+[build 0]
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-redraft-ac1
+
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer 543ms
+   → the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 38 ms, stdout "", stderr "deep-hook: spooled 01M86B4Y0FYCFYC64ZTJAQSQ92, but its sync didn't finish within the hook's 50 ms\n")
+ ✓ proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask 4236ms
+ × proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call 1552ms
+   → and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer
+Error: the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 38 ms, stdout "", stderr "deep-hook: spooled 01M86B4Y0FYCFYC64ZTJAQSQ92, but its sync didn't finish within the hook's 50 ms\n")
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:52:3
+ ❯ judgePush proceed.test.ts:74:9
+ ❯ proceed.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call
+AssertionError: and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+- Expected:
+/`git push origin main` ran in the turn/
+
++ Received:
+"the stop ending on \"want me to push to main?\" was not answered proceed: its reply let the turn end (exit 0 after 71 ms, stdout \"\", stderr \"deep-hook: spooled 01M86B541BM1GB3N0HWCKJS6JF, but its sync didn't finish within the hook's 50 ms\\n\")"
+
+ ❯ proceed.test.ts:136:75
+    134|     const failure = await failureOf(() => judgePush(w));
+    135|     expect(failure, 'the planted core that lets a proceed cover its tu…
+    136|     expect(failure, 'and fails it because the push ran, naming the cal…
+       |                                                                           ^
+    137|   }, 300_000);
+    138| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  00:35:49
+   Duration  10.01s (tests 98%, transform 1%, import 1%)
+
+[redraft run 1 exit 1] Tue Nov 24 12:35:59 AM PST 2026
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-redraft-ac1
+
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer 31397ms
+   → `git push origin main` was not held with an authority ask naming the push within 30 s of its PreToolUse; the session's asks: []; its PreToolUse ended exit 2 after 147 ms, stdout "", stderr "DeepBuild held this: `git push origin main` needs your authority, and no ask could be raised for it (BLOCKED: no deadline for authority asks is declared in your settings or the repo's done.yaml (asks.deadline.authority)).\n"
+ ✓ proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask 3891ms
+ × proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call 2359ms
+   → and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer
+Error: `git push origin main` was not held with an authority ask naming the push within 30 s of its PreToolUse; the session's asks: []; its PreToolUse ended exit 2 after 147 ms, stdout "", stderr "DeepBuild held this: `git push origin main` needs your authority, and no ask could be raised for it (BLOCKED: no deadline for authority asks is declared in your settings or the repo's done.yaml (asks.deadline.authority)).\n"
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgePush proceed.test.ts:93:3
+ ❯ proceed.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call
+AssertionError: and fails it because the push ran, naming the call: expected 'the stop ending on "want me to push t…' to match /`git push origin main` ran in the turn/
+
+- Expected:
+/`git push origin main` ran in the turn/
+
++ Received:
+"the stop ending on \"want me to push to main?\" was not answered proceed: its reply let the turn end (exit 0 after 36 ms, stdout \"\", stderr \"deep-hook: spooled 01M86B6E6FQC8XWC9T21EPNVAF, but its sync didn't finish within the hook's 50 ms\\n\")"
+
+ ❯ proceed.test.ts:136:75
+    134|     const failure = await failureOf(() => judgePush(w));
+    135|     expect(failure, 'the planted core that lets a proceed cover its tu…
+    136|     expect(failure, 'and fails it because the push ran, naming the cal…
+       |                                                                           ^
+    137|   }, 300_000);
+    138| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  00:36:01
+   Duration  41.25s (tests 100%)
+
+[redraft run 2 exit 1] Tue Nov 24 12:36:42 AM PST 2026
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-redraft-ac1
+
+ × proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer 237ms
+   → the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 37 ms, stdout "", stderr "deep-hook: spooled 01M86B6KAFMXJNHXK9DDWZ4JBS, but its sync didn't finish within the hook's 50 ms\n")
+ ✓ proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 after the same sorter's proceed for "want me to run the tests?", `npm test` runs with no ask 4883ms
+ ✓ proceed.test.ts > #321.69952336 wrong program: a core that lets a proceed cover the calls of the turn it starts > #321.69952336 DEEP_HUB_PLANT=proceed-covers-turn lets `git push origin main` through, and the push's judgement fails naming the call 7633ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.69952336 a proceed never covers a call that needs authority > #321.69952336 the planted sorter's proceed for "want me to push to main?" is recorded with its rule, and the turn's `git push origin main` is held at PreToolUse with an authority ask that waits for your answer
+Error: the stop ending on "want me to push to main?" was not answered proceed: its reply let the turn end (exit 0 after 37 ms, stdout "", stderr "deep-hook: spooled 01M86B6KAFMXJNHXK9DDWZ4JBS, but its sync didn't finish within the hook's 50 ms\n")
+ ❯ must helpers.ts:41:18
+     39| /** Throws `message` unless `ok`: a judgement reads as one sentence of…
+     40| export function must(ok: boolean, message: string): void {
+     41|   if (!ok) throw Error(message);
+       |                  ^
+     42| }
+     43| /** The message a judgement throws, or null when it holds: the wrong p…
+ ❯ judgeProceed proceed.test.ts:52:3
+ ❯ judgePush proceed.test.ts:74:9
+ ❯ proceed.test.ts:121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  00:36:44
+   Duration  17.08s (tests 100%)
+
+[redraft run 3 exit 1] Tue Nov 24 12:37:01 AM PST 2026
+ 00:37:01 up 4 days,  4:13,  4 users,  load average: 85.52, 92.49, 117.10

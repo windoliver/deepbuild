@@ -1,0 +1,68 @@
+# Why #321's AC1 has a new criterion and a new blind draft
+
+This folder's other files are the blind job's draft, byte for byte. Nobody else edits them (AGENTS.md, Proof). This
+file records how they came to be.
+
+## The conflict
+
+- **#321 AC1's first draft** (`../321/proceed.test.ts`, criterion `#321.69952336`) approves the held push, then
+  expects the agent's next try to run at once.
+- **#1101 AC1** holds a yes to a push for 10 s and refuses a try during the hold. Its blind redraft, made under
+  Dogfooding, stands (windoliver/deepbuild#3062, `docs/evidence/321-hold-waits/blind-redraft-2/RESULT.md`).
+- So no hub passes both. #321's first draft fails on main, and #1101's redraft fails on a hub that keeps the try
+  waiting (#3062).
+
+## The redraft of `#321.69952336`, used up
+
+The owner chose to redraft #321 AC1. The choice came through the coordinator session (2026-11-24) as "Redraft #321
+AC1".
+
+- **How it was made:** a blind job, given only the issue, the base `debda22` (#321's suite's base) and the criterion.
+- **What happened on main** (`docs/evidence/321-ac1/redraft-69952336/`): it fails, partly on its own defect. Its
+  world declares no authority deadline, so no ask can be raised.
+- **The rule:** by Dogfooding, the first draft stood, and each test is redrafted at most once.
+
+## The criterion change
+
+The old text said only that the push's ask "waits for your answer". It didn't say what follows your yes, and that
+gap is where the conflict lies. The owner approved the new wording, typed in the implementing session on
+2026-11-24 ("Approve the rewording"). The issue's text was changed that day, with the reason recorded in
+<https://github.com/windoliver/deepbuild/issues/321#issuecomment-7126597279>.
+
+The new criterion, `#321.70212996`:
+
+> A planted sorter answers "want me to push to main?" with "proceed": the proceed is recorded with its rule, and in
+> the turn it starts the agent's `git push origin main` is held at PreToolUse with an authority ask naming the push,
+> which waits for your answer; your yes starts the push's hold (#1101), a try during the hold is refused, and the push
+> runs once the hold ends; after the same sorter's "proceed" for "want me to run the tests?", `npm test` runs with no
+> ask. A core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails this test,
+> naming the call
+
+## How this draft was made (2026-11-24)
+
+- **Its repository** held one commit, `debda22`, fetched alone by SHA into an empty folder. Neither #321 nor #1101 is
+  implemented there.
+- **Its inputs** were:
+  - #321's text with the new criterion;
+  - #1101's text, for context, since the criterion names its hold;
+  - the design, `docs/technical-design.md` as of main `dc8625b09`;
+  - the criterion with its ID.
+- **What it wasn't given:** no dispute, no failing output, no earlier draft, nothing about #3062 or the
+  implementation.
+- **At its base:** both tests fail (`BASE-FAILURE.txt`).
+
+## On main
+
+All runs are on the Spark at main `dc8625b09`.
+
+- **Main unchanged** (`docs/evidence/321-ac1/failing-first.txt`): both tests fail. The draft plants its sorter as
+  `DEEP_HUB_TEST_SORTER=<rule>`, and main read that setting only as a JSON file's path.
+- **The fix:** the hub reads a value that names no file as the rule itself, for every question (`packages/hub/src/holds.ts`).
+- **Main with that fix, at load 163–175** (`docs/evidence/321-ac1/seam-runs.txt`):
+  - The wrong-program test passes in all 3 runs: the planted core fails the scenario, naming the call.
+  - The scenario passes in 1 of 3 runs.
+  - The other two failed when deep-hook's 50 ms wait for the hub ran out, so it spooled the call and let it through.
+    That is timing under load, INCONCLUSIVE, not a verdict.
+
+Since main's hold already refuses a try during the hold and lets the push run after it, #3062's change isn't needed
+for this criterion.

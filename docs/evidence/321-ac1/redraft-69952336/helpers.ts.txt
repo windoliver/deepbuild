@@ -1,0 +1,337 @@
+// Test-side tools for #321's first criterion (#321.69952336): temp homes; the shipped guard entries copied in as the
+// first rules.json; the hub as a process (`deep hub run`) with the planted sorter and, for the wrong program, a
+// planted core; deep-hook as Claude Code's hook entry runs it; made-up Claude Code sessions with their transcripts;
+// and reads of the record and the inbox through the hub's socket as the cli role. The process, socket and session
+// parts are adapted from tests/acceptance/304/helpers.ts and tests/acceptance/18/mapping/helpers.ts (same repo, same
+// license); this suite keeps its own copy so a redraft of those suites never moves these tests. Nothing here stands
+// in for deep-hook, the hub or the adapter: every decision comes from the real programs.
+
+import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import net from 'node:net';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+export const REPO = fileURLToPath(new URL('../../../', import.meta.url));
+export const CLI = join(REPO, 'packages/cli/dist/main.js');
+export const NODE = process.execPath;
+export const DEEP_HOOK = join(REPO, 'target/debug/deep-hook');
+export const DEFAULT_RULES = join(REPO, 'crates/deep-hook/default-rules.json');
+/** The Claude Code version every made-up session claims: the newest adapters/claude-code.facts.json covers at the base. */
+export const VERSION = '2.1.304';
+export const MODEL = 'claude-haiku-5-5';
+
+/** The criterion's ID: `#321.` and the first 8 hex of SHA-256 of its text. */
+export const AC = '#321.69952336';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Line = { [key: string]: any };
+export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+export const parseObject = (raw: string): Line | undefined => {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Line) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+/** Throws `message` unless `ok`: a judgement reads as one sentence of the criterion per check. */
+export function must(ok: boolean, message: string): void {
+  if (!ok) throw Error(message);
+}
+/** The message a judgement throws, or null when it holds: the wrong program's test expects it to throw. */
+export async function failureOf(judge: () => unknown): Promise<string | null> {
+  try {
+    await judge();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+// ---- Temp folders: short real paths under /tmp, since a Unix socket path must fit in 104 bytes on macOS.
+const made: string[] = [];
+export function tempDir(): string {
+  const dir = realpathSync(mkdtempSync('/tmp/dh321-'));
+  made.push(dir);
+  return dir;
+}
+/** A fresh home whose .deepbuild holds the shipped guard entries as the first rules.json, as #304's suite seeds it. */
+export function makeHome(): string {
+  const home = join(tempDir(), 'h');
+  mkdirSync(join(home, '.deepbuild'), { recursive: true, mode: 0o700 });
+  writeFileSync(join(home, '.deepbuild', 'rules.json'), readFileSync(DEFAULT_RULES, 'utf8'));
+  return home;
+}
+
+// ---- Processes this suite started. Stopped by PID only, never by name or port.
+const owned = new Set<number>();
+function own(pid: number | undefined): void {
+  if (pid) owned.add(pid);
+}
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+  try {
+    return !/Z/.test(execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }));
+  } catch {
+    return false;
+  }
+}
+/** Stops every process this suite started (SIGTERM, then SIGKILL after 3 s) and removes its temp folders. */
+export async function cleanup(): Promise<void> {
+  for (const pid of owned) {
+    try { process.kill(pid, 'SIGCONT'); } catch { /* gone */ }
+    try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ }
+  }
+  const deadline = Date.now() + 3000;
+  while ([...owned].some(alive) && Date.now() < deadline) await sleep(50);
+  for (const pid of owned) {
+    if (alive(pid)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+  }
+  owned.clear();
+  for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
+}
+
+const BILLING = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'AWS_BEARER_TOKEN_BEDROCK', 'OPENAI_API_KEY', 'CODEX_API_KEY'];
+/** A child's environment: this one with HOME moved to the test's home and no DEEP_/GIT_/XDG_/CLAUDE settings or billing keys. */
+export function childEnv(home: string, extra: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith('DEEP_') || key.startsWith('XDG_') || key.startsWith('GIT_') || key.startsWith('CLAUDE') || key === 'NODE_OPTIONS' || BILLING.includes(key)) continue;
+    env[key] = value;
+  }
+  env.HOME = home;
+  env.XDG_CONFIG_HOME = join(home, '.config');
+  env.XDG_CACHE_HOME = join(home, '.cache');
+  env.PATH = `${dirname(NODE)}:${process.env.PATH ?? '/usr/bin:/bin'}`;
+  env.LC_ALL = 'C';
+  for (const [key, value] of Object.entries(extra)) {
+    if (value === undefined) delete env[key];
+    else env[key] = value;
+  }
+  return env;
+}
+
+export interface Ran { code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string; ms: number; timedOut: boolean }
+/** Runs a command to its end without blocking this process's event loop; killed at `timeoutMs`. */
+export function run(command: string, args: readonly string[], o: { env?: NodeJS.ProcessEnv; cwd?: string; input?: string; timeoutMs?: number } = {}): Promise<Ran> {
+  return new Promise((resolve) => {
+    const t0 = performance.now();
+    const child = spawn(command, args, { cwd: o.cwd ?? REPO, env: o.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    own(child.pid);
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout += d));
+    child.stderr.setEncoding('utf8').on('data', (d: string) => (stderr += d));
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, o.timeoutMs ?? 60_000);
+    child.on('error', (error) => { clearTimeout(timer); resolve({ code: null, signal: null, stdout, stderr: `${stderr}${error.message}`, ms: performance.now() - t0, timedOut }); });
+    child.on('close', (code, signal) => { clearTimeout(timer); resolve({ code, signal, stdout, stderr, ms: performance.now() - t0, timedOut }); });
+    child.stdin.on('error', () => undefined);
+    child.stdin.end(o.input ?? '');
+  });
+}
+export const shown = (r: Ran) => `exit ${r.code}${r.signal ? ` (${r.signal})` : ''}${r.timedOut ? ', killed at the timeout' : ''} after ${r.ms.toFixed(0)} ms, stdout ${JSON.stringify(r.stdout.slice(0, 500))}, stderr ${JSON.stringify(r.stderr.slice(0, 500))}`;
+
+// ---- deep-hook, built once per test process (cargo only rebuilds what changed).
+let built: Promise<string> | undefined;
+export function deepHook(): Promise<string> {
+  built ??= run('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { timeoutMs: 900_000 }).then((r) => {
+    if (r.code !== 0 || !existsSync(DEEP_HOOK)) throw Error(`BLOCKED: cargo build -p deep-hook failed: ${r.stderr.slice(-3000)}`);
+    spawnSync(DEEP_HOOK, ['--version'], { stdio: 'ignore', timeout: 30_000 });
+    return DEEP_HOOK;
+  });
+  return built;
+}
+
+// ---- The hub as a process: `deep hub run`, its root <home>/.deepbuild.
+export interface Hub { home: string; socket: string; pid: number; proc: ChildProcess; stderr(): string; exit: Promise<void> }
+/**
+ * Starts the hub for `home` with the planted sorter (DEEP_HUB_TEST_SORTER=<rule>: README, The planted sorter) and,
+ * when `plant` is named, DEEP_HUB_PLANT=<plant>. A hub that doesn't start throws, naming why.
+ */
+export async function startHub(home: string, o: { sorterRule: string; plant?: string }, timeoutMs = 60_000): Promise<Hub> {
+  const env = childEnv(home, { DEEP_HUB_TEST_SORTER: o.sorterRule, DEEP_HUB_PLANT: o.plant });
+  const child = spawn(NODE, [CLI, 'hub', 'run'], { cwd: REPO, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  own(child.pid);
+  let out = '';
+  let err = '';
+  child.stderr!.setEncoding('utf8').on('data', (d: string) => (err += d));
+  const exit = new Promise<void>((resolve) => child.on('exit', () => resolve()));
+  const ready = await Promise.race([
+    new Promise<Line | undefined>((resolve) => {
+      child.stdout!.setEncoding('utf8').on('data', (d: string) => {
+        out += d;
+        if (out.includes('\n')) resolve(parseObject(out.split('\n')[0]!));
+      });
+    }),
+    exit.then(() => undefined),
+    sleep(timeoutMs).then(() => undefined),
+  ]);
+  if (!ready || ready.ready !== true) {
+    throw Error(`BLOCKED: the hub${o.plant ? ` with DEEP_HUB_PLANT=${o.plant} (the planted wrong program)` : ''} did not start: ${err.slice(-1500)}`);
+  }
+  return { home, socket: String(ready.socket), pid: Number(ready.pid), proc: child, stderr: () => err, exit };
+}
+
+// ---- The hub's socket as the cli role, with the control token.
+export function control(hub: Hub, method: string, params: Line = {}, timeoutMs = 30_000): Promise<Line> {
+  const token = readFileSync(join(hub.home, '.deepbuild', 'control.token'), 'utf8').trim();
+  return new Promise((resolve, reject) => {
+    const sock = net.connect(hub.socket);
+    let buffer = '';
+    let step = 0;
+    const timer = setTimeout(() => { sock.destroy(); reject(Error(`no reply to ${method} within ${timeoutMs} ms`)); }, timeoutMs);
+    sock.setEncoding('utf8');
+    sock.on('error', (error) => { clearTimeout(timer); reject(error); });
+    sock.on('data', (chunk: string) => {
+      buffer += chunk;
+      let i: number;
+      while ((i = buffer.indexOf('\n')) >= 0) {
+        const line = parseObject(buffer.slice(0, i));
+        buffer = buffer.slice(i + 1);
+        if (step === 0) {
+          step = 1;
+          sock.write(`${JSON.stringify({ v: 1, hello: 'cli', token })}\n`);
+        } else if (step === 1 && line?.role !== undefined) {
+          step = 2;
+          sock.write(`${JSON.stringify({ v: 1, id: 1, method, params })}\n`);
+        } else if (step === 2 && line?.id === 1) {
+          clearTimeout(timer);
+          sock.destroy();
+          if (line.error) reject(Error(`${method} refused: ${JSON.stringify(line.error)}`));
+          else resolve(line.result as Line);
+        }
+      }
+    });
+  });
+}
+export interface Ev { id: string; kind: string; log_pos: number; subject?: string; data: Line }
+export async function allEvents(hub: Hub): Promise<Ev[]> {
+  const out: Ev[] = [];
+  let after = 0;
+  for (;;) {
+    const events = (await control(hub, 'events.read', { after, limit: 1000 })).events as Ev[];
+    if (!events.length) return out;
+    out.push(...events);
+    after = events[events.length - 1]!.log_pos;
+  }
+}
+/** One row of `inbox.read`: every ask the record holds, open or closed, with its question. */
+export interface Asked { ask: string; kind: string; session: string; status: string; outcome: string; question: string; options: string[] }
+export async function inbox(hub: Hub): Promise<Asked[]> {
+  return (await control(hub, 'inbox.read')).asks as Asked[];
+}
+/** The asks of one agent session, however the inbox writes its ID (as given, or its letters and digits only). */
+export const asksOf = (rows: readonly Asked[], session: string): Asked[] => {
+  const bare = session.replace(/[^0-9A-Za-z]/g, '');
+  return rows.filter((r) => r.session === session || r.session.replace(/[^0-9A-Za-z]/g, '') === bare || r.session.endsWith(bare));
+};
+
+// ---- A git repository the sessions work in: one commit on main and an `origin` remote (a local bare repo nothing pushes to).
+export function makeRepo(): string {
+  const t = tempDir();
+  const repo = join(t, 'shop');
+  const bare = join(t, 'origin.git');
+  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', HOME: t, GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.invalid' };
+  const git = (args: string[], cwd = repo) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8', env });
+  mkdirSync(repo);
+  execFileSync('git', ['init', '-q', '--bare', bare], { env });
+  git(['init', '-q', '-b', 'main']);
+  mkdirSync(join(repo, 'src'));
+  writeFileSync(join(repo, 'src', 'login.js'), 'export const login = (user) => user.name;\n');
+  writeFileSync(join(repo, 'package.json'), `${JSON.stringify({ name: 'shop', private: true, scripts: { test: 'node --test' } }, null, 2)}\n`);
+  git(['add', '-A']);
+  git(['commit', '-q', '-m', 'base']);
+  git(['remote', 'add', 'origin', bare]);
+  return realpathSync(repo);
+}
+
+// ---- Made-up Claude Code sessions, shaped like the corpus's recorded payloads and transcripts.
+export interface HookCall { event: string; payload: Line; ran: Ran }
+/** What a Stop reply tells Claude Code: `continue` when it sends the agent on (decision block, or exit 2), else `ends`. */
+export function stopReply(r: Ran): 'continue' | 'ends' {
+  const out = parseObject(r.stdout.trim());
+  return r.code === 2 || out?.decision === 'block' ? 'continue' : 'ends';
+}
+/** The words a continued stop sends the agent on with. */
+export const stopReason = (r: Ran): string => String(parseObject(r.stdout.trim())?.reason ?? r.stderr);
+/** What a PreToolUse reply tells Claude Code: `allow` only for exit 0 with no deny, ask or block decision. */
+export function toolDecision(r: Ran): 'allow' | 'held' {
+  const out = parseObject(r.stdout.trim());
+  const said = out?.hookSpecificOutput?.permissionDecision ?? out?.decision;
+  return r.code === 0 && !r.timedOut && (said === undefined || said === 'allow') ? 'allow' : 'held';
+}
+
+export class Session {
+  readonly id = randomUUID();
+  readonly transcript: string;
+  private promptId: string | undefined;
+  private parent: string | null = null;
+  private turn = 0;
+  constructor(readonly home: string, readonly cwd: string) {
+    this.transcript = join(home, '.claude/projects', cwd.replace(/[^A-Za-z0-9]/g, '-'), `${this.id}.jsonl`);
+    mkdirSync(dirname(this.transcript), { recursive: true });
+    writeFileSync(this.transcript, '');
+  }
+  /** Appends one transcript entry, as Claude Code writes it. */
+  entry(value: Line): void {
+    const uuid = randomUUID();
+    const line = { parentUuid: this.parent, isSidechain: false, ...value, uuid, timestamp: new Date().toISOString(), userType: 'external', entrypoint: 'cli', cwd: this.cwd, sessionId: this.id, version: VERSION, gitBranch: 'main' };
+    this.parent = uuid;
+    writeFileSync(this.transcript, `${JSON.stringify(line)}\n`, { flag: 'a' });
+  }
+  /** Runs deep-hook as Claude Code's hook entry does: `deep-hook claude-code <event>`, the hook JSON on stdin. */
+  async hook(event: string, fields: Line = {}, timeoutMs = 60_000): Promise<HookCall> {
+    const payload: Line = {
+      session_id: this.id, transcript_path: this.transcript, cwd: this.cwd, ...(this.promptId ? { prompt_id: this.promptId } : {}),
+      permission_mode: 'default', effort: { level: 'medium' }, hook_event_name: event, ...fields,
+    };
+    const env = childEnv(this.home, { CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli', CLAUDE_PROJECT_DIR: this.cwd });
+    const ran = await run(await deepHook(), ['claude-code', event], { cwd: this.cwd, env, input: JSON.stringify(payload), timeoutMs });
+    return { event, payload, ran };
+  }
+  start(): Promise<HookCall> {
+    return this.hook('SessionStart', { source: 'startup', model: MODEL });
+  }
+  /** A prompt you typed: its transcript entry, then its UserPromptSubmit. */
+  async prompt(text: string): Promise<HookCall> {
+    this.promptId = randomUUID();
+    this.turn += 1;
+    this.entry({ promptId: this.promptId, type: 'user', message: { role: 'user', content: text }, origin: { kind: 'human' }, turnOrigin: 'human', turnPosition: { promptIndex: 1, turnIndex: this.turn } });
+    return this.hook('UserPromptSubmit', { prompt: text });
+  }
+  /**
+   * A tool call's start: the assistant's tool_use entry, then PreToolUse. Returns the call's ID and the running hook,
+   * not awaited, since a held call may keep its hook waiting.
+   */
+  before(tool: string, input: Line, timeoutMs = 60_000): { id: string; hook: Promise<HookCall> } {
+    const id = `toolu_${randomBytes(12).toString('hex')}`;
+    this.entry({ type: 'assistant', message: { model: MODEL, id: `msg_${randomBytes(12).toString('hex')}`, type: 'message', role: 'assistant', content: [{ type: 'tool_use', id, name: tool, input }], stop_reason: 'tool_use', usage: { input_tokens: 3, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 20 } } });
+    return { id, hook: this.hook('PreToolUse', { tool_name: tool, tool_input: input, tool_use_id: id }, timeoutMs) };
+  }
+  /** A tool call's end: its tool_result entry, then PostToolUse. */
+  async after(tool: string, input: Line, id: string, response: unknown): Promise<HookCall> {
+    this.entry({ promptId: this.promptId, type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: JSON.stringify(response), is_error: false }] }, toolUseResult: response });
+    return this.hook('PostToolUse', { tool_name: tool, tool_input: input, tool_response: response, tool_use_id: id, duration_ms: 40 });
+  }
+  /** An edit the agent makes: its PreToolUse, the file written, its PostToolUse. Throws if the edit is held. */
+  async edit(file: string, from: string, to: string): Promise<void> {
+    const input = { file_path: file, old_string: from, new_string: to, replace_all: false };
+    const { id, hook } = this.before('Edit', input);
+    const pre = await hook;
+    if (toolDecision(pre.ran) !== 'allow') throw Error(`BLOCKED: the agent's edit of ${file} was held: ${shown(pre.ran)}`);
+    writeFileSync(file, readFileSync(file, 'utf8').replace(from, to));
+    await this.after('Edit', input, id, { filePath: file, oldString: from, newString: to, structuredPatch: [], userModified: false, replaceAll: false });
+  }
+  /** The assistant's last words of the turn, then Stop. */
+  stop(said: string, timeoutMs = 120_000): Promise<HookCall> {
+    this.entry({ type: 'assistant', message: { model: MODEL, id: `msg_${randomBytes(12).toString('hex')}`, type: 'message', role: 'assistant', content: [{ type: 'text', text: said }], stop_reason: 'end_turn', usage: { input_tokens: 3, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 12 } } });
+    return this.hook('Stop', { stop_hook_active: false, last_assistant_message: said }, timeoutMs);
+  }
+}

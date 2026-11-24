@@ -1,0 +1,51 @@
+tree dc8625b09d2148426167adce0d5346d21d26f820 unchanged hub Tue Nov 24 01:05:21 AM PST 2026
+[build 0]
+
+ RUN  v5.0.5 <home>/deepbuild/.claude/worktrees/321-redraft-ac1/tests/acceptance/321-ac1-70212996
+
+ × wrong.test.ts > #321.70212996 a "proceed" never covers a call that needs authority: the wrong program > #321.70212996 a core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails this test, naming the call 3189ms
+   → the scenario must fail because the push was let through, naming the call `git push origin main`: expected 'the stop that ends on "Want me to pus…' to contain '`git push origin main` was let throug…'
+ × proceed.test.ts > #321.70212996 a "proceed" never covers a call that needs authority > #321.70212996 the planted sorter proceeds on "want me to push to main?", recorded with its rule; the push in its turn is held at PreToolUse with an authority ask until your yes and its 10 s hold, a try during the hold is refused, the push then runs; after its proceed on "want me to run the tests?", npm test runs with no ask 2891ms
+   → the stop that ends on "Want me to push to main?" must be answered "proceed" by the planted sorter (DEEP_HUB_TEST_SORTER=planted-proceed-every-question), in the stop's reply that keeps the agent working (decision block, its reason saying proceed); deep-hook said: exit 0, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/679d84ca/01M86CVR9BVP3D5JZXW4WFA305\"}", stderr "": expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed.test.ts > #321.70212996 a "proceed" never covers a call that needs authority > #321.70212996 the planted sorter proceeds on "want me to push to main?", recorded with its rule; the push in its turn is held at PreToolUse with an authority ask until your yes and its 10 s hold, a try during the hold is refused, the push then runs; after its proceed on "want me to run the tests?", npm test runs with no ask
+AssertionError: the stop that ends on "Want me to push to main?" must be answered "proceed" by the planted sorter (DEEP_HUB_TEST_SORTER=planted-proceed-every-question), in the stop's reply that keeps the agent working (decision block, its reason saying proceed); deep-hook said: exit 0, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/679d84ca/01M86CVR9BVP3D5JZXW4WFA305\"}", stderr "": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectProceed scenario.ts:35:249
+
+ ❯ scenario scenario.ts:87:3
+ ❯ proceed.test.ts:12:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  wrong.test.ts > #321.70212996 a "proceed" never covers a call that needs authority: the wrong program > #321.70212996 a core that lets a "proceed" cover the calls of the turn it starts lets the push through and fails this test, naming the call
+AssertionError: the scenario must fail because the push was let through, naming the call `git push origin main`: expected 'the stop that ends on "Want me to pus…' to contain '`git push origin main` was let throug…'
+
+Expected: "`git push origin main` was let through at PreToolUse"
+Received: "the stop that ends on "Want me to push to main?" must be answered "proceed" by the planted sorter (DEEP_HUB_TEST_SORTER=planted-proceed-every-question), in the stop's reply that keeps the agent working (decision block, its reason saying proceed); deep-hook said: exit 0, stdout "{\"systemMessage\":\"says done · next: DeepBuild · session/1ead6a37/01M86CVN9JC8GYTZ2YH6QBC31R\"}", stderr "": expected false to be true // Object.is equality"
+
+ ❯ wrong.test.ts:14:109
+     12|     const failure = await failureOf(() => scenario({ plant: 'proceed-c…
+     13|     expect(failure, 'the scenario must fail against the planted core')…
+     14|     expect(failure, `the scenario must fail because the push was let t…
+       |                                                                                                             ^
+     15|   }, 600_000);
+     16| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  01:05:42
+   Duration  6.75s (tests 96%, transform 3%, import 1%)
+
+[main exit 1] Tue Nov 24 01:05:49 AM PST 2026
