@@ -30,11 +30,11 @@ fn waves_scaled(x: vec2<f32>, t: f32, scale: f32) -> Waved {
 // length across its crests, so a wave too fine for the pixel reads as its mean; a pixel finer
 // than half the shortest wave sums every wave whole. Foam reads how steep the crests stand, each
 // wave its steepness's share of its slope where it rises, and only where foam is on.
-fn sea_shaded(rest: vec2<f32>, scale: f32, xy: vec2<f32>, z: f32, size: vec2<f32>, p: vec3<f32>, v: vec3<f32>) -> Waved {
+fn sea_shaded(rest: vec2<f32>, scale: f32, xy: vec2<f32>, z: f32, size: vec2<f32>, p: vec3<f32>, v: vec3<f32>, facing: f32) -> Waved {
     let wide = distance(world_at(xy + vec2<f32>(0.0, 1.0), z, size), p);
     let sideways = length(v.xz);
     let toward = select(vec2<f32>(1.0, 0.0), v.xz / sideways, sideways > 1e-4);
-    let along = toward * (wide / max(v.y, 0.02));
+    let along = toward * (wide / max(facing, 0.02));
     let foamy = params.look.y < 1.0;
     var sx = vec4<f32>(0.0);
     var sz = vec4<f32>(0.0);

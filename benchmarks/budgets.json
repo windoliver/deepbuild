@@ -2321,6 +2321,14 @@
       "criteria": [
         "#278.fe1a5277"
       ]
+    },
+    {
+      "id": "memory-admission",
+      "command": ["node", "benchmarks/memory-admission.mjs"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #3220 first measurement (#3220.c2610cec): the merge base keeps no run's peak and admits no run on one. One process opens a record and the supervisor, runs one sandboxed program that holds 64 MiB for 2 s so every scan of it keeps its peak and CPU, and reads what it used; then keeps 10,000 keys' clean peaks and decides 1,000 admissions of a key with three clean runs, printing the median time of one against the criterion's 1 ms. The process starts a scan makes stay in tests/acceptance/3220/ac9-budgets.test.ts, counted against the merge base's 2. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": ["#3220.c2610cec"]
     }
   ]
 }

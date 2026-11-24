@@ -10,11 +10,12 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use deep_canvas::ops;
 use serde_json::{json, Value};
 
-use crate::scene::{Layer3, Refused};
+use crate::scene::{Layer3, Refused, Scene};
 
 /// The most waves one water sums.
 pub const MAX_WAVES: usize = 4;
@@ -344,6 +345,9 @@ pub struct Water {
     pub depth: f64,
     /// How far the mirror's lookup moves along the bent normal, in frame px.
     pub distort: f64,
+    /// #3034: its index of refraction: from below, the surface shows what is above it inside
+    /// a cone of asin(1 ÷ ior) about its normal and mirrors what is below it outside.
+    pub ior: f64,
     /// Foam's steepness threshold; 1 is off.
     pub foam: f64,
     /// #968: the flow faster than which foam covers the water, m/s, or none.
@@ -379,6 +383,25 @@ impl Water {
         let cell = (1.0 / (self.rain * RING_LIFE).sqrt()).max(2.0 * RING_SPEED * RING_LIFE);
         let slot = 1.0 / (self.rain * cell * cell);
         (cell, slot, (RING_LIFE / slot - 1e-9).ceil() as u32)
+    }
+
+    /// #3034: the water's level where `eye` lies below a part's surface at rest, inside its
+    /// extent in x and z and lower than its plane: a frame from there is under water.
+    pub fn under(&self, eye: [f64; 3]) -> Option<f64> {
+        let covers = |(_, [x0, z0, x1, z1]): &(String, [f64; 4])| {
+            eye[0] >= *x0 && eye[0] <= *x1 && eye[2] >= *z0 && eye[2] <= *z1
+        };
+        (eye[1] < self.level && self.plates.iter().any(covers)).then_some(self.level)
+    }
+
+    /// The water as `scene`'s: its own mirror unless a material names one (#166), and whether
+    /// the frame is under it (#3034).
+    pub(crate) fn seen_in(self, scene: &mut Scene) {
+        if scene.mirror.is_none() {
+            scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &self);
+        }
+        scene.under = self.under(scene.camera.eye);
+        scene.water = Some(Arc::new(self));
     }
 }
 
@@ -578,6 +601,7 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         [1e-3, 1e5],
     )?;
     let distort = num(spec.get("distort"), "distort", 16.0, [0.0, 256.0])?;
+    let ior = num(spec.get("ior"), "ior", 1.33, [1.0, f64::INFINITY])?;
     let foam = num(
         spec.get("foam").and_then(|f| f.get("threshold")),
         "foam/threshold",
@@ -639,6 +663,7 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         absorption: color,
         depth,
         distort,
+        ior,
         foam,
         foam_speed,
         flow: crate::flow::parse(material, spec.get("flow"))?,
@@ -1073,6 +1098,63 @@ mod tests {
         let split = |k: i64| if k % 2 == 0 { 1.0 } else { -1.0 };
         assert!(read(within(65, F / 65, split)).is_ok());
         assert!(read(within(65, F / 32, |_| 1.0)).is_ok());
+    }
+
+    /// #3034: a 20 m lake at y = 0 seen from `eye`.
+    fn lake(eye: [f64; 3]) -> Value {
+        json!({
+            "format": 1, "profile": "scene", "title": "T", "size": [320, 180], "camera": "cam",
+            "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "name": "C", "order": "a0", "layer": "main", "params": {"projection": "perspective", "position": eye, "target": [0, 0, 0], "fov": 40}},
+                "wet": {"id": "wet", "kind": "material@1", "name": "M", "order": "a1", "layer": "main", "params": {"water": {}}},
+                "lake": {"id": "lake", "kind": "plate@1", "name": "L", "order": "b0", "layer": "main", "material": "wet", "params": {"grid": [4, 4], "size": [20, 20]}, "at": {"pos": [0, 0, 0]}}
+            }
+        })
+    }
+
+    fn look() -> crate::look::Look3 {
+        crate::look::Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}}))
+            .unwrap()
+    }
+
+    /// #3034: a frame is under water where its eye lies below a part's surface at rest, inside
+    /// its extent and lower than its plane; the view its mirror draws then takes the whole ray.
+    #[test]
+    fn a_frame_is_under_water_where_its_eye_lies_below_a_part() {
+        let look = look();
+        let at = |eye: [f64; 3]| {
+            crate::scene::evaluate(&lake(eye), 0, &look, &mut crate::label::Labels::new()).unwrap()
+        };
+        let below = at([0.0, -2.0, 3.0]);
+        let level = below.water.as_ref().expect("the lake is water").level;
+        assert!(level.abs() < 1e-9, "{level}");
+        assert_eq!(below.under, Some(level));
+        let mirrored = |scene: &Scene| {
+            let m = scene.mirror.clone().expect("the water mirrors");
+            crate::mirror::view(scene, &m, [160, 90]).under
+        };
+        assert_eq!(mirrored(&below), Some(f64::INFINITY));
+        // A camera aimed past the surface: a point 2 m under it shows in the mirrored view
+        // where its image 2 m over it shows in the frame, flipped about the centre.
+        let mut doc = lake([0.0, -2.0, 0.0]);
+        doc["items"]["cam"]["params"]["target"] = json!([0.5, 2.3, -6.9]);
+        let aimed = crate::scene::evaluate(&doc, 0, &look, &mut crate::label::Labels::new());
+        let aimed = aimed.unwrap();
+        let m = aimed.mirror.clone().expect("the water mirrors");
+        let view = crate::mirror::view(&aimed, &m, [320, 180]);
+        let seen = aimed.camera.project([0.0, 2.0, -6.9]).unwrap();
+        let drawn = view.camera.project([0.0, -2.0, -6.9]).unwrap();
+        let flipped = 2.0 * aimed.camera.centre[0] - seen[0];
+        assert!(
+            (drawn[0] - flipped).abs() < 1e-6 && (drawn[1] - seen[1]).abs() < 1e-6,
+            "{drawn:?} {seen:?}"
+        );
+        // Above its plane, and lower than it but beside the part.
+        for eye in [[0.0, 2.0, 3.0], [14.0, -2.0, 3.0]] {
+            let dry = at(eye);
+            assert_eq!((dry.under, mirrored(&dry)), (None, None), "{eye:?}");
+        }
     }
 
     /// #2760: a list none of whose kinds carries a point is refused, naming the list.

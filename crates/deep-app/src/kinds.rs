@@ -513,7 +513,7 @@ impl Model {
             calls,
             sign_in,
             price_page,
-            pictures: crate::pictures::of(events, handle, ask),
+            pictures: crate::pictures::of(events, ask),
         })
     }
 
@@ -628,7 +628,7 @@ fn calls(events: &[Value], handle: &str, now: u64) -> Vec<CallRow> {
                 back,
                 sends: if landed { REVERTS } else { ATTEMPTS },
                 applies: states::moment(states::deadline(events, ask).unwrap_or(now), now),
-                pictures: crate::pictures::of(events, member, ask),
+                pictures: crate::pictures::of(events, ask),
             })
         })
         .collect();

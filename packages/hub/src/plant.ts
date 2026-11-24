@@ -57,6 +57,11 @@ export type Plant =
   // #1840: a person's deep_search that reads every decision, whatever scope it was saved at.
   | 'search-decisions-unfiltered'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
+  // #3220's: a scan that keeps a run's first sample as its peak, an unread tree's peak recorded as 0, a check run on a key
+  // admitted on its class's constant, on no number, on the pool alone or on one run's peak, and an agent's heavy command
+  // admitted on its last run's peak.
+  | 'scan-keeps-first-sample' | 'unread-peak-recorded-zero' | 'admits-on-class-constant' | 'admits-on-nothing' | 'admits-on-pool-only'
+  | 'admits-on-one-peak' | 'admits-heavy-on-last-peak'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
   | 'stops-at-first-bad-line' | 'remove-spool-after-normal' | 'drops-post-tool-use' | 'replay-appends-twice'
@@ -219,6 +224,8 @@ export type Plant =
   // parent's exit, memory pressure ignored, an exclusive GPU lease beside shared ones, and scripts/lease run directly.
   | 'runs-matched-as-written' | 'denies-every-retry' | 'leases-every-cargo' | 'releases-on-parent-exit' | 'ignores-memory-pressure'
   | 'exclusive-beside-shared' | 'lease-script-runs-directly'
+  // #3219's: a later shared GPU request granted past a waiting exclusive one, and GPU waiters served in no order.
+  | 'shared-passes-waiting-exclusive' | 'serves-most-asks'
   // #1017's: a store that links its folders in, a manifest that knows only Cargo and npm, the nearest key cloned, a clone
   // placed whatever the worktree's sources, a store sessions can write, and a reclaim that ignores open files.
   | 'product-symlinks' | 'product-hard-links' | 'products-cargo-npm-only' | 'nearest-key' | 'places-stale' | 'store-writable' | 'reclaims-open-worktree'
@@ -347,6 +354,8 @@ const PLANTS: readonly string[] = [
   'sentence-from-agent-text', 'sentence-from-model', 'open-item-no-sentence',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
+  'scan-keeps-first-sample', 'unread-peak-recorded-zero', 'admits-on-class-constant', 'admits-on-nothing', 'admits-on-pool-only',
+  'admits-on-one-peak', 'admits-heavy-on-last-peak',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
   'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project', 'env-clone-without-record',
   'env-reuses-stale-install', 'env-keeps-database', 'env-keeps-redis', 'env-reuses-web-image', 'env-keeps-db-mount', 'env-second-install-store',
@@ -410,7 +419,7 @@ const PLANTS: readonly string[] = [
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
   'runs-matched-as-written', 'denies-every-retry', 'leases-every-cargo', 'releases-on-parent-exit', 'ignores-memory-pressure',
-  'exclusive-beside-shared', 'lease-script-runs-directly',
+  'exclusive-beside-shared', 'lease-script-runs-directly', 'shared-passes-waiting-exclusive', 'serves-most-asks',
   'product-symlinks', 'product-hard-links', 'products-cargo-npm-only', 'nearest-key', 'places-stale', 'store-writable', 'reclaims-open-worktree',
   'any-nonzero-base-exit',
   'stand-in-surface-dropped', 'stand-in-unrecorded', 'stand-in-always', 'stand-in-pass-proves',
