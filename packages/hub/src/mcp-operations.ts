@@ -115,6 +115,13 @@ export class McpOperations {
   /** A held request's exact call and ask; reserve both before raising the ask yields (#2072). */
   private readonly actionAsks = new Map<string, { digest: string; ask: Promise<string> }>();
 
+  /** The core forgot the session (#1866): its unspent stamps, its held requests' asks and its clients' limits go. */
+  forget(session: string): void {
+    this.stamps = this.stamps.filter((s) => s.session !== session);
+    for (const key of this.actionAsks.keys()) if (key.startsWith(`${session}|`)) this.actionAsks.delete(key);
+    for (const key of this.listed) if (key.startsWith(`${session}\n`)) this.listed.delete(key);
+  }
+
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   index!: Promise<IndexFill | undefined>;
 

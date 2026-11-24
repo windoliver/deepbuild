@@ -4,6 +4,7 @@
 // marks todo, makes conditional or names at run time isn't listed, nor, in a file that focuses some (.only, fit), one it doesn't focus. A listed test the run never ran was left out by
 // something other than its source, and the run can't pass, unless the check's own command left it out.
 import { createHash } from 'node:crypto';
+import { isControl } from './controls.js';
 import type { Expression, FunctionLikeDeclaration, Statement } from 'typescript';
 
 /** `names`: a node:test test's suites' names and its own, which its report gives it by, at its line. */
@@ -87,6 +88,8 @@ export async function listSource(source: string, file: string, joiner: string, h
   walk(sf.statements, [], fileTagged, false);
   const focusing = how.focus ?? FOCUS.test(source);
   const result = listed.filter((l) => !focusing || l.focused).map(({ focused: _, ...l }) => l);
+  // A file a control was planted in holds its run's draw, so no other run's source is equal to it.
+  if (isControl(source)) return result;
   if (listings.size >= LISTINGS) listings.delete(listings.keys().next().value!);
   listings.set(key, result);
   return result;

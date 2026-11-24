@@ -7,7 +7,8 @@
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { totalmem } from 'node:os';
-import { contents, keyId } from './shared-runs.js';
+import { contents, keyId, type KeyRows } from './shared-runs.js';
+import type { Used } from '@deepbuild/supervisor';
 
 /** The clean runs a key needs before its own peaks admit it (drafted). */
 export const CLEAN_RUNS = 3;
@@ -44,30 +45,63 @@ export function admitOn(peaks: readonly number[], declared: number | undefined, 
 export class KeyHistory {
   private readonly peaks = new Map<string, number[]>();
   private readonly sets = new Map<string, Map<string, readonly string[]>>();
+  /** `read` gives what the record holds of a key or a stem that left memory (#1866). */
+  constructor(private readonly read?: KeyRows) {}
+  /** Reads what the record holds of a key and its stem where either left memory, so a run added to it joins the rest. */
+  async ready(check: string, key: { id: string; stem: string }): Promise<void> {
+    await Promise.all([this.peaksOf(check, key.id), this.pathsOf(key.stem)]);
+  }
   /** A keyed run's place in its key's history: its path set under its stem, and its peak when it ran clean. */
   add(check: string, key: { id: string; stem: string; paths: readonly string[] }, peak: number | undefined): void {
     const sets = this.sets.get(key.stem) ?? new Map<string, readonly string[]>();
     const joined = key.paths.join('\0');
     if (!sets.has(joined)) sets.set(joined, key.paths);
-    this.sets.set(key.stem, sets);
+    newest(this.sets, key.stem, sets);
     if (peak === undefined) return;
     const id = `${check}\0${key.id}`;
     const peaks = this.peaks.get(id) ?? [];
     peaks.push(peak);
     if (peaks.length > PEAKS_READ) peaks.shift();
-    this.peaks.set(id, peaks);
+    newest(this.peaks, id, peaks);
   }
   /** The key a check's files in `dir` make under `stem`, and its clean peaks: the one with the most when several match. */
   async of(check: string, stem: string, dir: string): Promise<{ key?: string; peaks: number[] }> {
     let found: { key?: string; peaks: number[] } = { peaks: [] };
-    for (const paths of this.sets.get(stem)?.values() ?? []) {
+    for (const paths of (await this.pathsOf(stem)).values()) {
       const id = keyId(stem, paths, await contents(dir, paths));
-      const peaks = this.peaks.get(`${check}\0${id}`);
-      if (peaks && peaks.length >= found.peaks.length) found = { key: id, peaks: [...peaks] };
+      const peaks = await this.peaksOf(check, id);
+      if (peaks.length && peaks.length >= found.peaks.length) found = { key: id, peaks: [...peaks] };
     }
     return found;
   }
+  /** A key's clean peaks, from the record when it left memory. */
+  private async peaksOf(check: string, key: string): Promise<number[]> {
+    const id = `${check}\0${key}`;
+    const known = this.peaks.get(id);
+    if (known || !this.read) return known ?? [];
+    const rows = await this.read.key(key).catch(() => []);
+    const peaks = rows.flatMap((r) => { const peak = r.check === check ? cleanPeak(r.outcome, r.used) : undefined; return peak === undefined ? [] : [peak]; }).slice(-PEAKS_READ);
+    if (peaks.length) newest(this.peaks, id, this.peaks.get(id) ?? peaks);
+    return this.peaks.get(id) ?? peaks;
+  }
+  private async pathsOf(stem: string): Promise<Map<string, readonly string[]>> {
+    const known = this.sets.get(stem);
+    if (known || !this.read) return known ?? new Map();
+    const read = new Map<string, readonly string[]>((await this.read.paths(stem).catch(() => [])).map((paths) => [paths.join('\0'), paths]));
+    const sets = this.sets.get(stem) ?? read;
+    newest(this.sets, stem, sets);
+    return sets;
+  }
 }
+/** How many keys and stems the history keeps in memory (#1866): the newest, the rest the record's. */
+const HISTORY_KEPT = 64;
+function newest<T>(map: Map<string, T>, key: string, value: T): void {
+  map.delete(key);
+  map.set(key, value);
+  for (const oldest of map.keys()) { if (map.size <= HISTORY_KEPT) break; map.delete(oldest); }
+}
+/** A clean run's peak memory, the one its key's next runs are admitted by (#3220): a passed run's, as the scan read it; none for any other. */
+export const cleanPeak = (outcome: string, used: Used | undefined): number | undefined => (outcome === 'passed' && typeof used?.memory_peak_mb === 'number' ? used.memory_peak_mb : undefined);
 
 /**
  * The memory available on the host, in MB, as #2980 reads it: on macOS the kernel's own measure,
