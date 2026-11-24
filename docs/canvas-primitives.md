@@ -5389,7 +5389,7 @@ For: films (sparks, plume, airflow), the castle (chimney smoke, embers)
 
 **Cost:** About 2 to 5 ns per particle on the GPU plus one instanced draw (estimate); 32 B per particle of scratch, rebuilt each frame from t; at the showpiece cap, 1,048,576 particles take about 2 to 5 ms of GPU and 32 MiB of scratch, and their f64 closed form runs on the CPU only at the times a check or a pick reads them, never each frame (estimates), counted against the class's 4 ms of operator time and 128 MB of operator storage, so the check refuses a document they push over its class
 
-**It can never:** Integrate from frame to frame; collide (use the physics module); exceed its count; spawn from the wall clock; feed a check
+**It can never:** Integrate from frame to frame or collide with the world (Particles `particles.stepped@1` does both); exceed its count; spawn from the wall clock; feed a check
 
 **Lands:** R6
 
@@ -5501,6 +5501,35 @@ For: films with moving emitters (a grinder's sparks, a plane's exhaust), 3D data
 **It can never:** Store poses between frames; avoid one another (crowds that react need a bake); move a core view's layer off GPUI.
 
 **Lands:** R6; never R1 or R2
+
+#### Particles `particles.stepped@1`
+
+For: sand that piles, sparks that bounce off a moving floor, grains poured into a tray: particles that react to the world and to one another
+
+**Fields**
+
+- `count: u32 ≤ 65,536`, or ≤ 1,048,576 in a showpiece or an export
+- `step_rate: Hz = 60`, a valid rate (Time and the flick)
+- `emit: {shape: {box: {size: vec3, m}}, rate: per s, span: s, bursts: [{t, count}], velocity: vec3, m/s = 0}`, the box centred on the item's `at.pos`, a point without one
+- `emit.on: {list: occurrence list, kinds, where, count, max_bursts, cooldown}`, as Particles `particles@1`: occurrence bursts; with `emit.bursts`, at most 16 timed births
+- `life: s` (optional; without it a particle lives on); `kill: {on: {list, kinds, where, max_bursts}, radius: m = 0.1}`, at most 16 occurrences
+- `forces: {gravity: vec3, m/s² = [0, −9.81, 0], drag: 1/s = 0, attractors: [{at: vec3, strength: m/s²}] ≤ 4, turbulence: {strength: m = 0.5, frequency: 1/m = 1, travel: s = 4, seed}}`
+- `collide: {world: world ID, planes: [{normal: vec3, offset: m}] ≤ 6, restitution: 0..1 = 0}`
+- `spacing: m` (optional)
+- `attributes: {name → f32 | [min, max]} ≤ 4`
+- `checkpoint: {every: steps = 60, budget: bytes = 16 MiB}`
+- `readings: {name → {count: {box: [vec3, vec3]}} | {centroid: {box}}} ≤ 8`
+- `draw`, `size`, `opacity`, `color`: as Particles `particles@1`
+
+**Semantics:** The item's state is one buffer, `<item>.buffer`: 7 f32 words a particle, its position, its velocity and its age in s, then one word for each attribute, a value hashed in its range that the particle keeps. The age is below 0 while the particle isn't live: −1 before its birth and after its life, −2 once an occurrence killed it. A shipped compute step advances the buffer `step_rate` times a second of document time: step 0 is the state at 0 s, and a frame at t reads the buffer as step ⌊t × step_rate⌋ left it, whatever the frame rate. Timed births take the first particles in the order written, the stated bursts at the emitter and each occurrence's at its point; then the emitter's k-th particle is born k ÷ `rate` s in. Each is born at a place of the box hashed from the document's seed, the item and its index. A step adds the forces: gravity, drag, each attractor's pull toward its point, and turbulence, the particle's drift along one of two paths of the closed form's curl-noise table (Particles `particles@1`: turbulence), read at its age and held past `travel`. It then moves the particle and tests the move against the boxes of `collide.world`: each static or kinematic body's unrotated box shapes, a kinematic body where its `follow` channel puts it at the step's own time. A particle a box moved into is set on the box's nearest face and leaves at the speed that took it there; a particle whose move would cross a face stops on it, however far it moves in a step, and keeps `restitution` of its speed into the face, turned back. A particle that ends a step behind a declared plane, or a static body's plane shape, is set back on it the same way. Any other shape of such a body is refused at check, naming the body. An occurrence of `kill.on` kills the live particles within `radius` of its point at the step that reaches its time. With `spacing`, grains at rest stand one to a cell of a lattice that wide: a grain in flight lands on the column of cells under it, one grain a column a step, and two columns the step pairs level out, the higher one's top grains moving to the lower one's top, so a poured bed fills its tray level. Grains in flight don't push one another.
+
+The buffer is carried state (Carried state): a checkpoint each `every` steps in a ring within `budget` bytes, the spacing doubling when the ring would pass it (Checkpoint ring); a seek restores the nearest checkpoint at or before its time and steps forward. Its class is same machine (Determinism class): one machine, adapter and driver gives one buffer at each step; a comparison of a stepped buffer under another fingerprint reads INCONCLUSIVE. A live view with a store records the bake, the buffer at each frame time it draws, each kept by its hash under a key of the document, with the fingerprint of the machine that recorded it. An export draws from the bake under its document's key and never steps: its buffer is the bake's bytes on any machine, read as exact, and with no bake there it draws nothing and answers `no_bake`, naming the key. After each step the item publishes each reading of the live particles inside its box: their count, or their mean place (the box's middle when it holds none). A logic item reads one as `<item>.<reading>`, a count as an `i32` and a mean place as three `f64`: the value published after the item's last step before the logic step's time, zeros before any. A logic item that names the buffer is refused at check (`particles_buffer`), naming the buffer and both items.
+
+**Cost:** 60 B of operator storage a particle (the buffer and the draw's rows) and 4 B an attribute, 92 B with `spacing`, and 12 B a lattice column, inside the class's operator storage at its cap; a second buffer for the step before; the ring within its `budget`. One to five compute dispatches a step and one a frame for the draw, counted against the class's operator time: 0.34 ms a step at 1,000,000 particles with collision and spacing, against a budget of 4 ms (read on a reference Mac under load, so a reading, not yet a verdict). A recorded bake is 28 B a particle a frame drawn.
+
+**It can never:** Give the same buffer on two machines; feed a check, an export or a logic step except through its bake or a published reading; keep grains in flight apart; collide with a shape that isn't an unrotated box or a static plane; give a physics world a reading (a world is baked whole before any particle steps); run in a match (matches need cross-machine results).
+
+**Lands:** R6
 
 #### Variant
 
