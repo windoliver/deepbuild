@@ -23,6 +23,22 @@ pub const TOO_SMALL: &str = "arming.too_small";
 /// What a card in a window nobody can see says on a press, which an assistive client can send it.
 pub const UNSEEN: &str = "arming.unseen";
 
+/// A change of the card's window that re-arms the card (Question card: `rearm_on`); a change of what it says presents it
+/// anew.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rearm {
+    Move,
+    Resize,
+    /// It can be seen from now on, or can't any more.
+    Occluded {
+        seen: bool,
+    },
+    /// It is on another display, or its display changed.
+    Display,
+    /// It came forward, or went back.
+    Activation,
+}
+
 /// Where an input came from, as the platform names it (Input router: `source`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
@@ -214,18 +230,26 @@ impl Machine {
         self.seen && self.fits() && self.held.is_none()
     }
 
-    /// Its window can be seen from `t`, or can't any more (`rearm_on: occluded`): either stops an armed card being armed,
-    /// and it arms once its interval ran since it could be seen. Whether that is new.
-    pub fn look(&mut self, seen: bool, t: u64) -> bool {
-        if seen == self.seen {
-            return false;
+    /// Its window changed at `t`, the window's content area now `visible`, which its slot is judged in: a card that shows
+    /// is presented, its interval starts anew, and a press held down answers nothing. Neither does an OS prompt still up,
+    /// except that the prompt itself sends the window back and brings it forward. Whether that is new.
+    pub fn rearm(&mut self, on: Rearm, visible: [i64; 4], t: u64) -> bool {
+        if let Rearm::Occluded { seen } = on {
+            if seen == self.seen {
+                return false;
+            }
+            self.seen = seen;
         }
-        self.seen = seen;
+        if let Some(slot) = &mut self.slot {
+            slot.visible = visible;
+        }
         if let Some(seq) = self.shown() {
             self.state = State::Presented { seq, t };
             self.since = t;
             self.down = None;
-            self.confirming = None;
+            if on != Rearm::Activation {
+                self.confirming = None;
+            }
         }
         true
     }
@@ -332,6 +356,12 @@ impl Machine {
         matches!(self.state, State::Armed { .. }) && t >= self.since + ARM_AFTER
     }
 
+    /// Whether the OS's yes to a press on presentation `seq` answers it: the card shows that presentation, and nothing but
+    /// its interval holds it, which the prompt restarts.
+    pub fn confirms(&self, seq: u64) -> bool {
+        self.shown() == Some(seq) && self.may_arm()
+    }
+
     /// The card answered through its Send, with words or an image and no option: answered, nothing held.
     /// Its ask closed elsewhere while the card showed: the card is taken down, and nothing on it answers.
     pub fn withdrawn(&mut self) {
@@ -372,7 +402,7 @@ impl Machine {
         let Some((seq, option)) = self.confirming.take() else {
             return Outcome::Ignored;
         };
-        if !confirmed || self.state != (State::Armed { seq }) {
+        if !confirmed || !self.confirms(seq) {
             return Outcome::Ignored;
         }
         self.state = State::Answered { seq };

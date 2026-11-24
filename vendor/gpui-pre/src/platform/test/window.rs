@@ -43,7 +43,7 @@ pub(crate) struct TestWindowState {
     insets_callback: Option<Box<dyn FnMut(WindowInsets)>>,
     virtual_keyboard_requests: usize,
     virtual_keyboard_dismissals: usize,
-    moved_callback: Option<Box<dyn FnMut()>>,
+    pub(crate) moved_callback: Option<Box<dyn FnMut()>>, // DeepBuild patch (windoliver/deepbuild#1843)
     display_changed_callback: Option<Box<dyn FnMut()>>,
     appearance_change_callback: Option<Box<dyn FnMut()>>,
     request_frame_callback: Option<Box<dyn FnMut(RequestFrameOptions)>>,

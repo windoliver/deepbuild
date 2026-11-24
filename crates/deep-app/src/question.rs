@@ -1224,7 +1224,7 @@ impl Controller {
             return self.took(outcome, now, events, now);
         }
         if let Some(waiting) = self.send_waiting.take() {
-            if confirmed && waiting.seq == self.machine.seq() && self.machine.accepts(now) {
+            if confirmed && self.machine.confirms(waiting.seq) {
                 self.answer_words(now, events, now);
                 return Did::Answered;
             }
