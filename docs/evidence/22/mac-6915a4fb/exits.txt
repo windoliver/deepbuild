@@ -1,0 +1,21 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 21:41:43 load { 24.60 15.52 10.12 } thermal 0 free KB 79530712
+part 1 at 9cb02473e2c848df013de4d88e03910efd1eabda 21:41:47 load { 24.60 15.52 10.12 } thermal 0 free KB 79045472
+0-failing-first.txt: cargo exit=101; test result: FAILED. 108 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s 21:47:18 load { 66.78 52.62 28.59 } thermal 1 free KB 69077540
+part 1 failed tests (2): notify::tests::an_ask_notifies_once_the_hubs_list_holds_it_though_it_came_due_before record::tests::an_ask_the_hub_lists_is_shown_whatever_this_app_took_it_for ; compile errors: 1 21:47:18 load { 66.78 52.62 28.59 } thermal 1 free KB 69077536
+part 2 at 6915a4fbd75c35e0bac7e8ba11f95478cc169ea7 21:47:19 load { 66.78 52.62 28.59 } thermal 1 free KB 69077388
+1-deep-app-lib.txt: cargo exit=0; test result: ok. 110 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s 21:47:31 load { 58.57 51.33 28.41 } thermal 1 free KB 68770564
+part 3 merge of origin/main d3326d3c3682ccaad48a34b6f178d75236572b64 (#2474 is already on main) into 6915a4fbd75c35e0bac7e8ba11f95478cc169ea7: exit=0, scratch sha de7317da0f1e4fb58fe7874037d842d5037b1fa2 (never pushed), conflicts:  21:47:35 load { 56.21 50.96 28.41 } thermal 1 free KB 68250964
+2-deep-app-full.txt: cargo exit=101; test result: ok. 110 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s 21:55:42 load { 28.07 61.24 45.76 } thermal 1 free KB 55571328
+part 3 failing integration targets: [acceptance_1141 acceptance_34 hub_client ] (run with --no-fail-fast so every target is reached) 21:55:42 load { 28.07 61.24 45.76 } thermal 1 free KB 55568472
+part 3 failed tests are exactly 22n's six; main side not rerun 21:55:42 load { 28.07 61.24 45.76 } thermal 1 free KB 55567684
+worktree ~/private/dbc-22om removed 21:55:45 load { 26.62 60.39 45.55 } thermal 1 free KB 66593416
+part 4 setup exit=0 21:56:47 load { 17.38 51.60 43.27 } thermal 1 free KB 65522808
+4a app run start; screen-lock flag 0 21:56:47 load { 17.38 51.60 43.27 } thermal 1 free KB 65522776
+4a vitest exit=0; PNGs: 3 22:00:19 load { 28.11 43.85 42.06 } thermal 0 free KB 62405912
+tests/acceptance/1459/identifier.test.ts exit=1 22:12:05 load { 32.65 44.54 42.69 } thermal 1 free KB 55098176
+tests/acceptance/1459/panel.test.ts exit=1 22:12:28 load { 25.24 41.86 41.78 } thermal 0 free KB 55078428
+tests/acceptance/1172/rows.test.ts exit=1 22:14:30 load { 7.70 30.02 37.11 } thermal 0 free KB 54565900
+tests/acceptance/1172/panel.test.ts exit=0 22:14:52 load { 6.76 28.01 36.18 } thermal 0 free KB 54564000
+tests/acceptance/1460/cli.test.ts exit=0 22:15:17 load { 6.28 26.21 35.29 } thermal 1 free KB 54290212
+login-name hits after redaction: 0 22:15:21 load { 6.18 25.85 35.12 } thermal 1 free KB 54288604
+secret scan hits=0 22:15:21 load { 6.18 25.85 35.12 } thermal 1 free KB 54288480

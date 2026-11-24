@@ -1,0 +1,31 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 17:39:30 load { 2.62 2.70 2.73 } thermal 0 free KB 46354684
+head 97fffed505149c3d93599549b0a32d2e1e7494c0; failing-first fe56c13482021066182b9b8d9acb5b23b41dc215; origin/main b1fc9abb20d2fd9a5fd46c323e861726fcd62a28; merge-base b1fc9abb20d2fd9a5fd46c323e861726fcd62a28 17:40:34 load { 2.86 2.72 2.73 } thermal 0 free KB 45408316
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 17:40:37 load { 2.86 2.72 2.73 } thermal 0 free KB 45407360
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261 17:40:37 load { 2.86 2.72 2.73 } thermal 0 free KB 45407360
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720 17:40:37 load { 4.23 3.01 2.83 } thermal 0 free KB 45407360
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733 17:40:37 load { 4.23 3.01 2.83 } thermal 0 free KB 45407360
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711 17:40:37 load { 4.23 3.01 2.83 } thermal 0 free KB 45407360
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305 17:40:37 load { 4.23 3.01 2.83 } thermal 0 free KB 45407360
+judge copy checks: sha256 9257a6f60b757e4c957f8898f4ad54791ff6e7a8b51e77f988b9e6c63ee9886a diff-lines=4 reopen-early-return=1 row22=1 other-gh-calls=0 17:40:37 load { 4.23 3.01 2.83 } thermal 0 free KB 45407360
+part 0 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 17:40:37 load { 4.23 3.01 2.83 } thermal 0 free KB 45419328
+setup at F1 (npm ci, workspace build, deep-hook) exit=0 17:41:34 load { 14.19 6.01 3.96 } thermal 0 free KB 44314556
+part 0 cargo build -p deep-app exit=0 17:46:23 load { 77.73 61.15 30.42 } thermal 1 free KB 32977524
+part 0 test file: 97fffed5's e2e-signin.test.ts (F1's own copy differs or absent) 17:46:23 load { 77.73 61.15 30.42 } thermal 1 free KB 32977476
+part 0 signin at F1: vitest exit=1 (expected FAIL); PNGs 1; front app [Windows App] 17:46:46 load { 62.05 58.61 30.22 } thermal 1 free KB 32850264
+part 1 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 17:46:46 load { 62.05 58.61 30.22 } thermal 1 free KB 32837880
+1-deep-app-lib.txt: cargo exit=0; test result: ok. 114 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s 17:49:23 load { 49.36 60.54 36.31 } thermal 1 free KB 29206380
+part 2 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 17:49:23 load { 49.36 60.54 36.31 } thermal 1 free KB 29206376
+2-deep-app-full.txt: cargo exit=101; test result: ok. 114 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s 17:51:37 load { 27.54 50.04 35.69 } thermal 0 free KB 27048412
+part 2 failing targets: [acceptance_1141 acceptance_34 ]; failed tests 3; same as main's six (22n list): NO 17:51:37 load { 27.54 50.04 35.69 } thermal 0 free KB 27047704
+part 3 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 17:51:38 load { 27.54 50.04 35.69 } thermal 0 free KB 27046960
+setup at C (npm ci, workspace build, deep-hook) exit=0 17:52:36 load { 21.48 43.95 34.37 } thermal 1 free KB 26559732
+part 3 app run: vitest exit=1; PNGs 1; front app [Windows App] 17:54:08 load { 24.49 38.57 33.27 } thermal 0 free KB 25829732
+stopped leftover deep-app pid 36351 17:54:08 load { 24.49 38.57 33.27 } thermal 0 free KB 25829656
+part 4 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 17:54:09 load { 24.49 38.57 33.27 } thermal 0 free KB 25829432
+part 4 signin at head: vitest exit=1 (expected PASS); PNGs 0; front app [Windows App] 17:54:24 load { 21.05 37.12 32.84 } thermal 0 free KB 25552856
+stopped leftover deep-app pid 37900 17:54:24 load { 21.05 37.12 32.84 } thermal 0 free KB 25552840
+part 5 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 17:54:24 load { 21.05 37.12 32.84 } thermal 0 free KB 25552816
+tests/acceptance/1459/identifier.test.ts exit=1; front app [Windows App] 17:59:53 load { 53.34 44.46 37.08 } thermal 1 free KB 20828300
+STOPPED: free space dropped under 20 GB 17:59:53 load { 53.34 44.46 37.08 } thermal 1 free KB 20828256
+login-name hits after redaction: 0 17:59:53 load { 53.34 44.46 37.08 } thermal 1 free KB 20828340
+secret scan hits=0 17:59:53 load { 50.11 43.94 36.94 } thermal 1 free KB 20828444

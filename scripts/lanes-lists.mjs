@@ -376,6 +376,9 @@ timed.push('tests/acceptance/1634/budgets.test.ts');
 // real app's window on a real hub, with Accessibility and Screen Recording, by hand.
 alone.push('tests/acceptance/1458/');
 byHand.push('tests/acceptance/1458/redraft-ac13/shown.test.ts');
+// #83's status file is kept by hand: it counts an ask at once that #319's batch holds back, and its blind redraft
+// (tests/acceptance/83/redraft-319/) runs in its place, alone as the rest of #83's folder does.
+byHand.push('tests/acceptance/83/status.test.ts');
 // #501's files each build deep-show (seal.test.ts three times), export films through the GPU and the encode tool, and run a 600 s soak on the audio output.
 alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
@@ -456,6 +459,11 @@ byHand.push('tests/acceptance/503-redraft-ac4/');
 // a hub and the model host on its fixed port 8719: one file at a time.
 alone.push('tests/acceptance/935/', 'tests/acceptance/935-oracle/');
 byHand.push('tests/acceptance/408/machines.test.ts');
+
+// #3278's opening file runs #490's redraft-2 opening suite, which builds deep-show and its merge base (hours) and passes
+// only on main once the fix has landed, as its criterion (#3278.f8a0472b) says: it outlasts a lane run's 20 minutes and,
+// in the folder's one vitest run, stopped stable-keys.test.ts with it. It is kept by hand, run on main after the merge.
+byHand.push('tests/acceptance/3278/opening.test.ts');
 // #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
 // that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the
 // original criterion-4 file, whose rendered fixture the base refuses (lit solids with no paint), runs by hand.
@@ -1538,7 +1546,9 @@ byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/
 timed.push('tests/acceptance/1815/budget.test.ts');
 byHand.push('tests/acceptance/1815/shown.test.ts');
 
-// #3278's opening file runs #490's redraft-2 opening suite, which builds deep-show and its merge base (hours) and passes
-// only on main once the fix has landed, as its criterion (#3278.f8a0472b) says: it outlasts a lane run's 20 minutes and,
-// in the folder's one vitest run, stopped stable-keys.test.ts with it. It is kept by hand, run on main after the merge.
-byHand.push('tests/acceptance/3278/opening.test.ts');
+// #3295: the before lane lays the change's files under the test paths over the merge base, crates/*/tests included, so
+// the original suite's #3295.fae86cca test runs the fixed late-close test there and passes by construction. The
+// original file, kept as written, maps to its blind redraft and runs by hand only. Its three tests run in its place, in
+// 3295-redraft-fae86cca/ (a planted product twin for fae86cca) and 3295-redraft-byhand/ (63a9095d and 2acd3e71).
+Object.assign(redrafted, { 'tests/acceptance/3295/late-close.test.mjs': 'tests/acceptance/3295-redraft-fae86cca/' });
+byHand.push('tests/acceptance/3295/late-close.test.mjs');
