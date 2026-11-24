@@ -11,9 +11,38 @@ import { stripRust } from './rust-source.mjs';
 
 const STATUS = 'packages/hub/src/status.ts';
 const STATES = 'crates/deep-app/src/states.rs';
-const SHOWN = String.raw`(?:\bshown|\bcopy\s*::\s*(?:text|fill|english))\s*\(`;
-/** A comparison with shown words on either side: the call before `==`/`!=` (up to its closing parenthesis), or after it. */
-const COMPARED = new RegExp(String.raw`${SHOWN}[^;{}]*?\)\s*[!=]=(?!=)|[!=]=\s*&?\s*${SHOWN}`);
+/** A call of words in the language shown, with any path before it (`crate::copy::text`). */
+const SHOWN = /(?:\w+\s*::\s*)*(?:shown|copy\s*::\s*(?:text|fill|english))\s*$/;
+/** The side after an `==`/`!=` that opens with such a call, past any `(`, `*` or `&`. */
+const RIGHT = /^[\s(*&]*(?:\w+\s*::\s*)*(?:shown|copy\s*::\s*(?:text|fill|english))\s*\(/;
+
+/** Whether the side before the operator at `at` in `code` ends with such a call: its closing `)` matched back to its `(`. */
+function left(code, at) {
+  let end = at;
+  while (end > 0 && /[\s)]/.test(code[end - 1])) {
+    end -= 1;
+    if (code[end] !== ')') continue;
+    let depth = 1;
+    let open = end;
+    while (open > 0 && depth > 0) {
+      open -= 1;
+      if (code[open] === ')') depth += 1;
+      else if (code[open] === '(') depth -= 1;
+    }
+    return SHOWN.test(code.slice(Math.max(0, open - 200), open));
+  }
+  return false;
+}
+/** Each line of the Rust source `text` that compares against words in the language shown, across line breaks too. */
+function compared(text) {
+  const code = stripRust(text);
+  const lines = new Set();
+  for (const m of code.matchAll(/[!=]=(?!=)/g)) {
+    if (code[m.index - 1] === '=' || code[m.index - 1] === '!' || code[m.index - 1] === '<' || code[m.index - 1] === '>') continue;
+    if (RIGHT.test(code.slice(m.index + 2, m.index + 300)) || left(code, m.index)) lines.add(code.slice(0, m.index).split('\n').length);
+  }
+  return [...lines].sort((x, y) => x - y);
+}
 
 const at = process.argv.indexOf('--root');
 if (at !== -1 && (!process.argv[at + 1] || process.argv[at + 1].startsWith('--'))) {
@@ -34,9 +63,7 @@ const findings = [];
 read(STATUS).split('\n').forEach((line, index) => {
   if (line.includes('$.reading') && /\bLIKE\b/i.test(line)) findings.push(`FAIL display text: ${STATUS}:${index + 1}: a LIKE on a reading's words decides by display text; read its code (\`$.code\`, readingCode in reading-codes.ts) instead`);
 });
-stripRust(read(STATES)).split('\n').forEach((line, index) => {
-  if (COMPARED.test(line)) findings.push(`FAIL display text: ${STATES}:${index + 1}: a comparison against words in the language shown decides by display text; compare the code the hub sends (a state's word, cause or entry) instead`);
-});
+for (const line of compared(read(STATES))) findings.push(`FAIL display text: ${STATES}:${line}: a comparison against words in the language shown decides by display text; compare the code the hub sends (a state's word, cause or entry) instead`);
 for (const line of findings) console.log(line);
 if (!findings.length) console.log('PASS display text');
 process.exitCode = findings.length ? 1 : 0;

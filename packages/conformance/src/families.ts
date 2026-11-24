@@ -53,6 +53,7 @@ const STATE_LISTS: Record<string, readonly string[]> = {
   [`row.set@3 ${WORD}`]: [...ROW, 'running'],
   [`row.set@4 ${WORD}`]: [...ROW, 'running'],
   'session.state@2 /properties/data/properties/state': ROW,
+  'session.state@3 /properties/data/properties/state': ROW,
   [`work.state@1 ${WORD}`]: ['queued', 'working', 'says done', 'sent back', 'needs you', 'stale', 'finished', 'closed', 'closed before the gate'],
   // Attempt and plan's closed set of causes, the two a work run adds, and none for an attempt that hasn't ended.
   'work.attempt@1 /properties/data/properties/cause': ['none', 'landed with the budget window open', 'gave up its slot', 'replaced by you', 'sent back past its rounds', 'stalled', 'context full', 'plan window or spend cap', 'crashed or interrupted'],

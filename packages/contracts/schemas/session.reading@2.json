@@ -1,6 +1,6 @@
 {
   "title": "session.reading@2",
-  "description": "A reading the hub takes of a session: something about it a person should see beside it, such as that it works in one of DeepBuild's job folders or resumed a job's session ID. A minor of session.reading@1 (#1456): its code beside its words, so what a reading does to its session's state is read from the code and never from the words. It changes nothing about how the session is judged.",
+  "description": "A reading the hub takes of a session: something about it a person should see beside it, such as that it works in one of DeepBuild's job folders or resumed a job's session ID. A minor of session.reading@1 (#1456): its code beside its words, so what a reading does to its session's state is read from the code and never from the words. Its words change nothing about how the session is judged or the state it reads.",
   "x-since": "R1",
   "x-stability": "stable",
   "x-feeds": [
