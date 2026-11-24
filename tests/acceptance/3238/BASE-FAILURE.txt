@@ -1,11 +1,11 @@
 # #3238 acceptance tests, the runs recorded so far on the base f8c6cff82 (macOS, 18 cores, 1-minute load 100 to 130),
-# 2026-11-23. The runs still to come (cli, hub and admitted) are on the base b87494f02, which carries #3221: the branch
-# merged it as 138fe266b on 2026-11-24. scripts/lease is the same in both.
+# 2026-11-23, but for admitted.test.mjs, below, on the base b87494f02, which carries #3221: the branch merged it as
+# 138fe266b on 2026-11-24, and the runs still to come (cli and hub) are on it too. scripts/lease is the same in both.
 # Each file run once: nice -n 10 node --test --test-concurrency=1 --test-reporter=spec <file>. Paths redacted: the
 # user's home and each test's own HOME as ~, temp folders as <tmp>.
 #
-# RUN WITH NO GRANT, DURING ANOTHER RUN'S TIMED GRANT. Every run below of serial, inherited, no-grant and design, and of
-# the twins, with the reference script's runs (11 in all, 2026-11-23T19:03:32Z to 19:58:24Z), was made with no machine
+# RUN WITH NO GRANT, DURING ANOTHER RUN'S TIMED GRANT. Every run below of serial, inherited, no-grant and design,
+# of the twins against those files, and of the reference script on them (11 in all, 2026-11-23T19:03:32Z to 19:58:24Z), was made with no machine
 # grant while a preflight held the machine's exclusive timed grant, 2026-11-23T09:28:27Z to 20:03:20Z by the throttle's
 # log. They should have had a test grant: node --test is the throttle's test class whatever a file costs, and the rule
 # that lets a lint run with none is for lint scripts (section 7a). They ran beside that preflight's timed work, and were
@@ -19,15 +19,18 @@
 #   no-grant.test.mjs  #3238.4febe21a  the command started with no build grant
 #   design.test.mjs    #3238.b9ec371a  section 6 never names scripts/lease
 #
-# NOT RUN YET, on any base: cli.test.mjs (#3238.f2323033), hub.test.ts (#3238.8320a246) and admitted.test.mjs
-# (#3238.664c776d). The first two need the packages built (npm ci, npm run build --workspaces; hub.test.ts also
-# deep-hook), and no build grant came on this Mac that day.
+#   admitted.test.mjs  #3238.664c776d  (b87494f02, 2026-11-24T03:40Z, under a test grant, as were the twins and the
+#                                      reference run against it) both tests: no passed entry
+#
+# NOT RUN YET, on any base: cli.test.mjs (#3238.f2323033) and hub.test.ts (#3238.8320a246). Both need the packages
+# built (npm ci, npm run build --workspaces; hub.test.ts also deep-hook), and no build grant came on this Mac that day.
 #
 # After the base runs: each twin once against its test (the file named), each failing at the assertion its run shows.
 # own-test-grant was added and run after the first commit of this suite, at 19:58 UTC; own-grant waits behind the build
 # holder outside the run, not behind its own run, which own-test-grant does. One machine, one run each. A
 # throwaway reference script (the twins' source with no planted line, never committed) passed serial, inherited and
-# no-grant once each in the same session (2.3 s, 1.2 s and 1.6 s).
+# no-grant once each in the same session (2.3 s, 1.2 s and 1.6 s). On b87494f02 it passed admitted.test.mjs once, its
+# second test's diagnostic reading "the lint waited for a turn" (the open question in the README).
 
 === nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/serial.test.mjs
 === scripts/lease: base (a58f542237aa); 2026-11-23T19:04:47Z; load { 117.90 115.57 119.81 }
@@ -192,6 +195,218 @@ test at tests/acceptance/3238/design.test.mjs:25:1
     generatedMessage: false,
     code: 'ERR_ASSERTION',
     actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+=== exit 1
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/admitted.test.mjs
+=== scripts/lease: base b87494f02; 2026-11-24T03:40:29.902Z; load 36 47 85
+✖ #3238.664c776d under an affected.mjs run's admission with a token of the pool free, a lint scripts/lease runs starts at once, the log showing passed for it and no build request (350.142708ms)
+✖ #3238.664c776d under an admission whose every pool token another job of the run holds, a lint scripts/lease runs passes through with no build request, and runs once (562.132292ms)
+ℹ with every token of the pool held by another job of the run, the lint started at once, beside the job that holds the token
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 965.760791
+
+✖ failing tests:
+
+test at tests/acceptance/3238/admitted.test.mjs:58:1
+✖ #3238.664c776d under an affected.mjs run's admission with a token of the pool free, a lint scripts/lease runs starts at once, the log showing passed for it and no build request (350.142708ms)
+  AssertionError [ERR_ASSERTION]: the log shows no passed entry through the run's admission test:9b9d9b84f0bf4f0e for the lint `repo-rules-lint`
+  events:
+  {"name":"repo-rules-lint","event":"start","at":1795491630313,"pid":35558,"ppid":35555,"throttle":"test:9b9d9b84f0bf4f0e"}
+  {"name":"repo-rules-lint","event":"end","at":1795491630314,"pid":35558,"ppid":35555,"throttle":"test:9b9d9b84f0bf4f0e"}
+  table: {"grants":[{"id":"9b9d9b84f0bf4f0e","class":"test","pid":35509,"start":"Tue Nov 24 03:40:30 2026","nested":false,"window":false,"index":1,"at":1795491630175,"run":true,"used":0}],"requests":[],"seq":1}
+  the throttle's log:
+  {"at":"2026-11-24T03:40:30.175Z","event":"granted","class":"test","grant":"top-level","id":"9b9d9b84f0bf4f0e","pid":35509,"index":1,"load":35.78369140625,"cores":18,"wait":1,"run":true,"readings":{"memory":1099511627776,"load":1,"cores":2}}
+  run (`/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/checkout/scripts/throttle.mjs test --wait 1 -- /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/run.mjs [{"argv":["<tmp>/checkout/scripts/lease","node","<tmp>/stub.mjs","repo-rules-lint","exit"],"go":"<tmp>/lint.go"}]`, pid 35509): still running
+  started repo-rules-lint
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node <tmp>/stub.mjs repo-rules-lint exit` runs unleased
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/tests/acceptance/3238/admitted.test.mjs:74:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3238/admitted.test.mjs:78:1
+✖ #3238.664c776d under an admission whose every pool token another job of the run holds, a lint scripts/lease runs passes through with no build request, and runs once (562.132292ms)
+  AssertionError [ERR_ASSERTION]: the log shows no passed entry through the run's admission test:dd686bcc0659bcc7 for the lint `repo-rules-lint`
+  events:
+  {"name":"other-job","event":"start","at":1795491630718,"pid":35661,"ppid":35612,"throttle":"test:dd686bcc0659bcc7"}
+  {"name":"repo-rules-lint","event":"start","at":1795491630842,"pid":35674,"ppid":35608,"throttle":"test:dd686bcc0659bcc7"}
+  {"name":"repo-rules-lint","event":"end","at":1795491630844,"pid":35674,"ppid":35608,"throttle":"test:dd686bcc0659bcc7"}
+  table: {"grants":[{"id":"dd686bcc0659bcc7","class":"test","pid":35581,"start":"Tue Nov 24 03:40:30 2026","nested":false,"window":false,"index":1,"at":1795491630522,"run":true,"used":0},{"id":"ea297060ef137a67","class":"turn","run":"dd686bcc0659bcc7","pid":35612,"start":"Tue Nov 24 03:40:30 2026","nested":true,"at":1795491630678,"lent":0}],"requests":[],"seq":2}
+  the throttle's log:
+  {"at":"2026-11-24T03:40:30.522Z","event":"granted","class":"test","grant":"top-level","id":"dd686bcc0659bcc7","pid":35581,"index":1,"load":35.78369140625,"cores":18,"wait":1,"run":true,"readings":{"memory":1099511627776,"load":1,"cores":2}}
+  {"at":"2026-11-24T03:40:30.676Z","event":"passed","class":"test","pid":35612,"through":"test:dd686bcc0659bcc7"}
+  {"at":"2026-11-24T03:40:30.678Z","event":"turn","id":"ea297060ef137a67","run":"dd686bcc0659bcc7","pid":35612}
+  run (`/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/checkout/scripts/throttle.mjs test --wait 1 -- /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/run.mjs [{"argv":["/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node","<tmp>/checkout/scripts/throttle.mjs","test","--wait","30","--","node","<tmp>/stub.mjs","other-job"]},{"argv":["<tmp>/checkout/scripts/lease","node","<tmp>/stub.mjs","repo-rules-lint","exit"],"go":"<tmp>/lint.go"}]`, pid 35581): still running
+  started other-job
+  started repo-rules-lint
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node <tmp>/stub.mjs repo-rules-lint exit` runs unleased
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-3238-49d52c/agent-ab62da87a7954a21e/tests/acceptance/3238/admitted.test.mjs:101:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+=== exit 1
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/admitted.test.mjs
+=== scripts/lease: own-test-grant; 2026-11-24T03:40:32.637Z; load 34 47 84
+✖ #3238.664c776d under an affected.mjs run's admission with a token of the pool free, a lint scripts/lease runs starts at once, the log showing passed for it and no build request (517.279958ms)
+✖ #3238.664c776d under an admission whose every pool token another job of the run holds, a lint scripts/lease runs passes through with no build request, and runs once (656.171208ms)
+ℹ with every token of the pool held by another job of the run, the lint asked for a grant of its own
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1239.760292
+
+✖ failing tests:
+
+test at tests/acceptance/3238/admitted.test.mjs:58:1
+✖ #3238.664c776d under an affected.mjs run's admission with a token of the pool free, a lint scripts/lease runs starts at once, the log showing passed for it and no build request (517.279958ms)
+  AssertionError [ERR_ASSERTION]: the lint `node stub.mjs repo-rules-lint` didn't start at once under its run's admission: a request of its own waits in the table
+  events:
+  
+  table: {"grants":[{"id":"0bcd5a4192c8c3f5","class":"test","pid":36109,"start":"Tue Nov 24 03:40:32 2026","nested":false,"window":false,"index":1,"at":1795491632946,"run":true,"used":0},{"id":"85fba42e9f02e345","class":"test","pid":36195,"start":"Tue Nov 24 03:40:32 2026","nested":false,"window":false,"index":2,"at":1795491633197}],"requests":[],"seq":2}
+  the throttle's log:
+  {"at":"2026-11-24T03:40:32.946Z","event":"granted","class":"test","grant":"top-level","id":"0bcd5a4192c8c3f5","pid":36109,"index":1,"load":34.439453125,"cores":18,"wait":1,"run":true,"readings":{"memory":1099511627776,"load":1,"cores":2}}
+  {"at":"2026-11-24T03:40:33.198Z","event":"granted","class":"test","grant":"top-level","id":"85fba42e9f02e345","pid":36195,"index":2,"load":34.439453125,"cores":18,"wait":30,"readings":{"memory":1099511627776,"load":1,"cores":2}}
+  run (`/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/checkout/scripts/throttle.mjs test --wait 1 -- /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/run.mjs [{"argv":["<tmp>/checkout/scripts/lease","node","<tmp>/stub.mjs","repo-rules-lint","exit"],"go":"<tmp>/lint.go"}]`, pid 36109): still running
+  
+  
+  'waits' !== 'started'
+  
+      at TestContext.<anonymous> (file://<tmp>/-Users-<name>-dev-claude-worktrees-doneright-github-issue-3238-49d52c/8582efbe-3b0e-4e92-a209-32b2149691f8/scratchpad/blind-3238/checkout-own-test-grant/tests/acceptance/3238/admitted.test.mjs:70:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'waits',
+    expected: 'started',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3238/admitted.test.mjs:78:1
+✖ #3238.664c776d under an admission whose every pool token another job of the run holds, a lint scripts/lease runs passes through with no build request, and runs once (656.171208ms)
+  AssertionError [ERR_ASSERTION]: the lint `node stub.mjs repo-rules-lint` neither started nor waited for a turn: asked for a grant of its own
+  events:
+  {"name":"other-job","event":"start","at":1795491633667,"pid":36302,"ppid":36282,"throttle":"test:1496d41049209496"}
+  table: {"grants":[{"id":"1496d41049209496","class":"test","pid":36254,"start":"Tue Nov 24 03:40:33 2026","nested":false,"window":false,"index":1,"at":1795491633436,"run":true,"used":0},{"id":"4b839cef5aa27f41","class":"turn","run":"1496d41049209496","pid":36282,"start":"Tue Nov 24 03:40:33 2026","nested":true,"at":1795491633625,"lent":0},{"id":"af96bad8030a2ff2","class":"test","pid":36307,"start":"Tue Nov 24 03:40:33 2026","nested":false,"window":false,"index":2,"at":1795491633868}],"requests":[],"seq":3}
+  the throttle's log:
+  {"at":"2026-11-24T03:40:33.436Z","event":"granted","class":"test","grant":"top-level","id":"1496d41049209496","pid":36254,"index":1,"load":34.439453125,"cores":18,"wait":1,"run":true,"readings":{"memory":1099511627776,"load":1,"cores":2}}
+  {"at":"2026-11-24T03:40:33.623Z","event":"passed","class":"test","pid":36282,"through":"test:1496d41049209496"}
+  {"at":"2026-11-24T03:40:33.626Z","event":"turn","id":"4b839cef5aa27f41","run":"1496d41049209496","pid":36282}
+  {"at":"2026-11-24T03:40:33.868Z","event":"granted","class":"test","grant":"top-level","id":"af96bad8030a2ff2","pid":36307,"index":2,"load":34.439453125,"cores":18,"wait":30,"readings":{"memory":1099511627776,"load":1,"cores":2}}
+  run (`/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/checkout/scripts/throttle.mjs test --wait 1 -- /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/run.mjs [{"argv":["/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node","<tmp>/checkout/scripts/throttle.mjs","test","--wait","30","--","node","<tmp>/stub.mjs","other-job"]},{"argv":["<tmp>/checkout/scripts/lease","node","<tmp>/stub.mjs","repo-rules-lint","exit"],"go":"<tmp>/lint.go"}]`, pid 36254): still running
+  started other-job
+  
+      at TestContext.<anonymous> (file://<tmp>/-Users-<name>-dev-claude-worktrees-doneright-github-issue-3238-49d52c/8582efbe-3b0e-4e92-a209-32b2149691f8/scratchpad/blind-3238/checkout-own-test-grant/tests/acceptance/3238/admitted.test.mjs:100:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+=== exit 1
+
+=== nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/admitted.test.mjs
+=== scripts/lease: own-grant; 2026-11-24T03:40:33.973Z; load 34 47 84
+✖ #3238.664c776d under an affected.mjs run's admission with a token of the pool free, a lint scripts/lease runs starts at once, the log showing passed for it and no build request (429.1565ms)
+✖ #3238.664c776d under an admission whose every pool token another job of the run holds, a lint scripts/lease runs passes through with no build request, and runs once (607.359916ms)
+ℹ with every token of the pool held by another job of the run, the lint asked for a grant of its own
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1091.122541
+
+✖ failing tests:
+
+test at tests/acceptance/3238/admitted.test.mjs:58:1
+✖ #3238.664c776d under an affected.mjs run's admission with a token of the pool free, a lint scripts/lease runs starts at once, the log showing passed for it and no build request (429.1565ms)
+  AssertionError [ERR_ASSERTION]: the lint `repo-rules-lint` doesn't hold its run's grant test:ea0ca7862fc91de4
+  events:
+  {"name":"repo-rules-lint","event":"start","at":1795491634456,"pid":36473,"ppid":36433,"throttle":"build:068228ff73fa24e9"}
+  {"name":"repo-rules-lint","event":"end","at":1795491634458,"pid":36473,"ppid":36433,"throttle":"build:068228ff73fa24e9"}
+  table: {"grants":[{"id":"ea0ca7862fc91de4","class":"test","pid":36404,"start":"Tue Nov 24 03:40:34 2026","nested":false,"window":false,"index":1,"at":1795491634203,"run":true,"used":0},{"id":"068228ff73fa24e9","class":"build","pid":36433,"start":"Tue Nov 24 03:40:34 2026","nested":false,"window":false,"index":1,"at":1795491634420}],"requests":[],"seq":2}
+  the throttle's log:
+  {"at":"2026-11-24T03:40:34.203Z","event":"granted","class":"test","grant":"top-level","id":"ea0ca7862fc91de4","pid":36404,"index":1,"load":34.439453125,"cores":18,"wait":1,"run":true,"readings":{"memory":1099511627776,"load":1,"cores":2}}
+  {"at":"2026-11-24T03:40:34.420Z","event":"granted","class":"build","grant":"top-level","id":"068228ff73fa24e9","pid":36433,"index":1,"load":34.439453125,"cores":18,"wait":30}
+  run (`/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/checkout/scripts/throttle.mjs test --wait 1 -- /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/run.mjs [{"argv":["<tmp>/checkout/scripts/lease","node","<tmp>/stub.mjs","repo-rules-lint","exit"],"go":"<tmp>/lint.go"}]`, pid 36404): still running
+  started repo-rules-lint
+  
+  + actual - expected
+  
+  + 'build:068228ff73fa24e9'
+  - 'test:ea0ca7862fc91de4'
+  
+      at TestContext.<anonymous> (file://<tmp>/-Users-<name>-dev-claude-worktrees-doneright-github-issue-3238-49d52c/8582efbe-3b0e-4e92-a209-32b2149691f8/scratchpad/blind-3238/checkout-own-grant/tests/acceptance/3238/admitted.test.mjs:73:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'build:068228ff73fa24e9',
+    expected: 'test:ea0ca7862fc91de4',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3238/admitted.test.mjs:78:1
+✖ #3238.664c776d under an admission whose every pool token another job of the run holds, a lint scripts/lease runs passes through with no build request, and runs once (607.359916ms)
+  AssertionError [ERR_ASSERTION]: the lint `node stub.mjs repo-rules-lint` neither started nor waited for a turn: asked for a grant of its own
+  events:
+  {"name":"other-job","event":"start","at":1795491634837,"pid":36578,"ppid":36542,"throttle":"test:6fa601ea4668d117"}
+  table: {"grants":[{"id":"6fa601ea4668d117","class":"test","pid":36490,"start":"Tue Nov 24 03:40:34 2026","nested":false,"window":false,"index":1,"at":1795491634630,"run":true,"used":0},{"id":"be30915c5573da34","class":"turn","run":"6fa601ea4668d117","pid":36542,"start":"Tue Nov 24 03:40:34 2026","nested":true,"at":1795491634798,"lent":0}],"requests":[{"id":"0f40ef1291d7479e","class":"build","pid":36595,"start":"Tue Nov 24 03:40:34 2026","nested":false,"window":false,"limit":1,"seq":3}],"seq":3}
+  the throttle's log:
+  {"at":"2026-11-24T03:40:34.630Z","event":"granted","class":"test","grant":"top-level","id":"6fa601ea4668d117","pid":36490,"index":1,"load":34.439453125,"cores":18,"wait":1,"run":true,"readings":{"memory":1099511627776,"load":1,"cores":2}}
+  {"at":"2026-11-24T03:40:34.797Z","event":"passed","class":"test","pid":36542,"through":"test:6fa601ea4668d117"}
+  {"at":"2026-11-24T03:40:34.798Z","event":"turn","id":"be30915c5573da34","run":"6fa601ea4668d117","pid":36542}
+  run (`/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/checkout/scripts/throttle.mjs test --wait 1 -- /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <tmp>/run.mjs [{"argv":["/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node","<tmp>/checkout/scripts/throttle.mjs","test","--wait","30","--","node","<tmp>/stub.mjs","other-job"]},{"argv":["<tmp>/checkout/scripts/lease","node","<tmp>/stub.mjs","repo-rules-lint","exit"],"go":"<tmp>/lint.go"}]`, pid 36490): still running
+  started other-job
+  
+      at TestContext.<anonymous> (file://<tmp>/-Users-<name>-dev-claude-worktrees-doneright-github-issue-3238-49d52c/8582efbe-3b0e-4e92-a209-32b2149691f8/scratchpad/blind-3238/checkout-own-grant/tests/acceptance/3238/admitted.test.mjs:100:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
     expected: true,
     operator: '==',
     diff: 'simple'

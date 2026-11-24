@@ -18,8 +18,9 @@ I only listed. Beyond the brief's list I also read, at the base, `packages/hub/s
 twins), and the headers of the lints a new suite must pass.
 
 **Two bases.** The suite was drafted at `f8c6cff82`, and the runs recorded so far are there. The branch then merged main
-at `b87494f02`, which carries #3221 (admission and turns, section 6); I read main up to that commit, the admission and
-turn text, `scripts/throttle.mjs`, `scripts/affected.mjs` and `tests/acceptance/3221/` in it. The runs still to come (AC4,
+at `b87494f02`, which carries #3221 (admission and turns, section 6); I read main up to that commit, and of it the
+admission and turn text of section 6, `scripts/throttle.mjs`'s `acquire` and turn code, two lines of
+`scripts/affected.mjs`, and the start of `tests/acceptance/3221/README.md` with a search of its helpers. The runs still to come (AC4,
 AC5 and `admitted.test.mjs`) have `b87494f02` as their base. `scripts/lease` is the same in both.
 
 `helpers.mjs` is this suite's own. `hub.test.ts` imports #1015's helpers (its world, scripted sessions and lease
@@ -44,7 +45,7 @@ and `hub.test.ts` under the same wrapper around its vitest command.
 | `serial.test.mjs` | AC1 | nothing built: a copy of `scripts/` | about 3 s |
 | `inherited.test.mjs` | AC2 | nothing built: a copy of `scripts/` | about 2 s |
 | `no-grant.test.mjs` | AC3 | nothing built: a copy of `scripts/` | about 2 s |
-| `admitted.test.mjs` | AC2, the admission case | nothing built: a copy of `scripts/` | not run yet |
+| `admitted.test.mjs` | AC2, the admission case | nothing built: a copy of `scripts/` | about 2 s |
 | `cli.test.mjs` | AC4 | the built CLI (`npm ci`, `npm run build --workspaces`); BLOCKED without it | not run yet |
 | `hub.test.ts` | AC5 | the built CLI, and deep-hook (`cargo build --locked -p deep-hook --features env-plants`, which #18's helper runs when it is missing) | not run yet |
 
@@ -131,8 +132,11 @@ repo-rules-lint`, as `affected.mjs` starts a light lint.
   less the other job's own), with no build request; once the token goes back the lint has run exactly once and the run
   ends with 0. Whether it started while the token was held is printed as a diagnostic, not asserted (below).
 
-On the base the script runs the lint directly: it holds the run's `DEEP_THROTTLE`, but the log has no `passed` entry, so
-both should fail at that assertion (read from the base's code; not run yet).
+On the base (`b87494f02`) the script runs the lint directly: it holds the run's `DEEP_THROTTLE`, but the log has no
+`passed` entry, and both tests fail at that assertion. The twins fail too: under `own-grant` the lint takes a build
+grant, which isn't its run's, and under `own-test-grant` a request of its own is in the table (seen there while it is
+being granted, so it needn't have waited long). The reference script passes both tests, and in the second its lint
+waited for a turn.
 
 ### Open question: does a lint wait for a turn?
 
@@ -200,8 +204,7 @@ scripts the criteria name, and `own-grant` beside AC2's, are twins (`twins.json`
 against its test, failing as recorded at the end of `BASE-FAILURE.txt`. A throwaway reference script, the twins' source without their planted line,
 passed the tests of AC1, AC2 and AC3 here and was never committed.
 
-**`cli.test.mjs` (AC4), `hub.test.ts` (AC5) and `admitted.test.mjs` have not run yet, on the base or anywhere.** The
-last needs a test grant and no build. The other two need the packages built, and on the day these were drafted no build grant came on this Mac: a preflight held the machine's exclusive
+**`cli.test.mjs` (AC4) and `hub.test.ts` (AC5) have not run yet, on the base or anywhere.** Both need the packages built, and on the day these were drafted no build grant came on this Mac: a preflight held the machine's exclusive
 `timed` grant for over 10 hours. Their expected base failures above are read from the base's code, not seen. The
 runs of `serial`, `inherited`, `no-grant` and `design`, of the reference and of the twins were made with no machine
 grant, while that preflight held `timed` (`BASE-FAILURE.txt` has the times). They should have had a `test` grant:
