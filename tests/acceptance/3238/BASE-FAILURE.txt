@@ -1,7 +1,13 @@
 # #3238 acceptance tests on the base f8c6cff82 (macOS, 18 cores, 1-minute load 100 to 130), 2026-11-23.
-# Each file run once: nice -n 10 node --test --test-concurrency=1 --test-reporter=spec <file>, with no machine grant
-# (a preflight held the machine's exclusive timed grant all day; these four build nothing and each test uses a table
-# of its own inside node --test). Paths redacted: the user's home and each test's own HOME as ~, temp folders as <tmp>.
+# Each file run once: nice -n 10 node --test --test-concurrency=1 --test-reporter=spec <file>. Paths redacted: the
+# user's home and each test's own HOME as ~, temp folders as <tmp>.
+#
+# RUN WITH NO GRANT, DURING ANOTHER RUN'S TIMED GRANT. Every run below of serial, inherited, no-grant and design, and of
+# the twins, with the reference script's runs (11 in all, 2026-11-23T19:03:32Z to 19:58:24Z), was made with no machine
+# grant while a preflight held the machine's exclusive timed grant, 2026-11-23T09:28:27Z to 20:03:20Z by the throttle's
+# log. They should have had a test grant: node --test is the throttle's test class whatever a file costs, and the rule
+# that lets a lint run with none is for lint scripts (section 7a). They ran beside that preflight's timed work, and were
+# not rerun for this. Each test used a table of its own inside node --test, so the machine's table was not touched.
 #
 # Expected reason: the base's scripts/lease runs its command with no throttle grant (no deep on PATH and no built CLI:
 # "runs unleased"), and section 6 of docs/parallel-proof.md never names scripts/lease. Every failure is at an assertion

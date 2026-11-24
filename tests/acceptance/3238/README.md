@@ -29,8 +29,10 @@ node --test --test-concurrency=1 tests/acceptance/3238/*.test.mjs
 node node_modules/vitest/vitest.mjs run --testTimeout=1200000 tests/acceptance/3238/hub.test.ts
 ```
 
-On a shared Mac, each under the machine's test grant:
-`node scripts/throttle.mjs test --wait 600 -- nice -n 10 node --test --test-concurrency=1 tests/acceptance/3238/<file>`.
+On a shared Mac, each under the machine's test grant, the files that build nothing too, since `node --test` is the
+throttle's `test` class whatever a file costs:
+`node scripts/throttle.mjs test --wait 1440 -- nice -n 10 node --test --test-concurrency=1 tests/acceptance/3238/<file>`,
+and `hub.test.ts` under the same wrapper around its vitest command.
 
 | File | Criterion | Needs | Takes |
 |---|---|---|---|
@@ -46,9 +48,8 @@ The times are at a 1-minute load of 100 to 130 on 18 cores; a test whose program
 
 The `.mjs` files must run under `node --test` and `hub.test.ts` under vitest: only inside a test run does a request use
 a table of a test's own (section 6). `hub.test.ts` starts a hub, which runs deep-hook from this checkout's `target/`,
-so it belongs on `scripts/lanes-lists.mjs`'s `alone` list as `tests/acceptance/3238/hub.test.ts`, reason `binary`, as
-#1015's hub files are; this README is the instruction and the implementer makes that edit. The `.mjs` files need no
-list: each runs a few small node processes on a table of its own.
+so the folder runs alone, by its own `lane.json` (docs/parallel-proof.md section 7, #1327), reason `binary`, as #1015's
+hub files are. That takes the `.mjs` files with it: the lane file names a folder, not a file.
 
 **The machine's table at `~/.deepbuild/throttle/` is never read or written.** Every process a `.mjs` test starts gets a
 temporary `HOME`, `DEEP_THROTTLE_TABLE` pointed at a folder of the test's own sandbox, a `PATH` of a folder holding
@@ -161,9 +162,10 @@ passed the tests of AC1, AC2 and AC3 here and was never committed.
 
 **`cli.test.mjs` (AC4) and `hub.test.ts` (AC5) have not run yet, on the base or anywhere.** Both need the packages
 built, and on the day these were drafted no build grant came on this Mac: a preflight held the machine's exclusive
-`timed` grant for over 10 hours. Their expected base failures above are read from the base's code, not seen. The four
-files that build nothing were run once each with no machine grant, as section 7a lets a lint that builds nothing run,
-each on a table of its own inside `node --test`.
+`timed` grant for over 10 hours. Their expected base failures above are read from the base's code, not seen. The
+runs of `serial`, `inherited`, `no-grant` and `design`, of the reference and of the twins were made with no machine
+grant, while that preflight held `timed` (`BASE-FAILURE.txt` has the times). They should have had a `test` grant:
+section 7a's no-grant rule is for lint scripts, and `node --test` is the `test` class.
 
 ## Gaps
 
