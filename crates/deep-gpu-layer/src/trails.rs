@@ -133,6 +133,15 @@ pub(crate) fn plant_wake(scene: &mut Scene, planted: Option<Planted>, t: i64) {
     wake.path = kept.iter().map(|(_, p)| *p).collect();
 }
 
+/// #3036: each plate's lowering as the last frame this process drew left it, a share of the depth
+/// a vertex, which the planted `tracks_keep_last_frame` draws from and adds to.
+static TRACKS: Mutex<BTreeMap<String, Vec<f64>>> = Mutex::new(BTreeMap::new());
+
+/// What the planted `tracks_keep_last_frame` keeps between the frames this process draws.
+pub(crate) fn kept_tracks() -> std::sync::MutexGuard<'static, BTreeMap<String, Vec<f64>>> {
+    TRACKS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// #265: the check's refusal of a document's trails before anything draws, as the trail rule
 /// raises it (a span past the logic bake's oldest step, a source a live drag moves):
 /// `{"code": "refused", "issues": [...]}`, each issue naming its line.

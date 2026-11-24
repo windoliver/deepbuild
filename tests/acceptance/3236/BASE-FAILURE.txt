@@ -1,0 +1,65 @@
+#3236 at the base, f8c6cff82 (Merge pull request #3248), on 2026-11-23 from 09:33 to 09:34 UTC, an arm64 Mac (Mac17,10, 18
+cores, one-minute load 51 at the start and 74 at the end), deep-show built by the files (`cargo build --locked --bin
+deep-show`, toolchain from rustup, the target already warm from one earlier build of the same commit), after `npm ci &&
+npm run build --workspaces`:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    scripts/lease npx vitest run --root tests/acceptance/3236 --testTimeout=600000 --hookTimeout=3600000 --no-file-parallelism --reporter=verbose
+
+The lease said "The hub isn't answering; start it with deep hub start", so the run went unleased. Test Files 9 failed
+(9); Tests 13 failed, 1 passed (14); 52 s. `node node_modules/typescript/bin/tsc -p tests/acceptance/3236/tsconfig.json`
+exits 0. Every failure is an assertion; none is a crash, a timeout, BLOCKED or INCONCLUSIVE.
+
+What the base does with the fixtures, read before the run on stand-ins that weren't kept (the scatter with its NaN y
+replaced by 22, everything else as fixtures.ts writes it): presented; `see` gives the node {"id":"scatter","role":"data",
+"name":"Ball height"} with no value; Tab with no control leaves `state.focus` null; with #539's pick control `place` and
+the slider `speed`, Tab, Right, Right focus scatter#0, #1, #2, announced "0", "1", "2", Enter appends one pick
+{set: 0, key: [2, 0]}, then Tab focuses speed and the next Tab nothing. Its web export plays in headless Chrome here and
+the page's tree equals the app's by id, role and name, with no value on either. The bar chart and the 50,000-row series
+are presented, each one node with no value. For criterion 8's harness: this process is trusted for Accessibility, swiftc
+builds appkit.swift, and deep-show live opens its window (tried with #376's figure at two revisions whose readout
+differs); AppKit lists one window for it, but that element answers as
+the application itself, its children the same element again, with no element carrying an identifier, and no
+announcement was heard over 14 s though the readout's frame changed at 6 s: so at the base the
+live tree can't be read through AppKit, which criterion 8 reports as BLOCKED, naming that, once its replica passes.
+
+ac1-value.test.ts (1 failed, 1 passed)
+- The value: the fixture scatter is refused at check, out_of_range at items/scatter/params/columns/y/data (the base
+  refuses a NaN in a column; a missing y has no form at the base), so its node has no value.
+- PASSES at the base, as a guard: the planted document whose agent typed the node's value is refused with
+  unknown_field at items/scatter/value, ids ["scatter"]. Once the value exists, the check must go on refusing a typed
+  one.
+
+ac2-edit.test.ts (2 failed)
+- The edit: the fixture scatter is refused at check (out_of_range at items/scatter/params/columns/y/data).
+- tree_keeps_old_value: the scenario answers {"ok":false,"code":"bad_input"} (no such planted name).
+
+ac3-walk.test.ts (2 failed)
+- The walk: the fixture scatter is refused at check (out_of_range at items/scatter/params/columns/y/data).
+- reading_walk_writes_entry: bad_input.
+
+ac4-categories.test.ts (2 failed)
+- "the node bars carries no value (the node: {"id":"bars","role":"data","name":"Sales by region"})" and "Tab and Right
+  land 0 times, not on the 12 bars": no value, and no reading focus.
+- reading_walk_row_order: bad_input.
+
+ac5-buckets.test.ts (2 failed)
+- "Tab and Right never focus a stop of trace: the focus after each key is [null]".
+- reading_walk_every_row: bad_input.
+
+ac6-pick.test.ts (1 failed)
+- The scatter with the pick control is refused at check (out_of_range at items/scatter/params/columns/y/data). On the
+  NaN-free stand-in above the base already does what this test asks of #539's focus; it fails at the base only on the
+  missing row's form.
+
+ac7-web.test.ts (1 failed)
+- The fixture scatter is refused at check (out_of_range at items/scatter/params/columns/y/data), before any export.
+
+ac8-appkit.test.ts (1 failed)
+- The platform checks passed (macOS, Mac17,10 a reference Mac, swiftc, Accessibility trust); then the replica's fixture
+  scatter is refused at check (out_of_range at items/scatter/params/columns/y/data), before the live window opens.
+
+ac9-budgets.test.ts (1 failed)
+- "the 100,000-row set's node carries a value to time: {"id":"scatter","role":"data","name":"Heights"}": no value, so
+  nothing to time; the machine check and the release builds weren't reached. At this load (above the 18 cores) the
+  test would read INCONCLUSIVE before building anything once the value exists.
