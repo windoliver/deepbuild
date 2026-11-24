@@ -1,0 +1,11 @@
+{
+ "criterion": "#3242.28fd1eed",
+ "who": "The owner's coding agent, which drafted the text, on the owner's word in the session (\"close the issue\"), as #1336's and #1352's calls were made",
+ "when": "2026-11-24T06:33:52Z",
+ "text": {
+  "file": "docs/technical-design.md",
+  "sha256": "9bf7be86b492308d51139b11560362c0a1695e1a6dd94e416a0d7bdab08cfe52"
+ },
+ "call": "reads_right",
+ "note": "Read whole against the issue's four Scope decisions: each is answered in one item of One hub for a project with its own Not taken, in the issue's words, and agrees with that section's six earlier decisions, the learned layer's quote, scope and audit rules, and Privacy. The four Decided rows say the same in short, each with what reopens it. Three things go past the issue's draft answers: the audit ask is never sent on to a second person, a change whose quote check hasn't been reported isn't applied, and the four Reopens-if cells. The agent that makes this call also drafted the text, so it stands until a person on the project reads it: the others are told on #3242 and can overrule it."
+}
