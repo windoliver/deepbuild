@@ -1766,15 +1766,18 @@ pub(crate) fn title(
     id: impl Into<ElementId>,
     text: impl Into<SharedString>,
 ) -> ObservedElement<Stateful<Div>> {
-    let s = sizes();
+    let (s, text): (_, SharedString) = (sizes(), text.into());
     // A title longer than its room ends in an ellipsis, its whole text in its accessible name, as a row's does: a page
     // at 360 pt wide draws nothing past its frame (#2403).
-    label(id, text)
+    observed(id)
+        .role(Role::Label)
+        .aria_label(text.clone())
         .typed(s.title)
-        .h_auto()
         .min_h(s.title.line + s.space(2))
         .min_w_0()
-        .truncate()
+        .flex()
+        .items_center()
+        .child(div().min_w_0().truncate().child(text))
 }
 
 /// A list's heading: the body role at medium weight (#1458).

@@ -199,7 +199,7 @@ pub(crate) fn titled(
     let Some((query, of)) = read else {
         return heading.into_any_element();
     };
-    let Some((field, at)) = FIND.with(|find| {
+    let Some((field, keys, at)) = FIND.with(|find| {
         let mut find = find.borrow_mut();
         let find = find.as_mut()?;
         // What's left when the page lost matches is drawn in the next frame.
@@ -209,7 +209,7 @@ pub(crate) fn titled(
             window.defer(cx, |window, _| window.refresh());
         }
         find.of = of;
-        Some((find.query.clone(), find.at))
+        Some((find.query.clone(), find.keys.clone(), find.at))
     }) else {
         return heading.into_any_element();
     };
@@ -249,9 +249,13 @@ pub(crate) fn titled(
                         .role(Role::SearchInput)
                         .aria_label(copy::text("find.on_this_page"))
                         .aria_value(field.read(cx).value())
+                        // The input has no node of its own: an assistive client hears this one as focused.
+                        .track_focus(&keys)
                         .typed(s.body)
                         .w(s.list_min)
-                        .h(s.title.line)
+                        .h(s.body.line + s.space(0))
+                        .flex()
+                        .items_center()
                         .px(s.space(0))
                         .border(s.hairline)
                         .border_color(chrome.divider)
@@ -275,7 +279,9 @@ pub(crate) fn mark(range: Range<usize>, layout: TextLayout, color: Hsla) -> impl
                 );
             }
         },
-        move |_, _, window, _| crate::select::outline(&layout, range, color, window),
+        move |_, _, window, _| {
+            crate::select::outline(&layout, range, sizes().hairline, color, window)
+        },
     )
     .absolute()
     .size_0()
