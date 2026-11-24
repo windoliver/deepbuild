@@ -69,9 +69,13 @@ fn contrast(ink: u32, fill: u32) -> f64 {
 
 /// What the three rules find in `tree`, parents first.
 pub fn findings(tree: &Node) -> Vec<Finding> {
-    let mut found = Vec::new();
-    walk(tree, "0", None, None, &mut found);
-    found
+    let mut walk = Walk {
+        found: Vec::new(),
+        path: Vec::new(),
+        read: None,
+    };
+    walk.node(tree, None, None);
+    walk.found
 }
 
 /// What they find in the tree `view` last built: nothing where it built none, or one this can't read.
@@ -95,98 +99,134 @@ fn texts<'a>(node: &'a Node, shown: &mut Vec<&'a str>) {
     }
 }
 
-/// `ink` and `fill` are the text color and the fill the panel set at this node or above it, nearest first.
-fn walk(node: &Node, path: &str, ink: Option<u32>, fill: Option<u32>, found: &mut Vec<Finding>) {
-    let op = |name: &str| node.ops.iter().find(|op| op.name == name);
-    let ink = op("text_color").and_then(|op| color(&op.args)).or(ink);
-    let fill = op("bg").and_then(|op| color(&op.args)).or(fill);
-    // A button's own string is its id; a text node's is its text.
-    let id = op("id")
-        .and_then(|op| text_arg(&op.args))
-        .or_else(|| node.label.clone().filter(|_| node.kind != "text"));
-    let named = match &id {
-        // copy-exception: a refusal reason the kit and the loader report, never drawn
-        Some(id) => format!("the {} {id}", node.kind),
-        // copy-exception: a refusal reason the kit and the loader report, never drawn
-        None => format!("the {} at {path}", node.kind),
-    };
-    let place = id.unwrap_or_else(|| path.to_owned());
-    let press = node.kind == "Button" || op("on_click").is_some();
-    if press {
-        let labels: Vec<String> = ["label", "accessibility_label", "aria_label"]
-            .iter()
-            .filter_map(|name| op(name).and_then(|op| text_arg(&op.args)))
-            .collect();
-        let mut names: Vec<&str> = labels.iter().map(String::as_str).collect();
-        texts(node, &mut names);
-        names.retain(|name| !name.trim().is_empty());
-        // A name that is only its kind's word, such as "button", says nothing.
-        if names
-            .iter()
-            .all(|name| name.trim().eq_ignore_ascii_case(&node.kind))
-        {
-            // copy-exception: a refusal reason the kit and the loader report, never drawn
-            let why = match names.first() {
-                // copy-exception: a refusal reason the kit and the loader report, never drawn
-                Some(word) => format!("is named only {word:?}, its kind's word"),
-                // copy-exception: a refusal reason the kit and the loader report, never drawn
-                None => "has no name: no text of its own or under it, and no label".to_owned(),
-            };
-            found.push(Finding {
-                code: "no_name",
-                node: place.clone(),
-                // copy-exception: a refusal reason the kit and the loader report, never drawn
-                text: format!("no_name: {named} takes a press and {why}"),
-            });
+/// One walk of a tree. Nothing is written for a node no rule faults: a tree is read on every update.
+struct Walk {
+    found: Vec<Finding>,
+    /// Where the node in hand is: each child's place under its parent, from the root's.
+    path: Vec<usize>,
+    /// The last pair of colors read and its ratio: a panel's rows mostly draw one ink on one fill.
+    read: Option<((u32, u32), f64)>,
+}
+
+impl Walk {
+    fn ratio(&mut self, ink: u32, fill: u32) -> f64 {
+        match self.read {
+            Some((pair, ratio)) if pair == (ink, fill) => ratio,
+            _ => {
+                let ratio = contrast(ink, fill);
+                self.read = Some(((ink, fill), ratio));
+                ratio
+            }
         }
     }
-    // The toolkit's button is a tab stop with a focus handle of its own; anything else takes focus by tracking one,
-    // which DeepBuild's module makes a tab stop unless the script then refuses the stop.
-    let refused = node.ops.iter().rev().find(|op| op.name == "tab_stop");
-    let focus = node.kind == "Button"
-        || op("track_focus").is_some_and(|op| number(&op.args).is_some())
-            && !refused.is_some_and(|op| op.args.contains("false"));
-    if press && !focus {
-        found.push(Finding {
-            code: "pointer_only",
-            node: place.clone(),
+
+    /// The node by its id, or by its place in the tree when it has none, and as a finding's words name it.
+    fn place(&self, node: &Node) -> (String, String) {
+        // A button's own string is its id; a text node's is its text.
+        let id = node
+            .ops
+            .iter()
+            .find(|op| op.name == "id")
+            .and_then(|op| text_arg(&op.args))
+            .or_else(|| node.label.clone().filter(|_| node.kind != "text"));
+        match id {
             // copy-exception: a refusal reason the kit and the loader report, never drawn
-            text: format!("pointer_only: {named} takes a press and can't take keyboard focus, so no key reaches it"),
+            Some(id) => (format!("the {} {id}", node.kind), id),
+            None => {
+                let path = self
+                    .path
+                    .iter()
+                    .fold("0".to_owned(), |path, at| format!("{path}/{at}"));
+                // copy-exception: a refusal reason the kit and the loader report, never drawn
+                (format!("the {} at {path}", node.kind), path)
+            }
+        }
+    }
+
+    fn find(&mut self, code: &'static str, node: &Node, what: &str) {
+        let (named, place) = self.place(node);
+        self.found.push(Finding {
+            code,
+            node: place,
+            text: format!("{code}: {named} {what}"),
         });
     }
-    let text = node
-        .label
-        .as_deref()
-        .filter(|text| node.kind == "text" && !text.trim().is_empty());
-    if let (Some(text), Some(ink)) = (text, ink) {
-        // Where the panel set no fill under it, the fill is the look's in each theme; the worst pair decides.
-        let pairs: Vec<(u32, u32, String)> = match fill {
-            Some(fill) => vec![(ink, fill, String::new())],
-            None => look()
+
+    /// `ink` and `fill` are the text color and the fill the panel set at this node or above it, nearest first.
+    fn node(&mut self, node: &Node, ink: Option<u32>, fill: Option<u32>) {
+        let op = |name: &str| node.ops.iter().find(|op| op.name == name);
+        let ink = op("text_color").and_then(|op| color(&op.args)).or(ink);
+        let fill = op("bg").and_then(|op| color(&op.args)).or(fill);
+        if node.kind == "Button" || op("on_click").is_some() {
+            let labels: Vec<String> = ["label", "accessibility_label", "aria_label"]
                 .iter()
-                .flat_map(|(theme, [ground, raised])| {
-                    [("ground", *ground), ("raised", *raised)]
-                        // copy-exception: a refusal reason the kit and the loader report, never drawn
-                        .map(|(role, fill)| (ink, fill, format!(", the look's {role} in {theme},")))
-                })
-                .collect(),
-        };
-        let worst = pairs
-            .into_iter()
-            .map(|(ink, fill, where_)| (contrast(ink, fill), ink, fill, where_))
-            .min_by(|a, b| a.0.total_cmp(&b.0));
-        if let Some((ratio, ink, fill, where_)) = worst.filter(|(ratio, ..)| *ratio < FLOOR) {
-            let shown: String = text.chars().take(40).collect();
-            found.push(Finding {
-                code: "low_contrast",
-                node: place,
+                .filter_map(|name| op(name).and_then(|op| text_arg(&op.args)))
+                .collect();
+            let mut names: Vec<&str> = labels.iter().map(String::as_str).collect();
+            texts(node, &mut names);
+            names.retain(|name| !name.trim().is_empty());
+            // A name that is only its kind's word, such as "button", says nothing.
+            if names
+                .iter()
+                .all(|name| name.trim().eq_ignore_ascii_case(&node.kind))
+            {
+                let why = match names.first() {
+                    // copy-exception: a refusal reason the kit and the loader report, never drawn
+                    Some(word) => format!("takes a press and is named only {word:?}, its kind's word"),
+                    // copy-exception: a refusal reason the kit and the loader report, never drawn
+                    None => "takes a press and has no name: no text of its own or under it, and no label".to_owned(),
+                };
+                self.find("no_name", node, &why);
+            }
+            // The toolkit's button is a tab stop with a focus handle of its own; anything else takes focus by
+            // tracking one, which DeepBuild's module makes a tab stop unless the script then refuses the stop.
+            let refused = node.ops.iter().rev().find(|op| op.name == "tab_stop");
+            let focus = node.kind == "Button"
+                || op("track_focus").is_some_and(|op| number(&op.args).is_some())
+                    && !refused.is_some_and(|op| op.args.contains("false"));
+            if !focus {
                 // copy-exception: a refusal reason the kit and the loader report, never drawn
-                text: format!("low_contrast: the text {shown:?} draws #{ink:06x} on #{fill:06x}{where_} at {ratio:.2}:1, under {FLOOR}:1"),
-            });
+                let why = "takes a press and can't take keyboard focus, so no key reaches it";
+                self.find("pointer_only", node, why);
+            }
         }
-    }
-    for (at, child) in node.children.iter().enumerate() {
-        walk(child, &format!("{path}/{at}"), ink, fill, found);
+        let text = node
+            .label
+            .as_deref()
+            .filter(|text| node.kind == "text" && !text.trim().is_empty());
+        if let (Some(text), Some(ink)) = (text, ink) {
+            // Where the panel set no fill under it, the fill is the look's in each theme; the worst pair decides.
+            let worst = match fill {
+                Some(fill) => Some((self.ratio(ink, fill), fill, None)),
+                None => look()
+                    .iter()
+                    .flat_map(|(theme, [ground, raised])| {
+                        [("ground", *ground), ("raised", *raised)]
+                            .map(|(role, fill)| (contrast(ink, fill), fill, Some((role, *theme))))
+                    })
+                    .min_by(|a, b| a.0.total_cmp(&b.0)),
+            };
+            if let Some((ratio, fill, look)) = worst.filter(|(ratio, ..)| *ratio < FLOOR) {
+                let shown: String = text.chars().take(40).collect();
+                let on = match look {
+                    // copy-exception: a refusal reason the kit and the loader report, never drawn
+                    Some((role, theme)) => format!(", the look's {role} in {theme},"),
+                    None => String::new(),
+                };
+                let (_, place) = self.place(node);
+                self.found.push(Finding {
+                    code: "low_contrast",
+                    node: place,
+                    // copy-exception: a refusal reason the kit and the loader report, never drawn
+                    text: format!("low_contrast: the text {shown:?} draws #{ink:06x} on #{fill:06x}{on} at {ratio:.2}:1, under {FLOOR}:1"),
+                });
+            }
+        }
+        for (at, child) in node.children.iter().enumerate() {
+            self.path.push(at);
+            self.node(child, ink, fill);
+            self.path.pop();
+        }
     }
 }
 
