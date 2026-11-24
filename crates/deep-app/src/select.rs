@@ -198,6 +198,11 @@ impl Outlined {
             color,
         }
     }
+
+    /// Where its text is laid out, once it is: ⌘F marks its match there (#1815).
+    pub(crate) fn layout(&self) -> TextLayout {
+        self.styled_text.layout().clone()
+    }
 }
 
 /// The boxes a range from `start` to `end` takes, a line tall each, inside `bounds`.
@@ -230,7 +235,7 @@ fn selection_bounds(
     quads
 }
 
-fn outline(layout: &TextLayout, range: Range<usize>, color: Hsla, window: &mut Window) {
+pub(crate) fn outline(layout: &TextLayout, range: Range<usize>, color: Hsla, window: &mut Window) {
     let (Some(start), Some(end)) = (
         layout.position_for_index(range.start),
         layout.position_for_index(range.end),

@@ -1442,6 +1442,9 @@ pub fn focus_id(window: &Window) -> Option<String> {
     if crate::words::focused(window) {
         return Some("box-draft".to_owned());
     }
+    if crate::find::focused(window) {
+        return Some("find-field".to_owned());
+    }
     list_focused(window)
 }
 
@@ -1757,24 +1760,6 @@ pub(crate) fn label(
         .child(text)
 }
 
-/// #1498: a line of content, drawn as a label draws it, that the kit's selection selects, its selection outlined in
-/// `color`: a check's failure line. A label, a row or a button never selects.
-pub(crate) fn content(
-    id: impl Into<ElementId>,
-    text: impl Into<SharedString>,
-    color: Hsla,
-) -> ObservedElement<Stateful<Div>> {
-    let text = text.into();
-    observed(id)
-        .role(Role::Label)
-        .aria_label(text.clone())
-        .typed(sizes().body)
-        .h(sizes().body.line)
-        .flex()
-        .items_center()
-        .child(crate::select::Outlined::new("text", text, color))
-}
-
 /// A page's title: the title role, so a page has one voice (#1458). A title longer than its row wraps, whole, and the
 /// row grows with it (#1808).
 pub(crate) fn title(
@@ -1885,7 +1870,7 @@ struct Record {
     deadlines: Vec<u64>,
     /// What a session's page shows by its real names (#1348): the session, its issue and branch, and its newest
     /// run's failure whole, its trace included. On a session's page only.
-    details: Vec<String>,
+    details: std::rc::Rc<Vec<String>>,
     /// The sidebar's running jobs (#1925), in the list's order: each row's ID, its words, why it is there, and the
     /// status-map entry its row names (#1349: a job waiting on you is blocked, not running).
     jobs: Vec<(String, String, String, &'static str)>,
@@ -2045,7 +2030,8 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
             details
         }
         _ => Vec::new(),
-    };
+    }
+    .into();
     // Each running job's row (#1925), as the hub built it: a job whose tool reports no counter says how long it has
     // run, which reads differently as the clock moves on.
     let jobs = match kind {
@@ -2126,6 +2112,7 @@ impl Render for Shipped {
         // goes to the box.
         let is_page = !matches!(self.kind, Kind::Sidebar | Kind::Line) && !self.popped;
         if is_page {
+            crate::find::read(cx);
             let shows =
                 crate::open::shown_region(cx) == Some(crate::open::Region::Shipped(self.kind));
             if shows {
@@ -2619,6 +2606,13 @@ impl Render for Shipped {
                 // What a planted page draws beside the chart: the base's label, saying the caption again (#1459).
                 let beside = format!("{}: {} points", caption.text, hours.len()); // copy-exception: planted wrong program
                 let terminal = self.terminal.as_ref().filter(|tab| tab.session == session);
+                // What the page shows by its real names, and the newest failure whole (#1348).
+                let details = crate::lines::drawn(&record.details, chrome.focus);
+                // #1815's planted find counts the page's title and its state word.
+                if crate::plain::planted("find-matches-chrome") {
+                    crate::find::here(&task);
+                    crate::find::here(&state.text(now));
+                }
                 let tab = (!session.is_empty()).then(|| {
                     let session = session.clone();
                     control(
@@ -2658,20 +2652,16 @@ impl Render for Shipped {
                         )
                         .child(terminal_view(tab, chrome))
                         .children(crate::select::grid_outline(&tab.outline, chrome.focus))
+                        .children(crate::find::grid(tab.screen.as_ref(), chrome.focus))
                 });
                 // The session's canvas, in the place of its deadlines' line (#1454).
                 let figure = CANVAS
                     .with(|canvas| canvas.borrow().clone())
                     .filter(|panel| panel.read(cx).shows(&session));
                 if let Some(panel) = &figure {
-                    panel.update(cx, |panel, _| panel.show_session(&session));
+                    panel.update(cx, |panel, _| panel.show_session(&session).find());
                 }
                 let chart = terminal.is_none() && figure.is_none() && !hours.is_empty();
-                // What the page shows by its real names, and the newest failure whole (#1348): content, which the kit's
-                // selection selects (#1498).
-                let details = record.details.iter().enumerate().map(|(n, line)| {
-                    content(("session-detail", n), line.clone(), chrome.focus).h_auto()
-                });
                 // The page reads as its task's title, and to a screen reader as `Session <title>`. An untitled
                 // session's short name, `Session <ID>`, is only its accessible name: the title draws no ID (#1455).
                 let short = &session[..session.len().min(8)];
@@ -2758,12 +2748,13 @@ impl Render for Shipped {
                     .as_ref()
                     .filter(|[_, _, why]| !why.is_empty())
                     .map(|[word, _, why]| format!("{}: {}", states::shown(word), copy::hub(why)));
-                // The page fills its lane, so its canvas takes the height left under what's above it (#1498).
+                // The page fills its lane, so its canvas takes the height left under what's above it (#1498), and is as
+                // long as what it holds, so it scrolls (#1808).
                 let content = div()
                     .flex()
                     .flex_col()
-                    .flex_1()
-                    .min_h_0()
+                    .flex_none()
+                    .flex_grow(1.)
                     .when(session.is_empty(), |content| content.invisible());
                 // While you rename it (#2018), the title is a field holding the name, with the caret in it.
                 let field = self
@@ -2895,7 +2886,7 @@ impl Render for Shipped {
                     .children(bound_panel(chrome));
                 page.child(in_lane(
                     Some(format!("session:{session}").into()),
-                    Some(heading.into_any_element()),
+                    Some(crate::find::titled(heading, chrome, window, cx)),
                     content,
                     true,
                 ))
@@ -2907,7 +2898,7 @@ impl Render for Shipped {
                 let heading = page_title(title("agents-title", copy::text("views.agents")), chrome);
                 page.child(in_lane(
                     Some("agents".into()),
-                    Some(heading.into_any_element()),
+                    Some(crate::find::titled(heading, chrome, window, cx)),
                     inner,
                     true,
                 ))
@@ -3000,7 +2991,8 @@ impl Render for Shipped {
                                             .flex_1()
                                             .min_w_0()
                                             .truncate()
-                                            .child(rule.text.clone()),
+                                            .child(rule.text.clone())
+                                            .children(crate::find::found(&rule.text, chrome)),
                                     )
                                     .child(
                                         div()
@@ -3037,7 +3029,7 @@ impl Render for Shipped {
                     }));
                 page.child(in_lane(
                     Some("rules".into()),
-                    Some(heading.into_any_element()),
+                    Some(crate::find::titled(heading, chrome, window, cx)),
                     content,
                     true,
                 ))
