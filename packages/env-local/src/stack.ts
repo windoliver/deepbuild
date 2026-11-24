@@ -588,27 +588,36 @@ export function openBinds(config: { services?: Record<string, { volumes?: { type
   if (process.platform !== 'linux') return undefined;
   const root = realpathSync(folder);
   const inside = (path: string): boolean => path === root || path.startsWith(`${root}${sep}`);
+  const you = process.getuid!();
+  // Gone since it was listed: nothing to open.
+  const gone = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT';
   const open = (at: string): void => {
-    const kind = lstatSync(at);
-    if ((!kind.isDirectory() && !kind.isFile()) || !inside(realpathSync(at))) return;
     let fd: number;
-    try { fd = openSync(at, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ELOOP') return;
+    try {
+      const kind = lstatSync(at);
+      // What isn't yours (a source the daemon made, as root) is the daemon's to have opened, not the hub's.
+      if ((!kind.isDirectory() && !kind.isFile()) || kind.uid !== you || !inside(realpathSync(at))) return;
+      fd = openSync(at, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    } catch (error) {
+      if (gone(error) || (error as NodeJS.ErrnoException).code === 'ELOOP') return;
       throw error;
     }
+    let names: string[] = [];
     try {
       const s = fstatSync(fd);
-      if (s.isDirectory()) fchmodSync(fd, s.mode | 0o055);
-      else if (s.isFile() && s.nlink === 1) fchmodSync(fd, s.mode | 0o044 | (s.mode & 0o100 ? 0o011 : 0));
-      if (!s.isDirectory()) return;
+      const want = s.isDirectory() ? s.mode | 0o055 : s.isFile() && s.nlink === 1 ? s.mode | 0o044 | (s.mode & 0o100 ? 0o011 : 0) : s.mode;
+      if (want !== s.mode) fchmodSync(fd, want);
+      if (s.isDirectory()) names = readdirSync(at);
+    } catch (error) {
+      if (!gone(error)) throw error;
     } finally { closeSync(fd); }
-    for (const name of readdirSync(at)) open(join(at, name));
+    for (const name of names) open(join(at, name));
   };
   for (const service of Object.values(config.services ?? {})) {
     for (const v of service.volumes ?? []) {
       if (v.type !== 'bind' || !v.source) continue;
       try { open(realpathSync(v.source)); } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        if (gone(error)) continue;
         return `the bind mount ${v.source} couldn't be opened to read for its service: ${(error as Error).message}`;
       }
     }

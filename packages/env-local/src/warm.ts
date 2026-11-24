@@ -276,7 +276,8 @@ export class WarmStack {
       `id=$(${this.compose(file, `ps -a -q ${quote(d.service)}`)}) || exit 1`, 'echo "$id"',
       `i=0; until "$0" exec "$id" pg_isready -q -h 127.0.0.1 -U ${quote(d.user)}; do`,
       // Every tenth try, whether it still runs: one exited, or waiting on its restart policy to start it again, has ended.
-      `  [ $((i % 10)) -ne 0 ] || [ "$("$0" inspect -f '{{.State.Status}}' "$id")" = running ] || exit 3; i=$((i+1)); [ $i -lt 600 ] || exit 1; sleep 0.1`,
+      `  if [ $((i % 10)) -eq 0 ]; then s=$("$0" inspect -f '{{.State.Status}}' "$id"); [ -z "$s" ] || [ "$s" = running ] || exit 3; fi`,
+      '  i=$((i+1)); [ $i -lt 600 ] || exit 1; sleep 0.1',
       'done',
     ].join('\n'));
     const id = ran.stdout.trim().split('\n')[0] ?? '';
