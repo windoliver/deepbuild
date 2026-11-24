@@ -2542,11 +2542,12 @@ export class Core {
     const state = claim ? await this.judging.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL`, [meta.session])) as { at: number | null }[];
     // The list's one count (#1463, #1810): its ask rows, as deep and the app count them, each an ask the inbox holds
-    // open. Read from the inbox, not the rows: a row lands with its row.set's commit, which can wait on another
-    // commit's evidence sync, and the reply never does (#2539). #1810's planted reader counts an ask that took its
-    // default, which can still be undone, as open too.
+    // open and in sight, shown or put off with Later; one waiting for its batch has no row (#22). Read from the inbox,
+    // not the rows: a row lands with its row.set's commit, which can wait on another commit's evidence sync, and the
+    // reply never does (#2539). #1810's planted reader counts an ask that took its default, which can still be undone,
+    // as open too.
     const defaulted = this.options.plant === 'needs-you-counts-defaulted' ? Number(((await this.record.raw(`SELECT COUNT(*) AS n FROM asks WHERE status = 'defaulted'`)) as { n: number }[])[0]?.n ?? 0) : 0;
-    const needsYou = (await this.asks.inbox()).filter((a) => a.status !== 'closed').length + defaulted;
+    const needsYou = (await this.asks.inbox()).filter((a) => a.status === 'shown' || a.status === 'later').length + defaulted;
     return statusAnswer(state, { session: meta.session, agent: live?.agent ?? meta.agent, worktree: live?.cwd || meta.cwd, needsYou, now: this.now(), lastStop: stop?.at ?? null, state: claim ? undefined : live?.state });
   }
 

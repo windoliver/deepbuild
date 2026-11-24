@@ -320,8 +320,6 @@ class SqliteRecord implements RecordStore {
   private readonly queue: Pending[] = [];
   /** The FULL appends made in this turn of the event loop: they share one FULL commit at its end (#22). */
   private readonly fulls: Pending[] = [];
-  /** FULL commits of a turn still syncing the evidence they name: a settle waits for them. */
-  private committingFulls = 0;
   private scheduled = false;
   /**
    * The commits that may wait, each for an earlier one or for the evidence it names to sync (#1410), in arrival order:
@@ -635,11 +633,11 @@ class SqliteRecord implements RecordStore {
       if (CORE_ONLY.has(input.kind) || this.resumes([prepared])) {
         return new Promise<Appended>((resolve, reject) => {
           this.fulls.push({ prepared, resolve, reject });
-          if (this.fulls.length === 1) queueMicrotask(() => void this.commitFulls(this.takeFulls()));
+          if (this.fulls.length === 1) queueMicrotask(() => this.commitFulls(this.takeFulls()));
         });
       }
       // The FULL appends that arrived before it take their place in the line just before it (#22).
-      void this.commitFulls(this.takeFulls());
+      this.commitFulls(this.takeFulls());
       const me = this.arrive(prepared.session, () => this.resumes([prepared]));
       try {
         // Its mode is read once the commits before it landed, from the log they left: a stop committed ahead of it can
@@ -705,7 +703,8 @@ class SqliteRecord implements RecordStore {
     // A batch may hold several sessions' events, so it waits as an event of no session does.
     const me = batch.length ? this.arrive(null, () => this.resumes(batch.map((p) => p.prepared)), new Set(batch.map((p) => p.prepared.session))) : undefined;
     try {
-      await Promise.all([this.commitFulls(fulls), me && this.commitPending(batch, false, me)]);
+      this.commitFulls(fulls);
+      if (me) await this.commitPending(batch, false, me);
     } finally {
       this.scheduled = false;
       if (this.queue.length) {
@@ -716,27 +715,31 @@ class SqliteRecord implements RecordStore {
   }
 
   /**
-   * The FULL appends that arrived so far, taken as their batch takes its place in the commit order, so a FULL append
-   * that arrives later never commits ahead of what arrived before it. A settle waits for the batch from here.
+   * The FULL appends that arrived so far, a batch for each session in the order its first one arrived, each taking its
+   * place in the line as it is taken: a FULL append that arrives later never commits ahead of what arrived before it,
+   * and one session's batch never waits on another's evidence sync (#2539). One of no session takes its place after
+   * every batch holding an earlier append, so it lands after everything before it; a session's later append then
+   * starts a batch of its own.
    */
-  private takeFulls(): { batch: Pending[]; me: Waiting } | undefined {
-    const batch = this.fulls.splice(0);
-    if (!batch.length) return undefined;
-    this.committingFulls++;
-    // It waits as its one session's commit does, or, holding several sessions' events or one of none, as a batch (#2539).
-    const sessions = new Set(batch.map((p) => p.prepared.session));
-    const [only] = sessions;
-    return { batch, me: this.arrive(sessions.size === 1 ? only ?? null : null, () => this.resumes(batch.map((p) => p.prepared)), sessions) };
+  private takeFulls(): { batch: Pending[]; me: Waiting }[] {
+    const taken: { batch: Pending[]; me: Waiting }[] = [];
+    let open = new Map<string | null, Pending[]>();
+    const place = (): void => {
+      for (const batch of open.values()) taken.push({ batch, me: this.arrive(batch[0]!.prepared.session, () => this.resumes(batch.map((p) => p.prepared))) });
+      open = new Map();
+    };
+    for (const p of this.fulls.splice(0)) {
+      const session = p.prepared.session;
+      if (session === null && [...open.keys()].some((k) => k !== null)) place();
+      open.set(session, [...(open.get(session) ?? []), p]);
+    }
+    place();
+    return taken;
   }
 
-  /** Commits a batch of FULL appends made in one turn in one FULL commit (#22). */
-  private async commitFulls(fulls: { batch: Pending[]; me: Waiting } | undefined): Promise<void> {
-    if (!fulls) return;
-    try {
-      await this.commitPending(fulls.batch, true, fulls.me);
-    } finally {
-      this.committingFulls--;
-    }
+  /** Commits each session's FULL appends of one turn in one FULL commit, so an answer and its decision sync once (#22). */
+  private commitFulls(batches: { batch: Pending[]; me: Waiting }[]): void {
+    for (const { batch, me } of batches) void this.commitPending(batch, true, me);
   }
 
   /**
@@ -1090,7 +1093,7 @@ class SqliteRecord implements RecordStore {
 
   /** Waits for every queued stream event to commit or be refused. */
   private async settle(): Promise<void> {
-    while (this.queue.length || this.fulls.length || this.committingFulls || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
+    while (this.queue.length || this.fulls.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
   }
 
   /** A clean stop: no new appends, every one accepted committed or refused, the state recorded FULL. */
