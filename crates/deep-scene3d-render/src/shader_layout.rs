@@ -33,11 +33,6 @@ const GPU_ONLY: &[(&str, &str, &str)] = &[
         "the mirror's flip, which mirror.rs writes as one [f32; 4], with no host struct",
     ),
     (
-        "inset_unlit.wgsl",
-        "Unlit",
-        "the unlit inset's matrix and scale, which inset.rs writes as 20 f32, with no host struct",
-    ),
-    (
         "exposure.wgsl",
         "Partial",
         "the reduction's partial sums, which its compute pass writes and the host reads back",
