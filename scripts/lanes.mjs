@@ -234,7 +234,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1172/', 'tests/acceptance/1454/', 'tests/acceptance/1459/', 'tests/acceptance/1002/first-screen-redraft/', 'tests/acceptance/994/first-screen-redraft/',
     'tests/acceptance/2494/', 'tests/acceptance/1455/', 'tests/acceptance/1462/', 'tests/acceptance/1462-redraft-ac2/', 'tests/acceptance/539/', 'tests/acceptance/542/',
     'tests/acceptance/903/', 'tests/acceptance/548/', 'tests/acceptance/1808/', 'tests/acceptance/1431/', 'tests/acceptance/2403/',
-    'tests/acceptance/3236/', 'tests/acceptance/3236-redraft-ac8/', 'tests/live-window-hidden.test.ts',
+    'tests/acceptance/3236/', 'tests/acceptance/3236-redraft-ac8/', 'tests/acceptance/3282/', 'tests/live-window-hidden.test.ts',
   ],
 })) for (const entry of entries) aloneReasons[entry] = reason;
 for (const entry of alone) {
