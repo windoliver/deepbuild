@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-const S = '/private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-competent-cori-c426a4/8f56c42c-0c2b-4406-94d3-6241338f156c/scratchpad';
+const S = '<scratch>';
 const DOC = '01JB327800000000000000000A';
 const YOU = { pid: 3002, start: 3000 };
 function run(bin, calls) {
