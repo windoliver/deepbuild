@@ -1043,6 +1043,12 @@ alone.push('tests/acceptance/1561/');
 // and ac8 judges the shadows' GPU budget on the reference Mac.
 alone.push('tests/acceptance/2032/', 'tests/acceptance/2032-redraft-ac8/');
 timed.push('tests/acceptance/2032/ac8-budget.test.ts', 'tests/acceptance/2032-redraft-ac8/ac8-budget.test.ts');
+// #2844's ac1 registers #2032's redrafted budget test under #2844's criterion: it builds deep-gpu, draws on Metal and
+// judges the shadows' GPU budget with each run's load.
+timed.push('tests/acceptance/2844/ac1-budget.test.ts');
+// #2844's redraft holds criterion 2 on moving scenes of its own: it builds deep-gpu here and at the merge base and
+// draws on Metal.
+alone.push('tests/acceptance/2844-redraft-moving/');
 // #2053's files each build deep-gpu or deep-canvas-render and draw on Metal; ac6 also builds both at the merge base,
 // and ac7 judges the paged lights' GPU budget on the reference Mac.
 alone.push('tests/acceptance/2053/');
