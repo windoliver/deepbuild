@@ -99,7 +99,7 @@ already exists for AC3: no new twin folder is needed.
 |---|---|---|
 | timed out | `wake-assumed` (and the merged plant `delivered-on-waiter-exit`, the same code path): the waiter's hand-off recorded delivered | "its delivery must read timed_out within 60 s" |
 | replaced | `wake-assumed` | "its delivery must read replaced" |
-| waiter outlives its session | `waiter-outlives-session` (the twin also replaces `setup.ts`) | "its waiter … must not outlive it" |
+| waiter outlives its session | `waiter-outlives-session` (its `lines.json` also edits one line of `setup.ts`) | "its waiter … must not outlive it" |
 | stop held while a subagent runs | `answer-skips-held-stop` | "must continue the parent's held stop" |
 
 See `BASE-RESULTS.txt` for the runs. All four pass on the base `a1707356`, which already holds #27's implementation

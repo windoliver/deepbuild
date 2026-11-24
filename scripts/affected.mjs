@@ -10,11 +10,21 @@
 // (known-failures.json) read apart from new ones, and a timing budget missed at a load above the core count reads INCONCLUSIVE. So does a
 // skip, or BLOCKED by its note, unless the same file's `skips` list covers it, which is printed.
 //
-//   node scripts/affected.mjs [--list] [--wide] [--timed] [--slow] [--results=<file>] [path ...]
+//   node scripts/affected.mjs [--list] [--wide] [--settled] [--timed] [--slow] [--results=<file>] [path ...]
+//   node scripts/affected.mjs --alone [--timed] [--slow] [--results=<file>]
+//
+// --alone runs the unit lane's alone block whole, the files lanes.mjs's aloneCommand lists, whatever the change, and
+// nothing else: the preflight's unit lane runs it so (#3137; docs/parallel-proof.md, section 7a). --results then holds
+// each test's result too.
+//
+// A suite of a closed issue on the main watch's settled list that the change reaches only through a process the suite
+// starts is left to the watch, named on one SETTLED line, and the run reads INCONCLUSIVE; --settled runs it (settled,
+// below; #3064).
 //
 // The alone block's folders run side by side, each in a shard of its own (scripts/shards.mjs), so no sibling's cargo
 // build rewrites a binary under it; those lanes.mjs names exclusive run after, one at a time, with nothing beside them.
-// The builds of the shards and of the rest share one jobserver, so the run never compiles more at once than its cores.
+// The run's test grant is its admission, and each job takes a turn on the machine's pool of job tokens, which its
+// builds' compiles draw on too (throttle.mjs, #3221), so the runs never compile more at once than the pool.
 // The files lanes.mjs names slow run only with --slow, or when the change adds or edits them; unrun, they leave the run
 // INCONCLUSIVE, as the timed ones do.
 //
@@ -22,19 +32,19 @@
 // the selection without running it. A test that starts a package's build is selected when the change is in that
 // package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below).
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, constants as modes, existsSync, mkdtempSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
-import { dirname, join, posix, relative, sep } from 'node:path';
+import { availableParallelism, constants, homedir, loadavg, tmpdir } from 'node:os';
+import { dirname, join, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { alone, byHand, cargoResults, changedPaths, checks, crates, exactTree, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
+import { alone, aloneCommand, byHand, cargoResults, changedPaths, checks, crates, exactTree, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
 import { isTestFile, listFiles, named, underTestPaths } from './proof-change.mjs';
 import { namedByConfig } from './proof-guard.mjs';
 import { childEnv } from './proof-runs.mjs';
-import { binaryNames, binaryPlan, buildBinaries, buildInPlace, watchBinaries } from './proof-binaries.mjs';
-import { claimShards, cloneBuilds, roomy } from './shards.mjs';
-import { acquire, descendants, killTree, release } from './throttle.mjs';
+import { binaryNames, binaryPlan, buildBinaries, buildInPlace, commandFiles, watchBinaries } from './proof-binaries.mjs';
+import { claimShards, cloneBuilds, roomy, shardsRoom } from './shards.mjs';
+import { acquire, asking, descendants, killTree, release } from './throttle.mjs';
 
 export { cargoResults, crates, reportResults };
 
@@ -42,8 +52,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const BASELINE = 'scripts/known-failures.json';
 const CODE = /\.(?:[cm]?[jt]s|tsx)$/;
 // Files every suite reads, so a change to one is verified by the full preflight; so are those a runner config names, as
-// its setup files (select, below).
-const EVERY = ['package.json', 'package-lock.json', 'tsconfig.json', 'vitest.config.ts', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml'];
+// its setup files (select, below). .cargo/config.toml's [patch] tables reach every crate under the checkout, the
+// standalone test crates' locks among them (#2469).
+const EVERY = ['package.json', 'package-lock.json', 'tsconfig.json', 'vitest.config.ts', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/config.toml'];
 // A folder holding more files than this, as tests/acceptance, is named as a pattern, not as what a file reads.
 const WIDE = 400;
 // Repository paths in a literal: relative ones, and those from the root, as `${root}/packages/hub/dist/main.js`.
@@ -198,6 +209,9 @@ export function graph(cwd, files, workspace, tasks = []) {
  * watch and the release preflight run it.
  * Of the budget `tasks` given, `tasks` names those a budget window runs: each the change reaches or marks wide, each
  * the graph can't place, and all of them when it changes a file every suite reads (#1981).
+ * `through` names the tests, selected or wide, that the change reaches only through a process they start, a Rust binary
+ * or a package's build: none of its paths reaches them, or any test of their suite's folder, by import or by a file
+ * they or their helpers read by path, and none is in a package one of those imports from (#3064).
  */
 export function select(cwd, changed, { files = listFiles(cwd), workspace = crates(cwd), tasks = [] } = {}) {
   const all = [...new Set([...files, ...changed])];
@@ -220,8 +234,16 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
   };
   const ownersOf = (path) => workspace.filter((crate) => (within(crate.dir, path) && !path.endsWith('.md')) || (path.endsWith('.rs') && crate.away.some((folder) => within(folder, path)))).map((crate) => `crate:${crate.name}`);
   const packageOf = (path) => path.match(/^packages\/[^/]+/)?.[0];
-  const ends = (nodes) => [...nodes].filter((node) => isTestFile(node) || /^(?:crate|task):/.test(node));
+  // A test under a package's fixtures/ is a fixture project's own, a wrong program's among them, never one of the repo's (#2136).
+  const ends = (nodes) => [...nodes].filter((node) => (isTestFile(node) && !/^packages\/[^/]+\/fixtures\//.test(node)) || /^(?:crate|task):/.test(node));
   const task = (node) => node.startsWith('task:');
+  const onward = (nodes) => [...nodes, ...up(nodes.filter((node) => !node.startsWith('crate:')))];
+  // The tests a package is their own to (#3064): those that import one of its files, near or far, with no process between.
+  const owned = new Map();
+  const ownTests = (folder) => {
+    if (!owned.has(folder)) owned.set(folder, new Set(ends(up(all.filter((file) => within(folder, file))))));
+    return owned.get(folder);
+  };
   const reach = (path) => {
     const owners = ownersOf(path);
     const code = up([path, ...owners]);
@@ -233,26 +255,30 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
     const ran = [...runs].filter(([, targets]) => [...targets].some(hit)).map(([node]) => node);
     const started = [...spawns].filter(([, targets]) => [...targets].some((target) => hit(target) && own(target))).map(([node]) => node);
     const deeper = [...spawns].filter(([, targets]) => [...targets].some(hit)).map(([node]) => node);
-    const onward = (nodes) => [...nodes, ...up(nodes.filter((node) => !node.startsWith('crate:')))];
     // A task runs a binary as cargo builds it, from its crate and every crate that one depends on.
     const built = [...runs].filter(([, targets]) => [...targets].some((target) => target.startsWith('crate:') && code.has(target))).map(([node]) => node);
     const found = new Set(ends([...code, ...onward([...ran, ...started]), ...onward(deeper).filter(own), ...onward(built).filter(task)]));
-    return { found: [...found], wide: ends(onward(deeper)).filter((node) => !found.has(node)) };
+    // Reached with no process between (#3064): by import, or by a file a test or its helper reads by path.
+    const read = [...runs].filter(([, targets]) => [...targets].some((target) => !target.startsWith('crate:') && hit(target))).map(([node]) => node);
+    return { found: [...found], wide: ends(onward(deeper)).filter((node) => !found.has(node)), near: new Set(ends([...code, ...onward(read)])) };
   };
-  const tests = new Set(), reached = new Set(), wide = new Set(), every = [], none = [], touched = new Set();
+  const tests = new Set(), reached = new Set(), wide = new Set(), every = [], none = [], touched = new Set(), direct = new Set();
   // The files a runner config names, as the guard reads them: its setup files and the config modules it imports.
   const setup = namedByConfig(cwd, null, all);
   const feedsEvery = (path) => EVERY.includes(path) || setup.has(path);
   for (const path of changed) {
     if (feedsEvery(path)) every.push(path);
-    let { found, wide: far } = reach(path);
+    let { found, wide: far, near } = reach(path);
     for (const node of [...found, ...far].filter(task)) touched.add(node.slice(5));
     [found, far] = [found, far].map((nodes) => nodes.filter((node) => !task(node)));
     // A fixture no test names by path is read by the tests of its own folder.
     if (!found.length && underTestPaths(path)) {
       const folder = path.match(/^(?:tests\/acceptance\/[^/]+|packages\/[^/]+\/test|tests)\//)?.[0];
       found = folder ? all.filter((file) => file.startsWith(folder) && isTestFile(file)) : [];
+      near = new Set(found);
     }
+    const home = packageOf(path);
+    for (const node of [...near, ...(home ? ownTests(home) : [])]) direct.add(node);
     // A test the change deletes has nothing to run.
     for (const node of found) if (node.startsWith('crate:') || existsSync(join(cwd, node))) (node.startsWith('crate:') ? reached : tests).add(node.replace(/^crate:/, ''));
     for (const node of far) wide.add(node.replace(/^crate:/, 'cargo test -p '));
@@ -260,7 +286,56 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
   }
   const owners = [...new Set(changed.filter((path) => path.endsWith('.rs')).flatMap(ownersOf))].map((node) => node.slice(6));
   const runsTask = ({ id }) => every.length || touched.has(id) || !imports.has(`task:${id}`);
-  return { tests: [...tests].sort(), crates: [...reached].sort(), wide: [...wide].filter((node) => !tests.has(node) && !reached.has(node.replace('cargo test -p ', ''))).sort(), every, none, owners, tasks: tasks.filter(runsTask).map(({ id }) => id) };
+  // A suite is reached with no process between when any test of its folder is, selected or not.
+  const directly = new Set([...direct].map(suiteOf));
+  const through = [...new Set([...tests, ...wide])].filter((file) => isTestFile(file) && !direct.has(file) && !(suiteOf(file) && directly.has(suiteOf(file)))).sort();
+  return { tests: [...tests].sort(), crates: [...reached].sort(), wide: [...wide].filter((node) => !tests.has(node) && !reached.has(node.replace('cargo test -p ', ''))).sort(), every, none, owners, tasks: tasks.filter(runsTask).map(({ id }) => id), through };
+}
+
+// The main watch's settled list (docs/parallel-proof.md, sections 7a and 12b; #3064), in the HOME the run was given.
+const LIST = join(homedir(), '.deepbuild', 'main-watch', 'settled.json');
+const suiteOf = (file) => file.match(/^tests\/acceptance\/\d+\//)?.[0];
+
+/**
+ * The selected suites left to the main watch, as their folders: each on the watch's list with the files the worktree
+ * holds for it, whose selected files the change reaches only through a process (select's `through`), and which the
+ * change neither names by its issue nor touches. `problem` says why no list could be read: nothing is settled then.
+ */
+function settled(cwd, { tests, through }, changed) {
+  let suites;
+  try {
+    const list = JSON.parse(readFileSync(LIST, 'utf8'));
+    ({ suites } = list);
+    if (typeof list.tree !== 'string' || !suites || typeof suites !== 'object' || Array.isArray(suites) || Object.values(suites).some((id) => typeof id !== 'string')) throw Error('it names no tree, or no suites by folder and ID');
+  } catch (error) {
+    return { folders: [], problem: error.code === 'ENOENT' ? `${LIST} is missing` : `${LIST} can't be read (${error.message})` };
+  }
+  const far = new Set(through);
+  const candidates = [...new Set(tests.map(suiteOf))].filter((folder) => folder && Object.hasOwn(suites, folder)
+    && tests.filter((file) => file.startsWith(folder)).every((file) => far.has(file)) && !changed.some((path) => path.startsWith(folder)));
+  if (!candidates.length) return { folders: [] };
+  const git = (...args) => spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 2 ** 28 });
+  // The issues the change's commits name, by the pattern the trace lane reads them with (readIssue, proof-change.mjs),
+  // in any repository's spelling. Commits that can't be read might name any suite's, so nothing is left then.
+  const base = git('merge-base', 'HEAD', 'origin/main');
+  const messages = base.status === 0 ? git('log', '--format=%B', `${base.stdout.trim()}..HEAD`) : base;
+  if (messages.status !== 0) return { folders: [] };
+  const named = new Set([...messages.stdout.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of):?\s+(?:[\w.-]+\/[\w.-]+#|https?:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/|#)(\d+)\b/gi)].map(([, number]) => number));
+  // Each suite's folder as the worktree holds it now, uncommitted and untracked files too.
+  const held = new Map((git('ls-tree', exactTree(cwd) ?? '', 'tests/acceptance/').stdout ?? '').split('\n').flatMap((line) => {
+    const [, id, path] = line.match(/^\d+ tree (\w+)\t(.+)$/) ?? [];
+    return id ? [[`${path}/`, id]] : [];
+  }));
+  return { folders: candidates.filter((folder) => held.get(folder) === suites[folder] && !named.has(folder.split('/')[2])).sort() };
+}
+
+/**
+ * The unit lane's alone block as a selection (#3137): the files lanes.mjs's aloneCommand lists, by vitest's own listing,
+ * whatever the change. Throws BLOCKED when vitest can't list them.
+ */
+function aloneBlock() {
+  const tests = commandFiles(root, aloneCommand).map((file) => relative(realpathSync(root), realpathSync(resolve(root, file))).split(sep).join('/'));
+  return { tests: tests.sort(), crates: [], wide: [], every: [], none: [], owners: [] };
 }
 
 /** Which runner a test file is written for, by what it imports at its top level, else by its extension. */
@@ -338,11 +413,16 @@ export function classify(failures, findings, baseline, load = loadavg()[0]) {
 
 // Each job runs through the machine's throttle table (docs/parallel-proof.md, section 6): the workspace build, clippy and
 // cargo test as build, the vitest and node --test blocks as test, each passing through on the run's one test grant
-// (queued, below), and the timed ones as timed, waiting at most 30 minutes for their own; each, its parallel blocks
+// (queued, below) and taking its turn on the machine's pool, and the timed ones as timed, waiting at most 30 minutes for their own; each, its parallel blocks
 // too, under a cpu.slot of the calling session's through scripts/lease (#1015). A lint script that builds nothing
 // (LIGHT) reads files for seconds on one core, so it asks for no grant. It still runs under the session's cpu.slot. A
 // shard's job runs in its shard.
-const LIGHT = /^lint scripts\/(?:repo-rules|conformance-lint|slots-check|canvas-closures|record-reader-guard|color-literal-guard|guide)\.mjs$/;
+const LIGHT = /^lint scripts\/(?:repo-rules|conformance-lint|slots-check|canvas-closures|record-reader-guard|color-literal-guard|guide)\.mjs(?: \w+)?$/;
+// A lint job's label: its script, and the subcommand after it when it has one, so two runs of one script keep a log each (#2136).
+const lintLabel = (rest) => {
+  const at = rest.findIndex((arg) => arg.startsWith('scripts/'));
+  return `lint ${at < 0 ? rest[0] : rest.slice(at, /^\w+$/.test(rest[at + 1] ?? '') ? at + 2 : at + 1).join(' ')}`;
+};
 // The jobs running now, so a run stopped by its PID stops them too (main): they pass through on its one grant, which is
 // free once it has ended, so a job left running would run beside the next run uncounted. Once stopped, the run starts
 // no job: each reads as run by none.
@@ -354,11 +434,10 @@ let stopped = null;
 // before its 120 min tests with no result between, and the timed lane's limits reach 240 min (#416, #140). SIGTERM to the job, and
 // 10 s later SIGKILL to every process of its tree, by PID and start, as the throttle does for a grant past its bound
 // (#2744); the job's throttle, then, ends by itself and gives its grant back. The job ends once they have, and reads
-// by what it reported before the stop. DEEP_JOB_IDLE_MIN sets the bound in minutes, for tests.
+// by what it reported before the stop. A job still waiting for its turn has started nothing, so its wait never counts
+// (#3221). DEEP_JOB_IDLE_MIN sets the bound in minutes, for tests.
 const IDLE_MIN = Number(process.env.DEEP_JOB_IDLE_MIN ?? 360);
 const size = (path) => { try { return statSync(path).size; } catch { return 0; } };
-// The run's jobserver while its builds share it (jobserver, below); each job's end may fill it again.
-let pool = null;
 function run(logs, label, command, args, env = {}, cwd = root) {
   if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
@@ -372,19 +451,24 @@ function run(logs, label, command, args, env = {}, cwd = root) {
     let idle = null, watch = null;
     if (report) {
       let seen = '', since = performance.now();
+      // deadline: the look only stops a job that wrote nothing for IDLE_MIN minutes, a hang turned into a result.
       watch = setInterval(() => {
         const now = `${size(log)} ${size(report)}`;
         if (now !== seen) [seen, since] = [now, performance.now()];
         else if (!idle && performance.now() - since >= IDLE_MIN * 60_000) {
-          // Without a listing, nothing is stopped: the next look tries again.
-          let tree;
-          try { tree = descendants(child.pid); } catch { return; }
+          // Without a listing, nothing is stopped: the next look tries again. A job whose throttle still asks the table
+          // has started nothing: it waits for its turn.
+          let tree, waits;
+          try { waits = asking(child.pid); tree = descendants(child.pid); } catch { return; }
+          if (waits) { since = performance.now(); return; }
           // What the report holds now stands; what a job writes as it is stopped, a cancelled file's error, is no result.
           idle = { cut: size(report), minutes: IDLE_MIN };
           child.kill('SIGTERM');
+          // deadline: a stopped job's tree is given 10 s to end on SIGTERM before it is killed.
           idle.killed = new Promise((killed) => setTimeout(() => {
             try { killTree([...tree, ...child.exitCode === null && child.signalCode === null ? descendants(child.pid) : []]); } catch {}
             // The throttle ends once its command has; one that doesn't is ended too.
+            // deadline: the throttle is given 5 s to end once its command has, then killed.
             setTimeout(() => { child.kill('SIGKILL'); killed(); }, 5_000);
           }, 10_000));
         }
@@ -396,7 +480,6 @@ function run(logs, label, command, args, env = {}, cwd = root) {
       await idle?.killed;
       live.delete(child);
       closeSync(descriptor);
-      pool?.refill();
       done({ label, log, status, output: readFileSync(log, 'utf8'), idle });
     });
   });
@@ -404,74 +487,10 @@ function run(logs, label, command, args, env = {}, cwd = root) {
 
 // How many shards the alone block runs in: half the cores. An alone file keeps about one core busy (1,976 s of CPU in
 // 2,235 s for #1557's, 2026-11-07), so half the cores leave the rest to the parallel block beside it. DEEP_SHARDS sets
-// it for one run, and 1 runs the block one file at a time in the worktree, as before shards. A file whose test builds
-// with cargo asks for every core, so the builds share the run's jobserver, and the shards are at most the cores less
-// one, since each, like the worktree, runs one compile on no token (jobserver, below).
+// it for one run, and 1 runs the block one file at a time in the worktree, as before shards. Each shard's job takes a
+// turn on the machine's pool, a core less one (#3221), so the shards are at most the cores less one.
 const CORES = availableParallelism();
 const SHARDS = Math.min(Number(process.env.DEEP_SHARDS) || Math.max(1, Math.floor(CORES / 2)), CORES - 1);
-
-/**
- * The run's compiles at once (#2741): every cargo its jobs start, in a shard or in the worktree, joins one jobserver of
- * the run's, GNU make's named pipe through CARGO_MAKEFLAGS, and starts each compile past its first on a token read from
- * the pipe. Cargo builds one at a time in a folder's target/ and runs that first compile on no token, so the pipe holds
- * a token per core less one for the worktree and one for each of the `shards` running; `give` hands theirs back once
- * they have ended. `close` ends it, before the timed blocks, which compile as before. A cargo killed while it holds
- * tokens never writes them back (#2848), so as each job ends the run fills the pipe to its count again, as the hub's
- * pool does, but only while no process but the run has the pipe open: a live build may hold tokens, and none is added
- * beside them. `close` comes after every untimed job has ended, so the pipe should hold its count then; what it lacks
- * was lost while builds ran, so a build may have had less than its share, and it returns how many.
- */
-function jobserver(shards) {
-  const dir = mkdtempSync(join(tmpdir(), 'deep-jobserver-')), fifo = join(dir, 'tokens');
-  const made = spawnSync('mkfifo', ['-m', '600', fifo], { encoding: 'utf8' });
-  if (made.status !== 0) throw Error(`BLOCKED jobserver: mkfifo failed: ${made.error?.message ?? made.stderr.trim()}`);
-  // Held open by the run, so the pipe keeps its tokens while no build has it open, and never blocking the run.
-  const fd = openSync(fifo, modes.O_RDWR | modes.O_NONBLOCK);
-  let tokens = 0;
-  const give = (count) => { if (count > 0) { tokens += count; writeSync(fd, '+'.repeat(count)); } };
-  give(CORES - 1 - shards);
-  // Whether the run alone has the pipe open: fuser names every process that has, the run among them, so a fuser that
-  // can't see it, is missing or hangs on another mount says nothing.
-  const alone = () => {
-    const seen = spawnSync('fuser', [fifo], { encoding: 'utf8', timeout: 10_000 });
-    const pids = seen.status === null ? [] : seen.stdout.split(/\s+/).flatMap((word) => word.match(/^(\d+)\D*$/)?.[1] ?? []);
-    return pids.includes(String(process.pid)) && pids.every((pid) => pid === String(process.pid));
-  };
-  // No build has started yet, so a run that isn't alone here never can be: it never refills, and lost tokens stay lost.
-  const sees = alone();
-  if (!sees) console.log(`JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)`);
-  const before = process.env.CARGO_MAKEFLAGS;
-  process.env.CARGO_MAKEFLAGS = `-j --jobserver-auth=fifo:${fifo}`;
-  let open = true;
-  // The free tokens, read out of the pipe.
-  const take = () => {
-    const buffer = Buffer.alloc(4096);
-    let free = 0;
-    for (;;) {
-      try { const read = readSync(fd, buffer, 0, buffer.length, null); if (read <= 0) break; free += read; } catch { break; }
-    }
-    return free;
-  };
-  return {
-    give,
-    refill: () => {
-      if (!open || !sees || !alone()) return;
-      // The free tokens are read out first, so a build that opens the pipe meanwhile takes none and is seen.
-      const free = take();
-      writeSync(fd, '+'.repeat(alone() ? tokens : free));
-    },
-    close: () => {
-      if (!open) return 0;
-      open = false;
-      const lost = Math.max(0, tokens - take());
-      if (before === undefined) delete process.env.CARGO_MAKEFLAGS;
-      else process.env.CARGO_MAKEFLAGS = before;
-      closeSync(fd);
-      rmSync(dir, { recursive: true, force: true });
-      return lost;
-    },
-  };
-}
 
 /**
  * Runs groups of the alone block (shardGroups), each one file at a time, in `places` taken in turn as each frees: shards,
@@ -495,14 +514,16 @@ async function runGroups(groups, places, files, vitest, node, label, env = {}, m
 // The run's one test grant (docs/parallel-proof.md, section 6; #2574): the run asks `throttle.mjs test --wait` once, before
 // any job, and runs again as its command, so each job's own request, a build's too, passes through on that grant from
 // its holder, an ancestor. The run that holds it is named by HELD: the file it marks as started, and the DEEP_THROTTLE it
-// was asked under. A run asked under a caller's build or test grant passes through on it, and takes none; one that took
-// its own gives it back before the timed files, which then ask as the caller would. With no grant in the wait, no job started, and every file reads INCONCLUSIVE.
+// was asked under. The grant is the run's admission (DEEP_THROTTLE_RUN, the free disk its shards need), and each job then
+// takes a turn on the machine's pool (#3221). A run asked under a caller's build or test grant is admitted at once with
+// no slot, and one asked under a job's turn passes through on it; one that took its own grant gives it back before the
+// timed files, which then ask as the caller would. With no grant in the wait, no job started, and every file reads INCONCLUSIVE.
 // DEEP_TEST_GRANT_WAIT sets the wait in minutes, for tests.
 const HELD = 'DEEP_AFFECTED_HELD';
 async function queued(args, files, started, prep) {
   const marker = join(mkdtempSync(join(tmpdir(), 'deep-affected-grant-')), 'started');
   const wait = process.env.DEEP_TEST_GRANT_WAIT ?? '30';
-  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '', prep }) } });
+  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE_RUN: String(shardsRoom(prep.shards.length)), [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '', prep }) } });
   // A terminal's SIGINT reaches the whole group; a SIGTERM or SIGHUP sent to this process alone is passed on.
   process.on('SIGINT', () => {});
   for (const signal of ['SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
@@ -629,15 +650,22 @@ async function main(args) {
   delete process.env[HELD];
   if (held) writeFileSync(held.marker, '');
   const paths = args.filter((arg) => !arg.startsWith('--'));
-  const changed = paths.length ? paths : changedPaths(root);
+  const block = args.includes('--alone');
+  const changed = block ? [] : paths.length ? paths : changedPaths(root);
   if (!changed) return console.log('BLOCKED affected: no merge base with origin/main; name the changed paths'), 3;
-  const workspace = crates(root);
-  const selection = select(root, changed, { workspace });
+  const workspace = block ? [] : crates(root);
+  let selection;
+  if (!block) selection = select(root, changed, { workspace });
+  else try { selection = aloneBlock(); } catch (error) { return console.log(error.message), 3; }
   if (args.includes('--wide')) {
     selection.tests = [...new Set([...selection.tests, ...selection.wide.filter((node) => !node.startsWith('cargo '))])].sort();
     selection.crates = [...new Set([...selection.crates, ...selection.wide.filter((node) => node.startsWith('cargo ')).map((node) => node.slice(14))])].sort();
     selection.wide = [];
   }
+  // The settled suites are left to the main watch, and --settled runs them, as --wide the wide ones (#3064). The list
+  // is read once, before the wait for the test grant, so a tick of the watch meanwhile changes nothing in the run.
+  const watched = held ? held.prep.watched : args.includes('--settled') || block ? { folders: [] } : settled(root, selection, changed);
+  selection.tests = selection.tests.filter((file) => !watched.folders.includes(suiteOf(file)));
   const { blocks, skipped, timed: timedFiles, slow: slowFiles } = plan(root, selection.tests, changed);
   const runTimed = args.includes('--timed'), runSlow = args.includes('--slow');
   const unrunTimed = runTimed ? [] : [...timedFiles.vitest, ...timedFiles.node].sort();
@@ -651,6 +679,8 @@ async function main(args) {
     for (const path of selection.none) console.log(`NOTE ${path} reaches no test`);
   }
   if (!held && selection.wide.length) console.log(`WIDE ${selection.wide.length} more see the change only through a process that starts another package (--wide runs them): ${selection.wide.join(' ')}`);
+  if (!held && watched.problem) console.log(`SETTLED no list: ${watched.problem}, so every suite the change reaches runs`);
+  if (!held && watched.folders.length) console.log(`SETTLED ${watched.folders.length} ${watched.folders.length === 1 ? 'suite of a closed issue is' : 'suites of closed issues are'} left to the main watch (--settled runs them): ${watched.folders.join(' ')}`);
   if (args.includes('--list')) return 0;
   const files = [...Object.values(blocks).flatMap((block) => [...block.vitest, ...block.node]), ...runTimed ? [...timedFiles.vitest, ...timedFiles.node] : []];
   if (!held) {
@@ -658,6 +688,7 @@ async function main(args) {
     const timedRun = runTimed ? [...timedFiles.vitest, ...timedFiles.node] : [];
     const prep = await prepare(files.filter((file) => !timedRun.includes(file)), timedRun, [...blocks.alone.vitest, ...blocks.alone.node], listedFiles, started);
     if (typeof prep === 'number') return prep;
+    prep.watched = watched;
     try {
       return await queued(args, listedFiles, started, prep);
     } finally {
@@ -709,15 +740,14 @@ async function main(args) {
       });
     }
     const groups = shardGroups([...blocks.alone.vitest, ...blocks.alone.node]);
-    // The binary builds ran before the grant, one at a time; from here the run's builds run at once, so they share its jobserver.
-    pool = jobserver(shards.length);
-    const lints = checks.find(({ name }) => name === 'lint').commands.filter(([, script]) => script?.startsWith('scripts/'));
+    // The preflight runs its lints in its lint lane, so its alone block runs none.
+    const lints = block ? [] : checks.find(({ name }) => name === 'lint').commands.filter(([, script]) => script?.startsWith('scripts/'));
     if (selection.owners.length) lints.push(['cargo', 'fmt', '--all', '--', '--check'], ['cargo', 'clippy', '--locked', '--keep-going', '--all-targets', ...selection.owners.flatMap((name) => ['-p', name]), '--', '-D', 'warnings']);
     const beside = [
       ...blocks.parallel.vitest.length ? [vitest(blocks.parallel.vitest, [], 'vitest', root)] : [],
       ...blocks.parallel.node.length ? [node(blocks.parallel.node, [], 'node', root)] : [],
       ...selection.crates.length ? [run(logs, 'cargo', 'cargo', ['test', '--locked', '--no-fail-fast', ...selection.crates.flatMap((name) => ['-p', name])])] : [],
-      ...lints.map(([command, ...rest]) => run(logs, `lint ${rest.find((arg) => arg.startsWith('scripts/')) ?? rest[0]}`, command, rest)),
+      ...lints.map(([command, ...rest]) => run(logs, lintLabel(rest), command, rest)),
     ];
     // The shards run beside those, since no shard's build writes the worktree's target/.
     // A shard takes its next group only while the disk keeps its floor, since other sessions fill it too; the groups it
@@ -733,16 +763,13 @@ async function main(args) {
       }
     } finally {
       for (const shard of shards) shard.release();
-      // The shards' compiles go back to the worktree's builds after them.
-      pool.give(shards.length);
       shards = [];
     }
     if (inShards && left.length) console.log(`SHARD ${left.length} alone ${left.length === 1 ? 'group runs' : 'groups run'} in the worktree: the disk fell under its floor`);
     // Without shards the block runs in the worktree after the rest, one group at a time; the exclusive groups always do.
     jobs.push(...(await runGroups([...left, ...groups.exclusive], [root], blocks.alone, vitest, node, 'alone-worktree')).jobs);
-    // The untimed jobs have ended, so the run's own grant and its jobserver go back, and each timed block asks for its
-    // timed grant as the run's caller would: nested in the caller's grant, or top-level.
-    const lost = pool.close();
+    // The untimed jobs have ended, so the run's own grant goes back, and each timed block asks for its timed grant as the
+    // run's caller would: nested in the caller's grant, or top-level.
     const [cls, id] = (process.env.DEEP_THROTTLE ?? '').split(':');
     if (id && process.env.DEEP_THROTTLE !== held.before) release({ class: cls, id });
     const own = { DEEP_THROTTLE: held.before };
@@ -752,8 +779,6 @@ async function main(args) {
 
     if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];
     const failures = [], passed = [], findings = [], skips = [], partial = new Set();
-    // A build that ran short of its compile share may have timed out or run slow, so the run can't say it passed (#2848).
-    if (lost) failures.push({ id: 'jobserver', state: 'INCONCLUSIVE', message: `${lost} of the run's compile tokens were missing when its builds had ended, so a build may have had less than its share` });
     for (const job of jobs) {
       const tests = /^(?:vitest|node)/.test(job.label);
       let report = '';
@@ -781,6 +806,11 @@ async function main(args) {
         const stuck = job.idle && `its job reported nothing for ${job.idle.minutes} min and was stopped`;
         if (stuck || results.cut || results.failures.some(({ id }) => id === `${job.label} report`)) for (const file of files) partial.add(file);
         if (stuck) failures.push({ id: `${job.label} job`, state: 'INCONCLUSIVE', message: `${stuck}; a file it reported may be part run (${job.log})` });
+        // A runner that a signal or an error ended with no failed test may have left a file it had started part run (#2136).
+        else if (job.status !== 0 && !results.failures.length && !results.noGrant) {
+          for (const file of files) partial.add(file);
+          failures.push({ id: `${job.label} job`, state: 'INCONCLUSIVE', message: `its runner ${job.status === null ? 'was ended by a signal' : `exited ${job.status}`} with no failed test (${job.log})` });
+        }
         for (const file of files.filter((file) => !report.includes(file))) failures.push({ id: named(file, '(file)'), state: results.noGrant || stuck ? 'INCONCLUSIVE' : 'FAIL', message: results.noGrant ?? stuck ?? 'reported no test' });
       }
     }
@@ -794,13 +824,16 @@ async function main(args) {
     for (const { id, message } of fresh) console.log(`NEW FAIL ${id}${message && message !== 'lint' ? `: ${message}` : ''}`);
     for (const path of selection.every) console.log(`INCONCLUSIVE ${path} feeds every suite; run npm run preflight`);
     if (selection.wide.length) console.log(`INCONCLUSIVE ${selection.wide.length} suites that see the change through another package's process were not run; the release preflight or --wide runs them`);
+    if (watched.folders.length) console.log(`INCONCLUSIVE ${watched.folders.length} settled ${watched.folders.length === 1 ? 'suite was' : 'suites were'} not run; the main watch or --settled runs them`);
     if (unrunTimed.length) console.log(`INCONCLUSIVE ${unrunTimed.length} timed ${unrunTimed.length === 1 ? 'file was' : 'files were'} not run; --timed runs them under a timed grant: ${unrunTimed.join(' ')}`);
     if (skipped.length) console.log(`INCONCLUSIVE ${skipped.length} selected ${skipped.length === 1 ? 'file was' : 'files were'} not run, left to a person or to a lane of its own; run each by hand or in its lane: ${skipped.join(' ')}`);
     if (unrunSlow.length) console.log(`INCONCLUSIVE ${unrunSlow.length} slow ${unrunSlow.length === 1 ? 'file was' : 'files were'} not run; --slow runs them: ${unrunSlow.join(' ')}`);
     console.log(`TIMED the timed list, from scripts/lanes.mjs (${timed.length}): ${timed.join(' ')}`);
-    const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
+    const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || watched.folders.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
     const resultsFile = args.find((arg) => arg.startsWith('--results='))?.slice(10);
-    if (resultsFile) writeFileSync(resultsFile, `${JSON.stringify({ state, ...fileResults(selection, { fresh, known, unsure, passed }, jobs.some(({ label, status }) => label === 'cargo' && status === 0), partial) }, null, 2)}\n`);
+    // Each test's result as its runner reported it, which runLanes reads for the unit lane's record as a runner's report.
+    const tests = block ? { tests: { failures, passed, skips } } : {};
+    if (resultsFile) writeFileSync(resultsFile, `${JSON.stringify({ state, ...fileResults(selection, { fresh, known, unsure, passed }, jobs.some(({ label, status }) => label === 'cargo' && status === 0), partial), ...tests }, null, 2)}\n`);
     console.log(`${state} affected: ${fresh.length} new, ${known.length} already failing on main, ${unsure.length} inconclusive or blocked, ${covered.length} listed skips, ${passed.length} passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; logs in ${logs}`);
     return { FAIL: 1, INCONCLUSIVE: 2, BLOCKED: 3, INVALID: 3 }[state] ?? 0;
   } catch (error) {
@@ -808,7 +841,6 @@ async function main(args) {
     return error.message.startsWith('INCONCLUSIVE') ? 2 : 3;
   } finally {
     for (const shard of shards) shard.release();
-    pool?.close();
     rmSync(binRoot, { recursive: true, force: true });
   }
 }

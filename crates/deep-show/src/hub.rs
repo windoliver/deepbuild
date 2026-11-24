@@ -10,6 +10,7 @@
 //! Documents several writers share (issue #96) are in [`crate::shared`]: patches, undo, reads,
 //! history, the by-writer lens, the record and the clock's latch.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU32;
@@ -195,6 +196,8 @@ pub enum Planted {
     ProbeFromDepth,
     /// #1401: a probe that meets nothing answers the item drawn nearest its pixel.
     ProbeNearestItem,
+    /// #1722: a render-back of a 3D revision drops its 3D writer layers and draws its 2D marks.
+    RenderBack2dOnly,
     /// #1729: a 3D frame skips a `mesh.asset@1` whose file isn't in the store, with no issue.
     SkipsMissingMeshAsset,
     /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
@@ -221,6 +224,8 @@ pub enum Planted {
     Audit(crate::geometry_audit::Planted),
     /// #1921's: a world's outputs' wrong programs, which the physics host names.
     Physics(crate::physics::Planted),
+    /// #1500's: a run carried on across a revision.
+    Join(crate::joins::Planted),
     /// #525's live worlds' wrong programs.
     Ahead(crate::stepped::Planted),
     /// #1250's planted clips.
@@ -709,8 +714,13 @@ pub enum Body {
 }
 
 mod call;
+mod planted;
 mod presented;
+mod revise;
 pub use call::*;
+use planted::read_programs;
+pub(crate) use planted::{clock_noise, export_noise};
+pub(crate) use presented::only_layer;
 
 /// A background job (#857): a playtest batch's replicas of a document's session, or a bake of
 /// one, each evaluated frame after frame at the background priority.
@@ -725,10 +735,17 @@ pub struct Row {
     pub rev: u64,
     pub base_rev: u64,
     pub writer: Writer,
+    /// The patch that made it; `None` for a whole revision (#1721).
+    pub patch: Option<String>,
     pub hash: String,
     pub state: &'static str,
     /// The stamped document; kept for the current revision's diff and drawing.
     pub doc: Value,
+}
+
+/// A document's current revision among `revisions`.
+pub fn current_in<'r>(revisions: &'r BTreeMap<String, Vec<Row>>, doc: &str) -> Option<&'r Row> {
+    revisions.get(doc)?.iter().find(|r| r.state == "current")
 }
 
 /// The hub's state while a scenario runs.
@@ -737,6 +754,11 @@ pub struct Hub<'a> {
     pub startup: &'a Startup,
     pub revisions: BTreeMap<String, Vec<Row>>,
     pub shared: BTreeMap<String, Shared>,
+    /// What #96 holds of each document the hub minted, beside its `revisions` (#1721); those opened
+    /// from the record that no call has drawn yet, and those whose newest bytes are gone, by hash.
+    pub minted: BTreeMap<String, Shared>,
+    pub asleep: BTreeSet<String>,
+    pub unread: BTreeMap<String, String>,
     /// The clock's time, in flicks: a read shows what is current then.
     pub now: i64,
     /// When each writer's applied patches were checked, for its quota.
@@ -813,6 +835,8 @@ pub struct Hub<'a> {
     pub expansion_cache: BTreeMap<String, Expansion>,
     /// #544's planted start_on: each session's first evaluated time since its revision loaded.
     pub first_frames: BTreeMap<String, i64>,
+    /// #1500's planted capture: each step a carried-on run ran, by document, as the logic call's row.
+    pub carried_rows: BTreeMap<String, BTreeMap<i64, Value>>,
     /// #538's planted lookup: each copy table's key order in its document's first revision.
     pub first_orders: BTreeMap<String, Vec<String>>,
     /// The displays, the windows on them and the card's placement (#400).
@@ -900,6 +924,8 @@ fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
         steps_by_name: startup.steps_by_name,
         key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
         checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
+        ring_drops_start: false,
+        ring_newest_only: false,
         merge_by_finish: scenario.planted == Some(Planted::MergesInFinishOrder),
         admits_frame_json: startup.admits_frame_json,
         runs_every_node: scenario.planted == Some(Planted::RunsEveryNode),
@@ -964,6 +990,9 @@ impl<'a> Hub<'a> {
             startup,
             revisions: BTreeMap::new(),
             shared: BTreeMap::new(),
+            minted: BTreeMap::new(),
+            asleep: BTreeSet::new(),
+            unread: BTreeMap::new(),
             now: 0,
             applied_at: BTreeMap::new(),
             written: BTreeMap::new(),
@@ -1011,6 +1040,7 @@ impl<'a> Hub<'a> {
             expansions: BTreeMap::new(),
             expansion_cache: BTreeMap::new(),
             first_frames: BTreeMap::new(),
+            carried_rows: BTreeMap::new(),
             first_orders: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
@@ -1204,7 +1234,7 @@ impl<'a> Hub<'a> {
         // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs);
         // #3017: its visible table from the object-ID pass it drew.
         self.shown3d(doc, t, size)
-            .map(|(rgba, shown)| (rgba, size, shown))
+            .map(|(rgba, shown, _)| (rgba, size, shown))
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.
@@ -1270,6 +1300,14 @@ impl<'a> Hub<'a> {
             look::Distance::WhereStatusShows
         };
         look::resolve_in(&def, &bundled, at).ok()
+    }
+
+    /// The look `doc` names, where the evidence store holds it.
+    pub(crate) fn take_look(&mut self, doc: &Value) {
+        if let Some(look) = self.look_of(doc) {
+            self.look = look;
+            self.look_def = self.look_def_of(doc);
+        }
     }
 
     /// The look@1 a document names by asset, as the evidence store holds it.
@@ -1458,10 +1496,7 @@ impl<'a> Hub<'a> {
     }
 
     pub fn current(&self, doc: &str) -> Option<&Row> {
-        self.revisions
-            .get(doc)?
-            .iter()
-            .find(|r| r.state == "current")
+        current_in(&self.revisions, doc)
     }
 
     /// A deep_show or deep show call's reply, on a shared document or a sole writer's.
@@ -1507,6 +1542,14 @@ impl<'a> Hub<'a> {
             self.stamp(&mut refused);
             return refused;
         }
+        // #1721: a document whose newest recorded bytes are gone answers with that alone.
+        if let Some(issue) = called.as_ref().and_then(|(d, _)| self.unread_issue(d)) {
+            let mut refused = json!({"outcome": "refused", "code": issue.code,
+                                     "issues": [issue.to_json()], "snapshots": []});
+            self.stamp(&mut refused);
+            return refused;
+        }
+        self.wake(call);
         let frozen = called.as_ref().map(|(d, _)| self.session_state(d));
         let frozen = frozen == Some(crate::states::State::Frozen);
         if let Call::Show(show) = call {
@@ -1521,9 +1564,9 @@ impl<'a> Hub<'a> {
                 self.mode_show(show, args)
             }
             Call::Patch(p) => self.patch(p, None, self.now),
-            Call::Read { doc, via } => self.read(doc, via.as_ref()),
-            Call::History { doc, item } => self.history(doc, item),
-            Call::ByWriter(doc) => self.by_writer(doc),
+            Call::Read { doc, via } => self.as_shared(doc, |hub| hub.read(doc, via.as_ref())),
+            Call::History { doc, item } => self.as_shared(doc, |hub| hub.history(doc, item)),
+            Call::ByWriter(doc) => self.as_shared(doc, |hub| hub.by_writer(doc)),
             Call::Registry => self.registry_reply(),
             Call::Geometry(g) => self.geometry(g),
             Call::KindSchemas => self.kind_schemas_reply(),
@@ -1624,6 +1667,7 @@ impl<'a> Hub<'a> {
             } => self.play(doc, *display_hz, *to, *presented),
             Call::Determinism(d) => self.determinism(d),
             Call::Frames(f) => self.frames(f),
+            Call::PlayFrames(p) => self.play_frames(p),
             Call::ShapedRuns(text) => self.shaped_runs(text),
             Call::Settle(s) => self.settle_patches(s),
             Call::Query(q) => self.query(q),
@@ -1647,13 +1691,17 @@ impl<'a> Hub<'a> {
                     .map(|rows| {
                         rows.iter()
                             .map(|r| {
-                                json!({
+                                let mut row = json!({
                                     "rev": r.rev,
                                     "base_rev": r.base_rev,
                                     "writer": r.writer.to_json(),
                                     "hash": r.hash,
                                     "state": r.state,
-                                })
+                                });
+                                if let Some(patch) = &r.patch {
+                                    row["patches"] = json!([patch]);
+                                }
+                                row
                             })
                             .collect()
                     })
@@ -1806,38 +1854,28 @@ impl<'a> Hub<'a> {
     pub fn bands(&self) -> Vec<BandRow> {
         let mut rows = Vec::new();
         for (doc, panel) in &self.scenario.docs {
-            let visible = self.panel_visible(panel);
-            if let Some(k) = self.shown(doc).filter(|_| visible) {
-                // A shared document: each writer's layer in its band.
-                let (shown, _) = self.shared[doc].at(k);
-                for (layer, entry) in shown["layers"].as_object().into_iter().flatten() {
-                    let Some(owner) = entry["writer"].as_str().and_then(shared::writer_of_text)
-                    else {
-                        continue;
-                    };
-                    rows.push(BandRow {
-                        doc: Some(doc.clone()),
-                        band: owner.band(),
-                        layer: layer.clone(),
-                        outline: owner.outlined(),
-                        name: self.agent_name(&owner),
-                        owner,
-                    });
-                }
+            if !self.panel_visible(panel) {
                 continue;
             }
-            let Some(row) = self.current(doc).filter(|_| visible) else {
-                continue;
+            // Each writer's layer in its band.
+            let shown = match self.shown(doc) {
+                Some(k) => Some(self.shared[doc].at(k).0),
+                None => self.current(doc).map(|r| Cow::Borrowed(&r.doc)),
             };
-            let name = self.agent_name(&row.writer);
-            rows.push(BandRow {
-                doc: Some(doc.clone()),
-                band: row.writer.band(),
-                layer: row.writer.layer_id(),
-                owner: row.writer.clone(),
-                outline: row.writer.outlined(),
-                name,
-            });
+            let layers = shown.as_ref().and_then(|d| d["layers"].as_object());
+            for (layer, entry) in layers.into_iter().flatten() {
+                let Some(owner) = entry["writer"].as_str().and_then(shared::writer_of_text) else {
+                    continue;
+                };
+                rows.push(BandRow {
+                    doc: Some(doc.clone()),
+                    band: owner.band(),
+                    layer: layer.clone(),
+                    outline: owner.outlined(),
+                    name: self.agent_name(&owner),
+                    owner,
+                });
+            }
         }
         rows.sort_by(|a, b| a.band.cmp(&b.band).then_with(|| a.doc.cmp(&b.doc)));
         // A card the shell places counts as shown only once presented (#400).
@@ -1885,15 +1923,11 @@ impl<'a> Hub<'a> {
         else {
             return refused("ref_unresolved");
         };
-        // R1: a deep_show document is one writer's layer; another writer's whole revision would
-        // drop what it never held.
         let current = self.current(&show.doc);
-        if current.is_some_and(|c| c.writer != writer) {
-            return refused("not_your_layer");
-        }
         let current_doc = current.map(|c| c.doc.clone());
         let base_rev = current.map_or(0, |c| c.rev);
-        let rev = self.revisions.get(&show.doc).map_or(0, Vec::len) as u64 + 1;
+        let newest = self.revisions.get(&show.doc).and_then(|rows| rows.last());
+        let rev = newest.map_or(0, |r| r.rev) + 1;
         let title = name.map_or_else(|| "You".to_string(), str::to_string);
 
         // A doc ID is the record's ULID; the document holds it in lower case, as the ID grammar
@@ -1904,11 +1938,23 @@ impl<'a> Hub<'a> {
             &writer,
             &title,
         );
+        // #1721: the layers other writers hold there stay as they are.
+        let mut probe_issues = Vec::new();
+        let mut beside = None;
+        let stamped =
+            stamped.map(
+                |doc| match self.beside(&show.doc, &doc, &writer, &mut probe_issues) {
+                    Some((merged, b)) => {
+                        beside = Some(b);
+                        merged
+                    }
+                    None => doc,
+                },
+            );
         // #499: each asset a probing kind names is probed in the decode worker, its probe kept
         // on the document's asset, as the check and the frame read it.
-        let mut probe_issues = Vec::new();
         let stamped = stamped.map(|mut doc| {
-            probe_issues = self.probe_assets(&mut doc);
+            probe_issues.extend(self.probe_assets(&mut doc));
             // #935: a strip or spawn naming a generated sound's asset before its audio.gen passes.
             probe_issues.extend(self.unpassed_sounds(&doc));
             probe_issues.extend(self.stages_in_narration(&doc));
@@ -1917,10 +1963,7 @@ impl<'a> Hub<'a> {
         // The document's look (Document envelope: `look: {asset: look@major}`), read from the
         // evidence store by its asset's hash; one the store doesn't hold leaves the shipped look.
         if let Ok(doc) = &stamped {
-            if let Some(look) = self.look_of(doc) {
-                self.look = look;
-                self.look_def = self.look_def_of(doc);
-            }
+            self.take_look(doc);
         }
         let mut notices = Vec::new();
         // #403: in a claim that names the document, an item of a kind this build doesn't know
@@ -1988,26 +2031,23 @@ impl<'a> Hub<'a> {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,
                     _ => Scope::Every,
                 };
+                let current = current_doc.as_ref();
+                let diffed = |doc: &Value, removes: &[String]| match &beside {
+                    Some(b) => b.diff(current, doc, removes),
+                    None => whole_diff(current, doc, &writer.layer_id(), removes, scope),
+                };
                 let removes: Vec<String> = match self.scenario.planted {
                     // The planted deep_show takes every ID it dropped as named.
                     Some(Planted::PresentsUnnamedRemoval) => {
                         let mut all = show.removes.clone();
-                        if let Err(missing) =
-                            whole_diff(current_doc.as_ref(), &doc, &writer.layer_id(), &[], scope)
-                        {
+                        if let Err(missing) = diffed(&doc, &[]) {
                             all.extend(missing.into_iter().flat_map(|i| i.ids));
                         }
                         all
                     }
                     _ => show.removes.clone(),
                 };
-                let diff = match whole_diff(
-                    current_doc.as_ref(),
-                    &doc,
-                    &writer.layer_id(),
-                    &removes,
-                    scope,
-                ) {
+                let diff = match diffed(&doc, &removes) {
                     Ok(diff) => Some(diff),
                     Err(missing) => {
                         issues.extend(missing);
@@ -2032,6 +2072,10 @@ impl<'a> Hub<'a> {
                     &self.startup.sealed,
                     planted,
                 );
+                if let (Some(b), Some(current)) = (&beside, current) {
+                    b.carry(&mut issues, current, &doc, planted);
+                    skipped.extend(shared::hidden(&doc, &issues));
+                }
                 (Some(doc), issues, diff)
             }
         };
@@ -2060,71 +2104,22 @@ impl<'a> Hub<'a> {
                 }));
             }
         }
-        // The revision's check phases and, for a session on screen, its frame at `t`, run clean
-        // before it becomes current: what an operator can't evaluate is an issue of the revision
-        // too, naming the operator's module (#387). A read an operator didn't declare is the
-        // module's fault, not the document's, so it fails the frame and refuses nothing.
         let visible = self.doc_visible(&show.doc);
-        // The form that draws: the document with each recipe instance's derived items in its
-        // place (#306), less the items skipped as `unknown_kind` (#403).
-        let mut drawn_form = stamped.as_ref().map(|doc| {
-            let expansions = fresh.as_ref().map(|(e, _)| e.as_slice());
-            crate::verdict::without(
-                &crate::packs::drawn(doc, expansions.unwrap_or(&[])),
+        let drawn_form = stamped.as_ref().map(|doc| {
+            let (expansions, timing) = match fresh.as_mut() {
+                Some((e, (_, t))) => (e.as_slice(), t.as_mut()),
+                None => (&[][..], None),
+            };
+            self.checked_form(
+                &show.doc,
+                doc,
+                expansions,
                 &skipped,
+                show.t,
+                timing,
+                &mut issues,
             )
         });
-        if let Some(form) = drawn_form.as_mut() {
-            if let Err(r) = self.inline_tables(form) {
-                issues.push(unfit_issue(r.code, r.path));
-            }
-            issues.extend(self.inline_vectors(form));
-            issues.extend(crate::picks::check(form));
-            // #466: an operator transition's pass, checked before any frame draws it.
-            issues.extend(crate::film_operator::check(form));
-            issues.extend(deep_canvas_input::point::check(form));
-            // #542: text and scroll controls' fields.
-            issues.extend(deep_canvas_input::text::check(form));
-            issues.extend(deep_canvas_input::scroll::check(form));
-            // #903: the tour's keys.
-            issues.extend(deep_canvas_input::tour::check(form));
-            // #544: a spawn's reads of a logic item's occurrences, checked against its emits
-            // before any step runs; then the logic items baked into the lists their readers read.
-            if !deep_canvas_media::planted("undeclared_field_reads_zero") {
-                issues.extend(crate::spawn::undeclared_issues(form));
-            }
-            issues.extend(self.inline_baked(form));
-            // #533: then each logic item's program inlined for the logic module's steps.
-            self.inline_programs(form);
-        }
-        // Mark set columns that read a column source, resolved and narrowed by the core's
-        // column view at the frame's step (#397).
-        if let Some(form) = drawn_form.as_mut() {
-            // #538: and keyed copy's fit check, timed for `timing`.
-            let timing = fresh.as_mut().and_then(|(_, (_, t))| t.as_mut());
-            issues.extend(self.checked_view(&show.doc, form, show.t, timing));
-        }
-        if let Some(doc) = stamped
-            .as_ref()
-            .filter(|_| !issues.iter().any(|i| i.severity == "error"))
-        {
-            let (op_issues, drawing) =
-                self.probe(drawn_form.as_ref().unwrap_or(doc), show.t, visible, None);
-            for i in op_issues.iter().filter(|i| i.code != "undeclared_read") {
-                issues.push(op_issue(i));
-            }
-            if let Some(drawing) = drawing.filter(|_| op_issues.is_empty()) {
-                // #499: a video image item draws its frame at the revision's time.
-                let (_, pictures) = self.videos_at(doc, show.t, false);
-                self.renderer.videos = pictures;
-                if let Err(Unfit { code, path }) = self
-                    .renderer
-                    .prepare_drawing(&drawing, &self.scenario.evidence)
-                {
-                    issues.push(unfit_issue(code, path));
-                }
-            }
-        }
         let hash = stamped
             .as_ref()
             .and_then(|d| canonical_in(d, &self.startup.sealed.kinds()).ok())
@@ -2155,22 +2150,17 @@ impl<'a> Hub<'a> {
                 self.expansions.insert(show.doc.clone(), expansions);
             }
         }
-        let rows = self.revisions.entry(show.doc.clone()).or_default();
-        let state = if error { "refused" } else { "current" };
-        if !error {
-            for r in rows.iter_mut().filter(|r| r.state == "current") {
-                r.state = "superseded";
-            }
-        }
-        if stamped.is_some() {
-            rows.push(Row {
+        if let Some(doc) = &stamped {
+            let row = Row {
                 rev,
                 base_rev,
                 writer: writer.clone(),
+                patch: None,
                 hash,
-                state,
-                doc: stamped.clone().unwrap_or(Value::Null),
-            });
+                state: if error { "refused" } else { "current" },
+                doc: doc.clone(),
+            };
+            self.push_row(&show.doc, row);
         }
         if error {
             return refused_reply(reply, &issues, show.check);
@@ -2181,33 +2171,8 @@ impl<'a> Hub<'a> {
         // The checked revision becomes the session's current one; a snapshot is the session's
         // own frame at `t`.
         let doc = stamped.unwrap_or(Value::Null);
-        if !self.sessions.contains_key(&show.doc) {
-            let fresh = self.new_session();
-            self.sessions.insert(show.doc.clone(), fresh);
-        }
-        // #1967: a recording this revision's cell grids play, converted at its probe.
-        let readings = self.readings();
-        if let Some(s) = self.sessions.get_mut(&show.doc) {
-            s.set_readings(readings);
-        }
-        // #504: the session loads the played form: the drawn form with the document's input track
-        // and the session's picks, shown at `t`.
-        let again = self
-            .forms
-            .insert(
-                show.doc.clone(),
-                drawn_form.clone().unwrap_or_else(|| doc.clone()),
-            )
-            .is_some();
-        if again && self.planted(Planted::ReloadRebuildsEveryPart) {
-            // Planted (#504): a revision presented again rebuilds every part, kept or cached.
-            let startup = self.startup;
-            self.sched = Scheduler::new(&startup.sealed, self.options());
-            let fresh = self.new_session();
-            self.sessions.insert(show.doc.clone(), fresh);
-        }
-        self.replay(&show.doc, show.t);
-        self.first_frames.remove(&show.doc);
+        let form = drawn_form.unwrap_or_else(|| doc.clone());
+        self.make_current(&show.doc, form, show.t);
         // #1732: render-back's geometry audit of the revision, on its frame at `t`.
         if show.include.iter().any(|i| matches!(i, Include::Audit)) {
             let audit = self.audit_of(&show.doc, show.t);
@@ -2551,59 +2516,6 @@ impl<'a> Hub<'a> {
                 Some(claim) if claim.deliverables.contains(&show.doc) => "PASS",
                 Some(_) => "INCONCLUSIVE",
             },
-        }
-    }
-}
-
-/// The planted renderer's grain: a few pixels' red nudged by a xorshift seeded from the clock's
-/// nanoseconds, what an honest render-back never reads (Channel and key: it can never read the
-/// clock), so two runs draw two pictures (#670).
-pub(crate) fn clock_noise(rgba: &mut [u8]) {
-    seeded_noise(rgba, now_nanos());
-}
-
-/// #1163's [`clock_noise`] in an export, seeded from the clock once per process and by the
-/// frame's time: another process draws another picture, and a frame drawn again in the same
-/// export draws the same one, as #157's redraw holds every frame to.
-pub(crate) fn export_noise(rgba: &mut [u8], t: i64) {
-    static SEED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
-    seeded_noise(rgba, *SEED.get_or_init(now_nanos) ^ t as u64);
-}
-
-fn now_nanos() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos() as u64)
-}
-
-fn seeded_noise(rgba: &mut [u8], seed: u64) {
-    let mut x = seed | 1;
-    let pixels = (rgba.len() / 4) as u64;
-    for _ in 0..64 {
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        let i = (x % pixels) as usize * 4;
-        rgba[i] = rgba[i].wrapping_add((x >> 56) as u8 | 1);
-    }
-}
-
-/// The planted check that opens a logic program's bytes from the evidence store by its hash
-/// before the document is refused: what the honest check never does (#305).
-fn read_programs(doc: &Value, evidence: &std::path::Path) {
-    let Some(items) = doc.get("items").and_then(Value::as_object) else {
-        return;
-    };
-    for item in items.values() {
-        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-        let program = item
-            .get("params")
-            .and_then(|p| p.get("program"))
-            .and_then(Value::as_str);
-        if let (true, Some(sha)) = (kind.starts_with("logic@"), program) {
-            if sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()) {
-                let _ = std::fs::read(evidence.join(&sha[..2]).join(&sha[2..]));
-            }
         }
     }
 }

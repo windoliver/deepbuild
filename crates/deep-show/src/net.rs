@@ -88,7 +88,7 @@ pub fn module() -> Option<deep_canvas::registry::Module> {
 
 /// The net module's calls: `match`, `play_match`, `lobby`, `sockets` and `replay`.
 pub enum NetCall {
-    Match(MatchCall),
+    Match(Box<MatchCall>),
     Play(PlayCall),
     Lobby(live::LobbyCall),
     Sockets,
@@ -97,7 +97,7 @@ pub enum NetCall {
 
 pub fn parse(name: &str, c: &Map<String, Value>) -> Option<Call> {
     let call = match name {
-        "match" => NetCall::Match(parse_match(c)?),
+        "match" => NetCall::Match(Box::new(parse_match(c)?)),
         "play_match" => NetCall::Play(parse_play(c)?),
         "lobby" => NetCall::Lobby(live::parse_lobby(c)?),
         "replay" => NetCall::Replay(ReplayCall {

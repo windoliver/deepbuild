@@ -87,7 +87,9 @@ pub fn budget(
 /// #277: the share of the class's frame CPU a catch-up's slice takes, leaving the frame its draw.
 const SLICE_SHARE: f64 = 0.6;
 
-/// #552: 64 bits from the browser's secure random source, `crypto.getRandomValues`.
+/// #552: 64 bits from the browser's secure random source, `crypto.getRandomValues`. Only the page
+/// has one; a host build of the player (its tests) keeps the copy's own source.
+#[cfg(target_arch = "wasm32")]
 fn secure_u64() -> u64 {
     use wasm_bindgen::JsCast as _;
     let buf = js_sys::Uint8Array::new_with_length(8);
@@ -307,6 +309,7 @@ impl Match {
                     now,
                 );
                 // #552: a draw's bits come from the browser's secure random source.
+                #[cfg(target_arch = "wasm32")]
                 copy.draw_source(Box::new(secure_u64), Default::default());
                 if let Some(seats) = &seats {
                     copy.seat(seats);

@@ -1,0 +1,4 @@
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/windoliver/deepbuild/security/advisories/new
+    about: A way past a guard or the hook, out of the sandbox, onto the trusted card, or to a credential or another session's data. Not as a public issue until its fix has merged; see SECURITY.md.

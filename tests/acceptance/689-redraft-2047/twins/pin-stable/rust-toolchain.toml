@@ -1,0 +1,7 @@
+[toolchain]
+# Planted wrong program for #689's blind redraft (tests/acceptance/689-redraft-2047/README.md): the checkout follows
+# rustup's stable channel instead of pinning 1.99.1.
+channel = "stable"
+components = ["rustfmt", "clippy"]
+# Issue #140: the canvas core's crates build for the web's platform in the wasm32 lane.
+targets = ["wasm32-unknown-unknown"]

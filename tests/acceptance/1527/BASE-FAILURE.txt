@@ -6,7 +6,7 @@
 # command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/1527 --no-file-parallelism --testTimeout=600000
 
 
- RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-1527-repeat-job-cost-441636/tests/acceptance/1527
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-1527-repeat-job-cost-441636/tests/acceptance/1527
 
  ❯ monthly.test.ts (2 tests | 2 failed) 133617ms
    × #1527.cd627fd5 The card shows a cost per run and per month. A card without them fails, and a run past its per-run line stops before its next model turn 11991ms

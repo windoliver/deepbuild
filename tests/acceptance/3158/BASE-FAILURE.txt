@@ -1,0 +1,141 @@
+# #3158 acceptance suite at the base, 3c500c0c8 (origin/main, "Merge pull request #3097 ..."), before any work on #3158.
+# macOS arm64 (Darwin 27.2.0), 8 cores, Node v24.22.0, dependencies installed and every package built (`npm run build --workspaces`); no cargo.
+# One-minute load (`sysctl -n vm.loadavg`) 6.95 before the run and 7.27 after it ({ 6.95 9.11 19.49 } and { 7.27 9.14 19.44 }).
+# Run, once, from the checkout: npx vitest run tests/acceptance/3158 --reporter=verbose      exit 1
+# The checkout's path is shortened to <checkout>.
+#
+# Expected at the base: 7 tests fail, each at an assertion of its own on a value, and 2 pass.
+#
+# Fail, because the base reads cache_creation_input_tokens as one number and prices it at the five-minute rate alone:
+# - AC1 #3158.80f74d2a (pricing.test.ts): the one-hour 1,000,000 tokens cost 6.25 where 10.00 is expected. This is the
+#   failure the criterion names: "The merge base prices both at 6.25 and fails this test, naming the difference".
+# - AC2 #3158.ee4a9451 (corpus.test.ts, 3 tests): every write in the corpus is a one-hour write, priced at 1.25 times
+#   the input price where 2 times is expected. The first session of the 30 fails the sweep (2.1.299/compact, 0.0026978850
+#   for 0.0037304100), and the two hand counts read 0.2591408 for 0.3865388 and 0.001667555 for 0.00225578.
+# - AC3 #3158.969013e8: the total with no split is already priced at the five-minute rate (6.25, the first assertion
+#   holds), but the cost says nothing of "at least": it reads { basis, usd, rate_card } alone.
+# - AC4 #3158.3dd67f02: the session's 300,000 one-hour tokens and its subagent's 800,000 five-minute tokens are all
+#   priced at 6.25 a million, 6.875 where 3.00 + 5.00 is expected.
+# - AC5 #3158.fad2fa05: a row holds one write price at the base, and the base prices both kinds by it: an estimate of
+#   12.50 where "unpriced" is expected.
+#
+# Pass, because they guard what the base already does (AC6 #3158.e3a2e90a, corpus.test.ts, 2 tests): the token totals
+# of every recorded session are compared with base-totals.json, which was written from this same base. They fail a
+# change that moves any total.
+
+RUN  v5.0.5 <checkout>
+
+ × tests/acceptance/3158/pricing.test.ts > #3158.80f74d2a AC1 a transcript whose one message wrote 1,000,000 one-hour and 1,000,000 five-minute tokens at input price 5 costs 10.00 for the first and 6.25 for the second 6ms
+   → the 1,000,000 one-hour write tokens cost 10.00, twice the input price of 5; the merge base prices them at the five-minute 6.25: expected 6.25 to be close to 10, received difference is 3.75, but expected 5e-7
+ × tests/acceptance/3158/pricing.test.ts > #3158.969013e8 AC3 a record with a write total and no split is priced at the five-minute rate, and its session's cost reads "at least" 3ms
+   → a one-hour write can only cost more, so the cost reads "at least"; it reads {"basis":"estimated","usd":6.25,"rate_card":"anthropic-list-2026-10"}: expected false to be true // Object.is equality
+ × tests/acceptance/3158/pricing.test.ts > #3158.3dd67f02 AC4 a session with a subagent's file beside its transcript prices the subagent's five-minute writes and its own one-hour writes each at its rate, in one total 3ms
+   → one total: 300,000 one-hour tokens at 10.00 a million and 800,000 five-minute tokens at 6.25 a million, 3.00 + 5.00. All at the five-minute rate is 6.875, all at the one-hour rate 11.00, the two rates swapped 9.875, the session alone 3.00: expected 6.875 to be close to 8, received difference is 1.125, but expected 5e-7
+ × tests/acceptance/3158/pricing.test.ts > #3158.fad2fa05 AC5 a model whose row holds one write price and not the other reads unpriced, never priced by the one it has 2ms
+   → a row with the five-minute price alone reads unpriced, never its one-hour writes at 6.25; it reads {"basis":"estimated","usd":12.5,"rate_card":"acceptance-3158"}: expected 'estimated' to be 'unpriced' // Object.is equality
+ × tests/acceptance/3158/corpus.test.ts > #3158.ee4a9451 AC2 every recorded Claude Code session with usage is priced by the split its records give 6ms
+   → 2.1.299/compact: its records priced by their split, a one-hour write at twice the input price and a five-minute write at 1.25 times, come to 0.003730410000000001: expected 0.0026978849999999997 to be close to 0.003730410000000001, received difference is 0.0010325250000000012, but expected 5e-10
+ × tests/acceptance/3158/corpus.test.ts > #3158.ee4a9451 AC2 2.1.299/desktop-resume costs 0.3865388 by a hand count of its three records 1ms
+   → its 42,466 write tokens are all one-hour writes, 8 a million on claude-opus-5-5; at the five-minute 5 the session reads 0.2591408: expected 0.2591408 to be close to 0.3865388, received difference is 0.127398, but expected 5e-10
+ × tests/acceptance/3158/corpus.test.ts > #3158.ee4a9451 AC2 2.1.308/permission-answered costs 0.00225578 by a hand count of its two records 1ms
+   → its 7,843 write tokens are all one-hour writes, 0.2 a million on claude-haiku-5-5; at the five-minute 0.125 the session reads 0.001667555: expected 0.001667555 to be close to 0.00225578, received difference is 0.0005882250000000002, but expected 5e-10
+ ✓ tests/acceptance/3158/corpus.test.ts > #3158.e3a2e90a AC6 every recorded Claude Code session counts the input, output, cache-write and cache-read tokens it counted on the merge base 17ms
+ ✓ tests/acceptance/3158/corpus.test.ts > #3158.e3a2e90a AC6 every recorded Claude Code and Codex session reads the tokens its adapter read on the merge base, input taking in cache writes whole 30ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3158/corpus.test.ts > #3158.ee4a9451 AC2 every recorded Claude Code session with usage is priced by the split its records give
+AssertionError: 2.1.299/compact: its records priced by their split, a one-hour write at twice the input price and a five-minute write at 1.25 times, come to 0.003730410000000001: expected 0.0026978849999999997 to be close to 0.003730410000000001, received difference is 0.0010325250000000012, but expected 5e-10
+ ❯ tests/acceptance/3158/corpus.test.ts:62:173
+     60|     const cost = countUsage([transcriptOf('claude-code', session)]).co…
+     61|     expect(cost.basis, `${session}: its model is on the shipped rate c…
+     62|     expect(cost.usd, `${session}: its records priced by their split, a…
+       |                                                                                                                                                                             ^
+     63|   }
+     64|   expect(priced, 'the corpus holds 30 Claude Code sessions with usage'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/acceptance/3158/corpus.test.ts > #3158.ee4a9451 AC2 2.1.299/desktop-resume costs 0.3865388 by a hand count of its three records
+AssertionError: its 42,466 write tokens are all one-hour writes, 8 a million on claude-opus-5-5; at the five-minute 5 the session reads 0.2591408: expected 0.2591408 to be close to 0.3865388, received difference is 0.127398, but expected 5e-10
+ ❯ tests/acceptance/3158/corpus.test.ts:70:153
+     68|   // 6 input x 4 + 436 output x 20 + 42,466 one-hour writes x 8 + 190,…
+     69|   const cost = countUsage([transcriptOf('claude-code', '2.1.299/deskto…
+     70|   expect(cost.usd, 'its 42,466 write tokens are all one-hour writes, 8…
+       |                                                                                                                                                         ^
+     71| });
+     72|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/acceptance/3158/corpus.test.ts > #3158.ee4a9451 AC2 2.1.308/permission-answered costs 0.00225578 by a hand count of its two records
+AssertionError: its 7,843 write tokens are all one-hour writes, 0.2 a million on claude-haiku-5-5; at the five-minute 0.125 the session reads 0.001667555: expected 0.001667555 to be close to 0.00225578, received difference is 0.0005882250000000002, but expected 5e-10
+ ❯ tests/acceptance/3158/corpus.test.ts:76:161
+     74|   // 4 input x 0.1 + 155 output x 0.5 + 7,843 one-hour writes x 0.2 + …
+     75|   const cost = countUsage([transcriptOf('claude-code', '2.1.308/permis…
+     76|   expect(cost.usd, 'its 7,843 write tokens are all one-hour writes, 0.…
+       |                                                                                                                                                                 ^
+     77| });
+     78|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/acceptance/3158/pricing.test.ts > #3158.80f74d2a AC1 a transcript whose one message wrote 1,000,000 one-hour and 1,000,000 five-minute tokens at input price 5 costs 10.00 for the first and 6.25 for the second
+AssertionError: the 1,000,000 one-hour write tokens cost 10.00, twice the input price of 5; the merge base prices them at the five-minute 6.25: expected 6.25 to be close to 10, received difference is 3.75, but expected 5e-7
+ ❯ tests/acceptance/3158/pricing.test.ts:67:6
+     65|
+     66|   expect(usd(both)! - usd(fiveMinuteAlone)!, 'the 1,000,000 one-hour w…
+     67|     .toBeCloseTo(10, 6);
+       |      ^
+     68|   expect(usd(both)! - usd(oneHourAlone)!, 'the 1,000,000 five-minute w…
+     69|     .toBeCloseTo(6.25, 6);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/acceptance/3158/pricing.test.ts > #3158.969013e8 AC3 a record with a write total and no split is priced at the five-minute rate, and its session's cost reads "at least"
+AssertionError: a one-hour write can only cost more, so the cost reads "at least"; it reads {"basis":"estimated","usd":6.25,"rate_card":"anthropic-list-2026-10"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/3158/pricing.test.ts:77:132
+     75|   expect(usd(cost), '1,000,000 write tokens with no split cost 6.25, t…
+     76|     .toBeCloseTo(6.25, 6);
+     77|   expect(saysAtLeast(cost), `a one-hour write can only cost more, so t…
+       |                                                                                                                                    ^
+     78|   // A session whose every record gives its split has nothing left out…
+     79|   const split = countUsage([transcript('ac3-split.jsonl', [wrote({ fiv…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/acceptance/3158/pricing.test.ts > #3158.3dd67f02 AC4 a session with a subagent's file beside its transcript prices the subagent's five-minute writes and its own one-hour writes each at its rate, in one total
+AssertionError: one total: 300,000 one-hour tokens at 10.00 a million and 800,000 five-minute tokens at 6.25 a million, 3.00 + 5.00. All at the five-minute rate is 6.875, all at the one-hour rate 11.00, the two rates swapped 9.875, the session alone 3.00: expected 6.875 to be close to 8, received difference is 1.125, but expected 5e-7
+ ❯ tests/acceptance/3158/pricing.test.ts:89:6
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/acceptance/3158/pricing.test.ts > #3158.fad2fa05 AC5 a model whose row holds one write price and not the other reads unpriced, never priced by the one it has
+AssertionError: a row with the five-minute price alone reads unpriced, never its one-hour writes at 6.25; it reads {"basis":"estimated","usd":12.5,"rate_card":"acceptance-3158"}: expected 'estimated' to be 'unpriced' // Object.is equality
+
+Expected: "unpriced"
+Received: "estimated"
+
+ ❯ tests/acceptance/3158/pricing.test.ts:99:168
+     97|
+     98|   const fiveMinuteOnly = priced({ cache_write: 6.25 });
+     99|   expect(fiveMinuteOnly.basis, `a row with the five-minute price alone…
+       |                                                                                                                                                                        ^
+    100|   expect(fiveMinuteOnly.usd, 'an unpriced cost has no amount').toBeUnd…
+    101|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  7 failed | 2 passed (9)
+   Start at  18:04:23
+   Duration  447ms (transform 49%, tests 34%, import 10%, setup 6%, worker 1%)

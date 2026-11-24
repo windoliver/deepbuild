@@ -149,6 +149,28 @@ test('the measured preflight workload has its own frozen time and peak-memory bu
   assert.throws(() => compare(workload, { elapsedMs: 300_000, peakBytes: 1000 }, null, ['elapsedMs', 'peakBytes']), /elapsedMs/);
 });
 
+test('a preflight budget that already moved once moves again only by an approved proposal that records a measured full run (#3137)', () => {
+  const preflight = { margin: 0.5, limits: { elapsedMs: 900_000 }, initialReason: 'First complete local workload measurement.', changeReason: 'Raised from 300 s once.' };
+  const base = { ...config, preflight };
+  const run = { date: '2026-11-23', machine: 'Mac17,10', load: 3.5, elapsedMs: 1_620_000 };
+  const moved = { ...config, preflight: { ...preflight, limits: { elapsedMs: 1_800_000 }, changeReason: 'Raised to 1,800 s by the full run measured on 2026-11-23.', measured: run } };
+  const approval = 'benchmarks/budgets.json › preflight › elapsedMs 900000 → 1800000';
+  validateBudgets(moved, base, [approval]);
+  // With no approval, or one for another move, the move is refused, naming the item that would approve it.
+  assert.throws(() => validateBudgets(moved, base), new RegExp(`preflight.*Approves: ${approval}`));
+  assert.throws(() => validateBudgets(moved, base, ['benchmarks/budgets.json › preflight › elapsedMs 900000 → 1700000']), /Approves: benchmarks\/budgets\.json › preflight › elapsedMs 900000 → 1800000/);
+  // An approved move that doesn't record a measured full run on a reference Mac at a load below its cores is refused.
+  const unmeasured = [undefined, {}, { ...run, machine: 'Mac14,2' }, { ...run, load: 18 }, { ...run, load: undefined }, { ...run, date: 'yesterday' }, { ...run, elapsedMs: 0 }];
+  for (const measured of unmeasured) assert.throws(() => validateBudgets({ ...moved, preflight: { ...moved.preflight, measured } }, base, [approval]), /preflight.*measured/, JSON.stringify(measured));
+  // The run of an earlier move, or its reason, isn't this move's.
+  const twice = { ...base, preflight: { ...moved.preflight } };
+  const again = { ...config, preflight: { ...moved.preflight, limits: { elapsedMs: 2_400_000 }, changeReason: 'Raised again.' } };
+  assert.throws(() => validateBudgets(again, twice, ['benchmarks/budgets.json › preflight › elapsedMs 1800000 → 2400000']), /preflight.*measured/);
+  assert.throws(() => validateBudgets({ ...moved, preflight: { ...moved.preflight, changeReason: preflight.changeReason } }, base, [approval]), /preflight.*reason/);
+  // Only the limits move: a wider margin or a new first reason is refused, approved or not.
+  for (const change of [{ margin: 0.75 }, { initialReason: 'Reset' }]) assert.throws(() => validateBudgets({ ...moved, preflight: { ...moved.preflight, ...change } }, base, [approval]), /preflight/);
+});
+
 test('a CPU reading of 0 is a run shorter than time\'s 10 ms resolution, not a missing one (#1421)', () => {
   const workload = { id: 'preflight', margin: 0.5, limits: {} };
   const keys = ['cpuMs', 'peakBytes'];

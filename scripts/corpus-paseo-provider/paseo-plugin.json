@@ -1,0 +1,5 @@
+{
+  "id": "corpus-paseo",
+  "description": "The fixture corpus's stand-in agent for paseo's set (#3136): the model and the agent's own CLI, which this repo doesn't own",
+  "requirements": { "paseo": ">=0.15.0" }
+}
