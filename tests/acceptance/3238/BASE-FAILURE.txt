@@ -37,7 +37,8 @@
 # holder outside the run, not behind its own run, which own-test-grant does. One machine, one run each. A
 # throwaway reference script (the twins' source with no planted line, never committed) passed serial, inherited and
 # no-grant once each in the same session (2.3 s, 1.2 s and 1.6 s). On b87494f02 it passed admitted.test.mjs once, its
-# second test's diagnostic reading "the lint waited for a turn" (the open question in the README).
+# second test's diagnostic reading "the lint waited for a turn" (the open question in the README), and at 03:54Z, under a
+# test grant, cli.test.mjs (0.3 s) and hub.test.ts (2.6 s) once each, with scripts/lease swapped in the worktree and back.
 
 === nice -n 10 node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/3238/serial.test.mjs
 === scripts/lease: base (a58f542237aa); 2026-11-23T19:04:47Z; load { 117.90 115.57 119.81 }

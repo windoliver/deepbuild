@@ -216,7 +216,8 @@ never names `scripts/lease`.
 The tests of AC1, AC2, AC3 and AC6 fail on the base at their own assertions (`BASE-FAILURE.txt`). The three planted
 scripts the criteria name, and `own-grant` beside AC2's, are twins (`twins.json`, `twins/README.md`), each run once
 against its test, failing as recorded at the end of `BASE-FAILURE.txt`. A throwaway reference script, the twins' source without their planted line,
-passed the tests of AC1, AC2 and AC3 here and was never committed.
+passed the tests of AC1, AC2 and AC3 here and, on `b87494f02`, the admission case, AC4 and AC5 (one run each, on one Mac).
+It was never committed.
 
 `cli.test.mjs` (AC4) and `hub.test.ts`'s redraft (AC5) ran once each, on `b87494f02`, once a build grant came: on the day these were
 drafted a preflight held the machine's exclusive `timed` grant for over 10 hours. The
