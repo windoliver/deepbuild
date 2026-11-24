@@ -67,6 +67,11 @@ pub(super) fn light_reports(
     }
     if args.shadows {
         let counts = &drawn.counts;
+        // Shadow tiles' texels as this frame read them, on a captured frame (#2034).
+        let texels: BTreeMap<String, Vec<u8>> = match capture && !noop {
+            true => session3::tile_texels(app).into_iter().collect(),
+            false => BTreeMap::new(),
+        };
         let mut passes = counts.cascades_drawn.len() as u32;
         let maps: Vec<Value> = counts
             .local_maps
@@ -78,10 +83,30 @@ pub(super) fn light_reports(
                     5 => "area",
                     _ => "point",
                 };
-                json!({"light": m.light, "kind": kind, "key": format!("{:016x}", m.key), "drawn": m.drawn})
+                let mut row = json!({"light": m.light, "kind": kind, "key": format!("{:016x}", m.key), "drawn": m.drawn});
+                if m.size > 0 {
+                    row["size"] = json!(m.size);
+                    row["slots"] = json!(m.slots);
+                    row["pixel_hash"] = json!(texels.get(&m.light).map(|t| hex(t)));
+                }
+                row
             })
             .collect();
         frame.insert("shadows".into(), json!({"passes": passes, "maps": maps}));
     }
     Ok(())
+}
+
+/// #1634: what the light policy's scoring took and what the fill lights hold, with the cost
+/// model's estimate of the frame, in a scene that holds a fill light.
+pub(super) fn fill_lights(frame: &mut Map<String, Value>, drawn: &Drawn) {
+    let c = &drawn.counts;
+    if c.lists_bytes > 0 {
+        let lights = json!({"scoring_ms": c.scoring_ms, "lists_bytes": c.lists_bytes});
+        frame.insert("lights".into(), lights);
+        let [gpu_ms, scoring_ms, lists_bytes] = c.light_estimate;
+        let estimate =
+            json!({"gpu_ms": gpu_ms, "scoring_ms": scoring_ms, "lists_bytes": lists_bytes});
+        frame.insert("estimate".into(), estimate);
+    }
 }

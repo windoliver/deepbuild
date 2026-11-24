@@ -1,0 +1,92 @@
+#2700 acceptance suite on the base, before any change: the real output of its four fast files.
+One file fails, at its assertion: heap.test.mjs (#2700.9725b660), the criterion the merge base itself fails.
+The other three pass on the base (the base's recheck is slow, not wrong): each fails on the planted wrong
+program twins.json names for it (README.md, "Planted wrong programs"). budgets.long.test.mjs (#2700.db66efb8)
+is run by hand against a base checkout and was not run here: it is unrun, not passed.
+Paths are relative to the checkout root. The load was high and is recorded, not waited out: no file here is timed.
+
+base: 83b82f94a
+date: 2026-11-23T02:14Z
+node: v24.22.0; cargo: cargo 1.99.1 (5f94df478 2026-08-27)
+uptime: 18:14  up 9 days, 11:16, 3 users, load averages: 43.23 29.51 24.57
+machine: Mac15,12, Apple M3, macOS 27.2.1
+
+$ node --test tests/acceptance/2700/heap.test.mjs
+#2700.9725b660 recheck: 8,416,903 bytes with 4 MiB of data, 18,247 bytes with none: 8,398,656 bytes more
+✖ #2700.9725b660 a one-item patch allocates under 256 KB more heap on a document holding 4 MiB of data than on the same document with none (781.369875ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 875.234125
+
+✖ failing tests:
+
+test at tests/acceptance/2700/heap.test.mjs:18:1
+✖ #2700.9725b660 a one-item patch allocates under 256 KB more heap on a document holding 4 MiB of data than on the same document with none (781.369875ms)
+  AssertionError [ERR_ASSERTION]: recheck: the one-item patch allocated 8,398,656 bytes more heap on the document holding 4 MiB of data (8,416,903 bytes) than on the same document with no data (18,247 bytes); the limit is under 256,000 bytes more (at least 8 MiB more: the data was copied twice or more)
+      at TestContext.<anonymous> (tests/acceptance/2700/heap.test.mjs:37:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1
+
+$ node --test tests/acceptance/2700/equal.test.mjs
+#2700.ce79405c 10,000 patches on 101 documents: 7,546 to an item naming an asset, 6,837 to one naming a data row, 3,153 changing an item's asset, 9,981 revisions with issues; 0 mismatches
+✔ #2700.ce79405c for 10,000 generated patches on generated documents the recheck's issues equal the whole check's (4659.553916ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4754.816125
+exit 0
+
+$ node --test tests/acceptance/2700/data-row.test.mjs
+#2700.65df5186 row data/goal = ["seven"]: recheck answered; reported [{"code":"ref_unresolved","ids":["meter"],"path":"items/meter/params/row"}]
+#2700.65df5186 row data/goal = ["seven"]: recheck_with answered; reported [{"code":"ref_unresolved","ids":["meter"],"path":"items/meter/params/row"}]
+#2700.65df5186 row data/goal = 7: recheck answered; reported []
+#2700.65df5186 row data/goal = 7: recheck_with answered; reported []
+✔ #2700.65df5186 a patch that changes a row of data reports what the whole check reports (503.552333ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 623.613
+exit 0
+
+$ node --test tests/acceptance/2700/as-given.test.mjs
+#2700.934bb9b3 recheck, a recheck that returns issues: returned issues; the document equals the document as given (1815 bytes)
+#2700.934bb9b3 recheck_with, a recheck that returns issues: returned issues; the document equals the document as given (1815 bytes)
+#2700.934bb9b3 recheck, a recheck that returns nothing because the patch needs the whole check: returned nothing; the document equals the document as given (1866 bytes)
+#2700.934bb9b3 recheck_with, a recheck that returns nothing because the patch needs the whole check: returned nothing; the document equals the document as given (1866 bytes)
+#2700.934bb9b3 recheck, a recheck that panics inside a check: returned panic; the document equals the document as given (1828 bytes)
+#2700.934bb9b3 recheck_with, a recheck that panics inside a check: returned panic; the document equals the document as given (1828 bytes)
+✔ #2700.934bb9b3 after a recheck that returns issues, one that returns nothing and one that panics inside a check, the document is the document as given, byte for byte (424.184167ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 509.690791
+exit 0
+
+uptime after: 18:14  up 9 days, 11:16, 3 users, load averages: 41.27 29.56 24.65

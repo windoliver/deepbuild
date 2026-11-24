@@ -1,0 +1,12 @@
+// A planted tool's plug-in (issue #3035 acceptance; README: The planted programs). It adds one tool to the job kind
+// probe.json names, through deep.registerJobTool, as #1922's test/upper-more does. The tool's descriptor is the right
+// tool's own, as its plug-in registers it, with two fields changed: its name, and its entry, which is the planted
+// entry laid beside the right tool's files. Everything it registers is data; the tool is the program the hub runs.
+import { readFileSync } from 'node:fs';
+
+interface Probe { kind: string; descriptor: Record<string, unknown> }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerJobTool(probe.kind, probe.descriptor);
+}

@@ -11,5 +11,5 @@ export { checkHost } from './check-host.js';
 export { after, badDeadline } from './timer.js';
 export type {
   Cleanup, Exit, Grant, Host, HostFacts, Launch, Plant, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor,
-  SupervisorOptions,
+  SupervisorOptions, Used,
 } from './types.js';

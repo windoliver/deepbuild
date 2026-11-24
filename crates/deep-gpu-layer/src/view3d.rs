@@ -51,7 +51,7 @@ mod reports;
 pub(crate) use parse::*;
 
 use captured::captured;
-use reports::light_reports;
+use reports::{fill_lights, light_reports};
 
 /// #462's planted `status_in_look`: the status map of the look a render draws in, where it has
 /// one of its own; `None` for the shipped program, which draws the document's.
@@ -132,7 +132,7 @@ fn run_view(
             return Ok(());
         };
         let prefix = key.as_ref().map_or_else(String::new, |k| format!("{k}/"));
-        let ms = f.apply(app, profiler, &prefix, bytes, size, keep, true)?;
+        let ms = crate::look_ops::apply(f, app, profiler, &prefix, bytes, size, keep, true)?;
         if let (Some(ms), Some((gpu_ms, passes))) = (ms, timing) {
             *gpu_ms += ms;
             passes.insert(format!("{prefix}look.finish"), ms);
@@ -714,13 +714,7 @@ fn run_view(
             }
             let selected = levels.select(&composed, &scene);
             let settled = levels.settle(&selected);
-            let seeding = match app.planted {
-                Some(Planted::NoiseFromFrameCounter) => {
-                    effects::Seeding::FrameCounter(n - args.from)
-                }
-                Some(Planted::NoiseFromClock) => effects::Seeding::Clock,
-                _ => effects::Seeding::Item,
-            };
+            let seeding = effects::seeding(app.planted, n - args.from);
             // #420 AC1's wrong program steps the operators' clock from the last frame drawn,
             // so a seek starts it again at zero; the shipped one reads t itself.
             let fx_t = match app.planted {
@@ -1951,16 +1945,7 @@ fn run_view(
                     .chain(op_declared.map(|(k, v)| (k, json!(v))))
                     .collect();
                 frame.insert("declared_ms".into(), Value::Object(declared));
-                // #1634: what the light policy's scoring took and what the fill lights hold, with
-                // the cost model's estimate of the frame, in a scene that holds a fill light.
-                let c = &drawn.counts;
-                if c.lists_bytes > 0 {
-                    let lights = json!({"scoring_ms": c.scoring_ms, "lists_bytes": c.lists_bytes});
-                    frame.insert("lights".into(), lights);
-                    let [gpu_ms, scoring_ms, lists_bytes] = c.light_estimate;
-                    let estimate = json!({"gpu_ms": gpu_ms, "scoring_ms": scoring_ms, "lists_bytes": lists_bytes});
-                    frame.insert("estimate".into(), estimate);
-                }
+                fill_lights(&mut frame, &drawn);
             }
             if !clicks.is_empty() {
                 let ids = drawn.targets.as_ref().map(|(_, ids)| ids.as_slice());
@@ -1996,7 +1981,8 @@ fn run_view(
                     .collect();
                 frame.insert("clicks".into(), json!(answered));
             }
-            frames.push(Value::Object(frame));
+            let row = crate::hidden::reported(app, out, &args.targets, &drawn.counts, frame)?;
+            frames.push(row);
         }
         Ok(())
     })();

@@ -485,6 +485,8 @@ pub struct Layer3 {
     /// #1636: what its solids draw, by item and shape: the item whose mesh it is (an element's
     /// prototype) and its material's ID ("" for none), as a draw's report names them.
     pub draw_names: BTreeMap<(String, Shape), (String, String)>,
+    /// #290: the hidden view of each item whose solids draw here with one above opacity 0.
+    pub hidden: BTreeMap<String, crate::hidden::HiddenView>,
 }
 
 /// A soft cloud sprite at t (#422; Puff `puff@1`): where it is in world m, its size, and how the
@@ -929,6 +931,8 @@ pub struct Scene {
     pub exposure: Option<f64>,
     /// The view's water (#166; Material: water), which its own pass draws after the mirror's.
     pub water: Option<Arc<crate::water::Water>>,
+    /// #3034: under water, the height below which what the frame sees lies in the water.
+    pub under: Option<f64>,
     /// #166: whether the view reads back each mirror part's lookup (view3d's `reflection`).
     pub read_reflection: bool,
     /// #268: whether the view reads back the water's foam share (view3d's `foam`).
@@ -1274,7 +1278,7 @@ impl<'a> Items<'a> {
     }
 
     /// The items in document order. `written` holds some of them in that order too.
-    fn iter(&self) -> impl Iterator<Item = (&'a String, &'a Value)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&'a String, &'a Value)> {
         let mut written = self.written.iter().peekable();
         self.doc
             .iter()
@@ -1364,25 +1368,6 @@ fn moves(items: &Items<'_>, program: &Program, id: &str) -> bool {
         seen += 1;
     }
     false
-}
-
-/// The X, Y, Z angles in degrees of the rotation `r` (its rows), as `local_of` composes them:
-/// Rz · Ry · Rx.
-fn euler_of(r: &[Vec3; 3]) -> Vec3 {
-    use deep_canvas::ops::{asin, atan2, deg};
-    if r[2][0].abs() > 1.0 - 1e-12 {
-        // Straight up or down: X and Z turn about one axis, so Z takes none.
-        return [
-            deg(atan2(-r[1][2], r[1][1])),
-            deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
-            0.0,
-        ];
-    }
-    [
-        deg(atan2(r[2][1], r[2][2])),
-        deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
-        deg(atan2(r[1][0], r[0][0])),
-    ]
 }
 
 /// The rotation of `m` (its rows): its columns at unit length.
@@ -2680,6 +2665,7 @@ pub(crate) fn evaluate_compiled(
             }
         }
     }
+    crate::hidden::read(look, &items, &mut layers, (map, t))?;
     // The class's GPU memory, at 16 B a fragment (Object: see-through order).
     let budget = Value::Object(
         map.get("budget")
@@ -2887,6 +2873,7 @@ pub(crate) fn evaluate_compiled(
         optics,
         exposure,
         water: None,
+        under: None,
         read_reflection: false,
         read_foam: false,
         read_normal: false,
@@ -2939,10 +2926,7 @@ pub(crate) fn evaluate_compiled(
             let plates: Vec<[f64; 4]> = w.plates.iter().map(|(_, p)| *p).collect();
             flow.grid = Some(crate::flow::grid(map, &w.material, flow, &plates)?);
         }
-        if scene.mirror.is_none() {
-            scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &w);
-        }
-        scene.water = Some(Arc::new(w));
+        w.seen_in(&mut scene);
     }
     labels.places = memo.into_inner();
     Ok(scene)
