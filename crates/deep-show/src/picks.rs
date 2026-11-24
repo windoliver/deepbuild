@@ -119,8 +119,8 @@ pub(crate) struct Viewer {
     focus: Option<(String, Drawn)>,
     /// Each focus announcement, `{t, id, text}`, in the order made.
     pub(crate) said: Vec<Value>,
-    /// #3236: the reading focus on a set no pick control names: the set and its stop's ID.
-    pub(crate) reading: Option<(String, String)>,
+    /// #3236: the reading focus on a set no pick control names: the set and the stop it holds.
+    pub(crate) reading: Option<reading::Held>,
     /// Each pick control's hovered cell.
     hover: BTreeMap<String, [i64; 2]>,
     /// #298: the pointer's place over each item a driver's `hover_at` names, 0 to 1 on each axis
@@ -138,7 +138,7 @@ pub(crate) struct Viewer {
 impl Viewer {
     /// The focused row's ID, which `state.focus` reports for the control's stop.
     pub(crate) fn focused(&self) -> Option<&str> {
-        let reading = self.reading.as_ref().map(|(_, id)| id.as_str());
+        let reading = self.reading.as_ref().map(|h| h.id.as_str());
         self.focus.as_ref().map(|(_, d)| d.id.as_str()).or(reading)
     }
 }
@@ -681,6 +681,9 @@ impl Hub<'_> {
         key: &str,
         serial: u64,
     ) -> Result<Vec<Value>, Value> {
+        if key == "Tab" {
+            self.skip_empty(panel);
+        }
         self.settle_focus(panel);
         if let Some(appended) = self.reading_key(panel, key) {
             return Ok(appended);

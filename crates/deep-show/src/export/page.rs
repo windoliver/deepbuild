@@ -532,7 +532,7 @@ impl Hub<'_> {
             "view": s.node.view,
             "size": size,
             "targets": targets,
-            "tree": access::tree(&shown, &hidden),
+            "tree": access::tree_with(&shown, &hidden, &self.record()),
             "readouts": access::readouts(&data, &[]),
         }))
     }

@@ -977,6 +977,7 @@ pub fn rows(
             let column = column_of(c, rows.keys.len(), &format!("{path}/columns/{name}"))?;
             rows.columns.insert(name.clone(), column);
         }
+        rows.hide_missing(columns.keys(), p.get("encode"), &path)?;
         return Ok(rows);
     }
     if p.get("transforms").is_none() {
@@ -1017,12 +1018,6 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
     for c in columns.values().chain(p.get("alive")).chain(p.get("seen")) {
         if let Some(Value::Array(rows)) = c.get("hide") {
             hidden.extend(rows.iter().filter_map(Value::as_f64).map(|r| r as usize));
-        }
-    }
-    // #3236: nor does a row missing a value, a NaN in one of its columns.
-    for c in decoded.values() {
-        if let Column::Numbers(v) = c {
-            hidden.extend((0..n).filter(|i| v[*i].is_nan()));
         }
     }
     for ((key, column), value) in bound {
@@ -1077,13 +1072,15 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
             })
             .collect()
     };
-    Ok(Rows {
+    let mut rows = Rows {
         keys,
         columns: decoded,
         precision,
         hidden,
         ..Rows::default()
-    })
+    };
+    rows.hide_missing(columns.keys(), p.get("encode"), &path)?;
+    Ok(rows)
 }
 
 /// A mark set's rows as marks, each named `<id>#<key>`; `bound` holds its cells' bound readings.

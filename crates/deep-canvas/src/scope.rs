@@ -951,7 +951,7 @@ impl Scope {
     }
 
     /// Tab moves focus to the next stop, from the first after the last.
-    fn tab(&mut self, doc: &Value) {
+    pub fn tab(&mut self, doc: &Value) {
         let stops = self.stops(doc);
         let next = match self
             .focus

@@ -15,6 +15,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use deep_canvas_marks::scene::Record;
 use gpui_kit::*;
 use serde_json::{json, Value};
 
@@ -243,12 +244,16 @@ pub(crate) fn nodes(
     hidden: &[String],
     boxes: &[(String, [f64; 4])],
     panel: [f64; 4],
+    record: &Record,
 ) -> (Vec<Node>, Vec<String>) {
     let readouts = crate::access::readouts(doc, hidden);
     let mut out = Vec::new();
     let mut unboxed = Vec::new();
     let mut strip_x = panel[0];
-    for n in crate::access::tree(doc, hidden).into_iter().skip(1) {
+    for n in crate::access::tree_with(doc, hidden, record)
+        .into_iter()
+        .skip(1)
+    {
         let id = n["id"].as_str().unwrap_or("").to_string();
         let name = n["name"].as_str().unwrap_or("").to_string();
         let role = n["role"].as_str().unwrap_or("");
@@ -364,7 +369,10 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         let Some(picture) = crate::window::picture(rgba, px_size) else {
             return refused("no_picture");
         };
-        let (nodes, unboxed) = nodes(&revision, &hidden, &boxes, panel);
+        // #3236: with its tables inlined, so a set's value comes from the rows it draws.
+        let mut heard = revision.clone();
+        let _ = hub.inline_tables(&mut heard);
+        let (nodes, unboxed) = nodes(&heard, &hidden, &boxes, panel, &record);
         shown.push(json!({
             "rev": rev,
             "vsync": vsync,

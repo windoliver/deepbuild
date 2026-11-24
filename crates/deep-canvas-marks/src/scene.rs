@@ -3626,7 +3626,7 @@ pub fn text_at(
 
 /// The readings bound to mark sets' cells (`items/<set>#<key>/<column>`): set ID → its cells'
 /// readings.
-fn bound_rows(doc: &Map<String, Value>, record: &Record) -> BTreeMap<String, data::BoundRows> {
+pub fn bound_rows(doc: &Map<String, Value>, record: &Record) -> BTreeMap<String, data::BoundRows> {
     let mut out: BTreeMap<String, data::BoundRows> = BTreeMap::new();
     let Some(Value::Object(bound)) = doc.get("bound_values") else {
         return out;

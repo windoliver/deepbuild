@@ -30,6 +30,8 @@ enum Form {
     Shortest,
     Single,
     Time(f64),
+    /// At most this many decimals, without trailing zeros.
+    Decimals(usize),
 }
 
 impl Held {
@@ -39,6 +41,13 @@ impl Held {
             Form::Time(step) => crate::ticks::time_label(v as i64, step),
             Form::Single => format!("{}", v as f32),
             Form::Shortest => format!("{v}"),
+            Form::Decimals(digits) => {
+                let n = format!("{v:.digits$}");
+                match n.contains('.') {
+                    true => n.trim_end_matches('0').trim_end_matches('.').to_string(),
+                    false => n,
+                }
+            }
         }
     }
 
@@ -128,6 +137,8 @@ impl Holds {
 pub enum Stop {
     Row {
         key: String,
+        /// The centre of what the row draws, in the set's own u, as #539 orders rows by.
+        centre: [f64; 2],
         category: Option<String>,
         values: Vec<Option<f64>>,
     },
@@ -177,16 +188,17 @@ pub enum Walk {
     EveryRow,
 }
 
-/// What item `id` holds and the walk over what it draws: a mark set's or a series'; `None` for
-/// any other kind.
+/// What item `id` holds and the walk over what it draws, `bound` its cells' bound readings: a mark
+/// set's or a series'; `None` for any other kind.
 pub fn holds(
     id: &str,
     item: &Value,
     items: &Map<String, Value>,
+    bound: &BoundRows,
     walk: Walk,
 ) -> Option<Result<(Holds, Vec<Stop>), Refused>> {
     match item.get("kind").and_then(Value::as_str) {
-        Some("marks@1") => Some(mark_set_holds(id, item, items, walk)),
+        Some("marks@1") => Some(mark_set_holds(id, item, items, bound, walk)),
         Some("series@1") => Some(series_holds(id, item, walk)),
         _ => None,
     }
@@ -207,11 +219,12 @@ fn mark_set_holds(
     id: &str,
     item: &Value,
     items: &Map<String, Value>,
+    bound: &BoundRows,
     how: Walk,
 ) -> Result<(Holds, Vec<Stop>), Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
-    let rows = rows(id, item, items, &BoundRows::new())?;
+    let rows = rows(id, item, items, bound)?;
     let props = encoded(p, &rows, items, &path)?;
     let drawn: Vec<usize> = (0..rows.keys.len())
         .filter(|i| !rows.hidden.contains(i) && rows.opacity_of(*i) > 0.0)
@@ -249,7 +262,12 @@ fn mark_set_holds(
             (_, Some(d)) if d == "f32" => Form::Single,
             _ => Form::Shortest,
         };
-        // The rows missing a value in it: a NaN, or a row its column view hid.
+        // The rows missing a value in it: a NaN, a row its column view hid, or a cell whose
+        // bound reading the record doesn't hold.
+        let unread = bound
+            .iter()
+            .filter(|((_, c), reading)| c == column && reading.is_none())
+            .filter_map(|((key, _), _)| rows.keys.iter().position(|k| k == key));
         let mut missing: Vec<usize> = raw
             .and_then(|r| r.get("hide"))
             .and_then(Value::as_array)
@@ -258,6 +276,7 @@ fn mark_set_holds(
             .filter_map(Value::as_u64)
             .map(|r| r as usize)
             .chain((0..rows.keys.len()).filter(|i| c.number(*i).is_some_and(f64::is_nan)))
+            .chain(unread)
             .collect();
         missing.sort_unstable();
         missing.dedup();
@@ -278,17 +297,14 @@ fn mark_set_holds(
     }
     let category = |i: usize| categories.and_then(|(_, _, c)| c.text(i));
     let counted = categories.map(|(column, scale, _)| {
+        let mut of: std::collections::BTreeMap<String, usize> = Default::default();
+        for name in drawn.iter().filter_map(|i| category(*i)) {
+            *of.entry(name).or_default() += 1;
+        }
         let counts = scale
             .categories
             .iter()
-            .map(|name| {
-                let n = drawn
-                    .iter()
-                    .filter(|i| category(**i).as_deref() == Some(name))
-                    .count();
-                (name.clone(), n)
-            })
-            .filter(|(_, n)| *n > 0)
+            .filter_map(|name| Some((name.clone(), *of.get(name)?)))
             .collect();
         (column.clone(), counts)
     });
@@ -328,8 +344,9 @@ fn mark_set_holds(
         });
         order
             .into_iter()
-            .map(|(_, i, _)| Stop::Row {
+            .map(|(_, i, centre)| Stop::Row {
                 key: rows.keys[i].clone(),
+                centre,
                 category: category(i),
                 values: columns.iter().map(|(_, c)| c.number(i)).collect(),
             })
@@ -405,12 +422,15 @@ fn series_holds(id: &str, item: &Value, how: Walk) -> Result<(Holds, Vec<Stop>),
             .map(str::to_string)
     };
     let seconds = |i: usize| t[i] / FLICKS;
-    let held = |name: &str, unit: Option<String>, e| Held {
+    // Two decimals past what a tick over the window would show, so a time reads as one.
+    let span = ((t1 - t0) / FLICKS).max(1.0 / FLICKS);
+    let digits = (-ops::log10(linear_step(span)).floor()).max(0.0) as usize + 2;
+    let held = |name: &str, unit: Option<String>, e, form| Held {
         name: name.into(),
         unit,
         extent: e,
         missing: 0,
-        form: Form::Shortest,
+        form,
     };
     let holds = Holds {
         drawn: drawn.len(),
@@ -419,8 +439,14 @@ fn series_holds(id: &str, item: &Value, how: Walk) -> Result<(Holds, Vec<Stop>),
                 "t",
                 Some("s".into()),
                 extent(drawn.iter().map(|i| seconds(*i))),
+                Form::Decimals(digits),
             ),
-            held("v", unit("v"), extent(drawn.iter().map(|i| v[*i]))),
+            held(
+                "v",
+                unit("v"),
+                extent(drawn.iter().map(|i| v[*i])),
+                Form::Shortest,
+            ),
         ],
         categories: None,
     };
@@ -446,6 +472,7 @@ fn series_holds(id: &str, item: &Value, how: Walk) -> Result<(Holds, Vec<Stop>),
             .iter()
             .map(|&i| Stop::Row {
                 key: i.to_string(),
+                centre: [seconds(i), v[i]],
                 category: None,
                 values: vec![Some(seconds(i)), Some(v[i])],
             })
@@ -480,10 +507,102 @@ mod tests {
         (set, Map::new())
     }
 
+    fn f64s(v: &[f64]) -> Value {
+        let bytes: Vec<u8> = v.iter().flat_map(|x| x.to_le_bytes()).collect();
+        json!({"dtype": "f64", "len": v.len(), "data": deep_canvas::base64::encode(&bytes)})
+    }
+
+    /// The centers of the circles a point set draws, by key.
+    fn drawn(id: &str, items: &Map<String, Value>, bound: &BoundRows) -> Vec<(String, [f64; 2])> {
+        let palette: crate::scene::Palette = [("ink".to_string(), [0, 0, 0])].into();
+        mark_set(id, &items[id], items, &palette, [0.0, 0.0], bound)
+            .unwrap()
+            .marks
+            .into_iter()
+            .map(|m| match m {
+                Mark::Circle { item, center, .. } => (item, center),
+                m => panic!("{m:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_nan_is_missing_only_in_a_column_the_set_encodes() {
+        let points = |extra: Value| {
+            let set = json!({"kind": "marks@1", "params": {"mark": "point", "n": 3,
+                "columns": {"x": f64s(&[1.0, 2.0, 3.0]), "y": f64s(&[4.0, f64::NAN, 6.0]), "extra": extra},
+                "encode": {"x": {"column": "x"}, "y": {"column": "y"}}}});
+            Map::from_iter([("s".to_string(), set)])
+        };
+        // The row whose y is missing doesn't draw; the others do.
+        let items = points(f64s(&[1.0, 1.0, 1.0]));
+        let keys: Vec<String> = drawn("s", &items, &BoundRows::new())
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect();
+        assert_eq!(keys, ["s#0", "s#2"]);
+        // Nothing encodes `extra`, so a NaN there is out of range, as it always was, and no row
+        // is dropped for a value nobody reads.
+        let items = points(f64s(&[f64::NAN, 1.0, 1.0]));
+        let refused = rows("s", &items["s"], &items, &BoundRows::new()).unwrap_err();
+        assert_eq!(
+            (refused.code, refused.path.as_str()),
+            ("out_of_range", "items/s/params/columns/extra/data")
+        );
+    }
+
+    #[test]
+    fn a_missing_value_in_a_rows_of_set_hides_its_row_and_a_bound_cell_shows_its_reading() {
+        let source = json!({"kind": "marks@1", "params": {"mark": "point", "n": 3, "key": "k",
+            "columns": {"k": {"dtype": "str", "len": 3, "data": ["a", "b", "c"]},
+                "x": f64s(&[1.0, 2.0, 3.0]), "y": f64s(&[4.0, f64::NAN, 6.0])},
+            "encode": {"x": {"column": "x"}, "y": {"column": "y"}}}});
+        // A cell written as a missing value and bound to a reading draws the reading.
+        let mut items = Map::from_iter([("s".to_string(), source)]);
+        let bound: BoundRows = [(("b".into(), "y".into()), Some(45.0))].into();
+        let keys: Vec<String> = drawn("s", &items, &bound)
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect();
+        assert_eq!(keys, ["s#a", "s#b", "s#c"]);
+        // A set drawing another's rows with a missing value of its own hides that row.
+        items["s"]["params"]["columns"]["y"] = f64s(&[4.0, 5.0, 6.0]);
+        let lab = json!({"kind": "marks@1", "params": {"mark": "point", "rows_of": "s",
+            "columns": {"z": f64s(&[1.0, f64::NAN, 3.0])},
+            "encode": {"x": {"column": "x"}, "y": {"column": "z"}}}});
+        items.insert("lab".into(), lab);
+        let drew = drawn("lab", &items, &BoundRows::new());
+        assert!(
+            drew.iter().all(|(_, c)| c.iter().all(|v| v.is_finite())),
+            "{drew:?}"
+        );
+        let keys: Vec<&str> = drew.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, ["lab#a", "lab#c"]);
+    }
+
+    #[test]
+    fn a_series_says_its_times_in_seconds_at_a_listeners_precision() {
+        let t: Vec<u8> = (0..4_i64)
+            .flat_map(|i| (i * 11_760_000).to_le_bytes())
+            .collect();
+        let series = json!({"kind": "series@1", "params": {"box": [0, 0, 100, 50],
+            "t": {"dtype": "i64", "len": 4, "data": deep_canvas::base64::encode(&t)},
+            "v": f64s(&[1.5, 2.0, 3.25, 4.0])}});
+        let items = Map::new();
+        let (held, stops) = holds("s", &series, &items, &BoundRows::new(), Walk::Reading)
+            .unwrap()
+            .unwrap();
+        // 60 Hz samples over 0.05 s: the third is at 0.0333… s, never 0.03333333333333333.
+        assert_eq!(held.text(), "4 rows drawn, t s 0 to 0.05, v 1.5 to 4");
+        assert_eq!(held.says(&stops[2]), "t 0.0333 s, v 3.25");
+    }
+
     #[test]
     fn a_large_set_is_walked_by_equal_ranges_of_its_first_column_and_a_nan_is_missing() {
         let (set, items) = scatter(5_000);
-        let (held, stops) = holds("s", &set, &items, Walk::Reading).unwrap().unwrap();
+        let (held, stops) = holds("s", &set, &items, &BoundRows::new(), Walk::Reading)
+            .unwrap()
+            .unwrap();
         assert_eq!(held.drawn, 4_500);
         assert_eq!(held.columns[1].missing, 500);
         assert_eq!(
@@ -501,7 +620,9 @@ mod tests {
         assert_eq!(counted, 4_500);
         assert_eq!(held.says(&stops[0]), "45 rows, y 0 m to 6 m");
         // The planted walk stops on every drawn row.
-        let (_, every) = holds("s", &set, &items, Walk::EveryRow).unwrap().unwrap();
+        let (_, every) = holds("s", &set, &items, &BoundRows::new(), Walk::EveryRow)
+            .unwrap()
+            .unwrap();
         assert_eq!(every.len(), 4_500);
     }
 }

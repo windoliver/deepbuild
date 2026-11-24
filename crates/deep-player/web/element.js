@@ -759,6 +759,7 @@ class DeepPlayer extends HTMLElement {
       if (this.#live) this.#live.textContent = stops[at].text;
     };
     part.addEventListener('focus', () => { if (at < 0) land(0); });
+    part.addEventListener('blur', () => { at = -1; });
     part.addEventListener('keydown', (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const to = { ArrowRight: at + 1, ArrowDown: at + 1, ArrowLeft: at - 1, ArrowUp: at - 1, Home: 0, End: Infinity }[e.key];
