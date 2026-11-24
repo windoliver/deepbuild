@@ -1,0 +1,13 @@
+head 6b751acd40f14ba80cfffa219f56c9b121b07eb5 (fix-bin rebuilt at this clean head; base-bin built at dbbddd5dd)
+== base dbbddd5dd: <scratch>/base-bin/deep-show
+deep show outcome presented; issues 3
+  warning copy.missing ids ["caption"] actual {"table":"labels","key":1138747060,"array":"counter.presses","step":0}
+  warning copy.missing ids ["labels"] actual {"table":"labels","key":1138747060,"array":"counter.presses","step":0,"row":0}
+  warning flip.unmapped ids ["choices"] actual {"value":1138747060,"array":"counter.presses","step":0}
+eval outcome evaluated; arrays {"counter.presses":1138747060}; texts {"caption":"Counting","labels":"Counting"}
+snapshot cc6ff207a1823fb73ffd7c2d1bc69cb6936e0869d3d00592493ef6886a8fec72 -> <scratch>/e2e-base-bin.png
+== fix: <scratch>/fix-bin/deep-show
+deep show outcome presented; issues 0
+eval outcome evaluated; arrays {"counter.presses":0}; texts {"caption":"Ready","labels":"Ready"}
+snapshot 8598d57533dd117af97ac965ca775c01415f79a80a82603e0822b6fd541dd329 -> <scratch>/e2e-fix-bin.png
+exit 0
