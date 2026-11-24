@@ -4,11 +4,12 @@ Written first, blind, by a job that saw only the issue, the design and the base 
 of #3233 existed. The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft
 of this job (design: Dogfooding).
 
-**Read this first: half of this suite has not run.** The base was not built when this job ended, and the job could
-start no build of its own. The suite is whole, type-checked and syntax-checked, and its judges were run on planted
-inputs. `kit.test.ts` and `guide.test.ts` ran at the base. Nothing that needs cargo has run: `app/probe.rs` was
-parsed by rustfmt and never compiled, no fixture panel has been loaded, and there is no `BASE-FAILURE.txt` yet.
-"What has run" at the end says which facts of the base that leaves unchecked.
+**Read this first: two of the four test files have not run as test files.** `kit.test.ts` and `guide.test.ts` ran
+at the base. `panels.test.ts` and `budgets.test.ts` did not: the machine's throttle gave no test grant in two waits
+of 60 minutes, and the base's build was gone from the checkout before a third could be asked. What stands in for them
+is a reading: the built Rust half (`app/probe.rs`, which compiles at the base) and `deep-app panel-bench` were driven
+directly at the base, every fixture loaded and drew there, and the judges were run on what they gave.
+`BASE-FAILURE.txt` has both, each marked for what it is, and "What has run" at the end says what is still unchecked.
 
 The issue has seven checkbox criteria, AC1 to AC7 in the body's order. Each test's name starts with its criterion's
 ID (`#3233.` and the first 8 hex digits of SHA-256 of the criterion's text, white space collapsed, as
@@ -53,8 +54,13 @@ pack check and the loader take a panel whose press has no name, whose text is `#
 no key reaches. `panel@1` says nothing of a panel it passes, no file records the revision a panel was installed
 against, `deep-app panel-bench` reports no time for the rules, and `benchmarks/budgets.json` has no task for them.
 
+Tab moves no focus in the replica's window at the base, so no key reaches a panel's press there; Enter and Space on
+an element that already holds focus each run its press once (seen on a variant of a fixture).
+
 At the base `kit.test.ts` fails 3 of 5 and `guide.test.ts` 1 of 2, each for the missing surface its criterion names;
-the 3 that pass hold behaviour that must not change. The other two files have not run.
+the 3 that pass hold behaviour that must not change. By the judges on the built Rust half's report, `panels.test.ts`
+would fail 11 of 14, the 3 that pass being the twins that load, and `budgets.test.ts` both of its 2; neither ran as
+a test file. `BASE-FAILURE.txt` has each line.
 
 ## Run them
 
@@ -76,8 +82,8 @@ CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test --locked -p deep-replic
 |---|---|---|
 | `kit.test.ts` | nothing: it reads the conformance package's TypeScript | about 3 s (measured) |
 | `guide.test.ts` | nothing: it reads the guide and runs `node scripts/guide.mjs --check` | about 2 s (measured) |
-| `panels.test.ts` | the Rust half, which the file builds itself: `cargo test --locked -p deep-replica --test acceptance_3233` | not measured; 12 probes, 9 of them a pack check that draws 32 frames |
-| `budgets.test.ts` | `deep-app` with `panel-check` and `deep-panel-host`, dev profile, which the file builds itself: `cargo build --locked -p deep-panel-host -p deep-app --features deep-app/panel-check`; its first test runs the task's own command | not measured; five `panel-bench` runs of 164 updates each |
+| `panels.test.ts` | the Rust half, which the file builds itself: `cargo test --locked -p deep-replica --test acceptance_3233` | the file not measured; its 12 probes took about 1 s in the built Rust half, run directly |
+| `budgets.test.ts` | `deep-app` with `panel-check` and `deep-panel-host`, dev profile, which the file builds itself: `cargo build --locked -p deep-panel-host -p deep-app --features deep-app/panel-check`; its first test runs the task's own command | the file not measured; one `panel-bench` run of 164 updates took 4.6 s, and the file makes five |
 
 - With `--root` the repo's own Vitest config isn't read. That config imports `scripts/lanes.mjs`, which needs the
   workspaces' `dist`; in a checkout where `npm run build --workspaces` hasn't run it doesn't load (seen at the base).
@@ -210,10 +216,14 @@ a twin, and `twins.json` isn't needed. Each runs the same judge its real side pa
 | A host that runs the handler on both key down and key up (AC4) | `app/probe.rs`, `Mounted::press` with `planted` | The replica's key delivery with one change: an activation key's press completes on its key down and again on its key up, which reaches the window as two down-up pairs where the real delivery sends one. Tab is delivered as the real host delivers it. The real host must pass "exactly once" first; a planted host that also reads once is BLOCKED |
 | A host that refuses a revision-1 panel at load (AC5) | `app/probe.rs`, the probe `installed-at-1-planted` | A host that drops `panel-kit.json` before it loads the panel, so the real loader holds it to the kit's current revision. The real loader must load the panel with its record first. A planted host that loads it too, or refuses it without `no_name`, is BLOCKED |
 
-None of the three is built apart from the suite: each is built or run with it. At the base the first fails before
-its plant, since the three planted fills don't exist (seen). The second depends on what the key drive reads at the
-base, and the third is expected to read BLOCKED there, since no load holds a panel to revision 2; both wait for
-a run at the base.
+None of the three is built apart from the suite: each is built or run with it. At the base:
+
+- The first fails before its plant, since the three planted fills don't exist (seen in a run).
+- The second fails at its first step: the real host doesn't pass at the base, where Tab reaches nothing, so its
+  plant shows nothing yet. The planted delivery itself was seen to do what it says, on a variant of `named-press`
+  that takes focus itself: the real delivery read 1 after Enter and 2 after Space, the planted one 2 and 4.
+- The third reads BLOCKED: the planted host loaded the panel too, since no load at the base holds a panel to
+  revision 2 (seen in the Rust half's report).
 
 ## The fixtures
 
@@ -262,8 +272,8 @@ and 249 rows, each a `div` that takes a press and focus, holds its own text and 
   fails it.
 - **AC4** (`panels.test.ts`). `pointer-only` is refused at both, naming `pointer_only` and `refresh-control`: fails
   at the base. `named-press` loads: passes at the base and says so. The key drive (section 5) on `named-press`: Tab
-  runs nothing, Enter runs the handler exactly once, Space exactly once. Whether this passes at the base isn't known
-  until it runs there. Planted: the real drive passes; the planted host's fails with `the planted host: Enter ran the handler 2
+  runs nothing, Enter runs the handler exactly once, Space exactly once. It fails at the base, where four Tabs reach
+  nothing: `Enter ran the handler 0 times`. Planted: the real drive passes; the planted host's fails with `the planted host: Enter ran the handler 2
   times, not exactly once`, which is the count.
 - **AC5** (`panels.test.ts`). `installed-at-1` loads, and what `panel@1` says of it passes it and names `no_name`
   and `refresh-control` (section 4): fails at the base on the second half. Planted: the real loader loads it; the
@@ -277,8 +287,9 @@ and 249 rows, each a `div` that takes a press and focus, holds its own text and 
   at 500 nodes; a run's reading is its slowest `rulesNs`, in ms; the one-minute load is read at each run's start and
   end; `judgeLimit` (`scripts/benchmark.mjs`) judges the five against 1 ms. PASS passes and FAIL fails. Anything
   else fails as `INCONCLUSIVE:` with the five readings: off a reference Mac, on battery, with the thermal state not
-  nominal or the load above the core count, a time decides nothing, and is never a pass. The work runs first, so the
-  base fails on the missing `rulesNs`, not as INCONCLUSIVE.
+  nominal or the load above the core count, a time decides nothing, and is never a pass. The work runs first, and
+  each report's `rulesNs` is held by an assertion of its own, so the base fails there, on the missing `rulesNs`, not
+  as INCONCLUSIVE.
 
 A probe that didn't run is never a pass: no `[[test]]` entry, a Rust half that doesn't build, a probe that panicked,
 a panel that drew no count, a build of `deep-app` that failed, a bench that wrote no report, each fails as
@@ -366,21 +377,26 @@ Nothing else: `lane.json` is in this folder, and the suite needs no feature, pla
 ## What has run
 
 - `tsc -p tests/acceptance/3233/tsconfig.json`: clean. `node --check` on each fixture: clean.
-  `rustfmt --edition 2021 --check app/probe.rs`: clean (it parses and is formatted; it was not compiled).
-- The judges (`judges.ts`) on planted inputs, as a plain node script outside this folder: 87 checks, each judge passing
+  `rustfmt --edition 2021 --check app/probe.rs`: clean. `app/probe.rs` compiles at the base (the caller's build).
+- The judges (`judges.ts`) on planted inputs, as a plain node script outside this folder: 89 checks, each judge passing
   a good input and failing each wrong one with what its criterion names, the base's own answers among the wrong ones.
-- `kit.test.ts` at the base: 3 fail, 2 pass. `guide.test.ts` at the base: 1 fails, 1 passes.
+- `kit.test.ts` at the base: 3 fail, 2 pass. `guide.test.ts` at the base: 1 fails, 1 passes. Both ran directly,
+  not through the throttle: they build nothing and take under a second.
 - The planted kit's change, tried on each of the base's five plants: the shipped kit reads `FAIL`, the changed kit
   `PASS`, and the base's hygiene then names the fill and no rule.
+- The built Rust half, run directly at the base, all 12 probes: every fixture passed the base's pack check, loaded
+  and drew the tree its comment says (`BASE-FAILURE.txt` has each tree). The key drive read 0 after four Tabs.
+- The same key drive on three variants of `named-press`, each put back after: a script may not take focus during
+  render; given focus by its own task, Enter and Space each ran the press once, and the planted delivery twice; given
+  `.tab_index(0)` and `.tab_stop(true)`, Tab still reached nothing.
+- `deep-app panel-bench` with `deep-panel-host`, dev build, on the 500-node panel, through `helpers.ts`'s `bench`:
+  the report's tree counts 500 nodes, and its run has `warmup`, `scriptNs`, `ipcNs` and `totalNs`.
 
-Not checked, and to settle at the built base before any test blames a rule:
+Not run or not checked:
 
-- That `app/probe.rs` compiles. Its calls are the base's own, copied from `tests/acceptance/1425/app/panels.rs`
-  (`kit::panel`, `headless_context`, `new_runtime`, `open_window`, `mount_panel`, `render_frame`, `build_error`,
-  `snapshot().debug_tree()`, `force_dark`), `crates/deep-replica/src/main.rs` (`dispatch_event`) and
-  `crates/deep-app/lists_1477.rs` (`Keystroke::parse`, `KeyDownEvent`, `PlatformInput`).
-- That each fixture loads and draws at the base: a `div` with `.id`, `.track_focus` and `.on_click`; a `Button` with
-  `.track_focus`; a `bg` and a `text_color` given a string built at run time.
-- What the key drive reads at the base: whether Tab moves focus to a script's `div` in the replica's window, and so
-  whether AC4's third test fails there or holds.
-- `panels.test.ts` and `budgets.test.ts` at the base, and `BASE-FAILURE.txt`.
+- `panels.test.ts` and `budgets.test.ts` as test files: their own cargo step, the reading of cargo's messages for
+  the two binaries, and the `beforeAll` that holds the report. Two requests for a test grant each ended
+  `INCONCLUSIVE no grant: no test grant came within 60 min`, and the base's `target/` was gone from the checkout
+  before a third.
+- That a test file's own build step compiles nothing on a fresh build.
+- `node scripts/repo-rules.mjs` on this folder.

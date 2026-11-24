@@ -20,7 +20,7 @@ import { loadavg } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { AC7, bench, benchBinaries, BENCH_NODES, BUILD_MS, REPO } from './helpers.ts';
-import { nodeCount, rulesMs } from './judges.ts';
+import { nodeCount, rulesMs, rulesProblems } from './judges.ts';
 
 const TASK = 'panel-rules-500';
 /** The issue's target, in ms. */
@@ -60,6 +60,7 @@ test(`AC7 ${AC7} on a reference Mac, the three rules add under 1 ms to the check
     loads.push({ start, end: loadavg()[0]! });
     expect(nodeCount(report.tree), `BLOCKED unless the panel's update is a tree of ${BENCH_NODES} nodes`).toBe(BENCH_NODES);
     expect(report.runs?.length, 'panel-bench reports the one run asked for').toBe(1);
+    expect(rulesProblems(report.runs!, UPDATES), 'each timed update carries the three rules\' time').toEqual([]);
     readings.push(...rulesMs(report.runs!, UPDATES));
   }
 

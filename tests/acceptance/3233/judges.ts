@@ -299,3 +299,7 @@ export function rulesMs(runs: readonly BenchRun[], updates: number): number[] {
     return Math.max(...(times as number[])) / 1e6;
   });
 }
+/** What is wrong with a bench report's `rulesNs`, as a list: empty when `rulesMs` can read every run. */
+export function rulesProblems(runs: readonly BenchRun[], updates: number): string[] {
+  try { rulesMs(runs, updates); return []; } catch (error) { return [error instanceof Error ? error.message : String(error)]; }
+}
