@@ -57,6 +57,8 @@ export function runCli(argv: string[], prompt: string, cwd: string, env: Record<
     });
     child.on('exit', exited);
     child.on('close', done);
+    // A CLI that exits before it reads its prompt fails the write with EPIPE; the exit and close handlers end the run (#2126).
+    child.stdin!.on('error', () => undefined);
     child.stdin!.end(prompt);
   });
 }

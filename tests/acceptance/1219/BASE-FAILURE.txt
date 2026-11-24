@@ -1,0 +1,128 @@
+At base 5fcfb690ba6592ad567c303ecf67054dbcbdfc3c, on 2026-11-22 and 23, on a 16-inch MacBook Pro (Mac17,10, arm64) on
+mains power, with the one-minute load between 300 and 400. The base's `deep-show` (--no-default-features --features
+full) and `deep-gpu` were built once in the checkout, with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, cargo 1.99.1,
+Node 24.22.0 and vitest 5.0.5. Each test file was then run once, one at a time:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1219 --no-file-parallelism --testTimeout=3600000 <file>
+
+Each file's own `cargo build` found its binary fresh and compiled nothing: no rustc ran under any of the seven runs.
+
+Result: 11 tests in 7 files, 11 failed, none passed. Every test first ran every judge on its planted sets
+(judgesFailTheirPlants), which need no binary and passed, and then failed at the assertion below. No test passes at the
+base, so there is none to explain.
+
+- ac1-bay-frame.test.ts (2 tests, 2 failed, 13 s)
+  - "the seven-bay frame places 24 columns …" fails at "the seven-bay frame is presented" (ac1-bay-frame.test.ts:42):
+      an item is skipped as a kind the build doesn't know: {"code":"unknown_kind","severity":"notice","ids":["frame"],
+      "path":"items/frame/kind","actual":"arch.bay_frame@1","what":"kind `arch.bay_frame@1` is not registered in this
+      build; the item is skipped"}
+    The base has no bay frame: it stands no column.
+  - "the planted frame that spaces its columns evenly fails …" fails at "deep-show run accepts the scenario (its calls
+    deep_show, geometry, verdict, its planted program bay_frame_even_columns)" (ac1-bay-frame.test.ts:64):
+      {"ok":false,"code":"bad_input"}
+    The base knows no such planted program.
+
+- ac2-folded-profile.test.ts (2 tests, 2 failed, 12 s)
+  - "on the 8 m deep frame with raise 1/3 and four purlins a side …" fails at "the frame and its folded hip_ridge roof
+    is presented" (ac2-folded-profile.test.ts:40):
+      an item is skipped as a kind the build doesn't know: … "ids":["frame"] … "actual":"arch.bay_frame@1" …
+      the check raises an error: {"code":"out_of_range","ids":["roof"],"path":"items/roof/params/type","actual":
+      "hip_ridge","what":"type takes `gable` or `hip` or `shed` or `flat` or `mansard` or `gambrel` or `dutch` or
+      `conical`; got the string \"hip_ridge\"" …}
+      the check raises an error: {"code":"unknown_field","ids":["roof"],"path":"items/roof/params/corner_reach",
+      "actual":3,"what":"arch.roof@1.0 does not define `corner_reach`" …}
+      … and the same unknown_field for corner_rise (0.3), frame ("frame"), profile ("folded") and raise
+      (0.3333333333333333)
+      the show's outcome is "refused", not presented
+    The base's roof has no hip_ridge type, reads no frame, and has no raise and no folded profile.
+  - "the planted straight roof fails the folding rule …" fails at "deep-show run accepts the scenario (its calls
+    deep_show, geometry, verdict, its planted program roof_straight_as_folded)" (ac2-folded-profile.test.ts:49):
+      {"ok":false,"code":"bad_input"}
+
+- ac3-rising-corner.test.ts (2 tests, 2 failed, 9 s)
+  - "with corner_rise 0.3 m and corner_reach 3 m the eave line is level …" fails at "the frame and its roof with rising
+    corners is presented" (ac3-rising-corner.test.ts:39), with the same eight lines as ac2's first test: the frame
+    skipped as unknown_kind, out_of_range at items/roof/params/type, unknown_field at corner_reach, corner_rise, frame,
+    profile and raise, and the outcome "refused". The base's roof has no corner_rise and no corner_reach.
+  - "the planted rise that falls back before the corner fails …" fails at "deep-show run accepts the scenario (its
+    calls deep_show, geometry, verdict, its planted program eave_rise_falls_back)" (ac3-rising-corner.test.ts:47):
+      {"ok":false,"code":"bad_input"}
+
+- ac4-bracket-set.test.ts (2 tests, 2 failed, 8 s)
+  - "a two-step set of 0.45 m reach and 0.3 m height reaches 0.90 m …" fails at "the frame, its bracket set and the
+    roof it carries is presented" (ac4-bracket-set.test.ts:49):
+      an item is skipped as a kind the build doesn't know: … "ids":["brackets"] … "actual":"arch.bracket@1" …
+      an item is skipped as a kind the build doesn't know: … "ids":["frame"] … "actual":"arch.bay_frame@1" …
+      then the roof's out_of_range and five unknown_field errors as above, and the outcome "refused"
+    The base has no bracket set.
+  - "the planted bracket set that misses its purlin fails" fails at "deep-show run accepts the scenario (its calls
+    deep_show, geometry, verdict, its planted program bracket_misses_purlin)" (ac4-bracket-set.test.ts:58):
+      {"ok":false,"code":"bad_input"}
+
+- ac5-roof-types.test.ts (1 test, 1 failed, 8 s)
+  - "hip_gable, overhang_gable, flush_gable and pyramid on the same frame each pass …" fails at "the hall under a
+    hip_gable roof is presented" (ac5-roof-types.test.ts:49), on the first of the four types:
+      an item is skipped as a kind the build doesn't know, three times: between and brackets ("arch.bracket@1") and
+      frame ("arch.bay_frame@1")
+      the check raises an error: {"code":"out_of_range","ids":["roof"],"path":"items/roof/params/type","actual":
+      "hip_gable" …}
+      and the five unknown_field errors, and the outcome "refused"
+    The base's roof has none of the four types. (A probe showed the same for pyramid.)
+
+- ac6-rebuild.test.ts (1 test, 1 failed, 9 s)
+  - "changing one bay's width rebuilds only that frame, its brackets and its roof …" fails at "the two halls is
+    presented" (ac6-rebuild.test.ts:38):
+      an item is skipped as a kind the build doesn't know, six times: a-between, a-brackets, a-frame, b-between,
+      b-brackets and b-frame
+      the check raises an error: out_of_range at items/a-roof/params/type and at items/b-roof/params/type ("hip_ridge"),
+      and unknown_field for both roofs' five fields; the outcome is "refused"
+    The base builds none of the two halls' eight items, so nothing can rebuild.
+
+- ac7-taste.test.ts (1 test, 1 failed, 11 s)
+  - "the run writes a seven-bay hall with each roof type …" fails at "hall-hip-ridge: view3d is answered, not refused"
+    (ac7-taste.test.ts:40, in helpers.ts `drawn`):
+      {"code":"out_of_range","reason":"items/roof/params/size"}
+    The base's roof needs a `size` and knows no roof on a frame, so the renderer draws no picture of a hall. Nothing was
+    written to docs/evidence/1219/: the test writes only once all six pictures are drawn. With the pictures drawn and no
+    TASTE.json, the test fails "INCONCLUSIVE: no taste call is recorded …" (shown by a probe, below).
+
+Type-check: `node node_modules/typescript/bin/tsc -p tests/acceptance/1219/tsconfig.json` exits 0.
+
+Probes of the base, each a script driving target/debug/deep-show or target/debug/deep-gpu with a scenario on stdin,
+reading the base only:
+
+- A house of the base's own kinds (a wall, a door that is its child, a gable roof that is its child) is presented.
+  `geometry` answers each a row with positions, indices, closed, parts, anchors ({"a": {"pos": [0, 0, 0], …}, "b": …}),
+  outputs ({"rise": 1.0969…} for the roof), bounds and world. A child with no `at` of its own has its parent's world
+  matrix: a roof under a wall placed at (0, 0, 20) is drawn at z 20.
+- `eval` twice at 0s around a revision answers `building.build` nodes with `run: ran` and then `kept`. On two walls
+  with a door each, changing one wall's thickness reran that wall's and its door's build under new keys and kept the
+  other two; the suite's rebuild judge passed that, and failed it with the two walls' roles swapped and with the same
+  revision shown twice.
+- One claim with a `kind_rules` and a `geometry.audit` requirement gives two rows: kind_rules INCONCLUSIVE (no rule
+  runs on a building document), geometry.audit PASS. A scenario may hold a claim on a document it never shows.
+- A failed kind rule, on #202's shelf pack: the show is `presented`; its issue is {"code": "shelf.span", "severity":
+  "warning", "ids": ["s2"], "path": "items/s2/params", "actual": {"rule", "expr", "pack"}, "what", "fix"}; the
+  kind_rules row is FAIL with that issue, and PASS where the rule holds. The row has no `results`: the suite's rule
+  judges fail both rows for that alone.
+- The geometry audit at rest in scope scene: a crate on a floor is PASS; a 0.6 m box sunk into the crate is FAIL with
+  {"code": "geometry.overlap", "ids": ["crate", "probe"]}, which the suite's overlap judge passes; the same box inside
+  an `arch.wall@1` is PASS with nothing raised, which it fails. The base's audit reads no building kind.
+- Each fixture of the suite: a frame alone is presented with the frame skipped (`geometry`: {"code": "ref_unresolved",
+  "path": "items/frame"}; kind_rules BLOCKED on unknown_kind; geometry.audit PASS, having read nothing). Every fixture
+  with a roof is refused as above (`geometry` and `eval`: no_revision; both rows INVALID).
+- A roof of the base's own form with one thing added: `type: hip_ridge` alone is out_of_range at items/roof/params/type;
+  `raise` alone, or `frame`, `profile`, `corner_rise` and `corner_reach`, are unknown_field each.
+- Each of the four planted names alone, on the house: {"ok": false, "code": "bad_input"}.
+- `view3d` on the pictures' own set (camera, day sky, shadowed sun, ground plate, timber and roof_tiles materials) around
+  a wall and a hip roof of the base, each with a `material`, at 3024 × 1964 px: one frame, its `final` a 3024 × 1964 PNG
+  that hashes to its name; the suite's `drawn` reads it, and `tasteOf` with no call is inconclusive. The same set with
+  two hip roofs, one 14 m behind, drew both side by side from the end.
+
+No fixture was found wrong. Four files changed once the base was built, none in what a test asserts of the work; the
+three code files changed before the run of any test that reads them, so each run above is of the files as they stand:
+- judges.ts and helpers.ts: the pictures' documents and their look moved from helpers.ts to judges.ts, unchanged, so a
+  probe could draw them without the test runner.
+- ac7-taste.test.ts: it now draws all six pictures before it writes any, so a run in which `view3d` refuses a picture
+  (the base's) leaves nothing in docs/evidence/1219/.
+- README.md: "At the base" now says what the probes showed.

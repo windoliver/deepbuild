@@ -63,7 +63,7 @@ export const aloneReasons = {};
 for (const [reason, entries] of Object.entries({
   binary: [
     'tests/acceptance/2386/', 'tests/acceptance/2086-redraft-2047/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
-    'tests/acceptance/2700/heap.test.mjs', 'tests/acceptance/2700/equal.test.mjs', 'tests/acceptance/2700/data-row.test.mjs', 'tests/acceptance/2700/as-given.test.mjs',
+    'tests/acceptance/2700/heap.test.mjs', 'tests/acceptance/2700/equal.test.mjs', 'tests/acceptance/2700/data-row.test.mjs', 'tests/acceptance/2700/as-given.test.mjs', 'tests/acceptance/2700/reached.test.mjs',
     'tests/acceptance/1523/', 'tests/acceptance/84/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/',
     'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/',
     'tests/acceptance/389/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/1487/',
@@ -601,6 +601,10 @@ function cargoTarget(line, targets) {
 
 /** The results in cargo test's output, each test by the target that reruns it, and a target that failed in no test. */
 export function cargoResults(output, status, workspace) {
+  // #3333: a run the throttle gave no build grant never started cargo. The throttle's first line and its exit 3 say so,
+  // as its marker in a vitest report does, so the run reads as that missing grant, never as a failed test.
+  const refused = status === 3 ? output.split('\n')[0].match(/^INCONCLUSIVE no grant: (.+)$/)?.[1] : undefined;
+  if (refused) return { failures: [], passed: [], noGrant: refused };
   const targets = rerunTargets(workspace);
   const failures = [], passed = [], skips = [], failed = new Set();
   // #3100: a failed test reads as the state its own failure message names, so one that panics with INCONCLUSIVE: or
@@ -1006,7 +1010,8 @@ export function runLanes(lanes, { cwd = root } = {}) {
         // names it, so a merge with another machine's rows (parallel-proof §8) can't lose it.
         if (found && (found.lone || (results?.noGrant && found.error === results.noGrant) || !run.tests.some(({ state }) => state === found.state))) findings.push({ state: found.state, note: found.error });
         if (stands(found, failure)) failure = found;
-        if (command === 'cargo' && args[0] === 'test') {
+        // A run the throttle refused ran nothing to list, and listing it would ask the throttle again (#3333).
+        if (command === 'cargo' && args[0] === 'test' && !results?.noGrant) {
           cargoRan = true;
           const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment) : undefined;
           if (listing) {

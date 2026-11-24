@@ -270,7 +270,8 @@ impl Hub<'_> {
                 .map_err(|p| unreadable(format!("out_of_range at items/{id}/{p}")))?
                 .mesh
         } else if building::KINDS.contains(&kind) {
-            let built = building::build(&rev.drawn, id, &item);
+            let planted = self.scenario.module_planted.as_deref();
+            let built = building::build(&rev.drawn, id, &item, planted);
             Some(built.map_err(|p| unreadable(format!("out_of_range at items/{id}/{p}")))?)
         } else {
             None

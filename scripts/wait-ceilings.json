@@ -435,7 +435,6 @@
   "tests/acceptance/184/helpers.ts": 1,
   "tests/acceptance/1840/fixtures/agent.mjs": 2,
   "tests/acceptance/1840/search.test.ts": 2,
-  "tests/acceptance/1841/fixtures/hub-run.mjs": 2,
   "tests/acceptance/1848/fixtures/agent.mjs": 1,
   "tests/acceptance/1848/helpers.ts": 7,
   "tests/acceptance/1856/helpers.ts": 7,
