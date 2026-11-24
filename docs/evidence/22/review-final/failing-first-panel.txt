@@ -1,0 +1,58 @@
+# deep-app record test before the fix, at 156c33f55 + the new test; 2026-11-16T19:08:36Z; load 177.16 138.06 68.08
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: unused import: `gpui_kit`
+  --> crates/deep-app/src/gpu_view.rs:12:5
+   |
+12 | use gpui_kit::*;
+   |     ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+
+running 2 tests
+. 1/2
+record::tests::a_panel_isnt_given_an_ask_folded_into_an_exception_not_yet_in_sight --- FAILED
+
+failures:
+
+---- record::tests::a_panel_isnt_given_an_ask_folded_into_an_exception_not_yet_in_sight stdout ----
+
+thread 'record::tests::a_panel_isnt_given_an_ask_folded_into_an_exception_not_yet_in_sight' (3274554) panicked at crates/deep-app/src/record.rs:1156:9:
+assertion `left == right` failed: nothing of s1 before its exception is in sight
+  left: ["ask:b1", "ask:a6"]
+ right: ["ask:b1"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    record::tests::a_panel_isnt_given_an_ask_folded_into_an_exception_not_yet_in_sight
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 113 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p deep-app --lib`

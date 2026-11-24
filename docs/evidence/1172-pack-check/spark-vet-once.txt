@@ -1,0 +1,11 @@
+load 13 17 18
+shipped(canvas)	6880 ms	
+art-1.0.0:installed:1 blender-1.0.0:installed:1 chrome-fx-1.
+new process, no packs: call 1	197 ms	{"outcome":"refused","c
+no packs: call 2	4 ms	{"outcome":"refused","code":"no_revisi
+new process, all packs: call 1	6570 ms	{"outcome":"refused",
+all packs: call 2	144 ms	{"outcome":"refused","code":"no_rev
+all packs: call 3	146 ms	{"outcome":"refused","code":"no_rev
+all but deepbuild/lanes	4363 ms	{"outcome":"refused","code":
+all but deepbuild/foley	5319 ms	{"outcome":"refused","code":
+all but deepbuild/modslib	4023 ms	{"outcome":"refused","code

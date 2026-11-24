@@ -1,0 +1,21 @@
+start; Now drawing from 'AC Power'; front app [loginwindow] 13:30:46 load { 31.37 49.50 51.76 }  free KB 26026856
+head 9c7ecd658e4ed54d3ae7152b6191e2deeb95d4e5; origin/main dcb63a0a0a374d6759c1d352eb31439597792905; merge-base 86b99ac36cfbbf5d806aaa5566bd8486f671920c 13:30:47 load { 31.37 49.50 51.76 }  free KB 26026848
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 13:30:49 load { 29.58 48.82 51.50 }  free KB 26025744
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261 13:30:49 load { 29.58 48.82 51.50 }  free KB 26025744
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720 13:30:49 load { 29.58 48.82 51.50 }  free KB 26025744
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733 13:30:49 load { 29.58 48.82 51.50 }  free KB 26025744
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711 13:30:49 load { 29.58 48.82 51.50 }  free KB 26025744
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305 13:30:49 load { 29.58 48.82 51.50 }  free KB 26025744
+judge copy checks: sha256 45b32cfb0c32fdf27030e1e94444bf83af704c9530844be93722a7ea703df079 diff-lines=4 reopen-early-return=1 row22=1 13:30:49 load { 29.58 48.82 51.50 }  free KB 26025744
+part setup start: Now drawing from 'AC Power'; front app [loginwindow] 13:30:49 load { 29.58 48.82 51.50 }  free KB 26025744
+setup (npm ci, workspace build, deep-hook) exit=0 13:31:48 load { 19.91 42.84 49.10 }  free KB 24921636
+319 budgets start: Now drawing from 'AC Power'; front app [loginwindow]; Note: No thermal warning level has been recorded Note: No performance warning level has been recorded Note: No CPU power status has been recorded  13:31:48 load { 19.91 42.84 49.10 }  free KB 24921624
+319-budgets exit=0; Tests 2 passed (2); Now drawing from 'AC Power'; front app [loginwindow] 13:31:58 load { 18.22 41.72 48.64 }  free KB 24940740
+part 6 start: Now drawing from 'AC Power'; front app [loginwindow] 13:31:58 load { 18.22 41.72 48.64 }  free KB 24940728
+readIssue pre-check lines 170, 'blocked' count 0 13:31:58 load { 17.40 41.16 48.40 }  free KB 24938644
+status before the judge [?? scripts/spine-22-mac-9c7ecd65.mjs] 13:31:59 load { 17.40 41.16 48.40 }  free KB 24936112
+gh probe before: {comments:2,number:22,state:OPEN} exit=0 {comments:1,number:319,state:CLOSED} exit=0 13:32:00 load { 17.40 41.16 48.40 }  free KB 24936104
+judge exit=0 wall 532 s 13:40:53 load { 15.65 33.84 42.02 }  free KB 51732376
+gh probe after: {comments:2,number:22,state:OPEN} exit=0 {comments:1,number:319,state:CLOSED} exit=0 13:40:56 load { 15.28 33.46 41.84 }  free KB 51691464
+git status --porcelain lines after: 1 13:40:57 load { 15.28 33.46 41.84 }  free KB 51691672
+ALL DONE 13:40:57 load { 15.28 33.46 41.84 }  free KB 51691712
