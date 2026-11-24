@@ -1487,3 +1487,9 @@ alone.push('tests/acceptance/3234-redraft-ac6/');
 alone.push('tests/acceptance/1881-redraft-2047/');
 timed.push('tests/acceptance/1881-redraft-2047/suites85.test.ts');
 slow.push('tests/acceptance/1881-redraft-2047/suites85.test.ts');
+
+// #112's eval and dispatched-run files, #2077's removal file and #2495's report file are kept by hand until the owner
+// swaps them: their judges score every request as the agents' work, and #3245's first request is a control with none, so
+// no program passes both; their blind redrafts, 112-redraft-3245/, 2077-redraft-3245/ and 2495-redraft-3245/, run in
+// their place.
+byHand.push('tests/acceptance/112/eval.test.ts', 'tests/acceptance/112/ci.test.ts', 'tests/acceptance/2077/removal.test.ts', 'tests/acceptance/2495/report.test.ts');

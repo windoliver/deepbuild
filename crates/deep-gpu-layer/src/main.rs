@@ -265,6 +265,12 @@ pub enum Planted {
     WaterRingsAtRainHash,
     /// #2760: a ring started when a drawn frame first passes its occurrence, kept as state.
     WaterRingsStartOnDrawnFrame,
+    /// #3034: the water's surface from below drawn with an index of 1: no cone.
+    WaterBelowIorOne,
+    /// #3034: under water, a color dimmed by its point's depth below the surface.
+    WaterBelowTintByDepth,
+    /// #3034: the water's surface from below showing what is above it at every angle.
+    WaterBelowSkyAtEveryAngle,
     /// #290's wrong hidden views (tests/acceptance/290/README.md: Planted programs).
     HiddenViewDrawsWhereVisible,
     HiddenViewWithoutOwnDepth,
@@ -776,6 +782,9 @@ impl Planted {
             "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
             "water_rings_at_rain_hash" => Planted::WaterRingsAtRainHash,
             "water_rings_start_on_drawn_frame" => Planted::WaterRingsStartOnDrawnFrame,
+            "water_below_ior_one" => Planted::WaterBelowIorOne,
+            "water_below_tint_by_depth" => Planted::WaterBelowTintByDepth,
+            "water_below_sky_at_every_angle" => Planted::WaterBelowSkyAtEveryAngle,
             "hidden_view_draws_where_visible" => Planted::HiddenViewDrawsWhereVisible,
             "hidden_view_without_own_depth" => Planted::HiddenViewWithoutOwnDepth,
             "hidden_view_writes_ids" => Planted::HiddenViewWritesIds,
