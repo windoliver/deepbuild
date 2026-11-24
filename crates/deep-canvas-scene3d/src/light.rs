@@ -13,6 +13,9 @@ use deep_canvas::camera::Vec3;
 
 use crate::scene::{num, Camera, Depth, Refused};
 
+mod chains;
+use chains::map_use;
+pub use chains::{Chain, MapUse, MapUses};
 mod shadowing;
 pub use shadowing::{Contact, Shadowing, Soft, MOST_POINTS, MOST_SPOTS};
 
@@ -196,34 +199,6 @@ impl MapSlot {
     }
 }
 
-/// #3257: the mips a mask's or a blend's base color map samples: its texels' key, and a mask's
-/// cutoff, at which each level keeps level 0's coverage.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Chain {
-    pub key: String,
-    pub cutoff: Option<f32>,
-}
-
-impl Chain {
-    /// The chain of image `sha` in the base color of the `material@1` whose params are `p`, in
-    /// `mode` where they name none; `None` where its alpha isn't drawn. A mask tests the image's
-    /// alpha times the material's own, so the image's cutoff is the material's over that alpha.
-    fn of(sha: &str, p: &Value, mode: AlphaMode) -> Option<Chain> {
-        let own = p["alpha_mode"].as_str().and_then(AlphaMode::read);
-        let cutoff = match own.unwrap_or(mode) {
-            AlphaMode::Mask => {
-                let own = num(p["base_color"].get(3)).unwrap_or(1.0);
-                let alpha = own * num(p.get("alpha")).unwrap_or(1.0);
-                Some((num(p.get("alpha_cutoff")).unwrap_or(0.5) / alpha) as f32)
-            }
-            AlphaMode::Blend => None,
-            AlphaMode::Opaque | AlphaMode::Add => return None,
-        };
-        let key = cutoff.map_or(format!("{sha}:blend"), |c| format!("{sha}:{c}"));
-        Some(Chain { key, cutoff })
-    }
-}
-
 /// A material's texture maps, keyed by everything they hold, so materials with equal maps share
 /// one bind group.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -289,49 +264,6 @@ impl std::fmt::Debug for Texels {
 /// A document's decoded-image cap, bytes, which the bytes its maps take on the device count
 /// against (Image `image@1`: at most 64 MB decoded per document; Material: texture maps).
 pub const DECODED_CAP: u64 = 64 << 20;
-
-/// What a host makes ready under one key of a scene's texels: the image, the fields that name it
-/// and the mask's cutoff, where one samples it (#3257).
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct MapUse {
-    pub sha: String,
-    pub fields: std::collections::BTreeSet<&'static str>,
-    /// Whether a mask or a blend draws its alpha.
-    drawn: bool,
-    pub cutoff: Option<f32>,
-}
-
-impl MapUse {
-    /// The decode worker's job role: base color whose alpha is drawn, the other color fields'
-    /// sRGB, a normal map's two channels, an occlusion map alone's one channel, else linear data
-    /// (Material: texture maps: the format follows the map's role).
-    pub fn role(&self) -> &'static str {
-        let has = |f: &str| self.fields.contains(f);
-        if self.drawn {
-            "base_color"
-        } else if has("base_color") || has("emission") {
-            "color"
-        } else if has("normal_map") {
-            "normal"
-        } else if self.fields.len() == 1 && has("occlusion") {
-            "occlusion"
-        } else {
-            "data"
-        }
-    }
-}
-
-/// Every map a scene or a document samples, by its texels' key.
-pub type MapUses = std::collections::BTreeMap<String, MapUse>;
-
-fn map_use(out: &mut MapUses, sha: &str, field: &'static str, chain: Option<&Chain>) {
-    let key = chain.map_or(sha, |c| c.key.as_str());
-    let u = out.entry(key.to_string()).or_default();
-    u.sha = sha.to_string();
-    u.fields.insert(field);
-    u.drawn = chain.is_some();
-    u.cutoff = chain.and_then(|c| c.cutoff);
-}
 
 /// Every map `scene`'s solids sample, with the fields that name it, which a host makes ready for
 /// the GPU in its decode worker (#423, #1729); a material operator's texture input by hash (#431)
@@ -506,13 +438,13 @@ fn map_slot(v: &Value, field: &str) -> Result<MapSlot, Refused> {
 }
 
 /// The texture maps of the `material@1` that `item` names (#423), or `None` with none. `material`
-/// is what it draws as; `own` gives an item as the document holds it, which its chain is made by,
-/// so a cutoff a channel moves makes no chain a frame (#3257).
+/// is what it draws as; its chain is made by the item among `own`, the document's, so a cutoff a
+/// channel moves makes no chain a frame (#3257).
 pub fn maps<'a>(
     item: &Value,
     named: impl Fn(&str) -> Option<&'a Value>,
-    own: impl Fn(&str) -> Option<&'a Value>,
-    material: Option<&Material>,
+    own: &serde_json::Map<String, Value>,
+    material: &Option<Material>,
 ) -> Result<Option<std::sync::Arc<Maps>>, Refused> {
     let Some(name) = item.get("material").and_then(Value::as_str) else {
         return Ok(None);
@@ -553,7 +485,7 @@ pub fn maps<'a>(
         return Ok(None);
     }
     if let (Some(s), Some(m)) = (&mut out.base_color, material) {
-        let p = own(name).and_then(|i| i.get("params")).unwrap_or(p);
+        let p = own.get(name).and_then(|i| i.get("params")).unwrap_or(p);
         s.chain = Chain::of(&s.sha, p, m.alpha_mode);
     }
     out.key = format!("{out:?}");

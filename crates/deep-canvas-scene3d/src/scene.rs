@@ -892,9 +892,8 @@ pub struct Scene {
     /// Each `overlay.text@1` readout (#419): drawn by the view after the frame's samples and
     /// motion blur resolve, over the frame, never into the frame itself.
     pub readouts: Vec<Label>,
-    /// The texels of every map the solids sample, by the map's key (the image's SHA-256, or its
-    /// chain's), as the host had the decode worker make them (#423); a map whose texels aren't
-    /// here draws without it.
+    /// The texels of every map the solids sample, by the map's key, as the host had the decode
+    /// worker make them (#423); a map whose texels aren't here draws without it.
     pub texels: BTreeMap<String, Arc<crate::light::Texels>>,
     /// The frame's sub-pixel offset, px right and down (#423: Look: samples).
     pub jitter: [f64; 2],
@@ -1936,8 +1935,7 @@ pub(crate) fn evaluate_compiled(
                     );
                     bounds.extend(corners(&model));
                     let material = light::material(item, |m| items.get(m), look, id)?;
-                    let own = |m: &str| items.doc.get(m);
-                    let maps = light::maps(item, |m| items.get(m), own, material.as_ref())?;
+                    let maps = light::maps(item, |m| items.get(m), doc_items, &material)?;
                     let surface = surface(&items, look, id, item)?;
                     if surface.alpha <= 0.0 {
                         continue;
@@ -2163,8 +2161,7 @@ pub(crate) fn evaluate_compiled(
                                 m.double_sided = true;
                             }
                         }
-                        let own = |m: &str| items.doc.get(m);
-                        let maps = light::maps(holder, |m| items.get(m), own, material.as_ref())?;
+                        let maps = light::maps(holder, |m| items.get(m), doc_items, &material)?;
                         let surface = surface(&items, look, id, holder)?;
                         if surface.alpha <= 0.0 {
                             return Ok(None);
