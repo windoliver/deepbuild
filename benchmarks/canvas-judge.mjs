@@ -59,6 +59,7 @@ export const EFFICIENCY = {
   'canvas-water-flow': { flow_sheet_gpu_ms: (r) => r.flow_sheet_gpu_ms },
   'canvas-water-rings': { rings_pond_gpu_ms: (r) => r.rings_pond_gpu_ms },
   'canvas-atlas-draw': { draw_rows_frame_ms: (r) => r.draw_rows_frame_ms },
+  'canvas-atlas-slice': { slice_rows_frame_ms: (r) => r.slice_rows_frame_ms },
   'canvas-fx-pack': Object.fromEntries(['pack_check_ms', 'operator_compile_ms', 'still_dispatches'].map((k) => [k, (r) => r[k]])),
   'canvas-local-tone-map': { local_1080p_gpu_ms: (r) => r.local_1080p_gpu_ms, local_2160p_gpu_ms: (r) => r.local_2160p_gpu_ms },
   'canvas-ground': {
