@@ -57,6 +57,11 @@ export type Plant =
   // #1840: a person's deep_search that reads every decision, whatever scope it was saved at.
   | 'search-decisions-unfiltered'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
+  // #3220's: a scan that keeps a run's first sample as its peak, an unread tree's peak recorded as 0, a check run on a key
+  // admitted on its class's constant, on no number, on the pool alone or on one run's peak, and an agent's heavy command
+  // admitted on its last run's peak.
+  | 'scan-keeps-first-sample' | 'unread-peak-recorded-zero' | 'admits-on-class-constant' | 'admits-on-nothing' | 'admits-on-pool-only'
+  | 'admits-on-one-peak' | 'admits-heavy-on-last-peak'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
   | 'stops-at-first-bad-line' | 'remove-spool-after-normal' | 'drops-post-tool-use' | 'replay-appends-twice'
@@ -349,6 +354,8 @@ const PLANTS: readonly string[] = [
   'sentence-from-agent-text', 'sentence-from-model', 'open-item-no-sentence',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
+  'scan-keeps-first-sample', 'unread-peak-recorded-zero', 'admits-on-class-constant', 'admits-on-nothing', 'admits-on-pool-only',
+  'admits-on-one-peak', 'admits-heavy-on-last-peak',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
   'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project', 'env-clone-without-record',
   'env-reuses-stale-install', 'env-keeps-database', 'env-keeps-redis', 'env-reuses-web-image', 'env-keeps-db-mount', 'env-second-install-store',
