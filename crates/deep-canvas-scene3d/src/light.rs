@@ -192,13 +192,6 @@ pub struct MapSlot {
     pub chain: Option<Chain>,
 }
 
-impl MapSlot {
-    /// Its texels' key in the scene's.
-    pub fn key(&self) -> &str {
-        self.chain.as_ref().map_or(&self.sha, |c| &c.key)
-    }
-}
-
 /// A material's texture maps, keyed by everything they hold, so materials with equal maps share
 /// one bind group.
 #[derive(Clone, Debug, Default, PartialEq)]
