@@ -9028,6 +9028,40 @@ export interface PushRecord {
   pusher: string | null;
 }
 
+/** pushes.read@1 */
+export interface PushesRead {
+  v: 1;
+  id: string;
+  kind: "pushes.read";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    repo: string;
+    ref: string;
+    as_of: number;
+    pushes: Array<{
+      id: number;
+      at: number;
+      pusher: string | null;
+      commits: Array<{
+        commit: string;
+        tree: string;
+        reverts?: string;
+      }> | null;
+    }>;
+    snapshots: Array<{
+      commit: string;
+      tree: string;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** question.proceeded@1 */
 export interface QuestionProceeded {
   v: 1;
