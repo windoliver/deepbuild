@@ -1,0 +1,6 @@
+test record::tests::another_exception_of_the_cores_folds_into_an_open_keeps_asking_as_in_the_core ... FAILED
+thread 'record::tests::another_exception_of_the_cores_folds_into_an_open_keeps_asking_as_in_the_core' (759442) panicked at crates/deep-app/src/record.rs:1234:9:
+assertion `left == right` failed
+  left: (String("queued"), Null)
+ right: (String("folded"), String("ask:x1"))
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 121 filtered out; finished in 0.07s

@@ -20,13 +20,12 @@ pub fn stroke(points: Vec<[f64; 2]>, width: f64) -> Mesh {
     mesh
 }
 
-/// Paints `mesh`'s triangles, moved by `offset` px.
-pub fn paint(mesh: &Mesh, offset: [f32; 2], color: Hsla, window: &mut Window) {
+/// The GPUI path `paint` paints for `mesh`, moved by `offset` px: its triangles in order, three
+/// vertices each; `None` for a mesh with no triangles.
+pub fn path(mesh: &Mesh, offset: [f32; 2]) -> Option<Path<Pixels>> {
     let at = |p: [f32; 2]| point(px(p[0] + offset[0]), px(p[1] + offset[1]));
     let mut triangles = mesh.triangles();
-    let Some(first) = triangles.next() else {
-        return;
-    };
+    let first = triangles.next()?;
     let solid = (point(0., 1.), point(0., 1.), point(0., 1.));
     let mut path = Path::new(at(first[0]));
     // Its three vertices a triangle, sized once (#2660).
@@ -35,7 +34,14 @@ pub fn paint(mesh: &Mesh, offset: [f32; 2], color: Hsla, window: &mut Window) {
     for t in triangles {
         path.push_triangle((at(t[0]), at(t[1]), at(t[2])), solid);
     }
-    window.paint_path(path, color);
+    Some(path)
+}
+
+/// Paints `mesh`'s triangles, moved by `offset` px.
+pub fn paint(mesh: &Mesh, offset: [f32; 2], color: Hsla, window: &mut Window) {
+    if let Some(path) = path(mesh, offset) {
+        window.paint_path(path, color);
+    }
 }
 
 /// How far past a stroke's edge its strip reaches, in device px: a pixel whose centre lies within

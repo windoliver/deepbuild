@@ -127,6 +127,27 @@ function interpreterOf(path: string): string | null {
     return first?.startsWith('/') && existsSync(first) ? first : null;
   } catch { return null; }
 }
+/** Where the hub finds a program outside the system's folders: beside its own Node (TOOLS), else the first on its PATH. */
+function programAt(name: string): string | undefined {
+  const dirs = [...(TOOLS.includes(name) ? [NODE_BIN] : []), ...(process.env.PATH ?? '').split(':')];
+  return dirs.filter((d) => d && !SYSTEM.includes(d)).map((d) => join(d, name)).find((p) => existsSync(p));
+}
+const inVenv = (program: string): boolean => existsSync(join(dirname(program), '..', 'pyvenv.cfg'));
+/**
+ * Each program `command` names, with a reading of the file `linkPrograms` links for it (#2060): its real file's size and
+ * modified time, one file status and no bytes, or `absent` where it links none, as for a program the hub no longer finds.
+ * `read` holds a claim's readings, so each program is read once for it.
+ */
+export function programReadings(command: string, checkout: string, read: Map<string, string>): [string, string][] {
+  return [...new Set(programsIn(command, checkout))].filter((name) => !name.includes('/')).sort().map((name) => {
+    if (!read.has(name)) {
+      const at = programAt(name);
+      const file = at !== undefined && !inVenv(at) ? statSync(at, { throwIfNoEntry: false }) : undefined;
+      read.set(name, file?.isFile() ? `${file.size} ${file.mtimeMs}` : 'absent');
+    }
+    return [name, read.get(name)!];
+  });
+}
 /**
  * The programs the command itself names that the hub has outside the system's folders (python3, pnpm, go), linked by
  * their real paths into the run's bin folder, with what the run may read to run them (`installOf`); and for a
@@ -149,10 +170,10 @@ function linkPrograms(runner: string, checkout: string, bin: string): { roots: s
       continue;
     }
     if (existsSync(join(bin, name))) continue;
-    const dir = (process.env.PATH ?? '').split(':').find((d) => d && !SYSTEM.includes(d) && existsSync(join(d, name)));
-    if (!dir) continue;
-    if (existsSync(join(dir, '..', 'pyvenv.cfg'))) { refused.push(name); continue; }
-    const real = realpathSync(join(dir, name));
+    const at = programAt(name);
+    if (at === undefined) continue;
+    if (inVenv(at)) { refused.push(name); continue; }
+    const real = realpathSync(at);
     if (!statSync(real).isFile()) continue;
     symlinkSync(real, join(bin, name));
     roots.push(installOf(real));

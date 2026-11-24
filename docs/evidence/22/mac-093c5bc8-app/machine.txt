@@ -1,0 +1,7 @@
+Mac15,12
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B131
+Now drawing from 'AC Power'
+start 2026-11-14 12:11:43 12:11  up 1 day,  5:13, 6 users, load averages: 4.17 4.43 3.28
+end 2026-11-14 12:45:17 12:45  up 1 day,  5:47, 6 users, load averages: 7.56 9.99 10.00

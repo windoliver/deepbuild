@@ -489,6 +489,20 @@ fn in_chunks<T: Send, R: Send>(entries: &mut [T], work: impl Fn(&mut [T]) -> R +
     in_threads(entries, threads, work)
 }
 
+/// Runs `work` on each index below `count`, a chunk of indexes per core, up to 8, on scoped threads
+/// when std reports more than one core, and on the caller's thread otherwise (#1172: a pack
+/// field's entries, each checked on its own).
+#[inline(never)]
+pub fn each_index(count: usize, work: &(dyn Fn(usize) + Sync)) {
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(8).min(count));
+    let mut indexes: Vec<usize> = (0..count).collect();
+    in_threads(&mut indexes, threads, |chunk| {
+        for i in chunk.iter() {
+            work(*i);
+        }
+    });
+}
+
 /// The steps of a check after its items, in their order.
 #[derive(Clone, Copy)]
 enum Tail {
@@ -1388,99 +1402,6 @@ fn required_minors(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) -> BTr
     out
 }
 
-fn check_layers(doc: &Value, issues: &mut Vec<Issue>) -> BTreeSet<String> {
-    let mut ids = BTreeSet::new();
-    let Some(layers) = member(doc, "layers") else {
-        return ids;
-    };
-    let Some(layers) = layers.as_object() else {
-        issues.push(Issue::envelope(
-            "out_of_range",
-            "layers".into(),
-            layers.clone(),
-            "not an object",
-        ));
-        return ids;
-    };
-    for (key, layer) in layers {
-        ids.insert(key.clone());
-        check_key("layers", key, issues);
-        let Some(fields) = layer.as_object() else {
-            issues.push(Issue::envelope(
-                "out_of_range",
-                format!("layers/{key}"),
-                layer.clone(),
-                "not an object",
-            ));
-            continue;
-        };
-        for (field, value) in fields {
-            if !LAYER_KEYS.contains(&field.as_str()) {
-                issues.push(Issue::envelope(
-                    "unknown_field",
-                    format!("layers/{key}/{field}"),
-                    value.clone(),
-                    "not a field of a layer",
-                ));
-            }
-        }
-        for field in ["writer", "title", "order"] {
-            if !fields.get(field).is_some_and(Value::is_string) {
-                issues.push(Issue::envelope(
-                    "out_of_range",
-                    format!("layers/{key}/{field}"),
-                    fields.get(field).cloned().unwrap_or(Value::Null),
-                    "not a string",
-                ));
-            }
-        }
-        if let Some(role) = fields.get("role") {
-            if !role.as_str().is_some_and(|r| LAYER_ROLES.contains(&r)) {
-                issues.push(Issue::envelope(
-                    "out_of_range",
-                    format!("layers/{key}/role"),
-                    role.clone(),
-                    "not a layer role",
-                ));
-            }
-        }
-        if let Some(locked) = fields.get("locked") {
-            if !locked.is_boolean() {
-                issues.push(Issue::envelope(
-                    "out_of_range",
-                    format!("layers/{key}/locked"),
-                    locked.clone(),
-                    "not a boolean",
-                ));
-            }
-        }
-    }
-    // One writer, one layer: apply stamps the writer's layer, so two layers with one writer
-    // would make a patch's outcome depend on the layers' order.
-    // The layer first by ID keeps the writer, whatever order the file lists them in.
-    let mut writers: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
-    for (key, layer) in layers {
-        if let Some(writer) = member(layer, "writer").and_then(Value::as_str) {
-            writers.entry(writer).or_default().insert(key);
-        }
-    }
-    for (writer, keys) in &writers {
-        let mut keys = keys.iter();
-        let Some(first) = keys.next() else {
-            continue;
-        };
-        for key in keys {
-            issues.push(Issue::envelope(
-                "out_of_range",
-                format!("layers/{key}/writer"),
-                json!(writer),
-                &format!("layer `{first}` has this writer too"),
-            ));
-        }
-    }
-    ids
-}
-
 /// Runs an item's migrations in place, one major a step, with a notice per step. The check runs
 /// it on its lowered copy at load; `apply` runs it on the stored document for the writer's own
 /// items once a patch of theirs goes through.
@@ -2189,6 +2110,8 @@ mod check_assemblies;
 use check_assemblies::*;
 mod item_fields;
 use item_fields::{check_adjust, check_at};
+mod members;
+use members::{check_layers, check_ports};
 
 /// A bound value's fields (Bound value).
 const BOUND_VALUE_FIELDS: &[&str] = &[
@@ -2536,90 +2459,5 @@ pub(crate) fn resolve(
             Ok(())
         }
         _ => unreachable(),
-    }
-}
-
-/// The most ports a document declares (#210).
-const MAX_PORTS: usize = 8;
-
-/// #210: `ports: {name → {plugin, out: [control ID | occurrence list], in: [reading ID], sound}}`.
-fn check_ports(envelope: &Map<String, Value>, ports: &Value, issues: &mut Vec<Issue>) {
-    let bad = |at: String, value: &Value, what: &str| {
-        Issue::envelope("out_of_range", at, value.clone(), what)
-    };
-    let Some(ports) = ports.as_object() else {
-        issues.push(bad("ports".into(), ports, "not an object of ports by name"));
-        return;
-    };
-    if ports.len() > MAX_PORTS {
-        issues.push(bad(
-            "ports".into(),
-            &json!(ports.len()),
-            "more than 8 ports",
-        ));
-    }
-    let controls = envelope.get("controls").and_then(Value::as_object);
-    let items = envelope.get("items").and_then(Value::as_object);
-    for (name, port) in ports {
-        let at = format!("ports/{name}");
-        let Some(port) = port.as_object() else {
-            issues.push(bad(at, port, "not an object"));
-            continue;
-        };
-        for (key, value) in port {
-            if !["plugin", "out", "in", "sound"].contains(&key.as_str()) {
-                issues.push(Issue::envelope(
-                    "unknown_field",
-                    format!("{at}/{key}"),
-                    value.clone(),
-                    "not a field of a port",
-                ));
-            }
-        }
-        if !port.get("plugin").is_some_and(Value::is_string) {
-            issues.push(bad(
-                format!("{at}/plugin"),
-                &Value::Null,
-                "a port names its plug-in",
-            ));
-        }
-        if port.get("sound").is_some_and(|s| !s.is_boolean()) {
-            issues.push(bad(format!("{at}/sound"), &port["sound"], "not a boolean"));
-        }
-        for side in ["out", "in"] {
-            let Some(list) = port.get(side) else { continue };
-            let Some(list) = list.as_array() else {
-                issues.push(bad(format!("{at}/{side}"), list, "not a list of names"));
-                continue;
-            };
-            for (i, entry) in list.iter().enumerate() {
-                let here = format!("{at}/{side}/{i}");
-                let Some(id) = entry.as_str() else {
-                    issues.push(bad(here, entry, "not a name"));
-                    continue;
-                };
-                let known = if side == "in" {
-                    id.starts_with("reading:")
-                } else if let Some(item) = id.strip_suffix(".occurrences") {
-                    items
-                        .and_then(|m| m.get(item))
-                        .is_some_and(|i| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
-                } else {
-                    controls.is_some_and(|c| c.contains_key(id))
-                };
-                if !known {
-                    issues.push(Issue::envelope(
-                        "ref_unresolved",
-                        here,
-                        entry.clone(),
-                        if side == "in" {
-                            "a port reads a reading (`reading:<source>`)"
-                        } else {
-                            "a port sends a control of the document or a logic item's occurrence list"
-                        },
-                    ));
-                }
-            }
-        }
     }
 }

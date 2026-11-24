@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the sandbox log stream; both files open the supervisor, which reads the system's one log stream, and run packages in the platform sandbox, each given 10 s to start and register" }

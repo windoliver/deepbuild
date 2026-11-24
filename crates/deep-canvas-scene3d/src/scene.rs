@@ -25,6 +25,7 @@ use crate::label::{AtlasPage, Glyph, WORLD_EM_PX};
 use crate::light;
 pub use crate::light::{Light, Material};
 use crate::look::Look3;
+use crate::trail::frame_interval;
 
 /// Why a document can't be drawn: a closed-list code and the path it names.
 #[derive(Clone, Debug, PartialEq)]
@@ -931,6 +932,8 @@ pub struct Scene {
     pub exposure: Option<f64>,
     /// The view's water (#166; Material: water), which its own pass draws after the mirror's.
     pub water: Option<Arc<crate::water::Water>>,
+    /// #3034: under water, the height below which what the frame sees lies in the water.
+    pub under: Option<f64>,
     /// #166: whether the view reads back each mirror part's lookup (view3d's `reflection`).
     pub read_reflection: bool,
     /// #268: whether the view reads back the water's foam share (view3d's `foam`).
@@ -1366,25 +1369,6 @@ fn moves(items: &Items<'_>, program: &Program, id: &str) -> bool {
         seen += 1;
     }
     false
-}
-
-/// The X, Y, Z angles in degrees of the rotation `r` (its rows), as `local_of` composes them:
-/// Rz · Ry · Rx.
-fn euler_of(r: &[Vec3; 3]) -> Vec3 {
-    use deep_canvas::ops::{asin, atan2, deg};
-    if r[2][0].abs() > 1.0 - 1e-12 {
-        // Straight up or down: X and Z turn about one axis, so Z takes none.
-        return [
-            deg(atan2(-r[1][2], r[1][1])),
-            deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
-            0.0,
-        ];
-    }
-    [
-        deg(atan2(r[2][1], r[2][2])),
-        deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
-        deg(atan2(r[1][0], r[0][0])),
-    ]
 }
 
 /// The rotation of `m` (its rows): its columns at unit length.
@@ -2263,9 +2247,11 @@ pub(crate) fn evaluate_compiled(
                     // #2017: a plate with levels draws as its tiles, each at the level its error
                     // projected at the view chooses; one split by material draws whole.
                     if k == "plate@1" && uniform(&model) && whole.is_none() {
-                        let plate = layer.solids.last().expect("just pushed");
-                        let built = plate.mesh.as_ref().expect("a built mesh");
-                        if let Some(tiles) = crate::terrain::tiles(params, built, hash) {
+                        let plate = layer.solids.last_mut().expect("just pushed");
+                        // #3036: its tracks lower and darken what it draws, tiles and all.
+                        let read = (doc, map, program, t);
+                        let (built, hash) = crate::tracks::of(plate, read, &memo, &items, &ask)?;
+                        if let Some(tiles) = crate::terrain::tiles(params, &built, hash) {
                             let plate = layer.solids.pop().expect("just pushed");
                             let lod_px = crate::lod::lod_px(map);
                             for t in tiles.iter() {
@@ -2890,6 +2876,7 @@ pub(crate) fn evaluate_compiled(
         optics,
         exposure,
         water: None,
+        under: None,
         read_reflection: false,
         read_foam: false,
         read_normal: false,
@@ -2942,23 +2929,10 @@ pub(crate) fn evaluate_compiled(
             let plates: Vec<[f64; 4]> = w.plates.iter().map(|(_, p)| *p).collect();
             flow.grid = Some(crate::flow::grid(map, &w.material, flow, &plates)?);
         }
-        if scene.mirror.is_none() {
-            scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &w);
-        }
-        scene.water = Some(Arc::new(w));
+        w.seen_in(&mut scene);
     }
     labels.places = memo.into_inner();
     Ok(scene)
-}
-
-/// The document's frame interval in flicks: its transport's `frame_rate`, 60/1 by default.
-fn frame_interval(map: &Map<String, Value>) -> i64 {
-    let (p, q) = map
-        .get("transport")
-        .and_then(deep_canvas::document::frame_rate_of)
-        .filter(|(p, q)| *p > 0 && *q > 0)
-        .unwrap_or((60, 1));
-    deep_canvas::camera::FLICKS_PER_SECOND * i64::from(q) / i64::from(p)
 }
 
 /// Item `id`'s world origin at `t`, through the chain its channels and parents give: what a

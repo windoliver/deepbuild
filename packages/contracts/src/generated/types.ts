@@ -4972,6 +4972,51 @@ export interface AskAnsweredV6 {
   evidence?: Array<string>;
 }
 
+export type AskAnsweredV7PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@7 */
+export interface AskAnsweredV7 {
+  v: 7;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session" | "channel";
+    verified: boolean;
+    on: AskAnsweredV7PinnedTo;
+    token: string | null;
+    steps?: Array<number>;
+    words: string | null;
+    image: string | null;
+    option: string | null;
+    pictures?: Array<{
+      sha256: string;
+      shown: boolean;
+      scale: number;
+      ms: number;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.batched@1 */
 export interface AskBatched {
   v: 1;
@@ -5903,25 +5948,6 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
-/** ask.taken_over@1 */
-export interface AskTakenOver {
-  v: 1;
-  id: string;
-  kind: "ask.taken_over";
-  subject: string;
-  writer: "core";
-  actor: string;
-  scope: string;
-  ts: number;
-  seq?: bigint;
-  log_pos?: number;
-  data: {
-    device: string;
-    revision: number;
-  };
-  evidence?: Array<string>;
-}
-
 /** attempt.started@1 */
 export interface AttemptStarted {
   v: 1;
@@ -6261,6 +6287,25 @@ export interface CapabilityRefused {
     broke: "grant" | "quota" | "schema";
     clause: string;
     digest: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** card.taken_over@1 */
+export interface CardTakenOver {
+  v: 1;
+  id: string;
+  kind: "card.taken_over";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    device: string;
+    revision: number;
   };
   evidence?: Array<string>;
 }
@@ -8088,6 +8133,16 @@ export interface HeavyCommand {
   jobs_flag?: string;
 }
 
+/** heavy.command@2 */
+export interface HeavyCommandV2 {
+  name: string;
+  argv_prefix: Array<string>;
+  kinds: Array<string>;
+  jobs: string;
+  jobs_flag?: string;
+  memory_mb?: number;
+}
+
 /** holds.watch@1 */
 export interface HoldsWatch {
   v: 1;
@@ -8790,6 +8845,38 @@ export interface LeaseAcquiredV3 {
   evidence?: Array<string>;
 }
 
+/** lease.acquired@4 */
+export interface LeaseAcquiredV4 {
+  v: 4;
+  id: string;
+  kind: "lease.acquired";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
+    holder: string;
+    mode: "exclusive" | "shared";
+    expires: number;
+    units?: number;
+    run?: string;
+    agent?: {
+      pid: number;
+      start: string;
+    };
+    asked?: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** lease.denied@1 */
 export interface LeaseDenied {
   v: 1;
@@ -9464,6 +9551,29 @@ export interface ProcessEnded {
   data: {
     run: string;
     pid: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** process.ended@2 */
+export interface ProcessEndedV2 {
+  v: 2;
+  id: string;
+  kind: "process.ended";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    pid: number;
+    used?: {
+      memory_peak_mb: number | null;
+      cpu_s: number | null;
+    };
   };
   evidence?: Array<string>;
 }
@@ -10286,6 +10396,52 @@ export interface RunFinishedV3 {
       plain: boolean;
     };
     exit?: number | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.finished@4 */
+export interface RunFinishedV4 {
+  v: 4;
+  id: string;
+  kind: "run.finished";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    outcome: "passed" | "failed" | "ran_nothing" | "missing" | "overran" | "stopped" | "uncounted";
+    tests_run: number;
+    passed: number;
+    runs: number;
+    evidence: Array<string>;
+    check: string;
+    assertion: string | null;
+    expected: string | null;
+    actual: string | null;
+    step: string | null;
+    points_to: string | null;
+    findings: Array<string>;
+    environment: string;
+    key?: {
+      id: string;
+      stem: string;
+      paths: Array<string>;
+      claim: string;
+      session: string;
+      base: boolean;
+      withheld: boolean;
+      plain: boolean;
+    };
+    exit?: number | null;
+    used?: {
+      memory_peak_mb: number | null;
+      cpu_s: number | null;
+    };
   };
   evidence?: Array<string>;
 }
@@ -12871,6 +13027,29 @@ export interface UserAskV2 {
     from: "person" | "scheduled" | "subagent" | "session" | "continuation" | "app" | "unknown";
     request?: string;
     disposition?: "handled";
+  };
+  evidence?: Array<string>;
+}
+
+/** variant.spent@1 */
+export interface VariantSpent {
+  v: 1;
+  id: string;
+  kind: "variant.spent";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    check: string;
+    variant: number;
+    digests: Array<string>;
+    call: string;
+    named: "digest" | "checkout";
   };
   evidence?: Array<string>;
 }

@@ -1,0 +1,26 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 22:52:38 load { 16.70 47.80 71.99 } thermal 1 free KB 55610008
+head adaa0e19d08810370d6ba5bca9fa3563b41d1d2f parents 6915a4fbd and 2252dfd6f; 2b runs at the merged-in main 2252dfd6fd144f279f3944795602b1c7b3fc81c7; origin main tip now c740dede71931ed6e9ac5ba3da1562058e720b45 22:52:40 load { 16.70 47.80 71.99 } thermal 1 free KB 55607536
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 22:52:45 load { 16.16 47.17 71.62 } thermal 0 free KB 55078624
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261; session's copy same 22:52:45 load { 16.16 47.17 71.62 } thermal 0 free KB 55078588
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720; session's copy same 22:52:45 load { 16.16 47.17 71.62 } thermal 0 free KB 55078492
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733; session's copy same 22:52:46 load { 16.16 47.17 71.62 } thermal 0 free KB 55078492
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711; session's copy same 22:52:46 load { 16.16 47.17 71.62 } thermal 0 free KB 55078572
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305; session's copy same 22:52:46 load { 16.16 47.17 71.62 } thermal 0 free KB 55078572
+copy checks before any build: sha256 7e5323b292e9424b3c48802144fce8da1b427a6cfb894e4d56fdbeeaabffdfac diff-lines=4 reopen-early-return=1 row22=1 other-gh-calls=0 22:52:46 load { 16.16 47.17 71.62 } thermal 0 free KB 55078564
+readIssue pre-check (before any build) exit=0, lines 5, 'blocked' count 0 22:52:46 load { 16.16 47.17 71.62 } thermal 0 free KB 55078452
+part 1 at adaa0e19d08810370d6ba5bca9fa3563b41d1d2f 22:52:46 load { 16.16 47.17 71.62 } thermal 0 free KB 55078460
+1-deep-app-lib.txt: cargo exit=0; test result: ok. 110 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s 23:00:40 load { 104.06 118.27 98.08 } thermal 1 free KB 44834872
+2-deep-app-full.txt: cargo exit=101; test result: ok. 110 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.95s 23:02:45 load { 43.69 93.17 91.10 } thermal 1 free KB 42680224
+part 2 failing targets: [acceptance_1141 acceptance_34 hub_client ]; failed tests 6 23:02:45 load { 43.69 93.17 91.10 } thermal 1 free KB 42679840
+2b-main-full.txt: cargo exit=101; test result: ok. 98 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s 23:11:22 load { 27.81 53.57 70.57 } thermal 1 free KB 29855268
+2b at main 2252dfd6fd144f279f3944795602b1c7b3fc81c7: failed tests 6; same list as the head: yes 23:11:22 load { 27.81 53.57 70.57 } thermal 1 free KB 29855260
+setup in dbc-22pa at b51d52cd3: exit=0 23:12:33 load { 18.72 45.92 66.37 } thermal 1 free KB 28760748
+setup in dbc-22pb at adaa0e19d: exit=0 23:13:49 load { 11.76 37.82 61.57 } thermal 1 free KB 27853456
+part 3 start; no load wait (the user's choice at the Mac for this run); front app [Windows App]; pointer at x=439 y=145 (points, origin bottom-left of the main screen 1470x956) 23:13:49 load { 11.22 37.27 61.24 } thermal 1 free KB 27854500
+temp binary folder cleared before round A1 (nothing was running from it) 23:13:50 load { 11.22 37.27 61.24 } thermal 1 free KB 28296596
+round A1 tests/acceptance/1459/identifier.test.ts exit=0; front app [Windows App] 23:25:23 load { 32.92 52.63 62.12 } thermal 1 free KB 21365148
+round A1 tests/acceptance/1459/panel.test.ts exit=0; front app [Windows App] 23:25:51 load { 40.10 52.32 61.67 } thermal 1 free KB 21358992
+round A1 tests/acceptance/1172/rows.test.ts exit=1; front app [Windows App] 23:27:03 load { 25.08 45.67 58.45 } thermal 1 free KB 20827328
+STOPPED: free space dropped under 20 GB 23:27:03 load { 25.08 45.67 58.45 } thermal 1 free KB 20827296
+login-name hits after redaction: 0 23:27:03 load { 25.08 45.67 58.45 } thermal 1 free KB 20827156
+secret scan hits=0 23:27:03 load { 25.08 45.67 58.45 } thermal 1 free KB 20827088

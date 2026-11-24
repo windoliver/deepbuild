@@ -1,0 +1,223 @@
+# #3245 acceptance suite on the base commit a5fc47436 2026-11-23, Node v24.22.2, vitest 5.0.5, macOS (darwin-arm64).
+# All 8 tests fail, each at a named assertion, for the reason the issue is open. Nothing fails at an import, a type or a
+# fixture: each fixture's own checks pass first (AC5's two changes measure 30,000 and 20,000 characters, and
+# config-eval.mjs plan makes AC4's and AC7's plan).
+# - AC1: the base's judge is shown both replies, so all six pairs' outputs differ and the eval reads adopt.
+# - AC2: both of each task's runs' words are in that task's request.
+# - AC3: the run that changed nothing is shown as its reply over "Changes: (none)".
+# - AC4, AC7: the base's plan marks no task as graded on words.
+# - AC5: the 30,000-character run is graded on its first 20,000 characters.
+# - AC6: the base sends no control, so a judge that scores no change at 0.9 decides.
+# - AC8: the base's counts, 6 judge requests and 12 agent runs.
+# The type check, node node_modules/typescript/bin/tsc -p tests/acceptance/3245/tsconfig.json, exits 0 on the base.
+# The run's config is a file of two lines (tests/acceptance/**/*.test.ts, no setup file), not the repo's vitest.config.ts,
+# which loads every package's dist/ and so needs the whole workspace built; the packages the suite loads were built.
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run --config <scratch config> tests/acceptance/3245 --reporter=verbose
+(exit 1)
+
+RUN  v5.0.5 <checkout>
+
+ × tests/acceptance/3245/control.test.ts > AC6 #3245.e9a302e8 a judge that scores no change as done decides nothing > AC6 #3245.e9a302e8 no change scored 0.9 refuses the eval before any agent starts, naming the judge and the score; 0.1, with the right change 0.9, goes on with the control in its report; a planted eval that runs the control after the agents fails, naming the first agent run 4023ms
+   → a judge that scores no change at 0.9 (INCONCLUSIVE: grade's mean gain 0 has a bound of 0 over 2 tasks, so it neither adopts nor regresses): expected 'INCONCLUSIVE' to be 'refused' // Object.is equality
+ × tests/acceptance/3245/judged.test.ts > AC1 #3245.8d415edc a judge that believes a reply has none to believe > AC1 #3245.8d415edc six work tasks with the same change on both sides, the change side's replies ending "Done. All tests pass": each pair's outputs are equal byte for byte and the eval reads INCONCLUSIVE 8950ms
+   → the same change on both sides (the one-sided 95% bound beats the base on every declared measure over 6 tasks: grade's mean gain 0.6 has a bound of 0.6 over 6 tasks): expected { outcome: 'adopt', …(1) } to deeply equal { outcome: 'INCONCLUSIVE', …(1) }
+ × tests/acceptance/3245/kinds.test.ts > AC4 #3245.03f250e0 a task whose original session changed no file is graded on words > AC4 #3245.03f250e0 both plan makers mark the sessions that changed no file; the eval shows their replies and the report lists them as graded on words; a planted plan that marks one a work task shows its judge no change on both sides and fails, naming the task 11237ms
+   → config-eval.mjs plan marks as graded on words the sessions whose own tool calls changed no file: expected [] to deeply equal [ …(5) ]
+ × tests/acceptance/3245/kinds.test.ts > AC7 #3245.3e193e65 a task marked the other way after either side ran is refused > AC7 #3245.3e193e65 once either side ran, a task graded on words marked a work task, or a work task marked as graded on words, is refused, as any change to the plan is 1ms
+   → the frozen plan holds each task's mark: expected [] to deeply equal [ …(5) ]
+ × tests/acceptance/3245/control.test.ts > AC8 #3245.fb376f22 budgets > AC8 #3245.fb376f22 the control adds one judge request to the merge base's 6 and no agent run to its 12; an eval that grades nothing asks its judge nothing, as on the merge base 8173ms
+   → of one eval of six tasks (INCONCLUSIVE: grade's mean gain 0 has a bound of 0 over 6 tasks, so it neither adopts nor regresses): expected { 'judge requests': 6, …(1) } to deeply equal { 'judge requests': 7, …(1) }
+ × tests/acceptance/3245/judged.test.ts > AC2 #3245.89bedf9f no word of an agent's in an output of a work task > AC2 #3245.89bedf9f a marker planted in a run's final reply, and in its commit's message, is in no output of a work task, in any request; a planted eval that shows the reply fails, naming the request 3305ms
+   → where the judge was shown what a run said: expected [ …(4) ] to deeply equal []
+ × tests/acceptance/3245/judged.test.ts > AC3 #3245.f49a2718 a run that changed nothing is shown as no change > AC3 #3245.f49a2718 a run of a work task that changed no file and replied that it was done is shown as no change, without the reply, and is graded as that 2894ms
+   → no change is shown without the reply: expected 'Final reply:\nmarka1e018fa652facd9: D…' not to match /implemented and verified|mark[0-9a-f]…/
+ × tests/acceptance/3245/judged.test.ts > AC5 #3245.ee666719 an output past the cap is never sent cut > AC5 #3245.ee666719 a run whose change is 30,000 characters gets no grade, the report names 30,000 and the cap, and the comparison reads INCONCLUSIVE, naming the task; a change of exactly the cap is sent whole, and a reply past it isn't 7133ms
+   → the 30,000-character run's grade: expected 0.5 to be null
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3245/control.test.ts > AC6 #3245.e9a302e8 a judge that scores no change as done decides nothing > AC6 #3245.e9a302e8 no change scored 0.9 refuses the eval before any agent starts, naming the judge and the score; 0.1, with the right change 0.9, goes on with the control in its report; a planted eval that runs the control after the agents fails, naming the first agent run
+AssertionError: a judge that scores no change at 0.9 (INCONCLUSIVE: grade's mean gain 0 has a bound of 0 over 2 tasks, so it neither adopts nor regresses): expected 'INCONCLUSIVE' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "INCONCLUSIVE"
+
+ ❯ tests/acceptance/3245/control.test.ts:24:115
+     22|     };
+     23|     const refused = await under({ right: 0.95, none: 0.9 });
+     24|     expect(refused.report.after.outcome, `a judge that scores no chang…
+       |                                                                                                                   ^
+     25|     expect(refused.s.trace, 'it was asked for the control, and no agen…
+     26|     for (const named of [JUDGE, score(0.9), score(0.95)]) expect(refus…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  tests/acceptance/3245/control.test.ts > AC8 #3245.fb376f22 budgets > AC8 #3245.fb376f22 the control adds one judge request to the merge base's 6 and no agent run to its 12; an eval that grades nothing asks its judge nothing, as on the merge base
+AssertionError: of one eval of six tasks (INCONCLUSIVE: grade's mean gain 0 has a bound of 0 over 6 tasks, so it neither adopts nor regresses): expected { 'judge requests': 6, …(1) } to deeply equal { 'judge requests': 7, …(1) }
+
+- Expected
++ Received
+
+  {
+    "agent runs": 12,
+-   "judge requests": 7,
++   "judge requests": 6,
+  }
+
+ ❯ tests/acceptance/3245/control.test.ts:64:132
+     62|     const s = stub(tasks, script);
+     63|     const report = await evaluate(w, planOf(tasks), tasks, s);
+     64|     expect({ 'judge requests': s.judged.length, 'agent runs': s.ran.le…
+       |                                                                                                                                    ^
+     65|     const unjudged = stub(tasks, script);
+     66|     const tokens = await evaluate(w, planOf(tasks, { measures: [{ name…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  tests/acceptance/3245/judged.test.ts > AC1 #3245.8d415edc a judge that believes a reply has none to believe > AC1 #3245.8d415edc six work tasks with the same change on both sides, the change side's replies ending "Done. All tests pass": each pair's outputs are equal byte for byte and the eval reads INCONCLUSIVE
+AssertionError: the same change on both sides (the one-sided 95% bound beats the base on every declared measure over 6 tasks: grade's mean gain 0.6 has a bound of 0.6 over 6 tasks): expected { outcome: 'adopt', …(1) } to deeply equal { outcome: 'INCONCLUSIVE', …(1) }
+
+- Expected
++ Received
+
+  {
+-   "outcome": "INCONCLUSIVE",
+-   "pairs whose two outputs differ": [],
++   "outcome": "adopt",
++   "pairs whose two outputs differ": [
++     "t01",
++     "t02",
++     "t03",
++     "t04",
++     "t05",
++     "t06",
++   ],
+  }
+
+ ❯ tests/acceptance/3245/judged.test.ts:21:147
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tests/acceptance/3245/judged.test.ts > AC2 #3245.89bedf9f no word of an agent's in an output of a work task > AC2 #3245.89bedf9f a marker planted in a run's final reply, and in its commit's message, is in no output of a work task, in any request; a planted eval that shows the reply fails, naming the request
+AssertionError: where the judge was shown what a run said: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "judge request 1 (t02) shows what t02's base run said",
++   "judge request 1 (t02) shows what t02's change run said",
++   "judge request 2 (t01) shows what t01's base run said",
++   "judge request 2 (t01) shows what t01's change run said",
++ ]
+
+ ❯ tests/acceptance/3245/judged.test.ts:39:80
+     37|     const s = stub(tasks, script);
+     38|     await evaluate(w, planOf(tasks), tasks, s);
+     39|     expect(repliesShown(s, work), 'where the judge was shown what a ru…
+       |                                                                                ^
+     40|     expect(work.map((t) => outputsFor(s, t).filter(showsChange).length…
+     41|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  tests/acceptance/3245/judged.test.ts > AC3 #3245.f49a2718 a run that changed nothing is shown as no change > AC3 #3245.f49a2718 a run of a work task that changed no file and replied that it was done is shown as no change, without the reply, and is graded as that
+AssertionError: no change is shown without the reply: expected 'Final reply:\nmarka1e018fa652facd9: D…' not to match /implemented and verified|mark[0-9a-f]…/
+
+- Expected:
+/implemented and verified|mark[0-9a-f]{16}/
+
++ Received:
+"Final reply:
+marka1e018fa652facd9: Done: I implemented and verified the fix.
+
+Changes:
+(none)"
+
+ ❯ tests/acceptance/3245/judged.test.ts:57:98
+     55|     expect(shown.filter(showsChange).length, `t01's outputs: one chang…
+     56|     expect(shown.length, "both of t01's runs are shown").toBe(2);
+     57|     expect(shown.find((text) => !showsChange(text)), 'no change is sho…
+       |                                                                                                  ^
+     58|     expect([gradeOf(report, 't01', 'base'), gradeOf(report, 't01', 'ch…
+     59|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  tests/acceptance/3245/judged.test.ts > AC5 #3245.ee666719 an output past the cap is never sent cut > AC5 #3245.ee666719 a run whose change is 30,000 characters gets no grade, the report names 30,000 and the cap, and the comparison reads INCONCLUSIVE, naming the task; a change of exactly the cap is sent whole, and a reply past it isn't
+AssertionError: the 30,000-character run's grade: expected 0.5 to be null
+
+- Expected:
+null
+
++ Received:
+0.5
+
+ ❯ tests/acceptance/3245/judged.test.ts:74:82
+     72|     const [big, whole, long] = ([['t03', 'change'], ['t04', 'change'],…
+     73|     expect([big!.diff.length, whole!.diff.length], "the fixture's two …
+     74|     expect(gradeOf(report, 't03', 'change'), "the 30,000-character run…
+       |                                                                                  ^
+     75|     expect(report.runs.find((r) => r.task === 't03' && r.side === 'cha…
+     76|     expect(outputsFor(s, 't03').filter((text) => /x{50}/.test(text)).l…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  tests/acceptance/3245/kinds.test.ts > AC4 #3245.03f250e0 a task whose original session changed no file is graded on words > AC4 #3245.03f250e0 both plan makers mark the sessions that changed no file; the eval shows their replies and the report lists them as graded on words; a planted plan that marks one a work task shows its judge no change on both sides and fails, naming the task
+AssertionError: config-eval.mjs plan marks as graded on words the sessions whose own tool calls changed no file: expected [] to deeply equal [ …(5) ]
+
+- Expected
++ Received
+
+- [
+-   "failed session:01M47SAE40KWB2MC2EW1QP1G8T#m19",
+-   "none session:01M47BJZM00VMEKE3896X7K0BJ#m15",
+-   "none session:01M4871WM0HPT54Z41S8K0Y11E#m23",
+-   "read session:01M47JEPW0T2AB67C9Y34ZWE84#m17",
+-   "tests session:01M48065C0PKKJ6CF2376B518S#m21",
+- ]
++ []
+
+ ❯ tests/acceptance/3245/kinds.test.ts:42:148
+     40|     const { w, sessions, plan } = m;
+     41|     expect(sorted([...plan.tasks, ...plan.fitted]), 'the plan names th…
+     42|     expect(kindsOf(sessions, plan.words ?? []), "config-eval.mjs plan …
+       |                                                                                                                                                    ^
+     43|
+     44|     // A removal's plan, over all 24: the newest 20 decide, and the 4 …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  tests/acceptance/3245/kinds.test.ts > AC7 #3245.3e193e65 a task marked the other way after either side ran is refused > AC7 #3245.3e193e65 once either side ran, a task graded on words marked a work task, or a work task marked as graded on words, is refused, as any change to the plan is
+AssertionError: the frozen plan holds each task's mark: expected [] to deeply equal [ …(5) ]
+
+- Expected
++ Received
+
+- [
+-   "failed session:01M47SAE40KWB2MC2EW1QP1G8T#m19",
+-   "none session:01M47BJZM00VMEKE3896X7K0BJ#m15",
+-   "none session:01M4871WM0HPT54Z41S8K0Y11E#m23",
+-   "read session:01M47JEPW0T2AB67C9Y34ZWE84#m17",
+-   "tests session:01M48065C0PKKJ6CF2376B518S#m21",
+- ]
++ []
+
+ ❯ tests/acceptance/3245/kinds.test.ts:78:82
+     76|     const m = await planned();
+     77|     const words = m.plan.words ?? [];
+     78|     expect(kindsOf(m.sessions, words), "the frozen plan holds each tas…
+       |                                                                                  ^
+     79|     const { report } = await evaluated();
+     80|     expect(report.hash, 'the report carries the hash of the plan as it…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  8 failed (8)
+   Start at  18:14:57
+   Duration  27.36s (tests 83%, transform 11%, import 6%)

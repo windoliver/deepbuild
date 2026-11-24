@@ -1,0 +1,1 @@
+{ "alone": true, "why": "each file builds deep-show or deep-gpu with cargo, and ac4-seek and ac6-taste draw on the GPU, as #2014's and #2017's suites do" }
