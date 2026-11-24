@@ -493,7 +493,8 @@ pub(super) fn region_map(
                     "reading".to_string(),
                     read.clone(),
                 ),
-                _ => (4, "i32".to_string(), Read::World),
+                Read::Centre => (24, "vec3".to_string(), Read::Centre),
+                other => (4, "i32".to_string(), other.clone()),
             }
         } else if let Some((other, "hover")) =
             r.split_once('.').filter(|(c, _)| controls.contains_key(*c))
@@ -793,6 +794,12 @@ pub(super) fn sources_of(piece: &Value) -> Result<Sources, Refused> {
         .filter_map(Value::as_str)
     {
         sources.insert(name.to_string(), Read::World);
+    }
+    for (field, read) in [("count_reads", Read::Count), ("centre_reads", Read::Centre)] {
+        let names = piece.get(field).and_then(Value::as_array);
+        for name in names.into_iter().flatten().filter_map(Value::as_str) {
+            sources.insert(name.to_string(), read.clone());
+        }
     }
     for (name, src) in piece
         .get("sources")

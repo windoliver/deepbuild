@@ -755,18 +755,16 @@ impl Replica {
                     shell.set_commands(palette, window, cx);
                     shell.set_box(words, cx);
                     // GPUI asks the window where the pointer is when it activates or moves, and the headless one
-                    // answers its top-left corner: the pointer goes back where the replica has it.
+                    // answers its top-left corner: the pointer goes back where the replica has it, once the shell's
+                    // update this runs in is over, as the shell listens for its moves (#1808, #1546).
                     let pointer = kept_pointer.clone();
                     cx.observe_window_bounds(window, move |_, window, cx| {
                         let at = pointer.get();
                         if window.mouse_position() != at {
                             let event = MouseMoveEvent {
                                 position: at,
-                                pressed_button: None,
-                                modifiers: Modifiers::default(),
+                                ..Default::default()
                             };
-                            // Once this observer returns: it runs inside the shell's own update, and the shell
-                            // listens for the pointer's moves (#1808), which update it again (#1546).
                             window.defer(cx, move |window, cx| {
                                 window.dispatch_event(event.to_platform_input(), cx);
                             });
@@ -880,7 +878,7 @@ impl Replica {
             "feed" => self.feed(call),
             "open" => self.open(call),
             "notification" => self.notification(call),
-            "resize" => self.resize(call),
+            "resize" | "window" => self.window_changes(name, call),
             "wait_for" => self.wait_for(call),
             "see" => self.see(call),
             "probe" => self.probe(call),
@@ -897,7 +895,7 @@ impl Replica {
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, menus, show, terminal, clipboard, stored, close, ui_check and motion_check"),
+                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, window, menus, show, terminal, clipboard, stored, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();

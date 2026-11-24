@@ -1,0 +1,5 @@
+test record::tests::an_exception_of_the_cores_never_folds_by_count ... FAILED
+assertion `left == right` failed
+  left: "folded"
+ right: "queued"
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 122 filtered out; finished in 0.01s

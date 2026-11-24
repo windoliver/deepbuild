@@ -1,0 +1,11 @@
+{
+  "note": "Claude Code 2.1.326's /usage through -p after the weekly reset (Nov 24 07:59 UTC), at $0 (no model call: 0 tokens, total_cost_usd 0). The 2.1.308 binary used for usage.json was gone, so the claude on PATH ran. Only the window lines are kept; the rest of its answer (per-machine usage tips) is left out. The same entry's structured usage_report.rate_limits listed two limits, both group 'weekly' (weekly_all, weekly_scoped for Fable), and no session limit.",
+  "ran_at": "2026-11-24T08:14Z",
+  "command": "claude -p /usage --output-format stream-json --verbose --setting-sources user --max-turns 1",
+  "result_entry": { "subtype": "success", "num_turns": 0, "total_cost_usd": 0 },
+  "window_lines": [
+    "Current week (all models): 0% used · resets Dec 1 at 12am (America/Los_Angeles)",
+    "Current week (Fable): 0% used · resets Dec 1 at 12am (America/Los_Angeles)"
+  ],
+  "five_hour_line": null
+}

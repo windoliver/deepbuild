@@ -1,0 +1,6 @@
+HEAD detached at FETCH_HEAD
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	scripts/spine-22-mac-dc12364f.mjs
+
+nothing added to commit but untracked files present (use "git add" to track)
