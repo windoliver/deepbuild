@@ -1,0 +1,129 @@
+#1890's acceptance tests, one run on the base 81a5a9b2f, 2026-11-12, Node 24, macOS, 18 cores, load average 50.2
+as the run began. deep-hook was built under target/ first: without it the hub stops at once, for a reason the issue
+doesn't name.
+
+Command: npx vitest run tests/acceptance/1890 --testTimeout=600000
+
+Result: 2 tests, 2 failed, each at an assertion in tests/acceptance/1890/runs.test.ts:
+  AC1 #1890.e77cd011, line 19, at run 1 of 3: the base's background test times out waiting for the asks job to read
+      failing, the failure the issue quotes. The test stops there, so the copy and the planted hub are not reached.
+  AC2 #1890.75952fb4, line 48: the same test fails, and scripts/known-failures.json doesn't list it.
+
+<checkout> stands for the worktree's path. Output as vitest printed it:
+
+
+ RUN  v5.0.5 <checkout>
+
+stdout | tests/acceptance/1890/runs.test.ts > #1890 the background-job test > #1890.e77cd011 AC1 packages/hub/test/background.test.ts passes in three runs in a row on a loaded machine, and fails on a planted hub that drops a job's failure
+run 1 of 3 in the checkout: failed, exit 1 in 21.6 s at load 52.1 → 59.7 (18 cores)
+  FAIL: packages/hub/test/background.test.ts › a background job that fails is named in hub.health with its error, and cleared once it runs clean again: timed out after 15000 ms waiting for the asks job to read failing while its default cannot be appended
+
+stdout | tests/acceptance/1890/runs.test.ts > #1890 the background-job test > #1890.75952fb4 AC2 until packages/hub/test/background.test.ts passes, scripts/known-failures.json lists it with #1890, so affected.mjs sets it apart
+packages/hub/test/background.test.ts in the checkout: failed, exit 1 in 21.6 s at load 59.7 → 67.1 (18 cores)
+  FAIL: packages/hub/test/background.test.ts › a background job that fails is named in hub.health with its error, and cleared once it runs clean again: timed out after 15000 ms waiting for the asks job to read failing while its default cannot be appended
+
+ ❯ tests/acceptance/1890/runs.test.ts (2 tests | 2 failed) 43251ms
+   ❯ #1890 the background-job test (2)
+     × #1890.e77cd011 AC1 packages/hub/test/background.test.ts passes in three runs in a row on a loaded machine, and fails on a planted hub that drops a job's failure 21591ms
+     × #1890.75952fb4 AC2 until packages/hub/test/background.test.ts passes, scripts/known-failures.json lists it with #1890, so affected.mjs sets it apart 21556ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1890/runs.test.ts > #1890 the background-job test > #1890.e77cd011 AC1 packages/hub/test/background.test.ts passes in three runs in a row on a loaded machine, and fails on a planted hub that drops a job's failure
+AssertionError: run 1 of 3 in a row of packages/hub/test/background.test.ts on a loaded machine: every test in it ran and passed
+failed, exit 1 in 21.6 s at load 52.1 → 59.7 (18 cores)
+  FAIL: packages/hub/test/background.test.ts › a background job that fails is named in hub.health with its error, and cleared once it runs clean again: timed out after 15000 ms waiting for the asks job to read failing while its default cannot be appended
+
+deep hub: SQLITE_IOERR: the test VFS refuses writes
+ ❯ packages/hub/test/background.test.ts (1 test | 1 failed) 18515ms
+   × a background job that fails is named in hub.health with its error, and cleared once it runs clean again 18422ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/background.test.ts > a background job that fails is named in hub.health with its error, and cleared once it runs clean again
+Error: timed out after 15000 ms waiting for the asks job to read failing while its default cannot be appended
+ ❯ waitFor packages/hub/test/background.test.ts:54:33
+     52|     const v = await probe();
+     53|     if (v !== undefined) return v;
+     54|     if (Date.now() > end) throw Error(`timed out after ${ms} ms waitin…
+       |                                 ^
+     55|     await new Promise((r) => setTimeout(r, 100));
+     56|   }
+ ❯ packages/hub/test/background.test.ts:88:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  21:51:56
+   Duration  19.36s (tests 97%, transform 3%, import 1%): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1890/runs.test.ts:19:133
+     17|         const run = await runFile(ROOT);
+     18|         console.log(`run ${n} of 3 in the checkout: ${summary(run)}`);
+     19|         expect(passes(run), `run ${n} of 3 in a row of ${FILE} on a lo…
+       |                                                                                                                                     ^
+     20|       }
+     21|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1890/runs.test.ts > #1890 the background-job test > #1890.75952fb4 AC2 until packages/hub/test/background.test.ts passes, scripts/known-failures.json lists it with #1890, so affected.mjs sets it apart
+AssertionError: packages/hub/test/background.test.ts › a background job that fails is named in hub.health with its error, and cleared once it runs clean again fails on this checkout, so known-failures.json lists it, its note ending "(#1890, added <YYYY-MM-DD>)"
+failed, exit 1 in 21.6 s at load 59.7 → 67.1 (18 cores)
+  FAIL: packages/hub/test/background.test.ts › a background job that fails is named in hub.health with its error, and cleared once it runs clean again: timed out after 15000 ms waiting for the asks job to read failing while its default cannot be appended
+
+deep hub: SQLITE_IOERR: the test VFS refuses writes
+ ❯ packages/hub/test/background.test.ts (1 test | 1 failed) 18116ms
+   × a background job that fails is named in hub.health with its error, and cleared once it runs clean again 18035ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/background.test.ts > a background job that fails is named in hub.health with its error, and cleared once it runs clean again
+Error: timed out after 15000 ms waiting for the asks job to read failing while its default cannot be appended
+ ❯ waitFor packages/hub/test/background.test.ts:54:33
+     52|     const v = await probe();
+     53|     if (v !== undefined) return v;
+     54|     if (Date.now() > end) throw Error(`timed out after ${ms} ms waitin…
+       |                                 ^
+     55|     await new Promise((r) => setTimeout(r, 100));
+     56|   }
+ ❯ packages/hub/test/background.test.ts:88:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  21:52:18
+   Duration  19.40s (tests 96%, transform 3%, import 1%): expected '(not listed)' to match /\(#1890, added \d{4}-\d{2}-\d{2}\)$/
+
+- Expected:
+/\(#1890, added \d{4}-\d{2}-\d{2}\)$/
+
++ Received:
+"(not listed)"
+
+ ❯ tests/acceptance/1890/runs.test.ts:48:12
+     46|       for (const failure of failed) {
+     47|         expect(baseline.failures[failure.id] ?? '(not listed)', `${fai…
+     48|           .toMatch(/\(#1890, added \d{4}-\d{2}-\d{2}\)$/);
+       |            ^
+     49|         expect(classify([failure], [], baseline).known.map((k) => k.id…
+     50|       }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  21:51:52
+   Duration  45.39s (tests 96%, import 2%, transform 1%)
+
