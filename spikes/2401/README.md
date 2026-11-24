@@ -122,6 +122,11 @@ from the `anthropic-ratelimit-unified-*` response headers and says "Windows abse
 here". The probes' events held `seven_day` only, so the server sent no 5-hour header. The 5-hour window is missing from
 the account's state, not hidden by the warning band.
 
+The weekly reset didn't bring one. [`usage-after-reset.json`](usage-after-reset.json) holds the same `/usage` on Nov 24
+2026 at 08:14 UTC, after the reset, through Claude Code 2.1.326 (the 2.1.308 binary was gone), again with 0 turns and
+$0. It lists the same two weekly windows, now at 0% and resetting Dec 1 at 12 am Pacific, and no current-session line.
+The entry's structured `rate_limits` holds only those two weekly limits too.
+
 So the rule can't be applied on this account:
 
 - AC1 leaves out a run missing a 5-hour reading. Every run here misses one, so every run would be left out and the
