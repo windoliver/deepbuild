@@ -331,7 +331,8 @@ pub(crate) struct RowDrawn {
     /// The title reads right to left from its first strong character, so from the slot's right (#1808).
     rtl: bool,
     /// The time is drawn: beside a long state word at the list's narrowest a session row's leaves what's drawn
-    /// (#1808); an ask row's stays (#3282).
+    /// (#1808); an ask row's stays (#3282). The list sets it too, for #3282's planted row, since only it knows a row's
+    /// place.
     pub(crate) timed: bool,
     /// #1808's planted row draws its title whole, over the slots to its right.
     under: bool,
@@ -451,13 +452,15 @@ impl RowDrawn {
         // width, so the title keeps at least 12 characters. An ask row's time is when its recommended answer applies, so
         // it stays and the title takes what's left (#3282).
         let wide = |text: &str, weight| drawn_width(window, text, weight);
-        // The slots beside the title lay out at whole points, so each is taken at its text's width rounded up: an ask's
-        // title cut to a few characters would otherwise be fitted to room its slot doesn't have, and lose its ellipsis.
+        // A slot beside the title is laid out at least its text's width rounded up to a whole point, so each is taken
+        // so: an ask's title cut to a few characters would otherwise be fitted to room its slot doesn't have, and lose
+        // its ellipsis.
         let slot_wide = |text: &str| wide(text, FontWeight::NORMAL).ceil();
         let roomy = shape.width.map(|width| {
-            let flag = row.flag.as_ref().map_or(px(0.), |flag| {
-                s.space(1) + slot_wide(&flag.code)
-            });
+            let flag = row
+                .flag
+                .as_ref()
+                .map_or(px(0.), |flag| s.space(1) + slot_wide(&flag.code));
             let fixed = s.space(1) * 4. + s.space(3) + slot_wide(&drawn_word) + flag;
             let time = (s.space(1) + slot_wide(&time)).max(s.space(5));
             let mut least: String = title.chars().take(TITLE_LEAST).collect();
@@ -479,7 +482,9 @@ impl RowDrawn {
             Some(eight)
         } else {
             roomy.map(|(_, room)| match &twin {
-                Some((name, short)) => fitted(window, name, room - wide(short, weight), weight),
+                Some((name, short)) => {
+                    fitted(window, name, room - wide(short, weight).ceil(), weight)
+                }
                 None => fitted(window, &title, room, weight),
             })
         };
