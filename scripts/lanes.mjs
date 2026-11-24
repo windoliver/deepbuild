@@ -734,8 +734,11 @@ function libtestTargets(args, cwd) {
 /** A cargo test command that runs its packages whole: it picks no target of its own and filters no test. */
 const wholeRun = (args) => !args.some((arg) => arg === '--' || /^--(?:lib|bins?|tests?|doc|examples?|bench(?:es)?|all-targets)$/.test(arg));
 
-/** What a whole cargo test command lists with `-- --list`, by cargoList, under the throttle; null when the listing fails. */
-function cargoListed(args, cwd, env) {
+/**
+ * What a whole cargo test command lists with `-- --list`, by cargoList, under the throttle, asked with `grantWait`;
+ * null when the listing fails.
+ */
+function cargoListed(args, cwd, env, grantWait) {
   const targets = libtestTargets(args, cwd);
   if (!targets) return null;
   const directory = mkdtempSync(join(tmpdir(), 'deep-cargo-list-')), log = join(directory, 'output');
@@ -743,7 +746,7 @@ function cargoListed(args, cwd, env) {
     const descriptor = openSync(log, 'w', 0o600);
     let result;
     try {
-      result = spawnSync(process.execPath, [throttle, 'build', '--wait', '30', '--', leaseScript, 'cargo', ...args, ...targets, '--', '--list'], { cwd, env, stdio: ['ignore', descriptor, descriptor] });
+      result = spawnSync(process.execPath, [throttle, 'build', ...grantWait, '--', leaseScript, 'cargo', ...args, ...targets, '--', '--list'], { cwd, env, stdio: ['ignore', descriptor, descriptor] });
     } finally {
       closeSync(descriptor);
     }
@@ -936,8 +939,11 @@ export function unrunOf(key, cwd = root) {
   return { unrun, of: files.flat().length };
 }
 
-export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: treeOf } = {}) {
+export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: treeOf, stall } = {}) {
   const failures = [];
+  // A remote lane's far end passes its stall bound: each grant then waits while its class's grants change hands (#3350).
+  // Every other run waits 30 minutes, as section 6's table says.
+  const grantWait = stall === undefined ? ['--wait', '30'] : ['--stall', String(stall)];
   // Loaded only for the preflight, as a copy of this script stands alone without it.
   const { openKept, wholeJob } = key ? require('./proof-kept.mjs') : {};
   // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
@@ -1025,7 +1031,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
             // of the calling session's through scripts/lease (#1015).
             // The fill holds no grant over the alone block's own run, whose admission and turns are its jobs' (#3297).
             const began = performance.now(), leased = [leaseScript, ...reported?.command ?? [command, ...args]];
-            result = spawnSync(...fill && shards ? [leased[0], leased.slice(1)] : [process.execPath, [throttle, cls, '--wait', '30', '--', ...leased]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
+            result = spawnSync(...fill && shards ? [leased[0], leased.slice(1)] : [process.execPath, [throttle, cls, ...grantWait, '--', ...leased]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
             output = readFileSync(log, 'utf8').trim();
             results = testsOf([command, ...args], cwd, { report, output, status: result.status });
             if (kept && shards) try { keptRead += JSON.parse(readFileSync(report, 'utf8')).kept?.read ?? 0; } catch {}
@@ -1073,7 +1079,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
         // A run the throttle refused ran nothing to list, and listing it would ask the throttle again (#3333).
         if (command === 'cargo' && args[0] === 'test' && !results?.noGrant) {
           cargoRan = true;
-          const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment) : undefined;
+          const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment, grantWait) : undefined;
           if (listing) {
             listedCargo ??= {};
             for (const [target, names] of Object.entries(listing)) listedCargo[target] = [...new Set([...listedCargo[target] ?? [], ...names])];
