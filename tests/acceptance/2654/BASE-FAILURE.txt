@@ -1,0 +1,69 @@
+# #2654 acceptance suite at base 58b4a8cb2 (origin/main), macOS 27.2.1 arm64, Node 24.22.0; clone shown as <checkout>, home as <home>
+# blind redraft after the issue's Nov 22 amendment: criterion 1 (now #2654.4f03ec28) and criterion 2's memory-bound test run against the 96 MB bound
+# run: node node_modules/vitest/vitest.mjs run tests/acceptance/2654 --no-file-parallelism (after npm ci, npm run build --workspaces)
+# expected: criteria 1, 2 and 4 fail at their assertions (peak memory far past 96 MB on a long line, the cap+1 request answered, no failure reported for a held reply within 45 s); criterion 3's two tests and the budgets test pass at the base (they need planted wrong programs, see README)
+LOAD:  0:54  up 2 days,  5:20, 4 users, load averages: 34.18 64.56 64.04
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2654/ac4-hub-reply.test.ts (1 test | 1 failed) 50280ms
+   × #2654.7c3a0ee7 with the hub's reply held open with no newline, deep mcp gives up at the 16 MiB cap and tells its client the call failed 50128ms
+ ❯ tests/acceptance/2654/ac2-exact-cap.test.ts (2 tests | 2 failed) 1065ms
+   × #2654.2d94a9c4 a request of exactly the 16 MiB cap is answered, and one byte more is refused with an error naming the cap 239ms
+   × #2654.2d94a9c4 the bytes dropped past the cap aren't kept: a 256 MiB line leaves deep mcp under 96 MB resident, refused naming the cap, the next line served 778ms
+ ❯ tests/acceptance/2654/ac1-gigabyte.test.ts (1 test | 1 failed) 655ms
+   × #2654.4f03ec28 fed 1 GB with no newline, deep mcp stays under 96 MB resident, writes one error naming the 16 MiB cap, and answers the tools/list on the line after 603ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2654/ac1-gigabyte.test.ts > #2654.4f03ec28 fed 1 GB with no newline, deep mcp stays under 96 MB resident, writes one error naming the 16 MiB cap, and answers the tools/list on the line after
+AssertionError: deep mcp's peak resident memory, fed 536.9 MB with no newline in 0.6 s, was 752.0 MB, past 96.0 MB after 0.1 s; deep mcp (pid 2096) wrote [], exit 1, stderr "node:internal/readline/interface:652\n        this[kLine_buffer] += string;\n                              ^\n\nRangeError: Invalid string length\n    at [_normalWrite] [as _normalWrite] (node:internal/readline/interface:652:31)\n    at Socket.ondata (node:internal/readline/interface:268:23)\n    at Socket.emit (node:events:514:28)\n    at addChunk (node:internal/streams/readable:569:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:520:3)\n    at Readable.push (node:internal/streams/readable:400:5)\n    at Pipe.onStreamRead (node:internal/stream_base_commons:194:23)\n\nNode.js v24.22.0\n": expected 752025600 to be less than 96000000
+ ❯ tests/acceptance/2654/ac1-gigabyte.test.ts:32:251
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/2654/ac2-exact-cap.test.ts > #2654.2d94a9c4 a request of exactly the 16 MiB cap is answered, and one byte more is refused with an error naming the cap
+AssertionError: the 16777217-byte request (id 2) is refused, not answered: deep mcp (pid 2028) wrote ["{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}","{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}","{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}"], exit 0, stderr "": expected {} to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{}
+
+ ❯ tests/acceptance/2654/ac2-exact-cap.test.ts:24:103
+     22|   expect(exact?.result, `the ${CAP}-byte request (id 1) is answered: $…
+     23|   const over = mcp.lines.find((l) => l.id === 2);
+     24|   expect(over?.result, `the ${CAP + 1}-byte request (id 2) is refused,…
+       |                                                                                                       ^
+     25|   const errors = mcp.lines.filter(isError);
+     26|   expect(errors.length, `one error, for the ${CAP + 1}-byte request: $…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/2654/ac2-exact-cap.test.ts > #2654.2d94a9c4 the bytes dropped past the cap aren't kept: a 256 MiB line leaves deep mcp under 96 MB resident, refused naming the cap, the next line served
+AssertionError: deep mcp's peak resident memory, fed one 268.4 MB line, was 783.5 MB; deep mcp (pid 2032) wrote ["{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32700,\"message\":\"Parse error: send one JSON-RPC message per line.\"}}","{\"jsonrpc\":\"2.0\",\"id\":9,\"result\":{}}"], exit 0, stderr "": expected 783548416 to be less than 96000000
+ ❯ tests/acceptance/2654/ac2-exact-cap.test.ts:44:118
+     42|
+     43|   expect(mcp.samples, `setup: deep mcp's resident memory was sampled (…
+     44|   expect(mcp.peak, `deep mcp's peak resident memory, fed one ${mb(sent…
+       |                                                                                                                      ^
+     45|   expect(errors.length, `one error for the overlong line: ${mcp.shown(…
+     46|   expect(String(errors[0]?.error?.message ?? ''), `the error names the…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/2654/ac4-hub-reply.test.ts > #2654.7c3a0ee7 with the hub's reply held open with no newline, deep mcp gives up at the 16 MiB cap and tells its client the call failed
+AssertionError: deep mcp tells its client within 45 s that the call failed; the stand-in had sent 33.6 MB of a reply with no newline, all of it 15.3 s after the call; deep mcp (pid 686) wrote ["{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{},\"resources\":{}},\"serverInfo\":{\"name\":\"deep\",\"version\":\"0.0.0\"},\"instructions\":\"DeepBuild records this session's work; only check results decide when it is done, never your word. Begin each task with deep_status, which is loaded already: its reply says where your session stands and what to call next. Every other deep_* tool loads when you search for it, so name in one search each tool your task needs. By block: Event: deep_search. Claim: deep_claim. Check: deep_propose, deep_run. Ask: deep_ask, deep_wait, deep_root_plan. Evidence and open item: deep_open_item, deep_evidence. Environment and lease: deep_env. Screen and panel: deep_show, deep_drive. Job: deep_job. Canvas: deep_kinds, deep_query.\"}}"], exit undefined, stderr "": expected undefined to be defined
+ ❯ tests/acceptance/2654/ac4-hub-reply.test.ts:30:284
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed | 2 passed (5)
+      Tests  4 failed | 3 passed (7)
+   Start at  00:54:24
+   Duration  55.07s (tests 100%)
+
+vitest exit 1

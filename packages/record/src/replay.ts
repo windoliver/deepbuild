@@ -16,6 +16,8 @@ export interface ReplayPlan {
   tasks: string[];
   /** Tasks from before the cutoff, replayed as a reading that never decides. */
   fitted: string[];
+  /** The tasks graded on words, their original session having changed no file; every other is a work task (#3245). */
+  words?: string[];
   variants: { base: Variant; change: Variant };
   models: { agent: string; judge: string };
   repeats: number;

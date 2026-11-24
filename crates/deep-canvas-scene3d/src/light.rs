@@ -1008,6 +1008,11 @@ pub fn shadowed(lights: &[Light], policy: &Policy, budget: &Shadowing, scores: &
         if !l.shadow {
             continue;
         }
+        // Shadow tiles hold every shaded light's shadow (#2034).
+        if budget.tiles && l.kind != LightKind::Sun {
+            out.kept.push((i, 1.0));
+            continue;
+        }
         let (list, cap, group): (&mut Vec<usize>, usize, usize) = match l.kind {
             LightKind::Sun => {
                 if std::mem::replace(&mut sun, true) {

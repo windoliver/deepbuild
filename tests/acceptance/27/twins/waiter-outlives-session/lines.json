@@ -1,0 +1,32 @@
+{
+  "packages/hub/src/plant.ts": [
+    {
+      "find": [
+        "export function plantOf(value: string | undefined): Plant | undefined {",
+        "  if (!value) return undefined;"
+      ],
+      "wrong": [
+        "export function plantOf(value: string | undefined): Plant | undefined {",
+        "  value = 'waiter-outlives-session';"
+      ]
+    },
+    {
+      "find": [
+        "export const activePlant = (): string | undefined => process.env.DEEP_HUB_PLANT || undefined;"
+      ],
+      "wrong": [
+        "export const activePlant = (): string | undefined => 'waiter-outlives-session';"
+      ]
+    }
+  ],
+  "packages/hub/src/setup.ts": [
+    {
+      "find": [
+        "    const waiter = plant() === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : claudeCommand(hook, 'waiter');"
+      ],
+      "wrong": [
+        "    const waiter = plant() === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : `DEEP_HUB_PLANT=waiter-outlives-session ${claudeCommand(hook, 'waiter')}`;"
+      ]
+    }
+  ]
+}
