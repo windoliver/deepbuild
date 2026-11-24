@@ -755,19 +755,17 @@ impl Replica {
                     shell.set_commands(palette, window, cx);
                     shell.set_box(words, cx);
                     // GPUI asks the window where the pointer is when it activates or moves, and the headless one
-                    // answers its top-left corner: the pointer goes back where the replica has it, once the shell's
-                    // update this runs in is over, as the shell listens for its moves (#1808, #1546).
+                    // answers its top-left corner: the replica's pointer goes back once the shell's update ends (#1546).
                     let pointer = kept_pointer.clone();
                     cx.observe_window_bounds(window, move |_, window, cx| {
                         let at = pointer.get();
                         if window.mouse_position() != at {
-                            let event = MouseMoveEvent {
+                            let input = MouseMoveEvent {
                                 position: at,
                                 ..Default::default()
-                            };
-                            window.defer(cx, move |window, cx| {
-                                window.dispatch_event(event.to_platform_input(), cx);
-                            });
+                            }
+                            .to_platform_input();
+                            window.defer(cx, move |w, cx| _ = w.dispatch_event(input, cx));
                         }
                     })
                     .detach();
