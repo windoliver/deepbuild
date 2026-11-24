@@ -74,8 +74,8 @@ use deep_canvas::gauge::Kept;
 pub use crate::diag::{draw_offscreen_diag, white, Diag, DiagCounts};
 use crate::mesh::{Mesh, MESHES};
 pub use crate::module::{
-    draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
-    LIGHT, PYRAMID_NS_PER_PX,
+    draw_offscreen, draw_offscreen_texture, timed, AfterFrame, Counts, HdrFrame, Module3,
+    PostFrame, Profiler, Shared, LIGHT, PYRAMID_NS_PER_PX,
 };
 pub use crate::mesh::tangents_derived;
 pub use crate::planted::Planted;

@@ -71,6 +71,11 @@ impl GpuLease {
                     let holder: Option<i32> = std::fs::read_to_string(&file)
                         .ok()
                         .and_then(|s| s.trim().parse().ok());
+                    // #231: the kit's laws export inside the kit's own lease: this process
+                    // holds it already.
+                    if holder == i32::try_from(std::process::id()).ok() {
+                        return GpuLease(None);
+                    }
                     let alive = holder.is_some_and(|pid| {
                         std::process::Command::new("kill")
                             .args(["-0", &pid.to_string()])

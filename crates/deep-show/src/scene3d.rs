@@ -308,10 +308,17 @@ impl Gpu3 {
         // keeps for `targets`, `picks` and `light` are the frame's own, not its labels'.
         let plain = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
         let mut bytes = over.unwrap_or(plain);
-        for p in bytes.as_chunks_mut::<4>().0 {
-            p.swap(0, 2);
-        }
+        deep_gpu::surface::swap_red_blue(&mut bytes);
         Some(bytes)
+    }
+
+    /// #231: [`Gpu3::draw`]'s frame as the BGRA8 texture it is drawn into, which nothing reads
+    /// back; `None` for a scene with readouts, whose labels are a second draw.
+    pub fn draw_texture(&mut self, scene: &Scene, look: &Look3) -> Option<wgpu::Texture> {
+        let (device, renderer) = (&self.device, &mut self.renderer);
+        (scene.readouts.is_empty()).then(|| {
+            deep_scene3d_render::draw_offscreen_texture(device, renderer, scene, look, None)
+        })
     }
 
     /// #427: `doc` at `t` on a frame of `size`, its `mesh.asset@1` items read from `assets`: the

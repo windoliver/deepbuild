@@ -607,14 +607,20 @@ fn streamed<R: BufRead, W: Write>(
         &json!({"ready": {"format": format, "bytes": bytes, "open_seconds": open}}),
         None,
     );
-    let mut buf = Vec::new();
+    // #231: the frame last taken, which a repeat (a frame with no bytes) is taken as again; each
+    // answer says how long the frame took here.
+    let (mut buf, mut last) = (Vec::new(), Vec::new());
     for k in first..first + n {
         let head = pipe.next(&mut buf).ok_or(None)?;
+        let taken = std::time::Instant::now();
         if head["frame"].as_u64() != Some(k) {
             return Err(Some(error(format!(
                 "frame {k} is next, not {}",
                 head["frame"]
             ))));
+        }
+        if head["repeat"].as_bool() == Some(true) {
+            std::mem::swap(&mut buf, &mut last);
         }
         if buf.len() != bytes {
             return Err(Some(error(format!(
@@ -629,7 +635,9 @@ fn streamed<R: BufRead, W: Write>(
             Sink::Pngs(p) => p.push(k, &buf),
         }
         .map_err(Some)?;
-        pipe.reply(&json!({"frame": k}), None);
+        std::mem::swap(&mut buf, &mut last);
+        let seconds = taken.elapsed().as_secs_f64();
+        pipe.reply(&json!({"frame": k, "seconds": seconds}), None);
     }
     if pipe.next(&mut buf).ok_or(None)?["end"] != true {
         return Err(Some(error(format!("{n} frames, then the end"))));
