@@ -1490,3 +1490,29 @@ alone.push('tests/acceptance/3234-redraft-ac6/');
 // no program passes both; their blind redrafts, 112-redraft-3245/, 2077-redraft-3245/ and 2495-redraft-3245/, run in
 // their place.
 byHand.push('tests/acceptance/112/eval.test.ts', 'tests/acceptance/112/ci.test.ts', 'tests/acceptance/2077/removal.test.ts', 'tests/acceptance/2495/report.test.ts');
+
+// #3300: #854's and #896's made-up readings gave their runs no loads (and #854's idle runs no window), so since #1830
+// each test judging one through canvas.mjs judge read INCONCLUSIVE on every machine. Each original file, kept as
+// written, maps to the blind redraft inside its suite's own folder that gives every made-up run the load at its start
+// and end, and every made-up idle run a shown window, and runs in its place: the original test files run by hand only.
+// The redrafts sit inside tests/acceptance/854/ and 896/, so they run alone as their folders do, and each is timed
+// where its original was. #3300's own fit-Mac run of the two suites is by hand and timed.
+Object.assign(redrafted, Object.fromEntries([
+  ...['patch.test.ts', 'scene-read.test.ts', 'idle.test.ts', 'replica.test.ts', 'release.test.ts', 'replica-redraft.test.ts', 'helpers.ts']
+    .map((file) => [`tests/acceptance/854/${file}`, 'tests/acceptance/854/redraft-3300/']),
+  ...['settled.test.ts', 'dirty.test.ts', 'helpers.ts'].map((file) => [`tests/acceptance/896/${file}`, 'tests/acceptance/896/redraft-3300/']),
+]));
+byHand.push(...Object.keys(redrafted).filter((path) => /^tests\/acceptance\/(854|896)\/[^/]+\.test\.ts$/.test(path) && !byHand.includes(path)));
+timed.push(...['idle', 'patch', 'replica', 'scene-read'].map((name) => `tests/acceptance/854/redraft-3300/${name}.test.ts`),
+  ...['dirty', 'settled'].map((name) => `tests/acceptance/896/redraft-3300/${name}.test.ts`));
+byHand.push('tests/acceptance/3300/fit-mac.long.test.ts');
+timed.push('tests/acceptance/3300/fit-mac.long.test.ts');
+// #3300, on the owner's ruling: #1492's and #1551's made-up idle readings hand canvas.mjs judge runs with no loads too,
+// so their blind redrafts, inside each suite's folder, run in the originals' place, which run by hand only. Neither
+// original was alone or timed, so neither redraft is.
+Object.assign(redrafted, {
+  'tests/acceptance/1492/idle-energy.test.ts': 'tests/acceptance/1492/redraft-3300/',
+  'tests/acceptance/1492/helpers.ts': 'tests/acceptance/1492/redraft-3300/',
+  'tests/acceptance/1551/lane.test.ts': 'tests/acceptance/1551/redraft-3300/',
+});
+byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/lane.test.ts');
