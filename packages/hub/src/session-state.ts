@@ -412,6 +412,7 @@ export class SessionState {
       session.interrupted = true;
       if (this.options.settings.plant === 'reap-on-kill') this.options.services.stacks.endFor(session.id);
       this.letGoLive(session.id);
+      this.options.services.siblings.died(session.id);
       await this.options.events.appendSession(session.id, session.agent, 'session.gone', { pid: session.pid, start: session.start }).catch(() => undefined);
       if (session.agent === 'codex' && this.options.settings.plant !== 'leaves-codex-session-open') await this.closedAtExit(session).catch(() => undefined);
       this.endedOrder.delete(session.id);

@@ -138,6 +138,12 @@ export class Siblings {
   private readonly loops = new Map<string, { ask: string; pair: string[]; at: number }>();
   constructor(private readonly o: SiblingOptions) {}
 
+  /** The session's process went with no SessionEnd (#992): it works beside no other until a hook of its own says so. */
+  died(session: string): void {
+    const m = this.map.get(session);
+    if (m) m.ended = true;
+    this.pending.delete(session);
+  }
   /** The core forgot the session (#1866): its place on the map, what it was handed and what waits for it go. */
   forget(session: string): void {
     for (const of of [this.map, this.pending, this.turns, this.loops]) of.delete(session);
