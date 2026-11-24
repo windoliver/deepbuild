@@ -1480,3 +1480,6 @@ fn first_focus(controller: &Controller) -> Option<Target> {
 
 /// The card's measured size, what a slot must hold to arm.
 pub const SIZE: [i64; 2] = question::CARD_SIZE;
+
+#[cfg(test)]
+mod tests;
