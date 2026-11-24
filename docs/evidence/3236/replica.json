@@ -1,0 +1,278 @@
+{
+  "issue": 3236,
+  "how": "deep-show run on tests/acceptance/3236/fixtures.ts: the document shown, scope, Tab, then Right n times, then see and track",
+  "scatter": {
+    "planted": null,
+    "node": {
+      "id": "scatter",
+      "role": "data",
+      "name": "Ball height",
+      "value": "11 rows drawn, x seconds 0 to 11, y metres 2 to 40, 1 missing"
+    },
+    "landings": 11,
+    "announcements": [
+      {
+        "id": "scatter#0",
+        "text": "x 0 seconds, y 40 metres"
+      },
+      {
+        "id": "scatter#1",
+        "text": "x 1 seconds, y 37 metres"
+      },
+      {
+        "id": "scatter#2",
+        "text": "x 2 seconds, y 33 metres"
+      },
+      {
+        "id": "scatter#3",
+        "text": "x 3 seconds, y 30 metres"
+      },
+      {
+        "id": "scatter#4",
+        "text": "x 4 seconds, y 26 metres"
+      },
+      {
+        "id": "scatter#6",
+        "text": "x 6 seconds, y 19 metres"
+      },
+      {
+        "id": "scatter#7",
+        "text": "x 7 seconds, y 15 metres"
+      },
+      {
+        "id": "scatter#8",
+        "text": "x 8 seconds, y 12 metres"
+      },
+      {
+        "id": "scatter#9",
+        "text": "x 9 seconds, y 8 metres"
+      },
+      {
+        "id": "scatter#10",
+        "text": "x 10 seconds, y 5 metres"
+      },
+      {
+        "id": "scatter#11",
+        "text": "x 11 seconds, y 2 metres"
+      }
+    ],
+    "entries": []
+  },
+  "scatter_edited": {
+    "node": {
+      "id": "scatter",
+      "role": "data",
+      "name": "Ball height",
+      "value": "11 rows drawn, x seconds 0 to 11, y metres 2 to 55, 1 missing"
+    }
+  },
+  "scatter_planted_entry": {
+    "planted": "reading_walk_writes_entry",
+    "node": {
+      "id": "scatter",
+      "role": "data",
+      "name": "Ball height",
+      "value": "11 rows drawn, x seconds 0 to 11, y metres 2 to 40, 1 missing"
+    },
+    "landings": 4,
+    "announcements": [
+      {
+        "id": "scatter#0",
+        "text": "x 0 seconds, y 40 metres"
+      },
+      {
+        "id": "scatter#1",
+        "text": "x 1 seconds, y 37 metres"
+      },
+      {
+        "id": "scatter#2",
+        "text": "x 2 seconds, y 33 metres"
+      },
+      {
+        "id": "scatter#3",
+        "text": "x 3 seconds, y 30 metres"
+      }
+    ],
+    "entries": [
+      {
+        "control": "scatter",
+        "value": {
+          "set": 0,
+          "key": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "control": "scatter",
+        "value": {
+          "set": 0,
+          "key": [
+            1,
+            0
+          ]
+        }
+      },
+      {
+        "control": "scatter",
+        "value": {
+          "set": 0,
+          "key": [
+            2,
+            0
+          ]
+        }
+      },
+      {
+        "control": "scatter",
+        "value": {
+          "set": 0,
+          "key": [
+            3,
+            0
+          ]
+        }
+      }
+    ]
+  },
+  "bars": {
+    "planted": null,
+    "node": {
+      "id": "bars",
+      "role": "data",
+      "name": "Sales by region",
+      "value": "12 rows drawn, left 40 to 320, right 58 to 338, sales tonnes 3 to 14, series North 4, South 4, West 4"
+    },
+    "landings": 12,
+    "announcements": [
+      {
+        "id": "bars#9",
+        "text": "North, left 280, right 298, sales 9 tonnes"
+      },
+      {
+        "id": "bars#6",
+        "text": "North, left 200, right 218, sales 7 tonnes"
+      },
+      {
+        "id": "bars#3",
+        "text": "North, left 120, right 138, sales 5 tonnes"
+      },
+      {
+        "id": "bars#0",
+        "text": "North, left 40, right 58, sales 3 tonnes"
+      },
+      {
+        "id": "bars#10",
+        "text": "South, left 300, right 318, sales 10 tonnes"
+      },
+      {
+        "id": "bars#7",
+        "text": "South, left 220, right 238, sales 8 tonnes"
+      },
+      {
+        "id": "bars#4",
+        "text": "South, left 140, right 158, sales 6 tonnes"
+      },
+      {
+        "id": "bars#1",
+        "text": "South, left 60, right 78, sales 4 tonnes"
+      },
+      {
+        "id": "bars#11",
+        "text": "West, left 320, right 338, sales 14 tonnes"
+      },
+      {
+        "id": "bars#8",
+        "text": "West, left 240, right 258, sales 13 tonnes"
+      },
+      {
+        "id": "bars#5",
+        "text": "West, left 160, right 178, sales 12 tonnes"
+      },
+      {
+        "id": "bars#2",
+        "text": "West, left 80, right 98, sales 11 tonnes"
+      }
+    ],
+    "entries": []
+  },
+  "bars_planted_row_order": {
+    "planted": "reading_walk_row_order",
+    "node": {
+      "id": "bars",
+      "role": "data",
+      "name": "Sales by region",
+      "value": "12 rows drawn, left 40 to 320, right 58 to 338, sales tonnes 3 to 14, series North 4, South 4, West 4"
+    },
+    "landings": 4,
+    "announcements": [
+      {
+        "id": "bars#0",
+        "text": "North, left 40, right 58, sales 3 tonnes"
+      },
+      {
+        "id": "bars#1",
+        "text": "South, left 60, right 78, sales 4 tonnes"
+      },
+      {
+        "id": "bars#2",
+        "text": "West, left 80, right 98, sales 11 tonnes"
+      },
+      {
+        "id": "bars#3",
+        "text": "North, left 120, right 138, sales 5 tonnes"
+      }
+    ],
+    "entries": []
+  },
+  "series": {
+    "planted": null,
+    "node": {
+      "id": "trace",
+      "role": "data",
+      "name": "Sensor trace",
+      "value": "50000 rows drawn, t s 0 to 0.0000709, v 200 to 847"
+    },
+    "landings": 400,
+    "announcements": [
+      {
+        "id": "trace#0..124",
+        "text": "125 rows, v 200 to 448"
+      },
+      {
+        "id": "trace#125..249",
+        "text": "125 rows, v 201 to 449"
+      },
+      {
+        "id": "trace#250..374",
+        "text": "125 rows, v 202 to 450"
+      },
+      {
+        "id": "trace#375..499",
+        "text": "125 rows, v 203 to 451"
+      },
+      {
+        "id": "trace#500..624",
+        "text": "125 rows, v 204 to 452"
+      },
+      {
+        "id": "trace#625..749",
+        "text": "125 rows, v 205 to 453"
+      },
+      "… 392 more …",
+      {
+        "id": "trace#49750..49874",
+        "text": "125 rows, v 598 to 846"
+      },
+      {
+        "id": "trace#49875..49999",
+        "text": "125 rows, v 599 to 847"
+      }
+    ],
+    "entries": []
+  },
+  "series_planted_every_row": {
+    "landings": 402
+  }
+}

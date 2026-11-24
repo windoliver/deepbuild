@@ -1,0 +1,5 @@
+AT=25f35437548f501e12ed980b8831d18159976b49 node spine-local.mjs judge --issue 22  (Linux, RUSTC_WRAPPER= empty: the Spark's sccache server hung every compile; load 0.87 at start)
+{"issue":22,"commit":"25f35437548f501e12ed980b8831d18159976b49","verdict":"INCONCLUSIVE","criteria":[{"id":"#22.48b6696b","outcome":"PASS"},{"id":"#22.1f14a778","outcome":"INCONCLUSIVE"},{"id":"#22.f57a814c","outcome":"PASS"},{"id":"#22.3d85284a","outcome":"PASS"}],"reopen":{"criterion":"#22.1f14a778"}}
+--- stderr (each test that didn't PASS)
+#319 INCONCLUSIVE #319.43d13eb3 budgets on the reference Mac #319.43d13eb3 creating or answering an ask takes under 5 ms in the hub
+#319 INCONCLUSIVE #319.43d13eb3 budgets on the reference Mac #319.43d13eb3 the inbox projection with 10,000 asks loads in under 100 ms

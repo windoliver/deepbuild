@@ -1,0 +1,1054 @@
+== commit 534890e0918f392a2b81e4168be8d189fb63da17
+== command: cargo test --locked --no-fail-fast -p deep-app
+== start 2026-11-14 20:21:02 load { 68.11 68.49 43.96 } thermal 1
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling serde_core v1.0.229
+   Compiling allocator-api2 v0.2.21
+   Compiling autocfg v1.5.1
+   Compiling foldhash v0.2.0
+   Compiling equivalent v1.0.3
+   Compiling libm v0.2.16
+   Compiling memchr v2.8.3
+   Compiling hashbrown v0.17.1
+   Compiling bitflags v2.13.2
+   Compiling serde v1.0.229
+   Compiling num-traits v0.2.19
+   Compiling find-msvc-tools v0.1.15
+   Compiling shlex v2.0.1
+   Compiling typenum v1.20.1
+   Compiling once_cell v1.21.4
+   Compiling zeroize v1.9.1
+   Compiling pin-project-lite v0.2.17
+   Compiling rand_core v0.10.1
+   Compiling subtle v2.6.1
+   Compiling syn v3.0.9
+   Compiling syn v2.0.119
+   Compiling jobserver v0.1.35
+   Compiling itoa v1.0.18
+   Compiling cc v1.9.0
+   Compiling zerocopy v0.8.63
+   Compiling arrayvec v0.7.8
+   Compiling hybrid-array v0.4.15
+   Compiling version_check v0.9.5
+   Compiling stable_deref_trait v1.2.1
+   Compiling objc2-encode v4.1.0
+   Compiling parking v2.2.1
+   Compiling log v0.4.34
+   Compiling indexmap v2.14.2
+   Compiling objc2 v0.6.5
+   Compiling bytes v1.12.1
+   Compiling crypto-common v0.2.2
+   Compiling thiserror v2.0.21
+   Compiling scopeguard v1.2.0
+   Compiling zmij v1.0.23
+   Compiling event-listener v5.4.2
+   Compiling futures-core v0.3.34
+   Compiling semver v1.0.28
+   Compiling cmov v0.5.4
+   Compiling siphasher v1.0.4
+   Compiling fnv v1.0.7
+   Compiling winnow v1.0.4
+   Compiling toml_datetime v1.1.2+spec-1.1.0
+   Compiling rustc_version v0.4.1
+   Compiling ctutils v0.4.3
+   Compiling event-listener-strategy v0.5.4
+   Compiling objc2-core-foundation v0.3.2
+   Compiling unicode-segmentation v1.13.3
+   Compiling writeable v0.6.4
+   Compiling fastrand v2.5.0
+   Compiling block-buffer v0.12.1
+   Compiling synstructure v0.14.0
+   Compiling tracing-core v0.1.36
+   Compiling litemap v0.8.3
+   Compiling const-oid v0.10.2
+   Compiling crossbeam-utils v0.8.23
+   Compiling utf8_iter v1.0.4
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling convert_case v0.11.0
+   Compiling icu_properties_data v2.3.0
+   Compiling regex-syntax v0.8.11
+   Compiling simd-adler32 v0.3.10
+   Compiling futures-io v0.3.34
+   Compiling toml_edit v0.25.17+spec-1.1.0
+   Compiling block2 v0.6.2
+   Compiling lock_api v0.4.14
+   Compiling aho-corasick v1.1.5
+   Compiling serde_json v1.0.154
+   Compiling serde_derive v1.0.229
+   Compiling zerocopy-derive v0.8.63
+   Compiling bytemuck_derive v1.12.1
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling bytemuck v1.25.2
+   Compiling zerofrom v0.1.8
+   Compiling zerovec-derive v0.11.6
+   Compiling thiserror-impl v2.0.21
+   Compiling yoke v0.8.3
+   Compiling displaydoc v0.2.7
+   Compiling tracing-attributes v0.1.31
+   Compiling proc-macro-crate v3.5.0
+   Compiling zerotrie v0.2.5
+   Compiling zerovec v0.11.8
+   Compiling crc32fast v1.5.2
+   Compiling icu_normalizer_data v2.3.0
+   Compiling core-foundation-sys v0.8.7
+   Compiling adler2 v2.0.1
+   Compiling parking_lot_core v0.9.12
+   Compiling tracing v0.1.44
+   Compiling objc2-foundation v0.3.2
+   Compiling arrayref v0.3.9
+   Compiling slab v0.4.12
+   Compiling crossbeam-epoch v0.9.21
+   Compiling digest v0.11.3
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.6
+   Compiling icu_collections v2.3.0
+   Compiling async-lock v3.4.2
+   Compiling icu_locale_core v2.3.0
+   Compiling euclid v0.22.14
+   Compiling smallvec v1.16.3
+   Compiling tinyvec v1.13.3
+   Compiling crossbeam-deque v0.8.8
+   Compiling parking_lot v0.12.5
+   Compiling tokio-macros v2.7.2
+   Compiling quickjs-jit-sys v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling polycool v0.4.0
+   Compiling mio v1.2.4
+   Compiling icu_provider v2.3.1
+   Compiling socket2 v0.6.5
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling futures-sink v0.3.34
+   Compiling tokio v1.54.0
+   Compiling kurbo v0.13.1
+   Compiling half v2.7.1
+   Compiling miniz_oxide v0.9.1
+   Compiling errno v0.3.14
+   Compiling rustix v1.1.5
+   Compiling flate2 v1.1.10
+   Compiling objc2-io-surface v0.3.2
+   Compiling slotmap v1.1.1
+   Compiling cpufeatures v0.3.1
+   Compiling memmap2 v0.9.11
+   Compiling icu_locale_fallback_data v2.3.0
+   Compiling same-file v1.0.6
+   Compiling walkdir v2.5.0
+   Compiling generic-array v0.14.7
+   Compiling getrandom v0.4.3
+   Compiling icu_segmenter_data v2.3.0
+   Compiling ryu v1.0.23
+   Compiling futures-channel v0.3.34
+   Compiling static_assertions v1.1.0
+   Compiling bitflags v1.3.2
+   Compiling icu_locale_fallback v2.3.0
+   Compiling futures-macro v0.3.34
+   Compiling raw-window-handle v0.6.2
+   Compiling futures-task v0.3.34
+   Compiling icu_segmenter v2.3.0
+   Compiling miniz_oxide v0.8.9
+   Compiling futures-util v0.3.34
+   Compiling profiling-procmacros v1.0.18
+   Compiling concurrent-queue v2.5.0
+   Compiling futures-lite v2.6.1
+   Compiling objc2-core-graphics v0.3.2
+   Compiling http v1.5.0
+   Compiling unicode-width v0.2.2
+   Compiling rustversion v1.0.23
+   Compiling relative-path v2.0.2
+   Compiling profiling v1.0.18
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling core-foundation v0.10.1
+   Compiling ident_case v1.0.1
+   Compiling simdutf8 v0.1.5
+   Compiling cpubits v0.1.1
+   Compiling anyhow v1.0.104
+   Compiling either v1.19.0
+   Compiling percent-encoding v2.3.2
+   Compiling rustc-hash v2.1.3
+   Compiling form_urlencoded v1.2.2
+   Compiling digest v0.10.7
+   Compiling idna_adapter v1.2.2
+   Compiling regex-automata v0.4.18
+   Compiling cpufeatures v0.2.17
+   Compiling bstr v1.13.1
+   Compiling getrandom v0.3.4
+   Compiling rayon-core v1.13.0
+   Compiling paste v1.0.15
+   Compiling idna v1.1.0
+   Compiling http-body v1.1.0
+   Compiling fdeflate v0.3.7
+   Compiling async-task v4.7.1
+   Compiling cfg_aliases v0.2.2
+   Compiling base64ct v1.8.3
+   Compiling url v2.5.8
+   Compiling pem-rfc7468 v1.0.0
+   Compiling font-types v0.12.7
+   Compiling der_derive v0.8.0
+   Compiling phf_shared v0.11.3
+   Compiling blake3 v1.5.5
+   Compiling pulp v0.22.3
+   Compiling core_maths v0.1.1
+   Compiling zune-core v0.5.3
+   Compiling option-ext v0.2.0
+   Compiling thiserror v1.0.69
+   Compiling weezl v0.1.12
+   Compiling float-cmp v0.9.0
+   Compiling byteorder v1.5.0
+   Compiling quick-error v2.0.1
+   Compiling globset v0.4.20
+   Compiling strict-num v0.1.1
+   Compiling der v0.8.2
+   Compiling zune-jpeg v0.5.15
+   Compiling ttf-parser v0.25.1
+   Compiling read-fonts v0.41.0
+   Compiling objc2-metal v0.3.2
+   Compiling rand_core v0.9.5
+   Compiling serde_spanned v0.6.9
+   Compiling toml_datetime v0.6.11
+   Compiling sha2 v0.10.9
+   Compiling async-channel v2.5.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling lyon_geom v1.0.19
+   Compiling num-complex v0.4.6
+   Compiling thiserror-impl v1.0.69
+   Compiling serde_spanned v1.1.2
+   Compiling chacha20 v0.10.2
+   Compiling constant_time_eq v0.3.1
+   Compiling rand_core v0.6.4
+   Compiling toml_write v0.1.2
+   Compiling pulp-wasm-simd-flag v0.1.1
+   Compiling toml_writer v1.1.3+spec-1.1.0
+   Compiling ref-cast v1.0.27
+   Compiling reborrow v0.5.5
+   Compiling atomic-waker v1.1.2
+   Compiling winnow v0.7.15
+   Compiling linebender_resource_handle v0.1.1
+   Compiling byteorder-lite v0.1.0
+   Compiling color_quant v1.1.0
+   Compiling object v0.37.3
+   Compiling image-webp v0.2.4
+   Compiling gif v0.14.2
+   Compiling objc2-quartz-core v0.3.2
+   Compiling objc2-core-video v0.3.2
+   Compiling toml_edit v0.22.27
+   Compiling toml v1.1.8+spec-1.1.0
+   Compiling rand v0.8.8
+   Compiling rand v0.10.3
+   Compiling lyon_path v1.0.19
+   Compiling rand_chacha v0.9.0
+   Compiling tiny-skia-path v0.11.4
+   Compiling rayon v1.12.0
+   Compiling futures-executor v0.3.34
+   Compiling core-graphics-types v0.2.0
+   Compiling uuid v1.28.0
+   Compiling sha2 v0.11.1
+   Compiling unicode-normalization v0.1.26
+   Compiling pin-project-internal v1.1.13
+   Compiling enumn v0.1.14
+   Compiling ref-cast-impl v1.0.27
+   Compiling foreign-types-macros v0.2.4
+   Compiling zune-inflate v0.2.54
+   Compiling serde_derive_internals v0.30.0
+   Compiling bit_field v0.10.3
+   Compiling heapless v0.9.3
+   Compiling heck v0.5.0
+   Compiling lebe v0.5.3
+   Compiling pollster v0.4.0
+   Compiling base64 v0.22.1
+   Compiling unicode-bidi-mirroring v0.4.0
+   Compiling gimli v0.32.3
+   Compiling unicode-ccc v0.4.0
+   Compiling unicase v2.10.0
+   Compiling foreign-types-shared v0.3.1
+   Compiling unicode-properties v0.1.3
+   Compiling fax v0.2.7
+   Compiling gpui-pre-ztracing v0.3.9
+   Compiling pxfm v0.1.30
+   Compiling unicode-script v0.5.8
+   Compiling tiff v0.11.3
+   Compiling foreign-types v0.5.0
+   Compiling rustybuzz v0.20.1
+   Compiling schemars_derive v1.2.3
+   Compiling exr v1.74.2
+   Compiling addr2line v0.25.1
+   Compiling pin-project v1.1.13
+   Compiling accesskit v0.24.1
+   Compiling moxcms v0.8.1
+   Compiling deep-canvas v0.0.0 (~/private/dbc-22nm/crates/deep-canvas)
+   Compiling toml v0.8.23
+   Compiling futures v0.3.34
+   Compiling rand v0.9.5
+   Compiling embed-resource v3.0.12
+   Compiling phf_generator v0.11.3
+   Compiling fontdb v0.23.0
+   Compiling spki v0.8.0
+   Compiling hash32 v0.3.1
+   Compiling png v0.18.1
+   Compiling png v0.17.16
+   Compiling encoding_rs v0.8.42
+   Compiling serde_urlencoded v0.7.1
+   Compiling crypto-bigint v0.7.5
+   Compiling tempfile v3.27.0
+   Compiling svgtypes v0.16.1
+   Compiling iana-time-zone v0.1.65
+   Compiling qoi v0.4.1
+   Compiling spin v0.9.9
+   Compiling convert_case v0.10.0
+   Compiling simplecss v0.2.2
+   Compiling wait-timeout v0.2.1
+   Compiling roxmltree v0.21.1
+   Compiling hashbrown v0.16.1
+   Compiling rustc-demangle v0.1.28
+   Compiling imagesize v0.14.0
+   Compiling dyn-clone v1.0.20
+   Compiling bit-vec v0.10.1
+   Compiling gpui-pre-ztracing-macro v0.3.9
+   Compiling unicode-bidi v0.3.18
+   Compiling quick-error v1.2.3
+   Compiling unicode-vo v0.1.0
+   Compiling data-url v0.3.2
+   Compiling xmlwriter v0.1.0
+   Compiling pico-args v0.5.0
+   Compiling float_next_after v1.0.0
+   Compiling usvg v0.46.0
+   Compiling lyon_tessellation v1.0.22
+   Compiling rusty-fork v0.3.1
+   Compiling bit-set v0.11.1
+   Compiling schemars v1.2.3
+   Compiling backtrace v0.3.76
+   Compiling derive_more-impl v2.1.1
+   Compiling flume v0.12.0
+   Compiling image v0.25.10
+   Compiling quickjs-jit-core v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling chrono v0.4.45
+   Compiling tiny-skia v0.11.4
+   Compiling gpui-pre v0.3.9 (~/private/dbc-22nm/vendor/gpui-pre)
+   Compiling strum_macros v0.28.0
+   Compiling lyon_algorithms v1.0.21
+   Compiling skrifa v0.44.0
+   Compiling gpui-pre-util v0.3.9
+   Compiling rgb v0.8.53
+   Compiling color v0.3.3
+   Compiling gpui-pre-derive-refineable v0.3.9
+   Compiling crossbeam-queue v0.3.14
+   Compiling proptest-macro v0.6.0
+   Compiling smol_str v0.3.6
+   Compiling rand_xorshift v0.5.0
+   Compiling multiversion_no_op v1.0.0
+   Compiling unarray v0.1.4
+   Compiling quickjs-jit-macro v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling svg_fmt v0.4.5
+   Compiling link-section v0.19.3
+   Compiling atomic v0.5.3
+   Compiling new_debug_unreachable v1.0.6
+   Compiling fixedbitset v0.5.7
+   Compiling web-time v1.1.0
+   Compiling linktime-proc-macro v0.2.3
+   Compiling pollster v0.2.5
+   Compiling core_detect v1.0.0
+   Compiling postage v0.5.0
+   Compiling proptest v1.12.0
+   Compiling ctor v1.0.13
+   Compiling futures-concurrency v7.7.1
+   Compiling gpui-pre-scheduler v0.3.9
+   Compiling etagere v0.2.15
+   Compiling gpui-pre-shared-string v0.3.9
+   Compiling gpui-pre-refineable v0.3.9
+   Compiling strum v0.28.0
+   Compiling quickjs-jit v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling peniko v0.6.1
+   Compiling rquickjs v0.12.9 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling resvg v0.46.0
+   Compiling llrt_utils v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling gpui-pre-collections v0.3.9
+   Compiling lyon v1.0.19
+   Compiling gpui-pre-sum-tree v0.3.9
+   Compiling derive_more v2.1.1
+   Compiling gpui-pre-http-client v0.3.9
+   Compiling pkcs8 v0.11.0
+   Compiling phf_codegen v0.11.3
+   Compiling string_cache_codegen v0.5.4
+   Compiling core-graphics v0.24.0
+   Compiling gpui-pre-macros v0.3.9
+   Compiling hdrhistogram v7.6.0
+   Compiling regex v1.13.1
+   Compiling itertools v0.14.0
+   Compiling taffy v0.13.0
+   Compiling guillotiere v0.7.0
+   Compiling spin v0.10.1
+   Compiling ff v0.14.0
+   Compiling num_cpus v1.17.0
+   Compiling async-io v2.6.0
+   Compiling parlance v0.1.1
+   Compiling inventory v0.3.25
+   Compiling rustc-hash v1.1.0
+   Compiling seahash v4.1.0
+   Compiling mac v0.1.1
+   Compiling waker-fn v1.2.0
+   Compiling objc-sys v0.3.5
+   Compiling fearless_simd v0.7.0
+   Compiling futf v0.1.5
+   Compiling naga-types v30.0.1
+   Compiling fontique v0.12.0
+   Compiling markup5ever v0.12.1
+   Compiling ignore v0.4.33
+   Compiling harfrust v0.12.0
+   Compiling naga v30.0.1
+   Compiling arc-swap v1.9.3
+   Compiling polling v3.11.0
+   Compiling parley_data v0.12.0
+   Compiling hmac v0.13.0
+   Compiling pathfinder_simd v0.5.6
+   Compiling llrt_build v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling block-padding v0.4.2
+   Compiling float-cmp v0.10.0
+   Compiling malloc_buf v0.0.6
+   Compiling rustls-pki-types v1.15.1
+   Compiling cranelift-isle v0.116.1
+   Compiling utf-8 v0.7.6
+   Compiling bit-vec v0.9.1
+   Compiling mime v0.3.17
+   Compiling cbindgen v0.28.0
+   Compiling precomputed-hash v0.1.1
+   Compiling parley_emoji v0.12.0
+   Compiling string_cache v0.8.9
+   Compiling bit-set v0.10.0
+   Compiling tendril v0.4.3
+   Compiling objc v0.2.7
+   Compiling inout v0.2.5
+   Compiling vello_common v0.3.0
+   Compiling parley_engine v0.12.0
+   Compiling globwalk v0.8.1
+   Compiling group v0.14.0
+   Compiling glifo v0.4.0
+   Compiling deep-canvas-seams v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-seams)
+   Compiling mime_guess v2.0.5
+   Compiling piper v0.2.5
+   Compiling dirs-sys v0.5.0
+   Compiling phf v0.11.3
+   Compiling codespan-reporting v0.13.1
+   Compiling signature v3.0.0
+   Compiling objc2-core-text v0.3.2
+   Compiling ring v0.17.14
+   Compiling foldhash v0.1.5
+   Compiling cranelift-codegen-shared v0.116.1
+   Compiling block v0.1.6
+   Compiling heck v0.4.1
+   Compiling arraydeque v0.5.1
+   Compiling pkg-config v0.3.34
+   Compiling base16ct v1.0.0
+   Compiling anstyle v1.0.14
+   Compiling sec1 v0.8.1
+   Compiling granit-parser v1.3.0
+   Compiling annotate-snippets v0.12.17
+   Compiling zstd-sys v2.1.2+zstd.1.5.7
+   Compiling hashbrown v0.15.5
+   Compiling cranelift-codegen-meta v0.116.1
+   Compiling blocking v1.7.0
+   Compiling vello_cpu v0.3.0
+   Compiling dirs v6.0.0
+   Compiling objc2 v0.5.3
+   Compiling parley v0.12.0
+   Compiling encoding_rs_io v0.1.8
+   Compiling hkdf v0.13.0
+   Compiling wgpu-types v30.0.1
+   Compiling core-text v21.0.0
+   Compiling llrt_hooking v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling objc2-core-data v0.3.2
+   Compiling objc2-core-image v0.3.2
+   Compiling objc2-cloud-kit v0.3.2
+   Compiling dirs-sys v0.4.1
+   Compiling wgpu-hal v30.0.1
+   Compiling signal-hook-registry v1.4.8
+   Compiling cranelift-bitset v0.116.1
+   Compiling html5ever v0.27.0
+   Compiling phf_shared v0.14.0
+   Compiling bit-vec v0.8.0
+   Compiling base62 v2.2.6
+   Compiling target-lexicon v0.13.5
+   Compiling nohash-hasher v0.2.0
+   Compiling zed-font-kit v0.14.1-zed
+   Compiling base64 v0.23.1
+   Compiling serde-saphyr v1.3.0
+   Compiling itertools v0.11.0
+   Compiling wgpu-naga-bridge v30.0.1
+   Compiling bit-set v0.8.0
+   Compiling triomphe v0.1.17
+   Compiling phf_generator v0.14.0
+   Compiling cranelift-entity v0.116.1
+   Compiling async-signal v0.2.14
+   Compiling objc2-app-kit v0.3.2
+   Compiling dirs v5.0.1
+   Compiling cranelift-codegen v0.116.1
+   Compiling rust-embed-utils v8.13.0
+   Compiling elliptic-curve v0.14.1
+   Compiling pathfinder_geometry v0.5.1
+   Compiling gpui-pre-apple v0.3.9 (~/private/dbc-22nm/vendor/gpui-pre-apple)
+   Compiling deep-text v0.0.0 (~/private/dbc-22nm/crates/deep-text)
+   Compiling objc2-foundation v0.2.2
+   Compiling shellexpand v3.1.2
+   Compiling cipher v0.5.2
+   Compiling primefield v0.14.0
+   Compiling llrt_context v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling deep-canvas-drawn v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-drawn)
+   Compiling raw-window-metal v1.1.0
+   Compiling taffy v0.14.0
+   Compiling dispatch2 v0.3.1
+   Compiling getrandom v0.2.17
+   Compiling bumpalo v3.20.3
+   Compiling libloading v0.8.9
+   Compiling float-ord v0.3.2
+   Compiling outref v0.5.2
+   Compiling lazy_static v1.5.1
+   Compiling vsimd v0.8.0
+   Compiling normpath v1.5.2
+   Compiling arbitrary v1.5.0
+   Compiling gpui-kit-assets v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling httparse v1.10.1
+   Compiling untrusted v0.9.0
+   Compiling cranelift-control v0.116.1
+   Compiling deep-canvas-marks v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-marks)
+   Compiling rust-i18n-support v4.2.4
+   Compiling regalloc2 v0.11.2
+   Compiling rust-i18n v4.2.4
+   Compiling llrt_timers v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wnaf v0.14.1
+   Compiling rust-embed-impl v8.13.0
+   Compiling objc2-app-kit v0.2.2
+   Compiling cranelift-bforest v0.116.1
+   Compiling async-process v2.5.0
+   Compiling phf_macros v0.14.0
+   Compiling fancy-regex v0.16.2
+   Compiling llrt_async_hooks v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling async-fs v2.2.0
+   Compiling async-net v2.0.0
+   Compiling xml5ever v0.18.1
+   Compiling metal v0.33.0
+   Compiling cocoa-foundation v0.2.1
+   Compiling llrt_encoding v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling rfc6979 v0.6.0
+   Compiling llrt_exceptions v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_events v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling accesskit_consumer v0.38.0
+   Compiling wgpu-core v30.0.1
+   Compiling async-executor v1.14.0
+   Compiling fluent-uri v0.1.4
+   Compiling bincode v1.3.3
+   Compiling serde_repr v0.1.21
+   Compiling objc2-security v0.3.2
+   Compiling curve25519-dalek v5.0.0
+   Compiling gimli v0.31.1
+   Compiling hashbrown v0.14.5
+   Compiling unicode-id v0.3.7
+   Compiling mach2 v0.6.0
+   Compiling zstd-safe v7.3.0
+   Compiling alloc-no-stdlib v2.0.4
+   Compiling rustls v0.23.46
+   Compiling litrs v1.0.1
+   Compiling str_indices v0.4.4
+   Compiling glob v0.3.4
+   Compiling document-features v0.2.12
+   Compiling rust-i18n-macro v4.2.4
+   Compiling ropey v2.0.0-beta.1
+   Compiling alloc-stdlib v0.2.4
+   Compiling markdown v1.0.0
+   Compiling lsp-types v0.97.0
+   Compiling syntect v5.3.0
+   Compiling smol v2.0.2
+   Compiling accesskit_macos v0.26.3 (~/private/dbc-22nm/vendor/accesskit_macos)
+   Compiling llrt_abort v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling ecdsa v0.17.0
+   Compiling cocoa v0.26.0
+   Compiling markup5ever_rcdom v0.3.0
+   Compiling phf v0.14.0
+   Compiling rust-embed v8.13.0
+   Compiling primeorder v0.14.0
+   Compiling wgpu-core-deps-apple v30.0.1
+   Compiling rustls-webpki v0.103.15
+   Compiling base64-simd v0.8.0
+   Compiling hex-simd v0.8.0
+   Compiling halfbrown v0.4.0
+   Compiling objc2-user-notifications v0.3.2
+   Compiling wgpu v30.0.1
+   Compiling itertools v0.13.0
+   Compiling tokio-util v0.7.20
+   Compiling enum-iterator-derive v1.5.0
+   Compiling universal-hash v0.6.1
+   Compiling meshopt v0.7.0
+   Compiling fsevent-sys v4.1.0
+   Compiling notify-types v2.1.0
+   Compiling instant v0.1.13
+   Compiling gpui-component v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling try-lock v0.2.5
+   Compiling io-lifetimes v3.0.1
+   Compiling unicode-linebreak v0.1.5
+   Compiling io-lifetimes v2.0.4
+   Compiling notify v8.2.0
+   Compiling gpui-base v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling want v0.3.2
+   Compiling enum-iterator v2.3.0
+   Compiling gpui-pre-macos v0.3.9 (~/private/dbc-22nm/vendor/gpui-pre-macos)
+   Compiling h2 v0.4.20
+   Compiling polyval v0.7.3
+   Compiling value-trait v0.12.2
+   Compiling llrt_stream_web v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling two-face v0.4.5
+   Compiling brotli-decompressor v5.0.3
+   Compiling llrt_json v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling security-framework-sys v2.17.0
+   Compiling gpui-component-macros v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling similar v2.7.0
+   Compiling crc32c v0.6.8
+   Compiling tower-service v0.3.3
+   Compiling system-configuration-sys v0.6.0
+   Compiling io-extras v0.19.0
+   Compiling object v0.36.7
+   Compiling security-framework v3.7.0
+   Compiling brotli v8.0.4
+   Compiling llrt_buffer v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling zstd v0.13.3
+   Compiling simd-json v0.18.1
+   Compiling ghash v0.6.0
+   Compiling hyper v1.12.0
+   Compiling gpui-pre-platform v0.3.9
+   Compiling deep-canvas-motion v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-motion)
+   Compiling aes v0.9.3
+   Compiling ctr v0.10.1
+   Compiling ed25519 v3.0.0
+   Compiling aead v0.6.1
+   Compiling crypto-primes v0.7.2
+   Compiling pkcs1 v0.8.0-rc.4
+   Compiling ipnet v2.12.2
+   Compiling cap-primitives v4.0.3
+   Compiling deep-gpu v0.0.0 (~/private/dbc-22nm/crates/deep-gpu)
+   Compiling rsa v0.10.0-rc.18
+   Compiling ed25519-dalek v3.0.0
+   Compiling aes-gcm v0.11.1
+   Compiling aes-kw v0.3.1
+   Compiling hyper-util v0.1.21
+   Compiling fs-set-times v0.20.3
+   Compiling llrt_compression v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling rustls-native-certs v0.8.5
+   Compiling x25519-dalek v3.0.0
+   Compiling tokio-rustls v0.26.6
+   Compiling cranelift-module v0.116.1
+   Compiling p256 v0.14.0
+   Compiling deep-canvas-scene3d v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-scene3d)
+   Compiling gpui-kit v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling p384 v0.14.0
+   Compiling p521 v0.14.0
+   Compiling cbc v0.2.1
+   Compiling webpki-roots v1.0.10
+   Compiling quickjs-jit-runtime v0.12.11 (~/private/dbc-22nm/vendor/quickjs-jit-runtime)
+   Compiling sha1 v0.11.0
+   Compiling pbkdf2 v0.13.0
+   Compiling md-5 v0.11.0
+   Compiling core-foundation v0.9.4
+   Compiling cobs v0.3.0
+   Compiling objc2-io-kit v0.3.2
+   Compiling sync_wrapper v1.0.2
+   Compiling tower-layer v0.3.3
+   Compiling maybe-owned v0.3.4
+   Compiling unsafe-libyaml v0.2.11
+   Compiling cap-std v4.0.3
+   Compiling ambient-authority v0.0.2
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling tower v0.5.3
+   Compiling sysinfo v0.37.2
+   Compiling postcard v1.1.3
+   Compiling system-configuration v0.6.1
+   Compiling llrt_crypto v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling webpki-roots v0.26.11
+   Compiling deep-canvas-effects v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-effects)
+   Compiling cranelift-object v0.116.1
+   Compiling hyper-rustls v0.27.10
+   Compiling llrt_zlib v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wgpu-profiler v0.28.0
+   Compiling cranelift-frontend v0.116.1
+   Compiling cranelift-native v0.116.1
+   Compiling rustls-pemfile v2.2.0
+   Compiling llrt_path v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_url v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling tokio-socks v0.5.3
+   Compiling http-body-util v0.1.5
+   Compiling sha1 v0.10.7
+   Compiling filetime v0.2.29
+   Compiling data-encoding v2.11.1
+   Compiling tungstenite v0.29.0
+   Compiling tar v0.4.46
+   Compiling gpui-pre-reqwest v0.12.15
+   Compiling quickjs-jit-stdlib v0.12.7 (https://github.com/longbridge/quickjs-jit?rev=605da483611a3548edb8c33fdff602e3f5f42076#605da483)
+   Compiling deep-scene3d-render v0.0.0 (~/private/dbc-22nm/crates/deep-scene3d-render)
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+   Compiling gpui-fps v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling objc2-core-media v0.3.2
+   Compiling fs2 v0.4.3
+   Compiling gpui-shell v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling objc2-screen-capture-kit v0.3.2
+   Compiling deep-effects-render v0.0.0 (~/private/dbc-22nm/crates/deep-effects-render)
+   Compiling deep-marks-gpui v0.0.0 (~/private/dbc-22nm/crates/deep-marks-gpui)
+   Compiling deep-text-gpui v0.0.0 (~/private/dbc-22nm/crates/deep-text-gpui)
+   Compiling deep-canvas-cells v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-cells)
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+   Compiling deep-images v0.0.0 (~/private/dbc-22nm/crates/deep-images)
+   Compiling deep-app v0.0.0 (~/private/dbc-22nm/crates/deep-app)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `deep-app` (bin "deep-app") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7m 55s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/deep_app-d99f3c3fd3db76f9)
+
+running 108 tests
+test arming::tests::a_card_drawn_taller_than_its_slot_never_arms_until_it_fits ... ok
+test arming::tests::a_down_at_450_and_an_up_at_700_answers_nothing ... ok
+test arming::tests::a_key_repeat_never_answers ... ok
+test address::tests::an_ask_handle_and_its_ulid_are_one_address ... ok
+test arming::tests::a_press_stamped_499_ms_after_presentation_answers_nothing_and_one_at_500_answers ... ok
+test arming::tests::a_relaunch_presents_again_unarmed ... ok
+test actions::tests::a_key_draws_as_a_menu_draws_it ... ok
+test arming::tests::a_release_on_another_option_answers_nothing ... ok
+test arming::tests::a_slot_partly_outside_or_too_small_never_arms ... ok
+test arming::tests::a_synthetic_press_answers_only_once_the_os_confirms_you_and_once ... ok
+test address::tests::a_bad_part_refuses_the_whole_text ... ok
+test address::tests::each_form_reads_back_as_written ... ok
+test confirm::tests::the_reason_names_the_question_and_the_option ... ok
+test actions::tests::every_action_is_in_one_menu ... ok
+test confirm::tests::a_long_question_is_cut_before_its_marks_so_none_is_cut_in_half ... ok
+test device::tests::base64url_matches_the_hubs_reading_of_a_key ... ok
+test actions::tests::the_table_names_each_action_once_and_every_key_parses ... ok
+test cells::tests::a_row_keeps_its_text_its_color_runs_and_its_cells_off_the_grids_background ... ok
+test cells::tests::the_caret_counts_every_character_a_cell_before_the_cursor_holds ... ok
+test cells::tests::a_screen_from_the_hubs_reply_keeps_each_rows_runs_and_its_fills_off_the_ground ... ok
+test device::tests::canonical_bytes_order_keys_by_utf16_with_no_spaces ... ok
+test empties::tests::the_three_empties_differ_in_words_and_mark_and_a_down_hub_never_reads_0 ... ok
+test events::tests::a_sessions_sixth_open_ask_folds ... ok
+test events::tests::open_asks_are_listed_oldest_first_and_closed_ones_leave ... ok
+test kinds::tests::a_moved_choice_lists_each_run_on_the_new_commit_as_the_record_takes_it ... ok
+test kinds::tests::a_batch_member_runs_or_skips_whole_and_starts_off_with_a_step_that_cant_be_undone ... ok
+test kinds::tests::a_lone_approval_runs_its_whole_plan_and_says_so_on_its_button ... ok
+test device::tests::a_signature_covers_the_method_the_hub_the_time_the_once_and_the_params ... ok
+test kinds::tests::a_stalled_claim_is_a_choice_of_split_fund_or_accept_with_costs ... ok
+test kinds::tests::the_card_shows_the_plan_the_core_binds_never_a_later_one ... ok
+test kinds::tests::an_ask_batched_with_no_plan_of_its_own_is_still_among_the_steps_it_approves ... ok
+test kinds::tests::the_card_shows_the_batch_the_core_wrote_never_an_agents ... ok
+test kinds::tests::the_receipt_lists_only_the_asks_the_card_counted ... ok
+test kinds::tests::the_scope_counts_the_other_open_asks_with_the_same_key ... ok
+test kinds::tests::a_taste_call_says_how_many_checks_passed_on_its_commit_and_what_to_look_at ... ok
+test list::tests::a_state_that_changes_shows_in_place_at_once ... ok
+test list::tests::a_row_that_just_moved_drops_a_press_for_300_ms ... ok
+test list::tests::an_answered_ask_keeps_its_slot_while_you_are_in_the_list_and_for_2_s_after ... ok
+test list::tests::a_row_answered_elsewhere_waits_2_s_and_a_new_ask_lands_at_once ... ok
+test list::tests::an_ask_row_says_its_kind_or_how_it_waits_in_its_word_and_value ... ok
+test list::tests::an_empty_record_lists_nothing_and_with_no_ask_the_window_opens_on_the_latest_project ... ok
+test list::tests::needs_you_comes_first_then_each_project_with_its_quiet_sessions_folded ... ok
+test kinds::tests::a_taste_call_lists_past_calls_on_the_same_screen ... ok
+test kinds::tests::a_repo_scoped_answer_counts_only_the_asks_of_that_project ... ok
+test notify::tests::a_notification_held_from_before_the_app_started_stays_until_its_ask_closes ... ok
+test notify::tests::a_notification_shows_a_direction_mark_as_the_card_does ... ok
+test notify::tests::an_ask_in_a_record_with_no_batches_notifies_when_it_is_raised ... ok
+test notify::tests::a_moved_deadline_posts_the_notification_again_with_the_time_it_moved_to ... ok
+test notify::tests::a_notification_says_when_the_default_applies_after_its_undo ... ok
+test notify::tests::a_notification_the_app_finds_after_a_relaunch_still_carries_its_marked_question ... ok
+test notify::tests::an_ask_notifies_when_the_core_shows_it_not_when_it_is_raised ... ok
+test panel_module::tests::imports_are_read_with_their_lines_and_names ... ok
+test panel_values::tests::a_value_past_its_freshness_is_stale_with_its_age_and_one_within_it_is_neither ... ok
+test plain::tests::a_trace_is_found_by_its_lines_and_a_plain_line_is_not_one ... ok
+test plain::tests::a_listed_word_is_found_whole_in_any_case_and_plural_and_named_with_its_plain_word ... ok
+test panel_values::tests::the_tree_gives_each_bound_element_and_no_file_gives_none ... ok
+test question::tests::a_batch_card_follows_a_member_closing_and_a_plan_landing_and_keeps_your_switches ... ok
+test question::tests::a_batch_approvals_receipt_lists_the_other_members_it_ran ... ok
+test question::tests::a_check_finishing_while_the_card_shows_changes_what_it_says_and_presents_it_again_unarmed ... ok
+test panel_tree::tests::a_tree_reads_back_with_its_calls_text_and_nesting ... ok
+test question::tests::a_closed_ask_is_never_presented_and_one_closing_elsewhere_takes_its_card_down ... ok
+test question::tests::a_click_before_the_interval_is_refused_and_recorded_once_and_one_after_answers_the_drawn_option ... ok
+test question::tests::a_record_change_the_card_doesnt_show_leaves_it_armed_however_late_it_comes ... ok
+test question::tests::an_untrusted_press_waits_for_the_os_and_a_cancelled_prompt_leaves_the_card_armed ... ok
+test question::tests::an_approval_whose_own_step_cant_be_undone_waits_for_its_switch ... ok
+test question::tests::on_an_asks_page_the_box_holds_the_words_and_says_no_on_an_approval ... ok
+test record::tests::a_hub_down_for_200_ms_never_reads_as_not_answering ... ok
+test question::tests::switching_the_asks_own_steps_off_while_the_os_asks_sends_nothing ... ok
+test question::tests::tab_reaches_each_option_and_space_presses_the_focused_one ... ok
+test record::tests::a_hub_down_for_a_second_says_so_within_2_s_and_for_at_least_400_ms ... ok
+test record::tests::a_panel_is_given_the_folded_asks_with_those_in_sight ... ok
+test question::tests::words_alone_answer_this_ask_only_and_a_typed_yes_never_runs_the_plan ... ok
+test record::tests::a_sessions_sixth_open_ask_folds_in_a_record_with_no_exception ... ok
+test record::tests::an_ask_folds_only_into_its_sessions_keeps_asking_exception ... ok
+test record::tests::an_ask_held_for_the_agents_step_is_shown_once_the_core_shows_it ... ok
+test question::tests::visible_marks_each_control_direction_and_invisible_character ... ok
+test record::tests::asks_an_answered_exception_held_get_their_own_rows ... ok
+test record::tests::needs_you_holds_the_asks_the_hubs_list_holds ... ok
+test record::tests::the_first_missed_reply_says_nothing ... ok
+test shown::tests::a_shown_window_reports_each_view_every_time_and_hidden_once_as_it_stops ... ok
+test shown::tests::a_view_counts_as_shown_only_visible_unminimized_on_an_awake_display_unlocked ... ok
+test record::tests::only_the_cores_later_moves_an_ask_to_later ... ok
+test rules::tests::reads_each_file_and_each_rule_with_its_enforcer ... ok
+test states::tests::a_decision_the_core_applied_closes_the_ask_it_names ... ok
+test states::tests::a_hooks_word_that_the_session_works_again_is_its_attention ... ok
+test record::tests::the_inbox_closes_an_ask_as_the_core_does ... ok
+test panel_module::tests::the_served_module_holds_every_catalog_name_once ... ok
+test states::tests::a_job_row_counts_only_from_its_tools_counter ... ok
+test states::tests::a_session_whose_asks_all_closed_no_longer_needs_you ... ok
+test states::tests::every_hooks_attention_is_attention_as_the_whole_list_read_has_it ... ok
+test states::tests::a_sessions_readings_show_beside_it_and_move_nothing ... ok
+test states::tests::an_age_changes_exactly_when_its_span_next_reads_differently ... ok
+test states::tests::no_agent_closes_an_ask ... ok
+test states::tests::the_menu_bar_shows_a_titles_controls_and_direction_marks ... ok
+test states::tests::the_cores_undo_of_a_default_opens_the_ask_again_with_its_new_deadline ... ok
+test states::tests::the_sidebar_row_keeps_its_stops_claim_past_the_turns_end_and_the_idle_prompt ... ok
+test unread::tests::coming_back_starts_the_second_again ... ok
+test unread::tests::half_a_second_or_away_reads_nothing ... ok
+test unread::tests::a_page_open_a_second_while_you_are_present_reads_its_row ... ok
+test views::tests::a_record_no_batching_core_wrote_shows_its_asks_at_once ... ok
+test views::tests::a_needs_you_row_shows_a_direction_mark_as_the_card_does ... ok
+test views::tests::the_sidebars_keys_move_the_ring_and_open_the_focused_session_which_keeps_its_row_as_rows_move ... ok
+test views::tests::needs_you_shows_an_ask_once_the_core_shows_it_and_a_folded_one_only_through_its_exception ... ok
+test views::tests::a_name_that_is_not_a_shipped_view_is_refused - should panic ... ok
+test views::tests::the_window_has_two_regions_and_nothing_docked_below ... ok
+test panel_tree::tests::what_it_cant_read_is_an_error ... ok
+test images::tests::a_thumbnail_is_the_level_it_draws_at_from_the_shared_service ... ok
+test states::tests::the_open_asks_read_in_one_pass_and_folded_are_those_each_asks_own_reading_leaves_open ... ok
+
+test result: ok. 108 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+     Running unittests src/main.rs (target/debug/deps/deep_app-1f87f162a8d0a78c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running ../../tests/acceptance/1141/app/folded.rs (target/debug/deps/acceptance_1141-ec844831c5e116fe)
+
+running 4 tests
+test plant_drops_close_a_reader_that_drops_an_asks_close_fails_naming_the_ask ... ignored, the plant runs only in a build with --features plant-drops-close
+test plant_walks_events_a_reader_that_walks_every_event_per_render_fails_at_100000_events ... ignored, the plant runs only in a build with --features plant-walks-events
+test ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases ... FAILED
+test ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count ... FAILED
+
+failures:
+
+---- ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases stdout ----
+
+thread 'ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases' (4439027) panicked at crates/deep-app/../../tests/acceptance/1141/app/folded.rs:632:63:
+FAIL: seed 1, after log_pos 313: the app's notifier posted [
+    "notice · session 5e550001-1141-4000-8000-000001000001 · \"DeepBuild · Task 10\" · \"DeepBuild · Task 10\\n! needs you — Question 286? If you don't answer: No, at 04:31.\" · sound None",
+    "ask:01KA0001000000000000000305 · session 5e550005-1141-4000-8000-000001000005 · \"DeepBuild · Task 15\" · \"DeepBuild · Task 15\\n! needs you — Question 305? If you don't answer: No, at tomorrow 00:02.\" · sound Some(Question)",
+], the merge base's [
+    "notice · session 5e550001-1141-4000-8000-000001000001 · \"DeepBuild · Task 10\" · \"DeepBuild · Task 10\\n! needs you — Question 286? If you don't answer: No, at 04:31.\" · sound None",
+    "ask:01KA0001000000000000000304 · session 5e550005-1141-4000-8000-000001000005 · \"DeepBuild · Task 15\" · \"DeepBuild · Task 15\\n! needs you — Question 304? If you don't answer: Yes, at 15:32.\" · sound Some(Question)",
+    "ask:01KA0001000000000000000305 · session 5e550005-1141-4000-8000-000001000005 · \"DeepBuild · Task 15\" · \"DeepBuild · Task 15\\n! needs you — Question 305? If you don't answer: No, tomorrow at 00:02.\" · sound Some(Question)",
+]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count stdout ----
+
+thread 'ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count' (4439028) panicked at crates/deep-app/../../tests/acceptance/1141/app/folded.rs:925:39:
+INCONCLUSIVE: a reading only (loaded: a 1-minute load average of 73.5 on 8 cores): 20,000 events: sidebar 0.050 ms, tick 0.014 ms (medians); 100,000 events: sidebar 0.060 ms, tick 0.022 ms (medians); 200,000 events: sidebar 0.075 ms, tick 0.030 ms (medians); the sidebar's render at 200,000 events: 0.081, 0.078, 0.077, 0.080, 0.083 ms against 4 ms (margin 7%); a notifier tick at 200,000 events: 0.033, 0.033, 0.031, 0.030, 0.032 ms against 4 ms (margin 7%)
+
+
+failures:
+    ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases
+    ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count
+
+test result: FAILED. 0 passed; 2 failed; 2 ignored; 0 measured; 0 filtered out; finished in 3.64s
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_1141`
+     Running ../../tests/acceptance/1141/app/memory.rs (target/debug/deps/acceptance_1141_memory-29098e511588874d)
+
+running 1 test
+test ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.91s
+
+     Running ../../tests/acceptance/1510/app/card.rs (target/debug/deps/acceptance_1510-a220af819a3fdb23)
+
+running 4 tests
+test ac2_6263c922_a_call_with_u202e_in_an_authority_card_shows_a_visible_mark_at_that_place ... ok
+test ac2_6263c922_a_question_with_u202e_shows_a_visible_mark_at_that_place_in_the_card ... ok
+test ac4_5fbd0a55_plain_chinese_and_emoji_questions_show_unchanged_in_the_card ... ok
+test ac2_6263c922_each_invisible_or_direction_changing_character_shows_a_visible_mark_at_its_place ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running ../../tests/acceptance/1606-redraft-ac5-ac9/app/card.rs (target/debug/deps/acceptance_1606-6722bc06d61e7d99)
+acceptance_1606: no ask to answer (card.test.ts names one)
+     Running ../../tests/acceptance/1738/app/titles.rs (target/debug/deps/acceptance_1738-3c7eef5f5739a128)
+
+running 9 tests
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_line ... ok
+test ac4_f8a06717_a_chinese_title_shows_unchanged_on_every_surface ... ok
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_heading ... ok
+test ac4_f8a06717_a_plain_title_shows_unchanged_on_every_surface ... ok
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_sidebar_row ... ok
+test ac2_e6a3db6d_the_verdict_line_to_the_sessions_chat_marks_the_hostile_titles_characters ... ok
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_notification_title ... ok
+test ac3_7a00b50e_the_records_task_created_keeps_the_titles_original_bytes ... ok
+test ac4_f8a06717_an_emoji_title_shows_unchanged_on_every_surface ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running ../../tests/acceptance/2117/app/panel.rs (target/debug/deps/acceptance_2117-c1a7ad56673f9d5d)
+
+running 8 tests
+AC1 over the 60 s after the first frame: the window drew 0 frames; BoundPanel rendered its bound line `price` 0 times and was notified 0 times; the panel's script rendered 0 times and was notified 0; the window's content rendered 0 times and was notified 0
+test ac1_789c5dd8_a_still_bound_panel_held_60_s_renders_0_times_and_draws_0_frames_after_the_first ... ok
+AC2: frames drawn before 2.500 s: 0; the frame at 2.500 s drawn: true, showing `price` as "182.40 USD · 2 min old" in muted (#8b8f97)
+test ac2_ebc91643_the_frame_at_as_of_plus_stale_after_draws_it_muted_with_its_age_and_none_before_it ... ok
+AC3 over 180 s while stale: the age shown changed 3 times, at 29.700 s, 89.700 s, 149.700 s; the window drew 3 frames; BoundPanel rendered its bound line `price` 3 times and was notified 3 times; the panel's script rendered 3 times and was notified 0; the window's content rendered 3 times and was notified 0
+test ac3_426efcc0_while_stale_the_panel_renders_once_for_each_change_of_the_age_it_shows_never_between ... ok
+AC4: the new reading showed 1 frames (16 ms) after the reader held it; the window drew 1 frames; BoundPanel rendered its bound line `price` 1 times and was notified 1 times; the panel's script rendered 1 times and was notified 0; the window's content rendered 1 times and was notified 0
+test ac4_0504b71f_a_new_reading_shows_within_2_frames_of_the_reader_holding_it_no_other_view_notified ... ok
+AC5 over the 2 s after a reading equal to the one shown: the window drew 0 frames; BoundPanel rendered its bound line `price` 0 times and was notified 0 times; the panel's script rendered 0 times and was notified 0; the window's content rendered 0 times and was notified 0
+test ac5_2a24617a_a_reading_equal_to_the_one_shown_renders_0_views_and_draws_0_frames ... ok
+test plant_panel_ticks_ac1_789c5dd8_a_timer_that_notifies_every_second_fails_naming_the_view ... ignored, the plant runs only in a build with --features plant-panel-ticks
+test plant_panel_grays_on_reading_ac2_ebc91643_a_panel_that_waits_for_the_next_reading_fails_naming_the_element ... ignored, the plant runs only in a build with --features plant-panel-grays-on-reading
+test plant_panel_waits_for_redraw_ac4_0504b71f_a_panel_that_waits_for_another_views_redraw_fails_naming_the_source ... ignored, the plant runs only in a build with --features plant-panel-waits-for-redraw
+test result: ok. 5 passed; 0 failed; 3 ignored
+
+     Running ../../tests/acceptance/34/app/record_reader.rs (target/debug/deps/acceptance_34-dd0ecd21df864f8b)
+
+running 4 tests
+test ac5_cold_start_the_app_subscribes_after_800_and_shows_the_ask_appended_at_801 ... ok
+test ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them ... FAILED
+test ac6_a_dropped_frame_at_701_is_refetched_from_700_before_702_applies_and_702_applies_once ... ok
+test ac10_an_app_at_700_that_gets_750_refetches_from_700_once_moves_to_750_and_refetches_nothing_for_751 ... ok
+
+failures:
+
+---- ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them stdout ----
+
+thread 'ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them' (4439719) panicked at crates/deep-app/../../tests/acceptance/34/app/record_reader.rs:586:33:
+BLOCKED: the hub printed no ready line: ""
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_34`
+     Running ../../tests/acceptance/995/redraft/panel.rs (target/debug/deps/acceptance_995-fa92f1f8a5ca55df)
+
+running 3 tests
+the canvas panel's process held 136.3 MB after revision 10, 121.4 MB after revision 1000: 0.0 MB more
+test presenting_1000_revisions_each_with_a_new_1_mb_picture_leaves_memory_within_20_mb_of_its_level_after_the_first_10 ... ok
+test after_1000_revisions_the_panel_holds_only_the_pictures_a_shown_revision_uses ... ok
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... ok
+
+test result: ok. 3 passed; 0 failed
+
+     Running tests/chrome.rs (target/debug/deps/chrome-c10cb149be5a09ca)
+
+running 2 tests
+test a_script_panels_theme_is_the_looks_light_roles ... ok
+test with_macos_in_dark_a_script_panels_theme_is_the_looks_dark_roles ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/headless.rs (target/debug/deps/headless-ec4f1c7b8e3158fd)
+
+running 6 tests
+test a_panel_replaces_the_welcome_screen ... ok
+test mark_in_the_title_bar_and_the_welcome_screen ... ok
+test menu_bar_count ... ok
+test session_list_count_and_report ... ok
+test codex_stocks_panel ... ok
+test claude_code_stocks_panel ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+
+     Running tests/hub_client.rs (target/debug/deps/hub_client-b950ef818451363b)
+
+running 3 tests
+test a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app ... FAILED
+test the_hub_takes_the_views_the_app_reports_shown_and_hidden ... FAILED
+test the_app_reads_the_hubs_health_and_log_as_the_app ... FAILED
+
+failures:
+
+---- a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app stdout ----
+
+thread 'a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app' (4441583) panicked at crates/deep-app/tests/hub_client.rs:60:53:
+the hub's ready line: Error("EOF while parsing a value", line: 1, column: 0)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- the_hub_takes_the_views_the_app_reports_shown_and_hidden stdout ----
+
+thread 'the_hub_takes_the_views_the_app_reports_shown_and_hidden' (4441585) panicked at crates/deep-app/tests/hub_client.rs:60:53:
+the hub's ready line: Error("EOF while parsing a value", line: 1, column: 0)
+
+---- the_app_reads_the_hubs_health_and_log_as_the_app stdout ----
+
+thread 'the_app_reads_the_hubs_health_and_log_as_the_app' (4441584) panicked at crates/deep-app/tests/hub_client.rs:60:53:
+the hub's ready line: Error("EOF while parsing a value", line: 1, column: 0)
+
+
+failures:
+    a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app
+    the_app_reads_the_hubs_health_and_log_as_the_app
+    the_hub_takes_the_views_the_app_reports_shown_and_hidden
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p deep-app --test hub_client`
+     Running lists_1477.rs (target/debug/deps/lists_1477-5491ff8e00de70f8)
+     Running screens.rs (target/debug/deps/screens-b84ec326f58abc04)
+
+running 4 tests
+test window_screen ... ok
+test welcome_screen ... ok
+test claude_code_panel_screen ... ok
+test codex_panel_screen ... ok
+
+test result: ok. 4 passed; 0 failed
+     Running spike_402.rs (target/debug/deps/spike_402-7cca575b3d1e4138)
+{"p50":19.287709,"p95":23.397209,"max":31.700417,"emulator_p50":0.1285}
+record: /var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-402-52143/record.json
+test spike_402 ... ok
+   Doc-tests deep_app
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 3 targets failed:
+    `-p deep-app --test acceptance_1141`
+    `-p deep-app --test acceptance_34`
+    `-p deep-app --test hub_client`
+== end 2026-11-14 20:30:36 load { 31.08 72.09 59.99 } thermal 1
+cargo exit=101
