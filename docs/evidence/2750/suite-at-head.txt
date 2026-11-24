@@ -1,0 +1,24 @@
+#2750's suite on the change, one file at a time under one test grant, 2026-11-24 03:36-03:37 UTC, on the feature
+commit's tree before main was merged in (the merge touched one line of packages/hub/src/numbers.ts). Mac17,10, macOS arm64.
+Not run again after the merge: the build slot's queue. budgets.test.ts is INCONCLUSIVE, which is not a pass.
+
+unit packages/github/test/landed.test.ts: PASS (exit 0)
+landed.test.ts: PASS (exit 0) at 03:36:37, load 40.27 55.43 98.74
+revert.test.ts: PASS (exit 0) at 03:36:42, load 38.57 54.82 98.28
+missing.test.ts: PASS (exit 0) at 03:36:46, load 37.88 54.41 97.88
+rebuild.test.ts: PASS (exit 0) at 03:36:52, load 36.53 53.85 97.43
+quiet.test.ts: PASS (exit 0) at 03:37:02, load 33.60 52.66 96.49
+budgets.test.ts: FAILED as INCONCLUSIVE (exit 1) at 03:37:25, load 29.80 50.56 94.72
+
+packages/github/test/landed.test.ts: Test Files 1 passed (1), Tests 5 passed (5)
+landed.test.ts: Tests 1 passed (1)
+revert.test.ts: Tests 1 passed (1)
+missing.test.ts: Tests 1 passed (1)
+rebuild.test.ts: Tests 1 passed (1)
+quiet.test.ts: Tests 1 passed (1)
+
+budgets.test.ts, after its first assertions held (the month's 2,000 commits read as the fixture says):
+  AssertionError: INCONCLUSIVE: the recompute of 30 days with 2,000 landed commits is timed only on a reference Mac at 
+  rest, and nothing was timed here: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or 
+  Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): load 
+  29.80224609375 at a run's start or end is above the 18 cores; this is not a pass
