@@ -1,0 +1,145 @@
+Hand runs of tests/acceptance/3295-redraft-byhand on the Mac (MacBook Pro, Apple silicon), one at a time. Paths under the job's scratch folder read <tmp>: c3295-redraft is the checkout (2b697475e with this folder on top), r3295/byhand/twin an APFS clone (cp -cR) of its Cargo.toml, Cargo.lock, rust-toolchain.toml, .cargo, crates, vendor, tests, adapters, scripts and package.json with the twin's lines.json laid over crates/deep-hook/src/main.rs (each find matched once, as twinOverlay does). Home paths read <home>.
+Expected: both tests pass on the checkout; each fails at its control assertion with its twin laid over a copy.
+Not run: the proof lanes.
+
+## The blind commit, the whole file
+# 2026-11-24T04:12:20Z, head 2b697475e with the new folder as written, Darwin arm64, node v24.22.0, cargo 1.99.1 (5f94df478 2026-08-27)
+# load at start: { 96.90 95.31 95.05 }
+$ node --test --test-concurrency=1 tests/acceptance/3295-redraft-byhand/late-close.test.mjs
+✔ #3295.63a9095d the late-close test still fails on a deep-hook that decides only once its agent closes stdin: killed at the one-second deadline (106144.376459ms)
+✔ #3295.2acd3e71 the late-close test still fails on a deep-hook that allows the call and never spools it (1700.747333ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 111523.662666
+# exit 0; load at end: { 82.00 89.20 92.59 }
+
+
+## Twin waits-for-close, run of #3295.63a9095d
+laid over crates/deep-hook/src/main.rs
+$ diff of the twin's main.rs against the commit's
+1189,1191c1189
+<                 if whole {
+<                     break;
+<                 }
+---
+>                 let _ = whole;
+1544c1542
+<             && start.elapsed() < RULING_LIMIT
+---
+>             && (PENDING.get().is_none() || start.elapsed() < RULING_LIMIT)
+# 2026-11-24T04:14:22Z; load at start: { 84.57 89.51 92.66 }
+$ node --test --test-concurrency=1 --test-name-pattern='#3295.63a9095d' tests/acceptance/3295-redraft-byhand/late-close.test.mjs
+✖ #3295.63a9095d the late-close test still fails on a deep-hook that decides only once its agent closes stdin: killed at the one-second deadline (308842.870875ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 314493.041459
+
+✖ failing tests:
+
+test at tests/acceptance/3295-redraft-byhand/late-close.test.mjs:134:1
+✖ #3295.63a9095d the late-close test still fails on a deep-hook that decides only once its agent closes stdin: killed at the one-second deadline (308842.870875ms)
+  AssertionError [ERR_ASSERTION]: the late-close test passes on the checkout's own deep-hook, so a stand-in's failure is the stand-in's:
+  control: FAIL in 1.01s, 0 hook starts
+  failures:
+  
+  ---- a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it stdout ----
+  
+  thread 'a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it' (164057268) panicked at crates/deep-hook/tests/cli.rs:246:5:
+  assertion `left == right` failed: the call is allowed before its agent closes stdin
+    left: None
+   right: Some(0)
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  
+  
+  failures:
+      a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it
+  
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 1.01s
+  
+  error: test failed, to rerun pass `-p deep-hook --test cli`
+  
+  
+  'FAIL' !== 'PASS'
+  
+      at controlPasses (file://<tmp>/r3295/byhand/twin/tests/acceptance/3295-redraft-byhand/late-close.test.mjs:130:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<tmp>/r3295/byhand/twin/tests/acceptance/3295-redraft-byhand/late-close.test.mjs:135:9)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL',
+    expected: 'PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+# exit 1; load at end: { 85.39 101.66 98.72 }
+
+
+## Twin never-spools, run of #3295.2acd3e71
+laid over crates/deep-hook/src/main.rs
+$ diff of the twin's main.rs against the commit's
+997a998,1000
+>     if !request.is_empty() {
+>         return;
+>     }
+# 2026-11-24T04:20:03Z; load at start: { 84.76 99.99 98.22 }
+$ node --test --test-concurrency=1 --test-name-pattern='#3295.2acd3e71' tests/acceptance/3295-redraft-byhand/late-close.test.mjs
+✖ #3295.2acd3e71 the late-close test still fails on a deep-hook that allows the call and never spools it (266085.865167ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 271818.368042
+
+✖ failing tests:
+
+test at tests/acceptance/3295-redraft-byhand/late-close.test.mjs:149:1
+✖ #3295.2acd3e71 the late-close test still fails on a deep-hook that allows the call and never spools it (266085.865167ms)
+  AssertionError [ERR_ASSERTION]: the late-close test passes on the checkout's own deep-hook, so a stand-in's failure is the stand-in's:
+  control: FAIL in 0.24s, 0 hook starts
+  failures:
+  
+  ---- a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it stdout ----
+  
+  thread 'a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it' (164206909) panicked at crates/deep-hook/tests/cli.rs:251:5:
+  the call is spooled: ""
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  
+  
+  failures:
+      a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it
+  
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.24s
+  
+  error: test failed, to rerun pass `-p deep-hook --test cli`
+  
+  
+  'FAIL' !== 'PASS'
+  
+      at controlPasses (file://<tmp>/r3295/byhand/twin/tests/acceptance/3295-redraft-byhand/late-close.test.mjs:130:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<tmp>/r3295/byhand/twin/tests/acceptance/3295-redraft-byhand/late-close.test.mjs:150:9)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL',
+    expected: 'PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+# exit 1; load at end: { 104.76 94.09 95.32 }

@@ -489,7 +489,7 @@ export class Core {
     const options = this.options;
     this.gate = new GateRunner({
       raw: this.raw, now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
-      start: (r) => this.judging.runApproved(r), spent: (task, files) => this.variants.spent(task, files), ended: (run) => this.judging.runEnded(run), judged: (claim) => this.judging.judged(claim), stackStart: (folder, worktree) => this.stacks.expectedStart(folder, worktree), stacked: (folder) => this.stacks.wanted(folder),
+      start: (r) => this.judging.runApproved(r), spent: (task, files) => this.variants.spent(task, files), ended: (run) => this.judging.runEnded(run), judged: (claim) => this.judging.judged(claim), stackStart: (folder, worktree) => this.stacks.expectedStart(folder, worktree), stacked: (folder) => this.stacks.wanted(folder), programs: this.providers.checks.programs,
       ...(options.plant === 'env-starts-at-every-claim' ? {
         startsAtClaim: async (folder: string, session: string, worktree: string) => {
           const run = this.providers.environment.newRun();
@@ -645,8 +645,8 @@ export class Core {
 
     this.store = await openEvidenceStore({ root: this.root.evidence, now: this.now, sealer: variantSealer(this.root.dir) });
     const storage = this.durable.backend();
-    // Each event its own commit: the durable write points a run makes depend only on the events it appends,
-    // never on how many arrived together, so a cut at any one can be replayed.
+    // Each event its own commit, but the core's own made in one turn, an answer and the decision it saves, share one
+    // (#22): the durable write points a run makes depend only on the events it appends, so a cut at any one can be replayed.
     // Each read counted against the call it runs for, where one counts its queries (#1576).
     this.record = counted(receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) })));
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
@@ -735,7 +735,7 @@ export class Core {
       const held = asks.heldUntil();
       if (held !== null && held <= this.now()) return true;
       if (this.now() - looked >= 60_000 && (await this.record.raw(`SELECT 1 FROM asks WHERE status = 'open' AND batch_id IS NULL LIMIT 1`)).length) { looked = this.now(); return true; }
-      return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0;
+      return (await asks.batchDue()) || (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0; // or a batch time of yours came: the tick shows what waited for it (#22)
     };
     // The hook programs are checked at start and every 10 minutes on the hub's clock (#993): no hook arrives to say they can't run.
     await this.hookPrograms().catch(() => undefined);
@@ -2474,11 +2474,12 @@ export class Core {
     const state = claim ? await this.judging.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL`, [meta.session])) as { at: number | null }[];
     // The list's one count (#1463, #1810): its ask rows, as deep and the app count them, each an ask the inbox holds
-    // open. Read from the inbox, not the rows: a row lands with its row.set's commit, which can wait on another
-    // commit's evidence sync, and the reply never does (#2539). #1810's planted reader counts an ask that took its
-    // default, which can still be undone, as open too.
+    // open and in sight, shown or put off with Later; one waiting for its batch has no row (#22). Read from the inbox,
+    // not the rows: a row lands with its row.set's commit, which can wait on another commit's evidence sync, and the
+    // reply never does (#2539). #1810's planted reader counts an ask that took its default, which can still be undone,
+    // as open too.
     const defaulted = this.options.plant === 'needs-you-counts-defaulted' ? Number(((await this.record.raw(`SELECT COUNT(*) AS n FROM asks WHERE status = 'defaulted'`)) as { n: number }[])[0]?.n ?? 0) : 0;
-    const needsYou = (await this.asks.inbox()).filter((a) => a.status !== 'closed').length + defaulted;
+    const needsYou = (await this.asks.inbox()).filter((a) => a.status === 'shown' || a.status === 'later').length + defaulted;
     return statusAnswer(state, { session: meta.session, agent: live?.agent ?? meta.agent, worktree: live?.cwd || meta.cwd, needsYou, now: this.now(), lastStop: stop?.at ?? null, state: claim ? undefined : live?.state });
   }
 

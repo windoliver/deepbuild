@@ -1,0 +1,123 @@
+== commit 51e4a2b34e2c9c4e0e465e45975657c3a71c2d1d (main)
+== start 2026-11-14 21:05:00 load { 15.49 11.37 28.00 } thermal 0
+✔ #338.6257cd5b a replica launched headless at the reference window, under 2 s on every run, with a text snapshot of roles, names and canvas item IDs and a screenshot of each shipped view (54.728583ms)
+✔ #338.ed0f5115 the fixture record holds 40 open asks of every kind, one in Later, one held for an unread message, five folded into an exception, one superseded and one moot, as of its log_pos on the virtual clock (39.735083ms)
+✖ #338.ed0f5115 the fixture panel that replaces Needs you lists the inbox projection's rows, recomputed from the fixture's events, row for row, and passes needs-you@1; the planted views that cap at 20, drop the folded asks, list the superseded one or hide the newest each fail, naming the ask (274.100375ms)
+✖ #338.78331b15 for Needs you, the sidebar and a session page, the replica's snapshot with bounds equals the live accessibility tree captured on the reference Mac, node for node, and a replica laid out at scale 1 fails, naming the first node that differs (42.142208ms)
+✖ scope: gpui-shell's panel registry fills every slot of the app (a sidebar item, a home gadget, a tab in any panel, the line) and replaces the shipped Needs you, each from a tracked panel, and the decision says it covers them (188.082292ms)
+✔ scope: the canvas is a component in gpui-shell's registry with argument schemas and a retained-state handle, and gpui-kit and gpui-shell come from upstream at a commit, with no fork (48.090375ms)
+✔ scope: the decision records the finished macOS GPU-layer spike, the IOSurface handoff and its cost, with what the registry and the replica do, in the technical design (1.722833ms)
+✔ scope: the headless command runs in the local preflight, and nothing runs in CI (157.39925ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 5
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 851.708417
+
+✖ failing tests:
+
+test at tests/acceptance/338/spike.test.mjs:29:1
+✖ #338.ed0f5115 the fixture panel that replaces Needs you lists the inbox projection's rows, recomputed from the fixture's events, row for row, and passes needs-you@1; the planted views that cap at 20, drop the folded asks, list the superseded one or hide the newest each fail, naming the ask (274.100375ms)
+  AssertionError [ERR_ASSERTION]: 
+  the fixture Needs you panel: crates/deep-app/panels/338-needs-you/main.js doesn't hash to its recorded sha256
+  planted cap20: crates/deep-app/panels/338-cap20/main.js doesn't hash to its recorded sha256
+  planted drop-folded: crates/deep-app/panels/338-drop-folded/main.js doesn't hash to its recorded sha256
+  planted list-superseded: crates/deep-app/panels/338-list-superseded/main.js doesn't hash to its recorded sha256
+  planted hide-newest: crates/deep-app/panels/338-hide-newest/main.js doesn't hash to its recorded sha256
+  + actual - expected
+  
+  + [
+  +   "the fixture Needs you panel: crates/deep-app/panels/338-needs-you/main.js doesn't hash to its recorded sha256",
+  +   "planted cap20: crates/deep-app/panels/338-cap20/main.js doesn't hash to its recorded sha256",
+  +   "planted drop-folded: crates/deep-app/panels/338-drop-folded/main.js doesn't hash to its recorded sha256",
+  +   "planted list-superseded: crates/deep-app/panels/338-list-superseded/main.js doesn't hash to its recorded sha256",
+  +   "planted hide-newest: crates/deep-app/panels/338-hide-newest/main.js doesn't hash to its recorded sha256"
+  + ]
+  - []
+  
+      at holds (file://~/private/dbc-22n/tests/acceptance/338/spike.test.mjs:12:36)
+      at TestContext.<anonymous> (file://~/private/dbc-22n/tests/acceptance/338/spike.test.mjs:31:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "the fixture Needs you panel: crates/deep-app/panels/338-needs-you/main.js doesn't hash to its recorded sha256", "planted cap20: crates/deep-app/panels/338-cap20/main.js doesn't hash to its recorded sha256", "planted drop-folded: crates/deep-app/panels/338-drop-folded/main.js doesn't hash to its recorded sha256", "planted list-superseded: crates/deep-app/panels/338-list-superseded/main.js doesn't hash to its recorded sha256", "planted hide-newest: crates/deep-app/panels/338-hide-newest/main.js doesn't hash to its recorded sha256" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/338/spike.test.mjs:34:1
+✖ #338.78331b15 for Needs you, the sidebar and a session page, the replica's snapshot with bounds equals the live accessibility tree captured on the reference Mac, node for node, and a replica laid out at scale 1 fails, naming the first node that differs (42.142208ms)
+  AssertionError [ERR_ASSERTION]: 
+  needs-you: the replica's snapshot differs from the live tree: node 1 (label "Tasks") differs in role: "label" vs "group"
+  sidebar: the replica's snapshot differs from the live tree: node 1 (label "Tasks") differs in role: "label" vs "group"
+  session: the replica's snapshot differs from the live tree: node 1 (label "Tasks") differs in role: "label" vs "group"
+  + actual - expected
+  
+  + [
+  +   `needs-you: the replica's snapshot differs from the live tree: node 1 (label "Tasks") differs in role: "label" vs "group"`,
+  +   `sidebar: the replica's snapshot differs from the live tree: node 1 (label "Tasks") differs in role: "label" vs "group"`,
+  +   `session: the replica's snapshot differs from the live tree: node 1 (label "Tasks") differs in role: "label" vs "group"`
+  + ]
+  - []
+  
+      at holds (file://~/private/dbc-22n/tests/acceptance/338/spike.test.mjs:12:36)
+      at TestContext.<anonymous> (file://~/private/dbc-22n/tests/acceptance/338/spike.test.mjs:36:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ `needs-you: the replica's snapshot differs from the live tree: node 1 (label "Tasks") differs in role: "label" vs "group"`, `sidebar: the replica's snapshot differs from the live tree: node 1 (label "Tasks") differs in role: "label" vs "group"`, `session: the replica's snapshot differs from the live tree: node 1 (label "Tasks") differs in role: "label" vs "group"` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/338/spike.test.mjs:39:1
+✖ scope: gpui-shell's panel registry fills every slot of the app (a sidebar item, a home gadget, a tab in any panel, the line) and replaces the shipped Needs you, each from a tracked panel, and the decision says it covers them (188.082292ms)
+  AssertionError [ERR_ASSERTION]: 
+  slot sidebar: crates/deep-app/panels/338-sidebar/main.js doesn't hash to its recorded sha256
+  slot home: crates/deep-app/panels/338-home/main.js doesn't hash to its recorded sha256
+  slot tab: crates/deep-app/panels/338-tab/main.js doesn't hash to its recorded sha256
+  slot line: crates/deep-app/panels/338-line/main.js doesn't hash to its recorded sha256
+  slot replace: crates/deep-app/panels/338-needs-you/main.js doesn't hash to its recorded sha256
+  + actual - expected
+  
+  + [
+  +   "slot sidebar: crates/deep-app/panels/338-sidebar/main.js doesn't hash to its recorded sha256",
+  +   "slot home: crates/deep-app/panels/338-home/main.js doesn't hash to its recorded sha256",
+  +   "slot tab: crates/deep-app/panels/338-tab/main.js doesn't hash to its recorded sha256",
+  +   "slot line: crates/deep-app/panels/338-line/main.js doesn't hash to its recorded sha256",
+  +   "slot replace: crates/deep-app/panels/338-needs-you/main.js doesn't hash to its recorded sha256"
+  + ]
+  - []
+  
+      at holds (file://~/private/dbc-22n/tests/acceptance/338/spike.test.mjs:12:36)
+      at TestContext.<anonymous> (file://~/private/dbc-22n/tests/acceptance/338/spike.test.mjs:40:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "slot sidebar: crates/deep-app/panels/338-sidebar/main.js doesn't hash to its recorded sha256", "slot home: crates/deep-app/panels/338-home/main.js doesn't hash to its recorded sha256", "slot tab: crates/deep-app/panels/338-tab/main.js doesn't hash to its recorded sha256", "slot line: crates/deep-app/panels/338-line/main.js doesn't hash to its recorded sha256", "slot replace: crates/deep-app/panels/338-needs-you/main.js doesn't hash to its recorded sha256" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit=1
+== end 2026-11-14 21:05:01 load { 15.49 11.37 28.00 } thermal 0

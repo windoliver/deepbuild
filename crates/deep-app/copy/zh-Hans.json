@@ -143,6 +143,10 @@
     "text": "请把窗口拉高一些",
     "source": "1e7ce73b197ceeb14302e3f2b5a5d7672c88dfab6299a5e4546be24c8d496719"
   },
+  "arming.unseen": {
+    "text": "请先显示窗口",
+    "source": "9434f3b46895456752857cad31d64db69b3bb708b5dadacae3f8a318e681e4bf"
+  },
   "bound.card_named": {
     "text": "卡片 {0}：{1}",
     "source": "e59bbe5d8183bacd0404825bbba6c3ba026a3d5e19d970df32f7081ff64cd927"

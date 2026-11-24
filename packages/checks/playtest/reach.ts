@@ -8,7 +8,8 @@
 // (the first-party bots' and the drawn board's convention), within a layer, and through the grid's links; a locked
 // cell opens once the search has reached a cell holding its key under `locks`, every key kept, and the search runs on
 // until nothing more opens. Every goal and every cell of an `every` class must be reached, or it fails grid.unreached;
-// a depth `depths` lists that no run generated is BLOCKED, never PASS. The flow form reads `next` and `cost` at each
+// a depth `depths` lists that no run generated is BLOCKED, never PASS. With `differ` (#3265), a depth whose floors are
+// the same from run to run past that share fails grid.same. The flow form reads `next` and `cost` at each
 // step they change: at every step but the `lag` steps after one at which the grid changed (step 0 is no change), every
 // cell its own search leads to a target must step to a neighbour that isn't solid and whose cost is lower, and every
 // spawn must reach a target both by its own search and by following `next`, or it fails grid.flow.
@@ -26,7 +27,7 @@ export type Place = Cell | string;
 /** The flow form's input. */
 export interface FlowInput { next: string; cost: string; solid?: string[]; targets: Place[]; spawns: Place[]; lag?: number }
 /** grid.reach's own input: the playtest it names, then the search's or the flow form's. */
-export interface ReachInput { playtest: string; starts?: Cell[]; goals?: Place[]; every?: string[]; depths?: number[]; flow?: FlowInput }
+export interface ReachInput { playtest: string; starts?: Cell[]; goals?: Place[]; every?: string[]; depths?: number[]; differ?: number; flow?: FlowInput }
 
 /** A floor the search judged: its run, seed, depth and step, its cells' hash, and what it left unreached. */
 export interface FloorFound { run: string; seed: number; depth: number; step: number; hash: string; reached: boolean; unreached: Cell[]; nearest: Cell | null }
@@ -95,33 +96,36 @@ function neighbours(s: Shape, i: number, parity = false): number[] {
 }
 
 /**
- * A runner: the plug-in's own search, or a planted one the kit must catch (#68): its neighbours, and whether a locked
- * cell opens with the keys the search holds.
+ * A runner: the plug-in's own, or a planted one the kit must catch (#68): its search's neighbours, whether a locked
+ * cell opens with the keys the search holds, and how many of one depth's floors, in run order, are distinct.
  */
-export interface Runner { neighbours(s: Shape, i: number): number[]; opens(s: Shape, locked: number, keys: Set<number>): boolean }
+export interface Runner { neighbours(s: Shape, i: number): number[]; opens(s: Shape, locked: number, keys: Set<number>): boolean; distinct(hashes: string[]): number }
 
 /** The plug-in's own runner. */
 export const OWN: Runner = {
   neighbours: (s, i) => neighbours(s, i),
   opens: (s, locked, keys) => { const k = s.locks.get(locked); return k !== undefined && keys.has(k); },
+  distinct: (hashes) => new Set(hashes).size,
 };
 
 /** The kit's planted runners, each wrong in one way a fixture must catch. */
 export const PLANTED: Record<string, Runner> = {
   // Takes a hex grid's neighbours by the other offset.
-  'offset-even': { neighbours: (s, i) => neighbours(s, i, true), opens: OWN.opens },
+  'offset-even': { ...OWN, neighbours: (s, i) => neighbours(s, i, true) },
   // Treats the cells stacked above and below on the other layers as neighbours.
   'stacked-layers': {
+    ...OWN,
     neighbours: (s, i) => {
       const plane = s.w * s.h;
       const out = neighbours(s, i);
       for (const j of [i - plane, i + plane]) if (j >= 0 && j < plane * s.layers) out.push(j);
       return out;
     },
-    opens: OWN.opens,
   },
   // Opens every lock, its key reached or not.
-  'opens-locks': { neighbours: OWN.neighbours, opens: () => true },
+  'opens-locks': { ...OWN, opens: () => true },
+  // Compares each run's floor only with that of the run before it.
+  'previous-run': { ...OWN, distinct: (hashes) => hashes.filter((h, i) => h !== hashes[i - 1]).length },
 };
 
 /** The cells the search reaches from `starts`, with key-and-door closure; `links` are (from, to, two_way). */
@@ -363,6 +367,16 @@ function flowAt(s: Shape, cells: number[], next: number[], cost: number[], links
 
 // ---- The check.
 
+/** Why `differ` is refused before any run, or none. */
+function differRefusal(reach: ReachInput, input: PlaytestInput): string | undefined {
+  const d: unknown = reach.differ;
+  if (d === undefined) return undefined;
+  if (typeof d !== 'number' || !(d > 0 && d <= 1)) return `differ: ${JSON.stringify(d)}: it's the share of the floors that must differ, above 0 and at most 1`;
+  if (reach.flow) return 'differ with flow: the flow form reads no floors';
+  if (input.piece_seed !== 'run') return `differ with piece_seed: ${input.piece_seed ?? 'own'}: every run plays the document's one seed, so no two floors could differ; give the playtest piece_seed: run`;
+  return undefined;
+}
+
 /** Runs played at once: a playtest's replicas are leased two at a time. */
 const AT_ONCE = 2;
 
@@ -374,6 +388,8 @@ const AT_ONCE = 2;
 export async function runReach(reach: ReachInput, input: PlaytestInput, play: Play, runner: Runner = OWN): Promise<CheckResult & { reach: ReachFound }> {
   const found: ReachFound = { floors: [], coverage: {}, distinct: {}, flow: [], search_ms: 0 };
   const stop = (f: Failure): CheckResult & { reach: ReachFound } => ({ ...ended([f]), reach: found });
+  const unable = differRefusal(reach, input);
+  if (unable) return stop(failure('grid.reach', `refused before any run: ${unable}`, false));
   const iface = input.play;
   if (!iface) return stop(failure('grid.reach', 'refused before any run: grid.reach reads the play interface of the playtest it names, and its input gives none', false));
   const locked = lockRefusal(iface);
@@ -415,7 +431,8 @@ export async function runReach(reach: ReachInput, input: PlaytestInput, play: Pl
   const evidence = done.map((d) => d.track);
   if (refused) return { ...ended([refused], evidence, done.length), reach: found };
   const failures: Failure[] = [];
-  const blocked: [number, string][] = [];
+  const unseen: Failure[] = [];
+  const unsure: Failure[] = [];
   if (reach.flow) {
     for (const d of done) {
       const f = judgeFlow(s, d.answer, w, reach.flow, runner);
@@ -426,23 +443,18 @@ export async function runReach(reach: ReachInput, input: PlaytestInput, play: Pl
     }
   } else {
     // Every floor a run recorded is searched; `depths` names those that must have been generated.
-    const seen = new Map<number, Set<string>>();
-    const hashes = new Map<number, Set<string>>();
     const me = iface.units?.self ?? 0;
     for (const d of done) {
       for (const k of floorSteps(d.answer, w, ready)) {
         const cells = ints(at(d.answer.changes?.[w.cells], k));
         // With no `floor`, a run's one floor is depth 1.
         const depth = w.floor ? (ints(at(d.answer.changes?.[w.floor], k))[0] ?? 0) : 1;
-        const hash = floorHash(cells);
-        (seen.get(depth) ?? seen.set(depth, new Set()).get(depth)!).add(d.test);
-        (hashes.get(depth) ?? hashes.set(depth, new Set()).get(depth)!).add(hash);
         const unit = ints(at(d.answer.changes?.[w.unit ?? ''], k));
         const starts = reach.starts ?? (iface['start'] as Cell[] | undefined) ?? (unit.length > 2 * me + 1 ? [[unit[2 * me]!, unit[2 * me + 1]!] as Cell] : []);
         const t0 = performance.now();
         const j = judgeFloor(s, cells, linksAt(d.answer, w, k), starts.map((c) => indexOf(s, c)).filter((i) => i >= 0), reach, runner);
         found.search_ms += performance.now() - t0;
-        found.floors.push({ run: d.test, seed: d.seed, depth, step: k, hash, reached: j.unreached.length === 0, unreached: j.unreached.map((i) => cellOf(s, i)), nearest: j.nearest === null ? null : cellOf(s, j.nearest) });
+        found.floors.push({ run: d.test, seed: d.seed, depth, step: k, hash: floorHash(cells), reached: j.unreached.length === 0, unreached: j.unreached.map((i) => cellOf(s, i)), nearest: j.nearest === null ? null : cellOf(s, j.nearest) });
         if (j.unreached.length) {
           const first = j.unreached[0]!;
           const more = j.unreached.length > 1 ? ` (${j.unreached.length - 1} more unreached)` : '';
@@ -450,12 +462,25 @@ export async function runReach(reach: ReachInput, input: PlaytestInput, play: Pl
         }
       }
     }
-    for (const [depth, runs] of [...seen].sort((a, b) => a[0] - b[0])) found.coverage[String(depth)] = runs.size;
-    for (const [depth, hs] of [...hashes].sort((a, b) => a[0] - b[0])) found.distinct[String(depth)] = hs.size;
-    for (const depth of reach.depths ?? []) if (!seen.has(depth)) { found.coverage[String(depth)] = 0; blocked.push([depth, `BLOCKED: depth ${depth}: 0 runs generated it`]); }
+    const depths = new Map<number, FloorFound[]>();
+    for (const f of found.floors) (depths.get(f.depth) ?? depths.set(f.depth, []).get(f.depth)!).push(f);
+    for (const [depth, floors] of [...depths].sort((a, b) => a[0] - b[0])) {
+      const runs = new Set(floors.map((f) => f.run)).size;
+      const distinct = runner.distinct(floors.map((f) => f.hash));
+      found.coverage[String(depth)] = runs;
+      found.distinct[String(depth)] = distinct;
+      if (reach.differ === undefined) continue;
+      // Every bot's run i plays one seed, so one seed's same floor is one floor, whichever runs recorded it, and runs
+      // of one seed alone say nothing of another's.
+      const seeds = new Set(floors.map((f) => f.seed)).size;
+      const own = new Set(floors.map((f) => `${f.seed} ${f.hash}`)).size;
+      const made = `${runs} run${runs === 1 ? '' : 's'}`;
+      if (seeds < 2) unsure.push(failure(`depth ${depth}`, `INCONCLUSIVE: depth ${depth}: ${made} of one seed generated it, so differ has no other seed's floor to compare`, false));
+      else if (distinct / own < reach.differ) failures.push(failure(`depth ${depth}`, `grid.same: depth ${depth}: ${made} generated ${distinct} distinct floor${distinct === 1 ? '' : 's'} of ${own}, under differ: ${reach.differ}`));
+    }
+    if (reach.differ !== undefined && !depths.size) unsure.push(failure('differ', 'INCONCLUSIVE: no run generated a floor, so differ has none to compare', false));
+    for (const depth of reach.depths ?? []) if (!depths.has(depth)) { found.coverage[String(depth)] = 0; unseen.push(failure(`depth ${depth}`, `BLOCKED: depth ${depth}: 0 runs generated it`, false)); }
   }
-  const unseen = blocked.map(([depth, m]) => failure(`depth ${depth}`, m, false));
-  if (failures.length) return { outcome: 'failed', testsRun: done.length, failures: [...failures, ...unseen], evidence, read: [], mask: null, reach: found };
-  if (unseen.length) return { outcome: 'missing', testsRun: done.length, failures: unseen, evidence, read: [], mask: null, reach: found };
-  return { outcome: 'passed', testsRun: done.length, failures: [], evidence, read: [], mask: null, reach: found };
+  const outcome = failures.length ? 'failed' : unseen.length ? 'missing' : unsure.length ? 'uncounted' : 'passed';
+  return { outcome, testsRun: done.length, failures: [...failures, ...unseen, ...unsure], evidence, read: [], mask: null, reach: found };
 }
