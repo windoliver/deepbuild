@@ -137,7 +137,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/2650/planted-jobs.test.ts', 'tests/acceptance/2650/planted-names.test.ts', 'tests/acceptance/1498/', 'tests/acceptance/1812/',
     'tests/acceptance/67-redraft-1812/', 'tests/acceptance/1495/app-download.test.ts', 'tests/acceptance/1592/', 'tests/acceptance/1411/', 'tests/acceptance/1512/',
     'tests/acceptance/1509/', 'tests/acceptance/1929/', 'tests/acceptance/1826/', 'tests/acceptance/1415/', 'tests/acceptance/1430/', 'tests/acceptance/1430-redraft-ac2/',
-    'tests/acceptance/2456/', 'tests/write-reveal-frames.test.ts', 'tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts',
+    'tests/acceptance/2456/', 'tests/write-reveal-frames.test.ts', 'tests/web-reading-walk.test.ts', 'tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts',
     'tests/acceptance/2776/listing.test.ts', 'tests/acceptance/2457/', 'tests/acceptance/2500/', 'tests/acceptance/211/', 'tests/acceptance/981/', 'tests/acceptance/189/saves/',
     'tests/acceptance/189-oracle/', 'tests/acceptance/189/lab-redraft/', 'tests/acceptance/276/record/', 'tests/acceptance/276/match/', 'tests/acceptance/2109/',
     'tests/acceptance/953/', 'tests/acceptance/953-oracle/', 'tests/acceptance/1250/', 'tests/acceptance/1576/', 'tests/acceptance/2661/', 'tests/acceptance/980/',
