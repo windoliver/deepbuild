@@ -13,6 +13,7 @@
 // A hold denies the call, naming its ask; once you say yes the same call runs. #84's sort lives in questions.ts; its
 // proceeds are recorded here, and DEEP_HUB_TEST_SORTER, which only tests set, can still plant one.
 import { readFileSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
@@ -110,19 +111,15 @@ export class Holds {
   constructor(private readonly o: HoldOptions) {}
 
   /**
-   * The planted sorter's rule for a question; none unless a test set one. A file names its rule and the questions it
-   * answers "proceed"; a value that names no file is the rule itself, and answers every question so (#321 AC1's redraft).
+   * The planted sorter's rule for a question; none unless a test set one. An absolute path names a file with its rule
+   * and the questions it answers "proceed"; any other value is the rule itself, and answers every question so (#321
+   * AC1's blind draft, #321.70212996).
    */
   private sorted(question: string): string | undefined {
     if (!this.o.sorter || !question) return undefined;
-    let text: string;
+    if (!isAbsolute(this.o.sorter)) return this.o.sorter;
     try {
-      text = readFileSync(this.o.sorter, 'utf8');
-    } catch (e) {
-      return (e as NodeJS.ErrnoException).code === 'ENOENT' ? this.o.sorter : undefined;
-    }
-    try {
-      const s = JSON.parse(text) as { rule?: unknown; proceed?: unknown };
+      const s = JSON.parse(readFileSync(this.o.sorter, 'utf8')) as { rule?: unknown; proceed?: unknown };
       return Array.isArray(s.proceed) && s.proceed.includes(question.trim()) && typeof s.rule === 'string' ? s.rule : undefined;
     } catch {
       return undefined;

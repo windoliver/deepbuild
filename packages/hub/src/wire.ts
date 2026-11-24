@@ -281,7 +281,7 @@ export interface CoreOptions {
   forge?: string;
   /** The package registry a dependency's reading is read from in place of the public ones, from DEEP_HUB_TEST_REGISTRY; only tests set it (#1509). */
   registry?: string;
-  /** The planted sorter's file, from DEEP_HUB_TEST_SORTER: the questions it answers "proceed" and its rule; only tests set it. */
+  /** The planted sorter, from DEEP_HUB_TEST_SORTER: a file's absolute path (its rule and the questions it answers "proceed"), else the rule for every question; only tests set it. */
   sorter?: string;
   /** The definitions handed to the kernel, from DEEP_HUB_TEST_DRAFTS: by a prompt's text or a work item's ID; only tests set it. */
   drafts?: string;
