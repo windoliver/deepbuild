@@ -1402,7 +1402,8 @@ impl Card {
             };
             let d = crate::pictures::Drawn {
                 scale: f64::from(f32::from(bounds.size.width) * ratio) / f64::from(picture.size[0]),
-                whole: inside(&bounds),
+                // A frame drawn for an assistive client of a window nobody can see shows you nothing.
+                whole: window.is_visible() && inside(&bounds),
             };
             let better = best
                 .get(&hash)
