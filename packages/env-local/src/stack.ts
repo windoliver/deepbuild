@@ -580,9 +580,9 @@ export function composeRefusal(config: unknown, folder: string, leased: readonly
  * runs as its own user (postgres is uid 999), and the daemon checks that user against the mount's own mode bits there,
  * which the hub's umask leaves 0700. The daemon mounts as root, so only the source and what is under it need opening:
  * the folder above it, its checkouts folder and the hub's own keep their modes, so no other user of the machine reaches
- * it. Nothing outside the folder is changed: a link is never followed (each entry is opened without following one and
- * changed through its handle, after its real path is checked to be in the folder), and a file with another name
- * somewhere (a hard link) is left as it is. Docker Desktop on macOS doesn't check the container's uid.
+ * it. Nothing outside the folder is changed: each entry is opened without following a link and changed through its
+ * handle, once the handle's own path is in the folder and the entry is yours; a file with another name somewhere (a
+ * hard link) is left as it is. Docker Desktop on macOS doesn't check the container's uid.
  */
 export function openBinds(config: { services?: Record<string, { volumes?: { type?: string; source?: string }[] }> }, folder: string): string | undefined {
   if (process.platform !== 'linux') return undefined;
@@ -596,7 +596,7 @@ export function openBinds(config: { services?: Record<string, { volumes?: { type
     try {
       const kind = lstatSync(at);
       // What isn't yours (a source the daemon made, as root) is the daemon's to have opened, not the hub's.
-      if ((!kind.isDirectory() && !kind.isFile()) || kind.uid !== you || !inside(realpathSync(at))) return;
+      if ((!kind.isDirectory() && !kind.isFile()) || kind.uid !== you) return;
       fd = openSync(at, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     } catch (error) {
       if (gone(error) || (error as NodeJS.ErrnoException).code === 'ELOOP') return;
@@ -605,6 +605,8 @@ export function openBinds(config: { services?: Record<string, { volumes?: { type
     let names: string[] = [];
     try {
       const s = fstatSync(fd);
+      // What was opened, not the path: a folder above it swapped for a link after the lstat leads the open elsewhere.
+      if (s.uid !== you || !inside(readlinkSync(`/proc/self/fd/${fd}`))) return;
       const want = s.isDirectory() ? s.mode | 0o055 : s.isFile() && s.nlink === 1 ? s.mode | 0o044 | (s.mode & 0o100 ? 0o011 : 0) : s.mode;
       if (want !== s.mode) fchmodSync(fd, want);
       if (s.isDirectory()) names = readdirSync(at);

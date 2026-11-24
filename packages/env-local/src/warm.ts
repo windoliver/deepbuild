@@ -273,7 +273,7 @@ export class WarmStack {
     const d = this.db!;
     // `-a`: a container that already exited is listed too, so its exit and log can be named.
     const ran = await this.dock([
-      `id=$(${this.compose(file, `ps -a -q ${quote(d.service)}`)}) || exit 1`, 'echo "$id"',
+      `id=$(${this.compose(file, `ps -a -q ${quote(d.service)}`)}) || exit 1`, 'echo "$id"', '[ -n "$id" ] || exit 1',
       `i=0; until "$0" exec "$id" pg_isready -q -h 127.0.0.1 -U ${quote(d.user)}; do`,
       // Every tenth try, whether it still runs: one exited, or waiting on its restart policy to start it again, has ended.
       `  if [ $((i % 10)) -eq 0 ]; then s=$("$0" inspect -f '{{.State.Status}}' "$id"); [ -z "$s" ] || [ "$s" = running ] || exit 3; fi`,
