@@ -155,11 +155,9 @@ test('hung checks are stopped at the budget with its margin, their children too'
   // A hung run under the merge base's preflight is stopped here, by the PIDs it wrote, read before the folder goes.
   let pids = [];
   t.after(() => { for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL'); });
-  const started = Date.now();
   const result = spawnSync(process.execPath, [join(cwd, 'scripts/preflight.mjs')], { encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL' });
   if (existsSync(file)) pids = JSON.parse(readFileSync(file, 'utf8'));
   assert.equal(result.error, undefined, `preflight never ended: ${result.stdout}`);
-  assert.ok(Date.now() - started < 30_000);
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /FAIL preflight budget: the checks ran past 1\.50 s, the budget with its margin, and were stopped\n\s+Fix: .+/);
   assert.match(result.stdout, /BLOCKED perf: /);
