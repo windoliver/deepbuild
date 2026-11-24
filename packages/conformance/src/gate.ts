@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
-  REPO, Owned, Session, commitTree, events, filesOf, killHub, lastClaim, makeWorld, replyText, sleep, startHub, taskOf,
+  REPO, Owned, Session, commitTree, events, filesOf, killHub, lastClaim, lockedPackages, makeWorld, platformOnly, replyText, sleep, startHub, taskOf,
   type Ev, type Hub, type Ran, type World,
 } from './gate-play.js';
 
@@ -91,8 +91,10 @@ function readManifest(corpus: string): Manifest {
 const isDir = (p: string): boolean => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
 /** What is wrong with a case, each as one sentence. */
-function malformed(corpus: string, c: Case, seen: Set<string>): string[] {
+function malformed(corpus: string, c: Case, seen: Set<string>, locked: ReturnType<typeof lockedPackages>): string[] {
   const out: string[] = [];
+  // The kit adds each install's platform packages from this checkout (#3088), so a case naming one plays on one platform only.
+  for (const path of c.setup?.installs ?? []) if (platformOnly(locked[path])) out.push(`its setup.installs names ${path}, which the lockfile marks with os or cpu; list what every platform installs and the kit adds this one's`);
   if (!/^[a-z0-9-]+$/.test(String(c.id))) out.push(`its id ${JSON.stringify(c.id)} isn't [a-z0-9-]+`);
   if (seen.has(c.id)) out.push('its id is used twice');
   seen.add(c.id);
@@ -115,7 +117,8 @@ export function gateCheck(corpus: string, print: (line: string) => void): 0 | 1 
   const covered = new Set(m.cases.flatMap((c) => c.covers ?? []));
   const missing = requiredTags().filter((t) => !covered.has(t));
   const seen = new Set<string>();
-  const broken = m.cases.flatMap((c) => malformed(corpus, c, seen).map((why) => `${c.id}: ${why}`));
+  const locked = lockedPackages();
+  const broken = m.cases.flatMap((c) => malformed(corpus, c, seen, locked).map((why) => `${c.id}: ${why}`));
   for (const t of missing) print(`FAIL gate@1 corpus: missing ${t}`);
   for (const b of broken) print(`FAIL gate@1 corpus: ${b}`);
   if (missing.length || broken.length) { print(`FAIL gate@1 corpus: ${missing.length} tags missing, ${broken.length} cases malformed`); return 1; }

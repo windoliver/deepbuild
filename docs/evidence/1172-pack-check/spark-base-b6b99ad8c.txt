@@ -1,0 +1,12 @@
+load 22 25 22
+shipped(canvas)	21154 ms	
+art-1.0.0:installed:1 blender-1.0.0:installed:1 chrome-fx-1.0.0:installed:1 composites-1.0.0:installed:1 explain-1.0.0:installed:1 familiar-1.0.0:installed:1 foley-1.0.0:installed:1 fx-1.0.0:installed:1 godot-1.0.0:installed:1 interfaces-1.0.0:installed:1 lanes-1.0.0:installed:1 math-1.0.0:installed:1 modslib-1.0.0:installed:1 unreal-1.0.0:installed:1 verbs-1.0.0:installed:1
+new process, no packs: call 1	249 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+no packs: call 2	5 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+new process, all packs: call 1	21515 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+all packs: call 2	16333 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+all packs: call 3	16288 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+all but deepbuild/lanes	5017 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+all but deepbuild/foley	17534 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+all but deepbuild/modslib	12141 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+exit=0

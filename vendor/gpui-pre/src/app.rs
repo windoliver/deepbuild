@@ -2048,6 +2048,7 @@ impl App {
 
                 if self.pending_effects.is_empty() {
                     for window in self.windows.values().filter_map(|window| window.as_deref()) {
+                        window.draw_unseen(self); // DeepBuild patch (windoliver/deepbuild#3232)
                         if window.invalidator.is_dirty()
                             || window.needs_present.get()
                             || !window.next_frame_callbacks.borrow().is_empty()

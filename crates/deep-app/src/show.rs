@@ -232,6 +232,8 @@ pub struct CanvasPanel {
     area: Rc<Cell<Option<Bounds<Pixels>>>>,
     outline: Vec<[f32; 4]>,
     pressing: bool,
+    /// #1815: the item ⌘F's match is in, as `outline` gives a selection's boxes.
+    found: Option<[f32; 4]>,
 }
 
 /// #1498: where a session's page drew its panel: the session, the presented rect, and that rect in the window.
@@ -274,6 +276,7 @@ impl CanvasPanel {
             area: Rc::new(Cell::new(None)),
             outline: Vec::new(),
             pressing: false,
+            found: None,
         }
     }
 
@@ -336,8 +339,21 @@ impl CanvasPanel {
     }
 
     /// The session whose page draws the panel.
-    pub fn show_session(&mut self, session: &str) {
+    pub fn show_session(&mut self, session: &str) -> &mut Self {
         self.session = Some(session.to_owned());
+        self
+    }
+
+    /// #1815: its texts are content the page's ⌘F searches, in the order they were presented.
+    pub(crate) fn find(&mut self) {
+        let mut found = None;
+        for item in self.page().map_or(&[][..], |p| &p.items) {
+            let text = item.value["text"].as_str().unwrap_or_default();
+            if crate::find::here(text).is_some() {
+                found = Some(item.rect);
+            }
+        }
+        self.found = found;
     }
 
     /// Takes one presented revision: the pictures the panel doesn't hold yet are decoded in the background, and once
@@ -648,6 +664,7 @@ impl Render for CanvasPanel {
             )
         });
         let (outline, focus, area) = (self.outline.clone(), chrome.focus, self.area.clone());
+        let found = self.found;
         div()
             .size_full()
             .on_mouse_down(
@@ -678,7 +695,7 @@ impl Render for CanvasPanel {
                             deep_text_gpui::prepare(label, window.scale_factor());
                         }
                     },
-                    move |at, _, window, _| {
+                    move |at, _, window, cx| {
                         area.set(Some(at));
                         let area = at;
                         for (i, (rect, picture, name)) in layers.iter().enumerate() {
@@ -760,8 +777,11 @@ impl Render for CanvasPanel {
                                     at: panel,
                                 })
                             });
+                            if let Some(found) = found {
+                                crate::find::bring(at(found), window, cx);
+                            }
                             window.with_content_mask(Some(ContentMask { bounds: panel }), |w| {
-                                for r in &outline {
+                                for r in outline.iter().chain(&found) {
                                     w.paint_quad(quad(
                                         at(*r),
                                         px(0.),

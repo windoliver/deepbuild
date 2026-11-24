@@ -9,6 +9,7 @@ pub mod voice;
 
 use deep_canvas::registry::lists::RegistryDef;
 use serde_json::{json, Value};
+use std::sync::OnceLock;
 
 use preset::{Preset, RULE_COST, RULE_CYCLE, RULE_EDGE, RULE_NODE, RULE_PARAM};
 use voice::Twists;
@@ -94,18 +95,34 @@ pub fn presets_field_with(manifest: &Value, twists: Twists) -> Vec<(String, Stri
     let Some(presets) = manifest["presets"].as_object() else {
         return vec![(String::new(), "presets is {<name>@<major> → preset}".into())];
     };
+    // #1172: each preset's sweep on its own, across the cores, since a pack of 90 took seconds on one;
+    // the refusals keep the presets' order.
+    let compiled: Vec<(String, Option<Result<Preset, preset::Fault>>)> = presets
+        .iter()
+        .map(|(key, v)| {
+            let named = format!("{pack}.{key}");
+            (named, valid_key(key).then(|| Preset::compile(v)))
+        })
+        .collect();
+    let swept: Vec<OnceLock<Option<check::Refusal>>> =
+        compiled.iter().map(|_| OnceLock::new()).collect();
+    deep_canvas::document::each_index(compiled.len(), &|i| {
+        if let (named, Some(Ok(p))) = &compiled[i] {
+            let _ = swept[i].set(check::sweep(p, named, twists));
+        }
+    });
+    let swept = swept.into_iter().map(|s| s.into_inner().flatten());
     let mut bad = Vec::new();
-    for (key, v) in presets {
-        let named = format!("{pack}.{key}");
-        if !valid_key(key) {
+    for ((key, _), ((named, p), refusal)) in presets.iter().zip(compiled.into_iter().zip(swept)) {
+        let Some(p) = p else {
             bad.push((
                 key.clone(),
                 format!("preset {named}: a preset's key is <name>@<major>"),
             ));
             continue;
-        }
-        let p = match Preset::compile(v) {
-            Ok(p) => p,
+        };
+        match p {
+            Ok(_) => {}
             Err(f) => {
                 let path =
                     f.at.as_ref()
@@ -117,7 +134,7 @@ pub fn presets_field_with(manifest: &Value, twists: Twists) -> Vec<(String, Stri
                 continue;
             }
         };
-        if let Some(r) = check::sweep(&p, &named, twists) {
+        if let Some(r) = refusal {
             let at = if r.param == "all" {
                 format!("every param at seeded point {}", r.value)
             } else {

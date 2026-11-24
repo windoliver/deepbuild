@@ -128,6 +128,8 @@ pub fn column_view(sealed: &Sealed, form: &mut Value, t: i64) -> Vec<Issue> {
     {
         issues.extend(deep_canvas_scene3d::arrays::check(form, entries));
         issues.extend(deep_canvas_scene3d::tints::check(form));
+        // #3036: a plate's tracks, checked as a frame refuses them.
+        issues.extend(deep_canvas_scene3d::tracks::check(form));
     }
     issues.extend(deep_canvas::columns::view(form, entries, t));
     // #538: the logic grid, keyed copy and flip by array, each through the same view.

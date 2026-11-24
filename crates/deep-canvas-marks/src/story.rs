@@ -63,6 +63,35 @@ impl Rows {
         self
     }
 
+    /// #3236: hides each row missing a value in one of `names` that `encode` reads: a NaN, as null
+    /// and NaN are missing (Scale and encode). A NaN nothing encodes is out of range, as an
+    /// infinity is, so no row is dropped for a value nobody reads.
+    pub fn hide_missing<'a>(
+        &mut self,
+        names: impl Iterator<Item = &'a String>,
+        encode: Option<&Value>,
+        path: &str,
+    ) -> Result<(), Refused> {
+        let read: BTreeSet<&str> = object_or_empty(encode)
+            .values()
+            .filter_map(|e| e.get("column").and_then(Value::as_str))
+            .collect();
+        for name in names {
+            let Some(Column::Numbers(v)) = self.columns.get(name) else {
+                continue;
+            };
+            let missing: Vec<usize> = (0..v.len()).filter(|i| v[*i].is_nan()).collect();
+            if missing.is_empty() {
+                continue;
+            }
+            if !read.contains(name.as_str()) {
+                return refuse("out_of_range", format!("{path}/columns/{name}/data"));
+            }
+            self.hidden.extend(missing);
+        }
+        Ok(())
+    }
+
     pub fn opacity_of(&self, i: usize) -> f64 {
         self.opacity.get(i).copied().unwrap_or(1.0)
     }
