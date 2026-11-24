@@ -181,7 +181,7 @@ interface Claim { claim: string; session: string; task: string; cwd: string; bas
 interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean; unread?: string }
 /** The least time a read of what a claim changed is given (#1869). */
 const READ_FLOOR_MS = 5_000;
-/** Read as the snapshot's git reads are bounded (#1869): fsmonitor off, up to 256 MB of output, and all of them ended within `ms`, by SIGKILL. */
+/** Read as the snapshot's git reads are bounded (#1869): fsmonitor off, up to 1 GB of output (its untracked listing's), and all of them ended within `ms`, by SIGKILL. */
 async function changesOf(cwd: string, base: string, ms: number): Promise<Changes> {
   const deadline = Date.now() + ms;
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
@@ -189,9 +189,9 @@ async function changesOf(cwd: string, base: string, ms: number): Promise<Changes
   // A read that fails is recorded unless `missing` allows it (a file the base never had); either way it lists nothing.
   const git = (args: string[], missing = false): Promise<string[]> => new Promise((done) => {
     const left = Math.max(1, Math.ceil(deadline - Date.now()));
-    execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, env, maxBuffer: 1 << 28, timeout: left, killSignal: 'SIGKILL' }, (error, out, err) => {
+    execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, env, maxBuffer: 1 << 30, timeout: left, killSignal: 'SIGKILL' }, (error, out, err) => {
       if (error && !(missing && !error.killed)) {
-        const why = (error as { code?: unknown }).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'gave more than 256 MB' : error.killed ? `timed out, past the read's ${Math.ceil(ms)} ms deadline` : `failed: ${String(err).trim().split('\n')[0] || error.message}`;
+        const why = (error as { code?: unknown }).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'gave more than 1 GB' : error.killed ? `timed out, past the read's ${Math.ceil(ms)} ms deadline` : `failed: ${String(err).trim().split('\n')[0] || error.message}`;
         unread.push(`git ${args.join(' ')} ${why}`);
       }
       done(error ? [] : out.split('\n').filter(Boolean));

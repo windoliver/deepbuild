@@ -78,6 +78,14 @@ describe('the read of what a claim changed (#1869)', () => {
     expect(v?.reasons, 'price-approved counts as the agent\'s own for the file it edited, read whole').toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed test\/price\.test\.js/));
   }, 60_000);
 
+  it('takes an untracked listing past 256 MB, as the snapshot\'s own untracked read does (1 GB): a claim no check reads passes', async () => {
+    // `ls-files --others` lists 300 MB of untracked paths after the real ones; the snapshot lists them with -o, unstubbed.
+    const name = `other/${'u'.repeat(244)}.txt`;
+    const stub = `case " $* " in *" ls-files "*"--others "*) "$GIT" "$@"; yes '${name}' | head -n 1200000; exit 0 ;; esac`;
+    const { v } = await claimed({ base: TEST, head: { 'src/a.js': 'x\n' }, read: ['test/price.test.js'], stub });
+    expect(v?.outcome, `the claim changed no file a check reads, yet reads ${JSON.stringify(v?.reasons)}`).toBe('PASS');
+  }, 120_000);
+
   it('ends a read by its deadline though git leaves a process holding its output open', async () => {
     // `ls-files` starts a process that keeps git's output open, then hangs itself.
     const stub = 'case " $* " in *" ls-files "*) sleep 600 & echo $! >> "$PIDS"; echo $$ >> "$PIDS"; exec sleep 600 ;; esac';
