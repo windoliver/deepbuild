@@ -71,3 +71,34 @@ objc2-core-foundation = { version = "0.3", default-features = false, features = 
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVReturn"] }
 # Issue #854: an idle window's wakeups and CPU, read from the process.
 libc = "0.2"
+
+# Issue #2660: the acceptance tests written blind in tests/acceptance/2660, each its own binary
+# since each installs a counting global allocator (here, not in a canvas crate, whose lint refuses
+# `unsafe` and a target outside the crate).
+[[test]]
+name = "acceptance_2660_layout_marks"
+path = "../../tests/acceptance/2660/layout_marks.rs"
+
+[[test]]
+name = "acceptance_2660_fast_path"
+path = "../../tests/acceptance/2660/fast_path.rs"
+
+[[test]]
+name = "acceptance_2660_check_templates"
+path = "../../tests/acceptance/2660/check_templates.rs"
+
+[[test]]
+name = "acceptance_2660_hover"
+path = "../../tests/acceptance/2660/hover.rs"
+
+[[test]]
+name = "acceptance_2660_hover_planted"
+path = "../../tests/acceptance/2660/hover_planted.rs"
+
+[[test]]
+name = "acceptance_2660_shape"
+path = "../../tests/acceptance/2660/shape.rs"
+
+[[test]]
+name = "acceptance_2660_mesh"
+path = "../../tests/acceptance/2660/mesh.rs"

@@ -1422,9 +1422,6 @@ timed.push('tests/acceptance/980/ac09-budget.test.ts');
 alone.push('tests/acceptance/980-redraft-ac9/');
 timed.push('tests/acceptance/980-redraft-ac9/ac9-budget.test.ts');
 byHand.push('tests/acceptance/980/ac09-budget.test.ts');
-// #1841's first draft fails the next page's read only when that read binds two values; since #1576 it also binds the
-// page's byte cap, so the failure is never injected and the test reads BLOCKED. Its blind redraft runs in its place.
-byHand.push('tests/acceptance/1841/events-read.test.ts');
 
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
@@ -1484,6 +1481,11 @@ alone.push('tests/acceptance/3234-redraft-ac3/');
 // is kept by hand (3234-redraft-ac6/DISPUTE.md).
 byHand.push('tests/acceptance/3234/card.test.ts');
 alone.push('tests/acceptance/3234-redraft-ac6/');
+// #1881's blind redraft for the closed-issue sweep (#2047): suites85.test.ts runs each of #85's 17 test files in a child
+// Vitest (4 to 8 minutes), which start hubs of their own and include #85's budget measurement, judged on the reference Mac.
+alone.push('tests/acceptance/1881-redraft-2047/');
+timed.push('tests/acceptance/1881-redraft-2047/suites85.test.ts');
+slow.push('tests/acceptance/1881-redraft-2047/suites85.test.ts');
 
 // #112's eval and dispatched-run files, #2077's removal file and #2495's report file are kept by hand until the owner
 // swaps them: their judges score every request as the agents' work, and #3245's first request is a control with none, so
@@ -1516,6 +1518,12 @@ Object.assign(redrafted, {
   'tests/acceptance/1551/lane.test.ts': 'tests/acceptance/1551/redraft-3300/',
 });
 byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/lane.test.ts');
+
+// #1815's folder (blind) runs alone by its lane.json: its files build deep-drive with env-plants and test-confirm and draw
+// find's field and its matches. budget.test.ts times the first match on a 10,000-line page on the reference Mac;
+// shown.test.ts takes AC5's pictures for a person's call.
+timed.push('tests/acceptance/1815/budget.test.ts');
+byHand.push('tests/acceptance/1815/shown.test.ts');
 
 // #3295: the before lane lays the change's files under the test paths over the merge base, crates/*/tests included, so
 // the original suite's #3295.fae86cca test runs the fixed late-close test there and passes by construction. The

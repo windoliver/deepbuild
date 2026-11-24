@@ -5363,15 +5363,17 @@ fn build(
             slot.2
                 .push((Cow::Borrowed(&placed.rank), k, id, drawn, key));
         }
-        let later = placed.rank.after_children();
-        for (k, drawn) in placed.after.iter().enumerate() {
-            slot.2.push((
-                Cow::Owned(later.clone()),
-                placed.drawn.len() + k,
-                id,
-                drawn,
-                drawn.key(bucket),
-            ));
+        if !placed.after.is_empty() {
+            let later = placed.rank.after_children();
+            for (k, drawn) in placed.after.iter().enumerate() {
+                slot.2.push((
+                    Cow::Owned(later.clone()),
+                    placed.drawn.len() + k,
+                    id,
+                    drawn,
+                    drawn.key(bucket),
+                ));
+            }
         }
     }
     layers.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));

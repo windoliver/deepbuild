@@ -509,6 +509,7 @@ fn show(address: &Address, window: &mut Window, cx: &mut App) -> Result<Address,
         notice,
     };
     if changed {
+        crate::find::close(window, cx);
         selection(cx).opened_at = views::now();
     }
     window.refresh();
