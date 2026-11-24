@@ -1541,6 +1541,12 @@ byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/
 timed.push('tests/acceptance/1815/budget.test.ts');
 byHand.push('tests/acceptance/1815/shown.test.ts');
 
+// #1866's folder (blind) runs alone by its lane.json: its files run real hubs through the churn benchmark and read their
+// heaps. budgets.long runs the benchmark's 5,000 cycles beside the merge base's, as they are and with --killed, on a
+// reference Mac, by hand, gated by environmentProblem().
+byHand.push('tests/acceptance/1866/budgets.long.test.ts');
+timed.push('tests/acceptance/1866/budgets.long.test.ts');
+
 // #3295: the before lane lays the change's files under the test paths over the merge base, crates/*/tests included, so
 // the original suite's #3295.fae86cca test runs the fixed late-close test there and passes by construction. The
 // original file, kept as written, maps to its blind redraft and runs by hand only. Its three tests run in its place, in
