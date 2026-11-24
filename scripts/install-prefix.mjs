@@ -3,9 +3,9 @@
 // --ignore-scripts` would, from this checkout's already-built files; it builds nothing.
 //   node scripts/install-prefix.mjs --prefix <dir> [--plant checkout-fallback]
 // <dir>/lib/node_modules/deepbuild/ holds real copies, at the checkout's relative paths, of the root's package.json,
-// README and licence and the folders the CLI reads beside it (adapters/, the first-party packs/, the banner's mark) and the files its hub and deep doctor read (contracts/setup-steps.json and the shipped guard rules,
-// crates/deep-hook/default-rules.json, #3108); of every workspace package
-// the root's `bin` loads, as `npm pack` lists it plus its built dist/ (no package lists dist in a `files` list yet),
+// README and licence, the folders the CLI reads beside it (adapters/, the first-party packs/, the banner's mark) and
+// the files its hub and deep doctor read (contracts/setup-steps.json and the shipped guard rules,
+// crates/deep-hook/default-rules.json, #3108); of every workspace package the root's `bin` loads, as `npm pack` lists it plus its built dist/ (no package lists dist in a `files` list yet),
 // each linked at node_modules/<name> as npm links a workspace; of the third-party packages those depend on; and of the
 // canvas core, the newer of target/release and target/debug deep-show, shipped in the hub's dist/ beside its
 // native helper. <dir>/bin/deep is npm's link to the root's bin.
