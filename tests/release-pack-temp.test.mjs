@@ -16,7 +16,7 @@ const watchersGone = async (temp) => {
   // deadline: bounds the wait for the watcher's next poll to see the folder gone and exit
   for (const end = Date.now() + 10_000; naming().length; ) {
     assert.ok(Date.now() < end, `a process outlived the pack's folder: ${naming().join(' | ').slice(0, 300)}`);
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setImmediate(r));
   }
 };
 
@@ -107,7 +107,7 @@ test('a pack killed outright with its process group, as a test timeout kills it,
   // deadline: bounds the wait for the folder to go once the pack is gone
   for (const end = Date.now() + 30_000; packed().length; ) {
     assert.ok(Date.now() < end, `the killed pack left its temp folder: ${packed().join(', ')}`);
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setImmediate(r));
   }
   await watchersGone(temp);
 });
@@ -143,18 +143,21 @@ test('a pack killed outright alone, its clone writing on into the folder after i
   }
   process.kill(child.pid, 'SIGKILL');
   assert.equal((await exited).sig, 'SIGKILL');
-  // Long enough for anything that removes the folder as soon as the pack is gone to have done so.
-  await new Promise((r) => setTimeout(r, 2_000));
+  // deadline: bounds the window, four of the watcher's polls, in which one acting on the pack's death alone would act
+  for (const end = Date.now() + 2_000; Date.now() < end; ) {
+    assert.ok(packed().length, 'the folder went while the clone the killed pack left still wrote in it');
+    await new Promise((r) => setImmediate(r));
+  }
   writeFileSync(release, '');
   // deadline: bounds the wait for the clone's late write
   for (const end = Date.now() + 30_000; !existsSync(wrote); ) {
     assert.ok(Date.now() < end, 'the planted clone never wrote after the pack was killed');
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setImmediate(r));
   }
   // deadline: bounds the wait for the folder to go once the clone, the last thing writing in it, has ended
   for (const end = Date.now() + 30_000; packed().length; ) {
     assert.ok(Date.now() < end, `the killed pack left its temp folder: ${packed().join(', ')}`);
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setImmediate(r));
   }
   await watchersGone(temp);
 });
