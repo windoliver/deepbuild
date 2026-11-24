@@ -12,7 +12,7 @@ use crate::scene::Refused;
 const FLICKS: i128 = deep_canvas::camera::FLICKS_PER_SECOND as i128;
 
 /// A time literal's flicks: `"2s"`, `"250ms"` or a number of seconds.
-fn time(v: &Value) -> Option<i64> {
+pub(crate) fn time(v: &Value) -> Option<i64> {
     let secs = match v {
         Value::Number(n) => n.as_f64()?,
         Value::String(s) => match s.strip_suffix("ms") {

@@ -376,6 +376,9 @@ timed.push('tests/acceptance/1634/budgets.test.ts');
 // real app's window on a real hub, with Accessibility and Screen Recording, by hand.
 alone.push('tests/acceptance/1458/');
 byHand.push('tests/acceptance/1458/redraft-ac13/shown.test.ts');
+// #83's status file is kept by hand: it counts an ask at once that #319's batch holds back, and its blind redraft
+// (tests/acceptance/83/redraft-319/) runs in its place, alone as the rest of #83's folder does.
+byHand.push('tests/acceptance/83/status.test.ts');
 // #501's files each build deep-show (seal.test.ts three times), export films through the GPU and the encode tool, and run a 600 s soak on the audio output.
 alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
@@ -1074,6 +1077,9 @@ alone.push('tests/acceptance/2371/');
 // #1931's files build deep-physics (release and test-backends) and the wasm32 library; the blind redraft of #191's
 // first criterion's test under it builds deep-physics (shipped) and the wasm32 library, as #191's file does.
 alone.push('tests/acceptance/1931/', 'tests/acceptance/191-redraft-1931/');
+// #3258's folder (blind) runs alone by its lane.json: its files build deep-physics, as shipped and with the swapped soft
+// solver. ac6-budget times the audit of #524's banner, and of a world with no soft body, against the merge base.
+timed.push('tests/acceptance/3258/ac6-budget.test.ts');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1170,6 +1176,8 @@ timed.push('tests/acceptance/2650/budgets.long.test.ts');
 alone.push(...['heap', 'equal', 'data-row', 'as-given'].map((f) => `tests/acceptance/2700/${f}.test.mjs`));
 byHand.push('tests/acceptance/2700/budgets.long.test.mjs');
 timed.push('tests/acceptance/2700/budgets.long.test.mjs');
+// #2700's reached.test.mjs builds its own probe (probe-reached/, debug assertions off) against deep-canvas.
+alone.push('tests/acceptance/2700/reached.test.mjs');
 
 // #1498's files each build deep-drive and run replicas.
 alone.push('tests/acceptance/1498/');
@@ -1420,9 +1428,6 @@ timed.push('tests/acceptance/980/ac09-budget.test.ts');
 alone.push('tests/acceptance/980-redraft-ac9/');
 timed.push('tests/acceptance/980-redraft-ac9/ac9-budget.test.ts');
 byHand.push('tests/acceptance/980/ac09-budget.test.ts');
-// #1841's first draft fails the next page's read only when that read binds two values; since #1576 it also binds the
-// page's byte cap, so the failure is never injected and the test reads BLOCKED. Its blind redraft runs in its place.
-byHand.push('tests/acceptance/1841/events-read.test.ts');
 
 // #689's blind redraft: AC2 builds and tests the whole workspace on 1.99.1; AC4 builds deep-app's hub_client test.
 slow.push('tests/acceptance/689-redraft-2047/ac2-checks.test.mjs', 'tests/acceptance/689-redraft-2047/ac4-app-in-unit-lane.test.mjs');
@@ -1462,6 +1467,16 @@ timed.push('tests/acceptance/269/ac6-budgets.test.ts', 'tests/acceptance/269-red
 // step 0, so its grid never changes; its blind redraft, 269-redraft-ac6/, runs in its place.
 byHand.push('tests/acceptance/269/ac6-budgets.test.ts');
 
+// #3236's files (blind) each build deep-show; criterion 7 drives headless Chrome, 8 a real window read through AppKit,
+// 9 release builds here and at the merge base.
+alone.push('tests/acceptance/3236/');
+// #3236's criterion 8 was redrafted blind: the first draft's client hears each announcement twice
+// (tests/acceptance/3236-redraft-ac8/DISPUTE.md). The redraft runs in its place, both opening real windows, and the
+// hidden-window regression opens one too.
+alone.push('tests/acceptance/3236-redraft-ac8/', 'tests/live-window-hidden.test.ts');
+byHand.push('tests/acceptance/3236/ac8-appkit.test.ts');
+// tests/web-reading-walk.test.ts builds deep-show, exports each chart as a web bundle and presses keys in headless Chrome.
+alone.push('tests/web-reading-walk.test.ts');
 // #2848's first draft and its fuser test are kept by hand until the owner swaps them: they test the jobserver each run
 // made for itself, which #3221 replaces with job pipes lent from one pool; the blind redraft, 2848-redraft-3221/, runs
 // in their place (tests/acceptance/2848/DISPUTE-3221.md).
@@ -1482,9 +1497,53 @@ alone.push('tests/acceptance/3234-redraft-ac3/');
 // is kept by hand (3234-redraft-ac6/DISPUTE.md).
 byHand.push('tests/acceptance/3234/card.test.ts');
 alone.push('tests/acceptance/3234-redraft-ac6/');
+// #1881's blind redraft for the closed-issue sweep (#2047): suites85.test.ts runs each of #85's 17 test files in a child
+// Vitest (4 to 8 minutes), which start hubs of their own and include #85's budget measurement, judged on the reference Mac.
+alone.push('tests/acceptance/1881-redraft-2047/');
+timed.push('tests/acceptance/1881-redraft-2047/suites85.test.ts');
+slow.push('tests/acceptance/1881-redraft-2047/suites85.test.ts');
 
 // #112's eval and dispatched-run files, #2077's removal file and #2495's report file are kept by hand until the owner
 // swaps them: their judges score every request as the agents' work, and #3245's first request is a control with none, so
 // no program passes both; their blind redrafts, 112-redraft-3245/, 2077-redraft-3245/ and 2495-redraft-3245/, run in
 // their place.
 byHand.push('tests/acceptance/112/eval.test.ts', 'tests/acceptance/112/ci.test.ts', 'tests/acceptance/2077/removal.test.ts', 'tests/acceptance/2495/report.test.ts');
+
+// #3300: #854's and #896's made-up readings gave their runs no loads (and #854's idle runs no window), so since #1830
+// each test judging one through canvas.mjs judge read INCONCLUSIVE on every machine. Each original file, kept as
+// written, maps to the blind redraft inside its suite's own folder that gives every made-up run the load at its start
+// and end, and every made-up idle run a shown window, and runs in its place: the original test files run by hand only.
+// The redrafts sit inside tests/acceptance/854/ and 896/, so they run alone as their folders do, and each is timed
+// where its original was. #3300's own fit-Mac run of the two suites is by hand and timed.
+Object.assign(redrafted, Object.fromEntries([
+  ...['patch.test.ts', 'scene-read.test.ts', 'idle.test.ts', 'replica.test.ts', 'release.test.ts', 'replica-redraft.test.ts', 'helpers.ts']
+    .map((file) => [`tests/acceptance/854/${file}`, 'tests/acceptance/854/redraft-3300/']),
+  ...['settled.test.ts', 'dirty.test.ts', 'helpers.ts'].map((file) => [`tests/acceptance/896/${file}`, 'tests/acceptance/896/redraft-3300/']),
+]));
+byHand.push(...Object.keys(redrafted).filter((path) => /^tests\/acceptance\/(854|896)\/[^/]+\.test\.ts$/.test(path) && !byHand.includes(path)));
+timed.push(...['idle', 'patch', 'replica', 'scene-read'].map((name) => `tests/acceptance/854/redraft-3300/${name}.test.ts`),
+  ...['dirty', 'settled'].map((name) => `tests/acceptance/896/redraft-3300/${name}.test.ts`));
+byHand.push('tests/acceptance/3300/fit-mac.long.test.ts');
+timed.push('tests/acceptance/3300/fit-mac.long.test.ts');
+// #3300, on the owner's ruling: #1492's and #1551's made-up idle readings hand canvas.mjs judge runs with no loads too,
+// so their blind redrafts, inside each suite's folder, run in the originals' place, which run by hand only. Neither
+// original was alone or timed, so neither redraft is.
+Object.assign(redrafted, {
+  'tests/acceptance/1492/idle-energy.test.ts': 'tests/acceptance/1492/redraft-3300/',
+  'tests/acceptance/1492/helpers.ts': 'tests/acceptance/1492/redraft-3300/',
+  'tests/acceptance/1551/lane.test.ts': 'tests/acceptance/1551/redraft-3300/',
+});
+byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/lane.test.ts');
+
+// #1815's folder (blind) runs alone by its lane.json: its files build deep-drive with env-plants and test-confirm and draw
+// find's field and its matches. budget.test.ts times the first match on a 10,000-line page on the reference Mac;
+// shown.test.ts takes AC5's pictures for a person's call.
+timed.push('tests/acceptance/1815/budget.test.ts');
+byHand.push('tests/acceptance/1815/shown.test.ts');
+
+// #3295: the before lane lays the change's files under the test paths over the merge base, crates/*/tests included, so
+// the original suite's #3295.fae86cca test runs the fixed late-close test there and passes by construction. The
+// original file, kept as written, maps to its blind redraft and runs by hand only. Its three tests run in its place, in
+// 3295-redraft-fae86cca/ (a planted product twin for fae86cca) and 3295-redraft-byhand/ (63a9095d and 2acd3e71).
+Object.assign(redrafted, { 'tests/acceptance/3295/late-close.test.mjs': 'tests/acceptance/3295-redraft-fae86cca/' });
+byHand.push('tests/acceptance/3295/late-close.test.mjs');

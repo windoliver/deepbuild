@@ -778,10 +778,10 @@ impl Water {
     }
 }
 
-/// A wake or a trail (#450) behind an item a live drag moves is refused at check, naming the
-/// item: a document control whose handle drags the item or one of its parents, whose earlier
-/// places nothing keeps for either to read. One a logic array moves reads the logic bake's
-/// earlier steps through its drivers (#265).
+/// A wake or a trail (#450) behind an item a live drag moves, or a plate's tracks under one
+/// (#3036), is refused at check, naming the item: a document control whose handle drags the item
+/// or one of its parents, whose earlier places nothing keeps for any of them to read. One a logic
+/// array moves reads the logic bake's earlier steps through its drivers (#265).
 pub fn dragged(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
     let empty = serde_json::Map::new();
     let items = doc
@@ -798,16 +798,14 @@ pub fn dragged(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
     if handles.is_empty() {
         return Ok(());
     }
-    for item in items.values() {
+    let sources = items.values().flat_map(|item| {
         let source = item
             .pointer("/params/water/wake/item")
             .or_else(|| item.pointer("/params/trail/of"));
-        let Some(wake) = source
-            .and_then(Value::as_str)
-            .map(|s| s.split('#').next().unwrap_or(s))
-        else {
-            continue;
-        };
+        let one = source.and_then(Value::as_str).into_iter();
+        one.chain(crate::tracks::sources(doc, item))
+    });
+    for wake in sources.map(|s| s.split('#').next().unwrap_or(s)) {
         // The item and its parents.
         let mut chain = vec![wake];
         while let Some(p) = items

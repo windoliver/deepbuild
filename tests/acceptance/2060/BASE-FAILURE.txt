@@ -1,0 +1,184 @@
+Base commit: a2cbc50d93b6192b032e973acfd81d2e18d3e974 (Merge pull request #3352), main when this suite was drafted
+Command (Node 24.22.2, vitest 5.0.5):
+  NO_COLOR=1 node scripts/throttle.mjs test --wait 1440 -- node node_modules/vitest/vitest.mjs run tests/acceptance/2060/carry.test.ts --testTimeout=600000 --hookTimeout=180000
+The hub is packages/*/dist and target/debug/deep-hook as the session that launched this job placed them in this worktree,
+compiled, it says, from sources byte-identical to the base; this job checked dist of hub/shared-runs, hub/gate-runner, hub/plant and
+checks-command/index against what this worktree's own sources transpile to, and each is the same.
+Date: 2026-11-24, 01:39:28 to 01:39:47 EST, one run, under a top-level test grant.
+Machine: darwin-arm64, Mac17,10, Apple M5 Max, 64 GB, 18 cores, shared with other sessions: 1-minute load 62 at the grant.
+Checks at the base: tsc -p tests/acceptance/2060/tsconfig.json exits 0; scripts/wait-ratchet.mjs and scripts/loads-lint.mjs
+pass; scripts/alone-lint.mjs names nothing in this folder; scripts/repo-rules.mjs names no secret in this folder.
+Every home folder is written as ~ (a test's own HOME too), temp folders as <tmp>, the checkout as <repo>; stack lines of
+the built hub are left out.
+
+What each criterion reads on the base:
+- AC1: fails at its first assertion: B reads A's PASS as carried, naming A's run, after the file was replaced by version 2.
+- AC2: holds (its right leg passes): one run between A and B, carried by name.
+- AC3: its first leg (the file left as it is) holds; its second fails: after the file was replaced, A's base run is carried
+  to B, and B runs none.
+- AC4: fails at its first assertion: with fixture-tool gone, B reads A's PASS as carried.
+- The four planted legs are BLOCKED: the base's hub refuses each DEEP_HUB_PLANT name and doesn't start.
+
+RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/2060/carry.test.ts (9 tests | 7 failed) 18321ms
+   ❯ AC1 #2060.6d14b8db fixture-tool is replaced by version 2, a longer file that exits 1, between A's PASS and B's claim on the same files: B's check runs again, its result names B's own run, nothing is marked carried, and its verdict is not PASS (2)
+     × AC1 #2060.6d14b8db B's result is not carried: it names B's own run and is not PASS 3025ms
+     × AC1 #2060.6d14b8db (wrong program key-leaves-out-programs) a key that leaves the program readings out carries A's PASS and fails, naming fixture-tool 422ms
+   ❯ AC2 #2060.df8e51b3 With the file left as it is, sessions A and B with the same files read one run between them, and B's result is marked carried and names A's run (2)
+     × AC2 #2060.df8e51b3 (wrong program key-holds-program-link) a key that holds the path of the run's own link to the program never carries and fails 451ms
+   ❯ AC3 #2060.e0ef1360 A fix check's base run under version 1 in session A carries to session B while the file is left as it is; after the file is replaced by version 2, B's base run runs again (3)
+     × AC3 #2060.e0ef1360 the file replaced by version 2: B's base run runs again 3717ms
+     × AC3 #2060.e0ef1360 (wrong program program-readings-head-only) a hub that adds the readings to head keys only carries the base run and fails, naming the check 413ms
+   ❯ AC4 #2060.ad981d1d With fixture-tool removed after A's PASS, B reads no carried result and its verdict is not PASS (2)
+     × AC4 #2060.ad981d1d B reads no carried result and is not PASS 2587ms
+     × AC4 #2060.ad981d1d (wrong program skips-absent-program) a reader that skips a program it can't find carries A's PASS and fails, naming fixture-tool 399ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2060/carry.test.ts > AC1 #2060.6d14b8db fixture-tool is replaced by version 2, a longer file that exits 1, between A's PASS and B's claim on the same files: B's check runs again, its result names B's own run, nothing is marked carried, and its verdict is not PASS > AC1 #2060.6d14b8db B's result is not carried: it names B's own run and is not PASS
+AssertionError: fixture-tool was replaced by version 2 after A's PASS, so nothing of B's claim is marked carried: A: claim:01M864FVPQRW6FNJ1ASKGD475W read PASS, saying [".deepbuild/checks/tool.sh: PASS on 1 clean run","PASS 1/1 · 1 test · next: you · session/c229066a/01M864FVPQRW6FNJ1ASKGD475W","checks: .deepbuild/checks/tool.sh passed · wrote <tmp>/a/src/cart.mjs"]; B: claim:01M864FWKVXHH7FRKF015QNF91 read PASS, saying [".deepbuild/checks/tool.sh: PASS on 1 clean run",".deepbuild/checks/tool.sh carried run:01M864FW3ZKCTWCGK2P9P6RMJ5 from claim:01M864FVPQRW6FNJ1ASKGD475W in session:c229066ad296409191210170ee36f58b","PASS 1/1 · next: you · session/6d6f1009/01M864FWKVXHH7FRKF015QNF91","wrote <tmp>/b/src/cart.mjs"]; runs run:01M864FW3ZKCTWCGK2P9P6RMJ5 (.deepbuild/checks/tool.sh on the snapshot for A: passed): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   ".deepbuild/checks/tool.sh carried run:01M864FW3ZKCTWCGK2P9P6RMJ5 from claim:01M864FVPQRW6FNJ1ASKGD475W in session:c229066ad296409191210170ee36f58b",
++ ]
+
+ ❯ runsAgain tests/acceptance/2060/carry.test.ts:17:139
+     15| /** AC1: B's result is not carried, names B's own run, and is not PASS…
+     16| function runsAgain(r: Reading): void {
+     17|   expect(carried(r.b), `${TOOL} was replaced by version 2 after A's PA…
+       |                                                                                                                                           ^
+     18|   const own = headRuns(r, r.b, CHECK);
+     19|   expect(own.length, `${TOOL} was replaced by version 2, so ${CHECK} r…
+ ❯ tests/acceptance/2060/carry.test.ts:27:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/acceptance/2060/carry.test.ts > AC1 #2060.6d14b8db fixture-tool is replaced by version 2, a longer file that exits 1, between A's PASS and B's claim on the same files: B's check runs again, its result names B's own run, nothing is marked carried, and its verdict is not PASS > AC1 #2060.6d14b8db (wrong program key-leaves-out-programs) a key that leaves the program readings out carries A's PASS and fails, naming fixture-tool
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=key-leaves-out-programs did not start: <repo>/packages/hub/dist/plant.js:145
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=key-leaves-out-programs names no planted program
+
+ ❯ startHub tests/acceptance/2060/helpers.ts:119:36
+    117|   const exit = new Promise<undefined>((done) => child.once('exit', () …
+    118|   const ready = await Promise.race([first, exit, bound(180_000)]);
+    119|   if (ready?.ready !== true) throw Error(`BLOCKED: the hub${plant ? ` …
+       |                                    ^
+    120|   hub.socket = String(ready.socket);
+    121|   return hub;
+ ❯ twoSessions tests/acceptance/2060/helpers.ts:174:28
+ ❯ tests/acceptance/2060/carry.test.ts:31:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/acceptance/2060/carry.test.ts > AC2 #2060.df8e51b3 With the file left as it is, sessions A and B with the same files read one run between them, and B's result is marked carried and names A's run > AC2 #2060.df8e51b3 (wrong program key-holds-program-link) a key that holds the path of the run's own link to the program never carries and fails
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=key-holds-program-link did not start: <repo>/packages/hub/dist/plant.js:145
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=key-holds-program-link names no planted program
+
+ ❯ startHub tests/acceptance/2060/helpers.ts:119:36
+    117|   const exit = new Promise<undefined>((done) => child.once('exit', () …
+    118|   const ready = await Promise.race([first, exit, bound(180_000)]);
+    119|   if (ready?.ready !== true) throw Error(`BLOCKED: the hub${plant ? ` …
+       |                                    ^
+    120|   hub.socket = String(ready.socket);
+    121|   return hub;
+ ❯ twoSessions tests/acceptance/2060/helpers.ts:174:28
+ ❯ tests/acceptance/2060/carry.test.ts:50:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/acceptance/2060/carry.test.ts > AC3 #2060.e0ef1360 A fix check's base run under version 1 in session A carries to session B while the file is left as it is; after the file is replaced by version 2, B's base run runs again > AC3 #2060.e0ef1360 the file replaced by version 2: B's base run runs again
+AssertionError: fixture-tool was replaced by version 2, so A's base run run:01M864G7P7A6Q8TRNVY816VHDK of .deepbuild/checks/fix.sh is not carried to B: A: claim:01M864G6FDP8QJT78JYJDMJ615 read PASS, saying [".deepbuild/checks/fix.sh: PASS on 1 clean run","PASS 1/1 · 1 test · next: you · session/944e12da/01M864G6FDP8QJT78JYJDMJ615","checks: .deepbuild/checks/fix.sh passed · wrote <tmp>/a/src/cart.mjs"]; B: claim:01M864G84SAH0R0KMXA6NY4HPZ read PASS, saying [".deepbuild/checks/fix.sh: PASS on 1 clean run",".deepbuild/checks/fix.sh carried run:01M864G6VKA9HRD5D46FGKFZ1P from claim:01M864G6FDP8QJT78JYJDMJ615 in session:944e12da5617449c9f15d6cd123f4fb4",".deepbuild/checks/fix.sh carried its base run run:01M864G7P7A6Q8TRNVY816VHDK from claim:01M864G6FDP8QJT78JYJDMJ615 in session:944e12da5617449c9f15d6cd123f4fb4","PASS 1/1 · next: you · session/103df6c6/01M864G84SAH0R0KMXA6NY4HPZ","wrote <tmp>/b/src/cart.mjs"]; runs run:01M864G6VKA9HRD5D46FGKFZ1P (.deepbuild/checks/fix.sh on the snapshot for A: passed), run:01M864G7P7A6Q8TRNVY816VHDK (.deepbuild/checks/fix.sh on the merge base for A: failed): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   ".deepbuild/checks/fix.sh carried its base run run:01M864G7P7A6Q8TRNVY816VHDK from claim:01M864G6FDP8QJT78JYJDMJ615 in session:944e12da5617449c9f15d6cd123f4fb4",
++ ]
+
+ ❯ baseRunsAgain tests/acceptance/2060/carry.test.ts:67:182
+     65|   for (const x of headRuns(r, r.b, FIX)) if (x.outcome !== 'passed') t…
+     66|   const [source] = baseRuns(r, r.a, FIX);
+     67|   expect(carried(r.b).filter((s) => s.includes(source!.run)), `${TOOL}…
+       |                                                                                                                                                                                      ^
+     68|   expect(baseRuns(r, r.b, FIX).length, `${TOOL} was replaced by versio…
+     69| }
+ ❯ tests/acceptance/2060/carry.test.ts:77:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/acceptance/2060/carry.test.ts > AC3 #2060.e0ef1360 A fix check's base run under version 1 in session A carries to session B while the file is left as it is; after the file is replaced by version 2, B's base run runs again > AC3 #2060.e0ef1360 (wrong program program-readings-head-only) a hub that adds the readings to head keys only carries the base run and fails, naming the check
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=program-readings-head-only did not start: <repo>/packages/hub/dist/plant.js:145
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=program-readings-head-only names no planted program
+
+ ❯ startHub tests/acceptance/2060/helpers.ts:119:36
+    117|   const exit = new Promise<undefined>((done) => child.once('exit', () …
+    118|   const ready = await Promise.race([first, exit, bound(180_000)]);
+    119|   if (ready?.ready !== true) throw Error(`BLOCKED: the hub${plant ? ` …
+       |                                    ^
+    120|   hub.socket = String(ready.socket);
+    121|   return hub;
+ ❯ twoSessions tests/acceptance/2060/helpers.ts:174:28
+ ❯ tests/acceptance/2060/carry.test.ts:81:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/acceptance/2060/carry.test.ts > AC4 #2060.ad981d1d With fixture-tool removed after A's PASS, B reads no carried result and its verdict is not PASS > AC4 #2060.ad981d1d B reads no carried result and is not PASS
+AssertionError: fixture-tool was removed after A's PASS, so B reads no carried result: A: claim:01M864GA5X8FHS4P811MQADR37 read PASS, saying [".deepbuild/checks/tool.sh: PASS on 1 clean run","PASS 1/1 · 1 test · next: you · session/febf2c12/01M864GA5X8FHS4P811MQADR37","checks: .deepbuild/checks/tool.sh passed · wrote <tmp>/a/src/cart.mjs"]; B: claim:01M864GB3AB05CTQN0S7FW7PRW read PASS, saying [".deepbuild/checks/tool.sh: PASS on 1 clean run",".deepbuild/checks/tool.sh carried run:01M864GAH6ZZJ10VD081D666F8 from claim:01M864GA5X8FHS4P811MQADR37 in session:febf2c1267484c458ff47a99e9897bea","PASS 1/1 · next: you · session/6809fad6/01M864GB3AB05CTQN0S7FW7PRW","wrote <tmp>/b/src/cart.mjs"]; runs run:01M864GAH6ZZJ10VD081D666F8 (.deepbuild/checks/tool.sh on the snapshot for A: passed): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   ".deepbuild/checks/tool.sh carried run:01M864GAH6ZZJ10VD081D666F8 from claim:01M864GA5X8FHS4P811MQADR37 in session:febf2c1267484c458ff47a99e9897bea",
++ ]
+
+ ❯ readsNothing tests/acceptance/2060/carry.test.ts:89:112
+     87| /** AC4: B reads no carried result, and its verdict is not PASS. */
+     88| function readsNothing(r: Reading): void {
+     89|   expect(carried(r.b), `${TOOL} was removed after A's PASS, so B reads…
+       |                                                                                                                ^
+     90|   expect(r.b.outcomes, `${TOOL} was removed, so B's verdict is never P…
+     91| }
+ ❯ tests/acceptance/2060/carry.test.ts:95:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/acceptance/2060/carry.test.ts > AC4 #2060.ad981d1d With fixture-tool removed after A's PASS, B reads no carried result and its verdict is not PASS > AC4 #2060.ad981d1d (wrong program skips-absent-program) a reader that skips a program it can't find carries A's PASS and fails, naming fixture-tool
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=skips-absent-program did not start: <repo>/packages/hub/dist/plant.js:145
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=skips-absent-program names no planted program
+
+ ❯ startHub tests/acceptance/2060/helpers.ts:119:36
+    117|   const exit = new Promise<undefined>((done) => child.once('exit', () …
+    118|   const ready = await Promise.race([first, exit, bound(180_000)]);
+    119|   if (ready?.ready !== true) throw Error(`BLOCKED: the hub${plant ? ` …
+       |                                    ^
+    120|   hub.socket = String(ready.socket);
+    121|   return hub;
+ ❯ twoSessions tests/acceptance/2060/helpers.ts:174:28
+ ❯ tests/acceptance/2060/carry.test.ts:99:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 2 passed (9)
+   Start at  01:39:28
+   Duration  18.60s (tests 99%)

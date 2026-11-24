@@ -29,6 +29,9 @@ export class Showing {
   /** Each ask shown in a batch of several, and the batch's asks in order: what an approval's `steps` index (#327). */
   private readonly batchOf = new Map<string, string[]>();
 
+  /** When the asks were last shown. */
+  private shownAt = 0;
+
   constructor(private readonly options: ShowingOptions) {}
 
   /**
@@ -40,6 +43,12 @@ export class Showing {
     const batch = this.options.settings().batch;
     const every = isObj(batch) ? duration(batch.every) : undefined;
     return every && isObj(batch) && typeof batch.cap === 'number' ? { every, cap: batch.cap } : undefined;
+  }
+
+  /** Whether one of your batch times has come since the asks were last shown, by your batches as they are now. */
+  batchDue(now: number): boolean {
+    const batches = this.batches();
+    return !!batches && Math.floor(now / batches.every) > Math.floor(this.shownAt / batches.every);
   }
 
   members(handle: string): string[] { return this.batchOf.get(handle) ?? []; }
@@ -162,8 +171,11 @@ export class Showing {
       acted = true;
     }
     // A deadline at the next batch's own time counts as passing first: an ask first shown at its deadline would
-    // default only on a later call, after its deadline, so it shows now instead.
-    if (await this.showNow(waiting().filter((a) => this.showBy(a) <= next))) acted = true;
+    // default only on a later call, after its deadline, so it shows now instead. An agent's sign-in task (#1349) shows
+    // at once too: the work that needs the agent waits on you, from a Send or a lapsed sign-in, not on a batch.
+    if (await this.showNow(waiting().filter((a) => this.showBy(a) <= next || a.signIn === true))) acted = true;
+    // Only a showing the record took counts as the batch shown: a refused one is still due at the next beat.
+    this.shownAt = now;
     return acted;
   }
 
