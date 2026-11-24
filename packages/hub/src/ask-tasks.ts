@@ -199,8 +199,10 @@ interface AskTaskOptions {
   /** Why the plan window of the account the session's agent runs on keeps a drafting job waiting at your reserve, or undefined. */
   atReserve?(agent: string): string | undefined;
   pin(cwd: string, question: string): Promise<Obj>;
-  /** Keeps bytes in the evidence store, answering their SHA-256. */
-  keep(bytes: Uint8Array, source: string): Promise<string>;
+  /** Keeps bytes in the evidence store, sealed for a held-out variant (#3229), answering the SHA-256 it keeps them by. */
+  keep(bytes: Uint8Array, source: string, sealed?: true): Promise<string>;
+  /** A task's drafted requirements, their held-out variants kept: from now a call that names one spends it (#3229). */
+  keeps?(task_ref: string, requirements: readonly object[]): void;
   /** A definition just locked: its paid checks are priced and the issue's budget asked for once (#325), and its plan sized before any code (#324). */
   locked?(d: { session: string; agent: string; cwd: string; task_ref: string; requirements: { id: string; check: string | null; paid?: PaidKind }[] }): Promise<void>;
   /**
@@ -431,6 +433,7 @@ export class AskTasks {
         ...(!check && r.settled_by === BUDGET_WINDOW ? { settled_by: BUDGET_WINDOW } : {}),
       });
     }
+    this.o.keeps?.(t.task_ref, requirements);
     // A waiver counts only from you or a repo collaborator; any other's leaves the requirement in, and makes the
     // definition wait for your one answer, as outside text that adds a requirement does.
     const outside = requirements.filter((r) => !trusted(r.author)).map((r) => r.id);
@@ -522,12 +525,15 @@ export class AskTasks {
     }
   }
 
-  /** A check's held-out variants as handed: each file's bytes kept by digest, so only the digests reach the definition. */
+  /**
+   * A check's held-out variants as handed: each file kept sealed (#3229), so only its sealed bytes' digest reaches the
+   * definition, and the store's journal names the requirement and the variant's number, never a path of the fixture.
+   */
   private async heldOut(handed: Obj[], req: string): Promise<HeldOut[]> {
     const variants: HeldOut[] = [];
     for (const [i, v] of handed.entries()) {
       const files: Record<string, string> = {};
-      for (const [path, bytes] of Object.entries((v.files ?? {}) as Record<string, string>)) files[path] = await this.o.keep(Buffer.from(String(bytes)), `${req} held-out variant ${i + 1}: ${path}`);
+      for (const [path, bytes] of Object.entries((v.files ?? {}) as Record<string, string>)) files[path] = await this.o.keep(Buffer.from(String(bytes)), `${req} held-out variant ${i + 1}`, true);
       variants.push({ files });
     }
     return variants;

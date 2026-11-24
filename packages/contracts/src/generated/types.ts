@@ -12981,6 +12981,29 @@ export interface UserAskV2 {
   evidence?: Array<string>;
 }
 
+/** variant.spent@1 */
+export interface VariantSpent {
+  v: 1;
+  id: string;
+  kind: "variant.spent";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    check: string;
+    variant: number;
+    digests: Array<string>;
+    call: string;
+    named: "digest" | "checkout";
+  };
+  evidence?: Array<string>;
+}
+
 export type VerdictMadeRequirements = Array<{
   req: string;
   outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";

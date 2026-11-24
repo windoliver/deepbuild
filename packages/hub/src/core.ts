@@ -87,6 +87,7 @@ import type { DocSpec } from './doc-checks.js';
 const PROMPTED = new Set(['claude-code', 'claude', 'codex', 'paseo']);
 
 import { Stacks } from './stacks.js';
+import { Variants, variantSealer } from './variants.js';
 import { Starts } from './starts.js';
 import { Work } from './work.js';
 
@@ -295,6 +296,7 @@ export class Core {
   private spaces!: WorkspaceService;
   /** The supervisor's runs (runs.ts). */
   private runs!: Runs;
+  private variants!: Variants;
   private checkKinds!: () => Promise<CheckKinds>;
   private reviewRounds!: ReviewRounds;
   private reviewPasses!: ReviewPasses;
@@ -465,7 +467,7 @@ export class Core {
       reading: (session, agent, text) => this.appendReading(session, agent, text),
       // The window reading of the account the session's agent runs on, in the hub's own home (#322).
       atReserve: (agent) => this.runner.atReserve(agent === 'claude' ? 'claude-code' : agent as Parameters<typeof this.runner.atReserve>[0], homedir()),
-      pin: (cwd, question) => this.mcp.pinOf(cwd, question), keep: (bytes, source) => this.control.keep(bytes, source), run: (r) => this.judging.runClaim(r),
+      pin: (cwd, question) => this.mcp.pinOf(cwd, question), keep: (bytes, source, sealed) => this.control.keep(bytes, source, sealed), keeps: (task, requirements) => this.variants.keeps(task, requirements), run: (r) => this.judging.runClaim(r),
       invalid: (claim, commit, reason) => this.judging.invalid(claim, commit, reason),
       // A definition just locked: its paid checks priced (#325), and a plan marked large sized before any code (#324).
       locked: async (d) => {
@@ -497,7 +499,7 @@ export class Core {
     const options = this.options;
     this.gate = new GateRunner({
       raw: this.raw, now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
-      start: (r) => this.judging.runApproved(r), ended: (run) => this.judging.runEnded(run), judged: (claim) => this.judging.judged(claim), stackStart: (folder, worktree) => this.stacks.expectedStart(folder, worktree), stacked: (folder) => this.stacks.wanted(folder),
+      start: (r) => this.judging.runApproved(r), spent: (task, files) => this.variants.spent(task, files), ended: (run) => this.judging.runEnded(run), judged: (claim) => this.judging.judged(claim), stackStart: (folder, worktree) => this.stacks.expectedStart(folder, worktree), stacked: (folder) => this.stacks.wanted(folder),
       ...(options.plant === 'env-starts-at-every-claim' ? {
         startsAtClaim: async (folder: string, session: string, worktree: string) => {
           const run = this.providers.environment.newRun();
@@ -580,8 +582,9 @@ export class Core {
 
   private wireRunServices(): void {
     const options = this.options;
+    this.variants = new Variants({ root: this.root.dir, now: this.now, raw: this.raw, append: (session, agent, input) => this.append(this.connection('core', { session, agent }), input as EventInput), spent: async (task) => { for (const claim of this.gate.claimsOn(task)) await this.judging.judged(claim); } });
     this.runs = new Runs({
-      command: this.providers.checks.command,
+      command: this.providers.checks.command, variants: () => this.variants,
       hosts: () => this.hosts,
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
       raw: this.raw, sync: () => this.record.sync(), appendAsCore: (input) => this.append(this.connection('core'), input as EventInput),
@@ -647,7 +650,7 @@ export class Core {
   }
   private async openRecordAndAsks(): Promise<void> {
 
-    this.store = await openEvidenceStore({ root: this.root.evidence, now: this.now });
+    this.store = await openEvidenceStore({ root: this.root.evidence, now: this.now, sealer: variantSealer(this.root.dir) });
     const storage = this.durable.backend();
     // Each event its own commit: the durable write points a run makes depend only on the events it appends,
     // never on how many arrived together, so a cut at any one can be replayed.
@@ -686,6 +689,7 @@ export class Core {
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
     await this.runs.open();
+    await this.variants.open(this.runs.leftVariants());
     // The continues the hub carried before this start are those recorded before it; opening the core below settles
     // what landed while the hub was down (a task's check passed, a window reset, a fresh transient stop), and each
     // continue that records is routed right after, never skipped as already carried (#85).
@@ -1577,6 +1581,7 @@ export class Core {
       });
     }
     if (verified && meta.session) this.watchCalls(drafts, meta, settled);
+    void settled.then(() => this.variants.called(meta, drafts)).catch((error: unknown) => process.stderr.write(`deep hub: what ${meta.id} reached of a held-out variant was not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     if (meta.session) await this.products.hook(meta);
     if (meta.event === 'SessionStart') void this.products.sessionStart(meta.session, meta.cwd, meta.id).catch(() => undefined);
     return { settled };
