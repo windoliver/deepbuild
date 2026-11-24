@@ -161,7 +161,7 @@ fn run_view(
     }
     deep_canvas_effects::effect::lower(&mut args.doc);
     crate::physics::bake(&mut args.doc, &call["tracks"], &args.assets)?;
-    crate::particles::refuse(&args.doc, app.planted)?;
+    let operators = crate::particles::refuse(app, call, &mut args.doc)?;
     crate::trails::refuse(&args.doc)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
@@ -214,7 +214,7 @@ fn run_view(
     // Frame history's temporal upscale rebuilds the pixels from one sample each (#173).
     let upscales = args.look.history.mode == deep_canvas_scene3d::history::Mode::Upscale;
     let samples = (upscales && !args.export).then_some(1);
-    let opened = session3::open_doc(app, size, timings, shows, &args.doc, samples)?;
+    let opened = session3::open_doc(app, size, timings, shows, &operators, samples)?;
     session3::surface(app, args.surface)?;
     if args.cull_on_cpu {
         session3::cull_on_cpu(app);
@@ -392,7 +392,7 @@ fn run_view(
             Some(Planted::CreaseBelowAngle) => Some("crease_below_angle"),
             Some(Planted::EdgesDeriveEveryFrame) => Some("edges_derive_every_frame"),
             Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
-            Some(Planted::HiddenLines(name)) => Some(name),
+            Some(Planted::Named(name)) => Some(name),
             _ => None,
         };
         // #1782: the spans this run holds from frame to frame, for what it reports of them.
@@ -729,7 +729,7 @@ fn run_view(
                 }
                 _ => n as f64 / args.fps as f64,
             };
-            let settings = effects::settings(
+            let mut settings = effects::settings(
                 &scene,
                 &args.look_json,
                 &args.look,
@@ -738,7 +738,6 @@ fn run_view(
                 doc_seed,
                 seeding,
             );
-            let mut settings = settings;
             // #462: the strokes the frame lays, reported where asked; the planted twin draws and
             // reports them where the previous frame's camera put their anchors.
             let mut stroke_rows = None;
@@ -2319,6 +2318,7 @@ fn run_view(
         "render_targets": render_targets,
         "layers": layers_report(&args.doc, &args.hidden),
     });
+    crate::particles::stepped::report(&args.doc, &mut reply);
     if args.lose_at.is_some() {
         reply["device_losses"] = json!(device_losses);
     }

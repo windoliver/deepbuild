@@ -67,10 +67,14 @@ pub(crate) fn bake(
     if items.is_empty() {
         return Ok(Baked::default());
     }
+    // #853: what stepped particles published after each step, each read by its name.
+    let (count_reads, centre_reads, published) = crate::particles::stepped::published(doc);
     let piece = json!({
         "seed": doc["seed"].as_i64().unwrap_or(0),
         "controls": doc.get("controls").cloned().unwrap_or(json!({})),
         "items": items,
+        "count_reads": count_reads,
+        "centre_reads": centre_reads,
     });
     let read = |sha: &str| std::fs::read(assets.get(sha)?).ok();
     // #213: physics.cast@1 answers the logic items' requests on the document's worlds.
@@ -105,7 +109,7 @@ pub(crate) fn bake(
     let mut rec = Record::default();
     let mut world = World::new(
         piece.clone(),
-        track_of(&[]),
+        track_of(&published),
         false,
         Default::default(),
         &mut rec,

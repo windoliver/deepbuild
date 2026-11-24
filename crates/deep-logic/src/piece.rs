@@ -271,6 +271,11 @@ pub enum Read {
     /// sliding or crouched), an i32 of 0 or 1 as the last physics step before the logic step's
     /// time left it: logic steps first at a shared time and reads physics only from earlier steps.
     World,
+    /// #853: a count a canvas module published after its step, an i32: the last one before the
+    /// logic step's time, 0 before any.
+    Count,
+    /// #853: a mean place a canvas module published after its step, three f64, read as a count is.
+    Centre,
     /// Mirror j's range list (Logic: mirror reads).
     Mirror(usize),
     /// #552: `net.draws`, the draws the input track's reveals complete by the step.

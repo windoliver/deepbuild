@@ -24,6 +24,9 @@ use crate::effects::{item_pos, item_seed, resampled};
 use crate::view3d::write_named;
 use crate::{refused, App, Planted};
 
+pub(crate) mod stepped;
+pub(crate) use stepped::PLANTED;
+
 /// Flicks a second (Units and axes: time).
 const FLICKS: f64 = 705_600_000.0;
 
@@ -662,7 +665,11 @@ pub(crate) fn frame(
     let mut report = Map::new();
     let mut kept = Vec::new();
     for mut sp in std::mem::take(&mut settings.sparks) {
-        let Some(o) = scene.others.iter().find(|o| o.id == sp.item) else {
+        if sp.rows.is_some() {
+            sp.baked = stepped::baked(doc, call, &sp.item, t)?;
+        }
+        let own = |o: &&deep_canvas_scene3d::scene::Other| o.id == sp.item && sp.rows.is_none();
+        let Some(o) = scene.others.iter().find(own) else {
             kept.push(sp);
             continue;
         };
@@ -970,18 +977,21 @@ pub(crate) fn meshes(
 }
 
 /// The check's refusal of a document's particles before anything draws: `{"code": "refused",
-/// "issues": [...]}`, as a checked document is refused.
-pub(crate) fn refuse(doc: &Value, planted: Option<Planted>) -> Result<(), Value> {
-    let (_, _, every) = plants(planted);
+/// "issues": [...]}`, as a checked document is refused; else the document the view's operators
+/// are built from, its stepped particles lowered to theirs (#853).
+pub(crate) fn refuse(app: &App, call: &Value, doc: &mut Value) -> Result<Value, Value> {
+    let (_, _, every) = plants(app.planted);
     let errors: Vec<_> = rule::issues(doc, every)
         .into_iter()
         .filter(|i| i.severity == "error")
         .collect();
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(json!({"code": "refused", "issues": issues_json(&errors)}))
+    if !errors.is_empty() {
+        return Err(json!({"code": "refused", "issues": issues_json(&errors)}));
     }
+    let operators = stepped::operators(doc, app.planted)?;
+    stepped::bake(app, call, doc, &operators)?;
+    stepped::publish(app, doc, &operators);
+    Ok(operators)
 }
 
 #[cfg(test)]

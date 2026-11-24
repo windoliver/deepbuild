@@ -634,6 +634,7 @@ pub struct World {
 
 pub type Failed = Value;
 
+mod count;
 mod net;
 mod rewind;
 pub mod rollback;

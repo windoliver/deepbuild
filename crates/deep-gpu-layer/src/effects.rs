@@ -10,6 +10,7 @@ use deep_canvas::ops;
 use deep_canvas_effects::emit::Options;
 use deep_canvas_effects::graph::{self, Class, Kind, Tex, Ty};
 use deep_canvas_effects::interp::{self, hash1, Image};
+use deep_canvas_effects::particles::stepped;
 use deep_canvas_effects::{check, effect, shipped};
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
@@ -281,6 +282,8 @@ fn sparks_of(
         .iter()
         .position(|d| Some(*d) == p["draw"].as_str())
         .unwrap_or(0) as u32;
+    // #853: a stepped item's dots are grains, drawn over what is behind them at their own color.
+    let grains = o.kind == "particles.stepped@1" && draw == 0;
     Sparks {
         item: o.id.clone(),
         params,
@@ -288,17 +291,21 @@ fn sparks_of(
         seed,
         size_px: 1.0,
         // Sparks are emissive, bright enough to glow.
-        opacity: 4.0,
+        opacity: if grains { 1.0 } else { 4.0 },
         size: over_life(p.get("size"), 3.0),
         fade: over_life(p.get("opacity"), 1.0),
         fade_keys: life_keys(p.get("opacity")),
         stops,
-        draw,
+        draw: if grains { fx::GRAINS } else { draw },
         half: draw == 2 && p["resolution"].as_str() != Some("full"),
         closed: None,
         ribbon: None,
         effect: None,
         cost_ns: None,
+        // #853: a stepped item draws the rows its own operator wrote this frame.
+        rows: (o.kind == "particles.stepped@1")
+            .then(|| (stepped::rows_op(&o.id), stepped::ROWS.into())),
+        baked: None,
     }
 }
 
@@ -384,7 +391,7 @@ pub fn settings(
     let mut sparks: Vec<Sparks> = scene
         .others
         .iter()
-        .filter(|o| o.kind == "particles@1")
+        .filter(|o| o.kind == "particles@1" || o.kind == "particles.stepped@1")
         .map(|o| sparks_of(scene, o, look, seeding.key(item_seed(doc_seed, &o.id))))
         .collect();
     // #508: the film effects: a plume's or an airflow's particles cost as its preset declares,
@@ -1123,7 +1130,9 @@ pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks 
         ties_decreasing: p == Some(Planted::SortTiesDecreasing),
         compact_by_atomic: p == Some(Planted::CompactByAtomic),
         dispatch_without_guard: p == Some(Planted::DispatchWithoutGuard),
-        steps_per_frame: p == Some(Planted::StepsPerFrame),
+        steps_per_frame: p == Some(Planted::StepsPerFrame)
+            || crate::particles::stepped::planted(p).by_frame_time,
+        frame_time: crate::particles::stepped::planted(p).by_frame_time,
         keeps_every_checkpoint: p == Some(Planted::RingKeepsEveryCheckpoint),
         live_inputs: p == Some(Planted::StepReadsLivePointer),
         alternate_checkpoints: p == Some(Planted::RingCheckpointsTexturesOnAlternateSteps),
