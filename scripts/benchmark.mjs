@@ -203,9 +203,9 @@ function qosApart(current, base) {
   return `the change ran ${(now[top(now)] * 100).toFixed(0)}% at ${QOS_CLASSES[top(now)]} QoS and the merge base ${(then[top(then)] * 100).toFixed(0)}% at ${QOS_CLASSES[top(then)]}`;
 }
 
-// stream shows the command's output as it runs instead of capturing it; a captured run is stopped after
-// timeoutMs. Every child is counted, which costs the run and each child a few ms to start, so a run judged
-// on time passes follow = false: it runs as it would alone, and its count is parseInstructions's.
+// stream shows the command's output as it runs instead of capturing it; either run is stopped after timeoutMs.
+// Every child is counted, which costs the run and each child a few ms to start, so a run judged on time passes
+// follow = false: it runs as it would alone, and its count is parseInstructions's.
 export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, follow = true) {
   if (!['darwin', 'linux'].includes(process.platform)) throw Error('BLOCKED: native peak RSS requires macOS or Linux');
   const flags = process.platform === 'darwin' ? ['-l'] : ['-f', 'peak_rss_kb=%M\ncpu_s=%U %S'];
@@ -219,16 +219,17 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
     const env = build ? { ...bare(), DEEP_COUNT_LOG: counted } : bare();
     const loadStart = loadavg()[0];
     const started = performance.now();
-    // A captured run leads its own process group: spawnSync stops only /usr/bin/time at the timeout or
-    // maxBuffer, so the group is stopped with it, or the measured command and its children run on (#1322).
+    // The run leads its own process group: spawnSync stops only /usr/bin/time at the timeout or maxBuffer, so the
+    // group is stopped with it, or the measured command and its children run on (#1322), a streamed one too, holding
+    // whatever grant its caller took for it.
     const result = spawnSync('/usr/bin/time', [...flags, '-o', timing, ...argv], stream
-      ? { cwd, env, stdio: ['ignore', 'inherit', 'inherit'] }
+      ? { cwd, env, stdio: ['ignore', 'inherit', 'inherit'], timeout: timeoutMs, detached: true }
       : { cwd, env, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024, detached: true });
     const elapsedMs = performance.now() - started;
     const loadEnd = loadavg()[0];
     if (result.error) {
       try {
-        if (!stream && result.pid > 0) process.kill(-result.pid, 'SIGKILL');
+        if (result.pid > 0) process.kill(-result.pid, 'SIGKILL');
       } catch (error) {
         if (error.code !== 'ESRCH') throw error;
       }
