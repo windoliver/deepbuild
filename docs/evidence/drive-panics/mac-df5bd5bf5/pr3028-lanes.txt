@@ -1,0 +1,4 @@
+PASS guard: 10 commits checked: no guarded edit lacks its own approved proposal
+PASS before: no tagged test to run on the merge base
+PASS trace: Part of #1427; open: #1427.44c596cb, #1427.8eb79b07, #1427.de1e992b, #1427.ed5a527d, #1427.3c390bf0, #1427.388cd750, #1427.dd0b4e03
+proof: wall time 12.8 s
