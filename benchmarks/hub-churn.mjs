@@ -117,7 +117,7 @@ async function inspect(url) {
     close: () => socket.close(),
     /**
      * The retained heap of every thread after a full collection, and the process's resident memory. Each reading walks
-     * the heap first: the inline caches a walk clears are over 1 MB of the hub's, so a reading that found them warm
+     * the heap first: the inline caches a walk clears are about 1 MB of the hub's, so a reading that found them warm
      * would read them as growth over one taken after a walk (#1866).
      */
     async memory() {
