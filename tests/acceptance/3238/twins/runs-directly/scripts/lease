@@ -1,0 +1,17 @@
+#!/bin/sh
+# DeepBuild's own lease script (#1015; #29; #3238): runs its arguments under a grant of the machine's throttle
+# (docs/parallel-proof.md, section 6), never bare: a command from a chain that holds a grant passes through on it, and
+# one with none waits for a top-level build grant, DEEP_LEASE_WAIT minutes at most (30 by default). With no grant in the
+# wait the throttle prints INCONCLUSIVE no grant and the command never starts. Inside the grant it runs through
+# `deep lease` when `deep` is on PATH or the CLI is built, so a hub's lease table shows it under its session.
+set -eu
+# The planted wrong program for #1015's AC7 runs the command directly.
+if [ "${DEEP_HUB_PLANT:-}" = lease-script-runs-directly ]; then exec "$@"; fi
+# Planted: runs its command directly, with no throttle grant, as DEEP_HUB_PLANT=lease-script-runs-directly does.
+exec "$@"
+here="$(dirname "$0")"
+wait="${DEEP_LEASE_WAIT:-30}"
+if command -v deep >/dev/null 2>&1; then exec node "$here/throttle.mjs" build --wait "$wait" -- deep lease -- "$@"; fi
+cli="$here/../packages/cli/dist/main.js"
+if [ -f "$cli" ]; then exec node "$here/throttle.mjs" build --wait "$wait" -- node "$cli" lease -- "$@"; fi
+exec node "$here/throttle.mjs" build --wait "$wait" -- "$@"
