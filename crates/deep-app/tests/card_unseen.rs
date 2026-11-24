@@ -1,7 +1,8 @@
-//! A question card in a window nobody can see: it counts as shown only once it's on screen and arms again when it was
-//! covered (#327; the Question card's `rearm_on: occluded`), and a picture a taste call judges counts only while it's on
-//! screen (#3234). The ask's own page stands in a window that is hidden and shown, or behind a locked screen, and is drawn
-//! as macOS draws it: at a frame a display asks for, and none is asked of a hidden window. Time passes by the app's tick.
+//! A question card in a window nobody can see, or whose window changed: it counts as shown only once it's on screen and
+//! arms again when its window was covered, resized, or came forward (#327; the Question card's `rearm_on`), and a picture
+//! a taste call judges counts only while it's on screen (#3234). The ask's own page stands in a window that is hidden and
+//! shown, or behind a locked screen, and is drawn as macOS draws it: at a frame a display asks for, and none is asked of a
+//! hidden window. Time passes by the app's tick.
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -12,8 +13,8 @@ use deep_app::shown::{force_seen, Seen};
 use deep_app::{card, open, record, views};
 use gpui_kit::base::dock::DockArea;
 use gpui_kit::{
-    px, size, AnyWindowHandle, AppContext as _, Bounds, HeadlessAppContext, NoopTextSystem, Point,
-    WindowBounds, WindowOptions, WindowVisibility,
+    px, size, AnyWindowHandle, AppContext as _, Bounds, Empty, HeadlessAppContext, NoopTextSystem,
+    Point, WindowBounds, WindowOptions, WindowVisibility,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -80,6 +81,8 @@ fn commit() -> Value {
 struct Page {
     cx: HeadlessAppContext,
     window: AnyWindowHandle,
+    /// Another window, for the keyboard to be in.
+    other: AnyWindowHandle,
     now: u64,
 }
 
@@ -113,6 +116,10 @@ impl Page {
             .update(|cx| cx.open_window(options, |_, cx| cx.new(card::AskPage::new)))
             .unwrap()
             .into();
+        let other = cx
+            .open_window(size(px(100.), px(100.)), |_, cx| cx.new(|_| Empty))
+            .unwrap()
+            .into();
         cx.draw_on_request();
         cx.update_window(window, |_, window, cx| {
             let dock = cx.new(|cx| DockArea::new("deepbuild", None, window, cx));
@@ -122,8 +129,18 @@ impl Page {
         Page {
             cx,
             window,
+            other,
             now: NOW,
         }
+    }
+
+    /// The keyboard goes to this window, or to the other one.
+    fn active(&mut self, active: bool) {
+        let window = if active { self.window } else { self.other };
+        self.cx
+            .update_window(window, |_, window, _| window.activate_window())
+            .unwrap();
+        self.frames();
     }
 
     fn visible(&mut self) -> bool {
@@ -403,4 +420,65 @@ fn a_picture_drawn_behind_a_lock_was_not_shown() {
     page.pass(TICK);
     page.pass(ARM_AFTER);
     assert_eq!(page.card(|card| card.left()), Some((0, 1)));
+}
+
+/// A window made smaller has its card's slot outside it until its page is drawn again, which a busy app does late.
+#[test]
+fn a_press_before_a_smaller_window_is_drawn_answers_nothing() {
+    let mut page = Page::open(ask(commit()));
+    page.present();
+    page.pass(ARM_AFTER);
+    let (cx, window) = (&mut page.cx, page.window);
+    cx.simulate_resize(window, size(px(700.), px(400.)));
+    let at_once = page.state();
+    page.pass_unticked(2 * ARM_AFTER);
+    let pressed = page.press(NO, Source::Hardware);
+    let said = page.card(|card| card.lines()).pop();
+    page.frames();
+    page.pass(ARM_AFTER);
+    assert_eq!(
+        (at_once, pressed, said.as_deref(), page.state()),
+        (
+            "presented",
+            Did::Refused,
+            Some("Make the window taller"),
+            "armed"
+        )
+    );
+}
+
+/// An assistive client's press on `target`, the OS prompt it raises taking the keyboard from the window, and its yes: the
+/// card while the prompt is up, and what the yes did.
+fn prompted(target: Target, words: &str) -> (&'static str, Did) {
+    let mut page = Page::open(ask(commit()));
+    page.present();
+    page.active(true);
+    page.pass(ARM_AFTER);
+    page.card(|card| card.type_words(words));
+    let client = Source::Accessibility {
+        client: Client::Unknown,
+    };
+    let waits = page.press(target, client);
+    assert!(matches!(waits, Did::NeedsConfirmation(_)), "{waits:?}");
+    page.active(false);
+    let prompted = page.state();
+    page.active(true);
+    let (events, now) = (record::history(), page.now);
+    (
+        prompted,
+        page.card(|card| card.confirmed(true, &events, now)),
+    )
+}
+
+#[test]
+fn an_os_prompt_takes_the_keyboard_from_the_window_and_its_yes_still_answers() {
+    assert_eq!(prompted(NO, ""), ("presented", Did::Answered));
+}
+
+#[test]
+fn an_os_prompt_for_a_send_takes_the_keyboard_and_its_yes_still_answers() {
+    assert_eq!(
+        prompted(Target::Send, "darker"),
+        ("presented", Did::Answered)
+    );
 }
