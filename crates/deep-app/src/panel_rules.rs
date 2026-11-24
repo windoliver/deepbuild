@@ -140,9 +140,12 @@ fn walk(node: &Node, path: &str, ink: Option<u32>, fill: Option<u32>, found: &mu
             });
         }
     }
-    // The toolkit's button is a tab stop with a focus handle of its own; anything else takes focus by tracking one.
-    let focus =
-        node.kind == "Button" || op("track_focus").is_some_and(|op| number(&op.args).is_some());
+    // The toolkit's button is a tab stop with a focus handle of its own; anything else takes focus by tracking one,
+    // which DeepBuild's module makes a tab stop unless the script then refuses the stop.
+    let refused = node.ops.iter().rev().find(|op| op.name == "tab_stop");
+    let focus = node.kind == "Button"
+        || op("track_focus").is_some_and(|op| number(&op.args).is_some())
+            && !refused.is_some_and(|op| op.args.contains("false"));
     if press && !focus {
         found.push(Finding {
             code: "pointer_only",
@@ -211,6 +214,8 @@ mod tests {
             codes("div :id[Str(\"go\")] :on_click(fn)\n  text \"Refresh\""),
             [("pointer_only", "go".to_owned())]
         );
+        let unstopped = "div :id[Str(\"go\")] :track_focus[Number(1.0)] :tab_stop[Bool(true)] :tab_stop[Bool(false)] :on_click(fn)\n  text \"Refresh\"";
+        assert_eq!(codes(unstopped), [("pointer_only", "go".to_owned())]);
         assert_eq!(
             codes("Button \"button\"\n  text \"button\""),
             [("no_name", "button".to_owned())]

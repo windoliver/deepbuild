@@ -303,6 +303,8 @@ fn text_extent(text: &str, frame: Size<Pixels>, window: &Window) -> Option<Size<
 fn behavior(op: &crate::panel_tree::Op) -> bool {
     match op.name.as_str() {
         "track_focus" => number(&op.args).is_some(),
+        // What DeepBuild's module adds to an element that tracks focus (#3233): which stop it is stays in the host.
+        "tab_stop" => true,
         "on_action" => false,
         name => name.starts_with("on_") && op.args == "fn" || op.args == "registered",
     }

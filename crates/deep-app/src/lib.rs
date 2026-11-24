@@ -383,6 +383,16 @@ pub fn init(cx: &mut App) {
     cx.set_reduce_motion(
         objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion(),
     );
+    // Tab with nothing focused goes to the window's first tab stop (#3233). The toolkit binds Tab under its root's
+    // key context, which a window with no focus never reaches, so no key could reach a panel's press from there.
+    cx.intercept_keystrokes(|event, window, cx| {
+        let tab = event.keystroke.key == "tab" && !event.keystroke.modifiers.modified();
+        if tab && window.focused(cx).is_none() {
+            window.focus_next(cx);
+            cx.stop_propagation();
+        }
+    })
+    .detach();
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")
