@@ -1170,6 +1170,8 @@ timed.push('tests/acceptance/2650/budgets.long.test.ts');
 alone.push(...['heap', 'equal', 'data-row', 'as-given'].map((f) => `tests/acceptance/2700/${f}.test.mjs`));
 byHand.push('tests/acceptance/2700/budgets.long.test.mjs');
 timed.push('tests/acceptance/2700/budgets.long.test.mjs');
+// #2700's reached.test.mjs builds its own probe (probe-reached/, debug assertions off) against deep-canvas.
+alone.push('tests/acceptance/2700/reached.test.mjs');
 
 // #1498's files each build deep-drive and run replicas.
 alone.push('tests/acceptance/1498/');
