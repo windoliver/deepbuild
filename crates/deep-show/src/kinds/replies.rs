@@ -377,6 +377,11 @@ impl Hub<'_> {
                 .and_then(|e| e.as_array().cloned())
                 .unwrap_or_default();
             let from = if i == row0 { entry0 } else { 0 };
+            // #3108: a row a page continues keeps only its kind and name; its other fields (its
+            // planted entry, kit, schema) went with its first entries.
+            if from > 0 {
+                head = json!({"kind": head["kind"], "name": head["name"]});
+            }
             let mut kept: Vec<Value> = Vec::new();
             let head_size = head.to_string().len() + 16;
             if size + head_size > page_budget() && !page.is_empty() {
