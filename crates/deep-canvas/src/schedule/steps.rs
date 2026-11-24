@@ -179,17 +179,21 @@ fn checkpoint_bytes(values: &BTreeMap<String, Val>, failed: &BTreeMap<usize, OpE
     (values + failed).max(1)
 }
 
+/// The bytes the ring counts for a JSON node: what one takes on the reference Macs, counted on
+/// every target, so a ring's spacing is the same on each.
+const JSON_NODE: u64 = 72;
+
 /// A JSON value's bytes in memory: each node, each string's bytes and each member's key.
 fn json_bytes(v: &Value) -> u64 {
-    let node = std::mem::size_of::<Value>() as u64;
-    node + match v {
-        Value::String(s) => s.len() as u64,
-        Value::Array(a) => a.iter().map(json_bytes).sum(),
-        Value::Object(m) => (m.iter())
-            .map(|(k, v)| k.len() as u64 + json_bytes(v))
-            .sum(),
-        _ => 0,
-    }
+    JSON_NODE
+        + match v {
+            Value::String(s) => s.len() as u64,
+            Value::Array(a) => a.iter().map(json_bytes).sum(),
+            Value::Object(m) => (m.iter())
+                .map(|(k, v)| k.len() as u64 + json_bytes(v))
+                .sum(),
+            _ => 0,
+        }
 }
 
 /// The ring's budget for these stepping modules, whose arrays it holds: what each declares for

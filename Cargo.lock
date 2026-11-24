@@ -2982,6 +2982,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-urdf"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-physics",
+ "roxmltree 0.21.1",
+ "serde_json",
+]
+
+[[package]]
 name = "der"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
