@@ -4,8 +4,9 @@
 //
 //   helper scan <marker>...     every process whose root holds the run's marker directory, /run/deep/<marker>, which
 //                               bubblewrap makes in the run's own mount namespace and no fork, exec, setsid or empty
-//                               environment sheds: one line each, "<marker> <pid> <ppid> <pgid> <bytes>", <bytes> its
-//                               resident set (#1409).
+//                               environment sheds: one line each, "<marker> <pid> <ppid> <pgid> <bytes> <cpu>", <bytes>
+//                               its resident set (#1409) and <cpu> the nanoseconds of CPU it has used, user and system (#3220).
+//                               A marker "pgid:<n>" names a process group instead: a leased command's (#3220).
 //   helper limit <bytes> <program> [<arg>...]
 //                               execs <program> with RLIMIT_FSIZE at <bytes> (#1409), as the macOS helper does.
 //   helper probe <file> <op> <arg> ...
@@ -89,8 +90,9 @@ static int scan(int count, char **markers) {
     if (*end || pid <= 1 || pid == self) continue;
     for (int m = 0; m < count; m++) {
       char path[PATH_MAX];
+      int group = strncmp(markers[m], "pgid:", 5) == 0;
       snprintf(path, sizeof path, "/proc/%ld/root/run/deep/%s", pid, markers[m]);
-      if (access(path, F_OK) != 0) continue;
+      if (!group && access(path, F_OK) != 0) continue;
       snprintf(path, sizeof path, "/proc/%ld/stat", pid);
       FILE *stat = fopen(path, "r");
       if (!stat) continue;
@@ -105,7 +107,12 @@ static int scan(int count, char **markers) {
       snprintf(path, sizeof path, "/proc/%ld/statm", pid);
       FILE *statm = fopen(path, "r");
       if (statm) { if (fscanf(statm, "%*u %llu", &pages) != 1) pages = 0; fclose(statm); }
-      if (close && sscanf(close + 1, " %*c %d %d", &ppid, &pgid) == 2) printf("%s %ld %d %d %llu\n", markers[m], pid, ppid, pgid, pages * (unsigned long long)sysconf(_SC_PAGESIZE));
+      // Its CPU times, utime and stime, fields 14 and 15, in clock ticks.
+      unsigned long long user = 0, sys = 0;
+      if (close && sscanf(close + 1, " %*c %d %d %*d %*d %*d %*u %*u %*u %*u %*u %llu %llu", &ppid, &pgid, &user, &sys) >= 2 && (!group || pgid == atoi(markers[m] + 5))) {
+        unsigned long long cpu = (user + sys) * (1000000000ULL / (unsigned long long)sysconf(_SC_CLK_TCK));
+        printf("%s %ld %d %d %llu %llu\n", markers[m], pid, ppid, pgid, pages * (unsigned long long)sysconf(_SC_PAGESIZE), cpu);
+      }
     }
   }
   closedir(proc);

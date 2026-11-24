@@ -13,6 +13,9 @@ import { worst, writeRecord } from './lanes.mjs';
 import { holds } from './throttle.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+// Every cargo the window starts runs bare by its own setting, never by the machine's: an empty RUSTC_WRAPPER is no
+// wrapper over any cargo config, so a machine's compile cache never reaches a budget (docs/parallel-proof.md, section 4).
+process.env.RUSTC_WRAPPER = '';
 const manifest = 'benchmarks/budgets.json';
 const folder = join(homedir(), '.deepbuild', 'budget-window');
 const mark = join(folder, 'mark');

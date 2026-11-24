@@ -1,0 +1,49 @@
+== spark head f72256cd1 base 0a875355b Mon Nov 23 03:40:22 PM PST 2026 load 57.22 75.14 102.54
+-- branch
+
+ RUN  v5.0.5 /var/tmp/d2420
+
+ ✓ packages/supervisor/src/denied-ceiling.test.ts > the Linux sandbox parent's refusals > past 256 targets are counted in one closing event, and a long target is cut to 512 bytes and its length 608ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  15:42:32
+   Duration  2.26s (transform 60%, tests 32%, import 7%, setup 1%)
+
+branch exit 0
+-- merge base supervisor.ts
+
+ RUN  v5.0.5 /var/tmp/d2420
+
+ × packages/supervisor/src/denied-ceiling.test.ts > the Linux sandbox parent's refusals > past 256 targets are counted in one closing event, and a long target is cut to 512 bytes and its length 765ms
+   → run:CEILING's events naming a target while it lives: expected 301 to be 256 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/supervisor/src/denied-ceiling.test.ts > the Linux sandbox parent's refusals > past 256 targets are counted in one closing event, and a long target is cut to 512 bytes and its length
+AssertionError: run:CEILING's events naming a target while it lives: expected 301 to be 256 // Object.is equality
+
+- Expected
++ Received
+
+- 256
++ 301
+
+ ❯ packages/supervisor/src/denied-ceiling.test.ts:38:85
+     36|       const before = ((await record.read({ after: 0, limit: 100_000 })…
+     37|         .filter((e) => e.kind === 'sandbox.denied' && (e.data as { run…
+     38|       expect(before.length, 'run:CEILING\'s events naming a target whi…
+       |                                                                                     ^
+     39|       const bytes = Buffer.byteLength(long);
+     40|       expect(before.map((d) => d.target), 'the long target as its firs…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:42:42
+   Duration  1.42s (tests 65%, transform 27%, import 7%, setup 1%)
+
+base exit 1
+UNIT-DONE Mon Nov 23 03:42:43 PM PST 2026

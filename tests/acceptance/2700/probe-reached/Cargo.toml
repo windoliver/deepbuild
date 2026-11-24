@@ -1,0 +1,35 @@
+# The probe of tests/acceptance/2700/reached.test.mjs (#2700.dad8fae2): one small program that calls the canvas
+# core's public entry `deep_canvas::schedule::{Session::revise_items, Session::load, Scheduler, Options}` and
+# `deep_canvas::registry` (the core's own sealed set) and prints what it saw as one JSON line. Test tooling only,
+# outside the workspace (the empty [workspace] table). reached.test.mjs lays a copy of this folder at
+# target/acceptance-2700-reached/probe (the path below rewritten to reach the canvas core from there) and runs
+#   cargo build --release --manifest-path target/acceptance-2700-reached/probe/Cargo.toml --target-dir target/acceptance-2700-reached
+# from the checkout root. A release build with debug assertions off: `revise_items` debug-asserts that no member
+# outside `reached` changed, and the criterion's case is exactly a member that differs and is not named.
+[package]
+name = "acceptance-2700-reached-probe"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "acceptance-2700-reached-probe"
+path = "src/main.rs"
+
+[dependencies]
+deep-canvas = { path = "../../../../crates/deep-canvas" }
+# The canvas core's own serde_json, with its feature: a document's members keep their order.
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[profile.release]
+opt-level = 2
+debug = 0
+debug-assertions = false
+overflow-checks = true
+panic = "unwind"
+strip = false
+lto = false
+incremental = false
+
+[workspace]

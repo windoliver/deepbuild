@@ -30,7 +30,7 @@
   "crates/deep-marks-render/src/raster.rs": 1678,
   "crates/deep-replica/src/drive/mod.rs": 2290,
   "crates/deep-scene3d-render/src/lib.rs": 8967,
-  "crates/deep-scene3d-render/src/scene3d.wgsl": 3102,
+  "crates/deep-scene3d-render/src/scene3d.wgsl": 3051,
   "crates/deep-show/src/hub.rs": 2609,
   "crates/deep-show/src/main.rs": 2942,
   "packages/asks/src/index.ts": 2050,
