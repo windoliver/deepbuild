@@ -24,9 +24,9 @@ import { codexTrusted } from './codex-settings.js';
 import { countMcp, OWN_SERVERS } from './mcp-servers.js';
 import { reachOf, type Reach, type ReachTool } from './could-do.js';
 import { coveredBy } from './adapter-facts.js';
-import { mergedWithMain, releaseSpec, switchesOff, unreadSpec } from './release.js';
-import { specChecks } from './spec-checks.js';
-import { checksIn, docChecksIn } from './spec-entries.js';
+import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
+import { approvedChecks } from './spec-checks.js';
+import { checksIn, docChecksIn, outsideOf } from './spec-entries.js';
 import { approvedSpec, SPEC, specOnDisk } from './approved-spec.js';
 import { repoOf } from './shared-runs.js';
 import { GateRecord, type GateAsk } from './gate-record.js';
@@ -1007,7 +1007,7 @@ export class StopJudging {
       // The spec as you approved it (#1864): the claim's base commit's, never the worktree's; a difference is a proposal.
       const approved = r.joins ? undefined : await approvedSpec(r.cwd, r.base);
       if (approved) void this.proposeSpecDrift(r, approved.oid).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
-      const spec = approved ? this.specChecks(approved) : [];
+      const spec = approved ? approvedChecks(approved) : [];
       const pr = r.joins ? undefined : await this.prOf(r.session);
       const releaseNames = approved && pr ? releaseSpec(approved.spec).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
       // The wiki's review passes for a claim on a PR (#2748), those whose scope covers what it changed, read beside what follows.
@@ -1118,11 +1118,6 @@ export class StopJudging {
     });
     this.lanes.set(r.claim, lane);
     lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s setup failure wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
-  }
-
-  /** The repo's spec checks (#322), as spec-checks.ts reads them from the approved revision of its spec (#1864). */
-  private specChecks(a: Awaited<ReturnType<typeof approvedSpec>>): ClaimCheck[] {
-    return a.text === undefined ? [] : !a.parsed ? unreadSpec(a.text) : specChecks(a.text, a.spec, checksIn(a.spec), docChecksIn(a.spec));
   }
 
   /**
@@ -1334,7 +1329,7 @@ export class StopJudging {
     // check, never a deep_run of the worktree's line or a told command under a name the block lists (#1864).
     const scope = await this.claimScope(r.claim);
     const approved = scope && (await approvedSpec(scope.cwd, scope.base)).spec;
-    const outside = approved && (r.approved !== null || checksIn(approved).get(r.check)?.run === r.command) ? this.outsideOf(approved, r.check) : undefined;
+    const outside = approved && (r.approved !== null || checksIn(approved).get(r.check)?.run === r.command) ? outsideOf(approved, r.check) : undefined;
     const build = outside && (() => this.builtOutside(r.cwd, outside.build));
     if (heldOut && build) heldOut.build = build;
     else await build?.();
@@ -1346,17 +1341,6 @@ export class StopJudging {
       void this.options.services.runs.ended(String(run)).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     return String(run);
-  }
-
-  /**
-   * Whether the approved spec runs this check outside the sandbox (#33, #1864): `outside: { checks: [paths], build }`
-   * in .deepbuild/done.yaml, for suites that start sandboxes of their own, which macOS can't nest. Its build makes what
-   * those suites start (the workspaces, deep-hook) once per checkout. A run of no claim the hub judges stays inside.
-   */
-  private outsideOf(spec: unknown, check: string): { build: string } | undefined {
-    const o = isObj(spec) && isObj(spec.outside) ? spec.outside : undefined;
-    const paths = Array.isArray(o?.checks) ? o.checks.map(String) : [];
-    return o && typeof o.build === 'string' && paths.some((p) => check === p || (p.endsWith('/') && check.startsWith(p))) ? { build: o.build } : undefined;
   }
 
   private builtOutside(cwd: string, build: string): Promise<void> {
