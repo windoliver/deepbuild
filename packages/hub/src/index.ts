@@ -18,6 +18,7 @@ export const gatesCommand = async (off: boolean): Promise<number> => (await impo
 export const backupCommand = async (args: Args): Promise<number> => (await import('./backup.js')).backupCommand(args);
 export const restoreCommand = async (args: Args): Promise<number> => (await import('./backup.js')).restoreCommand(args);
 export const envCommand = async (args: Args, setUp?: SetUp): Promise<number> => (await import('./env.js')).envCommand(args, setUp);
+export const handleRead = async (root: string, params: Record<string, unknown>): Promise<Record<string, unknown> | undefined> => (await import('./client.js')).handleRead(root, params);
 export const guardCommand = async (args: Args, setUp?: SetUp): Promise<number> => (await import('./guards.js')).guardCommand(args, setUp);
 export const confirmedCommand = async (args: Args): Promise<number> => (await import('./confirmed-command.js')).confirmedCommand(args);
 export const inboxCommand = async (args: Args, setUp?: SetUp): Promise<number> => (await import('./inbox.js')).inboxCommand(args, setUp);

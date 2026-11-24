@@ -59,7 +59,11 @@ async function claimed(r: RecordStore, at: number): Promise<{ S: string; claim: 
   await r.append({ ...hook(S), writer: 'app' }, claim);
   return { S, claim };
 }
-const settled = <T>(p: Promise<T>, ms: number): Promise<T | 'waiting'> => Promise.race([p, new Promise<'waiting'>((done) => setTimeout(() => done('waiting'), ms))]);
+/** `p`'s value, or 'waiting' when it hasn't settled in 30 s. */
+// deadline: a promise the record holds back fails its test's assertion, naming it, not its timeout
+const settled = <T>(p: Promise<T>): Promise<T | 'waiting'> => Promise.race([p, new Promise<'waiting'>((done) => setTimeout(() => done('waiting'), 30_000).unref())]);
+/** Whether `p` has settled yet. */
+const watched = (p: Promise<unknown>): { settled: boolean } => { const now = { settled: false }; void p.then(() => { now.settled = true; }, () => { now.settled = true; }); return now; };
 
 it('untilSync settles once a FULL commit starts syncing stored evidence, before that sync ends (#2539)', async () => {
   const { r, release, sha } = await gatedRecord();
@@ -67,22 +71,27 @@ it('untilSync settles once a FULL commit starts syncing stored evidence, before 
   const waiting = r.untilSync!();
   const verdict = r.append(core(S), verdictOf(claim, T0 + 20, sha));
   try {
-    expect(await settled(waiting.then(() => 'started'), 2000), 'a sync of a stored file wakes what waits for one').toBe('started');
-    expect(await settled(verdict, 200), 'the verdict itself still waits for its sync').toBe('waiting');
+    const verdictYet = watched(verdict);
+    expect(await settled(waiting.then(() => 'started')), 'a sync of a stored file wakes what waits for one').toBe('started');
+    // Another session's event commits meanwhile, so a verdict that didn't wait would have landed first.
+    await settled(r.append(hook(ulidAt(T0 + 30)), event('session.start', T0 + 30, undefined)));
+    expect(verdictYet.settled, 'the verdict itself still waits for its sync').toBe(false);
   } finally {
     release();
   }
   await verdict;
-});
+}, 60_000);
 
 it('untilSync stays waiting through a FULL commit whose hash names nothing the store holds (#2539)', async () => {
   const { r, release } = await gatedRecord();
   release();
   const { S, claim } = await claimed(r, T0);
-  const waiting = r.untilSync!();
+  const woken = watched(r.untilSync!());
   // A digest that is no stored file, as a decision's key is: the commit is FULL and names it, with nothing to sync.
   await r.append(core(S), verdictOf(claim, T0 + 20, 'ab'.repeat(32)));
-  expect(await settled(waiting.then(() => 'started'), 300), 'a commit with no file to sync wakes nothing').toBe('waiting');
+  // What a commit's sync wakes, it wakes as the commit starts: well before the one after it has landed.
+  await r.append(hook(S), event('user.ask', T0 + 30, seqAt(T0 + 30), { msg: 2 }));
+  expect(woken.settled, 'a commit with no file to sync wakes nothing').toBe(false);
 });
 
 it('a store that can\'t read a named hash back leaves the FULL commit as its sync decides it (#2539)', async () => {

@@ -63,7 +63,7 @@ export const aloneReasons = {};
 for (const [reason, entries] of Object.entries({
   binary: [
     'tests/acceptance/2386/', 'tests/acceptance/2086-redraft-2047/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
-    'tests/acceptance/2700/heap.test.mjs', 'tests/acceptance/2700/equal.test.mjs', 'tests/acceptance/2700/data-row.test.mjs', 'tests/acceptance/2700/as-given.test.mjs',
+    'tests/acceptance/2700/heap.test.mjs', 'tests/acceptance/2700/equal.test.mjs', 'tests/acceptance/2700/data-row.test.mjs', 'tests/acceptance/2700/as-given.test.mjs', 'tests/acceptance/2700/reached.test.mjs',
     'tests/acceptance/1523/', 'tests/acceptance/84/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/',
     'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/',
     'tests/acceptance/389/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/1487/',
@@ -142,6 +142,8 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/189-oracle/', 'tests/acceptance/189/lab-redraft/', 'tests/acceptance/276/record/', 'tests/acceptance/276/match/', 'tests/acceptance/2109/',
     'tests/acceptance/953/', 'tests/acceptance/953-oracle/', 'tests/acceptance/1250/', 'tests/acceptance/1576/', 'tests/acceptance/2661/', 'tests/acceptance/980/',
     'tests/acceptance/1861/', 'tests/acceptance/2897/', 'tests/acceptance/2897-redraft-ac6/', 'tests/acceptance/2697/', 'tests/acceptance/409-redraft-2697/',
+    'tests/acceptance/1181/', 'tests/acceptance/1834/', 'tests/acceptance/2035/', 'tests/acceptance/2288/', 'tests/acceptance/2748/', 'tests/acceptance/1500/',
+    'tests/acceptance/1500-oracle/', 'tests/acceptance/3234/', 'tests/acceptance/3234-redraft-ac3/',
   ],
   timing: [
     'tests/acceptance/2513-redraft-2047/',
@@ -163,6 +165,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/1427-redraft-1830/', 'tests/acceptance/311-redraft-1830/', 'tests/acceptance/1018-redraft-1830/', 'tests/acceptance/166-redraft-1830/',
     'tests/acceptance/268-redraft-1830/', 'tests/acceptance/465-redraft-1830/', 'tests/acceptance/968-redraft-1830/', 'tests/acceptance/1830/ac2-timing.test.ts',
     'tests/acceptance/1801/', 'tests/acceptance/2760-redraft-ac8/', 'tests/acceptance/2777/', 'tests/acceptance/553/',
+    'tests/acceptance/980-redraft-ac9/', 'tests/acceptance/2317/', 'tests/acceptance/2740/',
   ],
   'shared: Docker': [
     'tests/acceptance/580/', 'tests/acceptance/238/', 'tests/acceptance/1255/', 'tests/acceptance/194/', 'tests/acceptance/531/', 'tests/acceptance/532/', 'tests/acceptance/190/',
@@ -205,6 +208,8 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/971/', 'tests/acceptance/1992/', 'tests/acceptance/1992-redraft-ac5/', 'tests/acceptance/1831/', 'tests/acceptance/2760/', 'tests/acceptance/732/',
     'tests/acceptance/1484/', 'tests/acceptance/806-redraft-ac3/', 'tests/acceptance/1215/', 'tests/acceptance/1489/', 'tests/acceptance/189/carry/', 'tests/acceptance/276/web/',
     'tests/acceptance/2738/', 'tests/acceptance/265/', 'tests/acceptance/3016/', 'tests/acceptance/552/', 'tests/acceptance/298/',
+    'tests/acceptance/1488/', 'tests/acceptance/161/', 'tests/acceptance/2034/', 'tests/acceptance/2054/', 'tests/acceptance/3171/', 'tests/acceptance/290/',
+    'tests/acceptance/2215/', 'tests/acceptance/2215-redraft-ac5/', 'tests/acceptance/3034/',
   ],
   'shared: the Lima VMs': [
     'tests/acceptance/1942/', 'tests/acceptance/1945/', 'tests/acceptance/1946/', 'tests/acceptance/1943/', 'tests/acceptance/1942-redraft-2073/',
@@ -212,6 +217,7 @@ for (const [reason, entries] of Object.entries({
   "shared: the checkout's source files": [
     'tests/acceptance/1901/', 'tests/acceptance/2497/', 'tests/acceptance/2173-redraft-2047/',
   ],
+  "shared: the checkout's built packages": ['tests/acceptance/2696/'],
   'shared: the sandbox log stream': [
     'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/',
     'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/37/',
@@ -220,7 +226,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/154/', 'tests/acceptance/154-oracle/', 'tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/', 'tests/acceptance/155/',
     'tests/acceptance/155-oracle/', 'tests/acceptance/162/', 'tests/acceptance/184/', 'tests/acceptance/184-redraft-ac7-2/', 'tests/acceptance/555/', 'tests/acceptance/1048/',
     'tests/acceptance/556/', 'tests/acceptance/2650/retries.test.ts', 'tests/acceptance/2650/jobs.test.ts', 'tests/acceptance/2650/replay.test.ts',
-    'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/',
+    'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/', 'tests/acceptance/3035/',
   ],
   'shared: memory': ['tests/acceptance/2645/'],
   'shared: the cores': ['tests/acceptance/2227/'],
@@ -600,6 +606,10 @@ function cargoTarget(line, targets) {
 
 /** The results in cargo test's output, each test by the target that reruns it, and a target that failed in no test. */
 export function cargoResults(output, status, workspace) {
+  // #3333: a run the throttle gave no build grant never started cargo. The throttle's first line and its exit 3 say so,
+  // as its marker in a vitest report does, so the run reads as that missing grant, never as a failed test.
+  const refused = status === 3 ? output.split('\n')[0].match(/^INCONCLUSIVE no grant: (.+)$/)?.[1] : undefined;
+  if (refused) return { failures: [], passed: [], noGrant: refused };
   const targets = rerunTargets(workspace);
   const failures = [], passed = [], skips = [], failed = new Set();
   // #3100: a failed test reads as the state its own failure message names, so one that panics with INCONCLUSIVE: or
@@ -1005,7 +1015,8 @@ export function runLanes(lanes, { cwd = root } = {}) {
         // names it, so a merge with another machine's rows (parallel-proof §8) can't lose it.
         if (found && (found.lone || (results?.noGrant && found.error === results.noGrant) || !run.tests.some(({ state }) => state === found.state))) findings.push({ state: found.state, note: found.error });
         if (stands(found, failure)) failure = found;
-        if (command === 'cargo' && args[0] === 'test') {
+        // A run the throttle refused ran nothing to list, and listing it would ask the throttle again (#3333).
+        if (command === 'cargo' && args[0] === 'test' && !results?.noGrant) {
           cargoRan = true;
           const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment) : undefined;
           if (listing) {
