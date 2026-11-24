@@ -306,7 +306,7 @@ impl MapUse {
     /// sRGB, a normal map's two channels, an occlusion map alone's one channel, else linear data
     /// (Material: texture maps: the format follows the map's role).
     pub fn role(&self) -> &'static str {
-        let has = |f| self.fields.contains(f);
+        let has = |f: &str| self.fields.contains(f);
         if self.drawn {
             "base_color"
         } else if has("base_color") || has("emission") {
@@ -325,9 +325,8 @@ impl MapUse {
 pub type MapUses = std::collections::BTreeMap<String, MapUse>;
 
 fn map_use(out: &mut MapUses, sha: &str, field: &'static str, chain: Option<&Chain>) {
-    let u = out
-        .entry(chain.map_or(sha, |c| &c.key).to_string())
-        .or_default();
+    let key = chain.map_or(sha, |c| c.key.as_str());
+    let u = out.entry(key.to_string()).or_default();
     u.sha = sha.to_string();
     u.fields.insert(field);
     u.drawn = chain.is_some();
