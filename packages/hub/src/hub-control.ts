@@ -202,6 +202,7 @@ export class HubControl {
       case 'numbers.sample': await this.options.state().notAnAgent(context, method); return this.options.services.numbers.sample(Number(params.before), typeof params.manifest === 'string' ? params.manifest : undefined);
       case 'changes.read': return this.readings.change(params);
       case 'evidence.read': return this.evidence.evidence(params);
+      case 'handle.read': return this.evidence.handle(params);
       case 'eval.report': {
         // Keep the report's exact serialization, not an outcome asserted by its caller. replayCheck reads its runs.
         let report: unknown;
@@ -424,7 +425,7 @@ export class HubControl {
 
   async job(args: Obj, caller: string | undefined): Promise<Obj> { return this.authority.job(args, caller); }
 
-  async keep(bytes: Uint8Array, source: string): Promise<string> { return this.evidence.keep(bytes, source); }
+  async keep(bytes: Uint8Array, source: string, sealed?: true): Promise<string> { return this.evidence.keep(bytes, source, sealed); }
 
   async stored(put: PutResult, what: string): Promise<Evidence> { return this.evidence.stored(put, what); }
 

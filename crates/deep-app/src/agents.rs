@@ -45,6 +45,7 @@ fn agents_row(
                 .w(relative(0.25))
                 .truncate()
                 .font_weight(FontWeight::MEDIUM)
+                .children(crate::find::found(&what, chrome))
                 .child(what),
         )
         .child(
@@ -135,6 +136,8 @@ pub(crate) fn agents_page(
             chrome,
         )
     });
+    // In reading order, which ⌘F walks (#1815).
+    let servers = servers.collect::<Vec<_>>();
     let skills = list("skills").into_iter().enumerate().map(|(i, k)| {
         let repo = k["repo"].as_str().unwrap_or_default();
         let commit = k["commit"].as_str().unwrap_or_default();
@@ -161,6 +164,7 @@ pub(crate) fn agents_page(
             chrome,
         )
     });
+    let skills = skills.collect::<Vec<_>>();
     let yours = agents
         .iter()
         .filter(|a| a["installed"] == true)
@@ -379,7 +383,13 @@ fn review_panel(
                             Some('+') => chrome.ink_primary,
                             _ => chrome.ink_secondary,
                         };
-                        text::label(&format!("agents-diff-{i}-{n}"), mono(line), color, None)
+                        let drawn =
+                            text::label(&format!("agents-diff-{i}-{n}"), mono(line), color, None)
+                                .into_any_element();
+                        match crate::find::found(line, chrome) {
+                            Some(found) => div().child(drawn).child(found).into_any_element(),
+                            None => drawn,
+                        }
                     })),
             )
     });

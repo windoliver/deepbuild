@@ -51,6 +51,19 @@ const MIB = 1024 * 1024;
 const LIMIT_KIND = 'run.stopped_at_limit';
 /** How long a run's end waits for the watcher to write the ends before it: it never holds an exit longer. */
 const SYNC_MS = 1000;
+/** A run's sandbox.denied events naming a target, at most (#2420, a starting value); past it each new one is counted. */
+const DENIED_MAX = 256;
+/** A target's bytes as recorded, at most (#2420, a starting value): the schema's 8,192 is never reached. */
+const TARGET_BYTES = 512;
+/** A target as recorded: whole up to TARGET_BYTES, else its first TARGET_BYTES cut at a character boundary, then its full length in bytes. */
+const cut = (target: string): string => {
+  const bytes = Buffer.from(target, 'utf8');
+  if (bytes.length <= TARGET_BYTES) return target;
+  let end = TARGET_BYTES;
+  // A UTF-8 continuation byte is 10xxxxxx: the cut moves back to the start of its character.
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end--;
+  return `${bytes.subarray(0, end).toString('utf8')}…${bytes.length}`;
+};
 /** Whether a lease event is one of the supervisor's runs' (the core's, or a writer a run named as its holder), not a session's or a package's own. */
 const ours = (holder: unknown): boolean => holder === 'core' || (typeof holder === 'string' && holder.startsWith('mcp:'));
 /** The kinds `open` and a tick read: both read them as this type, so a kind either names that the list leaves out fails to compile. */
@@ -84,6 +97,8 @@ interface Run {
   cleaning?: Promise<Cleanup>;
   /** It keeps running when the hub stops: an open adopts it rather than reaping it (StartSpec.keep). */
   kept?: boolean;
+  /** On Linux, its sandbox parent's refusals: settles once the parent is gone and they are counted and recorded. */
+  refusing?: Promise<void>;
   /** Its egress filter, while it holds a credential by stand-in; closed by its cleanup. */
   egress?: Egress;
   /** What it may take (StartSpec.limits). */
@@ -129,6 +144,8 @@ class LocalSupervisor implements Supervisor {
   /** Each unblock ask the supervisor raised, by handle: the key it is about. */
   private readonly asked = new Map<string, string>();
   private readonly denied = new Set<string>();
+  /** Each run's sandbox.denied naming a target so far, and the new ones left out past DENIED_MAX (#2420). */
+  private readonly refusals = new Map<string, { named: number; left: number; closed: boolean }>();
   /** With a lease table: each key's lease there, by `kind:key`. */
   private readonly leaseIds = new Map<string, string>();
   /** A run's table leases the record holds before its process.starting: the table grants them first. */
@@ -428,11 +445,11 @@ class LocalSupervisor implements Supervisor {
         if (m && log === this.log) this.warmAt = s.shownAt;
         // Any stream still running records, each refusal once: a run kept from before a restart may be refused mid-warm.
         if (!m || !this.runs.has(m[3]!)) continue;
-        const [, operation, target, run] = m as unknown as [string, string, string, string];
-        const seen = `${run} ${operation} ${target}`;
-        if (this.denied.has(seen)) continue;
-        this.denied.add(seen);
-        void this.recordDenial(run, operation, target || '(none)').catch(() => undefined);
+        const [, operation, said, run] = m as unknown as [string, string, string, string];
+        const whole = said || '(none)';
+        const seen = `${run} ${operation} ${sha256(whole)}`;
+        if (!this.admit(run, seen)) continue;
+        void this.recordDenial(run, operation, cut(whole)).catch(() => this.unadmit(run, seen));
       }
     });
     return s;
@@ -449,15 +466,68 @@ class LocalSupervisor implements Supervisor {
    * What a run's egress filter refused, recorded as the sandbox's refusals are: once for the run, operation and target,
    * in the one set, so a request refused in a loop adds one event (#2399).
    */
-  private filterRefused(run: string, { operation, target }: { operation: string; target: string }): void {
+  private filterRefused(run: string, refusal: { operation: string; target: string }): void {
     // The planted wrong programs: no refusal of the filter's recorded, one kept per operation, and a set without the run.
     if (this.options.plant === 'egress-refusals-unrecorded') return;
+    const { operation } = refusal;
+    const target = cut(refusal.target);
+    // Two long targets alike in their first bytes are still two: the key is the whole target's digest.
+    const whole = sha256(refusal.target);
     const seen = this.options.plant === 'egress-refusal-once-per-operation' ? `${run} ${operation}`
-      : this.options.plant === 'egress-refusals-seen-without-run' ? `${operation} ${target}` : `${run} ${operation} ${target}`;
-    if (this.denied.has(seen)) return;
-    this.denied.add(seen);
+      : this.options.plant === 'egress-refusals-seen-without-run' ? `${operation} ${whole}` : `${run} ${operation} ${whole}`;
+    if (!this.admit(run, seen)) return;
     // One the record didn't take isn't recorded: the next try is.
-    void this.append('sandbox.denied', { run, operation, target }, run).catch(() => void this.denied.delete(seen));
+    void this.append('sandbox.denied', { run, operation, target }, run).catch(() => this.unadmit(run, seen));
+  }
+
+  /**
+   * Whether a run's refusal is one to record: a key not seen before, while the run has fewer than DENIED_MAX events
+   * naming a target. Past that a refusal not among those is counted for the closing event and not kept, so the set
+   * stops growing (#2420); with nothing kept, the same target refused again past the ceiling is counted again.
+   */
+  private admit(run: string, seen: string): boolean {
+    if (this.denied.has(seen)) return false;
+    const tally = this.refusals.get(run) ?? { named: 0, left: 0, closed: false };
+    this.refusals.set(run, tally);
+    if (tally.named >= DENIED_MAX) {
+      tally.left++;
+      return false;
+    }
+    tally.named++;
+    this.denied.add(seen);
+    return true;
+  }
+  /**
+   * A refusal the record didn't take: its key and its place under the ceiling are free again, so the next try is
+   * recorded. Once the run has had refusals counted past the ceiling, a later try would be counted, not recorded, so
+   * this one is counted now and its key kept, and it is in the closing count rather than in neither.
+   */
+  private unadmit(run: string, seen: string): void {
+    const tally = this.refusals.get(run);
+    if (!tally || !this.denied.has(seen)) return;
+    if (tally.left) {
+      tally.left++;
+      return;
+    }
+    this.denied.delete(seen);
+    tally.named--;
+  }
+
+  /**
+   * A run past the ceiling says how many it was refused that the record leaves out, once its processes are gone
+   * (#2420). A Linux run's sandbox parent goes with them, and what it reported is counted first: bounded, so a pipe
+   * some unrecorded holder keeps open never holds the cleanup.
+   */
+  private async closeRefusals(r: Run): Promise<void> {
+    if (r.refusing) {
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([r.refusing, new Promise<void>((done) => { timer = setTimeout(done, SYNC_MS); })]);
+      clearTimeout(timer);
+    }
+    const tally = this.refusals.get(r.run);
+    if (!tally?.left || tally.closed) return;
+    await this.append('sandbox.denied', { run: r.run, operation: 'more', target: String(tally.left) }, r.run);
+    tally.closed = true;
   }
 
   /**
@@ -484,11 +554,12 @@ class LocalSupervisor implements Supervisor {
             continue;
           }
           if (typeof said.operation !== 'string' || typeof said.target !== 'string') continue;
-          const seen = `${run} ${said.operation} ${said.target}`;
-          if (this.denied.has(seen)) continue;
-          this.denied.add(seen);
-          const { operation, target } = said;
-          recorded = recorded.then(() => this.recordDenial(run, operation, target || '(none)')).catch(() => undefined);
+          const { operation } = said;
+          const whole = said.target || '(none)';
+          const seen = `${run} ${operation} ${sha256(whole)}`;
+          // A run already forgotten keeps nothing here: what it holds was freed with it.
+          if (!this.runs.has(run) || !this.admit(run, seen)) continue;
+          recorded = recorded.then(() => this.recordDenial(run, operation, cut(whole))).catch(() => this.unadmit(run, seen));
         }
       }).on('error', () => undefined).on('close', () => void recorded.then(resolve));
     });
@@ -775,7 +846,7 @@ class LocalSupervisor implements Supervisor {
       // The report can be read before the program's last output is, so the digests wait for both pipes, which `drain`
       // closes in time if a background process still holds them.
       const output = Promise.all([child.stdout, child.stderr].flatMap((pipe) => (pipe ? [new Promise((done) => { pipe.once('close', done); })] : [])));
-      const parentGone = this.readDenials(spec.run, child.stdio[3] as NodeJS.ReadableStream, (code, signal) => { if (r.state === 'running') r.state = 'exited'; drain(); void output.then(() => ended(code, signal)); });
+      const parentGone = r.refusing = this.readDenials(spec.run, child.stdio[3] as NodeJS.ReadableStream, (code, signal) => { if (r.state === 'running') r.state = 'exited'; drain(); void output.then(() => ended(code, signal)); });
       child.on('close', (code, signal) => void parentGone.then(() => output).then(() => ended(code, signal)));
     } else child.on('close', ended);
     const pid = child.pid;
@@ -1094,6 +1165,9 @@ class LocalSupervisor implements Supervisor {
     const outcome = left.length ? 'unfinished' : 'clean';
     await r.egress?.close();
     delete r.egress;
+    // A run that left a process still refuses: its closing event waits for the recheck that finds them gone. One
+    // that left only a key unclean refuses nothing more. A closing event the record didn't take is the recheck's too.
+    if (!this.lingering.has(r)) await this.closeRefusals(r).catch(() => { this.lingering.add(r); this.scanSoon(); });
     if (r.watched !== undefined && this.watchedRuns.get(r.watched) === r) this.watchedRuns.delete(r.watched);
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';
@@ -1117,6 +1191,7 @@ class LocalSupervisor implements Supervisor {
     for (const r of done.slice(0, Math.max(0, done.length - CLEANED_KEPT))) {
       this.runs.delete(r.run);
       for (const seen of this.denied) if (seen.startsWith(`${r.run} `)) this.denied.delete(seen);
+      this.refusals.delete(r.run);
     }
   }
 
@@ -1179,7 +1254,12 @@ class LocalSupervisor implements Supervisor {
     // A run its cleanup left running is checked again: each of its processes found gone gets its end recorded, which
     // is what ends a lease the lease table holds for the run. Its sandbox is scanned once they are found gone and
     // before their ends are recorded, so what they forked is recorded first: a gone process forks nothing more.
-    for (const r of this.closed ? [] : [...this.lingering]) if (!(await this.leftovers(r, this.recheck)).length) this.lingering.delete(r);
+    for (const r of this.closed ? [] : [...this.lingering]) {
+      if ((await this.leftovers(r, this.recheck)).length) continue;
+      // A closing event the record didn't take is tried again at the next tick.
+      if (!(await this.closeRefusals(r).then(() => true, () => false))) continue;
+      this.lingering.delete(r);
+    }
     // Nothing to read for until an unblock ask is open, a key is out of its pool or a run waits: a tick then costs nothing.
     if (!this.asked.size && !this.waiters.length && ![...this.keys.values()].some((k) => k.retired)) return;
     if (this.asked.size) await this.options.asks.tick();

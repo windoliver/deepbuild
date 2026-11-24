@@ -2285,6 +2285,65 @@
       }
     },
     {
+      "id": "fake-variant-read",
+      "covers": [
+        "fake:variant-read"
+      ],
+      "dir": "cases/fake-variant-read",
+      "prompt": "Fix the discount: 10% off 2000 cents must be 1800",
+      "stop": "Done: the discount is fixed and its test passes.",
+      "drafts": [
+        {
+          "ask": "Fix the discount: 10% off 2000 cents must be 1800",
+          "requirements": [
+            {
+              "id": "R1",
+              "text": "A 10% discount takes 200 cents off 2000, leaving 1800",
+              "source_line": "ask#L1",
+              "refuted_by": "a run where a 10% discount takes 200 cents off 2000, leaving 1800 does not hold",
+              "check": ".deepbuild/checks/discount.sh",
+              "on_base": "fails",
+              "asserts": [
+                "test/discount.test.js:6"
+              ],
+              "depth": "unit",
+              "oracle": "code",
+              "near_misses": [],
+              "held_out": [
+                {
+                  "files": {
+                    "test/discount.test.js": "const test = require('node:test');\nconst assert = require('node:assert');\nconst { applyDiscount } = require('../src/discount.js');\n\ntest('a percent discount takes that share off the price', () => {\n  assert.strictEqual(applyDiscount(3000, 20), 2400);\n});\n"
+                  }
+                }
+              ]
+            }
+          ],
+          "deliverables": [
+            "src/discount.js"
+          ],
+          "budget": null
+        }
+      ],
+      "setup": {
+        "reads_variant": true
+      },
+      "claim": {
+        "commits": [
+          "head"
+        ],
+        "expected": "INCONCLUSIVE",
+        "names": [
+          "held-out variant 1 is spent"
+        ]
+      },
+      "twin": {
+        "commits": [
+          "fix"
+        ],
+        "expected": "PASS"
+      }
+    },
+    {
       "id": "retry-empty-commit",
       "covers": [
         "retry:empty-commit"
@@ -2382,7 +2441,6 @@
           "node_modules/@jridgewell/sourcemap-codec",
           "node_modules/@jridgewell/trace-mapping",
           "node_modules/@oxc-project/types",
-          "node_modules/@rolldown/binding-darwin-arm64",
           "node_modules/@rolldown/pluginutils",
           "node_modules/@types/chai",
           "node_modules/@types/deep-eql",
@@ -2397,9 +2455,7 @@
           "node_modules/estree-walker",
           "node_modules/expect-type",
           "node_modules/fdir",
-          "node_modules/fsevents",
           "node_modules/lightningcss",
-          "node_modules/lightningcss-darwin-arm64",
           "node_modules/magic-string",
           "node_modules/nanoid",
           "node_modules/obug",
@@ -2593,7 +2649,6 @@
           "node_modules/@jridgewell/sourcemap-codec",
           "node_modules/@jridgewell/trace-mapping",
           "node_modules/@oxc-project/types",
-          "node_modules/@rolldown/binding-darwin-arm64",
           "node_modules/@rolldown/pluginutils",
           "node_modules/@types/chai",
           "node_modules/@types/deep-eql",
@@ -2608,9 +2663,7 @@
           "node_modules/estree-walker",
           "node_modules/expect-type",
           "node_modules/fdir",
-          "node_modules/fsevents",
           "node_modules/lightningcss",
-          "node_modules/lightningcss-darwin-arm64",
           "node_modules/magic-string",
           "node_modules/nanoid",
           "node_modules/obug",

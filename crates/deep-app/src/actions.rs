@@ -216,6 +216,7 @@ pub fn label(name: &str) -> &str {
         "Write in the box" => "actions.write_in_the_box",
         "Close Window" => "actions.close_window",
         "Undo answer" => "actions.undo_answer",
+        "Find" => "actions.find",
         "Commands" => "actions.commands",
         "Back" => "actions.back",
         "Forward" => "actions.forward",
@@ -276,8 +277,8 @@ fn layout() -> Vec<(&'static str, Vec<&'static str>)> {
     let mut menus = vec![
         ("DeepBuild", deepbuild), // copy-exception: the product's name, the app menu's title
         ("File", vec!["Write in the box", "Close Window"]), // copy-exception: an action's identity; label() draws it
-        ("Edit", vec!["Undo answer"]), // copy-exception: an action's identity; label() draws it
-        ("View", vec!["Commands"]),    // copy-exception: an action's identity; label() draws it
+        ("Edit", vec!["Undo answer", "Find"]), // copy-exception: an action's identity; label() draws it
+        ("View", vec!["Commands"]), // copy-exception: an action's identity; label() draws it
         ("Go", vec!["Back", "Forward", "Next ask", "Next area"]), // copy-exception: an action's identity; label() draws it
         ("Session", session), // copy-exception: an action's identity; label() draws it
         ("Window", vec!["Minimize"]), // copy-exception: an action's identity; label() draws it
@@ -496,6 +497,7 @@ pub fn run(name: &str, window: &mut Window, cx: &mut App) {
         "Close Window" => window.remove_window(),
         "Write in the box" | "Write to it" => crate::words::focus(window, cx),
         "Undo answer" => crate::card::undo(window, cx),
+        "Find" => crate::find::open(window, cx),
         "Back" => crate::open::walk(true, window, cx),
         "Forward" => crate::open::walk(false, window, cx),
         "Next area" => crate::views::next_area(window, cx),
