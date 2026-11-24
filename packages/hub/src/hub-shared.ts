@@ -125,6 +125,8 @@ export const PROMPT_PLACE_MS = 3000;
 
 /** The cores the check slots are half of: this machine's, or DEEP_HUB_TEST_CORES's, which only tests set (#965). */
 export const CORES = Number(process.env.DEEP_HUB_TEST_CORES) > 0 ? Math.floor(Number(process.env.DEEP_HUB_TEST_CORES)) : availableParallelism();
+/** The `mem` pool's size in MB, DEEP_HUB_TEST_MEM_MB's, which only tests set (#3220); this machine's memory less what it keeps without it. */
+export const TEST_MEM_MB = Number(process.env.DEEP_HUB_TEST_MEM_MB) > 0 ? Math.floor(Number(process.env.DEEP_HUB_TEST_MEM_MB)) : undefined;
 
 /**
  * The machine's 1-minute load against those cores, for a timing check's failed run (#352): DEEP_HUB_TEST_LOAD names a
@@ -462,4 +464,23 @@ export function hubConfig(dir: string): { loginPath: string; reservePct: number;
     // The issues that run at once, and the gate identity's key (#1325): with none, a swap goes to you.
     acceptance: { slots: isObj(c.acceptance) && typeof c.acceptance.slots === 'number' ? c.acceptance.slots : 1, gateKey: isObj(c.gate) && typeof c.gate.key === 'string' ? c.gate.key : null },
   };
+}
+
+/**
+ * The pictures a taste call's evidence lists (#3234), by SHA-256 in its order: the manifest `{pictures: [{sha256, size}]}`
+ * the ask is pinned to, in the evidence store. Undefined when the pin is no such manifest.
+ */
+export function picturesListed(store: string, evidence: string): string[] | undefined {
+  try {
+    const listed = (JSON.parse(readFileSync(join(store, evidence.slice(0, 2), evidence.slice(2)), 'utf8')) as { pictures?: unknown }).pictures;
+    if (!Array.isArray(listed)) return undefined;
+    const shas = listed.map((p) => (p && typeof p === 'object' ? (p as { sha256?: unknown }).sha256 : undefined));
+    return shas.every((sha) => typeof sha === 'string' && /^[0-9a-f]{64}$/.test(sha)) ? (shas as string[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function lazyServices<T extends Record<string, () => unknown>>(read: T): { [K in keyof T]: ReturnType<T[K]> } {
+  return Object.defineProperties({}, Object.fromEntries(Object.entries(read).map(([key, get]) => [key, { get }]))) as { [K in keyof T]: ReturnType<T[K]> };
 }

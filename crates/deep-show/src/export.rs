@@ -57,7 +57,7 @@ use crate::frames::drawing_of;
 use crate::hub::{EvalTime, Hub, Planted};
 use crate::snapshot::Unfit;
 use crate::time::{context_of, sample_rate_of};
-use frames::{Lease, Run, Sink};
+use frames::{Run, Sink};
 
 /// The export guards' wrong programs (#157), each only to prove its acceptance test fails on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -178,7 +178,7 @@ pub enum Guard {
 pub(crate) const READS_ALL_FIRST: Guard = Guard::Codec("encode_reads_all_frames_first");
 
 /// The helper processes' wrong programs (#157), by the names they answer to.
-const CODEC_PLANTS: [&str; 19] = [
+const CODEC_PLANTS: [&str; 20] = [
     "encode_reads_all_frames_first",
     "encode_full_range_bt601",
     "h264_full_range_under_limited_tags",
@@ -198,6 +198,8 @@ const CODEC_PLANTS: [&str; 19] = [
     "muxer_timescale_1000",
     "muxer_drops_video_edit_list",
     "reader_pads_last_packet",
+    // #1488: every still decoder ignores a photo's EXIF orientation (media::plant_images).
+    "decoder_ignores_orientation",
 ];
 
 /// #501's wrong programs, #1897's and #157's, by the names their acceptance suites give them.

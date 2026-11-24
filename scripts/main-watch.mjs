@@ -16,7 +16,9 @@
 // nothing else fails there; the issue reopens naming the failure, and landings open again. A revert that conflicts or
 // doesn't clear main starts an attempt on that issue, a headless agent run, and only once that has ended with main
 // still red is a person asked, once: a GitHub issue titled `Ask: …`.
-// State is kept under ~/.deepbuild/main-watch/, one file per watched checkout.
+// State is kept under ~/.deepbuild/main-watch/, one file per watched checkout. Each run of main's head also writes
+// settled.json there: the acceptance suites of closed issues that were clean in its last 10 runs, which affected.mjs
+// leaves to this job (#3064).
 import { spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -28,6 +30,7 @@ const HOURS = 6;
 const REPEATS = 3;
 const LANES = ['unit', 'lint'];
 const ATTEMPT_HOURS = 4;
+const SETTLED_RUNS = 10;
 
 const git = (cwd, ...args) => {
   const run = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 2 ** 28 });
@@ -67,7 +70,7 @@ function save(state) {
 const paused = (state) => Object.values(state.reds ?? {});
 
 function gh(...args) {
-  const run = spawnSync('gh', args, { cwd: repo, encoding: 'utf8' });
+  const run = spawnSync('gh', args, { cwd: repo, encoding: 'utf8', maxBuffer: 2 ** 28 });
   if (run.status !== 0) throw Error(`gh ${args.slice(0, 2).join(' ')}: ${(run.error?.message ?? run.stderr).trim()}`);
   return run.stdout.trim();
 }
@@ -199,7 +202,7 @@ function runAt(sha, lanes = { names: LANES }, excuse = false) {
       }
     }
     if (!result.lanes.length) failing.set('lane runner', 'the lanes could not be run');
-    return { failing, passed, listed, unproven, stale, excused };
+    return { failing, passed, listed, unproven, stale, excused, tests: result.lanes.flatMap(({ record }) => record?.tests ?? []) };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -354,6 +357,53 @@ function settle(state, red, head, failingAtHead) {
   return 'red';
 }
 
+/**
+ * The settled list (#3064; docs/parallel-proof.md, section 12b), written after each run of main's head: each suite
+ * tests/acceptance/<issue>/ whose issue is closed as completed and which was clean in the last SETTLED_RUNS runs, by the
+ * ID of its folder in the tree that ran. A suite is clean in a run when every test file of its folder reported a test
+ * and every test they reported read PASS; any other run, and a change to the folder, start its count again. affected.mjs
+ * leaves a listed suite to this job. A list that can't be worked out is removed and every count starts again, so
+ * nothing stays settled on an old one.
+ */
+function writeSettled(state, head, tests) {
+  const file = join(home, 'settled.json');
+  try {
+    const folders = git(repo, 'ls-tree', head, 'tests/acceptance/').split('\n').flatMap((line) => {
+      const [, id, path] = line.match(/^\d+ tree (\w+)\t(tests\/acceptance\/\d+)$/) ?? [];
+      return id ? [[`${path}/`, id]] : [];
+    });
+    const files = git(repo, 'ls-tree', '-r', '--name-only', head, 'tests/acceptance/').split('\n').filter((path) => /\.test\.(?:mjs|js|ts)$/.test(path));
+    const before = state.suites ?? {};
+    state.suites = {};
+    // A row of the test runner's own that names no file, as a report that ends before its run did or an unhandled error
+    // (reportResults, lanes.mjs), leaves every file's tests unknown: no suite was clean in such a run. A report with a
+    // line that doesn't parse leaves no row at all (testsOf), so its command's suites have no reporting file.
+    const whole = !tests.some((test) => /^vitest (?:report|› unhandled error)$/.test(test.id));
+    for (const [folder, id] of folders) {
+      const own = files.filter((path) => path.startsWith(folder)), results = tests.filter((test) => test.id.startsWith(folder));
+      const clean = whole && own.length > 0 && own.every((path) => results.some((test) => test.id.startsWith(`${path} `))) && results.every((test) => test.state === 'PASS');
+      state.suites[folder] = { files: id, runs: clean ? (before[folder]?.files === id ? before[folder].runs : 0) + 1 : 0 };
+    }
+    const due = folders.filter(([folder]) => state.suites[folder].runs >= SETTLED_RUNS);
+    let closed = new Set(), unread = '';
+    if (due.length) {
+      try {
+        closed = new Set(JSON.parse(gh('issue', 'list', '--state', 'closed', '--limit', '100000', '--json', 'number,stateReason')).filter(({ stateReason }) => stateReason === 'COMPLETED').map(({ number }) => String(number)));
+      } catch (error) {
+        unread = `; ${due.length} had ${SETTLED_RUNS} clean runs, but which issues are closed can't be read (${error.message})`;
+      }
+    }
+    const suites = Object.fromEntries(due.filter(([folder]) => closed.has(folder.split('/')[2])));
+    writeFileSync(`${file}.tmp`, `${JSON.stringify({ tree: git(repo, 'rev-parse', `${head}^{tree}`), suites }, null, 2)}\n`);
+    renameSync(`${file}.tmp`, file);
+    say(`SETTLED main-watch: ${Object.keys(suites).length} of ${folders.length} suites on main at ${short(head)}${unread}`);
+  } catch (error) {
+    state.suites = {};
+    for (const path of [file, `${file}.tmp`]) rmSync(path, { force: true });
+    say(`NOTE main-watch: no settled list for ${short(head)}: ${error.message}`);
+  }
+}
+
 function tick() {
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const lock = join(home, `${key}.lock`);
@@ -390,8 +440,11 @@ function run() {
     if (landings < LANDINGS && hours < HOURS) return say(`main-watch: not due: ${landings} of ${LANDINGS} landings since ${short(state.last.head)}, ${hours.toFixed(1)} of ${HOURS} hours`);
   }
   say(`RUN main-watch: the ${LANES.join(' and ')} lanes on main at ${short(head)}`);
-  const { failing, listed, unproven, stale, excused } = runAt(head, undefined, true);
+  const { failing, listed, unproven, stale, excused, tests } = runAt(head, undefined, true);
   state.last = { head, at: Date.now() };
+  writeSettled(state, head, tests);
+  // The counts are kept with the list, whatever becomes of the tick after it; the rest of the state is saved as before.
+  save({ ...load(), suites: state.suites });
   for (const id of listed) say(`KNOWN ${id}`);
   // A stale entry would read a later failure of its test as known: the tick fails, naming it, so the list is mended.
   // It pauses no landing, since nothing on main broke, but the run isn't a clean one.

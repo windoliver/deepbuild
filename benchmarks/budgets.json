@@ -554,6 +554,16 @@
       "initialReason": "Issue #237 first measurement: the merge base has no lease table. One process opens a record and the lease table, grants 1,000 port leases one after another, refuses a second holder on each, then ends every holder and releases every lease, so p50 includes Node's start; the issue's 50 ms per grant stays in tests/acceptance/237/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "lease-ask",
+      "command": [
+        "node",
+        "benchmarks/lease-ask.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #3218 first measurement: the merge base has no ask for several resources. One process opens a record and the lease table, holds 1,000 leases from 250 asks of four (a cpu.slot, units of two pools and a port), then makes 1,000 asks of four refused on their fourth, so p50 includes Node's start; the issue's 1 ms per ask and 50 ms per grant with units stay in tests/acceptance/3218/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "deep-mcp-30d",
       "command": [
         "node",
@@ -2270,6 +2280,23 @@
       ]
     },
     {
+      "id": "canvas-grid-image",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 2
+      },
+      "initialReason": "Issue #269 first measurement (#269.6ad7e180): the merge base draws no grid image and has no such task. A 256 x 256 logic grid whose every step changes 2% of its cells, drawn smooth at 2 px a cell (512 x 512 px), a data view; the vitest file runs the blind acceptance test itself (AC6's blind redraft, whose program keeps within the logic item's default fuel), which builds a release deep-gpu, plays the film's 120 frames on the GPU layer with timings, five runs after a warm-up one, each a fresh process, and judges each run's p95 of gpu_ms over frames 10 to 119 against 2 ms by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac at rest), printing the grid image's median draw_ms as the reading; the benchmark prints that verdict and exits 0, and its judge gives it as the target. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": [
+        "#269.6ad7e180"
+      ]
+    },
+    {
       "id": "net-rooms",
       "command": ["node", "benchmarks/net-rooms.mjs"],
       "margin": 0.5,
@@ -2278,6 +2305,14 @@
       "criteria": [
         "#278.fe1a5277"
       ]
+    },
+    {
+      "id": "memory-admission",
+      "command": ["node", "benchmarks/memory-admission.mjs"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #3220 first measurement (#3220.c2610cec): the merge base keeps no run's peak and admits no run on one. One process opens a record and the supervisor, runs one sandboxed program that holds 64 MiB for 2 s so every scan of it keeps its peak and CPU, and reads what it used; then keeps 10,000 keys' clean peaks and decides 1,000 admissions of a key with three clean runs, printing the median time of one against the criterion's 1 ms. The process starts a scan makes stay in tests/acceptance/3220/ac9-budgets.test.ts, counted against the merge base's 2. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": ["#3220.c2610cec"]
     }
   ]
 }

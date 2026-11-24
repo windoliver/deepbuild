@@ -1,0 +1,69 @@
+// The options StopJudging is built with: its settings, the hub's services, and the ports it reads through.
+import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
+import type { AnswerDeliveryPort, TranscriptsPort, SessionFlagsPort, SessionStatePort, McpOperationsPort, HubControlPort } from './hub-ports.js';
+import type { Questions } from './questions.js';
+import type { Asks } from '@deepbuild/asks';
+import type { Ledger } from '@deepbuild/budget';
+import type { EvidenceStore } from '@deepbuild/evidence';
+import type { ExtensionHost, ProjectTrust } from '@deepbuild/extension-host';
+import type { RecordStore } from '@deepbuild/record';
+import type { LeaseTable } from '@deepbuild/leases';
+import type { Runner } from '@deepbuild/runner';
+import type { Host } from '@deepbuild/supervisor';
+import type { AskTasks } from './ask-tasks.js';
+import type { SizeScope } from './scope.js';
+import type { Holds } from './holds.js';
+import type { OpenItems } from './open-items.js';
+import type { Runs } from './runs.js';
+import type { CheckKinds } from './checks-port.js';
+import type { ReviewRounds } from './review-rounds.js';
+import type { Stacks } from './stacks.js';
+import type { HeavyQueue } from './heavy.js';
+import type { HubCanvas } from './hub-canvas.js';
+import type { GateRunner } from './gate-runner.js';
+import type { Root } from './paths.js';
+import type { Agents } from './agents.js';
+import type { Box } from './box.js';
+import type { CoreOptions } from './wire.js';
+
+export interface StopJudgingOptions {
+  settings: CoreOptions & { forge: string };
+  services: {
+    readonly tasks: AskTasks;
+    readonly openItems: OpenItems;
+    readonly now: () => number;
+    readonly asks: Asks;
+    readonly agents: Agents;
+    readonly box: Box;
+    readonly ledger: Ledger;
+    readonly record: RecordStore;
+    readonly gate: GateRunner;
+    readonly raw: RecordStore['raw'];
+    readonly leases: LeaseTable;
+    readonly extensions: ExtensionHost | undefined;
+    readonly sizing: SizeScope;
+    readonly root: Root;
+    readonly holds: Holds;
+    readonly questions: Questions;
+    readonly runner: Runner;
+    readonly checkKinds: () => Promise<CheckKinds>;
+    readonly reviewRounds: Pick<ReviewRounds, "settled">;
+    readonly store: EvidenceStore;
+    readonly trust: ProjectTrust;
+    readonly heavy: HeavyQueue;
+    readonly host: Host;
+    readonly runs: Runs;
+    readonly stacks: Stacks;
+    readonly canvasSide: HubCanvas;
+  };
+  state: () => Pick<SessionStatePort, "attention" | "live" | "sessions" | "startOf">;
+  mcp: () => Pick<McpOperationsPort, "pinOf">;
+  delivery: () => Pick<AnswerDeliveryPort, "cap" | "deliver" | "handed" | "offer" | "promiseCarried" | "releases" | "unwoken" | "waiting" | "answers">;
+  transcripts: () => Pick<TranscriptsPort, "cursors">;
+  control: () => Pick<HubControlPort, "onSwitchedTree">;
+  flags: () => Pick<SessionFlagsPort, "watchOnly">;
+  events: Pick<HubEvents, "append" | "appendReading" | "connection">;
+kernel: Pick<HubRuntime, "blocked" | "overrides" | "stopping">;
+schedule: Pick<HookSchedule, "abandoned" | "askingNow" | "askingSoon" | "queue" | "wakeable">;
+
+}

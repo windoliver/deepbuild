@@ -1,0 +1,88 @@
+# #3240's planted wrong samplers (twins/, twins.json), each laid over the base 618ab3ab4 as scripts/throttle.mjs in
+# a scratch copy (<scratch>/twin-<name>/, with a copy of this folder), and its criterion's test run once against it.
+# macOS, M5 Max, 18 cores, 1-minute load about 30 to 70. Digest as in BASE-FAILURE.txt.
+#
+#   by-name           gpu.test.mjs        #3240.6f5727c7  FAIL at "the grant's gpu is 3.288 s; the test's own ioreg read 1.642 s":
+#                                                         both stubs are named gpudraw, so the ungranted one's time went to the grant too
+#   zeros-on-failure  gpu-unread.test.mjs #3240.2d406576  FAIL at "the sample taken while ioreg failed doesn't say the GPU wasn't read"
+#   holder-waits      line.test.mjs       #3240.f0d5ecc3  FAIL at "waiting holds 1 request of class build": it records 2
+#   gpu-arguments     log.test.mjs        #3240.712a690c  FAIL at "load.log holds a stub's argument"
+
+## by-name
+✖ #3240.6f5727c7 one stub grant whose child draws on the GPU for 10 s and one ungranted process of the same name that does the same: the sample gives each its GPU time within a fifth, to the grant's ID and to outside (62906.384167ms)
+ℹ the test's own ioreg, from its reading after the first sample to its reading after the second: the grant's child 1.642 s, the ungranted process 1.646 s, every client 17.757 s; Metal's own timestamps gave the stubs 10.021 s and 10.031 s; the sample: grant 3.287933124, outside 14.451323667
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 62958.902792
+
+✖ failing tests:
+
+test at <scratch>/twin-by-name/tests/acceptance/3240/gpu.test.mjs:15:1
+✖ #3240.6f5727c7 one stub grant whose child draws on the GPU for 10 s and one ungranted process of the same name that does the same: the sample gives each its GPU time within a fifth, to the grant's ID and to outside (62906.384167ms)
+  AssertionError [ERR_ASSERTION]: the grant's gpu is 3.287933124 s; the test's own ioreg read 1.642 s, so it must be within a fifth of that (1.314 to 1.970)
+    actual: false,
+    expected: true,
+
+## zeros-on-failure
+✖ #3240.2d406576 with the GPU read made to fail, the sample says the GPU wasn't read (gpuUnread, no gpu and no gpuTop, never a zero), and load --report counts it in no share (1559.415292ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1608.437875
+
+✖ failing tests:
+
+test at <scratch>/twin-zeros-on-failure/tests/acceptance/3240/gpu-unread.test.mjs:13:1
+✖ #3240.2d406576 with the GPU read made to fail, the sample says the GPU wasn't read (gpuUnread, no gpu and no gpuTop, never a zero), and load --report counts it in no share (1559.415292ms)
+  AssertionError [ERR_ASSERTION]: the sample taken while ioreg failed doesn't say the GPU wasn't read, in gpuUnread, a short reason
+  the stub ioreg was called 2 times
+    actual: false,
+    expected: true,
+
+## holder-waits
+✖ #3240.f0d5ecc3 one build grant held whose child spins 2 cores and one build request waiting: the sample records 1 request waiting, of class build, and idle and busy cores that sum to the machine's (10400.416375ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10458.69025
+
+✖ failing tests:
+
+test at <scratch>/twin-holder-waits/tests/acceptance/3240/line.test.mjs:14:1
+✖ #3240.f0d5ecc3 one build grant held whose child spins 2 cores and one build request waiting: the sample records 1 request waiting, of class build, and idle and busy cores that sum to the machine's (10400.416375ms)
+  AssertionError [ERR_ASSERTION]: waiting holds 1 request of class build and none of the others
+    actual: { build: 2, 'bay-pair': 0, test: 0, timed: 0 },
+    expected: { build: 1, 'bay-pair': 0, test: 0, timed: 0 },
+
+## gpu-arguments
+✖ #3240.712a690c the log still holds PIDs, grant IDs, classes and command names only: gpuTop, waiting, idle and busy add no argument, path, environment value or reason text (5874.059417ms)
+ℹ in gpuTop: 2 of the test's 2 GPU stubs; waiting undefined
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5919.526125
+
+✖ failing tests:
+
+test at <scratch>/twin-gpu-arguments/tests/acceptance/3240/log.test.mjs:10:1
+✖ #3240.712a690c the log still holds PIDs, grant IDs, classes and command names only: gpuTop, waiting, idle and busy add no argument, path, environment value or reason text (5874.059417ms)
+  AssertionError [ERR_ASSERTION]: load.log holds a stub's argument (argument-3240-5e8d1b)
+    actual: false,
+    expected: true,

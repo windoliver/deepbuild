@@ -1,0 +1,217 @@
+#3178 acceptance suite: runs at the base 37dd3c0c8 (origin/main) and on the twin, macOS, Node 24.22, 2026-11-22.
+
+== AC2 #3178.ea90fb17, provisional.test.ts, at the base (load 22 26 46)
+ ✓ #3178.ea90fb17 deep_ask with a recommended option, in a session no work run started, returns provisional with the recommended option at once, and the ask stays open for you 870ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+== AC2 #3178.ea90fb17, provisional.test.ts, on the twin never-provisional (APFS copy of the base, twin laid, npm run build --workspaces exit 0; load 61 37 48)
+ × #3178.ea90fb17 deep_ask with a recommended option, ... 16324ms
+AssertionError: #3178.ea90fb17 deep_ask goes on at once: it must return within 15 s, never wait on you: expected 'still waiting after 15003 ms (load 56…' to be 'returned' // Object.is equality
+Expected: "returned"
+Received: "still waiting after 15003 ms (load 56 37 48)"
+ ❯ tests/acceptance/3178/provisional.test.ts:35:193
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+Fails at its assertion, as the twin's wrong program should make it.
+
+== AC1 #3178.1821b407, suites.test.ts: a first run, DISCARDED
+A first run in the shared base clone (18:52-18:58, 3 failed | 4 passed) is discarded: other jobs had added untracked
+folders there (tests/acceptance/{667,27,111}/redraft-3178/), which this file's redraft rule counts as redrafts the base
+didn't hold, so it was no base reading (27/repeat passed that way).
+
+== AC1 #3178.1821b407, suites.test.ts, at the base, on a clean copy (load 33 32 40; 18:58-19:02)
+The copy: cp -cR of the clone, then `git clean -fd -e tests/acceptance/3178 -- tests/acceptance` (removed
+tests/acceptance/{111,27,667}/redraft-3178/); `git status --porcelain` then shows only `?? tests/acceptance/3178/`;
+HEAD 37dd3c0c84973a1ea7bbed142887c0fa094a7359.
+ × 667/redraft-1463/raised.test.ts: #667.84442921, #667.b25a1d05 2335ms
+ × 667/fold.test.ts: #667.b1086458 ×2 2473ms
+ × 667/plants.test.ts: #667.ca2b4f95, #667.b1086458 2415ms
+ × 27/repeat.test.ts: #27.6e863673 3431ms
+ × 27/waits.test.ts: #27.e6116d56 ×2 134883ms
+ × 27/desktop-redraft/desktop.test.ts: #27.f8331d25 25851ms
+ ✓ 111/revive.test.ts: #111.ddf55f68 13767ms
+ Test Files  1 failed (1)
+      Tests  6 failed | 1 passed (7)
+Each failure is this file's assertion "#3178.1821b407 each named test passes, or a blind redraft that replaces it
+passes", with the child tests' lines:
+- raised: #667.84442921 and #667.b25a1d05: BLOCKED: deep_ask "Keep the orders on SQLite or plain files?" ended before
+  the hub filed its ask (status provisional)
+- fold: both AC5 #667.b1086458: BLOCKED: deep_ask "Which header colour on the login page for bulk?" / "... for
+  deadline?" ended before the hub filed its ask: {"status":"provisional","answer":"green",...}
+- plants: AC4 #667.ca2b4f95, AC5 #667.b1086458: expected [Function] to throw error matching /AC4 #667\.ca2b4f95: ask
+  ask:.../ but got 'BLOCKED: deep_ask "Keep the cart on S…' (AC5 likewise, "Which header colou…")
+- repeat: AC2 #27.6e863673: AssertionError: session A's deep_ask comes back with your answer, green: (it came back
+  provisional)
+- waits: of the four #27.e6116d56 tests the filter ran, two passed and two failed: "the stop was held while
+  ask:01M835HFTFW3JFA2NPGJSWT61H was open ..." (AssertionError) and "BLOCKED: timed out after 60000 ms waiting for the
+  check run to start"
+- desktop-redraft: #27.f8331d25 step 2: ask:01M835KQQVJJXJG328X0R0TF8E must read delivered once the prompt carried
+  it; outcomes: stalled via next_prompt, stalled via next_prompt
+No redraft fallback ran: the clean copy holds no test file under 667/, 27/ or 111/ beyond the base's.
+
+Reading: six rows fail at the base at their assertion, as the issue's table says. The 111/revive row passed in this run.
+
+== 111/revive.test.ts alone on the same clean copy, two more runs (by the coordinator; logs scratchpad/out/main-revive-1.log, -2.log)
+Run 1: Tests 3 passed (3).
+Run 2: Tests 1 failed | 2 passed (3). The failing test was the third, "the option you passed over when you answered a
+choice is a rejected direction ...": Error: the choice: the call ended before it filed anything:
+{... "status":"provisional","answer":"rest" ...} (filedWhileWaiting, tests/acceptance/26/helpers.ts:375).
+So at the base the 111 row passes or fails by timing: the merge base is no wrong program to count on for it. Hence the
+twin below.
+
+== AC1 #3178.1821b407, suites.test.ts, on the twin no-rejected-directions
+The twin: packages/hub/src/memory.ts at the base with rejectedDirections answering [] (no decision reads as a rejected
+direction: deep_propose of one goes to the inbox, rules.json gets no rejected-* entry, so deep-hook lets a reviving
+tool call through). Laid on an APFS copy of the clean copy (`git status --porcelain`: ` M packages/hub/src/memory.ts`,
+`?? tests/acceptance/3178/`), npm run build --workspaces exit 0. Load 127 123 103; 19:33-19:39.
+(A first twin run, 19:14-19:20, is discarded: that twin's `if (raw)` failed the build with TS2774, though tsc still
+emitted the hub; the twin was corrected to `if (raw.length >= 0)` and rebuilt clean.)
+ × 667/redraft-1463/raised.test.ts 15053ms
+ × 667/fold.test.ts 18516ms
+ × 667/plants.test.ts 22335ms
+ × 27/repeat.test.ts 22763ms
+ × 27/waits.test.ts 176326ms
+ × 27/desktop-redraft/desktop.test.ts 31660ms
+ × 111/revive.test.ts 50705ms
+ Test Files  1 failed (1)
+      Tests  7 failed (7)
+Each at this file's assertion. The 111 row's child lines (the other rows fail as at the base, by the provisional ask):
+- passed: "a direction you rejected in chat is saved as a decision ..."
+- failed: "an agent's deep_propose of the rejected direction is refused, citing the decision ..." -- AssertionError: the
+  revival is refused: {... "proposal":"doc:01M837R4WXVB33JAMCX52Z004J" ...}
+- failed: "the option you passed over when you answered a choice is a rejected direction ..." -- AssertionError: the
+  passed-over option is refused: {... "proposal":"doc:01M837RK8AKN98J7MNEQFA1D6P" ...}
+The deep_propose test fails on the twin with no ask involved, so the row fails there whatever the timing.
+
+== The twin against a stand-in redraft: tests/acceptance/111/redraft/tool-call.test.ts (the tool-call half of #111.ddf55f68)
+On the clean copy (load 119 120 108): ✓ ... is denied by deep-hook citing decision:<id> ...  Tests 1 passed (1)
+On the twin (load 113 119 108):      × ... AssertionError: the revival is denied: exit 0, stdout "", stderr "":
+  expected 'allow' to be 'deny'.  Tests 1 failed (1)
+So both ways a redraft can revive a direction (deep_propose, and a tool call through deep-hook) fail on the twin.
+
+== Round 2 (DISCARDED)
+After the coordinator's review (redraft folders laid over the base, five twins under #3178.1821b407, new row
+semantics), a round 2 copied the redraft folders 667/, 27/, 111/redraft-3178/ from the shared clone while they were
+still changing. Its base run (load 133 142 132; 20:25-21:02) gave Tests 2 failed | 4 passed | 1 skipped (7), and it was
+stopped (Ctrl-C in its own terminal tab) at the first twin's build, once the coordinator said those folders had changed.
+It is discarded: the folders it ran are not the final ones.
+
+== Round 3 (DISCARDED)
+Round 3 ran on a fresh copy with the final redraft folders under the earlier rule ("a tag passes when any candidate
+passed"). A review showed that rule lets a failing redraft hide behind a passing one (27/outcomes-redraft carries
+#27.e6116d56 and passes on main), and that 27-redraft-2073 is now by hand in the change's lanes.mjs. suites.test.ts was
+revised (README, Readings) and round 3 was stopped in its own terminal tab during its base run, before any run finished.
+
+== Round 4: the merge base with the final redraft folders, then each twin: RUNNING when this file was last written
+The copy: the clean copy, plus this folder, plus the shared clone's final 667/, 27/ and 111/redraft-3178/ and
+27-redraft-2073/ as they are, with the copy's scripts/lanes.mjs given 'tests/acceptance/27-redraft-2073/' in byHand
+(mirroring the change's lanes.mjs, as the coordinator reported it; the base clone's own lanes.mjs is unchanged).
+Script blind-3178/round4.sh, logs blind-3178/r4/.
+`git status --porcelain` of the copy: ` M scripts/lanes.mjs` (the one byHand line), `?? tests/acceptance/{667,27,111}/redraft-3178/`,
+`?? tests/acceptance/3178/`, and `?? tests/acceptance/27-redraft-2073/27-redraft-2073/`: 27-redraft-2073 is already held by
+the clean copy (tracked, identical to the shared clone's), so `cp -R` laid a nested second copy; the byHand prefix
+leaves both out, so it changes no row.
+
+-- Round 4, the merge base with the redrafts (load 69 75 95; 21:29-21:45)
+ ✓ 667/redraft-1463/raised.test.ts 44068ms
+ ✓ 667/fold.test.ts 97720ms
+ ✓ 667/plants.test.ts 153380ms
+ × 27/repeat.test.ts 61690ms
+ ↓ 27/waits.test.ts 451278ms [INCONCLUSIVE #27.e6116d56: unrun: tests/acceptance/27/outcomes-redraft didn't run to a verdict]
+ ✓ 27/desktop-redraft/desktop.test.ts 74682ms
+ ✓ 111/revive.test.ts 57604ms
+      Tests  1 failed | 5 passed | 1 skipped (7)
+- 27/repeat fails at its assertion: 27/redraft-3178's second test fails on the base: "AssertionError: #27.6e863673 the
+  repeated question (asked with blue recommended) must be answered from your saved decision: B's deep_ask must come
+  back with green ...; it replied {... "status":"provisional","answer":"blue" ...}". (Its first test passed; the named
+  repeat.test.ts failed, AC2 "session A's deep_ask comes back with your answer, green".) So the merge base is a wrong
+  program for this row.
+- 27/waits is INCONCLUSIVE: 27/redraft-3178's five #27.e6116d56 tests passed and 27/outcomes-redraft's three passed, but
+  its fourth ended "Error: #27.e6116d56 BLOCKED: <session>'s stop went through before the subagent ran on, so no stop
+  was held (a hub that missed the hook on a loaded machine)": unrun, so no verdict.
+- The other five rows pass by their redrafts (or, for 111, by its redrafts with the named file).
+
+-- Round 4, twin no-rejected-directions (memory.ts laid; build exit 0; load 52 64 74; 21:50-22:05)
+ ✓ 667 raised   ✓ 667 fold   ✓ 667 plants   × 27 repeat   ↓ 27 waits (INCONCLUSIVE: outcomes-redraft unrun)
+ ✓ 27 desktop   × 111 revive
+      Tests  2 failed | 4 passed | 1 skipped (7)
+- 111 revive fails at its assertion: the named revive.test.ts's two revival tests ("AssertionError: the revival is
+  refused" / "the passed-over option is refused"), 111/redraft/tool-call.test.ts ("AssertionError: the revival is
+  denied: exit 0, stdout \"\", stderr \"\""), and 111/redraft-3178/revive.test.ts's four revival tests (proposal, tool
+  call, Codex transcript, passed-over option) all fail at assertions. So this twin is the 111 row's wrong program.
+- 27 repeat fails as on the merge base (the blue-recommended repeat).
+
+-- Round 4, twin sends-shown-again (plant.ts laid; build exit 0; load 78 72 74; 22:13-22:25)
+ × 667 raised   × 667 fold   × 667 plants   × 27 repeat   × 27 waits   × 27 desktop   ✓ 111 revive
+      Tests  6 failed | 1 passed (7)
+Verdicts (each failing row at this file's assertion; "failed" = a redraft folder failed at an assertion):
+  #667.84442921 replaced by 667/redraft-3178, which passes;  #667.b25a1d05 failed: 667/redraft-3178
+  #667.b1086458 failed: 667/redraft-2047;  #667.ca2b4f95 failed: 667/redraft-2047
+  #27.6e863673 failed: 27/redraft-3178;  #27.e6116d56 failed: 27/outcomes-redraft, 27/redraft-3178
+  #27.f8331d25 failed: 27/desktop-redraft-2
+First failure per folder:
+- 667/redraft-3178: AssertionError: #667.8700acae: the agent that raised ask:… got your answer 5 times, once expected
+- 667/redraft-2047: AssertionError: AC5 #667.b9deefc5: the scenario passed on the planted hub skip-default-at-deadline:
+  expected undefined to be defined. Note: this is that folder's own plant test, which asks its hub for
+  skip-default-at-deadline and gets this twin's plant instead (the twin forces its plant whatever DEEP_HUB_PLANT says).
+  It fails at an assertion, so the folder fails, but it is the twin's forcing that fails it, not sends-shown-again's
+  wrong program reaching #667 AC4/AC5.
+- 27/redraft-3178: AssertionError: #27.6e863673 the repeated question (asked with blue recommended) ... (as on the base)
+- 27/outcomes-redraft: AssertionError: #27.e6116d56 ask:… reads delivered once the turn showed it (within 30 s), once:
+  timed_out via next_prompt: expected +0 to be 1
+- 27/desktop-redraft-2: AssertionError: #27.f8331d25 step 2: the prompt carried ask:…; the turn's stop isn't sent back
+  with it again: {"blocked":"DeepBuild delivers your answers: ..."}
+
+-- Round 4, twin skip-default-at-deadline (plant.ts laid; build exit 0; load 53 61 67; 22:33-22:45)
+ × 667 raised   × 667 fold   × 667 plants   × 27 repeat   × 27 waits   ✓ 27 desktop   ✓ 111 revive
+      Tests  5 failed | 2 passed (7)
+Verdicts: #667.84442921 replaced by 667/redraft-3178, which passes; #667.b25a1d05 failed: 667/redraft-3178;
+  #667.b1086458 and #667.ca2b4f95 failed: 667/redraft-2047; #27.6e863673 failed: 27/redraft-3178 (as on the base);
+  #27.e6116d56 failed: 27/redraft-3178 (outcomes-redraft unrun: its subagent test BLOCKED again; a failed folder decides).
+First failures:
+- 667/redraft-2047: Error: AC5 #667.b9deefc5: ask ask:… (the sixth ask, folded into the exception) is still open 61 s
+  past its deadline … on the hub's clock: the criterion's own wrong program (#667 AC4/AC5) reaching the redraft.
+- 27/redraft-3178 waits: AssertionError: #27.e6116d56 ask:…, unanswered, must reach its default by its deadline: the
+  (ask) case, the wrong program reaching #27 AC4.
+- 667/redraft-3178: AssertionError: #667.8700acae: the scenario passed on the planted hub sends-shown-again (its own
+  plant test, given this twin's plant instead: the forcing, not AC2's wrong program).
+
+-- Round 4, twin repeat-reaches-you (plant.ts laid; build exit 0; load 97 111 87; 22:49-23:01)
+ × 667 raised   × 667 fold   × 667 plants   × 27 repeat   ↓ 27 waits (INCONCLUSIVE: outcomes-redraft unrun)
+ ✓ 27 desktop   ✓ 111 revive
+      Tests  4 failed | 2 passed | 1 skipped (7)
+- 27 repeat: 27/redraft-3178's first test now fails too: AssertionError: #27.6e863673 the repeated question must be
+  answered from your saved decision: B's deep_ask must come back with green ...: the criterion's wrong program (a repeat
+  reaches you) reaching the redraft's plain repeat, which passes on the base.
+- 667 raised, fold, plants fail only by the forcing (each folder's own plant test given this twin's plant:
+  "the scenario passed on the planted hub sends-shown-again" / "... skip-default-at-deadline").
+- 27 waits: outcomes-redraft's subagent test BLOCKED again (unrun), redraft-3178's waits passed: INCONCLUSIVE.
+
+-- Round 4, twin wake-assumed (plant.ts laid; build exit 0; load 81 78 79; 23:06-23:20)
+ × 667 raised   × 667 fold   × 667 plants   × 27 repeat   × 27 waits   × 27 desktop   ✓ 111 revive
+      Tests  6 failed | 1 passed (7)
+- 27 desktop: 27/desktop-redraft-2: AssertionError: #27.f8331d25 step 1: no turn showed your answer ..., so its delivery
+  must read stalled within 60 s of the waiter's exit; outcomes: delivered via next_prompt: the criterion's wrong program.
+- 27 waits: 27/outcomes-redraft: AssertionError: #27.e6116d56 the waiter took ask:… and …'s transcript couldn't be read,
+  so nothing proves whether a turn carried it: its delivery must read timed out: the criterion's wrong program
+  (27/twins.json names wake-assumed for #27.e6116d56).
+- 27 repeat fails as on the base; 667 raised, fold, plants only by the forcing (their plant tests given this plant).
+
+== Round 4: which program fails each AC1 row at its assertion
+Rows fail at suites.test.ts's own assertion. A "by forcing" failure is a redraft's own plant test handed the twin's
+plant in place of the one it asked for: an assertion failure, but not the row's criterion's wrong program.
+
+ Row          | base  | no-rejected | sends-shown-again | skip-default | repeat-reaches-you | wake-assumed | proven by (its own wrong program)
+ 667 raised   | pass  | pass        | FAIL              | FAIL*        | FAIL*              | FAIL*        | sends-shown-again (#667.b25a1d05)
+ 667 fold     | pass  | pass        | FAIL*             | FAIL         | FAIL*              | FAIL*        | skip-default-at-deadline
+ 667 plants   | pass  | pass        | FAIL*             | FAIL         | FAIL*              | FAIL*        | skip-default-at-deadline
+ 27 repeat    | FAIL  | FAIL        | FAIL              | FAIL         | FAIL               | FAIL         | the merge base; repeat-reaches-you
+ 27 waits     | INC   | INC         | FAIL              | FAIL         | INC                | FAIL         | skip-default-at-deadline; wake-assumed; sends-shown-again
+ 27 desktop   | pass  | pass        | FAIL              | pass         | pass               | FAIL         | wake-assumed; sends-shown-again
+ 111 revive   | pass  | FAIL        | pass              | pass         | pass               | pass         | no-rejected-directions
+ (* by forcing only; INC = skipped INCONCLUSIVE: 27/outcomes-redraft's subagent test BLOCKED, "a hub that missed the hook
+ on a loaded machine")
+
+Not covered: #667.84442921 (#667 AC1) has no wrong program of its own here (667/redraft-3178's README: no plant at the
+base reaches it); its row is proven through #667.b25a1d05. 27 waits is INCONCLUSIVE on three programs under this load.

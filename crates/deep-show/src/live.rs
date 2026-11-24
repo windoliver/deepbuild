@@ -15,6 +15,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use deep_canvas_marks::scene::Record;
 use gpui_kit::*;
 use serde_json::{json, Value};
 
@@ -25,6 +26,9 @@ use crate::window::{bounds, hsla, refused};
 const HOLD: Duration = Duration::from_secs(6);
 /// How long the last frame stays, for a person to walk the tree with VoiceOver.
 const LAST: Duration = Duration::from_secs(180);
+/// #3236: how long each focus announcement the scenario's keys made stays in the polite live
+/// region before the next, starting a frame's hold after the window opens.
+const SAID: Duration = Duration::from_secs(1);
 /// The strip under the panel where the controls sit, in px.
 pub(crate) const STRIP: f32 = 40.;
 
@@ -159,6 +163,10 @@ struct View {
     k: usize,
     ground: Hsla,
     ink: Hsla,
+    /// #3236: the focus announcements the scenario's keys made, in order, and the one the polite
+    /// live region holds now.
+    said: Rc<Vec<String>>,
+    j: Option<usize>,
 }
 
 impl Render for View {
@@ -198,7 +206,18 @@ impl Render for View {
             },
         )
         .size_full();
-        let nodes = self.frames[k].nodes.iter().map(|n| {
+        // One polite live region whose value is the focus announcement said now, so AppKit is
+        // asked to announce each as the replica's `see` lists it.
+        let panel = self.frames[k].panel;
+        let saying = self.j.and_then(|j| self.said.get(j)).map(|text| Node {
+            id: "announcement".into(),
+            role: accesskit::Role::Status,
+            name: String::new(),
+            value: Some(text.clone()),
+            live: true,
+            bounds: Bounds::new(panel.origin, size(px(1.), px(1.))),
+        });
+        let nodes = self.frames[k].nodes.iter().chain(saying.as_ref()).map(|n| {
             AxNode {
                 node: n.clone(),
                 style: StyleRefinement::default(),
@@ -225,12 +244,16 @@ pub(crate) fn nodes(
     hidden: &[String],
     boxes: &[(String, [f64; 4])],
     panel: [f64; 4],
+    record: &Record,
 ) -> (Vec<Node>, Vec<String>) {
     let readouts = crate::access::readouts(doc, hidden);
     let mut out = Vec::new();
     let mut unboxed = Vec::new();
     let mut strip_x = panel[0];
-    for n in crate::access::tree(doc, hidden).into_iter().skip(1) {
+    for n in crate::access::tree_with(doc, hidden, record)
+        .into_iter()
+        .skip(1)
+    {
         let id = n["id"].as_str().unwrap_or("").to_string();
         let name = n["name"].as_str().unwrap_or("").to_string();
         let role = n["role"].as_str().unwrap_or("");
@@ -251,9 +274,11 @@ pub(crate) fn nodes(
             unboxed.push(id);
             continue;
         };
+        // #3236: a mark set's value is what it holds, in words.
+        let holds = n["value"].as_str();
         out.push(Node {
             role: item_role(role),
-            value: readouts.get(&id).cloned(),
+            value: readouts.get(&id).cloned().or(holds.map(str::to_string)),
             live: readouts.contains_key(&id),
             bounds: bounds(*b),
             id,
@@ -261,6 +286,16 @@ pub(crate) fn nodes(
         });
     }
     (out, unboxed)
+}
+
+/// One step of the run, drawn at once. A draw is what gives AccessKit the tree and has it announce,
+/// and the display asks for none of a window nobody can see (covered, minimized, on another Space).
+fn step(window: WindowHandle<View>, cx: &mut AsyncApp, to: impl FnOnce(&mut View)) {
+    let _ = window.update(cx, |view, _, cx| {
+        to(view);
+        cx.notify();
+    });
+    let _ = cx.update_window(window.into(), |_, window, cx| window.draw(cx).clear(cx));
 }
 
 /// Plays the scenario's calls, then shows the panel the first document on screen sits in.
@@ -288,6 +323,16 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
     let record = hub.record();
     let mut frames = Vec::new();
     let mut shown = Vec::new();
+    // #3236: each landing of a focus the scenario's keys moved, said in the live window as in `see`.
+    let said: Rc<Vec<String>> = Rc::new(
+        hub.scopes
+            .get(&panel_id)
+            .map(|s| &s.picks.said)
+            .into_iter()
+            .flatten()
+            .filter_map(|a| a["text"].as_str().map(str::to_string))
+            .collect(),
+    );
     let mut last: Option<(u64, Vec<String>)> = None;
     let mut title = String::from("deep-show live");
     for frame in list {
@@ -334,7 +379,10 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         let Some(picture) = crate::window::picture(rgba, px_size) else {
             return refused("no_picture");
         };
-        let (nodes, unboxed) = nodes(&revision, &hidden, &boxes, panel);
+        // #3236: with its tables inlined, so a set's value comes from the rows it draws.
+        let mut heard = revision.clone();
+        let _ = hub.inline_tables(&mut heard);
+        let (nodes, unboxed) = nodes(&heard, &hidden, &boxes, panel, &record);
         shown.push(json!({
             "rev": rev,
             "vsync": vsync,
@@ -380,6 +428,8 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
                     k: 0,
                     ground,
                     ink,
+                    said: said.clone(),
+                    j: None,
                 })
             },
         );
@@ -400,13 +450,25 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         // Closing the window early ends the run.
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         cx.activate(true);
+        // The first read activates AccessKit's adapter, and the draw gives it the tree, so a client's
+        // own first ask finds it even where the window opens covered.
+        let _ = cx.update_window(handle.into(), |_, window, cx| {
+            crate::watch::read_tree(window);
+            window.draw(cx).clear(cx);
+        });
+        let spoken = said.len();
+        cx.spawn(async move |cx| {
+            cx.background_executor().timer(HOLD).await;
+            for j in 0..spoken {
+                step(handle, cx, |view| view.j = Some(j));
+                cx.background_executor().timer(SAID).await;
+            }
+        })
+        .detach();
         cx.spawn(async move |cx| {
             for k in 1..count {
                 cx.background_executor().timer(HOLD).await;
-                let _ = handle.update(cx, |view, _, cx| {
-                    view.k = k;
-                    cx.notify();
-                });
+                step(handle, cx, |view| view.k = k);
             }
             cx.background_executor().timer(LAST).await;
             cx.update(|cx| cx.quit());

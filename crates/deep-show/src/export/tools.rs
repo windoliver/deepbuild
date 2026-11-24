@@ -151,7 +151,7 @@ pub(crate) fn parse(list: Option<&Value>) -> Option<Vec<Tool>> {
     let tool = |t: &Value| {
         let (name, version) = t.get("tool")?.as_str()?.split_once('@')?;
         let named = !name.is_empty() && version.split('.').count() == 3;
-        Some(Tool {
+        let tool = Tool {
             id: t.get("tool")?.as_str()?.to_string(),
             codecs: texts(t.get("codecs")?)?,
             hardware: t.get("hardware")?.as_bool()?,
@@ -164,15 +164,14 @@ pub(crate) fn parse(list: Option<&Value>) -> Option<Vec<Tool>> {
             },
             pinned_only: false,
             surface: false,
-        })
-        .filter(|_| named && t.get("kind").and_then(Value::as_str) == Some("encode"))
+        };
+        let encode = named && t.get("kind").and_then(Value::as_str) == Some("encode");
         // Whichever input it registers, this build hands it each frame by a copy through memory.
-        .filter(|_| {
-            matches!(
-                t.get("input").and_then(Value::as_str),
-                Some("surface" | "memory")
-            )
-        })
+        let input = matches!(
+            t.get("input").and_then(Value::as_str),
+            Some("surface" | "memory")
+        );
+        (encode && input).then_some(tool)
     };
     list.as_array()?.iter().map(tool).collect()
 }

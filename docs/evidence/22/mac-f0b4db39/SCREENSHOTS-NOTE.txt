@@ -1,0 +1,1 @@
+All three PNGs are byte-identical (sha1 be2427a2…) and fully black: the display was off or locked when screencapture -x ran (23:12-23:13 local). They show nothing of the app. app-run.txt holds the deep inbox text at each point.

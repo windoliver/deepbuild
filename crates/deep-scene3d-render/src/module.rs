@@ -119,6 +119,9 @@ pub struct Counts {
     /// start of writing this frame's changed slot records (or overlay cells) to the return of the
     /// queue's write of them: a proof reading of the upload's cost.
     pub upload_ms: BTreeMap<String, f64>,
+    /// #290: each item whose hidden view this frame draws, in the order they draw: one depth
+    /// pass and one blended draw each.
+    pub hidden_views: Vec<String>,
 }
 
 /// What a frame hands the passes another render module adds between scene3d's geometry and its
@@ -549,7 +552,7 @@ pub fn draw_offscreen(
     renderer: &mut Renderer,
     scene: &Scene,
     look: &Look3,
-    post: Option<&mut dyn Post>,
+    mut post: Option<&mut dyn Post>,
 ) -> Option<Vec<u8>> {
     let texture = draw_offscreen_texture(device, renderer, scene, look, post);
     read_texture(device, &texture, scene.size, 4)
@@ -572,6 +575,8 @@ pub fn draw_offscreen_texture(
         FORMAT,
         wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
     );
+    // The instances outputs its instancers draw from, as a live frame's (#484, #1719).
+    renderer.feed(post.as_mut().map_or(Vec::new(), |p| p.sources(device)));
     renderer.prepare(device, scene, look);
     let mut encoder = device.device.create_command_encoder(&Default::default());
     for (_, job) in renderer.jobs(

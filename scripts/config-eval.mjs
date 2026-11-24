@@ -90,6 +90,7 @@ async function plan(args) {
   const input = {
     plan: {
       id: `config-${v.digest.slice(0, 12)}`, cutoff, tasks: after.map((t) => t.id), fitted: before.map((t) => t.id),
+      words: [...after, ...before].filter((t) => !t.work).map((t) => t.id),
       variants: { base: { name: `at ${v.from.slice(0, 12)}`, files: v.files.base }, change: { name: 'working tree', files: v.files.change } },
       models: { agent: values.agent, judge: values.judge }, repeats: Number(values.repeats), measures: [{ name: 'grade', better: 'higher' }],
       rule: 'paired-mean-one-sided-95', budget: { ms: Number(values.minutes) * 60_000, plan_share: Number(values.share) },
@@ -128,7 +129,7 @@ async function run(args) {
     console.error(`BLOCKED config eval: the report could not be kept as evidence: ${error instanceof Error ? error.message : String(error)}\n  The local report is kept at ${kept}`);
     return 1;
   }
-  console.log(`${report.after.outcome} config eval: ${report.after.reason}\n  before the cutoff: ${report.before.outcome}; ${report.runs.length} runs in ${(report.usage.ms / 60_000).toFixed(1)} min, plan share ${report.usage.plan_share ?? 'unread'}${report.diverged.length ? `; diverged (a call not in the recording): ${report.diverged.map((d) => d.task).join(', ')}` : ''}\n${kept}\n${handle}`);
+  console.log(`${report.after.outcome} config eval: ${report.after.reason}\n  before the cutoff: ${report.before.outcome}; ${report.runs.length} runs in ${(report.usage.ms / 60_000).toFixed(1)} min, plan share ${report.usage.plan_share ?? 'unread'}${report.diverged.length ? `; diverged (a call not in the recording): ${report.diverged.map((d) => d.task).join(', ')}` : ''}${report.words.length ? `\n  graded on words (the original session changed no file): ${report.words.join(', ')}` : ''}${report.oversize.map((o) => `\n  no grade: ${o.task}'s ${o.side} repeat ${o.repeat} is ${o.size} characters, past the judge's ${o.cap}`).join('')}\n${kept}\n${handle}`);
   return report.after.outcome === 'refused' ? 3 : report.held ? 1 : 0;
 }
 

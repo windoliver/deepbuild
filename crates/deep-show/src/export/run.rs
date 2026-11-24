@@ -565,8 +565,14 @@ impl Hub<'_> {
             .map(|b| f32::from_le_bytes(*b))
             .collect();
         drop(pcm);
-        // #157: the machine's GPU lease, held while the export draws and reads its frames.
-        let lease = Lease::take();
+        // #157, #3219: the machine's GPU lease, exclusive, held while the export draws and reads its frames.
+        let planted = self.scenario.module_planted.clone();
+        let lease = crate::kit::lease::GpuLease::take(
+            crate::kit::lease::Mode::Exclusive,
+            "deep-show export",
+            None,
+            planted.as_deref(),
+        );
         let first = start_number + frames.start as u64;
         let tc_start = match self.scenario.planted {
             Some(Planted::RangeRestartsTimecode) => start_number,
@@ -762,12 +768,7 @@ impl Hub<'_> {
             .session
             .clone()
             .unwrap_or_else(|| format!("process {}", std::process::id()));
-        let key = adapter
-            .as_ref()
-            .and_then(|a| a["name"].as_str())
-            .unwrap_or("gpu")
-            .to_string();
-        let lease = lease.release(&holder, &key);
+        let lease = lease.release(&holder, planted.as_deref());
         let hidden: Vec<&String> = match entry["hidden"].as_str() {
             Some("listed") => doc["items"]
                 .as_object()
@@ -940,6 +941,7 @@ impl Hub<'_> {
                 },
                 |r| r.writer.clone(),
             ),
+            patch: None,
             hash,
             state: "current",
             doc: baked,

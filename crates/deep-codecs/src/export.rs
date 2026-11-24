@@ -1315,11 +1315,14 @@ mod tests {
         let frames: Vec<(Vec<u8>, bool)> = (0..4u8).map(|k| (nv12_drawn(k), k == 0)).collect();
         let fed = path(&dir, "piped.mp4");
         let replies = piped(&piped_job("h264", &fed, 64, 0, 4), &frames, true, "none");
+        // #518: the ready reply also carries the encoder's open, timed where it happens.
+        let mut said = replies[0].0.clone();
+        let open = said["ready"]
+            .as_object_mut()
+            .and_then(|r| r.remove("open_seconds"));
+        assert!(open.and_then(|s| s.as_f64()).is_some_and(|s| s >= 0.0));
         let ready = json!({"ready": {"format": "nv12", "bytes": 64 * 64 * 3 / 2}});
-        assert_eq!(
-            [&replies[0].0, &replies[1].0],
-            [&ready, &json!({"frame": 0})]
-        );
+        assert_eq!([&said, &replies[1].0], [&ready, &json!({"frame": 0})]);
         assert!(std::fs::read(&out).unwrap() == std::fs::read(&fed).unwrap());
         // Stdin closes after two frames of four: nothing more is said, and no file is left.
         let cut = path(&dir, "cut.mp4");

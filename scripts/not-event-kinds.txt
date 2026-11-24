@@ -4,15 +4,22 @@
 # fails an entry whose issue is closed or no longer names it. A file or a method is not listed: the issue writes it
 # as a path or with its call marks.
 move.feel #274
+learn.paused #311
 stack.slot #335
-process.conserve #980
-process.busy #980
-process.little #980
+process.conserve #983
+process.busy #983
+process.little #983
 plan.sheet #1260
 plan.overlay #1260
 archive.scene #2036
 user.pan #2056
 lease.gpu #2133
-job.status #2136
 layer.puffs #2142
-hub.polkit #2538
+holds.ts #2764
+hub.address #2958
+hub.stop #2975
+hub.restart #2975
+hub.health #2975
+setup.installs #3088
+setup.needs #3088
+spend.usd #3250

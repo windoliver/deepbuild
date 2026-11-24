@@ -95,7 +95,7 @@ test-accent = []
 test-threads = []
 # Issue #411: `test.machines`, whose GPU operators write a float array and an exact one, read back
 # by its check kinds.
-test-machines = ["dep:deep-effects-render"]
+test-machines = []
 # Issue #855: a test canvas module whose frame-phase operator writes JSON, which the seal refuses;
 # a build whose Debug text for every typed value differs; and a result digesting its Debug text.
 test-json = []
@@ -367,7 +367,7 @@ deep-relay = { path = "../deep-relay" }
 # Issue #549: the net module: net@1, a match's copies, the Join prompt and the check kinds.
 deep-net = { path = "../deep-net" }
 deep-gpu = { path = "../deep-gpu" }
-deep-effects-render = { path = "../deep-effects-render", optional = true }
+deep-effects-render = { path = "../deep-effects-render" }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-marks-vello = { path = "../deep-marks-vello" }
 deep-marks-raster = { path = "../deep-marks-raster" }
@@ -398,6 +398,8 @@ wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "n
 # lockfile.
 [build-dependencies]
 sha2 = "0.10"
+# Issue #3299: the source digest skips what the workspace's .gitignore names, by git's own rules.
+ignore = "0.4"
 # Issue #2892: the player's prebuilt module sets stored as gzip once per build, by the export's own
 # compressor (src/export/gzip.rs).
 miniz_oxide = "0.9"

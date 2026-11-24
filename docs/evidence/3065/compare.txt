@@ -1,0 +1,120 @@
+$ node scripts/reach.mjs compare packages/hub/src/index.ts   # tree of f1872350f, the record's
+record: ~/.deepbuild/reach/95c248e9b3aac3de7f08ae92f62e43a8627e7f42.json
+selected: 635
+recorded as reaching: 573, of which 567 have no row and count as reaching
+recorded as not reaching: 62
+never reach the change, by the record: 9.8% of the selected
+crates, run by cargo test and not counted: deep-logic
+WIDE, left out as affected.mjs leaves them: 1283
+NOT REACHED packages/hub/test/cant-run.test.ts
+NOT REACHED packages/hub/test/done-reader-fold.test.ts
+NOT REACHED packages/hub/test/gate-recovery.test.ts
+NOT REACHED packages/hub/test/mods-start.test.ts
+NOT REACHED packages/hub/test/phone-reads.test.ts
+NOT REACHED packages/hub/test/promises-hub.test.ts
+NOT REACHED packages/hub/test/removal-provenance.test.ts
+NOT REACHED packages/hub/test/start-ps.test.ts
+NOT REACHED packages/hub/test/switch-asks.test.ts
+NOT REACHED packages/hub/test/wiki.test.ts
+NOT REACHED packages/hub/test/workspace-landing.test.ts
+NOT REACHED tests/acceptance/1114/failures.test.mjs
+NOT REACHED tests/acceptance/1115/failing-states.test.mjs
+NOT REACHED tests/acceptance/1116/guard.test.mjs
+NOT REACHED tests/acceptance/1333/known-failures.test.mjs
+NOT REACHED tests/acceptance/140/platform/wasm.test.ts
+NOT REACHED tests/acceptance/140/platform/window.test.ts
+NOT REACHED tests/acceptance/1404/child-count.test.mjs
+NOT REACHED tests/acceptance/1426/redraft-table/lint.test.mjs
+NOT REACHED tests/acceptance/1432/canvas-lint.test.mjs
+NOT REACHED tests/acceptance/1495/verify.test.ts
+NOT REACHED tests/acceptance/1604/waits.test.mjs
+NOT REACHED tests/acceptance/1634/receivers.test.ts
+NOT REACHED tests/acceptance/1802/ac10-removed-again.test.ts
+NOT REACHED tests/acceptance/1802/ac7-release-notes.test.ts
+NOT REACHED tests/acceptance/1802/ac8-restored-method.test.ts
+NOT REACHED tests/acceptance/1872/known-failures.test.mjs
+NOT REACHED tests/acceptance/1875/affected.test.mjs
+NOT REACHED tests/acceptance/2047/reopen.test.mjs
+NOT REACHED tests/acceptance/2063/ac3-stale-entries.test.mjs
+NOT REACHED tests/acceptance/2338/ac2-unknown-anchor.test.mjs
+NOT REACHED tests/acceptance/2338/ac5-reading-rule.test.mjs
+NOT REACHED tests/acceptance/2403/layout.test.ts
+NOT REACHED tests/acceptance/2487/own-tests.test.mjs
+NOT REACHED tests/acceptance/2574/wide.test.mjs
+NOT REACHED tests/acceptance/2629/install.test.ts
+NOT REACHED tests/acceptance/265/ac4-rollback-trail.test.ts
+NOT REACHED tests/acceptance/277/ac2-held-back.test.ts
+NOT REACHED tests/acceptance/2777/deep-kinds.test.ts
+NOT REACHED tests/acceptance/2790/drift.test.ts
+NOT REACHED tests/acceptance/280/ac5-correction.test.ts
+NOT REACHED tests/acceptance/280/ac7-tools.test.ts
+NOT REACHED tests/acceptance/2898/bytes.test.ts
+NOT REACHED tests/acceptance/2898/listed.test.ts
+NOT REACHED tests/acceptance/2898/table.test.ts
+NOT REACHED tests/acceptance/309/network-suite.test.ts
+NOT REACHED tests/acceptance/309/relay-suite.test.ts
+NOT REACHED tests/acceptance/33/redraft-ac8/spine-list.test.ts
+NOT REACHED tests/acceptance/377/noop.test.ts
+NOT REACHED tests/acceptance/458/suite/preflight.test.ts
+NOT REACHED tests/acceptance/549/ac4-lockstep-300.test.ts
+NOT REACHED tests/acceptance/550/ac10-track-bytes.test.ts
+NOT REACHED tests/acceptance/550/ac6-tools.test.ts
+NOT REACHED tests/acceptance/550/ac7-one-ulp.test.ts
+NOT REACHED tests/acceptance/551/ac2-replay-export.test.ts
+NOT REACHED tests/acceptance/551/ac6-page-before-image.test.ts
+NOT REACHED tests/acceptance/569/replay.test.mjs
+NOT REACHED tests/acceptance/594/warm.test.mjs
+NOT REACHED tests/acceptance/79/checks.test.mjs
+NOT REACHED tests/acceptance/87/gate/model-pass.test.ts
+NOT REACHED tests/acceptance/882/wrong.test.mjs
+NOT REACHED tests/listed-diagnostic.test.mjs
+exit 0
+
+$ node scripts/reach.mjs compare crates/deep-canvas/src/lib.rs   # tree of f1872350f, the record's
+record: ~/.deepbuild/reach/95c248e9b3aac3de7f08ae92f62e43a8627e7f42.json
+selected: 63
+recorded as reaching: 60, of which 25 have no row and count as reaching
+recorded as not reaching: 3
+never reach the change, by the record: 4.8% of the selected
+crates, run by cargo test and not counted: deep-app deep-canvas deep-canvas-cells deep-canvas-drawn deep-canvas-effects deep-canvas-export deep-canvas-graph deep-canvas-input deep-canvas-loop deep-canvas-marks deep-canvas-media deep-canvas-motion deep-canvas-physics deep-canvas-record deep-canvas-sandbox deep-canvas-scene3d deep-canvas-seams deep-canvas-sheet deep-canvas-test-modules deep-canvas-vector deep-codecs deep-effects-render deep-gpu deep-gpu-layer deep-groups-render deep-images deep-input deep-logic deep-lottie deep-marks-gpui deep-marks-raster deep-marks-render deep-marks-vello deep-motion deep-net deep-panel-host deep-physics-rapier deep-play deep-player deep-relay deep-replica deep-sandbox-wasmtime deep-scene3d-render deep-show deep-synth-job deep-text deep-text-gpui deep-text-render
+NOT REACHED tests/acceptance/2898/bytes.test.ts
+NOT REACHED tests/acceptance/2898/listed.test.ts
+NOT REACHED tests/acceptance/2898/table.test.ts
+exit 0
+
+$ node scripts/reach.mjs compare docs/technical-design.md   # tree of f1872350f, the record's
+record: ~/.deepbuild/reach/95c248e9b3aac3de7f08ae92f62e43a8627e7f42.json
+NOTE docs/technical-design.md is neither code node runs nor a crate's file, so no row can show a test reading it; every selected test counts as reaching
+selected: 0
+recorded as reaching: 0, of which 0 have no row and count as reaching
+recorded as not reaching: 0
+exit 0
+
+$ node scripts/reach.mjs compare crates/deep-hook/src/main.rs   # tree of f1872350f, the record's
+record: ~/.deepbuild/reach/95c248e9b3aac3de7f08ae92f62e43a8627e7f42.json
+selected: 1346
+recorded as reaching: 1327, of which 1257 have no row and count as reaching
+recorded as not reaching: 19
+never reach the change, by the record: 1.4% of the selected
+crates, run by cargo test and not counted: deep-hook
+NOT REACHED packages/conformance/src/gate.test.ts
+NOT REACHED packages/hub/test/channel-link-write.test.ts
+NOT REACHED packages/hub/test/duration-fold.test.ts
+NOT REACHED packages/hub/test/gate-recovery.test.ts
+NOT REACHED packages/hub/test/pr-wrappers.test.ts
+NOT REACHED packages/hub/test/switch-asks.test.ts
+NOT REACHED tests/acceptance/12/workflows.test.ts
+NOT REACHED tests/acceptance/1359/help-words.test.ts
+NOT REACHED tests/acceptance/1495/verify.test.ts
+NOT REACHED tests/acceptance/1604/waits.test.mjs
+NOT REACHED tests/acceptance/1802/ac10-removed-again.test.ts
+NOT REACHED tests/acceptance/1802/ac7-release-notes.test.ts
+NOT REACHED tests/acceptance/1802/ac8-restored-method.test.ts
+NOT REACHED tests/acceptance/2338/ac2-unknown-anchor.test.mjs
+NOT REACHED tests/acceptance/2338/ac5-reading-rule.test.mjs
+NOT REACHED tests/acceptance/33/redraft-ac8/spine-list.test.ts
+NOT REACHED tests/acceptance/34/judges.test.ts
+NOT REACHED tests/acceptance/45-redraft/lifecycle.test.ts
+NOT REACHED tests/acceptance/997/facts.test.ts
+exit 0
+

@@ -1,0 +1,22 @@
+{
+  "crates/deep-hook/src/main.rs": [
+    {
+      "find": [
+        "                if whole {",
+        "                    break;",
+        "                }"
+      ],
+      "wrong": [
+        "                let _ = whole;"
+      ]
+    },
+    {
+      "find": [
+        "            && start.elapsed() < RULING_LIMIT"
+      ],
+      "wrong": [
+        "            && (PENDING.get().is_none() || start.elapsed() < RULING_LIMIT)"
+      ]
+    }
+  ]
+}

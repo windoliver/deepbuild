@@ -556,7 +556,9 @@ impl Mesh {
         let at = self.welded_ids(true);
         let cos = deep_canvas::ops::cos(deep_canvas::ops::rad(angle));
         let material = |t: usize| materials.and_then(|m| m.get(t)).copied().unwrap_or(0);
-        let mut edges: BTreeMap<(u32, u32), (Vec<(V3, u32)>, [V3; 2])> = BTreeMap::new();
+        // Each welded edge: its triangles' normals with their materials, and its two ends.
+        type Faces = (Vec<(V3, u32)>, [V3; 2]);
+        let mut edges: BTreeMap<(u32, u32), Faces> = BTreeMap::new();
         for t in 0..self.triangles() {
             let v = [0, 1, 2].map(|j| self.indices[3 * t + j]);
             let w = v.map(|i| at[i as usize]);

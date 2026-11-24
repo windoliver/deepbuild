@@ -1,0 +1,328 @@
+# #1832 acceptance tests: the run on the base (11eb8c6fd)
+
+Node v24.22.0, macOS, under other sessions' load (not waited out; the load is beside each run).
+Paths: the checkout reads <repo>, temporary folders <tmp>. Nothing is cut from the two runs' output.
+
+All seven tests fail on the base, each at its own assertion:
+- lines.test.mjs (#1832.6c8186e3, three): the base's lane lays lines.json as a stray file, applies nothing and reads
+  `FAIL ... fails on neither the merge base nor its planted wrong program`; no line says BLOCKED or names the file.
+- lint.test.mjs (#1832.49f466eb, three): the base has no scripts/twins-lint.mjs (`Cannot find module`, empty stdout).
+- plant.test.mjs (#1832.28845f50, one): the base's twins of #25 and #27 are whole files; laid over plant.ts after the
+  planted change they lose it, uses.ts no longer builds, and all 11 read `BLOCKED ... cannot run on its planted wrong
+  program <twin>: npm run build --workspaces --if-present failed`.
+
+## lint.test.mjs and lines.test.mjs on the base
+
+$ node --test tests/acceptance/1832/lint.test.mjs tests/acceptance/1832/lines.test.mjs
+23:14  up 8 days, 16:16, 3 users, load averages: 34.43 51.24 37.00
+✖ #1832.6c8186e3 a twin whose wrong lines match nowhere in a file reads BLOCKED in the before lane, naming the twin and the file, and is laid nowhere, while a twin whose lines fit proves its test (10848.166458ms)
+✖ #1832.6c8186e3 a twin whose wrong lines match in two places reads BLOCKED in the before lane, naming the twin and the file, and is laid at neither (0.234292ms)
+✖ #1832.6c8186e3 a lane run that would pass by skipping a twin whose lines no longer match fails: it reads BLOCKED, naming the twin and the file, though another twin of the criterion fails the test (8179.33ms)
+✖ #1832.49f466eb the lint lists every whole-file twin the suites name, each once, and no twin kept as its lines alone (708.913791ms)
+✖ #1832.49f466eb the lint lists nothing and reads PASS once every twin the suites name is kept as its lines (677.06175ms)
+✖ #1832.49f466eb on this checkout the lint lists none of #25's and #27's twins, and each is there, kept as its lines (65.876875ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 0
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19113.93525
+
+✖ failing tests:
+
+test at tests/acceptance/1832/lines.test.mjs:93:1
+✖ #1832.6c8186e3 a twin whose wrong lines match nowhere in a file reads BLOCKED in the before lane, naming the twin and the file, and is laid nowhere, while a twin whose lines fit proves its test (10848.166458ms)
+  AssertionError [ERR_ASSERTION]: no BLOCKED before line names the twin tax-floors-stale and the file src/tax.mjs, whose lines it no longer matches
+  exit 1
+  stdout:
+  | FAIL before: tests/acceptance/9832/discount.test.mjs › #9832.9c86d5a6 ten percent off 1000 is 900: #9832.9c86d5a6: fails on neither the merge base nor its planted wrong program
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | FAIL before: tests/acceptance/9832/shipping.test.mjs › #9832.4d27ced7 an order of 6000 ships free: #9832.4d27ced7: fails on neither the merge base nor its planted wrong program
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | FAIL before: tests/acceptance/9832/total.test.mjs › #9832.ea8048ec two items at 250 total 500: #9832.ea8048ec: fails on neither the merge base nor its planted wrong program
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | proof: wall time 9.3 s
+  | 
+  stderr:
+  | 
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1832/lines.test.mjs:96:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1832/lines.test.mjs:103:1
+✖ #1832.6c8186e3 a twin whose wrong lines match in two places reads BLOCKED in the before lane, naming the twin and the file, and is laid at neither (0.234292ms)
+  AssertionError [ERR_ASSERTION]: no BLOCKED before line names the twin free-from-five-thousand-twice and the file src/price.mjs, where its lines match twice
+  exit 1
+  stdout:
+  | FAIL before: tests/acceptance/9832/discount.test.mjs › #9832.9c86d5a6 ten percent off 1000 is 900: #9832.9c86d5a6: fails on neither the merge base nor its planted wrong program
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | FAIL before: tests/acceptance/9832/shipping.test.mjs › #9832.4d27ced7 an order of 6000 ships free: #9832.4d27ced7: fails on neither the merge base nor its planted wrong program
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | FAIL before: tests/acceptance/9832/total.test.mjs › #9832.ea8048ec two items at 250 total 500: #9832.ea8048ec: fails on neither the merge base nor its planted wrong program
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | proof: wall time 9.3 s
+  | 
+  stderr:
+  | 
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1832/lines.test.mjs:106:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1832/lines.test.mjs:110:1
+✖ #1832.6c8186e3 a lane run that would pass by skipping a twin whose lines no longer match fails: it reads BLOCKED, naming the twin and the file, though another twin of the criterion fails the test (8179.33ms)
+  AssertionError [ERR_ASSERTION]: no BLOCKED before line names the twin total-starts-at-one-stale and the file src/price.mjs: the twin was skipped
+  exit 1
+  stdout:
+  | FAIL before: tests/acceptance/9832/total.test.mjs › #9832.ea8048ec two items at 250 total 500: #9832.ea8048ec: fails on neither the merge base nor its planted wrong program
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | proof: wall time 6.9 s
+  | 
+  stderr:
+  | 
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1832/lines.test.mjs:127:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1832/lint.test.mjs:19:1
+✖ #1832.49f466eb the lint lists every whole-file twin the suites name, each once, and no twin kept as its lines alone (708.913791ms)
+  AssertionError [ERR_ASSERTION]: the lint's FAIL twins lines do not list the three whole-file twins, each once
+  exit 1
+  stdout:
+  | 
+  stderr:
+  | node:internal/modules/cjs/loader:1568
+  |   throw err;
+  |   ^
+  | 
+  | Error: Cannot find module '<repo>/scripts/twins-lint.mjs'
+  |     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+  |     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+  |     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+  |     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+  |     at Module._load (node:internal/modules/cjs/loader:1341:5)
+  |     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+  |     at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  |     at node:internal/main/run_main_module:33:47 {
+  |   code: 'MODULE_NOT_FOUND',
+  |   requireStack: []
+  | }
+  | 
+  | Node.js v24.22.0
+  | 
+  + actual - expected
+  
+  + []
+  - [
+  -   'tests/acceptance/9001/twins/mixed-c',
+  -   'tests/acceptance/9001/twins/whole-a',
+  -   'tests/acceptance/9002/twins/whole-d'
+  - ]
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1832/lint.test.mjs:35:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'tests/acceptance/9001/twins/mixed-c', 'tests/acceptance/9001/twins/whole-a', 'tests/acceptance/9002/twins/whole-d' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1832/lint.test.mjs:40:1
+✖ #1832.49f466eb the lint lists nothing and reads PASS once every twin the suites name is kept as its lines (677.06175ms)
+  AssertionError [ERR_ASSERTION]: the lint gave no PASS twins line for a checkout with no whole-file twin
+  exit 1
+  stdout:
+  | 
+  stderr:
+  | node:internal/modules/cjs/loader:1568
+  |   throw err;
+  |   ^
+  | 
+  | Error: Cannot find module '<repo>/scripts/twins-lint.mjs'
+  |     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+  |     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+  |     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+  |     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+  |     at Module._load (node:internal/modules/cjs/loader:1341:5)
+  |     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+  |     at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  |     at node:internal/main/run_main_module:33:47 {
+  |   code: 'MODULE_NOT_FOUND',
+  |   requireStack: []
+  | }
+  | 
+  | Node.js v24.22.0
+  | 
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1832/lint.test.mjs:50:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /^PASS twins$/m,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1832/lint.test.mjs:56:1
+✖ #1832.49f466eb on this checkout the lint lists none of #25's and #27's twins, and each is there, kept as its lines (65.876875ms)
+  AssertionError [ERR_ASSERTION]: the lint did not run to a verdict on this checkout
+  exit 1
+  stdout:
+  | 
+  stderr:
+  | node:internal/modules/cjs/loader:1568
+  |   throw err;
+  |   ^
+  | 
+  | Error: Cannot find module '<repo>/scripts/twins-lint.mjs'
+  |     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+  |     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+  |     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+  |     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+  |     at Module._load (node:internal/modules/cjs/loader:1341:5)
+  |     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+  |     at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+  |     at node:internal/main/run_main_module:33:47 {
+  |   code: 'MODULE_NOT_FOUND',
+  |   requireStack: []
+  | }
+  | 
+  | Node.js v24.22.0
+  | 
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1832/lint.test.mjs:62:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+(exit 1)
+23:15  up 8 days, 16:17, 3 users, load averages: 34.34 50.14 36.93
+
+## plant.test.mjs on the base
+
+$ node --test tests/acceptance/1832/plant.test.mjs
+23:15  up 8 days, 16:17, 3 users, load averages: 33.47 49.18 36.82
+✖ #1832.28845f50 after a planted change elsewhere in the plant module, each twin of #25 and #27 laid by the before lane still builds and fails its test at its assertion (38350.375583ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 38432.492042
+
+✖ failing tests:
+
+test at tests/acceptance/1832/plant.test.mjs:73:1
+✖ #1832.28845f50 after a planted change elsewhere in the plant module, each twin of #25 and #27 laid by the before lane still builds and fails its test at its assertion (38350.375583ms)
+  AssertionError [ERR_ASSERTION]: 11 of the 11 twins of #25 and #27 did not build and fail their test at its assertion after the planted change
+  exit 1
+  stdout:
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.d870acd5 with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 25-routes-from-settings: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.4527d6db with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 25-routes-kept-across-sessions: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.a77fb67a with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 25-waiter-never-wakes: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.48f01e4b with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 25-waiter-outlives-session: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.579c88db with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 27-answer-skips-held-stop: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.ee03d854 with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 27-repeat-reaches-you: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.78edf03c with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 27-skip-default-at-deadline: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.f26ebd18 with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 27-waiter-checks-every-5s: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.f0656719 with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 27-waiter-never-wakes: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.069ebd4c with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 27-waiter-outlives-session: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | BLOCKED before: tests/acceptance/9832/plant.test.mjs › #9832.4e4a59f9 with no DEEP_HUB_PLANT set no planted program is selected: cannot run on its planted wrong program 27-wake-assumed: npm run build --workspaces --if-present failed: npm error Lifecycle script `build` failed with error:
+  |   Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+  | proof: wall time 36.6 s
+  | 
+  stderr:
+  | 
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/25/twins/routes-from-settings',
+  +   'tests/acceptance/25/twins/routes-kept-across-sessions',
+  +   'tests/acceptance/25/twins/waiter-never-wakes',
+  +   'tests/acceptance/25/twins/waiter-outlives-session',
+  +   'tests/acceptance/27/twins/answer-skips-held-stop',
+  +   'tests/acceptance/27/twins/repeat-reaches-you',
+  +   'tests/acceptance/27/twins/skip-default-at-deadline',
+  +   'tests/acceptance/27/twins/waiter-checks-every-5s',
+  +   'tests/acceptance/27/twins/waiter-never-wakes',
+  +   'tests/acceptance/27/twins/waiter-outlives-session',
+  +   'tests/acceptance/27/twins/wake-assumed'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1832/plant.test.mjs:123:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'tests/acceptance/25/twins/routes-from-settings', 'tests/acceptance/25/twins/routes-kept-across-sessions', 'tests/acceptance/25/twins/waiter-never-wakes', 'tests/acceptance/25/twins/waiter-outlives-session', 'tests/acceptance/27/twins/answer-skips-held-stop', 'tests/acceptance/27/twins/repeat-reaches-you', 'tests/acceptance/27/twins/skip-default-at-deadline', 'tests/acceptance/27/twins/waiter-checks-every-5s', 'tests/acceptance/27/twins/waiter-never-wakes', 'tests/acceptance/27/twins/waiter-outlives-session', 'tests/acceptance/27/twins/wake-assumed' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+(exit 1)
+23:15  up 8 days, 16:18, 3 users, load averages: 30.10 46.23 36.30

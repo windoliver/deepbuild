@@ -1,0 +1,10 @@
+Mac15,12
+Apple M3
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B131
+Now drawing from 'AC Power'
+ lowpowermode         0
+          Resolution: 2560 x 1664 Retina
+start 2026-11-14 14:23:21 14:23  up 1 day,  7:25, 2 users, load averages: 8.23 6.78 8.06 thermalState 0
+end 2026-11-14 15:07:37 15:07  up 1 day,  8:09, 2 users, load averages: 160.24 106.22 75.90

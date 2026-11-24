@@ -138,11 +138,11 @@
       "fail_closed": true
     },
     "no-control-token-read": {
-      "match": "read:~/.deepbuild/control.token ~/.deepbuild/channels.json ~/.deepbuild/slack.json ~/.deepbuild/app ~/.deepbuild/app/*",
+      "match": "read:~/.deepbuild/control.token ~/.deepbuild/channels.json ~/.deepbuild/slack.json ~/.deepbuild/app ~/.deepbuild/app/* ~/.deepbuild/checkouts ~/.deepbuild/checkouts/* ~/.deepbuild/evidence ~/.deepbuild/evidence/*",
       "scope": "all_repos",
       "mode": "block",
-      "reason": "~/.deepbuild/control.token is the CLI's credential to the hub, channels.json and slack.json name the tokens the hub sends as you, and ~/.deepbuild/app/ is the app's, which answers for you, so an agent never reads them, by any tool.",
-      "next_step": "Run the deep command you need yourself in your own terminal.",
+      "reason": "~/.deepbuild/control.token is the CLI's credential to the hub, channels.json and slack.json name the tokens the hub sends as you, ~/.deepbuild/app/ is the app's, which answers for you, and checkouts/ and evidence/ hold what the gate keeps from the session it judges, so an agent never reads them by a path, by any tool.",
+      "next_step": "Read evidence by its handle with deep read, and a checkout's file in your own worktree. Run any other deep command you need yourself in your own terminal.",
       "fail_closed": true
     },
     "no-unnamed-cloud-resource": {

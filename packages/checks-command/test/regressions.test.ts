@@ -5,7 +5,7 @@
 // Each runs a real project through the real supervisor, but for the command's text, read with no run.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ import { openAsks } from '../../asks/src/index.js';
 import type { CheckSpec } from '../../conformance/src/index.js';
 import { openRecord, type RecordStore } from '../../record/src/index.js';
 import { openSupervisor, type Supervisor } from '../../supervisor/src/index.js';
-import { runAddedTests, runCommandCheck, type CommandCheck } from '../src/index.js';
+import { programReadings, runAddedTests, runCommandCheck, type CommandCheck } from '../src/index.js';
 import { listSource } from '../src/listing.js';
 import { under, vitest as vitestReport } from '../src/report.js';
 import { absent, hiddenChild, maskIn, maskOf, programsIn, untraced } from '../src/shell.js';
@@ -858,6 +858,28 @@ describe('programs the tracers can\'t see into', () => {
       process.env.PATH = saved.PATH;
     }
   }, 120_000);
+
+  it('a program the command or its script names is read once for a claim, by its real file\'s size and modified time; one the run gets no link to reads as absent (#2060)', () => {
+    const at = folder({ 'real/tool': 'v1', 'bin/a-folder/x': '', 'venv/pyvenv.cfg': '', 'venv/bin/venv-tool': '' });
+    symlinkSync('../real/tool', join(at, 'bin/tool'));
+    const cwd = folder({ 'check.sh': 'tool --now\n' });
+    const saved = process.env.PATH;
+    process.env.PATH = `${at}/bin:${at}/venv/bin:/usr/bin:/bin`;
+    try {
+      const read = (claim = new Map<string, string>()) => Object.fromEntries(programReadings('sh check.sh && venv-tool && a-folder && ./by-path && gone', cwd, claim));
+      const reading = (size: number): string => `${size} ${statSync(join(at, 'real/tool')).mtimeMs}`;
+      const claim = new Map<string, string>();
+      const first = read(claim);
+      expect(first).toEqual({ 'a-folder': 'absent', gone: 'absent', sh: 'absent', tool: reading(2), 'venv-tool': 'absent' });
+      writeFileSync(join(at, 'real/tool'), 'version 2');
+      expect(read(claim), 'the same claim').toEqual(first);
+      expect(read().tool, 'the next claim').toBe(reading(9));
+      rmSync(join(at, 'real/tool'));
+      expect(read().tool, 'a claim once its file is gone').toBe('absent');
+    } finally {
+      process.env.PATH = saved;
+    }
+  });
 
   it('a go test run is placed from its report and fails, but its pass is never counted: no tracer saw what it read', async () => {
     need('go');

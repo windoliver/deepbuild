@@ -1,7 +1,7 @@
 //! Issue #157: how an export draws its frames and hands them on: each frame drawn, read on the
 //! GPU (its BLAKE3 digest, film.blank's and film.wrap's readings, frames.finite's count) and given
-//! to the writer as it is drawn, never stored raw; the writers the targets name; and the machine's
-//! GPU lease the export holds while it draws.
+//! to the writer as it is drawn, never stored raw; and the writers the targets name. The GPU lease
+//! the export holds while it draws is the machine's one (#3219, `kit::lease`).
 //!
 //! Issue #518: the writer is an encode job in the tool that registers the codec, opened before the
 //! first frame is drawn; a 4:2:0 codec's tool is handed each frame's NV12 planes from the GPU's
@@ -1011,41 +1011,6 @@ fn float_targets(
         out.push((item, target));
     }
     out
-}
-
-/// The machine's GPU lease, held while an export draws and reads its frames: when it was taken,
-/// how long the export waited for it, and when it was let go, in ms since the Unix epoch.
-pub(super) struct Lease {
-    lease: Option<crate::kit::goldens::GpuLease>,
-    asked: u128,
-    taken: u128,
-}
-
-impl Lease {
-    pub(super) fn take() -> Lease {
-        let asked = now_ms();
-        let lease = Some(crate::kit::goldens::GpuLease::wait());
-        Lease {
-            lease,
-            asked,
-            taken: now_ms(),
-        }
-    }
-
-    /// Lets the lease go: its record, the GPU named by `key` and held by `holder`.
-    pub(super) fn release(mut self, holder: &str, key: &str) -> Value {
-        // Its release is read before the lease file goes, so no later holder's acquisition reads earlier.
-        let released = now_ms();
-        drop(self.lease.take());
-        json!({"resource": {"host": "local", "kind": "gpu", "key": key}, "holder": holder, "asked": self.asked as u64,
-            "acquired": self.taken as u64, "waited_ms": (self.taken - self.asked) as u64, "released": released as u64})
-    }
-}
-
-fn now_ms() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis())
 }
 
 /// #169: an encode request with the job's transfer, sRGB for the page's clips.

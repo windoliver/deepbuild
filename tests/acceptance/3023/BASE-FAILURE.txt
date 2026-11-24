@@ -50,7 +50,7 @@ AC1: live.test.ts
 
 $ PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run tests/acceptance/3023/ --testTimeout=600000
 
- RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/youthful-blackburn-8d95e8/agent-a7f90fd6e0d482577
+ RUN  v5.0.5 ~/dev/claude-worktrees/youthful-blackburn-8d95e8/agent-a7f90fd6e0d482577
 
  ❯ tests/acceptance/3023/live.test.ts (2 tests | 2 failed) 688298ms
    ❯ AC1 #3023 a test-meter deep-gpu's live path seals test.gpu and opens sessions (2)

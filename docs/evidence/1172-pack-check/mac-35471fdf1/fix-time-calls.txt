@@ -1,0 +1,9 @@
+shipped(canvas)	10368 ms	
+new process, no packs: call 1	148 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+no packs: call 2	5 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+new process, all packs: call 1	10169 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+all packs: call 2	1826 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+all packs: call 3	1833 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+all but deepbuild/lanes	702 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+all but deepbuild/foley	1387 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad
+all but deepbuild/modslib	840 ms	{"outcome":"refused","code":"no_revision","core":"core@0.0.0","set_digest":"08ad

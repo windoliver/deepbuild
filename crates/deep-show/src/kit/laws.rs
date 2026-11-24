@@ -165,6 +165,18 @@ pub fn run(hub: &mut Hub<'_>, ctx: &Ctx<'_>) -> Option<PartRun> {
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::create_dir_all(&dir);
     let mut run = PartRun::new(2);
+    // With no GPU lease held nothing is drawn: each law is BLOCKED.
+    if super::lease::unleased() {
+        for law in ["held_span", "surface_digest_only"] {
+            let mut case = Case::new(law, Verdict::Pass);
+            let why = broken(law, "the kit holds no GPU lease", Value::Null);
+            case.fail(Verdict::Blocked, why);
+            run.cases.push(case);
+        }
+        return Some(run);
+    }
+    // The laws' exports draw under the lease the kit holds.
+    let _within = super::lease::within();
     run.cases.push(held_span(hub, &dir));
     run.cases.push(surface_digest_only(hub, &dir));
     hub.revisions.remove(KIT_DOC);

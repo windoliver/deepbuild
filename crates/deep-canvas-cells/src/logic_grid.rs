@@ -6,7 +6,7 @@
 //! bits are set, draws a blank cell in the grid's background and raises `grid.out_of_range`; it
 //! never wraps into the lists.
 
-use deep_canvas::columns::{mapped, source, Read};
+use deep_canvas::columns::{excursions_by, mapped, source, Read};
 use deep_canvas::document::Issue;
 use deep_canvas::registry::lists::SealedEntry;
 use serde_json::{json, Value};
@@ -210,54 +210,6 @@ fn array<'a>(
     Ok(a)
 }
 
-/// Every step at which a cell of the grid begins to draw blank, by the baked steps alone: every
-/// cell at step 0, then the cells each later step wrote: `(step, cell, value)`.
-fn excursions(s: &Spec<'_>, a: &Value) -> Vec<(i64, usize, f64)> {
-    let n = s.cols * s.rows;
-    let mut raw = vec![0.0; n];
-    let mut blank = vec![false; n];
-    let mut out = Vec::new();
-    let steps = a["steps"].as_array().map_or(&[][..], Vec::as_slice);
-    let mut checks: Vec<(i64, Option<&Value>)> = Vec::new();
-    if steps.first().and_then(|s| s["step"].as_i64()) != Some(0) {
-        checks.push((0, None));
-    }
-    checks.extend(
-        steps
-            .iter()
-            .map(|s| (s["step"].as_i64().unwrap_or(0), Some(s))),
-    );
-    for (step, st) in checks {
-        let mut touched = Vec::new();
-        for run in st
-            .and_then(|s| s["values"].as_array())
-            .into_iter()
-            .flatten()
-        {
-            let start = run[0].as_u64().unwrap_or(0) as usize;
-            for (j, v) in run[1].as_array().into_iter().flatten().enumerate() {
-                if start + j < n {
-                    raw[start + j] = v.as_f64().unwrap_or(f64::NAN);
-                    touched.push(start + j);
-                }
-            }
-        }
-        if step == 0 {
-            touched = (0..n).collect();
-        }
-        touched.sort_unstable();
-        touched.dedup();
-        for c in touched {
-            let is_blank = s.unpack(raw[c], false).is_none();
-            if is_blank && !blank[c] {
-                out.push((step, c, raw[c]));
-            }
-            blank[c] = is_blank;
-        }
-    }
-    out
-}
-
 fn out_of_range(id: &str, s: &Spec<'_>, (step, c, value): (i64, usize, f64)) -> Issue {
     let actual = json!({"array": s.array, "cell": [c % s.cols, c / s.cols], "value": value as i64, "step": step});
     Issue {
@@ -283,7 +235,7 @@ pub fn check(form: &Value, entries: &[SealedEntry]) -> Vec<Issue> {
         match array(form, entries, id, &s) {
             Err(issue) => out.push(*issue),
             Ok(a) => out.extend(
-                excursions(&s, a)
+                excursions_by(a, |e| s.unpack(e[0], false).is_none().then_some(e[0]))
                     .into_iter()
                     .map(|e| out_of_range(id, &s, e)),
             ),
@@ -304,7 +256,9 @@ pub fn raised_at(form: &Value, t: i64) -> Vec<Issue> {
             continue;
         };
         let k = t.div_euclid(a["every"].as_i64().unwrap_or(1).max(1));
-        let begun = excursions(&s, a).into_iter().filter(|e| e.0 == k);
+        let blank = |e: &[f64]| s.unpack(e[0], false).is_none().then_some(e[0]);
+        let begun = excursions_by(a, blank).into_iter();
+        let begun = begun.filter(|e| e.0 == k);
         out.extend(begun.map(|e| out_of_range(id, &s, e)));
     }
     out
@@ -371,7 +325,10 @@ mod tests {
         });
         let s = spec(&form["items"]["g"]["params"]).unwrap().unwrap();
         assert_eq!(
-            excursions(&s, &form["arrays"]["d.cells"]),
+            excursions_by(&form["arrays"]["d.cells"], |e| s
+                .unpack(e[0], false)
+                .is_none()
+                .then_some(e[0])),
             [(0, 41, 7.0), (5, 2, 7.0)]
         );
         let first = raised_at(&form, 0);

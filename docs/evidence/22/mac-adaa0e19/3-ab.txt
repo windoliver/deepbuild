@@ -1,0 +1,66 @@
+== A/B of three suite files; A = b51d52cd3e4b7fc226e8934e01a0fbbb6e391b21 in its own checkout, B = adaa0e19d08810370d6ba5bca9fa3563b41d1d2f in its own checkout; the suites' temp binary folder is cleared before each round
+
+===== round A1 commit b51d52cd3e4b7fc226e8934e01a0fbbb6e391b21 tests/acceptance/1459/identifier.test.ts  start 23:13:50 load { 11.22 37.27 61.24 } thermal 1 screen-lock flag 0 front app [Windows App] pointer at x=431 y=145 (points, origin bottom-left of the main screen 1470x956)
+
+ RUN  v5.0.5 ~/private/dbc-22pa
+
+ ✓ tests/acceptance/1459/identifier.test.ts (1 test) 691620ms
+   ✓ AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped (1)
+     ✓ AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record 691485ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:13:51
+   Duration  692.00s (tests 100%)
+
+===== round A1 tests/acceptance/1459/identifier.test.ts exit=0 end 23:25:23 load { 32.92 52.63 62.12 } thermal 1 front app [Windows App]
+
+===== round A1 commit b51d52cd3e4b7fc226e8934e01a0fbbb6e391b21 tests/acceptance/1459/panel.test.ts  start 23:25:23 load { 32.92 52.63 62.12 } thermal 1 screen-lock flag 0 front app [Windows App] pointer at x=238 y=361 (points, origin bottom-left of the main screen 1470x956)
+
+ RUN  v5.0.5 ~/private/dbc-22pa
+
+ ✓ tests/acceptance/1459/panel.test.ts (1 test) 25826ms
+   ✓ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     ✓ AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 25696ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:25:25
+   Duration  26.00s (tests 100%)
+
+===== round A1 tests/acceptance/1459/panel.test.ts exit=0 end 23:25:51 load { 40.10 52.32 61.67 } thermal 1 front app [Windows App]
+
+===== round A1 commit b51d52cd3e4b7fc226e8934e01a0fbbb6e391b21 tests/acceptance/1172/rows.test.ts  start 23:25:52 load { 40.10 52.32 61.67 } thermal 1 screen-lock flag 0 front app [Windows App] pointer at x=238 y=361 (points, origin bottom-left of the main screen 1470x956)
+
+ RUN  v5.0.5 ~/private/dbc-22pa
+
+ ❯ tests/acceptance/1172/rows.test.ts (2 tests | 1 failed) 69866ms
+   ❯ #1172 Needs you shows questions and presents their cards (2)
+     ✓ AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 54982ms
+     × AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 14695ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask
+Error: BLOCKED: deep-app exited (SIGTERM) before its window: 
+ ❯ blocked tests/acceptance/1172/helpers.ts:34:56
+     32| });
+     33|
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     35| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     36| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1172/helpers.ts:128:65
+ ❯ rowFailures tests/acceptance/1172/rows.test.ts:15:15
+ ❯ tests/acceptance/1172/rows.test.ts:57:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  23:25:53
+   Duration  70.03s (tests 100%)
+
+/private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-45-implementation-e83eea/5a2c4c17-6cd0-4325-8d48-a9d4de6a2360/scratchpad/run-22p.sh: line 15: 25776 Terminated: 15          caffeinate -d -i -s -w $$  (wd: ~/private/deepbuild-core/.claude/worktrees/issue-45-implementation-e83eea)
+===== round A1 tests/acceptance/1172/rows.test.ts exit=1 end 23:27:03 load { 25.08 45.67 58.45 } thermal 1 front app [Windows App]

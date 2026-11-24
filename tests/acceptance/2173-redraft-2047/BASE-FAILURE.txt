@@ -1,0 +1,584 @@
+# #2173's blind redraft (#2047's sweep) on its base, a3db8f131256664d75a46bc876e7aed3ae9cce89 ("blind base for #2173:
+# main without the accesskit_macos row in scripts/repo-rules.json"), then on a stand-in fix, then with each twin and
+# each mutant laid over that fix. <checkout> stands for this checkout's path, <copy> for a scratch copy's, ~ for the
+# home folder.
+#
+#   node --test tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs
+#
+# Run on 2026-11-23 with Node v24.22.2 and cargo 1.99.1 (rustup's, from /opt/homebrew/opt/rustup/bin) on macOS, at a
+# one-minute load of about 170 to 210 on a shared Mac. Every run was made once, with node's spec reporter (shown,
+# NO_COLOR=1) and the proof lane's own reporter (scripts/proof-reporter.mjs) at once; its failures were judged as
+# scripts/proof-runs.mjs's atAssertion does (an AssertionError [ERR_ASSERTION] whose first stack frame after its
+# message is under the test paths). That judgement ends each run below.
+#
+# The base ran in this checkout. Every other run is in a scratch copy of it (every file git lists; a git repository of
+# its own whose index lists them all), where a probe outside the suite laid the stand-in fix (the base's
+# scripts/repo-rules.json with an accesskit_macos entry under crates/deep-app/Cargo.toml's macOS table, spec ^0.26
+# and a why) and then the twin's files, or a mutant of the base's scripts/repo-rules.mjs:
+#   carve-out    `if (name === 'accesskit_macos') continue;` before the deps lane judges each declared dependency
+#   skip-target  the cargo loop reads `pkg.dependencies.filter((d) => !d.target)`
+#   skip-npm     no package.json is read
+# The checkout was left as it was (git status shows only this folder).
+#
+# Summary (AC1 | AC2 issue's dependency | AC2 deep-app macOS table | AC2 package.json; time of the whole run)
+#   base          FAIL at assertion | pass | pass | pass                                         55 s
+#   stand-in fix  pass | pass | pass | pass                                                      43 s
+#   no-reasons    FAIL at assertion | pass | pass | pass                                         56 s
+#   hollow        pass | FAIL at assertion | FAIL at assertion | FAIL at assertion               37 s
+#   unnamed       FAIL at assertion | FAIL at assertion | FAIL at assertion | FAIL at assertion  26 s
+#   carve-out     pass | FAIL at assertion | pass | pass                                         27 s
+#   skip-target   FAIL at assertion | FAIL at assertion | FAIL at assertion | pass               38 s
+#   skip-npm      FAIL at assertion | pass | pass | FAIL at assertion                            28 s
+#
+# On the base AC1 fails on the issue's own line, the one failing line outside tests/acceptance/; 146 more under
+# tests/acceptance/ are set apart as #3139's. An earlier full set of the same runs, at a load of 270 to 430 and before
+# two message-only edits (whole lines in quoted output; AC2 quoting the deps lines about its manifest or dependency),
+# gave the same verdicts in 31 to 86 s per run.
+
+
+## The base, in this checkout: AC1 fails at its assertion on the issue's line; AC2 passes
+
+$ node --test tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs
+✖ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (29071.933333ms)
+ℹ 146 failing lines set apart as #3139's (each about a file under tests/acceptance/)
+✔ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (48519.731333ms)
+✔ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (0.556834ms)
+✔ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (1.007917ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 55115.766709
+
+✖ failing tests:
+
+test at tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs:13:1
+✖ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (29071.933333ms)
+  AssertionError [ERR_ASSERTION]: node scripts/repo-rules.mjs exits 1, not 0, and 1 of its failing lines is about files outside tests/acceptance/ (146 more under tests/acceptance/ set apart as #3139's). Those lines:
+  FAIL deps: crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies accesskit_macos ^0.26 is not in scripts/repo-rules.json
+  Its stderr:
+  (nothing)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs:21:10)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+# proof reporter, judged:
+FAIL  AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs)
+pass  AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos
+pass  AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency
+pass  AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency
+# node --test exit 1, 55.2 s
+
+
+## A stand-in fix (an accesskit_macos entry added to scripts/repo-rules.json, in a scratch copy): all four pass
+
+$ node --test tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs
+✔ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (16295.186375ms)
+ℹ 146 failing lines set apart as #3139's (each about a file under tests/acceptance/)
+✔ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (36345.800625ms)
+✔ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (0.392042ms)
+✔ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.319584ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 42851.860625
+
+# proof reporter, judged:
+pass  AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds
+pass  AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos
+pass  AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency
+pass  AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency
+# node --test exit 0, 43.0 s
+
+
+## The twin no-reasons over the stand-in fix: AC1 fails at its assertion
+
+$ node --test tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs
+✖ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (28892.772834ms)
+ℹ 221 failing lines set apart as #3139's (each about a file under tests/acceptance/)
+✔ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (49459.660542ms)
+✔ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (1.03275ms)
+✔ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.895542ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 56223.148125
+
+✖ failing tests:
+
+test at tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs:13:1
+✖ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (28892.772834ms)
+  AssertionError [ERR_ASSERTION]: node scripts/repo-rules.mjs exits 1, not 0, and 666 of its failing lines are about files outside tests/acceptance/ (221 more under tests/acceptance/ set apart as #3139's). Those lines:
+  FAIL secrets: packages/asks/sources.json:803:72: home path
+  FAIL secrets: packages/contracts/fixtures/host.undone@1/01.json:16:70: home path
+  FAIL secrets: packages/contracts/fixtures/host.undone@1/01.json:23:24: home path
+  FAIL secrets: packages/contracts/fixtures/host.undone@1/01.json:29:18: home path
+  FAIL secrets: packages/contracts/fixtures/host.undone@1/01.json:30:18: home path
+  FAIL secrets: packages/contracts/fixtures/sandbox.refused@1/01.json:14:16: home path
+  FAIL secrets: packages/contracts/fixtures/stack.served@1/01.json:10:18: home path
+  FAIL secrets: packages/contracts/fixtures/stack.served@1/01.json:75:20: home path
+  FAIL secrets: packages/contracts/fixtures/staged.undone@1/01.json:12:8: home path
+  FAIL secrets: packages/contracts/fixtures/start.approval@1/01.json:12:14: home path
+  FAIL secrets: packages/contracts/fixtures/start.approval@1/01.json:20:23: home path
+  FAIL secrets: packages/contracts/fixtures/start.refused@1/01.json:13:14: home path
+  FAIL secrets: packages/contracts/fixtures/start.started@1/01.json:13:14: home path
+  FAIL secrets: packages/contracts/fixtures/start.started@1/01.json:17:14: home path
+  FAIL secrets: packages/contracts/fixtures/start.started@1/01.json:19:18: home path
+  FAIL secrets: packages/contracts/fixtures/workspace.created@1/01.json:11:16: home path
+  FAIL secrets: packages/contracts/fixtures/workspace.moved@1/01.json:11:16: home path
+  FAIL secrets: packages/contracts/fixtures/workspace.moved@1/01.json:12:14: home path
+  FAIL secrets: tests/corpus-redact.test.mjs:15:93: home path
+  FAIL deps: package.json devDependencies @microsoft/api-extractor 7.60.0 is not in scripts/repo-rules.json
+  … and 646 more
+  Its stderr:
+  (nothing)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs:21:10)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+# proof reporter, judged:
+FAIL  AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs)
+pass  AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos
+pass  AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency
+pass  AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency
+# node --test exit 1, 56.4 s
+
+
+## The twin hollow over the stand-in fix: the three AC2 tests fail at their assertion
+
+$ node --test tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs
+✔ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (98.256166ms)
+✖ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (29511.629334ms)
+✖ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (0.230125ms)
+✖ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.144167ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 36412.646875
+
+✖ failing tests:
+
+test at tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:83:1
+✖ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (29511.629334ms)
+  AssertionError [ERR_ASSERTION]: With 1 accesskit_macos entry taken out of the copy's scripts/repo-rules.json for crates/deep-app/Cargo.toml, which names accesskit_macos, node scripts/repo-rules.mjs exited 0 and printed no failing deps line naming crates/deep-app/Cargo.toml and accesskit_macos. None of its 1 deps lines names either; the first:
+  PASS deps: every dependency the manifests name is in scripts/repo-rules.json
+  Its stderr:
+  (nothing)
+      at assertNamed (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:77:10)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:85:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:90:1
+✖ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (0.230125ms)
+  AssertionError [ERR_ASSERTION]: With blind-planted-2173 = "0.1" planted in crates/deep-app/Cargo.toml's [target.'cfg(target_os = "macos")'.dependencies] table (found), node scripts/repo-rules.mjs exited 0 and printed no failing deps line naming crates/deep-app/Cargo.toml and blind-planted-2173. None of its 1 deps lines names either; the first:
+  PASS deps: every dependency the manifests name is in scripts/repo-rules.json
+  Its stderr:
+  (nothing)
+      at assertNamed (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:77:10)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:92:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:95:1
+✖ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.144167ms)
+  AssertionError [ERR_ASSERTION]: With blind-2173-planted/package.json planted, naming blind-planted-2173-npm 1.0.0 under dependencies, node scripts/repo-rules.mjs exited 0 and printed no failing deps line naming blind-2173-planted/package.json and blind-planted-2173-npm. None of its 1 deps lines names either; the first:
+  PASS deps: every dependency the manifests name is in scripts/repo-rules.json
+  Its stderr:
+  (nothing)
+      at assertNamed (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:77:10)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:97:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+# proof reporter, judged:
+pass  AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds
+FAIL  AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs)
+FAIL  AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs)
+FAIL  AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs)
+# node --test exit 1, 36.5 s
+
+
+## The twin unnamed over the stand-in fix: the three AC2 tests fail at their assertion (AC1 too)
+
+$ node --test tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs
+✖ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (89.1655ms)
+✖ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (20271.374ms)
+✖ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (0.526291ms)
+✖ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.481291ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 0
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25925.536083
+
+✖ failing tests:
+
+test at tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs:13:1
+✖ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (89.1655ms)
+  AssertionError [ERR_ASSERTION]: node scripts/repo-rules.mjs exits 1, not 0, and 1 of its failing lines is about files outside tests/acceptance/ (0 more under tests/acceptance/ set apart as #3139's). Those lines:
+  FAIL deps: a dependency has no entry in scripts/repo-rules.json
+  Its stderr:
+  (nothing)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs:21:10)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:83:1
+✖ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (20271.374ms)
+  AssertionError [ERR_ASSERTION]: With 1 accesskit_macos entry taken out of the copy's scripts/repo-rules.json for crates/deep-app/Cargo.toml, which names accesskit_macos, node scripts/repo-rules.mjs exited 1 and printed no failing deps line naming crates/deep-app/Cargo.toml and accesskit_macos. None of its 1 deps lines names either; the first:
+  FAIL deps: a dependency has no entry in scripts/repo-rules.json
+  Its stderr:
+  (nothing)
+      at assertNamed (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:77:10)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:85:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:90:1
+✖ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (0.526291ms)
+  AssertionError [ERR_ASSERTION]: With blind-planted-2173 = "0.1" planted in crates/deep-app/Cargo.toml's [target.'cfg(target_os = "macos")'.dependencies] table (found), node scripts/repo-rules.mjs exited 1 and printed no failing deps line naming crates/deep-app/Cargo.toml and blind-planted-2173. None of its 1 deps lines names either; the first:
+  FAIL deps: a dependency has no entry in scripts/repo-rules.json
+  Its stderr:
+  (nothing)
+      at assertNamed (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:77:10)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:92:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:95:1
+✖ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.481291ms)
+  AssertionError [ERR_ASSERTION]: With blind-2173-planted/package.json planted, naming blind-planted-2173-npm 1.0.0 under dependencies, node scripts/repo-rules.mjs exited 1 and printed no failing deps line naming blind-2173-planted/package.json and blind-planted-2173-npm. None of its 1 deps lines names either; the first:
+  FAIL deps: a dependency has no entry in scripts/repo-rules.json
+  Its stderr:
+  (nothing)
+      at assertNamed (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:77:10)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:97:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+# proof reporter, judged:
+FAIL  AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs)
+FAIL  AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs)
+FAIL  AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs)
+FAIL  AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs)
+# node --test exit 1, 26.0 s
+
+
+## The mutant carve-out (not kept) over the stand-in fix: only the first AC2 test fails
+
+$ node --test tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs
+✔ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (13376.44925ms)
+ℹ 146 failing lines set apart as #3139's (each about a file under tests/acceptance/)
+✖ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (23038.846167ms)
+✔ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (0.392209ms)
+✔ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.278958ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27247.174833
+
+✖ failing tests:
+
+test at tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:83:1
+✖ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (23038.846167ms)
+  AssertionError [ERR_ASSERTION]: With 1 accesskit_macos entry taken out of the copy's scripts/repo-rules.json for crates/deep-app/Cargo.toml, which names accesskit_macos, node scripts/repo-rules.mjs exited 1 and printed no failing deps line naming crates/deep-app/Cargo.toml and accesskit_macos. Its 1 deps lines naming either:
+  FAIL deps: crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies blind-planted-2173 ^0.1 is not in scripts/repo-rules.json
+  Its stderr:
+  (nothing)
+      at assertNamed (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:77:10)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:85:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+# proof reporter, judged:
+pass  AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds
+FAIL  AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs)
+pass  AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency
+pass  AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency
+# node --test exit 1, 27.4 s
+
+
+## The mutant skip-target (not kept) over the stand-in fix: the first two AC2 tests fail (AC1 too)
+
+$ node --test tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs
+✖ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (19364.108375ms)
+ℹ 146 failing lines set apart as #3139's (each about a file under tests/acceptance/)
+✖ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (33824.86675ms)
+✖ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (1.453208ms)
+✔ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.473083ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 37752.843625
+
+✖ failing tests:
+
+test at tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs:13:1
+✖ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (19364.108375ms)
+  AssertionError [ERR_ASSERTION]: node scripts/repo-rules.mjs exits 1, not 0, and 64 of its failing lines are about files outside tests/acceptance/ (146 more under tests/acceptance/ set apart as #3139's). Those lines:
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-user-notifications, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-core-foundation, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-core-graphics, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies raw-window-handle, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-screen-capture-kit, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-core-media, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies block2, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies gpui-pre-apple, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-quartz-core, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies pollster, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies wgpu, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies deep-effects-render, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies libc, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies deep-scene3d-render, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies deep-canvas-scene3d, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies deep-canvas-motion, which crates/deep-app/Cargo.toml doesn't declare
+  … and 44 more
+  Its stderr:
+  (nothing)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs:21:10)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:83:1
+✖ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (33824.86675ms)
+  AssertionError [ERR_ASSERTION]: With 1 accesskit_macos entry taken out of the copy's scripts/repo-rules.json for crates/deep-app/Cargo.toml, which names accesskit_macos, node scripts/repo-rules.mjs exited 1 and printed no failing deps line naming crates/deep-app/Cargo.toml and accesskit_macos. Its 22 deps lines naming either:
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-app-kit, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-foundation, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies security-framework, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-user-notifications, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-core-foundation, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-core-graphics, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies raw-window-handle, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-screen-capture-kit, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-core-media, which crates/deep-app/Cargo.toml doesn't declare
+  … and 12 more
+  Its stderr:
+  (nothing)
+      at assertNamed (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:77:10)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:85:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:90:1
+✖ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (1.453208ms)
+  AssertionError [ERR_ASSERTION]: With blind-planted-2173 = "0.1" planted in crates/deep-app/Cargo.toml's [target.'cfg(target_os = "macos")'.dependencies] table (found), node scripts/repo-rules.mjs exited 1 and printed no failing deps line naming crates/deep-app/Cargo.toml and blind-planted-2173. Its 22 deps lines naming either:
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-app-kit, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-foundation, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies security-framework, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-user-notifications, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-core-foundation, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-core-graphics, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies raw-window-handle, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-screen-capture-kit, which crates/deep-app/Cargo.toml doesn't declare
+  FAIL deps: scripts/repo-rules.json lists crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies objc2-core-media, which crates/deep-app/Cargo.toml doesn't declare
+  … and 12 more
+  Its stderr:
+  (nothing)
+      at assertNamed (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:77:10)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:92:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+# proof reporter, judged:
+FAIL  AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs)
+FAIL  AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs)
+FAIL  AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs)
+pass  AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency
+# node --test exit 1, 37.8 s
+
+
+## The mutant skip-npm (not kept) over the stand-in fix: the third AC2 test fails (AC1 too)
+
+$ node --test tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs
+✖ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (12100.012833ms)
+ℹ 105 failing lines set apart as #3139's (each about a file under tests/acceptance/)
+✔ AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos (22091.850917ms)
+✔ AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency (0.424917ms)
+✖ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.834458ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27810.350916
+
+✖ failing tests:
+
+test at tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs:13:1
+✖ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (12100.012833ms)
+  AssertionError [ERR_ASSERTION]: node scripts/repo-rules.mjs exits 1, not 0, and 176 of its failing lines are about files outside tests/acceptance/ (105 more under tests/acceptance/ set apart as #3139's). Those lines:
+  FAIL deps: scripts/repo-rules.json lists package.json devDependencies @stryker-mutator/core, which package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists package.json devDependencies @types/node, which package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists package.json devDependencies fast-check, which package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists package.json devDependencies typescript, which package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists package.json devDependencies jest, which package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists package.json devDependencies vitest, which package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists package.json devDependencies @types/better-sqlite3, which package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists package.json devDependencies @microsoft/api-extractor, which package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists package.json devDependencies gpt-tokenizer, which package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists spikes/hub-core/package.json dependencies effect, which spikes/hub-core/package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists spikes/hub-core/package.json devDependencies @effect/language-service, which spikes/hub-core/package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists spikes/hub-core/package.json devDependencies @types/node, which spikes/hub-core/package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists spikes/hub-core/package.json devDependencies typescript, which spikes/hub-core/package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists packages/record/package.json dependencies @deepbuild/contracts, which packages/record/package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists packages/record/package.json dependencies @deepbuild/evidence, which packages/record/package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists packages/record/package.json dependencies better-sqlite3, which packages/record/package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists packages/verdicts/package.json dependencies @deepbuild/contracts, which packages/verdicts/package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists packages/verdicts/package.json dependencies @deepbuild/record, which packages/verdicts/package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists packages/extension-host/package.json dependencies @deepbuild/adapters, which packages/extension-host/package.json doesn't declare
+  FAIL deps: scripts/repo-rules.json lists packages/extension-host/package.json dependencies @deepbuild/asks, which packages/extension-host/package.json doesn't declare
+  … and 156 more
+  Its stderr:
+  (nothing)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs:21:10)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:95:1
+✖ AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency (0.834458ms)
+  AssertionError [ERR_ASSERTION]: With blind-2173-planted/package.json planted, naming blind-planted-2173-npm 1.0.0 under dependencies, node scripts/repo-rules.mjs exited 1 and printed no failing deps line naming blind-2173-planted/package.json and blind-planted-2173-npm. None of its 205 deps lines names either; the first:
+  FAIL deps: crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies accesskit_macos ^0.26 is not in scripts/repo-rules.json
+  FAIL deps: crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies blind-planted-2173 ^0.1 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/851/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/851/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/189/carry/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/189/carry/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/189/saves/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/189/saves/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/192/dungeon/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  FAIL deps: tests/acceptance/192/dungeon/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  … and 195 more
+  Its stderr:
+  (nothing)
+      at assertNamed (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:77:10)
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs:97:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+# proof reporter, judged:
+FAIL  AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs)
+pass  AC2 #2173.2db46adb with its entry taken out of scripts/repo-rules.json, deep-app's accesskit_macos fails the deps lane, naming crates/deep-app/Cargo.toml and accesskit_macos
+pass  AC2 #2173.2db46adb a dependency planted in crates/deep-app/Cargo.toml's macOS table with no entry fails the deps lane, naming the manifest and the dependency
+FAIL  AC2 #2173.2db46adb a package.json planted with a dependency and no entry fails the deps lane, naming the manifest and the dependency
+      at its assertion (AssertionError [ERR_ASSERTION], first frame tests/acceptance/2173-redraft-2047/ac2-missing-entry.test.mjs)
+# node --test exit 1, 27.9 s

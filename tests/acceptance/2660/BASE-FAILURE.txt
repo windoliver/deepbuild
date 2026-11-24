@@ -1,0 +1,223 @@
+#2660 on the base: b6b99ad8c ("Merge pull request #3003 … fix-2977-concurrent-warm"), the checkout's HEAD.
+Run on 2026-11-21 (the logs' file dates; the run's own log prints only its times) on a Mac17,10 with rustc 1.99.1
+(58cf8f9c3 2026-10-13), in a checkout detached at that commit holding only this suite's files (untracked) and the
+README's [[test]] entries in the two manifests (uncommitted). Build: cargo's test profile as the workspace's Cargo.toml
+sets the dev profile, with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1. The run went through
+scripts/lease, which found no built CLI and ran it unleased. The machine is shared and was loaded throughout; the
+readings are counts and don't move with load.
+
+Every test file fails on the base, each for the reason its criterion names:
+- layout_marks.rs (AC1 #2660.d3570005): the build makes 139685 allocations for 10000 marks. Its draw list's hash
+  matches the fixture's, and it fails at its last assertion: 0 fewer than the merge base's 139685, where at least
+  50,000 fewer are owed.
+- fast_path.rs (AC2 #2660.1b678fb1): the third one-item change, taken by the fast path, asks for 195022 bytes in 2711
+  allocations; a copy of the frame's two text maps alone asks for 137520 bytes in 2334. It fails naming the bytes,
+  where under 65536 are owed.
+- check_templates.rs (AC3 #2660.c8534ab1): the check names all 200 templates and asks for 1905661789 bytes in 2559578
+  allocations, 450.1 times the document's 4234091 bytes. It fails at the limit of 8388608 bytes.
+- hover.rs (AC4 #2660.86f235d7): 995 of the 999 moves after the first allocate, 2994950 allocations in all, move 1
+  first with 3010 allocations of 623800 bytes; 839 moves hover an item. It prints the base's hover for each move, then
+  fails at its allocation check.
+- hover_planted.rs (AC4's planted scope): doesn't compile. Planted has no field named keeps_targets_across_patch
+  (E0560): the field is the planted scope.
+- shape.rs (AC5 #2660.732be9a5, the text): a warm shape of a text that fits builds its key 2 times (2 allocations of
+  the text's 48 bytes, 2 allocations in all). It fails: once is owed.
+- mesh.rs (AC5, the mesh): doesn't compile. deep_marks_gpui has no function path (E0423; E0603 is the same name
+  reaching that crate's private import of the path module): the function is what the test counts through.
+- terminal.rs (AC6 #2660.8d2a770c): 1 MB of colored output makes 424317 allocations and leaves the grid
+  782133f73890ddd5. The grid matches the fixture's, and it fails at its last assertion: at most 212158 (half) are owed.
+alloc.rs and hover_doc.rs are modules of those binaries and hold no test. AC7 names no new test and was not run.
+
+Below, each command and the lines of its log that show the failure, unchanged. A line in square brackets marks what was
+left out: cargo's Compiling lines (they hold the checkout's absolute path), the warnings in crates this suite doesn't
+touch, and the one long line "base hover reading: [...]", which after its label is fixtures/hover-base.json byte for
+byte (sha256 030dab89207a956a8b0fe182762fc673e124728fa82fca723490f9382d38e923).
+
+----- base-run.log: the head, the toolchain, the machine, each step's start, load and exit status -----
+[line 1 left out: the lease script's note that the run is unleased, with an absolute path]
+base checkout head b6b99ad8c; rustc 1.99.1 (58cf8f9c3 2026-10-13); Mac17,10
+== marks-render: layout_marks fast_path check_templates hover shape 13:39:35 load 105.29 126.33 97.21
+marks-render exit 101
+== marks-render: hover_planted 13:42:36 load 94.23 110.06 95.79
+hover_planted exit 101
+== marks-render: mesh 13:42:37 load 94.23 110.06 95.79
+mesh exit 101
+== replica: terminal 13:42:38 load 94.23 110.06 95.79
+terminal exit 101
+== done 13:43:55 load 69.54 98.44 92.55
+base-run finished exit 0 at 13:43:55
+
+----- base-marks-render.log: check_templates.rs, fast_path.rs, hover.rs, layout_marks.rs, shape.rs, in the order cargo ran them -----
+$ cargo test --locked -j 8 -p deep-marks-render --no-fail-fast --test acceptance_2660_layout_marks --test acceptance_2660_fast_path --test acceptance_2660_check_templates --test acceptance_2660_hover --test acceptance_2660_shape -- --nocapture
+[Compiling lines and warnings left out]
+    Finished `test` profile [unoptimized] target(s) in 2m 57s
+[a future-incompatibility warning left out]
+     Running ../../tests/acceptance/2660/check_templates.rs (target/debug/deps/acceptance_2660_check_templates-665bded86c498180)
+
+running 1 test
+check: 1905661789 bytes in 2559578 allocations (450.1 copies of the 4234091-byte document); 200 issues
+
+thread 'ac3_a_check_of_200_templates_beside_4_mib_of_description_allocates_under_8_mib' (173658578) panicked at crates/deep-marks-render/../../tests/acceptance/2660/check_templates.rs:76:5:
+the check allocated 1905661789 bytes in 2559578 allocations, 450.1 times the document's 4234091 bytes; under 8388608 bytes are owed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test ac3_a_check_of_200_templates_beside_4_mib_of_description_allocates_under_8_mib ... FAILED
+
+failures:
+
+failures:
+    ac3_a_check_of_200_templates_beside_4_mib_of_description_allocates_under_8_mib
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+error: test failed, to rerun pass `-p deep-marks-render --test acceptance_2660_check_templates`
+     Running ../../tests/acceptance/2660/fast_path.rs (target/debug/deps/acceptance_2660_fast_path-9947209dcafc01e3)
+
+running 1 test
+one-item change: 195022 bytes in 2711 allocations (a copy of the two text maps alone: 137520 bytes in 2334 allocations)
+
+thread 'ac2_a_one_item_change_on_the_fast_path_allocates_under_64_kb' (173658773) panicked at crates/deep-marks-render/../../tests/acceptance/2660/fast_path.rs:114:5:
+a one-item change on the fast path allocated 195022 bytes in 2711 allocations; under 65536 bytes are owed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test ac2_a_one_item_change_on_the_fast_path_allocates_under_64_kb ... FAILED
+
+failures:
+
+failures:
+    ac2_a_one_item_change_on_the_fast_path_allocates_under_64_kb
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+error: test failed, to rerun pass `-p deep-marks-render --test acceptance_2660_fast_path`
+     Running ../../tests/acceptance/2660/hover.rs (target/debug/deps/acceptance_2660_hover-dce729e60055434c)
+
+running 1 test
+995 of 999 moves after the first allocated, 2994950 allocations in all; 839 moves hovered an item
+[the line "base hover reading: [...]" left out: fixtures/hover-base.json, byte for byte after its label]
+
+thread 'ac4_pointer_moves_with_nothing_changed_allocate_nothing_after_the_first_and_hit_what_the_base_hits' (173658939) panicked at crates/deep-marks-render/../../tests/acceptance/2660/hover.rs:58:9:
+995 of the 999 moves after the first allocated (2994950 allocations in all); move 1 first, 3010 allocations of 623800 bytes
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test ac4_pointer_moves_with_nothing_changed_allocate_nothing_after_the_first_and_hit_what_the_base_hits ... FAILED
+
+failures:
+
+failures:
+    ac4_pointer_moves_with_nothing_changed_allocate_nothing_after_the_first_and_hit_what_the_base_hits
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+error: test failed, to rerun pass `-p deep-marks-render --test acceptance_2660_hover`
+     Running ../../tests/acceptance/2660/layout_marks.rs (target/debug/deps/acceptance_2660_layout_marks-42d26bd217774bcd)
+
+running 1 test
+build: 139685 allocations, 16881063 bytes; 10000 marks; draw list main:10000:e58041e1c69a8c26bd5592be2ca43975
+
+thread 'ac1_a_laid_out_mark_set_builds_with_50000_fewer_allocations_and_the_same_draw_list' (173659097) panicked at crates/deep-marks-render/../../tests/acceptance/2660/layout_marks.rs:100:5:
+the build made 139685 heap allocations, 0 fewer than the merge base's 139685; at least 50,000 fewer are owed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test ac1_a_laid_out_mark_set_builds_with_50000_fewer_allocations_and_the_same_draw_list ... FAILED
+
+failures:
+
+failures:
+    ac1_a_laid_out_mark_set_builds_with_50000_fewer_allocations_and_the_same_draw_list
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `-p deep-marks-render --test acceptance_2660_layout_marks`
+     Running ../../tests/acceptance/2660/shape.rs (target/debug/deps/acceptance_2660_shape-d1b304f524451e8c)
+
+running 1 test
+warm shape: 2 key builds (allocations of the text's 48 bytes), 2 allocations in all
+
+thread 'ac5_a_warm_shape_of_a_text_that_fits_builds_its_key_once' (173659160) panicked at crates/deep-marks-render/../../tests/acceptance/2660/shape.rs:48:5:
+a warm shape of a text that fits built its key 2 times (copies of its 48 bytes); once is owed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test ac5_a_warm_shape_of_a_text_that_fits_builds_its_key_once ... FAILED
+
+failures:
+
+failures:
+    ac5_a_warm_shape_of_a_text_that_fits_builds_its_key_once
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p deep-marks-render --test acceptance_2660_shape`
+error: 5 targets failed:
+    `-p deep-marks-render --test acceptance_2660_check_templates`
+    `-p deep-marks-render --test acceptance_2660_fast_path`
+    `-p deep-marks-render --test acceptance_2660_hover`
+    `-p deep-marks-render --test acceptance_2660_layout_marks`
+    `-p deep-marks-render --test acceptance_2660_shape`
+
+----- base-hover-planted.log: hover_planted.rs -----
+$ cargo test --locked -j 8 -p deep-marks-render --no-fail-fast --test acceptance_2660_hover_planted -- --nocapture
+[warnings and the Compiling line left out]
+error[E0560]: struct `deep_canvas::scope::Planted` has no field named `keeps_targets_across_patch`
+  --> crates/deep-marks-render/../../tests/acceptance/2660/hover_planted.rs:13:9
+   |
+13 |         keeps_targets_across_patch: true,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ `deep_canvas::scope::Planted` does not have this field
+   |
+   = note: available fields are: `line_scroll_pans`, `commit_every_move`, `pick_mid_gesture`, `full_screen_only_3d`, `esc_to_root`, `pick_selects`
+
+For more information about this error, try `rustc --explain E0560`.
+error: could not compile `deep-marks-render` (test "acceptance_2660_hover_planted") due to 1 previous error
+
+----- base-mesh.log: mesh.rs -----
+$ cargo test --locked -j 8 -p deep-marks-render --no-fail-fast --test acceptance_2660_mesh -- --nocapture
+[warnings and the Compiling line left out]
+error[E0423]: cannot find function `path` in crate `deep_marks_gpui`
+  --> crates/deep-marks-render/../../tests/acceptance/2660/mesh.rs:46:62
+   |
+46 |     let (path, counted) = alloc::counted(|| deep_marks_gpui::path(&mesh, offset));
+   |                                                              ^^^^ not found in `deep_marks_gpui`
+   |
+   = note: a module named `deep_marks_gpui::path` exists in another namespace
+
+error[E0603]: module `path` is private
+  --> crates/deep-marks-render/../../tests/acceptance/2660/mesh.rs:46:62
+   |
+46 |     let (path, counted) = alloc::counted(|| deep_marks_gpui::path(&mesh, offset));
+   |                                                              ^^^^ private module
+   |
+note: the module `path` is defined here
+  --> crates/deep-marks-gpui/src/lib.rs:6:31
+   |
+ 6 | use deep_canvas_marks::path::{self, Mesh, Polyline};
+   |                               ^^^^
+help: import `path` directly
+   |
+46 -     let (path, counted) = alloc::counted(|| deep_marks_gpui::path(&mesh, offset));
+46 +     let (path, counted) = alloc::counted(|| deep_canvas_marks::path(&mesh, offset));
+   |
+
+Some errors have detailed explanations: E0423, E0603.
+For more information about an error, try `rustc --explain E0423`.
+error: could not compile `deep-marks-render` (test "acceptance_2660_mesh") due to 2 previous errors
+
+----- base-terminal.log: terminal.rs -----
+$ cargo test --locked -j 8 -p deep-replica --no-fail-fast --test acceptance_2660_terminal -- --nocapture
+[Compiling lines and warnings left out]
+    Finished `test` profile [unoptimized] target(s) in 1m 17s
+[a future-incompatibility warning left out]
+     Running ../../tests/acceptance/2660/terminal.rs (target/debug/deps/acceptance_2660_terminal-027b900be9eca9f4)
+
+running 1 test
+1 MB of colored output: 424317 allocations, 26875416 bytes; grid 782133f73890ddd5
+
+thread 'ac6_a_megabyte_of_colored_output_allocates_half_the_base_and_leaves_the_same_grid' (173679882) panicked at crates/deep-replica/../../tests/acceptance/2660/terminal.rs:105:5:
+1 MB of colored output made 424317 heap allocations; the merge base made 424317, and at most 212158 (half) are owed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test ac6_a_megabyte_of_colored_output_allocates_half_the_base_and_leaves_the_same_grid ... FAILED
+
+failures:
+
+failures:
+    ac6_a_megabyte_of_colored_output_allocates_half_the_base_and_leaves_the_same_grid
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p deep-replica --test acceptance_2660_terminal`
+error: 1 target failed:
+    `-p deep-replica --test acceptance_2660_terminal`

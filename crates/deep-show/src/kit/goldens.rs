@@ -33,79 +33,6 @@ pub enum Render {
     Unfit(String),
 }
 
-/// The machine's GPU lease: one kit or export at a time draws on the GPU. Held until dropped.
-pub struct GpuLease(Option<PathBuf>);
-
-impl GpuLease {
-    pub fn take() -> GpuLease {
-        Self::acquire(Some(600))
-    }
-
-    /// #157: the lease for an export, however long its holder keeps it, so a second export waits
-    /// for it instead of sharing the GPU.
-    pub fn wait() -> GpuLease {
-        Self::acquire(None)
-    }
-
-    fn acquire(tries: Option<usize>) -> GpuLease {
-        let dir = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir)
-            .join(".cache")
-            .join("deepbuild-gpu");
-        let _ = std::fs::create_dir_all(&dir);
-        let file = dir.join("lease");
-        for _ in 0..tries.unwrap_or(usize::MAX) {
-            match std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&file)
-            {
-                Ok(mut f) => {
-                    use std::io::Write as _;
-                    let _ = write!(f, "{}", std::process::id());
-                    return GpuLease(Some(file));
-                }
-                Err(_) => {
-                    // A lease whose holder is gone was left by a killed run.
-                    let holder: Option<i32> = std::fs::read_to_string(&file)
-                        .ok()
-                        .and_then(|s| s.trim().parse().ok());
-                    // #231: the kit's laws export inside the kit's own lease: this process
-                    // holds it already.
-                    if holder == i32::try_from(std::process::id()).ok() {
-                        return GpuLease(None);
-                    }
-                    let alive = holder.is_some_and(|pid| {
-                        std::process::Command::new("kill")
-                            .args(["-0", &pid.to_string()])
-                            .status()
-                            .is_ok_and(|s| s.success())
-                    });
-                    if !alive {
-                        let _ = std::fs::remove_file(&file);
-                        continue;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(if tries.is_some() {
-                        500
-                    } else {
-                        50
-                    }));
-                }
-            }
-        }
-        GpuLease(None)
-    }
-}
-
-impl Drop for GpuLease {
-    fn drop(&mut self) {
-        if let Some(f) = &self.0 {
-            let _ = std::fs::remove_file(f);
-        }
-    }
-}
-
 /// The kinds whose items only a GPU pass fills, with the pass's shader.
 fn passes(hub: &Hub<'_>) -> BTreeMap<String, &'static str> {
     hub.startup
@@ -143,6 +70,8 @@ pub fn render(hub: &Hub<'_>, doc: &Value, backend: &str, t: i64) -> Render {
             return Render::Blocked(if gpu_only { "gpu pixels" } else { "pixels" });
         }
         "vello_cpu" if gpu_only => return Render::Blocked("gpu pixels"),
+        // #2133, #3219: with no GPU lease held once the wait ended, a GPU case draws nothing.
+        "gpu" if super::lease::unleased() => return Render::Blocked("gpu lease"),
         _ => {}
     }
     let sealed = &hub.startup.sealed;
@@ -418,7 +347,8 @@ impl<'a> Hub<'a> {
         let Some(f) = self.fixture_entry(fixture) else {
             return json!({"outcome": "refused", "code": "ref_unresolved", "fixture": fixture});
         };
-        let lease = (backend == "gpu").then(GpuLease::take);
+        let lease =
+            (backend == "gpu").then(|| super::lease::kit(self.scenario.module_planted.as_deref()));
         let out = self.judge_golden(&f, backend).reply;
         drop(lease);
         out
@@ -443,7 +373,8 @@ impl<'a> Hub<'a> {
         let Some(f) = self.fixture_entry(fixture) else {
             return json!({"outcome": "refused", "code": "ref_unresolved", "fixture": fixture});
         };
-        let lease = (backend == "gpu").then(GpuLease::take);
+        let lease =
+            (backend == "gpu").then(|| super::lease::kit(self.scenario.module_planted.as_deref()));
         let doc = stamped(&f.document);
         let rendered = render(self, &doc, backend, 0);
         drop(lease);
@@ -657,7 +588,8 @@ impl<'a> Hub<'a> {
                 recorded.dedup();
                 return json!({"outcome": "refused", "code": "wrong_commit", "commit": now, "recorded": recorded});
             }
-            let lease = (backend == "gpu").then(GpuLease::take);
+            let lease = (backend == "gpu")
+                .then(|| super::lease::kit(self.scenario.module_planted.as_deref()));
             let mut fixtures = Vec::new();
             for (fixture, _) in &changed {
                 let Some(f) = self.fixture_entry(fixture) else {
