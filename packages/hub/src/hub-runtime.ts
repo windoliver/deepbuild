@@ -9,7 +9,8 @@ import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decision
 import type { Host } from '@deepbuild/supervisor';
 import { writtenOf } from '@deepbuild/wiki';
 import { renamedSince } from '@deepbuild/workspaces';
-import { Core, type CoreProviders } from './core.js';
+import { Core } from './core.js';
+import type { CoreProviders } from './core-providers.js';
 import { openKinds } from './kinds.js';
 import { pageClaims, type IndexFill } from './search.js';
 import { MEMORY_TRANSCRIPTS, projectOf } from './memory.js';

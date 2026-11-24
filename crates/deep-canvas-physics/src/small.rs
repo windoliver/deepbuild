@@ -58,7 +58,8 @@ fn least_rate(w: &World, hz: f64) -> Option<f64> {
 /// any other body. A backend that keeps a pair's contact points within a share of
 /// `solver.length_unit` reads it, since such a body is thinner than that distance.
 pub fn unit_extent(w: &World, b: &Body) -> Option<f64> {
-    let extent = crate::fast::thinnest(w, b, usize::MAX).filter(|_| b.kind == BodyKind::Dynamic);
+    let extent =
+        crate::fast::thinnest(w, b, b.shapes.len()).filter(|_| b.kind == BodyKind::Dynamic);
     extent.filter(|e| *e < w.solver.length_unit * LEAST_SHARE)
 }
 

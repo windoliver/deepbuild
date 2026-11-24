@@ -944,6 +944,21 @@ impl<'a> Hub<'a> {
                         _ => {}
                     }
                 }
+                // #1219: the building module's kind rules on a hall's items, each run listed
+                // with whether it holds; a rule that fails raises its issue.
+                if sealed.modules.iter().any(|m| m.name == "building") {
+                    let planted = self.scenario.module_planted.as_deref();
+                    let runs =
+                        deep_canvas_scene3d::building::timber::rules(&checked.lowered, planted);
+                    for run in runs {
+                        ran.insert((run.rule.to_string(), "building".to_string()));
+                        results.push(json!({"doc": doc, "item": run.item, "rule": run.rule, "holds": run.issue.is_none()}));
+                        if let Some(issue) = run.issue {
+                            broken = true;
+                            raised.push(issue.to_json());
+                        }
+                    }
+                }
             }
             if let Some((m, check)) = registered {
                 let mut input = r.check.clone();
@@ -1170,6 +1185,8 @@ impl<'a> Hub<'a> {
         if registered.is_some_and(|(_, c)| c.report.is_some() || c.frames.is_some()) {
             row.insert("results".into(), Value::Array(results));
             row.insert("timing".into(), Value::Object(timing));
+        } else if rules && !results.is_empty() {
+            row.insert("results".into(), Value::Array(results));
         }
         // #1938: a pixel row names the environment it holds in: one fingerprint, or one a
         // deliverable where they differ.

@@ -565,15 +565,17 @@ pub fn pixel(
             present |= 1 << c;
         }
     }
-    let (mut first, mut second) = (usize::MAX, usize::MAX);
+    // No category yet: one past the last.
+    const NONE: usize = MAX_ROLES + 1;
+    let (mut first, mut second) = (NONE, NONE);
     for c in 0..=MAX_ROLES {
         if present >> c & 1 == 0 {
             continue;
         }
-        if first == usize::MAX || share[c] > share[first] {
+        if first == NONE || share[c] > share[first] {
             second = first;
             first = c;
-        } else if second == usize::MAX || share[c] > share[second] {
+        } else if second == NONE || share[c] > share[second] {
             second = c;
         }
     }
@@ -584,7 +586,7 @@ pub fn pixel(
             colors[OUT as usize]
         };
     }
-    if second == usize::MAX || g.edge <= 0.0 {
+    if second == NONE || g.edge <= 0.0 {
         return colors[first];
     }
     // The signed distance in px to where the runner-up's share overtakes, from the difference
