@@ -26,6 +26,9 @@ const EVERY = 100;
 const HEAP_PER_1000 = 200_000;
 const RSS_PER_1000 = 2_000_000;
 const STEP_MS = 60_000;
+/** How long a cycle gives the claim's verdict before its agent stops again, past the stop's own hold; and at all. */
+const TURN_MS = 15_000;
+const LATE_MS = 300_000;
 /** Read now keeps a source's answer from the last 2 s, so a view is read again no sooner than this. */
 const KEPT_MS = 2_100;
 /** Each cycle's set of 100 names is new, drawn from these 113: so an hour's rollup holds at most 113 series. */
@@ -124,6 +127,8 @@ async function inspect(url) {
       let heapBytes = 0;
       for (const session of threads()) {
         await timersOf(session);
+        // What a native object held, such as a finished statement's row function, goes on its thread's next turn.
+        await sleep(100);
         await send('HeapProfiler.collectGarbage', {}, session);
         await send('HeapProfiler.collectGarbage', {}, session);
         heapBytes += await value('process.memoryUsage().heapUsed', session);
@@ -346,9 +351,9 @@ function connect(to, hello) {
     });
   });
 }
-const within = (promise, what) => {
+const within = (promise, what, ms = STEP_MS) => {
   let timer;
-  const late = new Promise((_, reject) => { timer = setTimeout(() => reject(new Blocked(`${what}: nothing within ${STEP_MS / 1000} s`)), STEP_MS).unref(); });
+  const late = new Promise((_, reject) => { timer = setTimeout(() => reject(new Blocked(`${what}: nothing within ${ms / 1000} s`)), ms).unref(); });
   return Promise.race([promise, late]).finally(() => clearTimeout(timer));
 };
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -651,10 +656,10 @@ async function run({ cli, home, cycles, killed }) {
       if (at >= 0) wanted.splice(at, 1)[0].done(event);
       else seen.push(event);
     };
-    const frame = (what, test) => {
+    const frame = (what, test, ms) => {
       const at = seen.findIndex(test);
       if (at >= 0) return Promise.resolve(seen.splice(at, 1)[0]);
-      return within(new Promise((done) => wanted.push({ test, done })), what);
+      return within(new Promise((done) => wanted.push({ test, done })), what, ms);
     };
     const startOf = (pid) => execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } }).trim();
     const parent = { pid: process.pid, start: startOf(process.pid) };
@@ -680,11 +685,11 @@ async function run({ cli, home, cycles, killed }) {
       // A killed session's agent is a process of its own (#1866); any other session's is this one.
       const agent = killed ? standInSession(home, socket) : { pid: process.pid };
       let prompt;
-      const fire = async (event, extra = {}) => {
+      const fire = async (event, extra = {}, ms = STEP_MS) => {
         const reply = await within(hook(socket, {
           v: 1, agent: 'claude-code', event, seq: String(seq += 1000n), id: ulid(), pid: process.pid, ppid: agent.pid, matched: [],
           payload: { session_id: session, transcript_path: transcript, cwd: work, hook_event_name: event, ...(prompt ? { prompt_id: prompt } : {}), ...extra },
-        }), `cycle ${n}: ${event}`);
+        }), `cycle ${n}: ${event}`, ms);
         if (reply.error) throw new Blocked(`cycle ${n}: ${event}: ${JSON.stringify(reply.error)}`);
         return reply;
       };
@@ -807,9 +812,17 @@ async function run({ cli, home, cycles, killed }) {
       reloaded.catch(() => undefined);
       // The change is claimed at the stop, whose turn's usage its transcript holds, and judged to PASS (#1866).
       assistant([{ type: 'text', text: 'Done.' }], 'end_turn');
-      await fire('Stop', { stop_hook_active: false, last_assistant_message: 'Done.' });
+      let stopped = await fire('Stop', { stop_hook_active: false, last_assistant_message: 'Done.' });
       const claimed = await frame(`cycle ${n}: claim.made`, of('claim.made'));
-      const verdict = await frame(`cycle ${n}: verdict.made`, (event) => event.kind === 'verdict.made' && event.subject === `claim:${claimed.id}` && event.data?.outcome !== 'PENDING');
+      const judged = frame(`cycle ${n}: verdict.made`, (event) => event.kind === 'verdict.made' && event.subject === `claim:${claimed.id}` && event.data?.outcome !== 'PENDING', LATE_MS);
+      // A check that missed the stop's time, as on a busy machine, starts once the turn ends: an agent the stop's reply
+      // sent on takes that reply into its turn and stops again, and the hub holds the last of its stops for a minute.
+      let verdict;
+      while (!(verdict = await Promise.race([judged, sleep(TURN_MS)]))) {
+        entry({ promptId: prompt, type: 'user', message: { role: 'user', content: `Stop hook feedback:\n${JSON.parse(stopped.stdout || '{}').reason ?? ''}` } });
+        assistant([{ type: 'text', text: 'Done.' }], 'end_turn');
+        stopped = await fire('Stop', { stop_hook_active: true, last_assistant_message: 'Done.' }, LATE_MS);
+      }
       if (verdict.data?.outcome !== 'PASS') throw new Blocked(`cycle ${n}: the claim's verdict isn't PASS: ${JSON.stringify(verdict.data)}`);
       await fire('UserPromptSubmit', { prompt: 'what does the deploy say?' });
       await fire('Stop', { last_assistant_message: "I'll check the deploy again in half a second." });
