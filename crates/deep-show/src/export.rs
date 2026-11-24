@@ -54,7 +54,7 @@ use crate::frames::drawing_of;
 use crate::hub::{EvalTime, Hub, Planted};
 use crate::snapshot::Unfit;
 use crate::time::{context_of, sample_rate_of};
-use frames::{Lease, Run, Sink};
+use frames::{Run, Sink};
 
 /// The export guards' wrong programs (#157), each only to prove its acceptance test fails on it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

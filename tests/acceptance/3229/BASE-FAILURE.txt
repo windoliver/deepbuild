@@ -1,0 +1,315 @@
+Base commit: a5fc47436906b7f6caa7c5414e584a1ce9160d5d (Merge pull request #3273), origin/main when this suite was drafted
+Commands (one file at a time; Node 24.22.2, vitest 5.0.5; packages/cli/dist built with npm run build --workspaces and
+target/debug/deep-hook with cargo build --locked -p deep-hook, both at the base):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/3229/<file>.test.ts --testTimeout=600000 --hookTimeout=180000 --no-file-parallelism
+Date: 2026-11-23, 21:06 to 21:19 EST.
+Machine: darwin-arm64, Mac17,10, Apple M5 Max, 64 GB, 18 cores, shared with other sessions, on battery: 1-minute load 260 to 480.
+Checks at the base: tsc -p tests/acceptance/3229/tsconfig.json exits 0; scripts/wait-ratchet.mjs names nothing in this
+folder; scripts/public-text.mjs names no studied product; scripts/repo-rules.mjs names no secret in this folder.
+Every home folder is written as ~ (a test's own HOME too), temp folders as <tmp>, the checkout as <repo>; stack lines
+and lines of the built hub are left out, and long lines are cut.
+
+Each criterion fails at the base at a named assertion or, where it names only a plant, reads BLOCKED at the plant:
+- AC1: the evidence store holds the marker in the clear and the journal names the fixture's path.
+- AC2: its right leg passes (it states what the base does); its planted leg is BLOCKED (the base's hub refuses the name).
+- AC3: both calls are allowed. Its wrong-program leg passes (the base's entries are that wrong program).
+- AC4: deep_status says no count, and each `deep read` answers with the variant's bytes. The planted leg is BLOCKED.
+- AC5: the claim after the call is PASS. The twin leg passes (the base fails the unseen variant). The planted leg is BLOCKED.
+- AC6: the first claim after the call is PASS. The planted leg is BLOCKED.
+- AC7: the started session's child reads the store whole. Its second leg passes (no sandbox, not held).
+- AC8: INCONCLUSIVE, this Mac being no fit reference Mac just now.
+
+== sealed.test.ts
+
+RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/3229/sealed.test.ts (3 tests | 2 failed) 13826ms
+   ❯ AC1 #3229.ee87773b After a definition with one held-out variant locks, a search of the hub's home for its marker finds no file, and no journal line holds the fixture's path (1)
+     × AC1 #3229.ee87773b no file under ~/.deepbuild holds the variant's marker, and no line of the store's journal the fixture's path 3921ms
+   ❯ AC2 #3229.9319401a The variant's run gives the same outcome on the clean fixture repo as on the merge base, and when it ends its checkout holds no variant file (2)
+     × AC2 #3229.9319401a (wrong program leaves-unsealed-variant) a hub that leaves the unsealed file behind fails, naming it 980ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3229/sealed.test.ts > AC1 #3229.ee87773b After a definition with one held-out variant locks, a search of the hub's home for its marker finds no file, and no journal line holds the fixture's path > AC1 #3229.ee87773b no file under ~/.deepbuild holds the variant's marker, and no line of the store's journal the fixture's path
+AssertionError: after the definition locked, in the hub's home ~/.deepbuild: ~/.deepbuild/evidence/bc/ae3ffff47aaefcf742a150d0b3bac42bf9a8c7285db8162b4897655f1b5395 holds the variant's marker held-out-2fdef69729aa9372 in the clear; a line of evidence/records.jsonl holds the fixture's path test/fixtures/basket-3229.json: {"sha256":"bcae3ffff47aaefcf742a150d0b3bac42bf9a8c7285db8162b4897655f1b5395","size":80,"type":"binary","kind":"file","source":"R1 held-out variant 1: test/fixtures/basket-3229.json","origin":"deepbuild","redaction":"unknown","license":{"name":"session","allows":[]},"derivedFrom":[],"intake":"captured","storedAt":1795486662376}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "~/.deepbuild/evidence/bc/ae3ffff47aaefcf742a150d0b3bac42bf9a8c7285db8162b4897655f1b5395 holds the variant's marker held-out-2fdef69729aa9372 in the clear",
++   "a line of evidence/records.jsonl holds the fixture's path test/fixtures/basket-3229.json: {\"sha256\":\"bcae3ffff47aaefcf742a150d0b3bac42bf9a8c7285db8162b4897655f1b5395\",\"size\":80,\"type\":\"binary\",\"kind\":\"file\",\"source\":\"R1 held-out variant 1: test/fixtures/basket-3229.json\",\"origin\":\"deepbuild\",\"redaction\":\"unknown\",\"license\":{\"name\":\"session\",\"allows\":[]},\"derivedFrom\":[],\"intake\":\"captured\",\"storedAt\":1795486662376}",
++ ]
+
+ ❯ tests/acceptance/3229/sealed.test.ts:20:106
+     18|       ...journal(w).filter((l) => l.includes(FIXTURE)).map((l) => `a l…
+     19|     ];
+     20|     expect(failures, `after the definition locked, in the hub's home $…
+       |                                                                                                          ^
+     21|     r.close();
+     22|   }, LIMIT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/3229/sealed.test.ts > AC2 #3229.9319401a The variant's run gives the same outcome on the clean fixture repo as on the merge base, and when it ends its checkout holds no variant file > AC2 #3229.9319401a (wrong program leaves-unsealed-variant) a hub that leaves the unsealed file behind fails, naming it
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=leaves-unsealed-variant did not start: <repo>/packages/hub/dist/plant.js:142
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=leaves-unsealed-variant names no planted program
+
+ ❯ startHub tests/acceptance/3229/helpers.ts:212:36
+    210|   const first = new Promise<Line | undefined>((done) => createInterfac…
+    211|   const ready = await Promise.race([first, exitOf(child).then(() => un…
+    212|   if (ready?.ready !== true) throw Error(`BLOCKED: the hub${plant ? ` …
+       |                                    ^
+    213|   return { child, socket: String(ready.socket), root: w.root, stderr: …
+    214| }
+ ❯ cleanClaim tests/acceptance/3229/sealed.test.ts:29:28
+ ❯ tests/acceptance/3229/sealed.test.ts:50:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  21:17:38
+   Duration  14.31s (tests 99%, transform 1%)
+
+exit 1
+
+== hook.test.ts
+
+RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/3229/hook.test.ts (2 tests | 1 failed) 3904ms
+   ❯ AC3 #3229.c04b35af With the hub stopped, a session's cat and its Read of a path under ~/.deepbuild/checkouts are each denied, naming the guard (2)
+     × AC3 #3229.c04b35af both calls are denied naming a fail-closed read entry, and a cat of the session's own file is allowed 1888ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3229/hook.test.ts > AC3 #3229.c04b35af With the hub stopped, a session's cat and its Read of a path under ~/.deepbuild/checkouts are each denied, naming the guard > AC3 #3229.c04b35af both calls are denied naming a fail-closed read entry, and a cat of the session's own file is allowed
+AssertionError: `cat ~/.deepbuild/checkouts/01M85874AWCWVMD017KJ9T8486/test/fixtures/basket-3229.json` was allowed with the hub stopped: exit 0, stdout "", stderr ""; Read ~/.deepbuild/checkouts/01M85874AWCWVMD017KJ9T8486/test/fixtures/basket-3229.json was allowed with the hub stopped: exit 0, stdout "", stderr "": expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`cat ~/.deepbuild/checkouts/01M85874AWCWVMD017KJ9T8486/test/fixtures/basket-3229.json` was allowed with the hub stopped: exit 0, stdout \"\", stderr \"\"",
++   "Read ~/.deepbuild/checkouts/01M85874AWCWVMD017KJ9T8486/test/fixtures/basket-3229.json was allowed with the hub stopped: exit 0, stdout \"\", stderr \"\"",
++ ]
+
+ ❯ tests/acceptance/3229/hook.test.ts:63:35
+     61|     const seen = await observe(shipped());
+     62|     const said = failures(seen);
+     63|     expect(said, said.join('; ')).toEqual([]);
+       |                                   ^
+     64|     expect(decision(seen.own), `a cat of ${FIXTURE} in the session's o…
+     65|   }, LIMIT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  21:18:27
+   Duration  4.20s (tests 99%)
+
+exit 1
+
+== status.test.ts
+
+RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/3229/status.test.ts (2 tests | 2 failed) 20304ms
+   ❯ AC4 #3229.9dd1dffa deep_status says two variants and holds neither digest; a read by handle of a variant's digest from inside the session's process tree is refused, naming the variant (2)
+     × AC4 #3229.9dd1dffa deep_status counts the two variants with no digest, and deep read of each is refused, naming the variant 18854ms
+     × AC4 #3229.9dd1dffa (wrong program answers-variant-bytes) a hub that answers the read with the bytes fails, naming the call 1204ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3229/status.test.ts > AC4 #3229.9dd1dffa deep_status says two variants and holds neither digest; a read by handle of a variant's digest from inside the session's process tree is refused, naming the variant > AC4 #3229.9dd1dffa deep_status counts the two variants with no digest, and deep read of each is refused, naming the variant
+AssertionError: after claim:01M85NH9Z6KGT1XS4HV3HRTDGC (attempt 1): outcome PASS; verdicts [["PASS",[".deepbuild/checks/basket.sh: PASS on 3 clean runs"]]]; runs run:01M85NHAQNNGX87VENTZT084GE .deepbuild/checks/basket.sh passed, run:01M85NHKADG00SAAQTESQBRMW7 .deepbuild/checks/basket.sh passed, run:01M85NHM7QN7Q8Z3PR5E6797CE .deepbuild/checks/basket.sh passed; line "PASS 1/1 · 1 test · next: you · session/725aa349/01M85NH9Z6KGT1XS4HV3HRTDGC | checks: .deepbuild/checks/basket.sh passed, .deepbuild/checks/basket.sh passed, .deepbuild/checks/basket.sh passed · wrote <tmp>/w1/src/cart.mjs": deep_status doesn't say that the task's check has two held-out variants: {"session":"725aa349-d744-4d7f-ad5c-8d4e4f079db9","gates":{"watch_only":false,"reason":null},"claims":[{"claim":"claim:01M85NH9Z6KGT1XS4HV3HRTDGC","task_ref":"session:725aa349d7444d7fad5c8d4e4f079db9#0","commit":"61d54044d00f45ab3404e88f635720115b491a51","runs":[{"run":"run:01M85NHAQNNGX87VENTZT084GE","check":".deepbuild/checks/basket.sh","outcome":"passed"},{"run":"run:01M85NHKADG00SAAQTESQBRMW7","check":".deepbuild/checks/basket.sh","outcome":"passed"},{"run":"run:01M85NHM7QN7Q8Z3PR5E6797CE","check":".deepbuild/checks/basket.sh","outcome":"passed"}],"verdict":{"handle":"verdict:01M85NHMQ691XPYJNB6S6FZ4DN","outcome":"PASS","smallest":null,"points_to":null},"contradictions":[]}],"checks":[],"asks":[],"open_items":[]}; `deep…
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_status doesn't say that the task's check has two held-out variants: {\"session\":\"725aa349-d744-4d7f-ad5c-8d4e4f079db9\",\"gates\":{\"watch_only\":false,\"reason\":null},\"claims\":[{\"claim\":\"claim:01M85NH9Z6KGT1XS4HV3HRTDGC\",\"task_ref\":\"session:725aa349d7444d7fad5c8d4e4f079db9#0\",\"commit\":\"61d54044d00f45ab3404e88f635720115b491a51\",\"runs\":[{\"run\":\"run:01M85NHAQNNGX87VENTZT084GE\",\"check\":\".deepbuild/checks/basket.sh\",\"outcome\":\"passed\"},{\"run\":\"run:01M85NHKADG00SAAQTESQBRMW7\",\"check\":\".deepbuild/checks/basket.sh\",\"outcome\":\"passed\"},{\"run\":\"run:01M85NHM7QN7Q8Z3PR5E6797CE\",\"check\":\".deepbuild/checks/basket.sh\",\"outcome\":\"passed\"}],\"verdict\":{\"handle\":\"verdict:01M85NHMQ691XPYJNB6S6FZ4DN\",\"outcome\":\"PASS\",\"smallest\":null,\"points_to\":null},\"contradictions\":[]}],\"checks\":[],\"asks\":[],\"open_items\":[]}",
++   "`deep read ev:4fac64c98ed1bda85cd485cefd651e1b7a72f13895fe255642aa3fb48c508354` from inside the session's process tree answered with the variant's bytes: exit 0, stdout \"{\\\"name\\\":\\\"held-out-c228c8a62847767d\\\",\\\"items\\\":[200,50],\\\"discount\\\":30,\\\"total\\\":220}\\n\\n\", stderr \"\"",
++   "`deep read ev:8b392acc76b8fb31491b61bda437c281513fbb123a74e6b4dde24dc77fe33463` from inside the session's process tree answered with the variant's bytes: exit 0, stdout \"{\\\"name\\\":\\\"held-out-c2107669524911eb\\\",\\\"items\\\":[7,8,9],\\\"discount\\\":4,\\\"total\\\":20}\\n\\n\", stderr \"\"",
++ ]
+
+ ❯ countNotDigests tests/acceptance/3229/status.test.ts:55:79
+     53|     else if (!/variant/i.test(text)) failures.push(`\`${call}\` from i…
+     54|   }
+     55|   expect(failures, `after ${shownClaim(seen.claim)}: ${failures.join('…
+       |                                                                               ^
+     56| }
+     57|
+ ❯ tests/acceptance/3229/status.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/3229/status.test.ts > AC4 #3229.9dd1dffa deep_status says two variants and holds neither digest; a read by handle of a variant's digest from inside the session's process tree is refused, naming the variant > AC4 #3229.9dd1dffa (wrong program answers-variant-bytes) a hub that answers the read with the bytes fails, naming the call
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=answers-variant-bytes did not start: <repo>/packages/hub/dist/plant.js:142
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=answers-variant-bytes names no planted program
+
+ ❯ startHub tests/acceptance/3229/helpers.ts:212:36
+    210|   const first = new Promise<Line | undefined>((done) => createInterfac…
+    211|   const ready = await Promise.race([first, exitOf(child).then(() => un…
+    212|   if (ready?.ready !== true) throw Error(`BLOCKED: the hub${plant ? ` …
+       |                                    ^
+    213|   return { child, socket: String(ready.socket), root: w.root, stderr: …
+    214| }
+ ❯ observe tests/acceptance/3229/status.test.ts:14:28
+ ❯ tests/acceptance/3229/status.test.ts:64:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  21:18:02
+   Duration  21.12s (tests 99%, import 1%, transform 1%)
+
+exit 1
+
+== spent.test.ts
+
+RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/3229/spent.test.ts (5 tests | 4 failed) 34612ms
+   ❯ AC5 #3229.97352c61 a session's recorded call names a variant's digest, its claim special-cases the visible fixture and the variant: the variant is spent, its passing run counts neither way, the claim is INCONCLUSIVE naming the call (3)
+     × AC5 #3229.97352c61 the claim after the call reads INCONCLUSIVE naming it, never PASS 8561ms
+     × AC5 #3229.97352c61 (wrong program counts-spent-variant) a gate that counts the spent variant's run passes the claim and fails 603ms
+   ❯ AC6 #3229.2d41acf1 A spent variant stays spent across a compaction, a resume and a new attempt on the task, and a session on another task is unaffected (2)
+     × AC6 #3229.2d41acf1 the task's claims stay INCONCLUSIVE naming the call through a resume, a compaction that rotates the ID and a new attempt; another task's claim passes 16268ms
+     × AC6 #3229.2d41acf1 (wrong program spent-by-session-id) a hub that keys the mark on the session's ID unspends it when the ID rotates, and fails 878ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3229/spent.test.ts > AC5 #3229.97352c61 a session's recorded call names a variant's digest, its claim special-cases the visible fixture and the variant: the variant is spent, its passing run counts neither way, the claim is INCONCLUSIVE naming the call > AC5 #3229.97352c61 the claim after the call reads INCONCLUSIVE naming it, never PASS
+AssertionError: after the call: the spent variant's run counts neither way, so the claim is never PASS: claim:01M85MVVAH3EN3928H0QXKW81B (attempt 1): outcome PASS; verdicts [["PASS",[".deepbuild/checks/basket.sh: PASS on 2 clean runs"]]]; runs run:01M85MVVYZ3WHDNV2P67D1G0S2 .deepbuild/checks/basket.sh passed, run:01M85MVYV0C3DFQ5DZRTKAE6BE .deepbuild/checks/basket.sh passed; line "PASS 1/1 · 1 test · next: you · session/f018b638/01M85MVVAH3EN3928H0QXKW81B | checks: .deepbuild/checks/basket.sh passed, .deepbuild/checks/basket.sh passed · wrote <tmp>/w1/src/cart.mjs": expected [ 'PASS' ] to not include 'PASS'
+ ❯ spent tests/acceptance/3229/spent.test.ts:24:154
+     22| /** A claim after a reaching call: INCONCLUSIVE naming the call, no PA…
+     23| function spent(c: Claim, call: Call, when: string): void {
+     24|   expect(c.verdicts.map((v) => v.data.outcome), `${when}: the spent va…
+       |                                                                                                                                                          ^
+     25|   expect(c.outcome, `${when}: the claim reads INCONCLUSIVE until a var…
+     26|   expect(names(c.text, call), `${when}: the verdict names the call tha…
+ ❯ tests/acceptance/3229/spent.test.ts:43:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/3229/spent.test.ts > AC5 #3229.97352c61 a session's recorded call names a variant's digest, its claim special-cases the visible fixture and the variant: the variant is spent, its passing run counts neither way, the claim is INCONCLUSIVE naming the call > AC5 #3229.97352c61 (wrong program counts-spent-variant) a gate that counts the spent variant's run passes the claim and fails
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=counts-spent-variant did not start: <repo>/packages/hub/dist/plant.js:142
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=counts-spent-variant names no planted program
+
+ ❯ startHub tests/acceptance/3229/helpers.ts:212:36
+    210|   const first = new Promise<Line | undefined>((done) => createInterfac…
+    211|   const ready = await Promise.race([first, exitOf(child).then(() => un…
+    212|   if (ready?.ready !== true) throw Error(`BLOCKED: the hub${plant ? ` …
+       |                                    ^
+    213|   return { child, socket: String(ready.socket), root: w.root, stderr: …
+    214| }
+ ❯ reached tests/acceptance/3229/spent.test.ts:34:28
+ ❯ tests/acceptance/3229/spent.test.ts:56:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/3229/spent.test.ts > AC6 #3229.2d41acf1 A spent variant stays spent across a compaction, a resume and a new attempt on the task, and a session on another task is unaffected > AC6 #3229.2d41acf1 the task's claims stay INCONCLUSIVE naming the call through a resume, a compaction that rotates the ID and a new attempt; another task's claim passes
+AssertionError: before any rotation: the spent variant's run counts neither way, so the claim is never PASS: claim:01M85MWC45KMX5BSR8JN2YNXRZ (attempt 1): outcome PASS; verdicts [["PASS",[".deepbuild/checks/basket.sh: PASS on 2 clean runs"]]]; runs run:01M85MWCX9DHRSNJFZVJQPEDGF .deepbuild/checks/basket.sh passed, run:01M85MWEEQT5ZKRWGABV00E3C9 .deepbuild/checks/basket.sh passed; line "PASS 1/1 · 1 test · next: you · session/8f9facc4/01M85MWC45KMX5BSR8JN2YNXRZ | checks: .deepbuild/checks/basket.sh passed, .deepbuild/checks/basket.sh passed · wrote <tmp>/w1/src/cart.mjs": expected [ 'PASS' ] to not include 'PASS'
+ ❯ spent tests/acceptance/3229/spent.test.ts:24:154
+     22| /** A claim after a reaching call: INCONCLUSIVE naming the call, no PA…
+     23| function spent(c: Claim, call: Call, when: string): void {
+     24|   expect(c.verdicts.map((v) => v.data.outcome), `${when}: the spent va…
+       |                                                                                                                                                          ^
+     25|   expect(c.outcome, `${when}: the claim reads INCONCLUSIVE until a var…
+     26|   expect(names(c.text, call), `${when}: the verdict names the call tha…
+ ❯ staysSpent tests/acceptance/3229/spent.test.ts:94:3
+ ❯ tests/acceptance/3229/spent.test.ts:104:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/3229/spent.test.ts > AC6 #3229.2d41acf1 A spent variant stays spent across a compaction, a resume and a new attempt on the task, and a session on another task is unaffected > AC6 #3229.2d41acf1 (wrong program spent-by-session-id) a hub that keys the mark on the session's ID unspends it when the ID rotates, and fails
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=spent-by-session-id did not start: <repo>/packages/hub/dist/plant.js:142
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=spent-by-session-id names no planted program
+
+ ❯ startHub tests/acceptance/3229/helpers.ts:212:36
+    210|   const first = new Promise<Line | undefined>((done) => createInterfac…
+    211|   const ready = await Promise.race([first, exitOf(child).then(() => un…
+    212|   if (ready?.ready !== true) throw Error(`BLOCKED: the hub${plant ? ` …
+       |                                    ^
+    213|   return { child, socket: String(ready.socket), root: w.root, stderr: …
+    214| }
+ ❯ across tests/acceptance/3229/spent.test.ts:72:28
+ ❯ tests/acceptance/3229/spent.test.ts:108:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 1 passed (5)
+   Start at  21:06:22
+   Duration  35.21s (tests 99%)
+
+exit 1
+
+== started.test.ts
+
+RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/3229/started.test.ts (2 tests | 1 failed) 15917ms
+   ❯ AC7 #3229.ed92ed6d A session started from the app, on an agent whose facts name the wall, can't read the store and its row says held; on one whose facts name none, the row says not held (2)
+     × AC7 #3229.ed92ed6d a started session's read of the store, and of a checkout, fails by its sandbox, and its row says the wall is held 5497ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3229/started.test.ts > AC7 #3229.ed92ed6d A session started from the app, on an agent whose facts name the wall, can't read the store and its row says held; on one whose facts name none, the row says not held > AC7 #3229.ed92ed6d a started session's read of the store, and of a checkout, fails by its sandbox, and its row says the wall is held
+AssertionError: a child of the started session's npm test must fail to read ~/.deepbuild/evidence/f4/de097d92dcfff329d35f0552ed66fe771c6994bbc72d145c517b696e8bce75 by its sandbox (EPERM): {"path":"~/.deepbuild/evidence/f4/de097d92dcfff329d35f0552ed66fe771c6994bbc72d145c517b696e8bce75","text":"kept by the hub, read by no session (~)\n"}: expected 'read whole' to be 'EPERM' // Object.is equality
+
+Expected: "EPERM"
+Received: "read whole"
+
+ ❯ tests/acceptance/3229/started.test.ts:63:183
+     61|       expect(readFileSync(path, 'utf8'), `${path} is there for you to …
+     62|       const t = s.tried.find((x) => x.path === path);
+     63|       expect(t?.text === undefined ? t?.code : 'read whole', `a child …
+       |                                                                                                                                                                                       ^
+     64|     }
+     65|     const says = wall(s.row);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  21:18:34
+   Duration  16.47s (tests 99%, import 1%)
+
+exit 1
+
+== budgets.test.ts
+
+RUN  v5.0.5 <repo>
+
+stdout | tests/acceptance/3229/budgets.test.ts > AC8 #3229.82fbda49 Budgets, on the reference Mac in the local preflight, compared with the merge base > AC8 #3229.82fbda49 sealing and unsealing add under 5 ms to a variant's run, and the read entry adds no process and no file read to a tool call's hook
+AC8 not measured: Low Power Mode state unknown (no lowpowermode line in pmset -g)
+
+ ↓ tests/acceptance/3229/budgets.test.ts > AC8 #3229.82fbda49 Budgets, on the reference Mac in the local preflight, compared with the merge base > AC8 #3229.82fbda49 sealing and unsealing add under 5 ms to a variant's run, and the read entry adds no process and no file read to a tool call's hook 387ms [INCONCLUSIVE (not measured: Low Power Mode state unknown (no lowpowermode line in pmset -g)): a budget counts only on a fit reference Mac]
+
+ Test Files  1 passed (1)
+      Tests  1 skipped (1)
+   Start at  21:18:55
+   Duration  1.65s (tests 54%, transform 37%, setup 6%, import 3%, worker 1%)
+
+exit 0

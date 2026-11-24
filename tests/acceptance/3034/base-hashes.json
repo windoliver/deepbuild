@@ -1,0 +1,89 @@
+{
+  "base": "c7dc0edc3690706adb84d678806301c3d14456ca",
+  "machine": {
+    "model": "Mac17,10",
+    "chip": "Apple M5 Max",
+    "memoryBytes": 68719476736,
+    "macosBuild": "26B8119"
+  },
+  "hashes": {
+    "waves: the lake from above, frame 75": {
+      "pixel_hash": "10f4d37bc929077c1d41b064466013afdccb783a7fb766897ecf6f85d84b63f0",
+      "depth": "59175076e31695bec50af58c1aa7f0bf9379feb06492acfc6736f4a06d835a1d"
+    },
+    "seek: the harbour with waves, ripples and rain, seeked to 17, frame 17": {
+      "pixel_hash": "ff4ab7ebc0e91ff9bc29be7cf65c66a265b776d7a99b81ddd1b8b87ea320a803"
+    },
+    "seek: the harbour with waves, ripples and rain, seeked to 44, frame 44": {
+      "pixel_hash": "232d2b6f32ed11c8ba37262072a0f5733c9cc5ee3a1a2a242707b684f46b6bf8"
+    },
+    "seek: the harbour with waves, ripples and rain, seeked to 89, frame 89": {
+      "pixel_hash": "efeb9a901cbb230412cfa91ff95b84f49189795ed12089526a53b6af3dd66880"
+    },
+    "seek: the harbour without rain, frame 44": {
+      "pixel_hash": "ea92bb94294a86370881e770861336d45b5faf2cd6b4de668dea857fbb44e62d"
+    },
+    "seek: the harbour without ripples, frame 44": {
+      "pixel_hash": "e1231cf21a47bb985f51768c66c92479fd831e2c50a2aedd45d864999af5d273"
+    },
+    "mirror: the post in wavy water, frame 30": {
+      "pixel_hash": "ff2dd2e47f795178f7103554c2012d19114e9ca1aac411543fc2cd64bdcd033f",
+      "reflection": "dc8fb2fcc494fb69ec906b5677468ef1c7f5c7259e968d050db5421e87761a1b"
+    },
+    "mirror: the post in calm water, frame 30": {
+      "pixel_hash": "ede50c06a17c3ce0c423a98ab9eda183e92800eba9f8ea719f468e2012605467",
+      "reflection": "af0a78cfa305b471f2b0ba2131ec3ba4a160df9c84bfcd472a25ea30ec8fc643"
+    },
+    "tint: the white bed under the pool, frame 0": {
+      "pixel_hash": "ce912c5bdcc0292ff331941fee38af9644a1e349b9ca8f687a7ab01d801ad295",
+      "pre_tone": "cb8848828f18d59ee706af38442d3d1c9b92e87c818a2dc5b7ab32d0c14c6e06"
+    },
+    "tint: the white bed under the pool, frame 30": {
+      "pixel_hash": "23491fb8f5701cfe2a498e7079be257cc91c685f0a908d31504403f0e2522798",
+      "pre_tone": "93a8813d62c71a0e9efaf23c913cc39afa63c2cc984cb9920bd33472b53833c1"
+    },
+    "tint: the white bed under the pool, frame 60": {
+      "pixel_hash": "3c9c151b09d6bc938f3d598a9585a05d66dc31b8ccfe0bff46ec064777b5f368",
+      "pre_tone": "0f515f10ec0698ce7afaad59d46071a1deb2edef57931bbe0922f7f19029201a"
+    },
+    "tint: the black bed under the pool, frame 0": {
+      "pixel_hash": "935e43d2d5ecdb00f2e370492816bf85300e8bea4a61bd7602b052589416ce8b",
+      "pre_tone": "940ab2e4b086065971e2413c98a85024ff8846e306b7120e03cee10391a535a4"
+    },
+    "tint: the black bed under the pool, frame 30": {
+      "pixel_hash": "935e43d2d5ecdb00f2e370492816bf85300e8bea4a61bd7602b052589416ce8b",
+      "pre_tone": "940ab2e4b086065971e2413c98a85024ff8846e306b7120e03cee10391a535a4"
+    },
+    "tint: the black bed under the pool, frame 60": {
+      "pixel_hash": "935e43d2d5ecdb00f2e370492816bf85300e8bea4a61bd7602b052589416ce8b",
+      "pre_tone": "940ab2e4b086065971e2413c98a85024ff8846e306b7120e03cee10391a535a4"
+    },
+    "defaults: water: {}, frame 0": {
+      "pixel_hash": "f34a981f8877a709aadcb87d849a5ccc0f9c540dbeb5517cba3c1b45b0a1c9e0"
+    },
+    "defaults: water: {}, frame 20": {
+      "pixel_hash": "0e49d509c824b31f81a7f1d532973738fffbe97933b5a0c4217d20f80cbb8429"
+    },
+    "defaults: water: {}, frame 45": {
+      "pixel_hash": "7592c45777cb4465ef933eb9a227a0aa3b9757a8f5b514c0f2dfe193cb0adf7b"
+    },
+    "rain: the lake in the rain, frame 45": {
+      "pixel_hash": "da1f356febf5e1398087321275f5beb1e09c57b65b444d6037099d83f008aa94"
+    },
+    "foam: foam and a boat's wake at 20 s, frame 600": {
+      "pixel_hash": "63a39f92b441c56d193c026f9626db3ed997bec620ec4d1286c8bda8c74fea23"
+    },
+    "physics: a floating body's wake at 20 s, frame 600": {
+      "pixel_hash": "a50dc4a4793f0cd093725a63d8133e3f8d0f5008b62e6309250f504122983d40"
+    },
+    "taste: the lake with waves and ripples, frame 30": {
+      "pixel_hash": "de813d2be7b294091c3d5e9c4febb1c9635a0d7cac2871bb87e17c9e0fc2dacc"
+    },
+    "budgets: the lake filling half a 1080p frame, frame 0": {
+      "pixel_hash": "4f31bb50181263a1bdd8998c60fe87f6c95d6d1087e1bd766bf5db09d0d81963"
+    },
+    "budgets: the far pond, frame 0": {
+      "pixel_hash": "3daf4f3bb99c67a145e191f444701dafac04bae98db678acc044825a746f94c3"
+    }
+  }
+}
