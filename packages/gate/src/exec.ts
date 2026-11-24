@@ -75,20 +75,61 @@ const fastWaiting = new WeakMap<LeaseTable, number>();
  * fast-lane check may take the slot the pool keeps for it, and takes the next free slot ahead of every slow run.
  */
 export async function slot(table: LeaseTable, holder: string, run: string, lane: 'fast' | 'slow' = 'slow'): Promise<Lease> {
+  return (await admit(table, holder, run, lane))[0]!;
+}
+
+/** The host's memory pool (#3218): a run takes its expected peak as its units (#3220). */
+const MEM: Resource = { host: 'local', kind: 'mem', key: 'mem' };
+/** Why a run waits for memory: DeepBuild's runs hold the pool, or the kernel reads less available than it expects. */
+export type MemoryWait = { on: 'pool'; holders: Lease[]; free: number } | { on: 'outside'; available: number };
+/** What a run is admitted on, in memory (#3220). */
+export interface MemoryAsk {
+  /** Its expected peak, in MB: the units of `mem` it takes beside its slot. */
+  mb: number;
+  /** The memory the kernel reads available, in MB: the run starts only while it is at least `mb`. Undefined holds nothing back. */
+  available?: () => Promise<number | undefined>;
+  /** Told why it waits whenever that changes. */
+  waiting?: (why: MemoryWait) => void;
+}
+/**
+ * `slot`, with the run's expected peak as units of `mem` in the same ask (#3220): both granted or neither. Since the pool
+ * counts only what DeepBuild started, the run also waits while the kernel reads less memory available than it expects.
+ */
+export async function admit(table: LeaseTable, holder: string, run: string, lane: 'fast' | 'slow' = 'slow', memory?: MemoryAsk): Promise<Lease[]> {
   const fast = lane === 'fast';
   if (fast) fastWaiting.set(table, (fastWaiting.get(table) ?? 0) + 1);
+  let told = '';
+  const tell = (why: MemoryWait): void => {
+    const said = why.on === 'pool' ? `pool ${why.holders.map((l) => l.id).join(',')}` : 'outside';
+    if (said !== told) memory?.waiting?.(why);
+    told = said;
+  };
   try {
     for (let wait = 5; ; wait = fast ? 5 : Math.min(wait * 2, 50)) {
       if (fast || !fastWaiting.get(table)) {
-        const got = await table.lease({ holder, run }, fast ? SLOT : { ...SLOT, key: SLOW_SLOT }, 'exclusive');
-        if (got.status === 'granted') return got.lease;
-        if (got.status === 'BLOCKED') throw Error(got.message);
+        const asks = [{ resource: fast ? SLOT : { ...SLOT, key: SLOW_SLOT }, mode: 'exclusive' as const }, ...(memory ? [{ resource: MEM, mode: 'exclusive' as const, units: memory.mb }] : [])];
+        // Memory in use outside DeepBuild's runs holds it back only while the pool itself has room for it.
+        const available = memory?.available && (await memFree(table)) >= memory.mb ? await memory.available() : undefined;
+        if (available !== undefined && available < memory!.mb) tell({ on: 'outside', available });
+        else {
+          const got = await table.ask({ holder, run }, asks);
+          if (got.status === 'granted') return got.leases;
+          if (got.status === 'BLOCKED') throw Error(got.message);
+          if (got.resource.kind === MEM.kind) tell({ on: 'pool', holders: got.holders, free: got.free ?? 0 });
+        }
       }
       await sleep(wait);
     }
   } finally {
     if (fast) fastWaiting.set(table, fastWaiting.get(table)! - 1);
   }
+}
+/** The units of `mem` free on this host now: its n less what its leases take (#3220). */
+export async function memFree(table: LeaseTable): Promise<number> {
+  const kind = (await table.kinds()).find((k) => k.name === MEM.kind);
+  const n = Number(/^pool\((\d+)\)$/.exec(kind?.match ?? '')?.[1] ?? 0);
+  const held = (await table.leases()).filter((v) => v.lease.resource.kind === MEM.kind && v.lease.resource.host === MEM.host).reduce((sum, v) => sum + (v.lease.units ?? 1), 0);
+  return n - held;
 }
 interface Spawned { exit: number | null; output: string; started_at: number; ended_at: number }
 function spawnRun(argv: string[], cwd: string): Promise<Spawned> {

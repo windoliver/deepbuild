@@ -1,0 +1,135 @@
+Base commit: f8c6cff822b5b960d35312d75d44769616a95516 (Merge pull request #3248), origin/main when this suite was drafted
+Commands (one file at a time, in this order; the repo's Node, vitest 5.0.5; packages/cli/dist built with
+npm run build --workspaces, target/debug/deep-show built with --no-default-features --features full,test-kit-gpu-pass and
+target/debug/deep-hook with --features env-plants, all at the base):
+  export PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/3219/<file>.test.ts --testTimeout=7200000 --hookTimeout=180000
+Date: 2026-11-23, 04:39 to 04:59 EST (environment.test.ts again at 04:59, after a change to its last table wait).
+Machine: darwin-arm64, Mac17,10, Apple M5 Max, 64 GB, 18 cores, shared with other sessions: 1-minute load 35 to 240.
+Checks at the base: tsc -p tests/acceptance/3219/tsconfig.json exits 0; scripts/wait-ratchet.mjs names nothing in this
+folder; scripts/public-text.mjs names no studied product; scripts/repo-rules.mjs: PASS secrets.
+Home folders are written as ~ and the tests' temp folders as <tmp>; times are ms since the Unix epoch; the lines are
+trimmed to the readings, the failing test and its assertion.
+
+Every file fails at the base, in its right program's leg, for the reason its criterion gives: deep-show never calls the
+hub, takes the lease file whatever a hub holds, writes a receipt lease record of its own with no ID, and after its wait
+draws anyway. No planted leg ran: each comes after its right leg, and at the base each would fail before its judge
+(deep-show answers an unknown `planted` with {"ok":false,"code":"bad_input"}; the hub refuses an unknown DEEP_HUB_PLANT).
+
+AC3's merge-base count: the kit drew before the second export in 3 of 20 runs (order.test.ts below, 04:45 to 04:59,
+load 76 to 240). An earlier draft of the same file, the same fixture but for the 1 s as a test-side wait instead of the
+second export's own `sleep 1` and polled waits instead of event waits, ran its 20 runs at 04:26 to 04:36 (load 20 to
+75): 1 of 20. Both under 20, with the waits as they are (a kit tries the file every 500 ms, an export every 50 ms).
+
+== kit-table.test.ts (AC1): FAIL at its first assertion, the judge's list: the table holds no gpu lease under the calling session, and the lease file existed while the kit ran beside the live hub (deep-show never calls the hub at the base). The planted leg didn't run.
+started Mon Nov 23 04:39:43 EST 2026 load averages: 34.97 42.01 54.05
+AC1 as built (load 39.7 on 18 cores): the kit ran 1795426786898..1795426790146; reply lease {"gpu":true}; GPU cases parity/scene/gpu-pass-a.board#check2 PASS, parity/scene/gpu-pass-b.board#check2 PASS; the table's gpu leases: none; the lease file seen 2 times (PIDs 43171)
+× AC1 #3219.6dfa18b9 the kit's gpu lease is the table's, shared, under its session, with no lease file; a planted deep-show that takes the file beside the hub (planted: kit_takes_file_beside_hub) fails, naming the file 6132ms
+AssertionError: a kit on the GPU backend with a hub running:
+- with a hub running, the table shows no gpu lease under the calling session session:86b81221c03d484f9f19c57fd69d4094; its gpu leases: none
+- the lease file ~/.cache/deepbuild-gpu/lease existed while the kit ran beside a live hub: seen 2 times from 1795426789907, holding PID 43171, ?
+Tests  1 failed (1)
+Duration  6.36s (tests 99%, transform 1%)
+ended exit 1 Mon Nov 23 04:39:50 EST 2026 load averages: 39.69 42.88 54.28
+
+== modes.test.ts (AC2): FAIL at its first assertion: neither kit holds a gpu lease in the table, so neither could be held where it draws; the export and the third kit never started. The planted leg didn't run (its hub would refuse DEEP_HUB_PLANT=shared-passes-waiting-exclusive).
+started Mon Nov 23 04:39:50 EST 2026 load averages: 39.69 42.88 54.28
+AC2 as built (load 46.1 on 18 cores): the grants on the fixture, ms from the first run's start: none; runs kit 1 +0..+3546, kit 2 +0..+3036, the export not started, the third kit not started
+× AC2 #3219.150005e0 the grants on the fixture: kits 1 and 2 together, then the export, then the third kit; a planted lease that lets the later kit start beside the first two (DEEP_HUB_PLANT=shared-passes-waiting-exclusive) fails, naming the kit 6098ms
+AssertionError: the order of the gpu lease's grants:
+- kit 1 (session 6f3708d0-3d39-4d65-8f19-e82785d6a364) drew with no gpu lease in the table: its run ended at 1795426796932 and the table's gpu leases are none
+- kit 2 (session c18fd717-af66-425a-bf70-896147638078) drew with no gpu lease in the table: its run ended at 1795426796422 and the table's gpu leases are none
+- kit 1 (session:6f3708d03d394d658f19e82785d6a364) holds no gpu lease in the table; its gpu leases: none
+- kit 2 (session:c18fd717af66425abf70896147638078) holds no gpu lease in the table; its gpu leases: none
+Tests  1 failed (1)
+Duration  6.36s (tests 99%, transform 1%)
+ended exit 1 Mon Nov 23 04:39:57 EST 2026 load averages: 46.13 44.16 54.66
+
+== order.test.ts (AC3): FAIL: the kit drew before the second export in 3 of 20 runs (the merge base's count the criterion asks for; under 20). Every run's order is read from the kit's end and the second export's receipt, since no table lease is taken at the base. The planted leg didn't run.
+started Mon Nov 23 04:45:24 EST 2026 load averages: 240.31 207.36 128.46
+AC3 as built run 1: the second export drew first; first export +0..+84475 lease +8263..+81542 (receipt); kit +8280..+84841 lease -; second export +8281..+84435 lease asked +9893 +81584..+84398 (receipt); read from no table lease for the kit: the kit ended at 1795427220425, the second export's receipt released the lease at 1795427219982
+AC3 as built run 2: the second export drew first; first export +0..+71724 lease +5198..+69809 (receipt); kit +5207..+72248 lease -; second export +5207..+71628 lease asked +6698 +69847..+71498 (receipt); read from no table lease for the kit: the kit ended at 1795427292680, the second export's receipt released the lease at 1795427291930
+AC3 as built run 3: the second export drew first; first export +0..+55300 lease +4453..+53408 (receipt); kit +4458..+55566 lease -; second export +4458..+55048 lease asked +5923 +53422..+54977 (receipt); read from no table lease for the kit: the kit ended at 1795427348254, the second export's receipt released the lease at 1795427347665
+AC3 as built run 4: the kit drew first; first export +0..+50283 lease +3192..+48855 (receipt); kit +3199..+49096 lease -; second export +3200..+50439 lease asked +4398 +49116..+50415 (receipt); read from no table lease for the kit: the kit ended at 1795427397354, the second export's receipt released the lease at 1795427398673
+AC3 as built run 5: the second export drew first; first export +0..+49890 lease +2886..+48085 (receipt); kit +2893..+49808 lease -; second export +2894..+49634 lease asked +4192 +48088..+49550 (receipt); read from no table lease for the kit: the kit ended at 1795427448514, the second export's receipt released the lease at 1795427448256
+AC3 as built run 6: the second export drew first; first export +0..+34260 lease +3532..+33678 (receipt); kit +3536..+35094 lease -; second export +3536..+34777 lease asked +4837 +33728..+34752 (receipt); read from no table lease for the kit: the kit ended at 1795427483693, the second export's receipt released the lease at 1795427483351
+AC3 as built run 7: the second export drew first; first export +0..+32628 lease +1384..+31988 (receipt); kit +1386..+33387 lease -; second export +1387..+33135 lease asked +2598 +32016..+33111 (receipt); read from no table lease for the kit: the kit ended at 1795427517083, the second export's receipt released the lease at 1795427516807
+AC3 as built run 8: the second export drew first; first export +0..+33391 lease +1397..+31718 (receipt); kit +1401..+33374 lease -; second export +1401..+33138 lease asked +2602 +31750..+33110 (receipt); read from no table lease for the kit: the kit ended at 1795427550469, the second export's receipt released the lease at 1795427550205
+AC3 as built run 9: the second export drew first; first export +0..+35700 lease +3749..+34777 (receipt); kit +3760..+36414 lease -; second export +3760..+35840 lease asked +4989 +34838..+35812 (receipt); read from no table lease for the kit: the kit ended at 1795427586905, the second export's receipt released the lease at 1795427586303
+AC3 as built run 10: the second export drew first; first export +0..+25780 lease +2100..+25246 (receipt); kit +2102..+26893 lease -; second export +2102..+26213 lease asked +3402 +25286..+26192 (receipt); read from no table lease for the kit: the kit ended at 1795427613800, the second export's receipt released the lease at 1795427613099
+AC3 as built run 11: the second export drew first; first export +0..+22047 lease +1277..+21531 (receipt); kit +1278..+22991 lease -; second export +1279..+22592 lease asked +2457 +21552..+22567 (receipt); read from no table lease for the kit: the kit ended at 1795427636793, the second export's receipt released the lease at 1795427636369
+AC3 as built run 12: the second export drew first; first export +0..+29687 lease +1382..+27533 (receipt); kit +1384..+29751 lease -; second export +1385..+29229 lease asked +2561 +27571..+29114 (receipt); read from no table lease for the kit: the kit ended at 1795427666547, the second export's receipt released the lease at 1795427665910
+AC3 as built run 13: the second export drew first; first export +0..+49372 lease +3873..+47372 (receipt); kit +3876..+49352 lease -; second export +3876..+49135 lease asked +5179 +47407..+49099 (receipt); read from no table lease for the kit: the kit ended at 1795427715902, the second export's receipt released the lease at 1795427715649
+AC3 as built run 14: the second export drew first; first export +0..+52391 lease +3944..+50685 (receipt); kit +3946..+52511 lease -; second export +3946..+52128 lease asked +5196 +50733..+52086 (receipt); read from no table lease for the kit: the kit ended at 1795427768436, the second export's receipt released the lease at 1795427768011
+AC3 as built run 15: the second export drew first; first export +0..+38913 lease +3812..+38156 (receipt); kit +3813..+40258 lease -; second export +3814..+39591 lease asked +5160 +38209..+39565 (receipt); read from no table lease for the kit: the kit ended at 1795427808696, the second export's receipt released the lease at 1795427808003
+AC3 as built run 16: the second export drew first; first export +0..+33294 lease +1636..+32043 (receipt); kit +1639..+33694 lease -; second export +1639..+33368 lease asked +2875 +32087..+33342 (receipt); read from no table lease for the kit: the kit ended at 1795427842421, the second export's receipt released the lease at 1795427842069
+AC3 as built run 17: the second export drew first; first export +0..+23281 lease +2179..+22785 (receipt); kit +2181..+24409 lease -; second export +2182..+23728 lease asked +3389 +22818..+23706 (receipt); read from no table lease for the kit: the kit ended at 1795427866832, the second export's receipt released the lease at 1795427866129
+AC3 as built run 18: the kit drew first; first export +0..+22767 lease +1200..+22152 (receipt); kit +1213..+22446 lease -; second export +1213..+23472 lease asked +2397 +22463..+23447 (receipt); read from no table lease for the kit: the kit ended at 1795427889280, the second export's receipt released the lease at 1795427890281
+AC3 as built run 19: the kit drew first; first export +0..+24412 lease +1412..+23908 (receipt); kit +1414..+24130 lease -; second export +1414..+25087 lease asked +2619 +24129..+25065 (receipt); read from no table lease for the kit: the kit ended at 1795427914439, the second export's receipt released the lease at 1795427915374
+AC3 as built run 20: the second export drew first; first export +0..+27774 lease +1254..+26439 (receipt); kit +1256..+28099 lease -; second export +1257..+27803 lease asked +2468 +26463..+27761 (receipt); read from no table lease for the kit: the kit ended at 1795427943498, the second export's receipt released the lease at 1795427943160
+AC3 as built (load 89.2 on 18 cores): the kit drew before the second export in 3 of 20 runs
+× AC3 #3219.2c286a34 in each of 20 runs the kit draws before the second export; a planted queue that serves whichever asks most often (DEEP_HUB_PLANT=serves-most-asks) fails, naming the kit 817689ms
+AssertionError: the kit draws before the second export in each of 20 runs (it did in 3 of 20):
+- run 1: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427220425, the second export's receipt released the lease at 1795427219982)
+- run 2: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427292680, the second export's receipt released the lease at 1795427291930)
+- run 3: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427348254, the second export's receipt released the lease at 1795427347665)
+- run 5: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427448514, the second export's receipt released the lease at 1795427448256)
+- run 6: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427483693, the second export's receipt released the lease at 1795427483351)
+- run 7: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427517083, the second export's receipt released the lease at 1795427516807)
+- run 8: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427550469, the second export's receipt released the lease at 1795427550205)
+- run 9: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427586905, the second export's receipt released the lease at 1795427586303)
+- run 10: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427613800, the second export's receipt released the lease at 1795427613099)
+- run 11: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427636793, the second export's receipt released the lease at 1795427636369)
+- run 12: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427666547, the second export's receipt released the lease at 1795427665910)
+- run 13: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427715902, the second export's receipt released the lease at 1795427715649)
+- run 14: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427768436, the second export's receipt released the lease at 1795427768011)
+- run 15: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427808696, the second export's receipt released the lease at 1795427808003)
+- run 16: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427842421, the second export's receipt released the lease at 1795427842069)
+- run 17: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427866832, the second export's receipt released the lease at 1795427866129)
+- run 20: the kit (session:e5553929b705481a98ece0ed9efd2b42) asked while the first export held the lease, 1 s before the second export, but the second export drew first (no table lease for the kit: the kit ended at 1795427943498, the second export's receipt released the lease at 1795427943160)
+Tests  1 failed (1)
+Duration  818.09s (tests 100%)
+ended exit 1 Mon Nov 23 04:59:03 EST 2026 load averages: 89.23 121.10 126.83
+
+== environment.test.ts (AC4): FAIL at its first assertion: the kit, with the leased command's environment (DEEP_LEASED=1, MAKEFLAGS, CARGO_MAKEFLAGS), drew and ended while the exclusive holder held the gpu lease, and took no table lease. The holder was let go on the kit's end. The planted leg didn't run.
+started Mon Nov 23 04:59:13 EST 2026 load averages: 83.93 119.47 126.22
+AC4 as built (load 80.1 on 18 cores): the leased command's environment {"MAKEFLAGS":"-j11 --jobserver-auth=fifo:<tmp>/h/.dee...","CARGO_MAKEFLAGS":"-j11 --jobserver-auth=fifo:<tmp>/h/.dee...","DEEP_LEASED":"1"}; the holder's lease lease:01M83XGY7WF8P2EHAKD8VEHXKH exclusive 1795427956988..1795427960093, let go at 1795427960047; the kit ran 1795427957076..1795427960047; the kit session's gpu leases since: none
+× AC4 #3219.a0eeff4a a kit with a leased command's environment waits for an exclusive holder and then takes its own lease; a planted deep-show that trusts the environment (planted: trusts_leased_env) fails, naming the holder 6259ms
+AssertionError: a kit with a leased command's environment, beside an exclusive holder:
+- the kit, run with a leased command's environment and no lease in the table, ended at 1795427960047 while the exclusive holder session:b73a78d3730f4e1397a4a3a644ee1911 (`deep lease gpu:exclusive -- holder ac4` in session b73a78d3-730f-4e13-97a4-a3a644ee1911) held the gpu lease exclusive (granted 1795427956988, released 1795427960093): it drew beside the holder instead of waiting
+- the kit took no gpu lease in the table: it didn't ask, as any other kit asks, while the exclusive holder session:b73a78d3730f4e1397a4a3a644ee1911 (`deep lease gpu:exclusive -- holder ac4` in session b73a78d3-730f-4e13-97a4-a3a644ee1911) held it
+Tests  1 failed (1)
+Duration  6.50s (tests 99%)
+ended exit 1 Mon Nov 23 04:59:20 EST 2026 load averages: 80.14 117.49 125.44
+
+== no-hub.test.ts (AC5): FAIL with both legs' failures: with no hub the kit held the file (its PID seen in it) but its reply has no `from`; with the file held by a live PID, the kit waited its full wait (306.7 s) and then drew anyway, its GPU cases PASS and its reply `"gpu": true` (#2133's defect).
+started Mon Nov 23 04:40:13 EST 2026 load averages: 39.76 42.89 53.97
+AC5 the kit with no hub (load 39.8 on 18 cores): ran 1795426815009..1795426817622 as PID 50278; reply lease {"gpu":true}; GPU cases parity/scene/gpu-pass-a.board#check2 PASS, parity/scene/gpu-pass-b.board#check2 PASS; the lease file seen 2 times holding PIDs 50278
+AC5 the kit whose wait runs out (load 240.3 on 18 cores): ran 1795426817632..1795427124347 (306.7 s) while PID 50853 (alive: true) held the file; reply lease {"gpu":true}; GPU cases parity/scene/gpu-pass-a.board#check2 PASS, parity/scene/gpu-pass-b.board#check2 PASS
+× AC5 #3219.3e5e1a25 with no hub, a kit holds the lease file and its reply's lease says the file; a kit whose wait for the file runs out holds no lease and answers its GPU cases BLOCKED 310280ms
+AssertionError: a kit with no hub:
+- with no hub, the kit's reply must say its lease was the file's, {"gpu": true, "from": "file"}; it says {"gpu":true}
+- a kit that holds no lease after its wait (the file held by live PID 50853, no hub) must answer its GPU cases BLOCKED; they are parity/scene/gpu-pass-a.board#check2 PASS, parity/scene/gpu-pass-b.board#check2 PASS
+- a kit that holds no lease after its wait must report "lease": {"gpu": false}; it reports {"gpu":true}
+Tests  1 failed (1)
+Duration  310.52s (tests 100%)
+ended exit 1 Mon Nov 23 04:45:24 EST 2026 load averages: 240.31 207.36 128.46
+
+== receipt.test.ts (AC6): FAIL at its first assertion: the receipt's lease record names no lease ID; it is deep-show's own (holder `process <pid>`), and the table holds no gpu lease. The planted leg didn't run.
+started Mon Nov 23 04:40:02 EST 2026 load averages: 45.07 43.97 54.54
+AC6 as built (load 42.3 on 18 cores): the export ran 1795426805012..1795426808346; the receipt's lease {"resource":{"host":"local","kind":"gpu","key":"Apple M5 Max"},"holder":"process 47571","asked":1795426807485,"acquired":1795426807485,"waited_ms":0,"released":1795426808325}; the table's gpu leases: none
+× AC6 #3219.b9bc7bce the receipt's lease is a gpu lease the table recorded for the export, its asked, acquired and released times the table's; a planted receipt that writes a record of its own (planted: receipt_writes_own_lease) fails, naming the ID 5114ms
+AssertionError: the export's receipt and the lease table:
+- the receipt's lease record names no lease ID (lease.id): {"resource":{"host":"local","kind":"gpu","key":"Apple M5 Max"},"holder":"process 47571","asked":1795426807485,"acquired":1795426807485,"waited_ms":0,"released":1795426808325}; the table's gpu leases: none
+Tests  1 failed (1)
+Duration  5.32s (tests 99%, transform 1%)
+ended exit 1 Mon Nov 23 04:40:08 EST 2026 load averages: 42.26 43.42 54.22
+
+== budgets.test.ts (AC7): FAIL at its first assertion: with a hub running, the kit takes no table lease, so there is no lease whose taking could be timed. The machine check that follows (it would read INCONCLUSIVE here: load past the 18 cores) wasn't reached, and nothing was built.
+started Mon Nov 23 04:40:08 EST 2026 load averages: 42.26 43.42 54.22
+AC7 the kit with a hub (load 39.8 on 18 cores): ran 2629 ms; GPU cases parity/scene/gpu-pass-a.board#check2 PASS, parity/scene/gpu-pass-b.board#check2 PASS; its gpu leases: none
+× AC7 #3219.018fc9c7 with a hub, a kit takes the table's gpu lease; on a fit reference Mac, its run is within 5 ms of the merge base's at p50 4545ms
+AssertionError: with a hub running, the kit takes the table's gpu lease under its session session:37af9f7dd1bd42aaa96a5286bbeeb9e9, so there is a lease whose taking the budget times; the table's gpu leases: none: expected 0 to be greater than 0
+Tests  1 failed (1)
+Duration  4.72s (tests 99%)
+ended exit 1 Mon Nov 23 04:40:13 EST 2026 load averages: 39.76 42.89 53.97

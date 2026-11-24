@@ -1,0 +1,33 @@
+== branch-3 head 0a875355b Mon Nov 23 15:33:14 PST 2026 load { 40.54 73.34 86.18 }
+TSC OK
+ RUN  v5.0.5 <scratch>/blind/tests/acceptance/2420
+ ✓ runs.test.ts > runs under the ceiling, and runs side by side > #2420.17cfe76e a run refused 3 different targets records 3 events and no closing one 22251ms
+ ✓ runs.test.ts > runs under the ceiling, and runs side by side > #2420.fdfdf3b3 two runs side by side, each sent 300 requests under different names, each record 256 and a closing 44 2582ms
+ ✓ ceiling.test.ts > a run past 256 different targets > #2420.d74ef6aa 1,000 plain HTTP requests to the run's filter port, each under a different Host, are each answered 403; the record holds 256 sandbox.denied for the run naming a target, and after the run ends one more with operation more and target 744 2158ms
+ ✓ ceiling.test.ts > a run past 256 different targets > #2420.a7473ad6 a second thousand under other names adds no event while the run lives, and the closing event reads 1744 2122ms
+ ✓ long-target.test.ts > a target past 512 bytes > #2420.9574047b a request whose Host is 9,000 characters long is answered 403 and recorded with a target of its first 512 bytes followed by 9000 1758ms
+ Test Files  3 passed (3)
+      Tests  5 passed (5)
+   Start at  15:33:55
+   Duration  31.07s (tests 100%)
+DONE exit=0 Mon Nov 23 15:34:26 PST 2026
+== twin new-256-once-full (#2420.a7473ad6) Mon Nov 23 15:34:26 PST 2026 load { 25.63 62.11 80.93 }
+ ❯ ceiling.test.ts (2 tests | 1 failed | 1 skipped) 2511ms
+     × #2420.a7473ad6 a second thousand under other names adds no event while the run lives, and the closing event reads 1744 2510ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: run run:01M85C5KT3X12XG3EW5CDD81Q9 recorded 512 sandbox.denied naming a target, expected 256 (512 after the first thousand; the second thousand added 0: []): expected 512 to be 256 // Object.is equality
+      Tests  1 failed | 1 skipped (2)
+== twin closing-always (#2420.17cfe76e) Mon Nov 23 15:34:30 PST 2026 load { 25.50 61.48 80.59 }
+ ❯ runs.test.ts (2 tests | 1 failed | 1 skipped) 2405ms
+     × #2420.17cfe76e a run refused 3 different targets records 3 events and no closing one 2404ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: run run:01M85C5QQJDFPE3DD14QVYED99, refused 3 different targets, got a closing sandbox.denied: [{"operation":"more","target":"0"}]: expected [ { log_pos: 12, …(2) } ] to deeply equal []
+      Tests  1 failed | 1 skipped (2)
+== twin one-count-for-both (#2420.fdfdf3b3) Mon Nov 23 15:34:34 PST 2026 load { 24.74 60.72 80.21 }
+ ❯ runs.test.ts (2 tests | 1 failed | 1 skipped) 182924ms
+     × #2420.fdfdf3b3 two runs side by side, each sent 300 requests under different names, each record 256 and a closing 44 182923ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the second run run:01M85C5WV2GPS9QBERW7TD6WWH recorded 0 sandbox.denied naming a target, expected 256: []: expected +0 to be 256 // Object.is equality
+      Tests  1 failed | 1 skipped (2)
+DONE Mon Nov 23 15:37:42 PST 2026
+ROUND-DONE
