@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { JsonValue } from '@deepbuild/contracts';
-import { openRecord, type Connection, type Event, type RecordStore } from '@deepbuild/record';
+import { openRecord, testStorage, type Connection, type Event, type RecordStore } from '@deepbuild/record';
 import { AskRefused, askSources, draftAskSettings, openAsks, type AskKind, type Asks, type Delivery } from '../src/index.js';
 
 type Obj = { [key: string]: JsonValue };
@@ -150,6 +150,34 @@ describe('settings files', () => {
 });
 
 describe('the fold', () => {
+  it('an inbox row says whether it is its session\'s "keeps asking" exception, the one that holds folded asks, and no other exception is (#22)', async () => {
+    settings({}); // no batches: every ask shows when it's raised
+    await start('S1');
+    // An exception of another kind waits in the same session before its asks fold: it holds nothing.
+    const fixture = askSources().find((r) => r.source === 'guard.overridden')!.fixture.ask as Obj;
+    const guard = await asks.raise(core('S1'), 'guard.overridden', { ...structuredClone(fixture), deadline: T0 + 2 * DAY });
+    const { folded, exception } = await fold('S1', ask('taste', 'S1 footer'));
+    const rows = await asks.inbox();
+    const holders = rows.filter((r) => r.holder).map((r) => r.ask);
+    expect(holders).toEqual([exception]);
+    for (const r of rows) expect(r.holder, r.ask).toBe(r.ask === exception);
+    expect(rows.find((r) => r.ask === guard)?.kind).toBe('exception');
+    expect(rows.find((r) => r.ask === folded)?.status).toBe('folded');
+  });
+
+  it('an inbox row names the exception holding it, another session\'s on the same thread included, and no other row names one (#22)', async () => {
+    settings({}); // no batches: every ask shows when it's raised
+    await start('S1', 'T');
+    await start('S2', 'T'); // started in S1's place: the same thread, so its asks fold into S1's exception
+    const { folded, exception } = await fold('S1', ask('taste', 'S1 footer'));
+    const later = await asks.raise(core('S2'), sourceOf('taste'), ask('taste', 'S2 header'));
+    const rows = await asks.inbox();
+    expect(rows.find((r) => r.ask === later)).toMatchObject({ session: 'S2', status: 'folded', folded: exception });
+    for (const r of rows) expect(r.folded, r.ask).toBe(r.ask === folded || r.ask === later ? exception : null);
+    // Who raised each: a fold is one person's, so the app folds a live ask only under the same actor and scope.
+    for (const r of rows) expect({ actor: r.actor, scope: r.scope }, r.ask).toEqual({ actor: core('S1').actor, scope: core('S1').scope });
+  });
+
   it('Later on the exception never passes the earliest deadline among the asks it holds', async () => {
     settings({}); // no batches: every ask shows when it's raised
     await start('S1');
@@ -628,5 +656,28 @@ describe('showings', () => {
     await record.append({ writer: 'core', ...team }, { v: 1, id: id(now), kind: 'ask.later', ts: now, subject: mine, data: { until: T0 + HOUR } });
     expect((await asks.inbox()).find((r) => r.ask === mine)?.status).toBe('shown');
     expect((await record.table('asks')).rows.find((r) => `ask:${String(r.id)}` === mine)?.status).toBe('open');
+  });
+});
+
+describe('a batch the record refused (#22)', () => {
+  it('is still due at the next beat, and shows then: a refused showing does not count as the batch shown', async () => {
+    await record.close();
+    const storage = testStorage();
+    record = await openRecord({ path: join(dir, 'refused.db'), now: () => now, storage });
+    asks = planned(await openAsks({ record, now: () => now, deliver: (d) => { deliveries.push(d); }, home }));
+    settings({ every: '1h', cap: 10 });
+    await start('S1');
+    now = T0 + 10 * 60_000;
+    const handle = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'header'));
+    expect(await shown(), 'the ask waits for the 13:00 batch').toEqual([]);
+    now = T0 + HOUR + 1000;
+    expect(await asks.batchDue(), 'at 13:00 the batch is due').toBe(true);
+    storage.refuseWrites = true;
+    await expect(asks.tick(), 'the record refuses the batch').rejects.toThrow(/refuses writes/);
+    storage.refuseWrites = false;
+    now += 1000;
+    expect(await asks.batchDue(), 'the refused batch is still due at the next beat').toBe(true);
+    await asks.tick();
+    expect(await shown(), 'and the next tick shows it').toEqual([handle]);
   });
 });

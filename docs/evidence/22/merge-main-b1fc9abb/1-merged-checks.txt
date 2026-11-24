@@ -1,0 +1,68 @@
+tree: HEAD 6790df89abecb7508f58c94bdebc87f291399c43 with main b1fc9abb20d2fd9a5fd46c323e861726fcd62a28 merged, resolved, uncommitted; Sun Nov 15 05:03:14 PM PST 2026; load 20.61 65.15 70.61
+npm install 0
+build workspaces 0
+deep-hook 0
+=== cargo test -p deep-app --lib
+exit 0
+test result: ok. 114 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
+=== packages/asks/test
+exit 0
+ Test Files  5 passed (5)
+      Tests  79 passed (79)
+=== packages/hub/test/asleep.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/asleep.test.ts > a hub that slept with an ask waiting for its batch moves its deadline later by the time it slept
+RecordError: unlisted_field at /data/subject: Remove the field, or connect with the contract version that lists it. (ask.created 01M7GY8NYQTVKP5XT19VJ99VDF)
+ FAIL  packages/hub/test/asleep.test.ts > a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due, after you change the batches
+RecordError: unlisted_field at /data/subject: Remove the field, or connect with the contract version that lists it. (ask.created 01M7GY98W2C1VW30ZCEN0N6QNV)
+ FAIL  packages/hub/test/asleep.test.ts > the hub's list holds an ask from the batch that shows it, not while it waits for that batch
+RecordError: unlisted_field at /data/subject: Remove the field, or connect with the contract version that lists it. (ask.created 01M7GY98Y3HW5NFQFBXM8DM31K)
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+=== tests/acceptance/1345
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/1345/batch.test.ts > AC3 #1345.9c5710a8 Five calls from five issues reach one person as one card, and that day raises one notification
+ FAIL  tests/acceptance/1345/batch.test.ts > AC7 #1345.aaa324a9 Five calls from five issues draw as #328's card with five rows, and the tree holds no second batch card. A row whose Send back would revert says so before it's pressed. A plant
+ FAIL  tests/acceptance/1345/batch.test.ts > AC8 #1345.69fa185d On the five-row card each row shows when its recommended answer applies, and the five rows add up to the count. A planted card with no time on a row fails, naming the row
+Error: BLOCKED: the app draws headless on macOS only; this is linux
+     66| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+ FAIL  tests/acceptance/1345/blocked.test.ts > AC6 #1345.45221c69 Issues blocked by a landed change with an open call start. Issues blocked by a held one don't
+Error: BLOCKED: the app draws headless on macOS only; this is linux
+     66| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+ FAIL  tests/acceptance/1345/deadline.test.ts > AC4 #1345.464309b0 A call unanswered at its deadline takes its recommended answer, the issue closes, and the record reads default, never your answer
+Error: BLOCKED: the app draws headless on macOS only; this is linux
+     66| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+ FAIL  tests/acceptance/1345/held.test.ts > AC2 #1345.ba6681c8 A change that reaches a release, or a published page, stays held. A planted lander that lets it through fails, naming the change
+Error: BLOCKED: the app draws headless on macOS only; this is linux
+=== tests/acceptance/319
+exit 0
+ Test Files  7 passed (7)
+      Tests  18 passed | 2 skipped (20)
+=== tests/acceptance/320
+exit 0
+ Test Files  5 passed (5)
+      Tests  9 passed (9)
+=== tests/acceptance/321
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/321/deadline.test.ts > AC5 #321.e6090cff on the virtual clock, each hold takes no at the 1-day authority deadline and its call never runs > AC5 (wrong program) a hold filed as a choice whose recommended option approv
+Error: #321.e6090cff the planted hold-as-choice must fail this test naming the source (effect.push, effect.merge or mcp.tool_changed); it failed with: AC5 #321.e6090cff the session start must record forge's tool list (list_issues): 30 s aft
+ FAIL  tests/acceptance/321/proceed.test.ts > AC1 #321.69952336 a proceed never covers a push: held at PreToolUse with an authority ask, whatever sorter answered > AC1 (wrong program) a core that lets a proceed cover the turn's calls (DEEP_
+Error: #321.69952336 the planted core must fail this test naming the call `git push origin main`; it failed with: AC1 #321.69952336 the planted sorter's proceed for "want me to push to main?" must be recorded with the question and the rule 
+ Test Files  2 failed | 3 passed (5)
+      Tests  2 failed | 7 passed (9)
+=== tests/acceptance/83/redraft-319
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/83/redraft-319/status.test.ts > AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call > AC2 #83.5bcede40 an ask still waiting for its batch isn't co
+AssertionError: "still going?" is answered from the record (the UserPromptSubmit reply blocks the prompt with the answer as its reason): {"model":true,"runs":[{"command":"exec '<worktree>/tar
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+=== e2e-signin NO_APP
+exit 0
+      Tests  1 passed (1)
+sign-in task ask:01M7GYECMKQPED2HJWN6GMXWYG "Sign in to Claude Code again? Your sign-in lapsed. The work waits, and nothing is lost.": inbox shown, hub list listed
+taste call ask:01M7GYEBP4048D6X7TANZ74G14: inbox queued, hub list not listed
+done Sun Nov 15 05:09:55 PM PST 2026; load 87.77 61.72 64.55
