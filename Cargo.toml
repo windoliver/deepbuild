@@ -156,3 +156,10 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.deep-sandbox-wasmtime]
 opt-level = 3
+# Issue #3108: a hub's first deep_kinds call waits for the pack check, which compiles every
+# pack's programs through Cranelift; at the dev default that passed the hub's 55 s answer wait under
+# load, so the compiler and its register allocator build at release speed there.
+[profile.dev.package.cranelift-codegen]
+opt-level = 3
+[profile.dev.package.regalloc2]
+opt-level = 3

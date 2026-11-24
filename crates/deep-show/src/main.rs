@@ -1331,7 +1331,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
                 || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
-                || deep_canvas_input::rows::PLANTED.contains(p)
+                || deep_canvas_input::rows::PLANTED.contains(p) || deep_canvas_marks::data::holds::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
                 || deep_canvas_input::point::PLANTED.contains(p)
                 // #542's in the text field and the scroll control's router.

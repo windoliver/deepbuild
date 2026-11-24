@@ -426,9 +426,12 @@ impl Shown {
                 .collect();
             // An item heard but drawn in no box (a path) is still a node of the tree `see`
             // reads (criterion 4: "VoiceOver names every part"), at the panel it draws in.
-            let (_, unboxed) = nodes(revision, &[], &boxes, panel);
+            let mut heard = revision.clone();
+            let _ = hub.inline_tables(&mut heard);
+            let record = hub.record();
+            let (_, unboxed) = nodes(&heard, &[], &boxes, panel, &record);
             boxes.extend(unboxed.into_iter().map(|id| (id, panel)));
-            self.nodes = nodes(revision, &[], &boxes, panel).0;
+            self.nodes = nodes(&heard, &[], &boxes, panel, &record).0;
         }
         self
     }
