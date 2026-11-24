@@ -40,18 +40,18 @@ function firstDiff(a: unknown, b: unknown, at = ''): string | null {
 
 /**
  * Why a provider's row doesn't serve a use, as the first schema path that differs, or null when it does. A row that
- * keeps no digests (a manifest from before #103) is held to its name and minor alone. `namesAlone` is the planted
- * hub that compares names only.
+ * keeps no digests serves only a use that states none, by name and minor (a manifest from before #103). `namesAlone`
+ * is the planted hub that compares names only.
  */
 function mismatch(use: UseRow, row: ProvideRow, namesAlone = false): string | null {
-  if (row.interface === use.interface && (namesAlone || ((row.minor ?? 0) >= (use.minor ?? 0) && (row.digests === undefined || row.digests[String(use.minor ?? 0)] === use.digest)))) return null;
+  if (row.interface === use.interface && (namesAlone || ((row.minor ?? 0) >= (use.minor ?? 0) && row.digests?.[String(use.minor ?? 0)] === use.digest))) return null;
   return firstDiff(use.schema ?? {}, row.schema ?? {}) ?? '/';
 }
 
-/** The provider a use resolves to among the pieces, by type: the one it prefers when that one matches, else the first that does. */
+/** The provider a use resolves to among the pieces, by type: the one it prefers when that one matches, else the first by ID, in UTF-16 code units. */
 export function resolve(user: string, use: UseRow, pool: readonly Piece[], namesAlone = false): Piece | undefined {
   const matching = pool.filter((p) => p.id !== user && p.provides.some((row) => mismatch(use, row, namesAlone) === null));
-  return matching.find((p) => p.id === use.from) ?? matching.sort((a, b) => a.id.localeCompare(b.id))[0];
+  return matching.find((p) => p.id === use.from) ?? matching.sort((a, b) => (a.id < b.id ? -1 : 1))[0];
 }
 
 /**

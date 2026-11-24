@@ -7,7 +7,7 @@ import { basename } from 'node:path';
 import { promisify } from 'node:util';
 import type { RecordReader } from '@deepbuild/record';
 import type { RecordedCall, ReplayTask } from './index.js';
-import { isOutside } from './recording.js';
+import { isOutside, writesFile } from './recording.js';
 
 const run = promisify(execFile);
 const git = async (cwd: string, args: string[]): Promise<string | undefined> => {
@@ -31,14 +31,14 @@ function typed(entry: Record<string, unknown>): string | undefined {
 const resultText = (content: unknown): string => typeof content === 'string' ? content
   : Array.isArray(content) ? content.filter(isObj).filter((b) => b.type === 'text').map((b) => String(b.text ?? '')).join('\n') : '';
 
-/** The session's outside calls with their results, in order: each MCP tool call, and each shell command that reaches the network. */
-function recordingOf(entries: Record<string, unknown>[]): RecordedCall[] {
+/** The session's own tool calls with their results, in order. */
+function callsOf(entries: Record<string, unknown>[]): RecordedCall[] {
   const made = new Map<string, { tool: string; input: unknown }>();
   const out: RecordedCall[] = [];
   for (const entry of entries) {
     const content = isObj(entry.message) && Array.isArray(entry.message.content) ? entry.message.content.filter(isObj) : [];
     for (const b of content) {
-      if (entry.type === 'assistant' && b.type === 'tool_use' && typeof b.id === 'string' && typeof b.name === 'string' && isOutside(b.name, b.input)) made.set(b.id, { tool: b.name, input: b.input ?? {} });
+      if (entry.type === 'assistant' && b.type === 'tool_use' && typeof b.id === 'string' && typeof b.name === 'string') made.set(b.id, { tool: b.name, input: b.input ?? {} });
       const call = entry.type === 'user' && b.type === 'tool_result' && typeof b.tool_use_id === 'string' ? made.get(b.tool_use_id) : undefined;
       if (call) out.push({ ...call, result: resultText(b.content), ...(b.is_error === true ? { error: true } : {}) });
     }
@@ -81,8 +81,10 @@ export async function archivedTasks(reader: RecordReader, read: (sha256: string)
     const branch = typeof first.entry.gitBranch === 'string' && first.entry.gitBranch !== 'HEAD' ? first.entry.gitBranch : session.branch;
     const commit = (branch ? await git(repo, ['rev-list', '-1', before, branch, '--']) : undefined) ?? await git(repo, ['rev-list', '-1', before, 'HEAD', '--']);
     if (!commit) { skip(`${repo} has no commit from before ${new Date(at).toISOString()}`); continue; }
-    const recording = recordingOf(entries);
-    tasks.push({ id: `session:${session.id}#${String(first.entry.uuid)}`, at, repo, commit, prompt: first.text, ...(recording.length ? { recording } : {}) });
+    const calls = callsOf(entries);
+    const recording = calls.filter((c) => isOutside(c.tool, c.input));
+    const work = calls.some(writesFile);
+    tasks.push({ id: `session:${session.id}#${String(first.entry.uuid)}`, at, repo, commit, prompt: first.text, ...(recording.length ? { recording } : {}), ...(work ? { work } : {}) });
   }
   // A replay's own agents run with your hooks, so the archive holds their sessions too, each opening with the words of
   // the task it replayed: only the first session to ask in those words is a task.

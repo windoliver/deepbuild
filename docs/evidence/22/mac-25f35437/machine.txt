@@ -1,0 +1,15 @@
+Mac15,12
+Apple M3
+17179869184
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=20775011)	64%; charging; 1:55 remaining present: true
+ lowpowermode         0
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+ProductName:		macOS
+ProductVersion:		14.7.7
+BuildVersion:		23H723
+23:15  up 43 days,  1:40, 2 users, load averages: 3.85 12.21 14.10
+Now drawing from 'AC Power'
+budgets start: 2026-11-10 23:15:39 23:15  up 43 days,  1:40, 2 users, load averages: 3.85 12.21 14.10

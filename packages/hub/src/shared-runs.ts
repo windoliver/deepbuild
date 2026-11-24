@@ -1,8 +1,8 @@
 // Results shared across sessions (#1018; design: Pinned to a commit): a run's key names everything its result depends
 // on, so any claim in the same repo on the same host whose key is equal reads that run as carried, whichever session
 // made it. The key is a stem (the repo, the host, the check's approved bytes, command, deadline, held-out variants and referenced outputs,
-// the environment's installs and Node, the names of the files the snapshot holds, and for a base run the merge base
-// instead of those names) and the contents of the files it reads: the files its runs read, or for a base run its own
+// the environment's installs and Node, the programs its command names (#2060), the names of the files the snapshot holds,
+// and for a base run the merge base instead of those names) and the contents of the files it reads: the files its runs read, or for a base run its own
 // files. A key's runs come from every claim that ran it, each counted once.
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -81,8 +81,8 @@ export async function namesOf(dir: string): Promise<string> {
   return sha(out.sort().join('\0'));
 }
 /** The stem of a key: everything but the files' contents, and a workspace's state reading (#67) where a claim has one. */
-export const stemOf = (facts: { repo: string; check: string; approved: string | null; command: string; deadline_ms: number | null; held_out: unknown; references?: unknown; installs: string; names: string | null; base: string | null; session?: string; state?: Record<string, string> }): string =>
-  sha(JSON.stringify([facts.repo, hostname(), facts.check, facts.approved, facts.command, facts.deadline_ms, facts.held_out ?? null, facts.references ?? null, facts.installs, facts.names, facts.base, facts.session ?? null, ...facts.state ? [facts.state] : []]));
+export const stemOf = (facts: { repo: string; check: string; approved: string | null; command: string; deadline_ms: number | null; held_out: unknown; references?: unknown; installs: string; programs: [string, string][]; names: string | null; base: string | null; session?: string; state?: Record<string, string> }): string =>
+  sha(JSON.stringify([facts.repo, hostname(), facts.check, facts.approved, facts.command, facts.deadline_ms, facts.held_out ?? null, facts.references ?? null, facts.installs, facts.programs, facts.names, facts.base, facts.session ?? null, ...facts.state ? [facts.state] : []]));
 /** How run.finished names a failure among its findings, at most FINDINGS of them, and how a restarted hub reads one back. */
 export const FINDINGS = 20;
 const FINDING = /^(.*) \(([^()]*):(\d+)\): ([\s\S]*)$/;

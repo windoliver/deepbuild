@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the screen, since real.test.ts sizes, reads and presses the real deep-app's window and brings it and another app forward; clock.test.ts and it build deep-drive and deep-app with cargo and start a hub" }

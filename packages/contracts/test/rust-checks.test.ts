@@ -15,11 +15,26 @@ beforeAll(() => {
   if (build.status !== 0) throw Error(`cargo build failed:\n${build.stderr}`);
 }, 600_000);
 
-/** Each verdict of the Rust types for the given values of a schema: true where they decode. */
+/** Each verdict of the Rust types for the given values of a schema: true where they decode. The values go in batches
+ * of at most 64 MiB of lines, since every mutant of a large fixture in one input passes the longest string a
+ * JavaScript engine can hold. */
 function rustAccepts(name: string, values: JsonValue[]): boolean[] {
-  const run = spawnSync(BIN, ['check', name], { input: `${values.map((v) => JSON.stringify(v)).join('\n')}\n`, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
-  if (run.status !== 0) throw Error(`deep-contracts check ${name} failed:\n${run.stderr}`);
-  return run.stdout.trimEnd().split('\n').map((line) => line === 'ok');
+  const verdicts: boolean[] = [];
+  const check = (lines: string[]) => {
+    const run = spawnSync(BIN, ['check', name], { input: `${lines.join('\n')}\n`, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+    if (run.status !== 0) throw Error(`deep-contracts check ${name} failed:\n${run.stderr}`);
+    verdicts.push(...run.stdout.trimEnd().split('\n').map((line) => line === 'ok'));
+  };
+  let batch: string[] = [];
+  let size = 0;
+  for (const value of values) {
+    const line = JSON.stringify(value);
+    if (batch.length && size + line.length > 64 * 1024 * 1024) { check(batch); batch = []; size = 0; }
+    batch.push(line);
+    size += line.length + 1;
+  }
+  if (batch.length) check(batch);
+  return verdicts;
 }
 
 /** The schema node a value at this place answers to, through refs, nullables and the branch its tag names. */
@@ -146,7 +161,8 @@ describe('the Rust types refuse what the schemas refuse', () => {
     });
     expect(rust).toHaveLength(cases.length);
     expect(wrong.slice(0, 5), `${wrong.length} of ${cases.length} cases disagree`).toEqual([]);
-  }, 120_000);
+    // A large fixture's mutants take the debug build minutes to decode (adapter.facts@8: about 165 s on the Spark).
+  }, 600_000);
 
   it('every published pattern was matched and refused in some field', () => {
     const published = new Set<string>();

@@ -532,7 +532,7 @@ impl Hub<'_> {
             "view": s.node.view,
             "size": size,
             "targets": targets,
-            "tree": access::tree(&shown, &hidden),
+            "tree": access::tree_with(&shown, &hidden, &self.record()),
             "readouts": access::readouts(&data, &[]),
         }))
     }
@@ -726,15 +726,15 @@ impl Hub<'_> {
             });
             let evidence = self.scenario.evidence.clone();
             let read = move |sha: &str| crate::evidence::read(&evidence, sha);
-            let palette = self.look.light.clone();
+            let look = deep_canvas_scene3d::look::Look3::from_roles(self.look.light.clone());
             let gpu = self
                 .gpu3()
                 .ok_or_else(|| json!({"code": "gpu_unavailable"}))?;
             let (scene, look) = gpu
-                .evaluate(&posed, t, &palette, size, &read)
+                .evaluate(&posed, t, look, size, &read)
                 .map_err(|u| json!({"code": u.code, "path": u.path}))?;
-            let (_, ids) = gpu
-                .draw_scene(&scene, &look, false)
+            let ids = gpu
+                .draw_ids(&scene, &look)
                 .ok_or_else(|| json!({"code": "gpu_unavailable"}))?;
             let [w, h] = size.map(u32::from);
             let inner = |v: u32, n: u32, m: u32| {

@@ -2,14 +2,17 @@
 //! `faults`, `energy`, `penetration` and `soft`), so a lab document is held to settling cleanly:
 //! no fault row of the kinds it names; energy that never grows by more than `energy.max_gain` of
 //! the run's own energy a second, outside the steps an input starts; no contact deeper than
-//! `penetration.max`; and no soft body's edge past `soft.max_stretch` times its rest length. Each
-//! failure names its step, the IDs and a fix. A world's energy is each dynamic body's and each
-//! free particle's kinetic energy plus its height's above the lowest it reached in the run, so a
-//! still world has none and a swinging one its swing's. `settle`, `max_speed` and `joints` come
-//! with breakables and are refused, naming the issue that brings them.
+//! `penetration.max`; no soft body's edge past `soft.max_stretch` times its rest length; and no
+//! more than `soft.through.max` soft-body parts through what they met (#3258), which no contact
+//! depth shows. Each failure names its step, the IDs and a fix. A world's energy is each dynamic
+//! body's and each free particle's kinetic energy plus its height's above the lowest it reached in
+//! the run, so a still world has none and a swinging one its swing's. `settle`, `max_speed` and
+//! `joints` come with breakables and are refused, naming the issue that brings them.
 
 use super::*;
+use deep_canvas_physics::backend::State;
 use deep_canvas_physics::occurrence::Payload;
+use deep_canvas_physics::through::Through;
 use rapier3d::prelude::ColliderHandle;
 
 /// The issue that brings the audit's other expectations.
@@ -27,7 +30,7 @@ struct Reading {
 }
 
 impl Rapier {
-    fn reading(&self, w: &World) -> Reading {
+    fn reading(&self, w: &World, state: &State) -> Reading {
         let g = self.world.gravity;
         let dt = self.world.integration_parameters.dt;
         let mut energy = Vec::new();
@@ -45,7 +48,7 @@ impl Rapier {
         let gravity = [f64::from(g.x), f64::from(g.y), f64::from(g.z)];
         let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
         let mut stretch: Option<(f64, String, String)> = None;
-        for s in self.read().soft {
+        for s in &state.soft {
             let Some(soft) = w.soft.get(&s.id) else {
                 continue;
             };
@@ -99,6 +102,16 @@ impl Rapier {
             stretch,
         }
     }
+
+    /// #3258: `state` without the bodies nothing meets, those an input or their document turned off.
+    fn met<'a>(&self, state: &'a mut State) -> &'a State {
+        let mut on = self
+            .bodies
+            .iter()
+            .map(|(_, h)| self.world.bodies[*h].is_enabled());
+        state.bodies.retain(|_| on.next().unwrap_or(true));
+        state
+    }
 }
 
 impl Run {
@@ -132,6 +145,8 @@ impl Run {
             limit("/penetration/max", 0.01),
             limit("/soft/max_stretch", 1.1),
         );
+        let max_through = expect.pointer("/soft/through/max").and_then(Value::as_u64);
+        let max_through = max_through.unwrap_or(0);
         let (w, mut b) = match self.build(&world).and_then(dims::solid("physics.audit")) {
             Ok(x) => x,
             Err(e) => return Some(e),
@@ -141,7 +156,12 @@ impl Run {
             Err(e) => return Some(e),
         };
         let mut failures = Vec::new();
-        let mut readings: Vec<Reading> = vec![b.reading(&w)];
+        let mut through = Through::new(&w, max_depth, self.through);
+        let mut state = b.read();
+        let mut readings: Vec<Reading> = vec![b.reading(&w, &state)];
+        if let Some(t) = &mut through {
+            t.step(0, b.met(&mut state));
+        }
         let (mut depth, mut stretched) = (0.0f64, 0.0f64);
         for k in 1..=steps {
             let targets = scene
@@ -152,6 +172,9 @@ impl Run {
                 return Some(json!({"ok": false, "issues": [issue(&r)]}));
             }
             for row in b.occurrences() {
+                if let (Payload::Tear { edges }, Some(t)) = (&row.payload, &mut through) {
+                    t.tear(&row.a, edges);
+                }
                 if let Payload::Fault { kind } = row.payload {
                     if faults.iter().any(|f| f == kind) {
                         failures.push(json!({"rule": "faults", "id": row.a, "step": k, "measured": Value::Null, "limit": Value::Null, "fault": kind,
@@ -160,7 +183,11 @@ impl Run {
                     }
                 }
             }
-            let r = b.reading(&w);
+            let mut state = b.read();
+            let r = b.reading(&w, &state);
+            if let Some(t) = &mut through {
+                t.step(k, b.met(&mut state));
+            }
             if let Some((d, a, c)) = &r.deepest {
                 depth = depth.max(*d);
                 if *d > max_depth && !failures.iter().any(|f| f["rule"] == "penetration") {
@@ -230,13 +257,15 @@ impl Run {
                 }
             }
         }
+        let (passed, own) = through.as_ref().map_or((0, 0), Through::counts);
+        failures.extend(through.and_then(|t| t.failure(max_through)));
         failures.sort_by_key(|f| f["step"].as_u64());
         Some(
             json!({"ok": true, "kind": "physics.audit", "verdict": if failures.is_empty() { "PASS" } else { "FAIL" },
             "failures": failures,
-            "readings": {"energy_gain": gain, "penetration": depth, "max_stretch": stretched},
+            "readings": {"energy_gain": gain, "penetration": depth, "max_stretch": stretched, "through": passed, "self_through": own},
             "settings": {"faults": faults, "energy": {"max_gain": max_gain}, "penetration": {"max": max_depth},
-                       "soft": {"max_stretch": max_stretch}}}),
+                       "soft": {"max_stretch": max_stretch, "through": {"max": max_through}}}}),
         )
     }
 }

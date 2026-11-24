@@ -271,6 +271,11 @@ pub enum Read {
     /// sliding or crouched), an i32 of 0 or 1 as the last physics step before the logic step's
     /// time left it: logic steps first at a shared time and reads physics only from earlier steps.
     World,
+    /// #853: a count a canvas module published after its step, an i32: the last one before the
+    /// logic step's time, 0 before any.
+    Count,
+    /// #853: a mean place a canvas module published after its step, three f64, read as a count is.
+    Centre,
     /// Mirror j's range list (Logic: mirror reads).
     Mirror(usize),
     /// #552: `net.draws`, the draws the input track's reveals complete by the step.
@@ -535,6 +540,10 @@ pub struct Item {
     pub program: String,
     /// The bytes that run: sandbox@1's rewrite, or the program as built under `runs_unchecked`.
     pub bytes: Vec<u8>,
+    /// #2662: `bytes` compiled, once, at the first runner made of them; every later runner of the
+    /// item (a restore's, a seek's, a fork's) is a fresh instance of it.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) compiled: std::cell::OnceCell<deep_sandbox_wasmtime::Program>,
     pub hash: String,
     /// The bytes as given, whose code offsets the sidecar's DWARF stands for.
     pub given: Vec<u8>,
@@ -589,6 +598,9 @@ pub struct Item {
     /// The table its `separation` declares, its movers and minima checked, whose bytes are its
     /// asset 0 (#1255).
     pub separation: Option<std::sync::Arc<crate::separation::Table>>,
+    /// The circuit its `circuit` declares, its nodes and parts checked, whose bytes are its asset 0
+    /// (#1181).
+    pub circuit: Option<std::sync::Arc<crate::circuit::Circuit>>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,

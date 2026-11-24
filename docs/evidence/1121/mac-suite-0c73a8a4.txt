@@ -1,0 +1,57 @@
+$ node --test tests/acceptance/1121/record.test.mjs
+✔ #1121.95fa4a52 the Mac's cargo test writes each target's `cargo test -- --list` into its evidence record (3436.569875ms)
+﹣ #1121.95fa4a52 a Spark run's record lists each test absent by platform against the Mac's list, and its lane is INCONCLUSIVE (platform), not PASS (0.403625ms) # INCONCLUSIVE (platform): this needs the Spark, Linux on aarch64, and this machine is darwin-arm64; it is unrun here
+﹣ #1121.95fa4a52 a Spark run with no reference list from the Mac is never PASS (0.128542ms) # INCONCLUSIVE (platform): this needs the Spark, Linux on aarch64, and this machine is darwin-arm64; it is unrun here
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 3497.368417
+exit 0
+$ node --test tests/acceptance/1121/spool.test.mjs
+✔ #1121.23cb368c deep-hook on aarch64 refuses a symlinked spool path: the file it leads to is never written (16704.543ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16755.508417
+exit 0
+$ node --test tests/acceptance/1121/lsof.test.mjs
+﹣ #1121.301969cb env-local finds a free port on Linux, by an lsof that is there (0.667ms) # INCONCLUSIVE (platform): this needs Linux, and this machine is darwin-arm64; it is unrun here
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 55.165625
+exit 0
+$ node --test tests/acceptance/1121/build.test.mjs
+﹣ #1121.73d8f179 every crate of the workspace builds on the Spark, 27 of 27 when the issue was written (0.610667ms) # INCONCLUSIVE (platform): this needs the Spark, Linux on aarch64, and this machine is darwin-arm64; it is unrun here
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 65.717375
+exit 0
+$ node --test tests/acceptance/1121/cargo-test.test.mjs
+﹣ #1121.b915783e the workspace's cargo test on the Spark has no FAIL and no BLOCKED (0.633625ms) # INCONCLUSIVE (platform): this needs the Spark, Linux on aarch64, and this machine is darwin-arm64; it is unrun here
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 57.649583
+exit 0

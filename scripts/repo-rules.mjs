@@ -23,6 +23,8 @@ const fixes = {
   empty: 'Run this from a checkout whose files git lists.',
   card: 'Give the folder a README.md with the headings What it is for, Where new code goes, What it may import and Deviations.',
   deviation: 'Correct the deviation to the file it is about, or remove it if the file is gone.',
+  body: "Put <file>.statement.json beside it: drawn, with the script that drew it, or agreed, with a maintainer's signed agreement (scripts/body-fixtures.mjs).",
+  security: 'Keep SECURITY.md linking this repository\'s private report form, keep that link in .github/ISSUE_TEMPLATE/config.yml\'s contact_links with a name and an about, each key on one line, and keep the one line ending <!-- security rule --> the same in CONTRIBUTING.md and SECURITY.md, editing both together.',
 };
 const cardHeadings = 'What it is for|Where new code goes|What it may import|Deviations'.split('|');
 // Each pattern's match is the reported value; a home path's placeholders and shared folders don't match.
@@ -148,6 +150,8 @@ function cargoSpec(dependency, manifest) {
 }
 
 function checkDeps(files, listed) {
+  // A planted twin under tests/acceptance/ copies our own packages at a base (#3139); its manifests add no dependency.
+  files = files.filter((path) => !/^tests\/acceptance\/(?:[^/]+\/)*twins\//.test(path));
   const before = results.length;
   const declared = new Map(), read = new Set(), unread = new Set();
   let packageFiles = 0, crates = 0, cargoBlocked = false;
@@ -289,6 +293,100 @@ function checkCards(files) {
     report('PASS', 'cards', `${plural(counts.packages, 'package')} and ${plural(counts.crates, 'crate')} have cards with the four headings; ${plural(counts.deviations, 'deviation')}, each naming a file that exists`);
 }
 
+// #2327: a security report has a private route. SECURITY.md names this repository's private report form, the
+// issue chooser links it, and CONTRIBUTING.md and SECURITY.md state the rule in the same words.
+const securityRoute = 'https://github.com/windoliver/deepbuild/security/advisories/new';
+const securityFiles = { security: 'SECURITY.md', contributing: 'CONTRIBUTING.md', chooser: '.github/ISSUE_TEMPLATE/config.yml' };
+const ruleMark = '<!-- security rule -->';
+// It is strict on purpose: it accepts the plain forms these files use and fails anything else, never the reverse.
+function checkSecurity(files) {
+  const before = results.length;
+  const listed = new Set(files);
+  const text = {};
+  for (const [key, path] of Object.entries(securityFiles)) {
+    if (!listed.has(path)) {
+      report('FAIL', 'security', `${path} is missing`, fixes.security);
+      continue;
+    }
+    try {
+      text[key] = readFileSync(join(root, path), 'utf8').replace(/^﻿/, '').replace(/\r\n/g, '\n');
+    } catch (error) {
+      report(error.code === 'ENOENT' ? 'FAIL' : 'BLOCKED', 'security', error.code === 'ENOENT' ? `${path} is missing` : `${path} cannot be read (${error.code})`, error.code === 'ENOENT' ? fixes.security : fixes.read);
+    }
+  }
+  // The forge shows .github/SECURITY.md before the root's.
+  if (listed.has('.github/SECURITY.md')) report('FAIL', 'security', `.github/SECURITY.md would be shown in place of ${securityFiles.security}`, fixes.security);
+  // The route counts only as a bare <address> or an inline link's (address), outside HTML comments, fenced code, HTML
+  // anchors, link text and reference definitions, and not inside a longer address; a bare one may end a sentence.
+  const shown = (text.security ?? '').replace(/<!--[\s\S]*?-->/g, ' ').replace(/^ {0,3}(`{3,}|~{3,})[\s\S]*?^ {0,3}\1/gm, ' ').replace(/<a\b[\s\S]*?<\/a>/gi, ' ').replace(/^\s*\[[^\]]*\]:.*$/gm, ' ').replace(/\[[^\]]*\]/g, ' ');
+  if (text.security !== undefined && !RegExp(`(?<=(?:^|[\\s(])<?)${securityRoute.replace(/[.?/]/g, '\\$&')}(?=$|[\\s>)]|[.,;:!?](?:\\s|$))`, 'm').test(shown))
+    report('FAIL', 'security', `${securityFiles.security} names no route: it doesn't link this repository's private report form, ${securityRoute}`, fixes.security);
+  if (text.chooser !== undefined) {
+    // The chooser reads the whole file or nothing, so every line is judged. It holds top-level `key: value` lines and
+    // one block-style contact_links list: `- ` items at one indent, holding only name, url and about, one per line,
+    // all at one column, indented with spaces. A quoted value is whole, with only a comment after it: a single-quoted
+    // one doubles each ' inside, a double-quoted one escapes each ". A plain value ends at a comment, and can't start
+    // with a quote or another indicator, be a null, or hold ": ", which YAML reads as a mapping. Any other line, or a
+    // second document, and the file shows no link.
+    const scalar = (raw) => {
+      const single = raw.match(/^'((?:[^']|'')*)'(?:\s+#.*)?$/), double = raw.match(/^"((?:[^"\\]|\\.)*)"(?:\s+#.*)?$/);
+      if (single) return single[1].replace(/''/g, "'");
+      if (double) return double[1];
+      const value = raw.replace(/(?:^|\s+)#.*$/, '');
+      return /^['"!&*|>@`%{[]|^(?:~|null|Null|NULL)$/.test(value) || /:(?:\s|$)/.test(value) ? null : value;
+    };
+    const items = [];
+    let broken = false, list = 'before', indent = null, column = null;
+    text.chooser.split('\n').filter((line) => line.trim() && !/^\s*#/.test(line)).forEach((line, index) => {
+      if (index === 0 && /^---\s*$/.test(line)) return;
+      if (/^\S/.test(line) && !/^-\s/.test(line)) {
+        const top = line.match(/^([A-Za-z_][\w-]*):(?:\s+(.*?))?\s*$/);
+        if (top?.[1] === 'contact_links' && list === 'before' && scalar(top[2] ?? '') === '') list = 'in';
+        else if (!top || top[1] === 'contact_links' || scalar(top[2] ?? '') === null) broken = true;
+        else if (list === 'in') list = 'after';
+        return;
+      }
+      const dash = line.match(/^( *)- +/);
+      const field = line.match(/^( *)(?:- +)?(name|url|about):(?:\s+(.*?))?\s*$/);
+      const value = field && scalar(field[3] ?? '');
+      if (dash) items.push({});
+      if (list !== 'in' || !items.length || !field || value === null || (dash && (indent ??= dash[1].length) !== dash[1].length) || (column ??= (dash?.[0] ?? field[1]).length) !== (dash?.[0] ?? field[1]).length) broken = true;
+      else items.at(-1)[field[2]] = value;
+    });
+    if (broken || !items.some((item) => item.url === securityRoute && item.name && item.about))
+      report('FAIL', 'security', `${securityFiles.chooser} has no contact link to ${securityRoute} with a name and an about`, fixes.security);
+  }
+  // The rule is the one line in each file that ends with the mark, read without its list mark. It is a paragraph of
+  // its own, outside any HTML comment, so nothing on the page joins it or hides it.
+  const rule = (key) => {
+    const lines = (text[key] ?? '').split('\n');
+    const at = lines.flatMap((line, index) => (line.trimEnd().endsWith(ruleMark) ? [index] : []));
+    if (at.length !== 1) {
+      report('FAIL', 'security', `${securityFiles[key]} has ${at.length} lines ending ${ruleMark}; it states the rule in one`, fixes.security);
+      return null;
+    }
+    const [index] = at;
+    const words = lines[index].trimEnd().slice(0, -ruleMark.length).replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').replace(/\s+/g, ' ').trim();
+    // Its neighbours are blank lines, headings, or, for a list item, other items, so no text runs into it.
+    const item = (line) => /^\s*(?:[-*+]|\d+[.)])\s/.test(line);
+    const apart = (line) => line === undefined || !line.trim() || /^\s{0,3}#{1,6}(?:\s|$)/.test(line) || (item(lines[index]) && item(line));
+    const alone = apart(lines[index - 1]) && apart(lines[index + 1]);
+    const hidden = lines.slice(0, index).join('\n').replace(/<!--[\s\S]*?-->/g, '').includes('<!--') || lines[index].slice(0, -ruleMark.length).includes('<!--');
+    if (!words || !alone || hidden) {
+      report('FAIL', 'security', `${securityFiles[key]}'s line ending ${ruleMark} ${!words ? 'states no rule' : hidden ? 'is inside an HTML comment' : 'is not a paragraph of its own'}`, fixes.security);
+      return null;
+    }
+    return words;
+  };
+  if (text.security !== undefined && text.contributing !== undefined) {
+    const [security, contributing] = [rule('security'), rule('contributing')];
+    if (security !== null && contributing !== null && security !== contributing)
+      report('FAIL', 'security', `${securityFiles.contributing} and ${securityFiles.security} state the rule in different words`, fixes.security);
+  }
+  if (results.length === before)
+    report('PASS', 'security', `${securityFiles.security} names the private report form, ${securityFiles.chooser} links it, and ${securityFiles.contributing} and ${securityFiles.security} state the rule in the same words`);
+}
+
 // Report only: lines added and removed against the merge base perf uses, never the exit status.
 function noteSize() {
   let base;
@@ -325,6 +423,14 @@ function checkPhysicsBuild() {
   else for (const l of lines.length ? lines : [`it didn't run: ${run.error?.message ?? run.stderr}`]) report('FAIL', 'physics-build', l.replace(/^FAIL /, ''), 'Remove the feature or flag the line names from the physics build: rapier3d stays at 0.36.1 with enhanced-determinism, without simd8 or parallel, built for the target\'s baseline features.');
 }
 
+// #3347: every fixture for a class whose entries are a body's motion, listed with its statement (scripts/body-fixtures.mjs).
+function checkBodyFixtures() {
+  const run = spawnSync(process.execPath, [join(root, 'scripts', 'body-fixtures.mjs')], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const lines = run.status === 0 ? run.stdout.split('\n').filter(Boolean) : [];
+  for (const line of lines) report(line.split(' ', 1)[0], 'body-fixtures', line.slice(line.indexOf(' ') + 1), line.startsWith('PASS ') ? undefined : fixes.body);
+  if (!lines.length) report('BLOCKED', 'body-fixtures', `it didn't run: ${run.error?.message ?? /^\w*Error.*$/m.exec(run.stderr)?.[0] ?? `exit ${run.status}`}`, 'Run this from a git checkout that holds scripts/body-fixtures.mjs.');
+}
+
 function readConfig() {
   let rules;
   try {
@@ -354,6 +460,7 @@ try {
 } catch (error) {
   report('BLOCKED', 'secrets', error.message, fixes.git);
   report('BLOCKED', 'deps', error.message, fixes.git);
+  report('BLOCKED', 'security', error.message, fixes.git);
 }
 if (files) {
   const rules = readConfig();
@@ -362,9 +469,11 @@ if (files) {
   if (rules.error) report('INVALID', 'deps', rules.error, fixes.config);
   else checkDeps(files, rules.listed);
   checkCards(files);
+  checkSecurity(files);
   noteSize();
 }
 checkPhysicsBuild();
+checkBodyFixtures();
 const order = ['FAIL', 'INVALID', 'BLOCKED', 'PASS', 'NOTE'];
 for (const { line, fix } of results.sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state))) console.log(fix ? `${line}\n  Fix: ${fix}` : line);
 if (results.some(({ state }) => ['FAIL', 'INVALID', 'BLOCKED'].includes(state))) process.exitCode = 1;
