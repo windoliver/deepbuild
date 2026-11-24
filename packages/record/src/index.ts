@@ -193,7 +193,7 @@ const SCHEMA_VERSION = 1;
 /** Events a replay reads at a time. */
 const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
-const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'work.read', 'work.delivery', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
+const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'work.read', 'work.delivery', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'variant.spent', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
   'approval.held', 'approval.started', 'approval.withdrawn', 'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set', 'claim.progress']);
 /**
  * The evidence an event's data names by hash beside its own list (#1410): a verdict's run output, an answer's image or
@@ -1090,7 +1090,7 @@ export interface RecordReader {
   archived(): Promise<string[]>;
   /** The same sessions with their agent, worktree and branch, and the SHA-256 of the newest transcript copy (#112). */
   sessions(): Promise<{ id: string; agent: string | null; worktree: string | null; branch: string | null; transcript: string }[]>;
-  /** Handles `deep find` searches besides transcripts: your decisions in force, and evidence that is neither media nor a transcript. */
+  /** Handles `deep find` searches besides transcripts: your decisions in force, and evidence that is neither media, a transcript nor held out from a session (#3229). */
   findable(): Promise<string[]>;
   /** As RecordStore's: through the index the hub keeps, and each session it doesn't hold from its transcript (#1515). */
   findMessages(terms: readonly (readonly string[])[], sessions?: readonly string[]): Promise<FoundMessage[]>;
@@ -1107,7 +1107,7 @@ export function openRecordReader(options: { path: string; evidence?: EvidenceSto
     sessions: async () => db.prepare('SELECT id, agent, worktree, branch, transcript FROM sessions WHERE transcript IS NOT NULL ORDER BY id').all() as Awaited<ReturnType<RecordReader['sessions']>>,
     findable: async () => [
       ...(db.prepare("SELECT id FROM decisions WHERE state = 'active' ORDER BY created, id").all() as { id: string }[]).map((r) => `decision:${r.id}`),
-      ...(db.prepare("SELECT hash FROM evidence WHERE type NOT IN ('png', 'jpeg', 'mp4', 'webm') AND kind NOT IN ('transcript', 'transcript-copy') ORDER BY hash").all() as { hash: string }[]).map((r) => `ev:${r.hash}`),
+      ...(db.prepare("SELECT hash FROM evidence WHERE type NOT IN ('png', 'jpeg', 'mp4', 'webm') AND kind NOT IN ('transcript', 'transcript-copy', 'held-out') ORDER BY hash").all() as { hash: string }[]).map((r) => `ev:${r.hash}`),
     ],
     findMessages: (terms, sessions) => findMessages(db, terms, sessions, (session) => sessionTranscript(db, options.evidence, transcripts, session)),
     touched: async (file, cwd) => touched(db, file, cwd),
