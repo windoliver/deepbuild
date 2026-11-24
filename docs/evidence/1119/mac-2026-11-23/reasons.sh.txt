@@ -1,0 +1,9 @@
+#!/bin/bash
+# Tallies cargo's fingerprint reasons and rebuilt units in a run's base-copy cargo calls.
+cd "$1/cargo" || exit 1
+for f in *.log; do case "$(sed -n 2p "$f")" in *"/base/copy"*) cat "$f";; esac; done > /tmp/reasons.$$
+echo "== stale: changed (paths)"; /usr/bin/grep -oE 'stale: changed "[^"]*"' /tmp/reasons.$$ | sed -E 's#/Users/[^"]*/base/##' | sort | uniq -c | sort -rn | head -12
+echo "== dirty kinds"; /usr/bin/grep -oE 'dirty: [A-Za-z]+' /tmp/reasons.$$ | sort | uniq -c
+echo "== fingerprint error (no fingerprint file)"; /usr/bin/grep -c 'fingerprint error' /tmp/reasons.$$
+echo "== units"; /usr/bin/grep -oE '^ *(Compiling|Checking) [^ ]+' /tmp/reasons.$$ | awk '{print $1, $2}' | sort | uniq -c | sort -rn
+rm -f /tmp/reasons.$$

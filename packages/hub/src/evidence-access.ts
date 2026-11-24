@@ -8,6 +8,7 @@ import { relative, resolve } from 'node:path';
 
 import { type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { citedEvidence } from '@deepbuild/extension-host';
+import { openSlicer } from '@deepbuild/reading/slices';
 import { type RecordStore } from '@deepbuild/record';
 import { type Checkouts } from '@deepbuild/gate';
 
@@ -15,17 +16,22 @@ import type { WorkspaceService } from './workspaces-port.js';
 
 import { retain } from './retention.js';
 
+import { HELD_OUT } from './variants.js';
+
 import { LogReads } from './log-reads.js';
+
+import type { Root } from './paths.js';
 
 import { type Durable } from './vfs.js';
 import { refuse, Refused, refusal, type CoreOptions } from './wire.js';
 
-import { type Obj, isUnder } from "./hub-shared.js";
+import { type Obj, isObj, isUnder } from "./hub-shared.js";
 
 export interface EvidenceAccessOptions {
  settings: CoreOptions;
  services: {
 readonly log: LogReads;
+readonly root: Root;
 readonly store: EvidenceStore;
 readonly durable: Durable;
 readonly record: RecordStore;
@@ -49,8 +55,25 @@ export class EvidenceAccess {
     return this.options.services.log.reflecting(async () => {
       const evidence = await this.options.services.store.get(sha);
       if (!evidence) throw new Refused(refusal('not_found', '/params/sha', `The store holds no evidence ${sha}.`, sha));
+      if (evidence.sealed) throw new Refused(refusal('denied', '/params/sha', `${sha} is ${evidence.source}, held out from the sessions its check judges: no read by handle opens it.`, sha));
       return { evidence: JSON.parse(JSON.stringify(evidence)) as Obj };
     });
+  }
+
+  /** `deep read` and `deep find` for a process that can't open the store itself (#3229): the same slices, from the store the hub holds. */
+  async handle(params: Obj): Promise<Obj> {
+    const cursor = typeof params.cursor === 'string' ? params.cursor : undefined;
+    const file = isObj(params.file) && typeof params.file.path === 'string' ? { path: params.file.path, ...(typeof params.file.cwd === 'string' ? { cwd: params.file.cwd } : {}) } : undefined;
+    const sha = this.options.settings.plant === 'answers-variant-bytes' ? /^ev:([0-9a-f]{64})$/.exec(String(params.read))?.[1] : undefined;
+    if (sha && (await this.options.services.store.get(sha))?.sealed) return { handle: String(params.read), covers: 'the whole file', text: Buffer.from(await this.options.services.store.unseal(sha)).toString('utf8') };
+    const slicer = await openSlicer(this.options.services.root.dir, this.options.services.store);
+    try {
+      return { ...(typeof params.find === 'string' ? await slicer.find(params.find, cursor, undefined, file) : await slicer.read(String(params.read), cursor)) };
+    } catch (error) {
+      throw new Refused(refusal('not_found', '/params', error instanceof Error ? error.message : String(error), params.find ?? params.read));
+    } finally {
+      slicer.close();
+    }
   }
 
   /** The peer a store writer is bound to: from the connection's credential, never from what the payload says. */
@@ -62,9 +85,9 @@ export class EvidenceAccess {
     return fromCredential;
   }
 
-  /** A drafted check's bytes as approved at its definition's lock, kept by digest for the claim's checks to run. */
-  async keep(bytes: Uint8Array, source: string): Promise<string> {
-    const put = await this.options.services.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'unknown', license: { name: 'session', allows: [] } });
+  /** A drafted check's bytes as approved at its definition's lock, kept by digest for the claim's checks to run; a held-out variant's sealed (#3229). */
+  async keep(bytes: Uint8Array, source: string, sealed?: true): Promise<string> {
+    const put = await this.options.services.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: sealed ? HELD_OUT : 'file', source, redaction: 'unknown', license: { name: 'session', allows: [] }, ...(sealed ? { sealed } : {}) });
     return (await this.stored(put, source)).sha256;
   }
 

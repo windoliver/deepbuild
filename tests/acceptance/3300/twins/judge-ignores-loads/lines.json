@@ -1,0 +1,8 @@
+{
+  "benchmarks/canvas-judge.mjs": [
+    {
+      "find": ["export const loadsOf = (measured) => measured.map((r) => ({ start: r.loadStart, end: r.loadEnd }));"],
+      "wrong": ["export const loadsOf = (measured) => measured.map(() => ({ start: 0, end: 0 }));"]
+    }
+  ]
+}

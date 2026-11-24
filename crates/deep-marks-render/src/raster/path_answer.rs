@@ -167,3 +167,27 @@ pub fn path_answer(
         Ok(v) | Err(v) => v,
     }
 }
+
+/// A `path` line's planted value, or `None` for one the surface doesn't name.
+pub fn planted_path(name: &str) -> Option<Planted> {
+    const OPS: [&str; 7] = [
+        "trim",
+        "round_corners",
+        "offset_path",
+        "zigzag",
+        "pucker",
+        "twist",
+        "repeater",
+    ];
+    match name {
+        deep_canvas_marks::warp::ANCHORS_ONLY => Some(Planted::WarpAnchorsOnly),
+        "merge_zero_fills" => Some(Planted::MergeZeroFills),
+        "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
+        "light_stale_list" => Some(Planted::LightStaleList),
+        "light_stale_height" => Some(Planted::LightStaleHeight),
+        _ => {
+            let op = name.strip_prefix("moved:")?;
+            OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))
+        }
+    }
+}

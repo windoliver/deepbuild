@@ -19,6 +19,7 @@ import { type PaidKind } from '@deepbuild/gate';
 import { type Reach } from './could-do.js';
 
 import { type ClaimCheck, type DefinitionState, type RunKey, type StatePin } from './gate-runner.js';
+import type { Variant } from './variants.js';
 
 import { type ClaimState } from './verdict-chat.js';
 
@@ -157,7 +158,7 @@ export interface StopJudgingPort {
   buildProduct(b: { cwd: string; command: string }): Promise<{ code: number | null; tail: string }>;
   runEnded(run: string): Promise<string>;
   judged(claim: string): Promise<void>;
-  runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; key?: RunKey; stack?: StackWant }): Promise<string>;
+  runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant }): Promise<string>;
   invalid(claim: string, commit: string, reason: string, outcome?: 'INVALID' | 'INCONCLUSIVE'): Promise<void>;
   stopRule(count: Counter): boolean;
   isAnswer(count: Counter): boolean;
@@ -257,7 +258,7 @@ export interface McpOperationsPort {
   index: Promise<IndexFill | undefined>;
   mcpCall(params: Obj, context: CallContext): Promise<unknown>;
   agentConnection(session: string): Connection;
-  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown }>;
+  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown; memory_mb?: unknown }>;
   pinOf(worktree: string, question: string): Promise<Obj>;
   propose(session: string, args: Obj): Promise<Obj>;
 }

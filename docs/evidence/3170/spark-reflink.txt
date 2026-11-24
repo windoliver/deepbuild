@@ -1,0 +1,10 @@
+== head a7db2f5bf933484547094d954d1dade13d9c2cfa, Sun Nov 22 07:49:44 PM PST 2026, load 9.87 21.07 26.16 7/3859 2319654
+$ findmnt <home>/deepbuild-cow
+TARGET                   SOURCE      FSTYPE OPTIONS
+<home>/deepbuild-cow /dev/loop10 xfs    rw,relatime,inode64,logbufs=8,logbsize=32k,noquota
+$ grep -A1 "^\[env\]" ~/.cargo/config.toml
+[env]
+DEEP_TEST_COW_DIR = "<home>/deepbuild-cow"
+$ cp --reflink=always a b (in ~/deepbuild-cow)
+'<home>/deepbuild-cow/probe-IOKm/a' -> '<home>/deepbuild-cow/probe-IOKm/b'
+exit 0

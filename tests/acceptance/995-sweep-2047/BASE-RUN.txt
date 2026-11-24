@@ -1,0 +1,27 @@
+# Base (origin/main ccafae68f), macOS arm64 27.2.1, after the round-2 review's fixes.
+## npx vitest run tests/acceptance/995-sweep-2047/panel.test.ts
+start Sun Nov 22 22:11:53 PST 2026 22:11  up 3 days,  2:38, 4 users, load averages: 61.71 70.99 74.21
+
+ RUN  v5.0.5 <c995>/repo
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:11:56
+   Duration  107.90s (tests 100%)
+
+exit 0 after 111 s; 22:13  up 3 days,  2:40, 4 users, load averages: 77.57 71.83 74.03
+
+
+## The same cargo test run directly, for its readings (vitest hides a passing test's console):
+## cargo test --locked -p deep-app --test sweep_995_panel -- --nocapture --test-threads 1 (compiler warnings left out)
+    Finished `test` profile [unoptimized] target(s) in 2.87s
+     Running tests/sweep_995_panel.rs (target/debug/deps/sweep_995_panel-384fcc3fff0db257)
+
+running 1 test
+test canvas_panel_holds_only_the_shown_revisions_pictures ... #995 memory after revision 10: 14828048 B; after revision 1000: 12501520 B; grew -2326528 B (limit 20000000 B); held 2 (most 2), shown 2; gauge CanvasPanel::pictures 2 entries, 2097152 B; shown pictures not held when presented again: 0
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 69.26s
+
+exit 0 after 72 s; 22:14  up 3 days,  2:41, 4 users, load averages: 75.96 71.41 73.60

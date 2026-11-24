@@ -1,0 +1,97 @@
+base 98347e837, 2026-11-23T06:12:51Z, load: 61.96 69.38 73.39
+$ npx vitest run tests/acceptance/2551/
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2551/rules.test.ts (2 tests | 2 failed) 279ms
+   ❯ #2551 the design's numbered adapter rules and adapter.facts@1's x-rules (2)
+     × #2551.89179774 every rule in adapter.facts@1's x-rules is named in the design's numbered adapter rules, and every rule the design names is in x-rules 7ms
+     × #2551.89179774 the design's numbered adapter rules and adapter.facts@1's x-rules hold the same rules in the same order: rule i of x-rules is the design's rule i 5ms
+ ❯ tests/acceptance/2551/fakes-313.test.ts (1 test | 1 failed) 13468ms
+   ❯ #2551 tests/acceptance/313/fakes.test.ts passes on main (1)
+     × #2551.7d1ea751 tests/acceptance/313/fakes.test.ts passes on main: every test vitest runs in it passes, and one known-failures.json retires is replaced by a named suite whose every test passes 13232ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2551/fakes-313.test.ts > #2551 tests/acceptance/313/fakes.test.ts passes on main > #2551.7d1ea751 tests/acceptance/313/fakes.test.ts passes on main: every test vitest runs in it passes, and one known-failures.json retires is replaced by a named suite whose every test passes
+AssertionError: what keeps tests/acceptance/313/fakes.test.ts from passing: expected [ …(8) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the twelve rules in the design's order, each with an id (redraft 2551): AssertionError: expected 13 to be 12 // Object.is equality (replacing tests/acceptance/313/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id)",
++   "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list that lacks a rule in the middle fails this test (redraft 2551): AssertionError: expected [Function] to throw error matching /expected 11 to be 12/ but got 'rule 3 is a clock stepped back: expec…' (replacing tests/acceptance/313/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id)",
++   "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with a thirteenth rule the design doesn't name fails this test (redraft 2551): AssertionError: expected [Function] to throw error matching /expected 13 to be 12/ but got 'expected 14 to be 12 // Object.is equ…' (replacing tests/acceptance/313/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id)",
++   "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with the last two rules swapped fails this test, naming rule 11 and the design's phrase (redraft 2551): AssertionError: expected [Function] to throw error matching /rule 11 is a block the model needs go…/ but got 'expected 13 to be 12 // Object.is equ…' (replacing tests/acceptance/313/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id)",
++   "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with two of the first ten rules swapped fails this test, naming the first of them (redraft 2551): AssertionError: expected [Function] to throw error matching /rule 3 is a clock stepped back/ but got 'expected 13 to be 12 // Object.is equ…' (replacing tests/acceptance/313/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id)",
++   "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list whose twelfth rule says something else fails this test, naming rule 12 and the design's phrase (redraft 2551): AssertionError: expected [Function] to throw error matching /rule 12 is a block the model needs ne…/ but got 'expected 13 to be 12 // Object.is equ…' (replacing tests/acceptance/313/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id)",
++   "tests/acceptance/313-redraft-2551/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 (wrong program) a list with one id used twice, or an id out of form, fails this test (redraft 2551): AssertionError: expected [Function] to throw error matching /expected 11 to be 12/ but got 'expected 13 to be 12 // Object.is equ…' (replacing tests/acceptance/313/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id)",
++   "tests/acceptance/313/fakes.test.ts › AC14 every planted entry, broken fake and clean twin names the exact codes it must raise, empty for a twin › AC14 for any set of codes a fake could name, the proof kills it exactly when the set equals what it raises (1,000 cases): Error: Test timed out in 5000ms.",
++ ]
+
+ ❯ tests/acceptance/2551/fakes-313.test.ts:83:55
+     81|     const { skips = [] } = JSON.parse(readFileSync(join(ROOT, 'scripts…
+     82|     const found = await problems(SUITE, skips);
+     83|     expect(found, `what keeps ${SUITE} from passing`).toEqual([]);
+       |                                                       ^
+     84|   }, TIMEOUT);
+     85| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/2551/rules.test.ts > #2551 the design's numbered adapter rules and adapter.facts@1's x-rules > #2551.89179774 every rule in adapter.facts@1's x-rules is named in the design's numbered adapter rules, and every rule the design names is in x-rules
+AssertionError: x-rules the design's list does not name: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "reads-count-as-read: A tool the hub serves that changes nothing, such as deep_query, maps to read, never to a kind the guards count as change.",
++ ]
+
+ ❯ tests/acceptance/2551/rules.test.ts:71:65
+     69|     const unnamed = rules.filter((r) => !phrases.some((p) => norm(r.ru…
+     70|     const missing = phrases.filter((p) => !rules.some((r) => norm(r.ru…
+     71|     expect(unnamed, 'x-rules the design\'s list does not name').toEqua…
+       |                                                                 ^
+     72|     expect(missing, 'rules the design names that x-rules does not hold…
+     73|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/2551/rules.test.ts > #2551 the design's numbered adapter rules and adapter.facts@1's x-rules > #2551.89179774 the design's numbered adapter rules and adapter.facts@1's x-rules hold the same rules in the same order: rule i of x-rules is the design's rule i
+AssertionError: x-rules holds as many rules as the design names (design: who is calling | order by seq with ties by id | a clock stepped back | a late event in a stopped turn | unknown rather than finished | threads across rotated ids | one owner per session | allow only from decision | a stop that can't be parsed read as unknown | delivery confirmed from the transcript | a block the model needs goes out only on an output the facts mark as reaching the model | a block the model needs never goes out as stderr on exit 0; x-rules: who-is-calling, order-by-seq, clock-stepped-back, late-event-in-stopped-turn, unknown-not-finished, threads-across-rotated-ids, one-owner-per-session, allow-only-from-decision, unparsed-stop-reads-unknown, delivery-confirmed-from-transcript, block-only-where-it-reaches-model, no-block-on-stderr-at-exit-0, reads-count-as-read): expected 13 to be 12 // Object.is equality
+
+- Expected
++ Received
+
+- 12
++ 13
+
+ ❯ tests/acceptance/2551/rules.test.ts:79:157
+     77|     const rules = schemaRules();
+     78|     expect(phrases.length, 'the design names its adapter rules').toBeG…
+     79|     expect(rules.length, `x-rules holds as many rules as the design na…
+       |                                                                                                                                                             ^
+     80|     rules.forEach((r, i) => {
+     81|       expect(norm(r.rule), `x-rules rule ${i + 1} (${r.id}) is the des…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Start at  22:12:54
+   Duration  13.98s (tests 99%, worker 1%)
+
+vitest exit 1
+
+$ npx vitest run tests/acceptance/313/fakes.test.ts   (alone, for context, 22:13 local, load 62.69 68.98 73.13; summary lines)
+     × AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id 54ms
+      Tests  1 failed | 21 passed (22)
+
+$ npx tsc --noEmit -p tests/acceptance/2551/tsconfig.json
+exit 0, no output

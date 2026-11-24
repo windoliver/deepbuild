@@ -1,0 +1,310 @@
+# #2697's acceptance suite on its bases. Two runs: the first draft's (criteria 1, 2, 3 and 5) and criterion 4's
+# blind redraft (#2697.6cec48c3, amended 2026-11-23). <checkout> stands for the checkout's path; home folders are ~.
+#
+# == The first draft, on 4aa543da7 (origin/main), nothing of #2697 applied, deep-show built first
+# (cargo build --locked --bin deep-show --no-default-features --features full), at a load average of 30-140:
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2697 --no-file-parallelism --reporter=verbose
+# AC1 names the skill's 3735 tokens; AC2 (both) and AC3 (both) fail at their first assertion, the skill's craft lines
+# naming no guide deep_kinds serves. AC5 passes on the base by definition; its wrong program is
+# twins/skill-names-its-time (checked by hand: two starts 61 s apart generate "Generated at 06:29:55" and
+# "Generated at 06:30:56", so its first comparison fails). The old criterion 4's two tests (#2697.1f9af6f6), which
+# failed there at the same first assertion, are cut from this record: the redraft replaced them. The counts below are
+# that run's, with them.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2697
+
+ × source.test.ts > AC3 #2697.09d255e9 the guide and the skill's line come from craft.json alone > AC3 #2697.09d255e9 a check added to craft.json shows in the guide, with its description, threshold and fix, and the skill is unchanged 6826ms
+   → the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+ × source.test.ts > AC3 #2697.09d255e9 the guide and the skill's line come from craft.json alone > AC3 #2697.09d255e9 the skill is what its generator gives, its craft line names the guide, and tests/acceptance/26/ finds no drift 352ms
+   → the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+ × guide.test.ts > AC2 #2697.5bf72d0a the guide deep_kinds serves states every craft check as the merge base's skill did > AC2 #2697.5bf72d0a deep_kinds op: read with the guide's name returns every craft check with its description, thresholds and fix, each the merge base's skill's text 6770ms
+   → the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+ × guide.test.ts > AC2 #2697.5bf72d0a the guide deep_kinds serves states every craft check as the merge base's skill did > AC2 #2697.5bf72d0a a planted guide that drops text_led fails, naming it 365ms
+   → the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+stdout | ceiling.test.ts > AC1 #2697.588cc8a0 the skill is at most 1900 tokens by the pinned tokenizer, and the merge base's skill fails the same check, naming its count
+skills/deepbuild/SKILL.md: 3735 tokens; the merge base's: 3735 tokens
+
+ × ceiling.test.ts > AC1 #2697.588cc8a0 the skill is at most 1900 tokens by the pinned tokenizer, and the merge base's skill fails the same check, naming its count 30ms
+   → the skill is at most 1900 tokens:
+  skills/deepbuild/SKILL.md is 3735 tokens by o200k_base (gpt-tokenizer 4.0.0), over the ceiling of 1900: expected [ Array(1) ] to deeply equal []
+ ✓ bytes.test.ts > AC5 #2697.2d464f5e two sessions started a minute apart receive byte-identical skill text, the checkout's SKILL.md; a planted text holding the clock time fails, naming it 168ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ceiling.test.ts > AC1 #2697.588cc8a0 the skill is at most 1900 tokens by the pinned tokenizer, and the merge base's skill fails the same check, naming its count
+AssertionError: the skill is at most 1900 tokens:
+  skills/deepbuild/SKILL.md is 3735 tokens by o200k_base (gpt-tokenizer 4.0.0), over the ceiling of 1900: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "skills/deepbuild/SKILL.md is 3735 tokens by o200k_base (gpt-tokenizer 4.0.0), over the ceiling of 1900",
++ ]
+
+ ❯ none helpers.ts:49:60
+     47| /** No failures; the message lists them. */
+     48| export function none(failures: readonly string[], what: string): void {
+     49|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     50| }
+     51| /** At least one failure, one naming every one of `names`, and (with `…
+ ❯ ceiling.test.ts:17:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  guide.test.ts > AC2 #2697.5bf72d0a the guide deep_kinds serves states every craft check as the merge base's skill did > AC2 #2697.5bf72d0a deep_kinds op: read with the guide's name returns every craft check with its description, thresholds and fix, each the merge base's skill's text
+AssertionError: the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the skill's craft line names no guide deep_kinds serves: deep_kinds op: read answers no text for any of 26 names its 2 craft line(s) give (Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]"
+
+ ❯ theGuide guide.test.ts:25:86
+     23| function theGuide(b: string): { name: string; text: string } {
+     24|   const named = guideName(b, readFileSync(SKILL, 'utf8'));
+     25|   expect(named.failure, 'the skill\'s craft line names the guide deep_…
+       |                                                                                      ^
+     26|   const guide = guideText(b, named.name!);
+     27|   expect(guide.failure, `deep_kinds read guide: ${named.name}`).toBeUn…
+ ❯ guide.test.ts:34:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  guide.test.ts > AC2 #2697.5bf72d0a the guide deep_kinds serves states every craft check as the merge base's skill did > AC2 #2697.5bf72d0a a planted guide that drops text_led fails, naming it
+AssertionError: the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the skill's craft line names no guide deep_kinds serves: deep_kinds op: read answers no text for any of 26 names its 2 craft line(s) give (Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]"
+
+ ❯ theGuide guide.test.ts:25:86
+     23| function theGuide(b: string): { name: string; text: string } {
+     24|   const named = guideName(b, readFileSync(SKILL, 'utf8'));
+     25|   expect(named.failure, 'the skill\'s craft line names the guide deep_…
+       |                                                                                      ^
+     26|   const guide = guideText(b, named.name!);
+     27|   expect(guide.failure, `deep_kinds read guide: ${named.name}`).toBeUn…
+ ❯ guide.test.ts:39:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+
+
+ FAIL  source.test.ts > AC3 #2697.09d255e9 the guide and the skill's line come from craft.json alone > AC3 #2697.09d255e9 a check added to craft.json shows in the guide, with its description, threshold and fix, and the skill is unchanged
+AssertionError: the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the skill's craft line names no guide deep_kinds serves: deep_kinds op: read answers no text for any of 26 names its 2 craft line(s) give (Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]"
+
+ ❯ source.test.ts:43:88
+     41|     const skill = readFileSync(SKILL, 'utf8');
+     42|     const named = guideName(b, skill);
+     43|     expect(named.failure, 'the skill\'s craft line names the guide dee…
+       |                                                                                        ^
+     44|     const before = guideText(b, named.name!);
+     45|     expect(before.failure, `deep_kinds read guide: ${named.name}`).toB…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  source.test.ts > AC3 #2697.09d255e9 the guide and the skill's line come from craft.json alone > AC3 #2697.09d255e9 the skill is what its generator gives, its craft line names the guide, and tests/acceptance/26/ finds no drift
+AssertionError: the skill's craft line names the guide deep_kinds serves: expected 'the skill\'s craft line names no guid…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"the skill's craft line names no guide deep_kinds serves: deep_kinds op: read answers no text for any of 26 names its 2 craft line(s) give (Craft, checks, a, film, brief, names, A, s, the, craft@1, it, wants, Each, runs, only, when, holds, to, thresholds, and, never, yours, passes, on, its, own); the lines: [\"## Craft checks a film brief names\",\"A film's brief names the craft@1 checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.\"]"
+
+ ❯ source.test.ts:87:88
+     85|     const skill = readFileSync(SKILL, 'utf8');
+     86|     const named = guideName(b, skill);
+     87|     expect(named.failure, 'the skill\'s craft line names the guide dee…
+       |                                                                                        ^
+     88|     const generated = generatedSkill(REPO);
+     89|     expect(generated.failure, 'scripts/skill.mjs generates the skill')…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  7 failed | 1 passed (8)
+   Start at  22:36:09
+   Duration  28.56s (tests 97%, import 3%)
+
+# == Criterion 4's redraft, on a288ae247 (origin/main): criteria 1-3's change landed (the skill names the guide
+# `craft`, which deep_kinds serves), criterion 4's not (scripts/agent-eval.mjs has no film rule). deep-show built
+# first as above, at a load average of ~160:
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2697 --no-file-parallelism --reporter=verbose sessions.test.ts
+# The five FAIL tests fail at their assertion "is scored FAIL": the base's scorer scores each session PASS, exit 0.
+# The PASS test passes on the base; its wrong program is twins/eval-fails-briefs (second run below).
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2697
+
+ ✓ sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 a film session that reads the guide before its first deep_show and whose rows report exactly its brief's checks passes 8453ms
+ × sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it, when its read of the guide comes after its first render 1673ms
+   → the session that reads the guide after its first deep_show is scored FAIL: exit 0; stdout: {"outcome":"PASS","reasons":[]}
+; stderr: : expected 'PASS' to be 'FAIL' // Object.is equality
+ × sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it, when it never reads the guide 1455ms
+   → the session that never reads the guide is scored FAIL: exit 0; stdout: {"outcome":"PASS","reasons":[]}
+; stderr: : expected 'PASS' to be 'FAIL' // Object.is equality
+ × sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it and the check, when its rows miss a check its brief names 1510ms
+   → the session whose rows miss ends, which its brief names is scored FAIL: exit 0; stdout: {"outcome":"PASS","reasons":[]}
+; stderr: : expected 'PASS' to be 'FAIL' // Object.is equality
+ × sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it and the check, when its rows report a check its brief doesn't name 1452ms
+   → the session whose rows report ends, which its brief doesn't name is scored FAIL: exit 0; stdout: {"outcome":"PASS","reasons":[]}
+; stderr: : expected 'PASS' to be 'FAIL' // Object.is equality
+ × sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it, when its skill is a planted skill with no line naming the guide 1460ms
+   → the session on the planted skill is scored FAIL: exit 0; stdout: {"outcome":"PASS","reasons":[]}
+; stderr: : expected 'PASS' to be 'FAIL' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it, when its read of the guide comes after its first render
+AssertionError: the session that reads the guide after its first deep_show is scored FAIL: exit 0; stdout: {"outcome":"PASS","reasons":[]}
+; stderr: : expected 'PASS' to be 'FAIL' // Object.is equality
+
+Expected: "FAIL"
+Received: "PASS"
+
+ ❯ scoredFailNaming helpers.ts:453:57
+    451| /** The scorer fails the session: exit 1, FAIL, and a reason whose tex…
+    452| export function scoredFailNaming(s: Scored, run: string, also: string[…
+    453|   expect(s.outcome, `${what} is scored FAIL: ${s.out}`).toBe('FAIL');
+       |                                                         ^
+    454|   expect(s.status, `${what}: the scorer exits 1: ${s.out}`).toBe(1);
+    455|   const named = s.reasons.filter((r) => [run, ...also].every((n) => `$…
+ ❯ sessions.test.ts:48:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it, when it never reads the guide
+AssertionError: the session that never reads the guide is scored FAIL: exit 0; stdout: {"outcome":"PASS","reasons":[]}
+; stderr: : expected 'PASS' to be 'FAIL' // Object.is equality
+
+Expected: "FAIL"
+Received: "PASS"
+
+ ❯ scoredFailNaming helpers.ts:453:57
+    451| /** The scorer fails the session: exit 1, FAIL, and a reason whose tex…
+    452| export function scoredFailNaming(s: Scored, run: string, also: string[…
+    453|   expect(s.outcome, `${what} is scored FAIL: ${s.out}`).toBe('FAIL');
+       |                                                         ^
+    454|   expect(s.status, `${what}: the scorer exits 1: ${s.out}`).toBe(1);
+    455|   const named = s.reasons.filter((r) => [run, ...also].every((n) => `$…
+ ❯ sessions.test.ts:53:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it and the check, when its rows miss a check its brief names
+AssertionError: the session whose rows miss ends, which its brief names is scored FAIL: exit 0; stdout: {"outcome":"PASS","reasons":[]}
+; stderr: : expected 'PASS' to be 'FAIL' // Object.is equality
+
+Expected: "FAIL"
+Received: "PASS"
+
+ ❯ scoredFailNaming helpers.ts:453:57
+    451| /** The scorer fails the session: exit 1, FAIL, and a reason whose tex…
+    452| export function scoredFailNaming(s: Scored, run: string, also: string[…
+    453|   expect(s.outcome, `${what} is scored FAIL: ${s.out}`).toBe('FAIL');
+       |                                                         ^
+    454|   expect(s.status, `${what}: the scorer exits 1: ${s.out}`).toBe(1);
+    455|   const named = s.reasons.filter((r) => [run, ...also].every((n) => `$…
+ ❯ sessions.test.ts:58:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it and the check, when its rows report a check its brief doesn't name
+AssertionError: the session whose rows report ends, which its brief doesn't name is scored FAIL: exit 0; stdout: {"outcome":"PASS","reasons":[]}
+; stderr: : expected 'PASS' to be 'FAIL' // Object.is equality
+
+Expected: "FAIL"
+Received: "PASS"
+
+ ❯ scoredFailNaming helpers.ts:453:57
+    451| /** The scorer fails the session: exit 1, FAIL, and a reason whose tex…
+    452| export function scoredFailNaming(s: Scored, run: string, also: string[…
+    453|   expect(s.outcome, `${what} is scored FAIL: ${s.out}`).toBe('FAIL');
+       |                                                         ^
+    454|   expect(s.status, `${what}: the scorer exits 1: ${s.out}`).toBe(1);
+    455|   const named = s.reasons.filter((r) => [run, ...also].every((n) => `$…
+ ❯ sessions.test.ts:63:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it, when its skill is a planted skill with no line naming the guide
+AssertionError: the session on the planted skill is scored FAIL: exit 0; stdout: {"outcome":"PASS","reasons":[]}
+; stderr: : expected 'PASS' to be 'FAIL' // Object.is equality
+
+Expected: "FAIL"
+Received: "PASS"
+
+ ❯ scoredFailNaming helpers.ts:453:57
+    451| /** The scorer fails the session: exit 1, FAIL, and a reason whose tex…
+    452| export function scoredFailNaming(s: Scored, run: string, also: string[…
+    453|   expect(s.outcome, `${what} is scored FAIL: ${s.out}`).toBe('FAIL');
+       |                                                         ^
+    454|   expect(s.status, `${what}: the scorer exits 1: ${s.out}`).toBe(1);
+    455|   const named = s.reasons.filter((r) => [run, ...also].every((n) => `$…
+ ❯ sessions.test.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 1 passed (6)
+   Start at  13:27:34
+   Duration  19.84s (tests 97%, import 2%, transform 1%)
+
+
+# == The PASS test with twins/eval-fails-briefs/scripts/agent-eval.mjs laid over scripts/agent-eval.mjs at a288ae247
+# (copied in by hand, restored after, byte for byte), the same command with -t "passes": it fails at "is scored PASS".
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2697
+
+ × sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 a film session that reads the guide before its first deep_show and whose rows report exactly its brief's checks passes 7508ms
+   → the good film session is scored PASS: exit 1; stdout: {"outcome":"FAIL","reasons":[{"code":"film_brief","detail":"eval-claude-code-kettle-film-good: its brief names craft checks"}]}
+; stderr: : expected 'FAIL' to be 'PASS' // Object.is equality
+ ↓ sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it, when its read of the guide comes after its first render
+ ↓ sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it, when it never reads the guide
+ ↓ sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it and the check, when its rows miss a check its brief names
+ ↓ sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it and the check, when its rows report a check its brief doesn't name
+ ↓ sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 the session fails, naming it, when its skill is a planted skill with no line naming the guide
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  sessions.test.ts > AC4 #2697.6cec48c3 the agent eval's scorer judges a film session on the guide, offline > AC4 #2697.6cec48c3 a film session that reads the guide before its first deep_show and whose rows report exactly its brief's checks passes
+AssertionError: the good film session is scored PASS: exit 1; stdout: {"outcome":"FAIL","reasons":[{"code":"film_brief","detail":"eval-claude-code-kettle-film-good: its brief names craft checks"}]}
+; stderr: : expected 'FAIL' to be 'PASS' // Object.is equality
+
+Expected: "PASS"
+Received: "FAIL"
+
+ ❯ scoredPass helpers.ts:447:57
+    445| /** The scorer passes the session: exit 0, PASS, no reason. */
+    446| export function scoredPass(s: Scored, what: string): void {
+    447|   expect(s.outcome, `${what} is scored PASS: ${s.out}`).toBe('PASS');
+       |                                                         ^
+    448|   expect(s.status, `${what}: the scorer exits 0: ${s.out}`).toBe(0);
+    449|   expect(s.reasons, `${what}: no reason: ${s.out}`).toEqual([]);
+ ❯ sessions.test.ts:43:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  13:28:28
+   Duration  11.24s (tests 93%, import 6%, transform 1%)
+

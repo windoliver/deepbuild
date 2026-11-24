@@ -26,12 +26,14 @@ use deep_hook::matcher;
 mod actions;
 mod cow;
 mod heavy;
+mod heavy_entry;
 mod remote;
 mod spool_file;
 mod tool_paths;
 mod waiter;
 
 use cow::clone;
+use heavy_entry::heavy_entry;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -523,25 +525,6 @@ fn heavy_call(
 fn peer() -> ExitCode {
     match deep_hook::matcher::peer_of(0) {
         Some(pid) => println!("{pid}"),
-        None => println!("null"),
-    }
-    ExitCode::SUCCESS
-}
-
-/// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
-/// `{"name", "jobs", "jobs_flag"}`, or `null`; `deep lease` reads it to know how the command takes jobs.
-fn heavy_entry() -> ExitCode {
-    let mut command = String::new();
-    let _ = io::stdin().read_to_string(&mut command);
-    let cwd = env::current_dir().ok();
-    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
-    match heavy::matched(&command, cwd.as_deref(), &home, None) {
-        Some(hit) => println!(
-            "{{\"name\":{},\"jobs\":{},\"jobs_flag\":{}}}",
-            quoted(&hit.name),
-            quoted(&hit.jobs),
-            hit.jobs_flag.as_deref().map_or("null".to_string(), quoted)
-        ),
         None => println!("null"),
     }
     ExitCode::SUCCESS
