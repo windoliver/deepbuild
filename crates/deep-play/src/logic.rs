@@ -279,8 +279,8 @@ pub fn inline_logic(
     }
     // #538: each item's comparisons after its steps, on its first array, for `frames`' timings.
     // They are clock readings, which would move the key of everything that reads the form
-    // (#3278), so the array holds only a key of what the bake ran on (the item's bake key, its
-    // steps and the planted hand-over), and the readings go back to the caller under it.
+    // (#3278), so the array holds only a key of what the bake ran (the item, its bake key and its
+    // steps), and the readings go back to the caller under it.
     let mut compares = Compares::new();
     for (id, list) in &rec.compares {
         let Some(i) = piece.items.iter().position(|i| &i.id == id) else {
@@ -292,7 +292,7 @@ pub fn inline_logic(
             .map(|w| format!("{id}.{}", w.name));
         if let Some(a) = first.and_then(|f| arrays.get_mut(&f)) {
             let ran = deep_logic::bake_key(&piece, i, &entries);
-            let of = sha256_hex(format!("{ran} {steps} {drops_last_range}").as_bytes());
+            let of = sha256_hex(format!("{id} {ran} {steps}").as_bytes());
             a["compares"] = json!(of);
             let list = list.iter().map(|(k, bytes, ms)| json!([k, bytes, ms]));
             compares.insert(of, list.collect());
