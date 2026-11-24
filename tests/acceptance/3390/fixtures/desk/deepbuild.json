@@ -1,0 +1,9 @@
+{
+  "id": "test/desk",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": [] },
+  "stores": ["ext.desk.pin"],
+  "actions": ["ext.desk.pin_symbol", "ext.desk.retire_symbol", "ext.desk.list_pins", "ext.desk.runs"],
+  "requires": { "preview": ["deep.registerAction", "deep.store", "deep.store.put", "deep.store.list"] }
+}
