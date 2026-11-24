@@ -229,6 +229,12 @@ pub fn of(events: &[Value], ask: &Value) -> Vec<Listed> {
     })
 }
 
+/// A manifest's pictures, kept as if the store had been read.
+#[cfg(test)]
+pub(crate) fn keep(manifest: &str, listed: Vec<Listed>) {
+    MANIFESTS.with(|kept| kept.borrow_mut().insert(manifest.to_owned(), listed));
+}
+
 /// A manifest's pictures; one with an entry that names no hash and size lists none.
 fn listed(manifest: &Value) -> Vec<Listed> {
     let entries = manifest["pictures"].as_array().cloned().unwrap_or_default();
