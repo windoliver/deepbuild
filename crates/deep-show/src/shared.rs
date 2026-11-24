@@ -1096,7 +1096,7 @@ fn restore(
 /// The issue of `doc`'s layer or envelope file `sha`, which revision `rev`'s event names, when the state folder
 /// doesn't hold it, or holds bytes that don't hash to its name or don't read as a layer file.
 fn damaged_file(doc: &str, layers: &Path, sha: &str, rev: u64) -> Issue {
-    let (code, what) = if evidence::kept(layers, sha) {
+    let (code, what) = if evidence::has(layers, sha) {
         let what = format!("the file revision {rev} names doesn't hash to its name or read as one");
         ("layer_file_mismatch", what)
     } else {
