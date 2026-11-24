@@ -23,6 +23,9 @@ use crate::hub::HubError;
 use crate::question::{self, Controller, Did, Input, Phase, Row, Target};
 use crate::trusted_input::{delivered, PressEdge};
 
+mod look;
+pub(crate) use look::look;
+
 thread_local! {
     /// Where the next card is presented, in window points.
     static AT: RefCell<Option<Bounds<Pixels>>> = const { RefCell::new(None) };
@@ -163,6 +166,7 @@ pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
             cx,
         );
         card.page = true;
+        card.watch(window, cx);
         card
     });
     // An ask opened takes the keyboard to its card, until you move it elsewhere (#1462).
