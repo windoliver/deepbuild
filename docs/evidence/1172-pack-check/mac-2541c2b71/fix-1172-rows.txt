@@ -1,0 +1,13 @@
+
+ RUN  v5.0.5 ~/mac-runs/pc2-fix
+
+ ✓ tests/acceptance/1172/rows.test.ts (2 tests) 467113ms
+   ✓ #1172 Needs you shows questions and presents their cards (2)
+     ✓ AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 432843ms
+     ✓ AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 34150ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  15:31:34
+   Duration  467.39s (tests 100%)
+

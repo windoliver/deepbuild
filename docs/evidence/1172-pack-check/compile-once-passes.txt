@@ -1,0 +1,9 @@
+
+running 2 tests
+test runners_of_one_program_keep_their_own_state ... ok
+first runner 0.227 s, later runners [0.000, 0.000, 0.000] s
+test a_thread_compiles_a_program_once ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+exit=0
