@@ -14,15 +14,15 @@ minimized, or covered by an opaque panel.
 |---|---|---|---|
 | shown (the control) | the tree | 42 nodes, 31 identified | 42, 31 |
 | shown, an ask answered | announced | once, "1 ask needs you" | once, the same |
-| minimized before the first ask | the tree | 6 nodes, 0 identified, for 12 s | 42, 31 at the first read, 19 ms |
-| covered before the first ask | the tree | 7 nodes, 0 identified, for 6 s | 42, 31 at the first read, 19 ms |
-| minimized before the first ask, an ask answered | announced | not read yet | once, "1 ask needs you" |
+| minimized before the first ask | the tree | 6 nodes, 0 identified | 42, 31 at the first read |
+| covered before the first ask | the tree | 7 nodes, 0 identified | 42, 31 at the first read |
+| minimized before the first ask, an ask answered | announced | 0 | once, "1 ask needs you" |
 | covered before the first ask, an ask answered | announced | 0 | once, "1 ask needs you" |
 | read while shown, then minimized, the other ask answered | the count's line | still "1 ask needs you" after 10 s | "Nothing needs you" |
 | the same | announced | 0, and no title or value change | once, "Nothing needs you" |
 
-Minimized and then shown again, the window's pixels hold the ask that was answered meanwhile, and the next change after
-it.
+Minimized and then shown again, the window's pixels hold the ask that was answered meanwhile ("1 ask needs you"), and the
+next change after it ("Nothing needs you").
 
 `deep-app` on main has no live region (#3232 adds the first one), so the announcement rows are a measuring build of each:
 the list's count, `sidebar-count`, given its label as its value and made a polite live region. Nothing of it is committed:
@@ -67,8 +67,9 @@ no view asks for a frame in a loop (a next-frame callback waits for the next cha
 | `crates/deep-app/tests/unseen.rs`, on the fix's call taken out | 3 of 5 fail: the client's tree is `None`, not `Some("opened")`; 0 draws, not 1; 0 draws of 1,000 changes | 5 pass |
 | the same, on the fresh draw at being shown taken out | 1 of 5 fails: no draw for the first frame seen | 5 pass |
 | `card::tests`, on the guard taken out | 1 of 2 fails: 0 of 1 pictures left, not 1 | 2 pass |
-| `tests/unseen-window.test.mjs`, the real app minimized before a client asks, on the fix's call taken out | fails: 6 nodes, no ask named, 30 s later the same | passes |
-| the same, behind a lock | | skipped, `BLOCKED: the screen is locked` |
+| `tests/unseen-window.test.mjs`, the real app minimized before a client asks, on the fix's call taken out | fails: the count's line `null` at first and 30 s after an ask was answered, not "2 asks need you" and "1 ask needs you"; 0 asks named, not 2 | passes |
+| the same, behind a lock, or where the window didn't stay minimized | | skipped, `BLOCKED`, saying which |
 
-The real-app row was run before its waits moved from the test into its client and before the fresh draw and the guard;
-its final form is not run yet: the screen locked at 22:26 EST.
+The real-app row ran unlocked at 23:46 EST on the two apps built before it, the base's from this branch with the fix's call
+taken out; a first run on the base failed the same way and had its window restored by hand midway, which the test now
+reports as `BLOCKED`. The 5 and the 2 ran again on the merge of main, `bfc7f9839`.
