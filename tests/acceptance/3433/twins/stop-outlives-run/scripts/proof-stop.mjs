@@ -17,7 +17,7 @@ const LOOK_MS = 500;
 // watcher), which ends once the run has: it gets 8 s to, then SIGTERM, then SIGKILL 3 s later.
 const OWN_MS = 8_000, GRACE_MS = 3_000;
 // Each watcher names itself here by PID and start, so another's, whose tree it was launched in, leaves it be.
-const WATCHERS = join(tmpdir(), 'deep-stop-watchers');
+const WATCHERS = join(tmpdir(), `deep-stop-watchers-${process.getuid?.() ?? 'user'}`);
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const writeJson = (file, value) => {
   writeFileSync(`${file}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
@@ -35,28 +35,43 @@ let shared;
  * was stopped; `disarm()` after the command. A watcher that can't start says why in `error`, and its calls do nothing.
  */
 export function watchTree() {
-  if (shared?.pid) {
-    try {
-      process.kill(shared.pid, 0);
-      return shared;
-    } catch {}
-  }
+  if (shared?.live()) return shared;
   let folder;
   try {
     folder = mkdtempSync(join(tmpdir(), 'deep-stop-'));
     // Through a launcher, so the watcher is no child of this process (no zombie, in no tree it watches) and leads a
     // group of its own; the launcher returns once the watcher has listed this process.
-    const launched = spawnSync(process.execPath, [self, 'launch', String(process.pid), folder], { encoding: 'utf8' });
+    // deadline: a watcher not started in 30 s (a ps that hangs) is no watcher.
+    const launched = spawnSync(process.execPath, [self, 'launch', String(process.pid), folder], { encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL' });
     const pid = Number(launched.stdout.trim());
     if (!(pid > 1)) throw Error(launched.error?.message ?? (launched.stderr.trim() || `exit ${launched.status}`));
+    // The watcher's own registry entry holds its start: a number since taken by another process is no watcher.
+    const entry = join(WATCHERS, String(pid)), start = readFileSync(entry, 'utf8');
+    const live = () => {
+      try {
+        process.kill(pid, 0);
+        return readFileSync(entry, 'utf8') === start;
+      } catch { return false; }
+    };
     const armed = join(folder, 'armed.json');
-    let asked = 0;
-    shared = {
+    let asked = 0, runs = 0;
+    const mine = {
       pid,
-      arm(file, record) { writeJson(armed, file ? { file, record } : {}); },
+      live,
+      // A watcher that died since is started again, so a run is never armed on no one.
+      arm(file, record) {
+        if (!live()) {
+          shared = undefined;
+          const next = watchTree();
+          Object.assign(mine, next);
+          return next.arm(file, record);
+        }
+        writeJson(armed, { run: ++runs, ...file && { file, record } });
+      },
       disarm() { rmSync(armed, { force: true }); },
       stop(root) {
         const result = join(folder, `stopped-${++asked}.json`);
+        if (!live()) return { stopped: [], error: "the stop's watcher is gone" };
         writeJson(join(folder, 'stop.json'), { root, result });
         try { process.kill(pid, 'SIGUSR1'); } catch {}
         // deadline: the watcher's wait for a group of its own, its SIGTERM grace and its SIGKILL; past 30 s it said nothing.
@@ -64,10 +79,11 @@ export function watchTree() {
         try { return JSON.parse(readFileSync(result, 'utf8')); } catch { return { stopped: [], error: "the stop's watcher said nothing of what it stopped" }; }
       },
     };
+    shared = mine;
   } catch (error) {
     if (folder) rmSync(folder, { recursive: true, force: true });
     const why = `the stop's watcher did not start: ${error.message}`, nothing = () => {};
-    shared = { error: why, arm: nothing, disarm: nothing, stop: () => ({ stopped: [], error: why }) };
+    shared = { error: why, live: () => false, arm: nothing, disarm: nothing, stop: () => ({ stopped: [], error: why }) };
   }
   return shared;
 }
@@ -92,11 +108,21 @@ function lines(pids) {
 
 /** Lists `caller`'s tree while it is armed, and stops the run's part of it when asked or when the caller dies. */
 function watch(caller, folder) {
+  // Named in the registry before the first look, so no other watcher's look takes this one for a run's.
+  const own = spawnSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } }).stdout.trim();
+  mkdirSync(WATCHERS, { recursive: true, mode: 0o700 });
+  writeFileSync(join(WATCHERS, String(process.pid)), own);
+  process.on('exit', () => rmSync(join(WATCHERS, String(process.pid)), { force: true }));
   const first = table(), callerStart = first.get(caller)?.start;
   if (!callerStart) process.exit(1);
-  mkdirSync(WATCHERS, { recursive: true, mode: 0o700 });
-  writeFileSync(join(WATCHERS, String(process.pid)), first.get(process.pid)?.start ?? '');
-  process.on('exit', () => rmSync(join(WATCHERS, String(process.pid)), { force: true }));
+  // An entry whose watcher is gone (one killed outright) is taken out.
+  try {
+    for (const name of readdirSync(WATCHERS)) {
+      let start = null;
+      try { start = readFileSync(join(WATCHERS, name), 'utf8'); } catch {}
+      if (first.get(Number(name))?.start !== start) rmSync(join(WATCHERS, name), { force: true });
+    }
+  } catch {}
   const armed = join(folder, 'armed.json');
   // A process's ancestors in `procs` up to the caller or to a process already known (whose own ancestors follow),
   // nearest first; null for one that is neither's.
@@ -112,7 +138,8 @@ function watch(caller, folder) {
   // The caller's processes from before the watch (the launcher, this watcher, a test's helpers) and theirs are none
   // of a run's.
   const known = new Map();
-  const fence = new Set([...first.keys()].filter((pid) => ancestors(first, pid)));
+  const fence = new Map([...first].filter(([pid]) => ancestors(first, pid)).map(([pid, { start }]) => [pid, start]));
+  const fenced = (procs, pid) => fence.get(pid) === procs.get(pid)?.start;
   // Each process seen under the caller while armed, with its ancestors as first seen: one whose parent died first is
   // still known, and known as part of the command it was under.
   const look = () => {
@@ -122,11 +149,11 @@ function watch(caller, folder) {
     const others = new Set(named.filter((pid) => {
       try { return readFileSync(join(WATCHERS, String(pid)), 'utf8') === now.get(pid)?.start; } catch { return false; }
     }));
-    for (const [pid, { start }] of known) if (now.get(pid)?.start !== start) known.delete(pid);
+    for (const [pid, { start }] of known) if (now.get(pid)?.start !== start || others.has(pid)) known.delete(pid);
     for (const [pid, { start, pgid }] of now) {
-      if (pid === process.pid || fence.has(pid) || known.has(pid) || others.has(pid)) continue;
+      if (pid === process.pid || fenced(now, pid) || known.has(pid) || others.has(pid)) continue;
       const up = ancestors(now, pid);
-      if (up && !up.some((at) => fence.has(at))) known.set(pid, { pid, start, pgid, up });
+      if (up && !up.some((at) => fenced(now, at))) known.set(pid, { pid, start, pgid, up });
     }
     return now;
   };
@@ -171,7 +198,7 @@ function watch(caller, folder) {
   });
   // SIGTERM, SIGINT and SIGHUP, as a stop of a tree this watcher is in sends, don't end the watch.
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => {});
-  let ticks = 0;
+  let ticks = 0, run = null;
   setInterval(() => {
     if (stopping) return;
     let gone = false;
@@ -188,6 +215,13 @@ function watch(caller, folder) {
       if (gone) setTimeout(() => process.exit(0), 60_000);
       return;
     }
+    // Each arm is a command of its own: what an earlier one left running ended with it, and isn't this one's.
+    let pending = {};
+    try { pending = JSON.parse(readFileSync(armed, 'utf8')); } catch {}
+    if (pending.run !== run) {
+      known.clear();
+      run = pending.run;
+    }
     if (!gone) {
       // Without a listing the next look tries again; a caller whose number is gone is gone without one.
       try {
@@ -198,9 +232,9 @@ function watch(caller, folder) {
     // fails on the way, the watcher ends.
     stopping = true;
     process.on('uncaughtException', () => process.exit(0));
-    let pending = {};
-    try { pending = JSON.parse(readFileSync(armed, 'utf8')); } catch {}
-    const result = stopTree(() => true, new Set([first.get(caller).pgid]));
+    // The run's own groups: the caller's, and those its commands lead (measureOnce's capture leads one).
+    const groups = new Set([first.get(caller).pgid, ...[...known.values()].filter(({ up }) => !up.length).map(({ pgid }) => pgid)]);
+    const result = stopTree(() => true, groups);
     if (pending.file) {
       try {
         const note = `stopped: the run (pid ${caller}) ended while its commands ran; ${named(result)}`;
