@@ -125,6 +125,8 @@ export const PROMPT_PLACE_MS = 3000;
 
 /** The cores the check slots are half of: this machine's, or DEEP_HUB_TEST_CORES's, which only tests set (#965). */
 export const CORES = Number(process.env.DEEP_HUB_TEST_CORES) > 0 ? Math.floor(Number(process.env.DEEP_HUB_TEST_CORES)) : availableParallelism();
+/** The `mem` pool's size in MB, DEEP_HUB_TEST_MEM_MB's, which only tests set (#3220); this machine's memory less what it keeps without it. */
+export const TEST_MEM_MB = Number(process.env.DEEP_HUB_TEST_MEM_MB) > 0 ? Math.floor(Number(process.env.DEEP_HUB_TEST_MEM_MB)) : undefined;
 
 /**
  * The machine's 1-minute load against those cores, for a timing check's failed run (#352): DEEP_HUB_TEST_LOAD names a

@@ -9,7 +9,7 @@ export function checksIn(spec: unknown): ReturnType<McpOperationsPort['checksOf'
   const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
   return new Map(Object.entries(checks).flatMap(([name, c]) => {
     if (!isObj(c) || typeof c.run !== 'string') return [];
-    const written = Object.fromEntries((['deadline', 'runs', 'accept', 'min_tests'] as const).flatMap((key) => (c[key] !== undefined ? [[key, c[key]]] : [])));
+    const written = Object.fromEntries((['deadline', 'runs', 'accept', 'min_tests', 'memory_mb'] as const).flatMap((key) => (c[key] !== undefined ? [[key, c[key]]] : [])));
     return [[name, { run: c.run, ...written, ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
   }));
 }
