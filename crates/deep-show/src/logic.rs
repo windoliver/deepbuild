@@ -164,16 +164,9 @@ impl Hub<'_> {
             track.extend(read);
         }
         let compares = deep_play::logic::inline_logic(form, piece, &track, drops)?;
-        // #538, #3278: the bake's comparisons, clock readings, wait here for `frames`' timings;
-        // the array holds only the hash of its own content, which says which bake they belong to.
-        let mut kept = self.compares.borrow_mut();
-        for (name, list) in compares {
-            if let Some(a) = form.pointer_mut(&format!("/arrays/{name}")) {
-                let of = deep_canvas::schedule::sha256_hex(&deep_canvas::schedule::canonical(a));
-                a["compares"] = json!(of);
-                kept.insert(name, (of, list));
-            }
-        }
+        // #538, #3278: the bake's clock readings wait here for `frames`' timings, under the key
+        // the form's array holds; a bake of the same inputs reads the same work.
+        self.compares.borrow_mut().extend(compares);
         Ok(())
     }
 
