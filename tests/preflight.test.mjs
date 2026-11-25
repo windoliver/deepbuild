@@ -137,7 +137,7 @@ test('the check budget comes from budgets.json and excludes the perf comparison'
 // A check that hangs, as one did for hours on the Spark holding the machine's timed grant, is stopped with its
 // children once the checks pass the budget with its margin, perf's allowance for the same workload.
 test('hung checks are stopped at the budget with its margin, their children too', (t) => {
-  const cwd = entry(t, { limit: 1000, checks: `
+  const cwd = entry(t, { limit: 4000, checks: `
     import { spawn } from 'node:child_process';
     import { writeFileSync } from 'node:fs';
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
@@ -159,10 +159,48 @@ test('hung checks are stopped at the budget with its margin, their children too'
   if (existsSync(file)) pids = JSON.parse(readFileSync(file, 'utf8'));
   assert.equal(result.error, undefined, `preflight never ended: ${result.stdout}`);
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /FAIL preflight budget: the checks ran past 1\.50 s, the budget with its margin, and were stopped\n\s+Fix: .+/);
+  assert.match(result.stdout, /FAIL preflight budget: the checks ran past 6\.00 s, the budget with its margin, and were stopped\n\s+Fix: .+/);
   assert.match(result.stdout, /BLOCKED perf: /);
   assert.equal(pids.length, 2, 'the checks started their child');
   assert.deepEqual(pids.filter(alive), [], 'the checks and their child were stopped');
+});
+
+// Ctrl-C at a terminal signals preflight's whole process group. The measured checks lead a group of their own, so
+// only preflight's stop reaches them, and it must find them, children too, before the timed grant goes back.
+test('a Ctrl-C to preflight stops the measured checks and their children', async (t) => {
+  const cwd = entry(t, { checks: `
+    import { spawn } from 'node:child_process';
+    import { writeFileSync } from 'node:fs';
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    writeFileSync('pids', JSON.stringify([process.pid, child.pid]));
+    console.log('checks hung');
+    setInterval(() => {}, 1000);
+  ` });
+  const alive = (pid) => {
+    try {
+      return process.kill(pid, 0);
+    } catch {
+      return false;
+    }
+  };
+  let pids = [];
+  t.after(() => { for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL'); });
+  // Its own group, as a terminal's foreground job is, so the Ctrl-C reaches preflight's group and nothing else here.
+  const child = spawn(process.execPath, [join(cwd, 'scripts/preflight.mjs')], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} });
+  let stdout = '';
+  // exit, not close: a check left running holds preflight's output open.
+  const exited = once(child, 'exit');
+  await new Promise((hung) => child.stdout.setEncoding('utf8').on('data', (chunk) => {
+    stdout += chunk;
+    if (stdout.includes('checks hung')) hung();
+  }));
+  pids = JSON.parse(readFileSync(join(cwd, 'pids'), 'utf8'));
+  process.kill(-child.pid, 'SIGINT');
+  await exited;
+  // deadline: a stopped process stays a zombie until its new parent reaps it; 10 s bounds that, never a wait for it.
+  for (const by = Date.now() + 10_000; pids.some(alive) && Date.now() < by;) await new Promise((next) => setTimeout(next, 100));
+  assert.deepEqual(pids.filter(alive), [], `the checks or their child outlived preflight's stop:\n${stdout}`);
 });
 
 test('the unit lane runs every tooling test file', (t) => {
