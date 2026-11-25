@@ -1049,6 +1049,10 @@
     "text": "{0}：{1}",
     "source": "fb62fe2ae6b2ae6cd472717ded838cce62600f4789e31aa5873e7e69407848bc"
   },
+  "question.holds_escapes": {
+    "text": "这里含有看不见的字符，每个都显示为它的转义序列",
+    "source": "e3054503d3316a73ae3f086cc105a2047417b268d2cdb0db17b2a0b878798f65"
+  },
   "question.look_first": {
     "text": "请先看完每张图片",
     "source": "a03e2d16d6a97a5cdde61769edb8f22ca9d3ec914574845b1546defd337d542f"

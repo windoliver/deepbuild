@@ -2,7 +2,7 @@
 // sea's table in its uniform (water.rs: `sea_source`), four waves a lane, longest first. Each wave
 // only lifts the water: its height at rest point x is a × cos(K · x + ψ), K its wavenumber along
 // its heading and ψ its phase at the frame's t, so the point at rest under a point of the surface
-// is that point. Water without a sea never compiles this, so it draws as it did.
+// is that point. Water without a sea never compiles this and reads none of the table.
 
 // water.rs's SEA_WAVES and SEA_DRAWN, in lanes of four.
 const SEA_LANES: u32 = 16u;

@@ -34,7 +34,9 @@ export interface Control extends Listed { block: string }
 const queue = new Map<string, Promise<unknown>>();
 function serial<T>(key: string, fn: () => T | Promise<T>): Promise<T> {
   const next = (queue.get(key) ?? Promise.resolve()).then(fn, fn);
-  queue.set(key, next.catch(() => undefined));
+  const tail = next.then(() => undefined, () => undefined);
+  queue.set(key, tail);
+  void tail.then(() => { if (queue.get(key) === tail) queue.delete(key); });
   return next;
 }
 

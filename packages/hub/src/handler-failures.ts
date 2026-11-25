@@ -20,6 +20,8 @@ export class HandlerFailures {
   private readonly told = new Set<string>();
   constructor(private readonly o: HandlerFailuresOptions) {}
 
+  /** The core forgot the session (#1866). */
+  forget(session: string): void { for (const key of this.told) if (key.startsWith(`${session}\n`)) this.told.delete(key); }
   /** Records what a hook's reply says of its handlers; `call` is the agent's ID for the call, or the hook event's. */
   async note(hook: string, reply: Pick<HookReply, 'failed' | 'aside'>, call: string, session: string | undefined, agent: string | undefined): Promise<void> {
     const who = session ? { session, ...(agent ? { agent } : {}) } : {};

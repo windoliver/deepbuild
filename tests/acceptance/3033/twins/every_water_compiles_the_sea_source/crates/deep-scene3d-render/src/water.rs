@@ -28,16 +28,12 @@ const SOURCE: &str = include_str!("water.wgsl");
 /// #3033: a sea's waves, compiled after water.wgsl for water that has a sea.
 const SEA: &str = include_str!("sea.wgsl");
 
-/// #3033: water.wgsl as water with a sea compiles it: the uniform ends with the sea's table, the
-/// list's `waves_scaled` gives way to sea.wgsl's, which draws the waves the vertex stage sums,
-/// and the pixel's normal reads the whole table. Water without a sea compiles water.wgsl as it
-/// is, so it draws as it did.
+/// #3033: water.wgsl as water with a sea compiles it: the list's `waves_scaled` gives way to
+/// sea.wgsl's, which draws the waves the vertex stage sums, and the pixel's normal reads the
+/// whole table, which water.wgsl's uniform ends with. Water without a sea compiles water.wgsl as
+/// it is and reads none of the table.
 fn sea_source() -> String {
     let swaps = [
-        (
-            "    above: vec4<f32>,\n};",
-            "    above: vec4<f32>,\n    sea: vec4<f32>,\n    sea_kx: array<vec4<f32>, 16>,\n    sea_kz: array<vec4<f32>, 16>,\n    sea_at: array<vec4<f32>, 16>,\n    sea_k: array<vec4<f32>, 16>,\n    sea_a: array<vec4<f32>, 16>,\n    sea_sx: array<vec4<f32>, 16>,\n    sea_sz: array<vec4<f32>, 16>,\n    sea_steep: array<vec4<f32>, 16>,\n};",
-        ),
         ("fn waves_scaled(", "fn waves_listed("),
         (
             "    let w = waves_scaled(rest, t, scale);",
@@ -83,6 +79,7 @@ pub struct Planted {
     pub tint_by_depth: bool,
 }
 
+deep_gpu::paired! { params: "water.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Params {
@@ -124,7 +121,15 @@ struct Params {
     // wavenumbers, their amplitudes, their slopes along their headings (x, then z) and their
     // steepness's share of those slopes.
     sea: [f32; 4],
-    sea_waves: [[[f32; 4]; SEA_WAVES / 4]; 8],
+    sea_kx: [[f32; 4]; SEA_WAVES / 4],
+    sea_kz: [[f32; 4]; SEA_WAVES / 4],
+    sea_at: [[f32; 4]; SEA_WAVES / 4],
+    sea_k: [[f32; 4]; SEA_WAVES / 4],
+    sea_a: [[f32; 4]; SEA_WAVES / 4],
+    sea_sx: [[f32; 4]; SEA_WAVES / 4],
+    sea_sz: [[f32; 4]; SEA_WAVES / 4],
+    sea_steep: [[f32; 4]; SEA_WAVES / 4],
+}
 }
 const _: () = assert!(SEA_WAVES == 64 && SEA_DRAWN == 16);
 
@@ -749,6 +754,7 @@ impl Waterer {
             shortest = shortest.max(k);
         }
         let sea = [shortest as f32, 0.0, 0.0, 0.0];
+        let [sea_kx, sea_kz, sea_at, sea_k, sea_a, sea_sx, sea_sz, sea_steep] = sea_waves;
         let wake = water.wake.as_ref().filter(|w| w.path.len() >= 2);
         let path: Vec<[f32; 2]> = match wake {
             Some(w) => w
@@ -1046,7 +1052,14 @@ impl Waterer {
                 above: (frame.above)
                     .map_or([0.0; 4], |c| [c[0] as f32, c[1] as f32, c[2] as f32, 1.0]),
                 sea,
-                sea_waves,
+                sea_kx,
+                sea_kz,
+                sea_at,
+                sea_k,
+                sea_a,
+                sea_sx,
+                sea_sz,
+                sea_steep,
             };
             if self.parts.len() == self.draws.len() {
                 self.parts.push(Part {
