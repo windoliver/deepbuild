@@ -152,9 +152,12 @@ interface ProductsOptions {
   build(o: { cwd: string; command: string }): Promise<{ code: number | null; tail: string }>;
   /** The processes with a file open under a folder, read by the supervisor. */
   openUnder(dir: string): Promise<{ pid: number; command: string }[]>;
-  /** Installs the store's guard@1 entry, with its planted call and twin, into rules.json. */
+  /** Installs the store's guard@1 entry into rules.json, and its planted call and twin into proofs.json. */
   guard(given: Obj): Promise<{ status: string; reason?: string }>;
 }
+
+/** How many of the newest starts are kept, each for the hook's record that follows its reply. */
+const STARTS_KEPT = 64;
 
 export class Products {
   readonly store: string;
@@ -260,7 +263,7 @@ export class Products {
     if (!started) {
       started = this.start(session, cwd);
       this.starts.set(hook, started);
-      if (this.starts.size > 1000) this.starts.delete(this.starts.keys().next().value!);
+      if (this.starts.size > STARTS_KEPT) this.starts.delete(this.starts.keys().next().value!);
     }
     return started;
   }

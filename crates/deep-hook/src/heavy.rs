@@ -29,6 +29,8 @@ pub struct Entry {
     /// How it takes jobs (#1016): `jobserver`, `n` (a worker count set by `jobs_flag`), `none` or a fixed number.
     pub jobs: String,
     pub jobs_flag: Option<String>,
+    /// The memory it is admitted on, in MB (#3220): its expected peak, taken as units of the host's `mem` pool.
+    pub memory_mb: Option<u64>,
     /// Whether it names a whole run, as DeepBuild's own do: a word after its prefix that isn't an option focuses it.
     pub whole: bool,
 }
@@ -40,6 +42,7 @@ pub struct Hit {
     pub kinds: Vec<String>,
     pub jobs: String,
     pub jobs_flag: Option<String>,
+    pub memory_mb: Option<u64>,
 }
 
 fn strings(value: Option<&Value>) -> Vec<String> {
@@ -79,6 +82,10 @@ fn shipped() -> Vec<Entry> {
                 kinds: strings(get("kinds")),
                 jobs: text("jobs").unwrap_or_else(|| "none".to_string()),
                 jobs_flag: text("jobs_flag"),
+                memory_mb: match get("memory_mb") {
+                    Some(Value::Number(n)) if *n >= 1.0 && n.fract() == 0.0 => Some(*n as u64),
+                    _ => None,
+                },
                 whole: true,
             })
         })
@@ -157,6 +164,7 @@ pub fn repo_entries(text: &str) -> Vec<Entry> {
                 kinds: Vec::new(),
                 jobs: "none".to_string(),
                 jobs_flag: None,
+                memory_mb: None,
                 whole: false,
             });
             list = None;
@@ -174,6 +182,7 @@ pub fn repo_entries(text: &str) -> Vec<Entry> {
             "name" => e.name = scalar(value),
             "jobs" => e.jobs = scalar(value),
             "jobs_flag" => e.jobs_flag = Some(scalar(value)).filter(|f| !f.is_empty()),
+            "memory_mb" => e.memory_mb = scalar(value).parse().ok().filter(|m| *m > 0),
             "argv_prefix" | "kinds" => {
                 let items = if value.is_empty() {
                     list = Some(if key == "kinds" {
@@ -295,6 +304,7 @@ pub fn matched_in(
                 kinds: Vec::new(),
                 jobs: "jobserver".to_string(),
                 jobs_flag: None,
+                memory_mb: None,
             });
         }
         if let Some(e) = entries.iter().find(|e| covers(e, &words)) {
@@ -303,6 +313,7 @@ pub fn matched_in(
                 kinds: e.kinds.clone(),
                 jobs: e.jobs.clone(),
                 jobs_flag: e.jobs_flag.clone(),
+                memory_mb: e.memory_mb,
             });
         }
     }

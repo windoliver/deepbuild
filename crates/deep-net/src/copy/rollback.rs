@@ -201,6 +201,7 @@ impl<S: Stepper> Copy<S> {
         if self.roll.trapped.as_ref().is_some_and(|(k, _)| *k >= s) {
             self.roll.trapped = None;
         }
+        self.unflag(s);
         self.next = s;
         while self.next < to && self.roll.trapped.is_none() && self.end.is_none() {
             self.run(self.now);
@@ -232,6 +233,10 @@ impl<S: Stepper> Copy<S> {
                 let h = self.hashes[i];
                 self.owed.push_back(h);
                 self.compare(k);
+            }
+            // #278: a nonzero `finish` ends the match once its step is confirmed.
+            if self.confirm(k) {
+                break;
             }
         }
         let settled = self.roll.settled;

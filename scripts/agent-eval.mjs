@@ -2,6 +2,8 @@
 // The manual agent evaluation's scorer (#26). Real Claude Code and Codex sessions run by hand on fixture repos, never
 // in CI; each run is recorded as one JSON file (tests/acceptance/26/README.md, The manual evaluation's scorer) and
 // scored here on its closed claim manifest, against evidence actually delivered in that session.
+// A film session, one whose `brief` names craft checks (#2697), also reads the guide its skill names before its first
+// deep_show, and its verdict rows report exactly the brief's checks.
 //   node scripts/agent-eval.mjs run --agent claude|codex [--out <dir>] [--model <name>] [--no-skill | --skill <file>]
 //   node scripts/agent-eval.mjs score <run.json>
 // `run` starts one real session and records it (scripts/agent-eval-run.mjs), then scores it as `score` does.
@@ -57,7 +59,47 @@ export function score(run) {
     if (typeof claim.evidence !== 'string' || !claim.evidence || !delivered.includes(claim.evidence)) fail('evidence_not_delivered', `${claim.id} cites ${claim.evidence}, which no call in this session delivered`);
   }
   for (const id of expected.keys()) if (!run.answer.claims.some((c) => c.id === id)) fail('claim_missing', `the session made no claim ${id}`);
+  filmReasons(run, skill, fail);
   return reasons;
+}
+
+/** Every value inside a result, a string holding JSON read as its value too (MCP results carry text content). */
+function* values(v) {
+  yield v;
+  if (Array.isArray(v)) for (const x of v) yield* values(x);
+  else if (isObj(v)) for (const x of Object.values(v)) yield* values(x);
+  else if (typeof v === 'string' && /^\s*[[{]/.test(v)) {
+    try { yield* values(JSON.parse(v)); } catch { /* not JSON: plain text */ }
+  }
+}
+
+/**
+ * A film session (#2697): one whose `brief` names craft checks. It reads the guide its skill's craft lines name
+ * (`guide `<name>`` or `` `<name>` guide``) with deep_kinds, a read not refused, before its first deep_show, and its
+ * verdict rows (each `requirements` entry `from: {craft}`) report exactly the brief's checks.
+ */
+function filmReasons(run, skill, fail) {
+  const named = Array.isArray(run.brief?.craft) ? run.brief.craft.map((c) => c?.check).filter((c) => typeof c === 'string') : [];
+  if (!named.length) return;
+  const id = run.run;
+  const craftLines = (skill ?? '').split('\n').filter((line) => /craft/i.test(line)).join('\n');
+  const guide = /\bguide\s+`([^`\s]+)`|`([^`\s]+)`\s+guide\b/.exec(craftLines)?.slice(1).find(Boolean);
+  const render = run.calls.findIndex((c) => c.tool === 'deep_show');
+  if (!guide) fail('skill_names_no_guide', `${id}: its skill names no guide for the craft checks its brief names, so it can't be told to read one before its first render`);
+  else {
+    const read = run.calls.findIndex((c) => c.tool === 'deep_kinds' && c.arguments?.op === 'read' && c.arguments?.guide === guide && c.result?.isError !== true);
+    if (render < 0) fail('film_never_rendered', `${id}: the session never called deep_show, so it can't show the guide ${guide} read before its first render`);
+    else if (read < 0) fail('guide_not_read', `${id}: the session never read the guide ${guide} before its first render, call ${render + 1}`);
+    else if (read > render) fail('guide_read_late', `${id}: the session read the guide ${guide} at call ${read + 1}, after its first render at call ${render + 1}`);
+  }
+  const ran = new Set();
+  for (const call of run.calls) {
+    for (const v of values(call.result ?? null)) {
+      if (isObj(v) && Array.isArray(v.requirements)) for (const row of v.requirements) if (typeof row?.from?.craft === 'string') ran.add(row.from.craft);
+    }
+  }
+  for (const check of new Set(named)) if (!ran.has(check)) fail('craft_check_unrun', `${id}: its brief names the craft check ${check}, which no verdict row reports`);
+  for (const check of ran) if (!named.includes(check)) fail('craft_check_unnamed', `${id}: its verdict rows report the craft check ${check}, which its brief doesn't name`);
 }
 
 /** Whether the file holds a recorded run this scorer can read. */

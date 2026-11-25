@@ -1,0 +1,524 @@
+# #3297's suite on the base 3cab59fbd, each test file run once with `node --test --test-reporter=spec <file>` on the Mac
+# (18 cores, darwin, node v24.22.2), the five side by side, while other sessions kept the 1-minute load at 13 to 27. Home
+# folders read ~ (a scene's own HOME too), temp folders <tmp>, the checkout <checkout>, the machine <host> and a grant's ID
+# <grant>; each failure's dump of its scene is cut to its first line, and the assertion's own comparison is kept.
+#
+# Every tagged test fails at an assertion, for the expected reason; the two guards, which carry no tag, pass:
+#   fill.test.mjs    #3297.758dee21  no build request another session makes beside any untimed job is granted before the
+#                                    preflight ends: each waits behind the timed grant the preflight holds throughout
+#   timed.test.mjs   #3297.758dee21  the one timed grant is held while untimed files run, and covers every file
+#                    #3297.dab8afb0  no timed file has a grant of its own; those of the alone block are one job, those of the
+#                                    parallel block and `node --test` run beside their neighbours, in one job with them; with
+#                                    one of each taken away, whole blocks run again
+#   finish.test.mjs  #3297.0a3b3b31  with a file unrun, or open, it runs the other lane and the rest of a finish; the one timed
+#                                    grant covers the file it ran; no Kept: line; the record says no count
+#                    #3297.3773818a  a kept line names no run and no time; no Kept: line; what Checks elapsed times holds the
+#                                    run of a file
+#   perf.test.mjs    #3297.17071219  the merge-base run starts every job, all of them kept; unlike sides pass
+#   doc.test.mjs     #3297.80732be9  the page states no choice
+
+## node --test tests/acceptance/3297/fill.test.mjs
+
+✖ #3297.758dee21 a build request another session makes while the parallel block runs is granted before the preflight ends
+✖ #3297.758dee21 a build request another session makes while an alone group runs is granted before the preflight ends
+✖ #3297.758dee21 a build request another session makes while `cargo test` runs is granted before the preflight ends
+✖ #3297.758dee21 a build request another session makes while `node --test` runs is granted before the preflight ends
+✔ guard: the preflight those requests were made beside runs every file once and ends whole
+ℹ tests 5
+ℹ pass 1
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3297/fill.test.mjs:54:3
+✖ #3297.758dee21 a build request another session makes while the parallel block runs is granted before the preflight ends
+  AssertionError [ERR_ASSERTION]: the build request another session made while tests/p.test.ts ran (the parallel block) waited 187.2 s, to the preflight's end, and wasn't granted before it; held meanwhile: timed grant <grant> of pid 86044, the preflight
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/fill.test.mjs:60:12)
+
+test at tests/acceptance/3297/fill.test.mjs:54:3
+✖ #3297.758dee21 a build request another session makes while an alone group runs is granted before the preflight ends
+  AssertionError [ERR_ASSERTION]: the build request another session made while tests/acceptance/149/a.test.ts ran (an alone group) waited 124.5 s, to the preflight's end, and wasn't granted before it; held meanwhile: timed grant <grant> of pid 86044, the preflight; test grant <grant> of pid 6933; turn grant <grant> of pid 7053
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/fill.test.mjs:60:12)
+
+test at tests/acceptance/3297/fill.test.mjs:54:3
+✖ #3297.758dee21 a build request another session makes while `cargo test` runs is granted before the preflight ends
+  AssertionError [ERR_ASSERTION]: the build request another session made while cargo test ran (`cargo test`) waited 62.3 s, to the preflight's end, and wasn't granted before it; held meanwhile: timed grant <grant> of pid 86044, the preflight
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/fill.test.mjs:60:12)
+
+test at tests/acceptance/3297/fill.test.mjs:54:3
+✖ #3297.758dee21 a build request another session makes while `node --test` runs is granted before the preflight ends
+  AssertionError [ERR_ASSERTION]: the build request another session made while tests/n.test.mjs ran (`node --test`) waited 61.8 s, to the preflight's end, and wasn't granted before it; held meanwhile: timed grant <grant> of pid 86044, the preflight
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/fill.test.mjs:60:12)
+
+## node --test tests/acceptance/3297/timed.test.mjs
+
+✖ #3297.758dee21 while the tree's results are filled, the preflight holds no timed grant while an untimed job runs
+✖ #3297.758dee21 each timed grant the preflight holds while it fills is for one timed file's run, and the last, with no file under it, is the finish's
+✖ #3297.dab8afb0 a timed file of the alone block runs alone, under its own timed grant
+✖ #3297.dab8afb0 a timed file of the alone block is a job of its own, whose kept line names that one file
+✖ #3297.dab8afb0 another timed file of the alone block runs alone, under its own timed grant
+✖ #3297.dab8afb0 another timed file of the alone block is a job of its own, whose kept line names that one file
+✖ #3297.dab8afb0 a timed file of the parallel block runs alone, under its own timed grant
+✖ #3297.dab8afb0 a timed file of the parallel block is a job of its own, whose kept line names that one file
+✖ #3297.dab8afb0 another timed file of the parallel block runs alone, under its own timed grant
+✖ #3297.dab8afb0 another timed file of the parallel block is a job of its own, whose kept line names that one file
+✖ #3297.dab8afb0 a timed file of `node --test` runs alone, under its own timed grant
+✖ #3297.dab8afb0 a timed file of `node --test` is a job of its own, whose kept line names that one file
+✖ #3297.dab8afb0 a timed file with no kept result is run by the next run as its own job, with no other file of its block
+✖ #3297.dab8afb0 the jobs beside the timed files hold none of them, and the run whose timed files stood alone passes whole
+ℹ tests 14
+ℹ pass 0
+ℹ fail 14
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3297/timed.test.mjs:56:1
+✖ #3297.758dee21 while the tree's results are filled, the preflight holds no timed grant while an untimed job runs
+  AssertionError [ERR_ASSERTION]: the preflight held a timed grant while tests/p.test.ts, which isn't timed, ran from 04:14:12.149 to 04:14:13.655
+  …
+
+  + actual - expected
+  
+  + [
+  +   'timed grant <grant>, held from 04:14:05.755 to 04:14:31.682 (25.9 s)'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:62:12)
+
+test at tests/acceptance/3297/timed.test.mjs:66:1
+✖ #3297.758dee21 each timed grant the preflight holds while it fills is for one timed file's run, and the last, with no file under it, is the finish's
+  AssertionError [ERR_ASSERTION]: timed grant <grant>, held from 04:14:05.755 to 04:14:31.682 (25.9 s), before the last file ended, was held while 10 files ran: tests/acceptance/1018/budgets.test.ts, tests/acceptance/46/budgets.test.ts, tests/acceptance/15/budgets.test.ts, tests/acceptance/237/budgets.test.ts, tests/preflight.test.mjs, tests/p.test.ts, tests/q.test.ts, tests/acceptance/149/a.test.ts, tests/acceptance/1523/a.test.ts, tests/n.test.mjs
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:73:12)
+
+test at tests/acceptance/3297/timed.test.mjs:80:3
+✖ #3297.dab8afb0 a timed file of the alone block runs alone, under its own timed grant
+  AssertionError [ERR_ASSERTION]: tests/acceptance/1018/budgets.test.ts's timed grant isn't its own: other files ran under timed grant <grant>, held from 04:14:05.755 to 04:14:31.682 (25.9 s)
+  …
+
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/46/budgets.test.ts',
+  +   'tests/acceptance/15/budgets.test.ts',
+  +   'tests/acceptance/237/budgets.test.ts',
+  +   'tests/preflight.test.mjs',
+  +   'tests/p.test.ts',
+  +   'tests/q.test.ts',
+  +   'tests/acceptance/149/a.test.ts',
+  +   'tests/acceptance/1523/a.test.ts',
+  +   'tests/n.test.mjs',
+  +   'cargo test'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:87:12)
+
+test at tests/acceptance/3297/timed.test.mjs:93:3
+✖ #3297.dab8afb0 a timed file of the alone block is a job of its own, whose kept line names that one file
+  AssertionError [ERR_ASSERTION]: the kept line of tests/acceptance/1018/budgets.test.ts (job vitest-timed) names other files: tests/acceptance/46/budgets.test.ts
+  …
+
+  + actual - expected
+  
+    [
+      'tests/acceptance/1018/budgets.test.ts',
+  +   'tests/acceptance/46/budgets.test.ts'
+    ]
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:96:12)
+
+test at tests/acceptance/3297/timed.test.mjs:80:3
+✖ #3297.dab8afb0 another timed file of the alone block runs alone, under its own timed grant
+  AssertionError [ERR_ASSERTION]: tests/acceptance/46/budgets.test.ts's timed grant isn't its own: other files ran under timed grant <grant>, held from 04:14:05.755 to 04:14:31.682 (25.9 s)
+  …
+
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/1018/budgets.test.ts',
+  +   'tests/acceptance/15/budgets.test.ts',
+  +   'tests/acceptance/237/budgets.test.ts',
+  +   'tests/preflight.test.mjs',
+  +   'tests/p.test.ts',
+  +   'tests/q.test.ts',
+  +   'tests/acceptance/149/a.test.ts',
+  +   'tests/acceptance/1523/a.test.ts',
+  +   'tests/n.test.mjs',
+  +   'cargo test'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:87:12)
+
+test at tests/acceptance/3297/timed.test.mjs:93:3
+✖ #3297.dab8afb0 another timed file of the alone block is a job of its own, whose kept line names that one file
+  AssertionError [ERR_ASSERTION]: the kept line of tests/acceptance/46/budgets.test.ts (job vitest-timed) names other files: tests/acceptance/1018/budgets.test.ts
+  …
+
+  + actual - expected
+  
+    [
+  +   'tests/acceptance/1018/budgets.test.ts',
+      'tests/acceptance/46/budgets.test.ts'
+    ]
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:96:12)
+
+test at tests/acceptance/3297/timed.test.mjs:80:3
+✖ #3297.dab8afb0 a timed file of the parallel block runs alone, under its own timed grant
+  AssertionError [ERR_ASSERTION]: tests/acceptance/15/budgets.test.ts, timed, ran from 04:14:08.062 to 04:14:12.069 beside other files
+  …
+
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/237/budgets.test.ts'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:84:12)
+
+test at tests/acceptance/3297/timed.test.mjs:93:3
+✖ #3297.dab8afb0 a timed file of the parallel block is a job of its own, whose kept line names that one file
+  AssertionError [ERR_ASSERTION]: the kept line of tests/acceptance/15/budgets.test.ts (job unit 0) names other files: tests/p.test.ts, tests/q.test.ts, tests/acceptance/237/budgets.test.ts
+  …
+
+  + actual - expected
+  
+    [
+  +   'tests/p.test.ts',
+  +   'tests/q.test.ts',
+      'tests/acceptance/15/budgets.test.ts',
+  +   'tests/acceptance/237/budgets.test.ts'
+    ]
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:96:12)
+
+test at tests/acceptance/3297/timed.test.mjs:80:3
+✖ #3297.dab8afb0 another timed file of the parallel block runs alone, under its own timed grant
+  AssertionError [ERR_ASSERTION]: tests/acceptance/237/budgets.test.ts, timed, ran from 04:14:08.063 to 04:14:12.068 beside other files
+  …
+
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/15/budgets.test.ts'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:84:12)
+
+test at tests/acceptance/3297/timed.test.mjs:93:3
+✖ #3297.dab8afb0 another timed file of the parallel block is a job of its own, whose kept line names that one file
+  AssertionError [ERR_ASSERTION]: the kept line of tests/acceptance/237/budgets.test.ts (job unit 0) names other files: tests/p.test.ts, tests/q.test.ts, tests/acceptance/15/budgets.test.ts
+  …
+
+  + actual - expected
+  
+    [
+  +   'tests/p.test.ts',
+  +   'tests/q.test.ts',
+  +   'tests/acceptance/15/budgets.test.ts',
+      'tests/acceptance/237/budgets.test.ts'
+    ]
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:96:12)
+
+test at tests/acceptance/3297/timed.test.mjs:80:3
+✖ #3297.dab8afb0 a timed file of `node --test` runs alone, under its own timed grant
+  AssertionError [ERR_ASSERTION]: tests/preflight.test.mjs, timed, ran from 04:14:27.575 to 04:14:31.583 beside other files
+  …
+
+  + actual - expected
+  
+  + [
+  +   'tests/n.test.mjs'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:84:12)
+
+test at tests/acceptance/3297/timed.test.mjs:93:3
+✖ #3297.dab8afb0 a timed file of `node --test` is a job of its own, whose kept line names that one file
+  AssertionError [ERR_ASSERTION]: the kept line of tests/preflight.test.mjs (job unit 3) names other files: tests/n.test.mjs
+  …
+
+  + actual - expected
+  
+    [
+  +   'tests/n.test.mjs',
+      'tests/preflight.test.mjs'
+    ]
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:96:12)
+
+test at tests/acceptance/3297/timed.test.mjs:101:1
+✖ #3297.dab8afb0 a timed file with no kept result is run by the next run as its own job, with no other file of its block
+  AssertionError [ERR_ASSERTION]: the kept lines of tests/acceptance/1018/budgets.test.ts, tests/preflight.test.mjs, tests/acceptance/15/budgets.test.ts alone were taken away
+  …
+
+  + actual - expected
+  
+    [
+      'alone-1',
+  +   'alone-2',
+  +   'n',
+      'node-1',
+  +   'p',
+      'parallel-1',
+  +   'parallel-2',
+  +   'q'
+    ]
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:102:10)
+
+test at tests/acceptance/3297/timed.test.mjs:110:1
+✖ #3297.dab8afb0 the jobs beside the timed files hold none of them, and the run whose timed files stood alone passes whole
+  AssertionError [ERR_ASSERTION]: kept jobs hold timed files beside untimed ones
+  …
+
+  + actual - expected
+  
+  + [
+  +   'unit 0: tests/p.test.ts, tests/q.test.ts, tests/acceptance/15/budgets.test.ts, tests/acceptance/237/budgets.test.ts',
+  +   'unit 3: tests/n.test.mjs, tests/preflight.test.mjs'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/timed.test.mjs:112:10)
+
+## node --test tests/acceptance/3297/finish.test.mjs
+
+✖ #3297.0a3b3b31 with a file unrun the preflight doesn't finish: it exits 3, INCONCLUSIVE, naming the file, with no PASS for the unit lane
+✖ #3297.0a3b3b31 with a file open the preflight doesn't finish: it runs that file, and exits 3, INCONCLUSIVE, naming it
+✖ #3297.0a3b3b31 once every file has a kept result the same command finishes: one timed grant, no file started again, and both lines
+✖ #3297.0a3b3b31 a run with nothing to fill finishes at once: one timed grant, no file started, and both lines
+✖ #3297.0a3b3b31 a file whose kept FAIL stands has its result: the preflight starts nothing, finishes and fails
+✖ #3297.0a3b3b31 the unit record of a finishing run says how many test files it read from kept results, of how many
+✖ #3297.3773818a a kept line says which preflight ran its job and how long the job took
+✖ #3297.3773818a the Kept: line says how many jobs are kept, their machine time in all and how many runs they came from
+✖ #3297.3773818a Checks elapsed is the finishing run's: its warm-up builds and checks, and no kept job's time
+ℹ tests 9
+ℹ pass 0
+ℹ fail 9
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3297/finish.test.mjs:94:1
+✖ #3297.0a3b3b31 with a file unrun the preflight doesn't finish: it exits 3, INCONCLUSIVE, naming the file, with no PASS for the unit lane
+  AssertionError [ERR_ASSERTION]: it finished early, with tests/acceptance/1523/a.test.ts unrun, its runner killed: it ran these of the finish
+  …
+
+  + actual - expected
+  
+  + [
+  +   "the checks' other lane"
+  + ]
+  - []
+  
+      at unfinished (<checkout>/tests/acceptance/3297/finish.test.mjs:82:10)
+
+test at tests/acceptance/3297/finish.test.mjs:101:1
+✖ #3297.0a3b3b31 with a file open the preflight doesn't finish: it runs that file, and exits 3, INCONCLUSIVE, naming it
+  AssertionError [ERR_ASSERTION]: it finished early, with tests/acceptance/1523/a.test.ts open, its kept row INCONCLUSIVE: it ran these of the finish
+  …
+
+  + actual - expected
+  
+  + [
+  +   "the checks' other lane"
+  + ]
+  - []
+  
+      at unfinished (<checkout>/tests/acceptance/3297/finish.test.mjs:82:10)
+
+test at tests/acceptance/3297/finish.test.mjs:106:1
+✖ #3297.0a3b3b31 once every file has a kept result the same command finishes: one timed grant, no file started again, and both lines
+  AssertionError [ERR_ASSERTION]: a finishing run takes one timed grant, under which no file runs: 1 were taken, 0 of them with no file under it (under the others ran tests/acceptance/1523/a.test.ts)
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/finish.test.mjs:107:26)
+
+test at tests/acceptance/3297/finish.test.mjs:114:1
+✖ #3297.0a3b3b31 a run with nothing to fill finishes at once: one timed grant, no file started, and both lines
+  AssertionError [ERR_ASSERTION]: it prints no line "Kept: <jobs> jobs, <seconds> s of machine time, from <runs> runs"
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/finish.test.mjs:115:19)
+
+test at tests/acceptance/3297/finish.test.mjs:120:1
+✖ #3297.0a3b3b31 a file whose kept FAIL stands has its result: the preflight starts nothing, finishes and fails
+  AssertionError [ERR_ASSERTION]: it prints no line "Kept: <jobs> jobs, <seconds> s of machine time, from <runs> runs"
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/finish.test.mjs:121:19)
+
+test at tests/acceptance/3297/finish.test.mjs:129:1
+✖ #3297.0a3b3b31 the unit record of a finishing run says how many test files it read from kept results, of how many
+  AssertionError [ERR_ASSERTION]: the record of the run "filled" says undefined
+  …
+
+  + actual - expected
+  
+  + undefined
+  - {
+  -   of: 5,
+  -   read: 5
+  - }
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/finish.test.mjs:130:52)
+
+test at tests/acceptance/3297/finish.test.mjs:133:1
+✖ #3297.3773818a a kept line says which preflight ran its job and how long the job took
+  AssertionError [ERR_ASSERTION]: the kept line of unit 0 (tests/p.test.ts) names no run: undefined
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/finish.test.mjs:137:12)
+
+test at tests/acceptance/3297/finish.test.mjs:150:1
+✖ #3297.3773818a the Kept: line says how many jobs are kept, their machine time in all and how many runs they came from
+  AssertionError [ERR_ASSERTION]: the run "filled" prints no line "Kept: <jobs> jobs, <seconds> s of machine time, from <runs> runs": the kept jobs' machine time is left out
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/finish.test.mjs:151:52)
+
+test at tests/acceptance/3297/finish.test.mjs:166:1
+✖ #3297.3773818a Checks elapsed is the finishing run's: its warm-up builds and checks, and no kept job's time
+  AssertionError [ERR_ASSERTION]: in the run "filled" Checks elapsed, 26.04 s, isn't the finish's alone: these files ran under the grant it is timed on, held for 26.2 s
+  …
+
+  + actual - expected
+  
+  + [
+  +   'tests/acceptance/1523/a.test.ts'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/finish.test.mjs:170:12)
+
+## node --test tests/acceptance/3297/perf.test.mjs
+
+✖ #3297.17071219 on the merge base itself, whose tree is both sides', perf's merge-base run starts none of the jobs the run just kept
+✖ #3297.17071219 perf's merge-base run, on a tree whose results are all kept, starts none of its jobs, and the like sides compare
+✖ #3297.17071219 perf's merge-base run starts the one job with no kept result of its own tree, and no other
+✖ #3297.17071219 the workload line reads INCONCLUSIVE, never PASS, when the merge base's tree keeps 3 of its 4 files' results, for the base side to read, and the change's side reads all 4
+✖ #3297.17071219 the workload line reads INCONCLUSIVE, never PASS, when the merge base's tree keeps no result, so the base side reads none, and the change's side reads all 4
+✖ #3297.17071219 the checks without the change's own tests, run whole, never pass against a base side that read its results
+ℹ tests 6
+ℹ pass 0
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3297/perf.test.mjs:90:1
+✖ #3297.17071219 on the merge base itself, whose tree is both sides', perf's merge-base run starts none of the jobs the run just kept
+  AssertionError [ERR_ASSERTION]: the base side started jobs whose kept results of its own tree are whole: the merge-base run ran these again
+  …
+
+  + actual - expected
+  
+  + [
+  +   'p',
+  +   'a',
+  +   'b',
+  +   'n',
+  +   'cargo test'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/perf.test.mjs:94:10)
+
+test at tests/acceptance/3297/perf.test.mjs:97:1
+✖ #3297.17071219 perf's merge-base run, on a tree whose results are all kept, starts none of its jobs, and the like sides compare
+  AssertionError [ERR_ASSERTION]: the base side started jobs whose kept results of its own tree are whole: the merge-base run ran these again
+  …
+
+  + actual - expected
+  
+  + [
+  +   'p',
+  +   'a',
+  +   'b',
+  +   'n',
+  +   'cargo test'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/perf.test.mjs:101:10)
+
+test at tests/acceptance/3297/perf.test.mjs:110:1
+✖ #3297.17071219 perf's merge-base run starts the one job with no kept result of its own tree, and no other
+  AssertionError [ERR_ASSERTION]: the base side was to run tests/acceptance/149/a.test.ts alone, whose kept line of its own tree was taken away
+  …
+
+  + actual - expected
+  
+    [
+  +   'p',
+      'a',
+  +   'b',
+  +   'n',
+  +   'cargo test'
+    ]
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/perf.test.mjs:113:10)
+
+test at tests/acceptance/3297/perf.test.mjs:120:3
+✖ #3297.17071219 the workload line reads INCONCLUSIVE, never PASS, when the merge base's tree keeps 3 of its 4 files' results, for the base side to read, and the change's side reads all 4
+  AssertionError [ERR_ASSERTION]: perf passed unlike sides: the merge base's tree keeps 3 of its 4 files' results, for the base side to read, and the change's side reads all 4, and its workload line reads PASS
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/perf.test.mjs:126:5)
+
+test at tests/acceptance/3297/perf.test.mjs:120:3
+✖ #3297.17071219 the workload line reads INCONCLUSIVE, never PASS, when the merge base's tree keeps no result, so the base side reads none, and the change's side reads all 4
+  AssertionError [ERR_ASSERTION]: perf passed unlike sides: the merge base's tree keeps no result, so the base side reads none, and the change's side reads all 4, and its workload line reads PASS
+  …
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/perf.test.mjs:126:5)
+
+test at tests/acceptance/3297/perf.test.mjs:132:1
+✖ #3297.17071219 the checks without the change's own tests, run whole, never pass against a base side that read its results
+  AssertionError [ERR_ASSERTION]: the base side started jobs whose kept results of its own tree are whole: the merge-base run ran these again
+  …
+
+  + actual - expected
+  
+  + [
+  +   'p',
+  +   'a',
+  +   'b',
+  +   'n',
+  +   'cargo test'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/perf.test.mjs:135:10)
+
+## node --test tests/acceptance/3297/doc.test.mjs
+
+✖ #3297.80732be9 docs/parallel-proof.md states that the owner chose (a), and not (b)
+✔ guard: pages that state no choice, or another one, are told from pages that state (a)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3297/doc.test.mjs:29:1
+✖ #3297.80732be9 docs/parallel-proof.md states that the owner chose (a), and not (b)
+  AssertionError [ERR_ASSERTION]: the letters docs/parallel-proof.md says the owner chose for what the preflight's budget bounds
+  …
+
+  + actual - expected
+  
+  + []
+  - [
+  -   'a'
+  - ]
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/3297/doc.test.mjs:30:10)

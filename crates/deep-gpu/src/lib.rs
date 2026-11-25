@@ -11,6 +11,7 @@ pub mod footprint;
 pub mod frame_budget;
 pub mod frame_checks;
 pub mod guard;
+pub mod layout;
 pub mod memory;
 pub mod meter;
 pub mod nv12;

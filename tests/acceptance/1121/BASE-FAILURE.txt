@@ -1,0 +1,167 @@
+# #1121 acceptance tests: the runs on the base, and the planted wrong programs
+
+Base: 654c560c. Two machines: the Mac (darwin arm64, 18 cores, at a load of 66 to 140) and the Spark (Linux aarch64, 20
+cores, at a load of 12 to 23, umask 002). Paths are cut to <checkout>, <copy> and /tmp. On the Spark cargo ran with
+CARGO_BUILD_JOBS=4.
+
+## The base on the Mac
+
+$ node --test 'tests/acceptance/1121/*.test.mjs'
+(a fresh clone of the base with this suite copied in and nothing built; 130 s, nearly all of it building deep-hook)
+
+﹣ #1121.73d8f179 every crate of the workspace builds on the Spark, 27 of 27 when the issue was written # INCONCLUSIVE (platform): this needs the Spark, Linux on aarch64, and this machine is darwin-arm64; it is unrun here
+﹣ #1121.b915783e the workspace's cargo test on the Spark has no FAIL and no BLOCKED # INCONCLUSIVE (platform): this needs the Spark, Linux on aarch64, and this machine is darwin-arm64; it is unrun here
+﹣ #1121.301969cb env-local finds a free port on Linux, by an lsof that is there # INCONCLUSIVE (platform): this needs Linux, and this machine is darwin-arm64; it is unrun here
+✖ #1121.95fa4a52 the Mac's cargo test writes each target's `cargo test -- --list` into its evidence record
+    AssertionError: the Mac's record holds no reference list: its keys are lane, state, host, platform, tree, tests, and `list` is undefined
+        at record.test.mjs:24
+﹣ #1121.95fa4a52 a Spark run's record lists each test absent by platform against the Mac's list, and its lane is INCONCLUSIVE (platform), not PASS # INCONCLUSIVE (platform): this needs the Spark, Linux on aarch64, and this machine is darwin-arm64; it is unrun here
+﹣ #1121.95fa4a52 a Spark run with no reference list from the Mac is never PASS # INCONCLUSIVE (platform): this needs the Spark, Linux on aarch64, and this machine is darwin-arm64; it is unrun here
+✔ #1121.23cb368c deep-hook on aarch64 refuses a symlinked spool path: the file it leads to is never written
+
+ℹ tests 7
+ℹ pass 1
+ℹ fail 1
+ℹ skipped 5
+
+The one failure is at its assertion, after the run wrote one record in which the Mac's nine tests passed. The one pass
+has its wrong program below.
+
+## The base on the Spark
+
+$ node --test tests/acceptance/1121/record.test.mjs tests/acceptance/1121/spool.test.mjs
+(a fresh clone of the base with this suite copied in; 153 s, nearly all of it building deep-hook)
+
+﹣ #1121.95fa4a52 the Mac's cargo test writes each target's `cargo test -- --list` into its evidence record # INCONCLUSIVE (platform): this needs the reference list's machine, a Mac, and this machine is linux-arm64; it is unrun here
+✖ #1121.95fa4a52 a Spark run's record lists each test absent by platform against the Mac's list, and its lane is INCONCLUSIVE (platform), not PASS
+    AssertionError: the record lists the six tests absent by platform, four whole test files' and two single tests; its tests are [
+     { "id": "cargo -p alpha --lib › tests::runs_everywhere", "state": "PASS" },
+     { "id": "cargo -p alpha --lib › tests::single_on_linux", "state": "PASS" },
+     { "id": "cargo -p alpha --test mixed › runs_on_both", "state": "PASS" },
+     { "id": "cargo -p beta --lib › tests::everywhere", "state": "PASS" }
+    ]
+    + []
+    - [
+    -   'cargo -p alpha --lib › tests::single_on_the_mac',
+    -   'cargo -p alpha --test mac_one › file_one_on_the_mac',
+    -   'cargo -p alpha --test mac_two › file_two_on_the_mac',
+    -   'cargo -p alpha --test mixed › mixed_single_on_the_mac',
+    -   'cargo -p beta --test mac_four › file_four_on_the_mac',
+    -   'cargo -p beta --test mac_three › file_three_on_the_mac'
+    - ]
+        at record.test.mjs:40
+✖ #1121.95fa4a52 a Spark run with no reference list from the Mac is never PASS
+    AssertionError: a Spark cargo test compared with nothing proves nothing of the tests Linux lacks: PASS unit (0.84 s)
+        at record.test.mjs:59
+✔ #1121.23cb368c deep-hook on aarch64 refuses a symlinked spool path: the file it leads to is never written
+
+ℹ tests 4
+ℹ pass 1
+ℹ fail 2
+ℹ skipped 1
+
+$ npm ci && node --test tests/acceptance/1121/lsof.test.mjs
+(11 s after npm ci: the test builds env-local and the packages it needs)
+
+✔ #1121.301969cb env-local finds a free port on Linux, by an lsof that is there
+
+ℹ tests 1
+ℹ pass 1
+
+Unrun on the Spark: build.test.mjs (AC1) and cargo-test.test.mjs (AC2). Each takes the whole workspace, which this job
+was not to build or test on that shared machine. Their bodies ran on the Mac only narrowed to deep-hook, with the
+platform check lifted in a scratch copy of each: the build's count read "2 of 54 crates build on darwin-arm64; these
+don't: deep-app, …" with only deep-hook and deep-contracts built, and the cargo test read deep-hook's own tests with no
+FAIL or BLOCKED. Neither scratch copy is kept.
+
+## The planted wrong programs
+
+Each ran in a throwaway copy of the base with this suite in it and the twin's one file copied over the file it
+replaces, which was put back after.
+
+### x86-nofollow (crates/deep-hook/src/spool_file.rs), AC4 #1121.23cb368c
+
+The Mac:
+$ node --test tests/acceptance/1121/spool.test.mjs
+✖ #1121.23cb368c deep-hook on aarch64 refuses a symlinked spool path: the file it leads to is never written
+    AssertionError: deep-hook on darwin-arm64 followed the symlinked spool file /tmp/dh1121-2qveeQ/.deepbuild/spool/spool.jsonl and wrote the file it leads to, /tmp/dh1121-h0Amix/spool.jsonl:
+    untouched
+    {"v":1,"agent":"claude-code","event":"PreToolUse","seq":"…","id":"…","pid":…,"ppid":…,"matched":[],"payload":{"session_id":"s1121","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls t1121-file-0"}}}
+    … (each of the five calls, three times: deep-hook tries a moved spool three times)
+        at spool.test.mjs:59
+ℹ tests 1
+ℹ fail 1
+
+The Spark:
+$ node --test tests/acceptance/1121/spool.test.mjs
+✖ #1121.23cb368c deep-hook on aarch64 refuses a symlinked spool path: the file it leads to is never written
+    AssertionError: deep-hook on linux-arm64 followed the symlinked spool file /tmp/dh1121-kjjwUp/.deepbuild/spool/spool.jsonl and wrote the file it leads to, /tmp/dh1121-MF5axJ/spool.jsonl:
+    untouched
+    {"v":1,"agent":"claude-code","event":"PreToolUse","seq":"…","id":"…","pid":…,"ppid":…,"matched":[],"payload":{"session_id":"s1121","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls t1121-file-0"}}}
+    …
+        at spool.test.mjs:59
+ℹ tests 1
+ℹ fail 1
+
+### sbin-lsof (packages/supervisor/src/procs.ts), AC5 #1121.301969cb
+
+The Spark:
+$ node --test tests/acceptance/1121/lsof.test.mjs
+✖ #1121.301969cb env-local finds a free port on Linux, by an lsof that is there
+    AssertionError: lsof on linux-arm64 names the process that listens on port 41697: {"error":"lsof can't list port 41697's listeners: spawn /usr/sbin/lsof ENOENT"}
+        at lsof.test.mjs:64
+ℹ tests 1
+ℹ fail 1
+
+The Mac: the test skips, and the twin is no fault there, since /usr/sbin/lsof is the Mac's.
+
+### umask-spool-folder (crates/deep-hook/src/tests.rs), AC2 #1121.b915783e
+
+Unrun under cargo-test.test.mjs, which is unrun on the Spark. The test the twin breaks is one of the workspace's cargo
+tests, so that file reads its FAIL once it runs. Alone, on the Spark, umask 002:
+
+$ cargo test --locked -p deep-hook --bin deep-hook a_line_written_to_a_spool_moved_aside      (the base)
+test tests::a_line_written_to_a_spool_moved_aside_is_written_again_to_the_new_one ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out
+
+$ cargo test --locked -p deep-hook --bin deep-hook a_line_written_to_a_spool_moved_aside      (the twin)
+test tests::a_line_written_to_a_spool_moved_aside_is_written_again_to_the_new_one ... FAILED
+thread '…' panicked at crates/deep-hook/src/tests.rs:52:6:
+called `Result::unwrap()` on an `Err` value: Custom { kind: Other, error: "the spool folder is a link, or others can write it" }
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out
+error: test failed, to rerun pass `-p deep-hook --bin deep-hook`
+
+The Mac: the twin is no fault there under its umask of 022.
+
+### mac-only-dependency (crates/deep-app/src/show.rs), AC1 #1121.73d8f179
+
+Unrun on both machines. build.test.mjs is unrun on the Spark, and so is this twin by itself: a `cargo check --locked
+-p deep-app` there, started for the issue's own fault (`image` back among deep-app's macOS-only dependencies), was 430
+of about 1,000 crates in after 50 minutes when the Spark's disk fell from 59 GB free to 19 GB under other sessions'
+runs, and the blind job stopped its own run and removed its folder. So nothing here shows deep-app building on the
+Spark at the base, or failing there with the twin. The twin's build on the Mac is unrun too: it names
+`objc2::runtime::Bool`, of a crate deep-app's macOS dependencies hold and its other sources use.
+
+## Not a wrong program for AC2: x86-nofollow under deep-hook's own test
+
+On the Spark, with x86-nofollow planted:
+
+$ cargo test --locked -p deep-hook --test cli a_spool_path_that_leads_elsewhere_is_never_written      (umask 002, the Spark's)
+test a_spool_path_that_leads_elsewhere_is_never_written ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 29 filtered out
+
+$ (umask 022; cargo test --locked -p deep-hook --test cli a_spool_path_that_leads_elsewhere_is_never_written)
+test a_spool_path_that_leads_elsewhere_is_never_written ... FAILED
+thread '…' panicked at crates/deep-hook/tests/cli.rs:795:9:
+assertion `left == right` failed: a symlinked spool file: the file it leads to is never written
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out
+
+That test makes its spool folder under the umask, so under 002 deep-hook refuses the folder before the open the
+constant guards, and the wrong constant passes. AC4's test here makes the folder 0700 and fails on it (above).
+
+## A program that passes, not kept
+
+To see that AC3's tests can pass, the blind job wrote a throwaway change to `runLanes` of about 40 lines: on the Mac
+`list` from `cargo test … -- --list`, and on Linux the rows, the state and the summary line from the Mac's record.
+With it the Mac's test passed on the Mac and the two Spark tests passed on the Spark (the third skipped on each). It
+is not in this folder and was shown to no one.

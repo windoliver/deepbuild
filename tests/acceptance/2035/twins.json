@@ -1,0 +1,18 @@
+{
+  "#2035.577758f2": [
+    "place_blends"
+  ],
+  "#2035.9b03a44c": [
+    "place_blends_rotation"
+  ],
+  "#2035.e60b6f6d": [
+    "place_blends_wheels"
+  ],
+  "#2035.4a4b7836": [
+    "cut_ignored"
+  ],
+  "#2035.65049ccc": [
+    "restore_forgets_place",
+    "restore_forgets_cut"
+  ]
+}

@@ -57,7 +57,15 @@ pub struct Sparks {
     /// its pass, and its declared cost, ns per px at its resolution; none for an item of its own.
     pub effect: Option<String>,
     pub cost_ns: Option<f64>,
+    /// #853: a stepped item's rows, the storage one of the document's operators wrote this
+    /// frame (its item and output), drawn in place of a dispatch of this draw's own.
+    pub rows: Option<(String, String)>,
+    /// #853: in an export, the item's buffer as its bake holds it for this frame, and its step.
+    pub baked: Option<(Arc<Vec<u8>>, u64)>,
 }
+
+/// #853: the draw of a stepped item's dots: grains, each over what is behind it.
+pub const GRAINS: u32 = 5;
 
 /// A closed-form item's frame uniform words, bake table words and surface (#449).
 type Closed = (Vec<Vec<u32>>, Arc<Vec<u32>>, Vec<f32>);
@@ -197,6 +205,8 @@ pub struct Effects {
 struct SparkDraw {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
+    /// #853: grains, each drawn over what is behind it in place of adding to it.
+    grains: wgpu::RenderPipeline,
     /// The half-resolution puffs' draw into their half-size target, and the filtered upsample
     /// adding that to the linear target, with its sampler (#1173).
     half: wgpu::RenderPipeline,
@@ -469,7 +479,11 @@ impl Effects {
                 operation: wgpu::BlendOperation::Add,
             },
         };
-        let additive_into = |vs, fs, depth_stencil| {
+        let over = wgpu::BlendState {
+            color: wgpu::BlendComponent::REPLACE,
+            ..additive
+        };
+        let into = |vs, fs, depth_stencil, blend| {
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(SPARKS),
                 layout: None,
@@ -485,7 +499,7 @@ impl Effects {
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: LINEAR,
-                        blend: Some(additive),
+                        blend: Some(blend),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
@@ -496,26 +510,24 @@ impl Effects {
                 cache: None,
             })
         };
-        let pipeline = additive_into(
-            "vs",
-            "fs",
-            Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-        );
+        let tested = Some(wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: Some(false),
+            depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+            stencil: Default::default(),
+            bias: Default::default(),
+        });
+        let pipeline = into("vs", "fs", tested.clone(), additive);
         let layout = pipeline.get_bind_group_layout(0);
         let instances = instance_buffer(d, shipped::MAX_PARTICLES);
         self.sparks = Some(SparkDraw {
             pipeline,
             layout,
-            half: additive_into("vs", "half_fs", None),
-            upsample: additive_into("upsample_vs", "upsample_fs", None),
-            upsample_full: additive_into("upsample_vs", "upsample_full_fs", None),
-            upsample_quarter: additive_into("upsample_vs", "upsample_quarter_fs", None),
+            grains: into("vs", "fs", tested, over),
+            half: into("vs", "half_fs", None, additive),
+            upsample: into("upsample_vs", "upsample_fs", None, additive),
+            upsample_full: into("upsample_vs", "upsample_full_fs", None, additive),
+            upsample_quarter: into("upsample_vs", "upsample_quarter_fs", None, additive),
             sampler: d.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some(SPARKS),
                 mag_filter: wgpu::FilterMode::Linear,
@@ -548,8 +560,17 @@ impl Effects {
             }
             self.half.as_ref().expect("made above").1.clone()
         });
+        let stepped = s.rows.as_ref().and_then(|(op, output)| {
+            self.build_docops(device);
+            let ops = self.docops.as_mut()?;
+            if let Some((bytes, step)) = &s.baked {
+                ops.load(device, &s.item, "buffer", bytes, *step);
+            }
+            ops.buffer_of(op, output).cloned()
+        });
         let rows = s.count * s.ribbon.map_or(1, |r| r.0 + 1);
-        if let Some(draw) = self.sparks.as_mut().filter(|dr| dr.capacity < rows) {
+        let grows = |dr: &&mut SparkDraw| dr.capacity < rows && stepped.is_none();
+        if let Some(draw) = self.sparks.as_mut().filter(grows) {
             draw.instances = instance_buffer(d, rows);
             draw.capacity = rows;
         }
@@ -587,7 +608,8 @@ impl Effects {
         // count runs past one); none when the closed-form kernel writes them.
         let chunk = shipped::MAX_PARTICLES;
         let mut dispatches = Vec::new();
-        let chunks = if kernel.is_some() {
+        let instances = stepped.clone().unwrap_or_else(|| draw.instances.clone());
+        let chunks = if kernel.is_some() || stepped.is_some() {
             0
         } else {
             s.count.div_ceil(chunk).max(1)
@@ -657,9 +679,14 @@ impl Effects {
             contents: &uni,
             usage: wgpu::BufferUsages::UNIFORM,
         });
+        // Grains (#853) draw through their own pipeline, bound by its own layout.
+        let (pipeline, layout) = match s.draw {
+            GRAINS => (draw.grains.clone(), draw.grains.get_bind_group_layout(0)),
+            _ => (draw.pipeline.clone(), draw.layout.clone()),
+        };
         let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("particles draw"),
-            layout: &draw.layout,
+            layout: &layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -667,7 +694,7 @@ impl Effects {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: draw.instances.as_entire_binding(),
+                    resource: instances.as_entire_binding(),
                 },
             ],
         });
@@ -682,7 +709,7 @@ impl Effects {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: draw.instances.as_entire_binding(),
+                        resource: instances.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
@@ -707,7 +734,6 @@ impl Effects {
             let pipelines = (draw.half.clone(), draw.upsample.clone());
             (small, drawn, up, pipelines)
         });
-        let pipeline = draw.pipeline.clone();
         let profiler = self.profiler.clone();
         // A ribbon draws a quad a segment of each particle (#450).
         let count = s.count * s.ribbon.map_or(1, |r| r.0);

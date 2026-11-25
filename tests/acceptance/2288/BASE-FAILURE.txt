@@ -1,0 +1,142 @@
+The #2288 suite run once at base commit b6317234f ("Merge pull request #3101 …"; no implementation of #2288; #1921's,
+#1918's and #2013's merges are there), on macOS arm64 (Mac17,10, 18 cores, one-minute load 250 to 340), rustc 1.99.1,
+Node 24.22.2, vitest 5.0.5, with
+`PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 nice -n 10 npx vitest
+run --root tests/acceptance/2288 --testTimeout=600000 --hookTimeout=600000 --no-file-parallelism -t "AC"` (the
+checkout's path redacted to `<checkout>`). The base's deep-physics and deep-show were built just before, cold, with the
+same flags: deep-physics in 12 min 28 s, deep-show (`-p deep-show --bin deep-show`, the default full set) in 23 min
+52 s, so the run's own cargo builds were no-ops and the run took 37 s. An earlier run of the same three files, before
+the titles were changed to start with `AC<n>`, failed the same four tests at the same assertions.
+
+All three files ran: 4 of 4 tests fail, each at an assertion because the behavior is absent, none in the harness and
+none BLOCKED:
+- ac1's (built) test: the turned lab's world is refused at check with `physics.unsupported` at `bodies/tile/each`
+  ("each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; #2288 brings
+  it"), so it fails on the check's errors before it reads `built`.
+- ac1's (played) test: the same refusal answers the bake (`ok: false`), so it fails before deep-show is reached.
+  Behind it, read apart from the run: the base's deep-show refuses the scene with `physics_refused` naming the same
+  issue (seen on the scatter scene, which the base's physics refuses the same way), so it would fail at "presented".
+  The base's `eval` reads the paths the test reads: the turned lab with its world taken out is presented, and `eval`
+  at frames 0 and 60 answers `items/tiles/at/pos` [5, 0, 0], `at/rot` [0, 90, 0] (Euler degrees), and 100 rows of
+  `params/pos` and `params/rot`, the rows as written.
+- ac2's test: the scatter alone is presented and read with `geometry` (200 elements, IDs 0 … 199, every one with a
+  `rot`, least spacing 0.9015 m, on the plate at y = 2 within 3e-16 m), so the fixture's own checks pass; then the
+  scatter world is refused at check with `physics.unsupported` at `bodies/rock/each`, the same text.
+- ac3's test: the turned lab with the channel `nudge` is refused only with that same `physics.unsupported` issue, whose
+  `ids` is ["tile"], `path` bodies/tile/each, `actual` "tiles" and `what` names tiles but no channel, so no error
+  names both the instancer and the channel. (Its control, the lab with no channel, is refused the same way.)
+
+Probes apart from the run, on the base's binaries, not committed:
+- The turned lab's bodies declared one by one at the instancer's world transform × their rows, in a plain world:
+  checks clean, built within 9.4e-9 m of the f64 poses; baked 240 steps, every tile falls at least 0.35 m, the bodies'
+  world x spans 2.59 m to 8.48 m, 65 pairs of tiles touch, 95 rest; their poses taken into the instancer's frame and
+  rounded to f32 move at most 1.9e-8 m. Building at the bare row is at least 0.82 m off at a corner, and multiplying
+  the turns the other way round up to 0.19 m.
+- The scatter's twin (the 200 bodies declared one by one at the geometry row's poses): checks clean; built within
+  3.2e-7 m of the scatter's poses; 601 step hashes, the same with `every: 600` as with none, 367 distinct; 77 rock-rock
+  contacts, 202 rest rows; the same twin declared in its addresses' text order gives the same hashes (canonical order
+  is #1921's `id_order`); one element 1 mm off changes the hash from index 0.
+
+The type-check, `npx tsc -p tests/acceptance/2288/tsconfig.json`, exits 0.
+
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2288
+
+ ❯ ac2-scatter-twin.test.ts (1 test | 1 failed) 13277ms
+   ❯ AC2 #2288.015cbad4 each: over a scattered instancer (1)
+     × AC2 #2288.015cbad4 an each: body over a 200-element scatter builds 200 bodies in element-ID order at the scatter's poses, and gives the same per-step world state hash as a twin world declaring them one by one 6182ms
+ ❯ ac1-turned-instancer.test.ts (2 tests | 2 failed) 11594ms
+   ❯ AC1 #2288.392506fb each: over a moved and turned instancer (2)
+     × AC1 #2288.392506fb (built) a 100-element instancer at (5, 0, 0) turned 90° about +Y, with each: and a <body>#* output, builds each body at the instancer's world transform × its row 621ms
+     × AC1 #2288.392506fb (played) its columns played for 2 s read back each body's pose in the instancer's own frame within 1e-6 m 110ms
+ ❯ ac3-channel-moved-refused.test.ts (1 test | 1 failed) 6130ms
+   ❯ AC3 #2288.e6a5f511 an instancer a channel moves can't take a world's columns (1)
+     × AC3 #2288.e6a5f511 an instancer moved by a channel while a world writes its columns is refused at check, naming the instancer and the channel 444ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-turned-instancer.test.ts > AC1 #2288.392506fb each: over a moved and turned instancer > AC1 #2288.392506fb (built) a 100-element instancer at (5, 0, 0) turned 90° about +Y, with each: and a <body>#* output, builds each body at the instancer's world transform × its row
+AssertionError: the world, each: over an instancer at (5, 0, 0) turned 90° about +Y, checks with no error:
+  {"check":"document.validate","code":"physics.unsupported","severity":"error","ids":["tile"],"path":"bodies/tile/each","actual":"tiles","t":null,"what":"each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; #2288 brings it (place tiles at the origin with its own ids and pos)","fix":"Remove the field until that issue lands."}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"physics.unsupported\",\"severity\":\"error\",\"ids\":[\"tile\"],\"path\":\"bodies/tile/each\",\"actual\":\"tiles\",\"t\":null,\"what\":\"each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; #2288 brings it (place tiles at the origin with its own ids and pos)\",\"fix\":\"Remove the field until that issue lands.\"}",
++ ]
+
+ ❯ none ../2009/helpers.ts:66:73
+     64| /** No failures; the message lists them. */
+     65| export function none(failures: readonly string[], what: string): void {
+     66|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     67| }
+     68| /** A planted twin is caught: the judge that passes the real program f…
+ ❯ ac1-turned-instancer.test.ts:53:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  ac1-turned-instancer.test.ts > AC1 #2288.392506fb each: over a moved and turned instancer > AC1 #2288.392506fb (played) its columns played for 2 s read back each body's pose in the instancer's own frame within 1e-6 m
+AssertionError: the turned lab's world is baked in its scene: {"ok":false,"issues":[{"check":"document.validate","code":"physics.unsupported","severity":"error","ids":["tile"],"path":"bodies/tile/each","actual":"tiles","t":null,"what":"each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; #2288 brings it (place tiles at the origin with its own ids and pos)","fix":"Remove the field until that issue lands."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeTiles ac1-turned-instancer.test.ts:42:103
+     40| function bakeTiles(): Map<number, Pose[]> {
+     41|   const [baked] = physics([sceneBake(turnedScene(), TURNED_WORLD, TILE…
+     42|   expect(baked!['ok'], `the turned lab's world is baked in its scene: …
+       |                                                                                                       ^
+     43|   const fails: string[] = [];
+     44|   const poses = new Map<number, Pose[]>();
+ ❯ ac1-turned-instancer.test.ts:72:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  ac2-scatter-twin.test.ts > AC2 #2288.015cbad4 each: over a scattered instancer > AC2 #2288.015cbad4 an each: body over a 200-element scatter builds 200 bodies in element-ID order at the scatter's poses, and gives the same per-step world state hash as a twin world declaring them one by one
+AssertionError: the world, each: over a scattered instancer, checks with no error:
+  {"check":"document.validate","code":"physics.unsupported","severity":"error","ids":["rock"],"path":"bodies/rock/each","actual":"rocks","t":null,"what":"each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; #2288 brings it (place rocks at the origin with its own ids and pos)","fix":"Remove the field until that issue lands."}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"physics.unsupported\",\"severity\":\"error\",\"ids\":[\"rock\"],\"path\":\"bodies/rock/each\",\"actual\":\"rocks\",\"t\":null,\"what\":\"each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; #2288 brings it (place rocks at the origin with its own ids and pos)\",\"fix\":\"Remove the field until that issue lands.\"}",
++ ]
+
+ ❯ none ../2009/helpers.ts:66:73
+     64| /** No failures; the message lists them. */
+     65| export function none(failures: readonly string[], what: string): void {
+     66|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     67| }
+     68| /** A planted twin is caught: the judge that passes the real program f…
+ ❯ ac2-scatter-twin.test.ts:72:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  ac3-channel-moved-refused.test.ts > AC3 #2288.e6a5f511 an instancer a channel moves can't take a world's columns > AC3 #2288.e6a5f511 an instancer moved by a channel while a world writes its columns is refused at check, naming the instancer and the channel
+AssertionError: an error issue names both the instancer tiles and the channel nudge; the errors: [{"check":"document.validate","code":"physics.unsupported","severity":"error","ids":["tile"],"path":"bodies/tile/each","actual":"tiles","t":null,"what":"each: over an instancer that is moved, turned or scattered isn't run by this backend interface yet; #2288 brings it (place tiles at the origin with its own ids and pos)","fix":"Remove the field until that issue lands."}]: expected 0 to be greater than 0
+ ❯ ac3-channel-moved-refused.test.ts:28:135
+     26|     const errors = errorsOf(moved, 'the turned lab with the channel nu…
+     27|     const naming = errors.filter((e) => namesId(e, TILES) && namesId(e…
+     28|     expect(naming.length, `an error issue names both the instancer ${T…
+       |                                                                                                                                       ^
+     29|     none(errorsOf(still, 'the turned lab with no channel').map((e) => …
+     30|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed (4)
+   Start at  09:52:34
+   Duration  33.74s (tests 97%, import 1%, transform 1%, worker 1%)
+

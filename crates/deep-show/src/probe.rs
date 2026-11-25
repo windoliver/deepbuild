@@ -77,6 +77,11 @@ pub fn draws_3d(doc: &Value) -> bool {
     deep_canvas_scene3d::scene::has_3d(doc) || doc.pointer("/requires/modules/scene3d").is_some()
 }
 
+/// The reply to a revision that can't be drawn as it says: what it names, and that as an issue.
+fn undrawn(u: &crate::snapshot::Unfit) -> Value {
+    json!({"code": u.code, "path": u.path, "issues": [crate::snapshot::issue(u)]})
+}
+
 impl Hub<'_> {
     /// Render-back of a 3D revision `shown` at `t` for `session`: drawn on the GPU through
     /// `probes.camera` or its own camera, its snapshot kept by hash, and with probes, `hits`: one
@@ -98,7 +103,8 @@ impl Hub<'_> {
             }
             return self.view_sheet(rev, shown, t, size, &probes.views);
         }
-        let mut doc = shown.clone();
+        // Its recipe instances as their derived items, which its probes' hits name (#306).
+        let mut doc = self.expanded3d(shown).unwrap_or_else(|| shown.clone());
         if let Some(cam) = &probes.camera {
             let kind = doc
                 .get("items")
@@ -109,8 +115,6 @@ impl Hub<'_> {
             }
             doc["camera"] = json!(cam);
         }
-        // #493: a shot writes the camera's pose the frame is drawn through.
-        let doc = crate::film::posed(&doc, t).unwrap_or(doc);
         let size = size.unwrap_or_else(|| {
             crate::snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
@@ -118,16 +122,31 @@ impl Hub<'_> {
         if self.gpu3().is_none() {
             return refused("unsupported_platform");
         }
-        let (scene, look) = match self.evaluate3d(&doc, t, size) {
+        // #3219: it draws on the GPU under the machine's GPU lease, shared, until it returns.
+        let _lease = crate::kit::lease::GpuLease::take(
+            crate::kit::lease::Mode::Shared,
+            "deep-show render-back",
+            None,
+            self.scenario.module_planted.as_deref(),
+        );
+        // #1722: drawn as presenting draws it (Hub::draw3d): the 3D frame through its shot's pose
+        // (#493) with its visible table, then its 2D items over it with no ground of their own,
+        // their rows in that table.
+        let (mut rgba, mut shown, scene) = match self.shown3d(&doc, t, size) {
             Ok(s) => s,
+            Err(u) => return undrawn(&u),
+        };
+        match self.items2d(&doc, t) {
+            Ok(Some(d)) => {
+                let over = self.renderer.raster(&d, size, None);
+                crate::snapshot::over(&mut rgba, &over);
+                shown.over(d.boxes(), d.scale(size), size);
+            }
+            Ok(None) => {}
             Err(u) => return json!({"code": u.code, "path": u.path}),
-        };
-        let depth = planted == Some(Planted::ProbeFromDepth);
-        let gpu = self.gpu3().expect("opened above");
-        let Some((rgba, targets)) = gpu.draw_scene(&scene, &look, depth) else {
-            return refused("unsupported_platform");
-        };
+        }
         let light = self.light3d(&doc, t);
+        let blank = crate::snapshot::blank(&rgba);
         let png = crate::snapshot::png(rgba, size);
         let Ok(sha) = crate::evidence::put(&self.scenario.evidence, &png) else {
             return refused("not_written");
@@ -143,13 +162,19 @@ impl Hub<'_> {
         });
         // #3017: the frame's visible table, from the object-ID pass its probes read.
         if let Some(r) = reply.as_object_mut() {
-            let plant = self.scenario.module_planted.as_deref();
-            targets.shown(scene.boxes(), size, plant).put(r);
+            shown.put(r);
+        }
+        if let Some(b) = blank {
+            reply["notices"] = json!([b.notice(&sha, None)]);
         }
         if probes.at.is_empty() {
             return reply;
         }
         let frame = size.map(u32::from);
+        let depth = planted == Some(Planted::ProbeFromDepth);
+        let Some(targets) = self.gpu3().and_then(|g| g.targets(frame, depth)) else {
+            return refused("unsupported_platform");
+        };
         let centre = |p: [u32; 2]| p.map(|v| f64::from(v) + 0.5);
         let ats: Vec<([f64; 2], bool)> = probes
             .at
@@ -206,10 +231,12 @@ impl Hub<'_> {
         if self.gpu3().is_none() {
             return refused("unsupported_platform");
         }
+        let expanded = self.expanded3d(shown);
+        let shown = expanded.as_ref().unwrap_or(shown);
         // The scene's world bounds, from what it draws through its own camera.
-        let (scene, _) = match self.evaluate3d(shown, t, size) {
-            Ok(s) => s,
-            Err(u) => return json!({"code": u.code, "path": u.path}),
+        let scene = match self.evaluate3d(shown, t, size) {
+            Ok(f) => f.staged.scene,
+            Err(u) => return undrawn(&u),
         };
         let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
         for p in scene
@@ -239,7 +266,7 @@ impl Hub<'_> {
         let (w, h) = (f64::from(size[0]), f64::from(size[1]));
         let half = atan(w.min(h) / w.max(h) * tan(rad(VIEW_FOV) / 2.0));
         let distance = radius * VIEW_PAD / sin(half);
-        let mut snapshots = Vec::new();
+        let (mut snapshots, mut notices) = (Vec::new(), Vec::new());
         for view in views {
             let [azimuth, elevation] = VIEWS
                 .iter()
@@ -250,16 +277,17 @@ impl Hub<'_> {
             doc["items"][CAMERA] = json!({"id": CAMERA, "kind": "camera@1", "name": "View", "order": "zz",
                 "params": {"target": centre, "fov": VIEW_FOV,
                            "orbit": {"azimuth": azimuth, "elevation": elevation, "distance": distance}}});
-            let (scene, look) = match self.evaluate3d(&doc, t, size) {
-                Ok(s) => s,
+            let frame = match self.evaluate3d(&doc, t, size) {
+                Ok(f) => f,
                 Err(u) => return json!({"code": u.code, "path": u.path, "view": view}),
             };
             let Some(gpu) = self.gpu3() else {
                 return refused("unsupported_platform");
             };
-            let Some((rgba, targets)) = gpu.draw_scene(&scene, &look, false) else {
+            let Some((rgba, targets)) = gpu.draw_scene(&frame, false) else {
                 return refused("unsupported_platform");
             };
+            let blank = crate::snapshot::blank(&rgba);
             let png = crate::snapshot::png(rgba, size);
             let Ok(sha) = crate::evidence::put(&self.scenario.evidence, &png) else {
                 return refused("not_written");
@@ -268,12 +296,19 @@ impl Hub<'_> {
             let mut entry = json!({"view": view, "sha256": sha, "w": size[0], "h": size[1]});
             if let Some(e) = entry.as_object_mut() {
                 let plant = self.scenario.module_planted.as_deref();
-                targets.shown(scene.boxes(), size, plant).put(e);
+                targets
+                    .shown(frame.staged.scene.boxes(), size, plant)
+                    .put(e);
             }
+            notices.extend(blank.map(|b| b.notice(&sha, Some(*view))));
             snapshots.push(entry);
         }
-        json!({"rev": rev, "t": t, "outcome": "presented", "snapshots": snapshots,
-               "backends": crate::seams::backends(true)})
+        let mut reply = json!({"rev": rev, "t": t, "outcome": "presented", "snapshots": snapshots,
+                               "backends": crate::seams::backends(true)});
+        if !notices.is_empty() {
+            reply["notices"] = Value::Array(notices);
+        }
+        reply
     }
 }
 

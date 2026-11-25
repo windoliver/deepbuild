@@ -6,6 +6,7 @@
     { "name": "Write in the box", "verb": "Write", "target": "box", "key": "cmd-n", "variant_of": null },
     { "name": "Close Window", "verb": "Close", "target": "window", "key": "cmd-w", "variant_of": null },
     { "name": "Undo answer", "verb": "Undo", "target": "card", "key": "cmd-z", "variant_of": null },
+    { "name": "Find", "verb": "Find", "target": "page", "key": "cmd-f", "variant_of": null },
     { "name": "Commands", "verb": "Find", "target": "app", "key": "cmd-k", "variant_of": null },
     { "name": "Back", "verb": "Go", "target": "window", "key": "cmd-[", "variant_of": null },
     { "name": "Forward", "verb": "Go", "target": "window", "key": "cmd-]", "variant_of": null },

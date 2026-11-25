@@ -130,21 +130,28 @@ impl Run {
 
     /// `seek`: the bake kept under this world's, track's, span's and frame rate's key, restored
     /// from its ring's checkpoint at or before `to`, stepped to `to` and `play` more steps on its
-    /// track; `no_bake` with none. It never re-bakes and stores nothing.
+    /// track; `no_bake` with none. It never re-bakes and stores nothing. #2035: with `frame`, a
+    /// frame of the bake's rate, in place of `to`, it restores the checkpoint at or before the step
+    /// the frame starts from, steps on to the next one, and answers each output's sample at that
+    /// frame under `outputs`, laid out as the bake's series holds it.
     pub(super) fn seek(&self, call: &Value) -> Option<Value> {
         let (world, scene) = match self.subject(call)? {
             Ok(x) => x,
             Err(e) => return Some(e),
         };
         let world = &world;
-        let (steps, dir, to) = (
-            call.get("steps")?.as_u64()?,
-            call.get("store")?.as_str()?,
-            call.get("to")?.as_u64()?,
-        );
+        let (steps, dir) = (call.get("steps")?.as_u64()?, call.get("store")?.as_str()?);
+        let frame = match call.get("frame") {
+            Some(j) => Some(j.as_u64()?),
+            None => None,
+        };
+        let to = match frame {
+            Some(_) => 0,
+            None => call.get("to")?.as_u64()?,
+        };
         let play = call.get("play").map_or(Some(0), Value::as_u64)?;
         let reply = (|| {
-            let (rate, _) = rate(call)?;
+            let (rate, flicks) = rate(call)?;
             let (w, _) = self.build(world)?;
             let track = self.track(&w, call)?;
             let reads = scene.as_ref().filter(|s| !s.reads_nothing());
@@ -161,7 +168,11 @@ impl Run {
                     json!({"ok": false, "code": "no_bake", "key": key, "what": "the store holds no bake under this key; a seek reads a bake and never re-bakes"}),
                 );
             };
-            let (w, mut b) = self.restored(world, nearest(&bake, to).as_ref())?;
+            // #2035: the step a frame starts from, and the one after it that a frame between reads.
+            let step = occurrence::step_flicks(&w) as u64;
+            let t = frame.map(|j| j.saturating_mul(flicks as u64));
+            let (at, to) = t.map_or((to, to), |t| (t / step, t.div_ceil(step)));
+            let (w, mut b) = self.restored(world, nearest(&bake, at).as_ref())?;
             let from = b.read().step;
             let read =
                 series(call, &b, &w).ok_or_else(|| json!({"ok": false, "code": "bad_input"}))?;
@@ -172,11 +183,50 @@ impl Run {
                 (&track, scene.as_ref()),
                 Some(read),
             )?;
-            Ok(
-                json!({"ok": true, "key": key, "from": from, "step_hashes": t.step_hashes, "bodies": t.bodies, "particles": t.particles}),
-            )
+            let mut reply = json!({"ok": true, "key": key, "from": from, "step_hashes": t.step_hashes, "bodies": t.bodies, "particles": t.particles});
+            if let Some(j) = frame {
+                reply["outputs"] = self.drawn(t, &bake, &w, (&rate, flicks), (from, to, j));
+            }
+            Ok(reply)
         })();
         Some(reply.unwrap_or_else(|e: Value| e))
+    }
+
+    /// #2035: each output's sample at frame `j` of `rate`, as the bake's series holds it, from a
+    /// run `t` that restored state `from` and stepped to `to`: its readings set at their steps,
+    /// the first standing in for the states before `from`, which frame `j` never reads; and its
+    /// cuts with the bake's own through `from`, whose steps it never took. The planted seek keeps
+    /// no cut.
+    fn drawn(
+        &self,
+        mut t: Trace,
+        bake: &Value,
+        w: &World,
+        rate: (&str, i64),
+        (from, to, j): (u64, u64, u64),
+    ) -> Value {
+        fn ahead<T: Clone>(v: &mut Vec<T>, n: usize) {
+            if let Some(first) = v.first().cloned() {
+                v.splice(0..0, std::iter::repeat_n(first, n));
+            }
+        }
+        let n = from as usize;
+        t.positions.values_mut().for_each(|v| ahead(v, n));
+        t.readings.values_mut().for_each(|v| ahead(&mut v.1, n));
+        t.wheels.values_mut().for_each(|v| ahead(v, n));
+        t.values.values_mut().for_each(|v| ahead(v, n));
+        for (id, s) in deep_canvas_physics::cut::read(&bake["outputs"], from) {
+            t.cuts.entry(id).or_default().extend(s);
+        }
+        if self.twin == Twin::RestoreForgetsPlace {
+            t.cuts.clear();
+        }
+        let drawn = json!({"outputs": vehicle::outputs(self, &t, rate, w, to)});
+        let at = |id: &String| {
+            let v = deep_canvas_physics::reading::frames(&drawn, id).get(j as usize)?;
+            Some((id.clone(), v.clone()))
+        };
+        Value::Object(w.outputs.keys().filter_map(at).collect())
     }
 
     /// physics.determinism over `world` and its track for `steps` steps, sampled at `at_times`.

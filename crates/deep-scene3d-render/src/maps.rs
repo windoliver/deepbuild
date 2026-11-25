@@ -1,6 +1,6 @@
 //! Issue #423: a material's texture maps on the GPU (canvas primitives: Material: texture maps).
-//! Each map is uploaded once per key (its source's hash, its format and the transcoder's
-//! version, as the decode worker made it) with its whole mip chain; each material's maps are one
+//! Each map is uploaded once per key (its source's hash, its chain and its format, as the decode
+//! worker made it) with its whole mip chain; each material's maps are one
 //! bind group, group 3 of the solids' draws, with one sampler per map: linear min, mag and mip
 //! filters, its wrap, and anisotropy up to its `filter_taps`. Samplers are bindings, so changing
 //! one never recompiles a pipeline.
@@ -47,19 +47,23 @@ impl<'a> Ground<'a> {
     }
 }
 
+deep_gpu::paired! { slot_uniform: "scene3d.wgsl", MapSlot;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct SlotUniform {
     u: [f32; 4],
     v: [f32; 4],
 }
+}
 
+deep_gpu::paired! { maps_uniform: "scene3d.wgsl", Maps;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct MapsUniform {
     slots: [SlotUniform; SLOTS],
     has: [u32; 4],
     values: [f32; 4],
+}
 }
 
 /// The wgpu format a map's texels name.
@@ -138,7 +142,7 @@ pub fn layout(d: &deep_gpu::counted::Wgpu) -> wgpu::BindGroupLayout {
     })
 }
 
-/// #1431: the maps' textures on the GPU (`Store::textures`), by their source's hash and format.
+/// #1431: the maps' textures on the GPU (`Store::textures`), by their key and format.
 pub static TEXTURES: Gauge = Gauge::new("Store::textures", Place::Device, 256, 256_000_000);
 /// #1431: the materials' bind groups (`Store::groups`), each with its uniform buffer; a group
 /// that binds a freed texture goes with it.
@@ -162,7 +166,7 @@ pub struct Store {
     /// #1381: terrain plates' horizon tables by key, and the stand-in a solid without one binds.
     horizons: BTreeMap<String, wgpu::Buffer>,
     samplers: BTreeMap<([Wrap; 2], u8), wgpu::Sampler>,
-    /// This frame's texels by image hash (the scene's).
+    /// This frame's texels by map key (the scene's).
     pub texels: BTreeMap<String, Arc<Texels>>,
     /// #506: each view inset's picture by its key, with a count of the store's that is new for
     /// each target made, so a bind group made on an old one is never reused; and the last count.
@@ -267,7 +271,7 @@ impl Store {
             .slots()
             .iter()
             .map(|(_, s)| match s {
-                Some(s) if self.texels.contains_key(&s.sha) => '1',
+                Some(s) if self.texels.contains_key(s.key()) => '1',
                 Some(s) if self.views.contains_key(&s.sha) => '1',
                 _ => '0',
             })
@@ -367,11 +371,11 @@ impl Store {
         &mut self,
         d: &deep_gpu::counted::Wgpu,
         queue: &deep_gpu::counted::Queue,
-        sha: &str,
+        map: &str,
     ) -> Option<String> {
-        let t = self.texels.get(sha)?.clone();
-        // Kept by the source's hash and its format.
-        let key = format!("{sha}:{}", t.format);
+        let t = self.texels.get(map)?.clone();
+        // Kept by the map's key and its format.
+        let key = format!("{map}:{}", t.format);
         if self.textures.touch(&key) {
             return Some(key);
         }
@@ -546,10 +550,10 @@ impl Store {
             let (key, format) = match self.views.get(&s.sha) {
                 Some(_) => (s.sha.clone(), String::new()),
                 None => {
-                    let Some(key) = self.texture(d, queue, &s.sha) else {
+                    let Some(key) = self.texture(d, queue, s.key()) else {
                         continue;
                     };
-                    (key, self.texels[&s.sha].format.clone())
+                    (key, self.texels[s.key()].format.clone())
                 }
             };
             let [r0, r1] = s.transform;

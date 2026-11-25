@@ -178,7 +178,7 @@ fn a_revision_of_item_values_alone_leaves_what_a_whole_load_leaves() {
     moved["items"]["a"]["at"] = json!({"pos": [3, 0, 0]});
     moved["items"]["a"]["params"]["box"] = json!([0, 0, 12, 10]);
     whole.load(&mut s, &moved);
-    let issues = items.revise_items(&mut s2, &moved, &["a"]);
+    let issues = items.revise_items(&mut s2, &moved, &["a"], &[]);
     assert_eq!(issues, Some(Vec::new()));
     let ran = (
         whole.frame(&mut s, 0, &default_view(&moved)),
@@ -204,10 +204,20 @@ fn a_revision_of_item_values_alone_leaves_what_a_whole_load_leaves() {
     // A change that moves an item in the plan is the whole load's.
     let mut reordered = moved.clone();
     reordered["items"]["a"]["order"] = json!("z9");
-    assert_eq!(items.revise_items(&mut s2, &reordered, &["a"]), None);
+    assert_eq!(items.revise_items(&mut s2, &reordered, &["a"], &[]), None);
     let mut grown = moved.clone();
     grown["items"]["c"] = json!({"id": "c", "kind": "rect@1", "params": {"box": [0, 0, 1, 1]}});
-    assert_eq!(items.revise_items(&mut s2, &grown, &["c"]), None);
+    assert_eq!(items.revise_items(&mut s2, &grown, &["c"], &[]), None);
+    // So is a change to a member the patch reached; a member it reached and left alone is not.
+    let mut seeded = moved.clone();
+    seeded["seed"] = json!(7);
+    assert_eq!(
+        items.revise_items(&mut s2, &seeded, &["a"], &["seed"]),
+        None
+    );
+    assert!(items
+        .revise_items(&mut s2, &moved, &["a"], &["seed"])
+        .is_some());
 }
 
 /// Real threads, each taking the next job, so shards apply in whatever order they finish.
@@ -381,13 +391,13 @@ fn reached_as_whole(pooled: bool) {
             doc["items"][&id]["params"]["box"] = json!([0, 0, 4 + k % 3, 4]);
         }
         whole.load(&mut s, &doc);
-        assert!(items.revise_items(&mut s2, &doc, &[&id]).is_some());
+        assert!(items.revise_items(&mut s2, &doc, &[&id], &[]).is_some());
         if k % 4 == 3 {
             // A second revision before the frame.
             let other = format!("i{:03}", (k * 29 + 1) % 60);
             doc["items"][&other]["at"]["pos"] = json!([k, 9, 0]);
             whole.load(&mut s, &doc);
-            assert!(items.revise_items(&mut s2, &doc, &[&other]).is_some());
+            assert!(items.revise_items(&mut s2, &doc, &[&other], &[]).is_some());
         }
         let ran = (
             whole.frame(&mut s, 0, &default_view(&doc)),

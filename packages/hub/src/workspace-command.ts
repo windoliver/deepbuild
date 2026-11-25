@@ -1,10 +1,9 @@
 // `deep workspace` (#67): a CLI over the running hub, and no command asks a question. Each prints what it did in words,
 // or with `--json` last its result as one line of JSON (#1812). A task enters a workspace's record with `task` (#1347),
 // and `revert` with no commit goes back one step.
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { call, notAnswered } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl } from './paths.js';
 import { visible } from './visible.js';
 
 const USAGE = `Usage: deep workspace new <topic> [--folder <path>] [--json]
@@ -70,7 +69,8 @@ export async function workspaceCommand(args: readonly string[]): Promise<number>
     return 2;
   }
   try {
-    const reply = await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), asked.method, asked.params);
+    const { path: socket, token } = hubControl();
+    const reply = await call(socket, token, asked.method, asked.params);
     if ('error' in reply) {
       process.stderr.write(`${reply.error.remediation}\n`);
       return 1;

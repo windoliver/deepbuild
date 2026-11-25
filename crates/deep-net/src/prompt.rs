@@ -47,18 +47,32 @@ pub fn reads_me(doc: &Value) -> bool {
         }
     }
     let items = doc.get("items").and_then(Value::as_object);
-    items.into_iter().flatten().any(|(_, item)| {
-        let p = &item["params"];
-        p.get("fog").is_some_and(|f| f.get("grid").is_some()) || walk(item)
-    })
+    // #290: a driver's var names it in the document's `drivers`.
+    doc.get("drivers").is_some_and(walk)
+        || items.into_iter().flatten().any(|(_, item)| {
+            let p = &item["params"];
+            p.get("fog").is_some_and(|f| f.get("grid").is_some()) || walk(item)
+        })
 }
 
 /// The prompt as its host shows it: `{state, relay, players, courtesy, refused, text}`, where
-/// `courtesy` is the fog line for a piece that reads `match.me`, else null. A piece that keeps a
-/// profile record says its numbers go to the other players (#276).
-pub fn prompt(host: &str, players: u8, courtesy: bool, profile: bool, state: &State) -> Value {
+/// `courtesy` is the fog line for a piece that reads `match.me`, else null. `min` is the copies a
+/// room's match starts with, `players` where the piece declares one count (#278). A piece that
+/// keeps a profile record says its numbers go to the other players (#276).
+pub fn prompt(
+    host: &str,
+    min: u8,
+    players: u8,
+    courtesy: bool,
+    profile: bool,
+    state: &State,
+) -> Value {
+    let count = match min < players {
+        true => format!("{min} to {players}"),
+        false => players.to_string(),
+    };
     let mut about = format!(
-        "This piece is played by {players} players through the relay {host}. \
+        "This piece is played by {count} players through the relay {host}. \
          The relay, and on a direct path the other players, see this copy's network address."
     );
     if courtesy {
@@ -97,18 +111,25 @@ mod tests {
 
     #[test]
     fn the_prompt_names_the_relay_host_and_who_sees_the_address() {
-        let p = prompt("relay.test:4433", 2, false, false, &State::Open);
+        let p = prompt("relay.test:4433", 2, 2, false, false, &State::Open);
         let text = p["text"].as_str().unwrap();
         assert!(
             text.contains("relay.test:4433") && text.contains("network address"),
             "{text}"
         );
+        assert!(text.contains("played by 2 players"), "{text}");
+        // #278: a room's prompt names its range, and `players` stays its seats.
+        let room = prompt("relay.test:4433", 2, 8, false, false, &State::Open);
+        let text = room["text"].as_str().unwrap();
+        assert!(text.contains("played by 2 to 8 players"), "{text}");
+        assert_eq!(room["players"], json!(8));
         assert_eq!(
             (&p["state"], &p["refused"]),
             (&json!("open"), &json!("none"))
         );
         let r = prompt(
             "relay.test",
+            2,
             2,
             false,
             false,
@@ -128,7 +149,11 @@ mod tests {
             {"seen": {"array": "rules.sight", "as": "i32"}}}}});
         let paddle = json!({"items": {"ball": {"kind": "marks@1", "params": {"x": 1}}}});
         assert!(reads_me(&fog) && !reads_me(&paddle));
-        let p = prompt("relay.test", 2, reads_me(&fog), false, &State::Open);
+        // #290: a driver that reads it, as a hidden view's opacity does.
+        let driven = json!({"items": {}, "drivers": {"d": {"target": "items/a/hidden_view/opacity",
+            "expr": "me", "vars": {"me": "match.me"}}}});
+        assert!(reads_me(&driven));
+        let p = prompt("relay.test", 2, 2, reads_me(&fog), false, &State::Open);
         assert_eq!(p["courtesy"], json!(COURTESY));
         assert!(p["text"]
             .as_str()

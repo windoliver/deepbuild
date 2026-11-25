@@ -1,0 +1,220 @@
+head bbe9ee3a8, dirty files 0, build: exit 0 throttle exit 0 , 2026-11-21 12:43:15
+ac1-reference:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac2-spline-homography:  Tests 1 passed (1) | exit 0 | 0 INCONCLUSIVE lines
+ac3-pack-check:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac4-cost:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac5-status-guard:  Tests 1 passed (1) | exit 0 | 0 INCONCLUSIVE lines
+ac6-budgets:  Tests 3 passed (3) | exit 0 | 0 INCONCLUSIVE lines
+ac7-slice-shift:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac8-invert-premultiplied:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac9-alpha-guard:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac10-moved-group:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac11-internal-scale:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac12-linear-color-key:  Tests 2 passed (2) | exit 0 | 0 INCONCLUSIVE lines
+ac13-taste:  Tests 1 failed (1) | exit 1 | 2 INCONCLUSIVE lines
+done 12:44:34
+
+==== ac1-reference.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac1-reference.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:43:15
+   Duration  4.83s (tests 100%)
+
+exit 0
+
+==== ac2-spline-homography.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac2-spline-homography.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  12:43:20
+   Duration  2.91s (tests 99%)
+
+exit 0
+
+==== ac3-pack-check.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac3-pack-check.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:43:23
+   Duration  3.55s (tests 100%)
+
+exit 0
+
+==== ac4-cost.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac4-cost.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:43:27
+   Duration  3.27s (tests 99%)
+
+exit 0
+
+==== ac5-status-guard.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac5-status-guard.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  12:43:31
+   Duration  4.90s (tests 100%)
+
+exit 0
+
+==== ac6-budgets.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac6-budgets.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  12:43:36
+   Duration  9.00s (tests 100%)
+
+exit 0
+
+==== ac7-slice-shift.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac7-slice-shift.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:43:46
+   Duration  17.63s (tests 99%)
+
+exit 0
+
+==== ac8-invert-premultiplied.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac8-invert-premultiplied.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:44:04
+   Duration  4.45s (tests 100%)
+
+exit 0
+
+==== ac9-alpha-guard.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac9-alpha-guard.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:44:09
+   Duration  4.75s (tests 99%)
+
+exit 0
+
+==== ac10-moved-group.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac10-moved-group.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:44:14
+   Duration  5.04s (tests 99%)
+
+exit 0
+
+==== ac11-internal-scale.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac11-internal-scale.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:44:20
+   Duration  4.47s (tests 99%)
+
+exit 0
+
+==== ac12-linear-color-key.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac12-linear-color-key.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:44:25
+   Duration  4.26s (tests 100%)
+
+exit 0
+
+==== ac13-taste.test.ts
+The hub isn't answering; start it with deep hub start. `node node_modules/vitest/vitest.mjs run --root tests/acceptance/161 --no-file-parallelism --testTimeout=3600000 ac13-taste.test.ts` runs with no lease.
+
+ RUN  v5.0.5 <repo>/tests/acceptance/161
+
+stdout | ac13-taste.test.ts > AC13 #161.2dcc0047 one taste call on the renderer's own screenshots and recording > AC13 #161.2dcc0047 a sheet per effect category, levels, curves, corner_pin, the slice_shift title and its recording, from the renderer's own output, and the recorded taste call says they look right
+for the taste call: <notes>/evidence-head/category-color-4c530ce2352781a9668be71974dd3df3149bbaa2c53994af39c1a971bf3bba54.png
+for the taste call: <notes>/evidence-head/category-blur-5f4fba058bb4d6c519487257c1e2ec2fc8540b396b303b6e1eac89ce40da28e2.png
+for the taste call: <notes>/evidence-head/category-distort-afc44fbc315f5b91d251c98719f4d67793876317f278a35fa807fe22b5ef2135.png
+for the taste call: <notes>/evidence-head/category-stylize-e37b969d9795f5ea56bb9b6fb2d8e83278b0ef2e120e0502c44d85837a5fada1.png
+for the taste call: <notes>/evidence-head/category-generate-3298b9b6ef89b5213d7ff6094763d1c4e5dbb0820b77cb1d8191675f97a1d95d.png
+for the taste call: <notes>/evidence-head/category-noise-74f78679e18b9426a4ba769ef5d6baf93f8eb27edbe63ac4b1111fbac5fb5bff.png
+for the taste call: <notes>/evidence-head/category-channel-12d325989cac2dae138eb0c7a25d68722d7592a484b05ac1d1e35b99bb28e633.png
+for the taste call: <notes>/evidence-head/category-keying-2826b510caf26550cc5de998fa5c74fe149f0eb86333ca47005a3f9f2626cdab.png
+for the taste call: <notes>/evidence-head/category-matte-664a82cc82622f3a6cdbb6ad9b32c669dfbec5d7f53173225ad05fe60d615f68.png
+for the taste call: <notes>/evidence-head/category-transitions-69b79feb783e34d0ff5d89a8dc3b1012f3ada395fa9e2016f707edca389980ea.png
+for the taste call: <notes>/evidence-head/levels-2c7f4ee5c5e96ce1b07d402a3a490cf44c0ed284515ebdb2a26ac5d97e009fa7.png
+for the taste call: <notes>/evidence-head/curves-418baf94c200064b30781b3e64f5773e9eb0be15a55a2215efcb29ae748651cf.png
+for the taste call: <notes>/evidence-head/corner_pin-147d828bae55db5d958d15da5a4d6672d7482c001c8707ba1fb060475f5fad1b.png
+for the taste call: <notes>/evidence-head/slice-shift-title-f90138b73552e9b0e09c5aab822bf2e11da259d210126c82891a03e05aefb6cf.png
+for the taste call: <notes>/evidence-head/slice-shift-title-362b11e3ebe35d6cc457f3ff425e29a18e90b6f160edca4a23cf1b9eddbb26ac.apng
+
+ ❯ ac13-taste.test.ts (1 test | 1 failed) 4697ms
+   ❯ AC13 #161.2dcc0047 one taste call on the renderer's own screenshots and recording (1)
+     × AC13 #161.2dcc0047 a sheet per effect category, levels, curves, corner_pin, the slice_shift title and its recording, from the renderer's own output, and the recorded taste call says they look right 4097ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac13-taste.test.ts > AC13 #161.2dcc0047 one taste call on the renderer's own screenshots and recording > AC13 #161.2dcc0047 a sheet per effect category, levels, curves, corner_pin, the slice_shift title and its recording, from the renderer's own output, and the recorded taste call says they look right
+AssertionError: INCONCLUSIVE: no taste call is recorded on these files (4c530ce2352781a9668be71974dd3df3149bbaa2c53994af39c1a971bf3bba54, 5f4fba058bb4d6c519487257c1e2ec2fc8540b396b303b6e1eac89ce40da28e2, afc44fbc315f5b91d251c98719f4d67793876317f278a35fa807fe22b5ef2135, e37b969d9795f5ea56bb9b6fb2d8e83278b0ef2e120e0502c44d85837a5fada1, 3298b9b6ef89b5213d7ff6094763d1c4e5dbb0820b77cb1d8191675f97a1d95d, 74f78679e18b9426a4ba769ef5d6baf93f8eb27edbe63ac4b1111fbac5fb5bff, 12d325989cac2dae138eb0c7a25d68722d7592a484b05ac1d1e35b99bb28e633, 2826b510caf26550cc5de998fa5c74fe149f0eb86333ca47005a3f9f2626cdab, 664a82cc82622f3a6cdbb6ad9b32c669dfbec5d7f53173225ad05fe60d615f68, 69b79feb783e34d0ff5d89a8dc3b1012f3ada395fa9e2016f707edca389980ea, 2c7f4ee5c5e96ce1b07d402a3a490cf44c0ed284515ebdb2a26ac5d97e009fa7, 418baf94c200064b30781b3e64f5773e9eb0be15a55a2215efcb29ae748651cf, 147d828bae55db5d958d15da5a4d6672d7482c001c8707ba1fb060475f5fad1b, f90138b73552e9b0e09c5aab822bf2e11da259d210126c82891a03e05aefb6cf, 362b11e3ebe35d6cc457f3ff425e29a18e90b6f160edca4a23cf1b9eddbb26ac); record yours in a file named by DEEPBUILD_TASTE_161; this is not a pass
+ ❯ inconclusive helpers.ts:60:10
+     58| /** A test that can't be judged here fails with this, never passes. */
+     59| export function inconclusive(reason: string): never {
+     60|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     61| }
+     62| /** The GPU layer draws on macOS's GPU device; anywhere else a test is…
+ ❯ ac13-taste.test.ts:110:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:44:29
+   Duration  4.78s (tests 100%)
+
+exit 1

@@ -1,9 +1,8 @@
 // `deep fix <id>` (#66): starts work from a work item by its ID at any source you switched on, over the running hub.
 // It prints one sentence naming the task it started, or with `--json` the task and the item's link as one line of JSON
 // (#1812), and asks no question.
-import { readFileSync } from 'node:fs';
 import { call, notAnswered } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl } from './paths.js';
 import { visible } from './visible.js';
 
 export async function fixCommand(args: readonly string[]): Promise<number> {
@@ -14,7 +13,8 @@ export async function fixCommand(args: readonly string[]): Promise<number> {
     return 2;
   }
   try {
-    const reply = await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'work.fix', { id, cwd: process.cwd() });
+    const { path: socket, token } = hubControl();
+    const reply = await call(socket, token, 'work.fix', { id, cwd: process.cwd() });
     if ('error' in reply) {
       process.stderr.write(`${reply.error.remediation}\n`);
       return 1;
