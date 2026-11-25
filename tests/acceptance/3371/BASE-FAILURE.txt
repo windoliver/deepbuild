@@ -1,0 +1,76 @@
+# #3371 acceptance tests on the merge base: the recorded failure
+
+Base commit: 5b82006d5fa96b31695a012c7b7e64bdc095fef4 (origin/main, "Merge pull request #2911 ...")
+Checkout:    a fresh GitHub clone at the base on a Linux machine (<home>/3371-base), npm ci and npm run build
+             --workspaces done by the coordinator's build job (packages/supervisor/dist/helper built); this suite
+             copied in unchanged (git status: only ?? tests/acceptance/3371/)
+Command:     NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/3371
+Date:        2026-11-24T08:22:28Z
+Machine:     Linux 7.0.0-1025-nvidia aarch64 (Ubuntu; /var/run -> /run), bubblewrap 0.9.0 at /usr/bin/bwrap
+Node:        v24.22.0      Vitest: 5.0.5
+Load:        149.85 150.90 141.15 before, 145.31 149.87 140.92 after (other sessions' work; not waited on)
+Exit code:   1
+Type-check:  node node_modules/typescript/bin/tsc -p tests/acceptance/3371/tsconfig.json -> exit 0
+
+Per test:
+  AC1 #3371.93dce41a  FAILED, at its expect assertions (setup ran: the probe wrote its tries; the run exited 0):
+    - the connect by the path as granted (through the symlink): expected 'refused No such file or directory' to be 'connected'
+    - the connect by the real path under /run:                  expected 'refused No such file or directory' to be 'connected'
+    - connections the granted socket's listener counted:        expected 0 to be greater than or equal to 2
+    (the exit-code assertion, 0, held)
+    That is the failure the issue names: each connect ends ENOENT (the sandbox's own tmpfs /run hides the socket)
+    and the listener counts 0.
+  AC2 #3371.abb32c74  passed on the base, as expected: nothing under /run is reachable there, so the ungranted socket
+    gets 0 connections. Its wrong program is the planted twin twins/folder-bound (README, "Twin failure").
+
+Output (paths redacted: <home>, <uid>, <rand>):
+
+
+ RUN  v5.0.5 <home>/3371-base
+
+ ❯ tests/acceptance/3371/sockets.test.ts (2 tests | 1 failed) 5590ms
+   × AC1 #3371.93dce41a a socket granted by a path through a symlink to a real path under /run is connected to by the path as granted and by its real path, and the run exits 0 5509ms
+   ✓ AC2 #3371.abb32c74 in the same run, a second listening socket in the same /run folder that the grant doesn't name gets 0 connections and the program's connect fails 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3371/sockets.test.ts > AC1 #3371.93dce41a a socket granted by a path through a symlink to a real path under /run is connected to by the path as granted and by its real path, and the run exits 0
+AssertionError: the connect by the path as granted (/tmp/deep-3371-<rand>/var-run/a.sock, through the symlink): expected 'refused No such file or directory' to be 'connected' // Object.is equality
+
+Expected: "connected"
+Received: "refused No such file or directory"
+
+ ❯ tests/acceptance/3371/sockets.test.ts:125:132
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/3371/sockets.test.ts > AC1 #3371.93dce41a a socket granted by a path through a symlink to a real path under /run is connected to by the path as granted and by its real path, and the run exits 0
+AssertionError: the connect by the real path under /run (/run/user/<uid>/deep-3371-<rand>/a.sock): expected 'refused No such file or directory' to be 'connected' // Object.is equality
+
+Expected: "connected"
+Received: "refused No such file or directory"
+
+ ❯ tests/acceptance/3371/sockets.test.ts:126:106
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/3371/sockets.test.ts > AC1 #3371.93dce41a a socket granted by a path through a symlink to a real path under /run is connected to by the path as granted and by its real path, and the run exits 0
+AssertionError: connections the granted socket's listener counted: at least 1 by each of the two paths: expected 0 to be greater than or equal to 2
+ ❯ tests/acceptance/3371/sockets.test.ts:128:140
+    126|   expect.soft(outcome(r, r.granted.real), `the connect by the real pat…
+    127|   // Both connects dial the one listener and nothing else does: two co…
+    128|   expect.soft(r.granted.listener.connections(), 'connections the grant…
+       |                                                                                                                                            ^
+    129|   expect.soft(r.exit.code, 'the run\'s exit code').toBe(0);
+    130| }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  00:22:29
+   Duration  7.28s (tests 78%, transform 19%, import 2%)
+
