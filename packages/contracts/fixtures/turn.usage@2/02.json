@@ -1,0 +1,30 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "turn.usage",
+  "subject": "session:01K74G1Z3X5V7T9R1P3N5M7K9H",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "seq": "1760013451123456789",
+  "data": {
+    "turn": "msg_01Turn000000000000000001",
+    "model": "claude-opus-4-5",
+    "covers": "session",
+    "tokens": {
+      "input": 1100110,
+      "cached": 1000,
+      "output": 20,
+      "exact": true,
+      "cache_write_5m": 0,
+      "cache_write_1h": 0
+    },
+    "cost": {
+      "basis": "estimated",
+      "usd": 6.87655,
+      "rate_card": "anthropic-list-2026-10",
+      "at_least": true
+    }
+  }
+}
