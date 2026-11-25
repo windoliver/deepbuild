@@ -2,7 +2,7 @@
 // its storage by injection (design: Fault injection). The record's own storage is the OS file system in
 // WAL mode; the test storage is the design's test VFS, which keeps every write in memory until a sync
 // and drops the rest at a power cut.
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 
@@ -53,6 +53,18 @@ function transact(db: Db, mode: Durability, work: () => void): void {
 const fullSync = (db: Db): boolean =>
   db.pragma('synchronous', { simple: true }) === 2 && (process.platform !== 'darwin' || db.pragma('fullfsync', { simple: true }) === 1);
 
+/**
+ * The most the write-ahead file keeps once a checkpoint has reset it (#3440): 64 MiB, about sixteen times the 1,000
+ * pages at which SQLite checkpoints by itself. One large commit or a held read still grows the file past it; the
+ * commits after the next reset cut it back.
+ */
+const WAL_LIMIT = 64 * 1024 * 1024;
+
+/** The record's size as the 1 GB budget reads it: the log's file and its write-ahead file together, in bytes. */
+export function recordSize(path: string): number {
+  return [path, `${path}-wal`].reduce((sum, file) => sum + (statSync(file, { throwIfNoEntry: false })?.size ?? 0), 0);
+}
+
 /** The record's own storage: a file in WAL mode. A FULL commit syncs the WAL, with fullfsync on macOS. */
 export function fileStorage(): Backend {
   return {
@@ -62,6 +74,8 @@ export function fileStorage(): Backend {
       mkdirSync(dirname(path), { recursive: true });
       const db = new Database(path);
       settle(db);
+      // Only the writer resets the write-ahead file, so the limit is the writer's; a reader's would do nothing.
+      db.pragma(`journal_size_limit = ${WAL_LIMIT}`);
       return db;
     },
     commit: transact,
