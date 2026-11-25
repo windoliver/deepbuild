@@ -26,8 +26,8 @@ const WINDOW_RETURNS = 10;
 interface Subscriber { last: number; scope?: { sql: string; values: string[] }; head?: number; replying?: true }
 
 /**
- * An event's JSON text, built by SQLite from the stored row: the record's toJson fields, seq as its decimal string, and
- * `verified` for the unverified mark. `data` and `evidence` are stored as JSON text already, and json_quote writes a
+ * An event's JSON text, built by SQLite from the stored row: the record's toJson fields, seq as its decimal string, the
+ * host of a session on another machine (#999), and `verified` for the unverified mark. `data` and `evidence` are stored as JSON text already, and json_quote writes a
  * string as JSON.stringify does.
  */
 const EVENT_TEXT = `'{"v":' || v || ',"id":' || json_quote(id) || ',"kind":' || json_quote(kind) || ',"writer":' || json_quote(writer)
@@ -35,7 +35,7 @@ const EVENT_TEXT = `'{"v":' || v || ',"id":' || json_quote(id) || ',"kind":' || 
   || ',"data":' || data || ',"evidence":' || coalesce(evidence, '[]') || iif(subject IS NULL, '', ',"subject":' || json_quote(subject))
   || iif(seq IS NULL, '', ',"seq":"' || CAST(seq AS TEXT) || '"') || iif(session_id IS NULL, '', ',"session":' || json_quote(session_id))
   || iif(project_id IS NULL, '', ',"project":' || json_quote(project_id)) || iif(agent IS NULL, '', ',"agent":' || json_quote(agent))
-  || ',"verified":' || iif(unverified, 'false', 'true') || '}'`;
+  || iif(host IS NULL, '', ',"host":' || json_quote(host)) || ',"verified":' || iif(unverified, 'false', 'true') || '}'`;
 
 interface LogReadsOptions {
   /** The record's raw reads, parameters bound. */

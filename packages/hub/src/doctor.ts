@@ -17,7 +17,9 @@ import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, t
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
+import { addedHosts } from './host-sessions.js';
 import { controlToken, hubAddress, installedRoot, underTemp } from './paths.js';
+import { majorsApart, outsideContract } from './wire.js';
 import { activePlant as plant } from './plant.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
@@ -95,6 +97,11 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
     if (answering) add('hub.socket', 'deepbuild', 'healthy', 'ok', `the hub answers at unix:${socket}`, 'Nothing to do.');
     // Before setup, `deep hub start` would start a hub that no hook reaches: setup adds the hooks and starts it.
     else add('hub.socket', 'deepbuild', 'hub_unreachable', 'fail', `no hub answers at unix:${socket}`, installed(root) ? 'Run `deep hub start`; deep setup installs it as a login service.' : 'Run `deep setup`, which adds the hooks and starts the hub at login.');
+  }
+  // Each added host's deep-hook (#999): within the hub's contract it records, whatever its version; a major apart, its hooks send nothing.
+  for (const [host, h] of Object.entries(addedHosts(root))) {
+    if (majorsApart(h.contract, h.hubContract)) add('host.hook', 'deepbuild', 'hook_outside_contract', 'fail', outsideContract(host, h.version, h.contract!, h.hubVersion, h.hubContract), `Run \`deep host add ${host}\`, which installs the deep-hook this hub's contract speaks; sessions running there keep running.`);
+    else add('host.hook', 'deepbuild', 'healthy', 'ok', `${host}'s deep-hook ${h.version ?? 'of no version it reports'} speaks contract ${h.contract ?? 'none it reports'}, within the hub's ${h.hubContract} (hub ${h.hubVersion})`, 'Nothing to do.');
   }
   // Linux's trusted path (#70): polkit knows the action only from a root-owned file, and without it nothing you confirm counts.
   if (process.platform === 'linux') {

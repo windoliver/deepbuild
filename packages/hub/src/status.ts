@@ -14,7 +14,7 @@ import { numbersLines } from './numbers.js';
 import { hubControl } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
-import { startOf } from './wire.js';
+import { majorsApart, outsideContract, startOf } from './wire.js';
 import { claimState } from './verdict-chat.js';
 import { visible } from './visible.js';
 import { watched, watchWords, type Watch } from './watch.js';
@@ -61,7 +61,7 @@ export interface Lacked { rule: string; state: State; fact: string }
  * one, and no other session's state changes with no event of its own, so the minute pass reads a session again once
  * its `until` has passed and reads no other.
  */
-export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; rule: string; why: string; plain: string; since: number | null; waits_on: string | null; facts: Fact[]; lacked: Lacked[]; note?: string; flag?: Flag; until?: number }
+export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; /** The host a session on another machine runs on (#999). */ host?: string; state: State; cause: Cause; rule: string; why: string; plain: string; since: number | null; waits_on: string | null; facts: Fact[]; lacked: Lacked[]; note?: string; flag?: Flag; until?: number }
 
 /** The one flag a row shows beside its word (#2019), never a state: the first of FLAGS that applies. */
 export type FlagCode = 'interrupted' | 'retrying' | 'repeating' | 'watch-only' | 'unpushed';
@@ -113,6 +113,8 @@ export interface SessionFacts {
   watch?: Watch;
   /** Its commits no remote branch holds (#2019). */
   unpushed?: { commits: number; branch: string | null; at: Fact };
+  /** The host it runs on, that host's link going down with no return since, and its deep-hook a contract major apart from the hub, in words that name both (#999). */
+  host?: string; linkDown?: Fact; skew?: string;
 }
 
 /** What a row of the table gives a session it matches. */
@@ -189,8 +191,10 @@ const TABLE: readonly Rule[] = [
   { rule: 'finished', state: 'finished', cause: 'finished', lacks: 'no turn stopped in the last day with nothing to judge',
     match: (f, now) => { const at = f.stopped?.ts ?? f.last_seen; return f.status === 'finished' && recent(f, now) ? { why: `its turn stopped ${ago(at, now)} ago`, plain: 'its turn stopped', since: at, waits_on: 'you', facts: [f.stopped ?? f.statusBy, f.seenBy], until: recentUntil(f) } : undefined; } },
   // Whatever is left: its hooks said unknown, a prompt it showed went unanswered, or no hook came in a day.
+  // A session on a host whose link is down (#999): its hooks spool there, so nothing says what it does now.
   { rule: 'quiet', state: 'quiet', cause: 'quiet', lacks: '',
-    match: (f, now) => ({ why: `last seen ${ago(f.last_seen, now)} ago`, plain: 'no hook since', since: f.last_seen, waits_on: 'agent', facts: [f.seenBy, f.statusBy] }) },
+    match: (f, now) => (f.linkDown ? { why: `the link to ${f.host ?? 'its host'} is down since ${clockTime(f.linkDown.ts)}, so its hooks spool there`, plain: `the link to ${f.host ?? 'its host'} is down`, since: f.linkDown.ts, waits_on: 'agent', facts: [f.linkDown, f.statusBy] }
+      : { why: `last seen ${ago(f.last_seen, now)} ago`, plain: 'no hook since', since: f.last_seen, waits_on: 'agent', facts: [f.seenBy, f.statusBy] }) },
 ];
 /** The words in the table's order (#2018): every surface and `--why` name the rows above a state by these. */
 export const WORDS: readonly State[] = [...new Set(TABLE.map((r) => r.state))];
@@ -284,7 +288,9 @@ export function decide(f: SessionFacts, now: number): Reading {
     if (!hit) { lacked.push({ rule: row.rule, state: row.state, fact: row.lacks }); continue; }
     const facts = hit.facts.filter((x): x is Fact => x !== undefined).filter((x, i, all) => all.findIndex((y) => y.log_pos === x.log_pos) === i);
     const flag = flagOf(f, row.state);
-    return { id: f.id, project_id: f.project_id, agent: f.agent, worktree: f.worktree, state: row.state, cause: row.cause, rule: row.rule, why: hit.why, plain: hit.plain ?? hit.why, since: hit.since, waits_on: hit.waits_on, facts, lacked, ...(f.note ? { note: f.note } : {}), ...(flag ? { flag } : {}), ...(hit.until === undefined ? {} : { until: hit.until }) };
+    // A deep-hook outside the hub's contract says so on its sessions' rows, whatever their state (#999).
+    const said = f.skew ? ` · ${f.skew}` : '';
+    return { id: f.id, project_id: f.project_id, agent: f.agent, worktree: f.worktree, ...(f.host ? { host: f.host } : {}), state: row.state, cause: row.cause, rule: row.rule, why: `${hit.why}${said}`, plain: `${hit.plain ?? hit.why}${said}`, since: hit.since, waits_on: hit.waits_on, facts, lacked, ...(f.note ? { note: f.note } : {}), ...(flag ? { flag } : {}), ...(hit.until === undefined ? {} : { until: hit.until }) };
   }
   throw new Error(`no row of the state table matched session ${f.id}`);
 }
@@ -327,7 +333,17 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   const placed = columns.has('status_at');
   // A row no event of its own made is no session: as the row a transcript.archived makes, which names the session by
   // its handle, its letters and digits, and so not by its ID.
-  const sessions = (await query(`SELECT s.id, s.project_id, s.agent, s.status, s.last_seen, s.worktree, ${columns.has('cause') ? 's.cause' : 'NULL AS cause'}, ${placed ? 'st.kind AS status_kind, st.ts AS status_ts, s.status_at, se.kind AS seen_kind, se.ts AS seen_ts, s.seen_at' : 'NULL AS status_kind, NULL AS status_ts, NULL AS status_at, NULL AS seen_kind, NULL AS seen_ts, NULL AS seen_at'} FROM sessions s${placed ? ' LEFT JOIN events st ON st.log_pos = s.status_at LEFT JOIN events se ON se.log_pos = s.seen_at' : ''} WHERE s.last_seen IS NOT NULL${of('s.id')}`)) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null; cause: string | null; status_kind: string | null; status_ts: number | null; status_at: number | null; seen_kind: string | null; seen_ts: number | null; seen_at: number | null }[];
+  const sessions = (await query(`SELECT s.id, s.project_id, s.agent, s.status, s.last_seen, s.worktree, ${columns.has('host') ? 's.host' : 'NULL AS host'}, ${columns.has('cause') ? 's.cause' : 'NULL AS cause'}, ${placed ? 'st.kind AS status_kind, st.ts AS status_ts, s.status_at, se.kind AS seen_kind, se.ts AS seen_ts, s.seen_at' : 'NULL AS status_kind, NULL AS status_ts, NULL AS status_at, NULL AS seen_kind, NULL AS seen_ts, NULL AS seen_at'} FROM sessions s${placed ? ' LEFT JOIN events st ON st.log_pos = s.status_at LEFT JOIN events se ON se.log_pos = s.seen_at' : ''} WHERE s.last_seen IS NOT NULL${of('s.id')}`)) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null; host: string | null; cause: string | null; status_kind: string | null; status_ts: number | null; status_at: number | null; seen_kind: string | null; seen_ts: number | null; seen_at: number | null }[];
+  // Each host's link as its newest host.link says (#999): down, from the first that said so with no return since.
+  const down = new Map<string, Fact>();
+  const skew = new Map<string, string>();
+  for (const l of (sessions.some((s) => s.host) ? await read(`SELECT json_extract(data, '$.host') AS host, json_extract(data, '$.up') AS up, json_extract(data, '$.hook_version') AS hook_version, json_extract(data, '$.hook_contract') AS hook_contract, json_extract(data, '$.hub_version') AS hub_version, json_extract(data, '$.hub_contract') AS hub_contract, ts, log_pos FROM events WHERE kind = 'host.link' ORDER BY log_pos`) : []) as { host: string; up: number; hook_version: string | null; hook_contract: string | null; hub_version: string | null; hub_contract: string | null; ts: number; log_pos: number }[]) {
+    if (!l.up) { if (!down.has(l.host)) down.set(l.host, { kind: 'host.link', ts: l.ts, log_pos: l.log_pos }); continue; }
+    down.delete(l.host);
+    // What each side speaks is read at each return of the link: the newest says whether they still agree.
+    if (majorsApart(l.hook_contract, l.hub_contract)) skew.set(l.host, outsideContract(l.host, l.hook_version, l.hook_contract!, l.hub_version, l.hub_contract!));
+    else skew.delete(l.host);
+  }
   const asks = new Map<string, { n: number; since: number | null; facts: Fact[] }>();
   for (const a of (await query(`SELECT a.session_id, a.created, e.ts, e.log_pos FROM asks a LEFT JOIN events e ON e.id = a.id WHERE a.status IN ('open', 'later') AND a.session_id IS NOT NULL${of('a.session_id')} ORDER BY a.created, a.id`)) as { session_id: string; created: number | null; ts: number | null; log_pos: number | null }[]) {
     const open = asks.get(a.session_id) ?? { n: 0, since: a.created, facts: [] };
@@ -398,6 +414,7 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
     const note = notes.get(s.id);
     return {
       id: s.id, project_id: s.project_id, agent: s.agent, worktree: s.worktree, status: s.status, stopCause: s.cause, last_seen: s.last_seen,
+      ...(s.host ? { host: s.host, ...(down.has(s.host) && !['finished', 'failed', 'stuck'].includes(s.status) ? { linkDown: down.get(s.host)! } : {}), ...(skew.has(s.host) ? { skew: skew.get(s.host)! } : {}) } : {}),
       ...(statusBy ? { statusBy } : {}), ...(seenBy ? { seenBy } : {}), ...(asks.has(s.id) ? { asks: asks.get(s.id)! } : {}), ...(gone.has(s.id) ? { gone: gone.get(s.id)! } : {}),
       ...(words.has(s.id) ? { words: words.get(s.id)! } : {}), ...(note ? { note: note.text, ...(note.code === 'hooks_cant_run' ? { cantRun: note.at } : {}) } : {}),
       ...(due.has(s.id) ? { promised: due.get(s.id)! } : {}), ...(watching.has(s.id) ? { watching: watching.get(s.id)! } : {}), ...(interrupted.has(s.id) ? { interrupted: interrupted.get(s.id)! } : {}),

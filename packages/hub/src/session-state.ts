@@ -32,6 +32,7 @@ import { Siblings } from './siblings.js';
 import { argsOf, parentOf, parents, peerOf, startOf } from './children.js';
 import { deepHook, type Root } from './paths.js';
 import { OWNER, People } from './people.js';
+import type { Hosts } from './hosts.js';
 
 import { UNREAD_WINDOW } from './status.js';
 
@@ -71,6 +72,7 @@ export interface SessionStateOptions {
     readonly siblings: Siblings;
     readonly sessionStarts: Starts;
     readonly people: People;
+    readonly hosts: Hosts;
   };
   judging: () => Pick<StopJudgingPort, "forget" | "letGo" | "watchEnded">;
   transcripts: () => Pick<TranscriptsPort, "cursors" | "saveCursors" | "writeCursors">;
@@ -130,6 +132,9 @@ export class SessionState {
   readonly projects = new Map<string, string>();
 
   readonly sessionPeople = new Map<string, string>();
+
+  /** The host each session on another machine runs on, from the connection its hooks came over (#999). */
+  readonly sessionHosts = new Map<string, string>();
 
   /** The project each session entered, for its packs (#67). */
   readonly entered = new Map<string, string>();
@@ -224,6 +229,8 @@ export class SessionState {
   }
 
   async parentArgs(meta: HookMeta): Promise<string> {
+    // A host's process is read there, never in this machine's table (#999).
+    if (meta.host) return this.options.services.hosts.sessions.argsOf(meta.host, meta.ppid);
     const session = this.sessions.get(meta.session);
     const kept = session && !session.ended && session.pid === meta.ppid && session.cwd === meta.cwd
       && (!meta.transcript || resolve(meta.transcript) === session.transcript)
@@ -793,7 +800,7 @@ export class SessionState {
     const before = [...this.sessions.values()].filter((s) => s.id !== session.id && s.pid === session.pid && s.start === session.start).at(-1);
     if (before) return before.thread;
     if (source !== 'fork') return session.id;
-    const from = /(?:^|\s)(?:--resume|-r)[\s=]([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(?=\s|$)/.exec(await argsOf(session.pid))?.[1];
+    const from = /(?:^|\s)(?:--resume|-r)[\s=]([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(?=\s|$)/.exec(this.sessionHosts.has(session.id) ? '' : await argsOf(session.pid))?.[1];
     if (!from) return session.id;
     // One that ended long ago has left memory; the record still names its thread.
     const known = this.sessions.get(from)?.thread;
@@ -831,7 +838,9 @@ export class SessionState {
    * stranger's commits, whatever their author and committer fields say.
    */
   private async commits(meta: HookMeta, live: Live, made: boolean): Promise<void> {
-    const head = await headOf(meta.cwd).catch(() => undefined);
+    // A host's folder is read over SSH (#999): at a start, a stop and a call that makes commits, not at every call's end.
+    if (meta.host && !made && meta.event.startsWith('PostToolUse')) return;
+    const head = await this.head(meta.session, meta.cwd).catch(() => undefined);
     // A folder with no commit yet: the first one a call makes is a commit too.
     if (!head) { live.unborn = true; return; }
     const before = live.head;
@@ -839,7 +848,7 @@ export class SessionState {
     live.head = head.sha;
     live.unborn = false;
     if ((before === undefined && !first) || before === head.sha || !made) return;
-    for (const sha of first ? [head.sha] : await commitsBetween(meta.cwd, before!, head.sha)) {
+    for (const sha of first || meta.host ? [head.sha] : await commitsBetween(meta.cwd, before!, head.sha)) {
       if (this.committed.has(sha)) continue;
       this.committed.set(sha, meta.session);
       await this.options.events.appendSession(meta.session, live.agent, 'commit.made', { sha, worktree: meta.cwd, branch: head.branch }).catch(() => undefined);
@@ -890,8 +899,15 @@ export class SessionState {
     return parked;
   }
 
+  /** The HEAD of a session's folder: on its host for a session there (#999), else here. */
+  head(session: string, cwd: string): Promise<{ sha: string; branch: string | null } | undefined> {
+    const host = this.sessionHosts.get(session);
+    return host ? this.options.services.hosts.sessions.headOf(host, cwd) : headOf(cwd);
+  }
   /** A process's start time, or undefined when it can't be read. Read from the children's thread, never this one or the event loop. */
-  startOf(pid: number, fresh = false): Promise<string | undefined> {
+  startOf(pid: number, fresh = false, host?: string): Promise<string | undefined> {
+    // A host's process is read there, never in this machine's table (#999).
+    if (host) return this.options.services.hosts.sessions.startOf(host, pid, fresh);
     const known = this.starts.get(pid);
     if (known && !fresh) return known;
     const read = startOf(pid);
@@ -912,12 +928,17 @@ export class SessionState {
     // its working folder and process tree alone, and nothing is read from a transcript for it (#806).
     // paseo's plugin keeps no transcript: its sessions are checked by working folder and the plugin's process (#55).
     const none = (meta.agent === 'codex' && !meta.transcript) || meta.agent === 'paseo';
+    // A session is on the host its first hook's connection came over (#999).
+    if (meta.host && meta.session && !this.sessionHosts.has(meta.session)) this.sessionHosts.set(meta.session, meta.host);
     if (!meta.session || !meta.cwd || (!none && !isAbsolute(meta.transcript))) return false;
-    const homes = meta.agent === 'codex' ? sessionHomes(this.options.services.root.dir) : [join(homedir(), '.claude', 'projects')];
-    const transcript = none ? '' : resolve(meta.transcript);
+    // A session on a host (#999) keeps its transcript under its agent's home there, and its process is read there.
+    const homes = meta.host ? [`${this.options.services.hosts.sessions.home(meta.host) ?? ''}/.claude/projects`] : meta.agent === 'codex' ? sessionHomes(this.options.services.root.dir) : [join(homedir(), '.claude', 'projects')];
+    const named = none ? '' : resolve(meta.transcript);
     // pi's --session-dir puts a session's file anywhere; its package runs inside pi, and pi's process is what is checked.
-    if (!none && meta.agent !== 'pi' && !homes.some((home) => isUnder(transcript, home))) return false;
-    const start = await this.startOf(meta.ppid);
+    if (!none && meta.agent !== 'pi' && !homes.some((home) => isUnder(named, home))) return false;
+    // Nothing is read here from a transcript that is on a host: a file at the same path here is another's.
+    const transcript = meta.host ? '' : named;
+    const start = await this.startOf(meta.ppid, false, meta.host);
     if (!start) return false;
     const session = this.sessions.get(meta.session);
     // A Codex subagent's SubagentStart names the child's own rollout, whose file ends in its agent_id, with the root's session ID.
@@ -948,7 +969,7 @@ export class SessionState {
       this.parentLinks.delete(session);
     }
     if (binary && transcript === session.transcript && meta.event === 'SessionStart' && resumed
-      && (session.ended || await this.startOf(session.pid, true) !== session.start) && binary.test(await this.parentArgs(meta))) {
+      && (session.ended || await this.startOf(session.pid, true, meta.host) !== session.start) && binary.test(await this.parentArgs(meta))) {
       Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false, interrupted: false, watched: false });
       return true;
     }
@@ -963,7 +984,8 @@ export class SessionState {
       return true;
     }
     const own = ((child && meta.event === 'SubagentStart') || transcript === session.transcript) && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
-    if (own && !session.watched) { session.watched = true; this.options.transcripts().saveCursors(); }
+    // Only a process of this machine is watched for its end: a host's sessions read unknown while its link is down, never gone (#999).
+    if (own && !session.watched && !meta.host) { session.watched = true; this.options.transcripts().saveCursors(); }
     return own;
   }
 

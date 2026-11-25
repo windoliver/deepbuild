@@ -15,6 +15,16 @@ export const FEATURES: readonly string[] = [
 ];
 /** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
 export const CONTRACT = '1.0';
+/** Whether two contracts, each major.minor, are a major apart: neither side then reads the other's lines (design: Version skew). */
+export const majorsApart = (a: string | null | undefined, b: string | null | undefined): boolean => Boolean(a && b && a.split('.')[0] !== b.split('.')[0]);
+/** A host's deep-hook a contract major apart from the hub (#999), in the words its sessions' rows and `deep doctor` say, naming both. */
+export const outsideContract = (host: string, hookVersion: string | null, hookContract: string, hubVersion: string | null, hubContract: string): string =>
+  `${host}'s deep-hook ${hookVersion ?? 'of no version it reports'} speaks contract ${hookContract} and the hub ${hubVersion ?? ''} speaks contract ${hubContract}, a major apart, so its hooks send the hub nothing`.replace('  ', ' ');
+/** The contract a hub says it speaks: the planted hub of #1334 speaks one a major ahead and #999's one a minor ahead, so every deep-hook is the older side, outside the contract or within it. */
+export function contractOf(plant: string | undefined): string {
+  const [major, minor] = CONTRACT.split('.').map(Number) as [number, number];
+  return plant === 'contract-major-ahead' ? `${major + 1}.0` : plant === 'contract-minor-ahead' ? `${major}.${minor + 1}` : CONTRACT;
+}
 /** What a stream subscribe asks for (#1575): one session's events, or the list's rows; with none, every event, as the app subscribes. */
 export type Scope = { kind: 'session'; session: string } | { kind: 'list' };
 
@@ -116,6 +126,8 @@ export interface HookMeta {
   person?: string;
   /** Only the actor-from-payload plant reads it. */
   payloadActor?: string;
+  /** The host whose forwarded socket the hook came over (#999), set by the event loop alone; none for this machine. */
+  host?: string;
   /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
   denied?: string;
   /** Set by the server on a PreToolUse its guard entries blocked: the entries, by name, for a PostToolUse that shows it ran anyway (#1033). */

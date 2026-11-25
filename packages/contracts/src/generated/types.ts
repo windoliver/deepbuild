@@ -8136,7 +8136,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "polkit_action_missing" | "hooks_modified" | "mod_overrides_guard" | "not_loaded" | "handler_set_aside" | "footprint_unknown" | "proofs_unreadable" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "polkit_action_missing" | "hooks_modified" | "mod_overrides_guard" | "not_loaded" | "handler_set_aside" | "footprint_unknown" | "proofs_unreadable" | "hook_outside_contract" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -8614,6 +8614,29 @@ export interface HostChanged {
     }>;
     ask: string | null;
     run: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** host.link@1 */
+export interface HostLink {
+  v: 1;
+  id: string;
+  kind: "host.link";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    host: string;
+    up: boolean;
+    why: string | null;
+    hook_version: string | null;
+    hook_contract: string | null;
+    hub_version: string | null;
+    hub_contract: string | null;
   };
   evidence?: Array<string>;
 }
@@ -10052,6 +10075,40 @@ export interface PushRecord {
   pusher: string | null;
 }
 
+/** pushes.read@1 */
+export interface PushesRead {
+  v: 1;
+  id: string;
+  kind: "pushes.read";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    repo: string;
+    ref: string;
+    as_of: number;
+    pushes: Array<{
+      id: number;
+      at: number;
+      pusher: string | null;
+      commits: Array<{
+        commit: string;
+        tree: string;
+        reverts?: string;
+      }> | null;
+    }>;
+    snapshots: Array<{
+      commit: string;
+      tree: string;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** question.proceeded@1 */
 export interface QuestionProceeded {
   v: 1;
@@ -10580,6 +10637,60 @@ export interface RowSetV4 {
       count?: number;
       command?: string;
     };
+  };
+  evidence?: Array<string>;
+}
+
+/** row.set@5 */
+export interface RowSetV5 {
+  v: 5;
+  id: string;
+  kind: "row.set";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    id: string;
+    listed: boolean;
+    order?: string;
+    address?: string;
+    title?: string;
+    project?: string | null;
+    session?: string;
+    agent?: string | null;
+    entry?: "idle" | "running" | "pass" | "fail" | "blocked" | "invalid" | "inconclusive" | "needs_you" | "stale";
+    word?: "queued" | "working" | "says done" | "PASS" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "needs you" | "stale" | "quiet" | "stuck" | "flagged" | "finished" | "running";
+    why?: string;
+    waits_on?: string | null;
+    since?: number | null;
+    actions?: Array<{
+      answer: string;
+      label: string;
+    }>;
+    unread?: boolean;
+    default?: string;
+    default_at?: number;
+    progress?: string;
+    doing?: {
+      words: string;
+      at: number;
+      ago: boolean;
+    };
+    flag?: {
+      code: "interrupted" | "retrying" | "repeating" | "watch-only" | "unpushed";
+      text: string;
+      since: number | null;
+      fix?: string;
+      doing?: string;
+      until?: number;
+      cause?: string;
+      count?: number;
+      command?: string;
+    };
+    host?: string;
   };
   evidence?: Array<string>;
 }
