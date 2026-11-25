@@ -19,10 +19,12 @@ const OWN_MS = 8_000, GRACE_MS = 3_000;
 // Each watcher names itself here by PID and start, so another's, whose tree it was launched in, leaves it be.
 const WATCHERS = join(tmpdir(), `deep-stop-watchers-${process.getuid?.() ?? 'user'}`);
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-const writeJson = (file, value) => {
-  writeFileSync(`${file}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
-  renameSync(`${file}.tmp`, file);
+const writeAtomic = (file, text) => {
+  const temporary = join(dirname(file), `.${process.pid}.tmp`);
+  writeFileSync(temporary, text);
+  renameSync(temporary, file);
 };
+const writeJson = (file, value) => writeAtomic(file, `${JSON.stringify(value, null, 2)}\n`);
 /** `pid <n> (<command>)` for each stopped process, or why none could be listed: the words a record carries. */
 export const named = ({ stopped, error }) => (error ? `the stop could not list the run's processes: ${error}`
   : `the stop ended ${stopped.length} processes${stopped.length ? `: ${stopped.map(({ pid, command }) => `pid ${pid} (${command})`).join(', ')}` : ''}`);
@@ -66,7 +68,8 @@ export function watchTree() {
           Object.assign(mine, next);
           return next.arm(file, record);
         }
-        writeJson(armed, { run: ++runs, ...file && { file, record } });
+        // A run whose arm can't be written runs unwatched, as one whose watcher didn't start does.
+        try { writeJson(armed, { run: ++runs, ...file && { file, record } }); } catch {}
       },
       disarm() { rmSync(armed, { force: true }); },
       stop(root) {
@@ -89,14 +92,14 @@ export function watchTree() {
 }
 
 /**
- * Every process now, by pid: its parent, its group and its start as ps prints it, in one zone and language for every
+ * Every process now, by pid: its parent, its group, its state and its start as ps prints it, in one zone and language for every
  * reader. Its own listing, not throttle.mjs's: a test's copy of the lanes may stand a stub in for the throttle.
  */
 function table() {
-  const listing = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,pgid=,lstart='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
+  const listing = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,pgid=,stat=,lstart='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
   if (listing.status !== 0) throw Error(`ps failed: ${listing.error?.message ?? listing.stderr.trim()}`);
-  return new Map(listing.stdout.split('\n').map((line) => line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/)).filter(Boolean)
-    .map(([, pid, ppid, pgid, start]) => [Number(pid), { ppid: Number(ppid), pgid: Number(pgid), start }]));
+  return new Map(listing.stdout.split('\n').map((line) => line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/)).filter(Boolean)
+    .map(([, pid, ppid, pgid, stat, start]) => [Number(pid), { ppid: Number(ppid), pgid: Number(pgid), stat, start }]));
 }
 /** The command lines of `pids`, by pid. */
 function lines(pids) {
@@ -111,16 +114,19 @@ function watch(caller, folder) {
   // Named in the registry before the first look, so no other watcher's look takes this one for a run's.
   const own = spawnSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } }).stdout.trim();
   mkdirSync(WATCHERS, { recursive: true, mode: 0o700 });
-  writeFileSync(join(WATCHERS, String(process.pid)), own);
+  writeAtomic(join(WATCHERS, String(process.pid)), own);
   process.on('exit', () => rmSync(join(WATCHERS, String(process.pid)), { force: true }));
   const first = table(), callerStart = first.get(caller)?.start;
   if (!callerStart) process.exit(1);
-  // An entry whose watcher is gone (one killed outright) is taken out.
+  // An entry whose watcher is gone (one killed outright) is taken out: its number runs nothing, or runs a process of
+  // another start. One that started after the listing stands.
   try {
-    for (const name of readdirSync(WATCHERS)) {
-      let start = null;
+    for (const name of readdirSync(WATCHERS).filter((name) => /^\d+$/.test(name))) {
+      let start = null, running = true;
       try { start = readFileSync(join(WATCHERS, name), 'utf8'); } catch {}
-      if (first.get(Number(name))?.start !== start) rmSync(join(WATCHERS, name), { force: true });
+      try { process.kill(Number(name), 0); } catch (error) { running = error.code !== 'ESRCH'; }
+      const listed = first.get(Number(name));
+      if (!running || (listed && start && listed.start !== start)) rmSync(join(WATCHERS, name), { force: true });
     }
   } catch {}
   const armed = join(folder, 'armed.json');
@@ -139,7 +145,7 @@ function watch(caller, folder) {
   // of a run's.
   const known = new Map();
   const fence = new Map([...first].filter(([pid]) => ancestors(first, pid)).map(([pid, { start }]) => [pid, start]));
-  const fenced = (procs, pid) => fence.get(pid) === procs.get(pid)?.start;
+  const fenced = (procs, pid) => fence.has(pid) && fence.get(pid) === procs.get(pid)?.start;
   // Each process seen under the caller while armed, with its ancestors as first seen: one whose parent died first is
   // still known, and known as part of the command it was under.
   const look = () => {
@@ -159,35 +165,39 @@ function watch(caller, folder) {
   };
   // Stops the known processes `pick` chooses: SIGTERM to those in the run's own groups, then, once those in groups of
   // their own have had their time to end, SIGTERM and SIGKILL to what is left, each by PID and start.
+  // Each look on the way adds what the tree started since (a process given its time keeps starting others): one in the
+  // run's own groups, or any once that time is over, gets SIGTERM at once.
   const stopTree = (pick, groups) => {
-    let tree;
-    try {
-      const now = look();
-      tree = [...known.values()].filter((entry) => pick(entry) && now.get(entry.pid)?.start === entry.start);
-    } catch (error) {
-      return { stopped: [], error: error.message };
-    }
-    let argv = new Map();
-    try { if (tree.length) argv = lines(tree.map(({ pid }) => pid)); } catch {}
-    // A long command line keeps its head (the program) and its tail (the file it runs, often last).
-    const short = (line) => (line.length > 600 ? `${line.slice(0, 300)} … ${line.slice(-300)}` : line);
-    const stopped = tree.map(({ pid }) => ({ pid, command: short(argv.get(pid) ?? '?') }));
-    const left = () => {
-      try {
-        const now = table();
-        return tree.filter(({ pid, start }) => now.get(pid)?.start === start);
-      } catch { return tree; }
-    };
+    const tree = new Map(), argv = new Map();
+    // A process that ended unreaped (a zombie) runs nothing: it is no longer the run's to stop.
+    const running = (now, { pid, start }) => now.get(pid)?.start === start && !now.get(pid).stat.startsWith('Z');
+    let all = false;
     const signal = (list, name) => { for (const { pid } of list) try { process.kill(pid, name); } catch {} };
+    const add = () => {
+      const now = look();
+      const fresh = [...known.values()].filter((entry) => pick(entry) && tree.get(entry.pid)?.start !== entry.start && running(now, entry));
+      for (const entry of fresh) tree.set(entry.pid, entry);
+      try { if (fresh.length) for (const [pid, args] of lines(fresh.map(({ pid }) => pid))) argv.set(pid, args); } catch {}
+      signal(fresh.filter(({ pgid }) => all || groups.has(pgid)), 'SIGTERM');
+      return now;
+    };
+    try { add(); } catch (error) { return { stopped: [], error: error.message }; }
+    const left = () => {
+      let now;
+      try { now = add(); } catch { return [...tree.values()]; }
+      return [...tree.values()].filter((entry) => running(now, entry));
+    };
     const wait = (ms) => { for (const by = performance.now() + ms; left().length && performance.now() < by;) sleep(250); };
-    signal(tree.filter(({ pgid }) => groups.has(pgid)), 'SIGTERM');
     // deadline: a process in a group of its own gets 8 s to end with the run, as a run's cleanup does.
     wait(OWN_MS);
+    all = true;
     signal(left(), 'SIGTERM');
     // deadline: what ignores SIGTERM for 3 s is killed.
     wait(GRACE_MS);
     signal(left(), 'SIGKILL');
-    return { stopped };
+    // A long command line keeps its head (the program) and its tail (the file it runs, often last).
+    const short = (line) => (line.length > 600 ? `${line.slice(0, 300)} … ${line.slice(-300)}` : line);
+    return { stopped: [...tree.values()].map(({ pid }) => ({ pid, command: short(argv.get(pid) ?? '?') })) };
   };
   let stopping = false;
   // A stop the run asks for: the tree under the command it names, whose group is its own (measureOnce's capture).
@@ -225,9 +235,11 @@ function watch(caller, folder) {
       run = pending.run;
     }
     if (!gone) {
-      // Without a listing the next look tries again; a caller whose number is gone is gone without one.
+      // Without a listing the next look tries again; a caller whose number is gone is gone without one, and one that
+      // died unreaped (a zombie, state Z) is gone too.
       try {
-        if (look().get(caller)?.start === callerStart) return;
+        const listed = look().get(caller);
+        if (listed?.start === callerStart && !listed.stat.startsWith('Z')) return;
       } catch { return; }
     }
     // The caller died while a run was armed: every process of the run is stopped, and its record says so. Whatever

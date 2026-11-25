@@ -1059,6 +1059,8 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
         } catch (error) {
           result = { status: null, error };
         } finally {
+          // The command is over: a death from here on leaves the lane no record, never one short of this job's rows.
+          stop.disarm();
           try {
             if (descriptor !== undefined) closeSync(descriptor);
             if (directory) rmSync(directory, { recursive: true, force: true });
@@ -1149,7 +1151,6 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
       else console.log(`PASS ${lane.name} (${elapsed} s)`);
       try {
-        stop.disarm();
         if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, { ...more, ...findings.length && { findings }, ...kept && { kept: { read: keptRead, of: testFiles.flat().length } } });
       } catch (error) {
         // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
