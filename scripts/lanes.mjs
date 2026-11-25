@@ -227,6 +227,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/155-oracle/', 'tests/acceptance/162/', 'tests/acceptance/184/', 'tests/acceptance/184-redraft-ac7-2/', 'tests/acceptance/555/', 'tests/acceptance/1048/',
     'tests/acceptance/556/', 'tests/acceptance/2650/retries.test.ts', 'tests/acceptance/2650/jobs.test.ts', 'tests/acceptance/2650/replay.test.ts',
     'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/', 'tests/acceptance/3035/',
+    'tests/acceptance/139-redraft-2062/',
   ],
   'shared: memory': ['tests/acceptance/2645/'],
   'shared: the cores': ['tests/acceptance/2227/'],
@@ -257,6 +258,9 @@ export const aloneCommand = [process.execPath, 'node_modules/vitest/vitest.mjs',
 const sharded = [process.execPath, 'scripts/affected.mjs', '--alone', '--slow', '--timed'];
 /** The command runLanes runs for a lane command: the alone block's in shards, any other as it is. */
 const runOf = (command) => (command === aloneCommand ? sharded : command);
+
+// #231's folders (blind) run alone by their lane.json; these three files read a clock and the machine's load.
+timed.push('tests/acceptance/231/speed.test.ts', 'tests/acceptance/231/wall.test.ts', 'tests/acceptance/231/starts.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -735,8 +739,11 @@ function libtestTargets(args, cwd) {
 /** A cargo test command that runs its packages whole: it picks no target of its own and filters no test. */
 const wholeRun = (args) => !args.some((arg) => arg === '--' || /^--(?:lib|bins?|tests?|doc|examples?|bench(?:es)?|all-targets)$/.test(arg));
 
-/** What a whole cargo test command lists with `-- --list`, by cargoList, under the throttle; null when the listing fails. */
-function cargoListed(args, cwd, env) {
+/**
+ * What a whole cargo test command lists with `-- --list`, by cargoList, under the throttle, asked with `grantWait`;
+ * null when the listing fails.
+ */
+function cargoListed(args, cwd, env, grantWait) {
   const targets = libtestTargets(args, cwd);
   if (!targets) return null;
   const directory = mkdtempSync(join(tmpdir(), 'deep-cargo-list-')), log = join(directory, 'output');
@@ -744,7 +751,7 @@ function cargoListed(args, cwd, env) {
     const descriptor = openSync(log, 'w', 0o600);
     let result;
     try {
-      result = spawnSync(process.execPath, [throttle, 'build', '--wait', '30', '--', leaseScript, 'cargo', ...args, ...targets, '--', '--list'], { cwd, env, stdio: ['ignore', descriptor, descriptor] });
+      result = spawnSync(process.execPath, [throttle, 'build', ...grantWait, '--', leaseScript, 'cargo', ...args, ...targets, '--', '--list'], { cwd, env, stdio: ['ignore', descriptor, descriptor] });
     } finally {
       closeSync(descriptor);
     }
@@ -918,12 +925,15 @@ export function mergeRecords(tree) {
 /** A lane's evidence record, which T7 and T8 read: its state, where it ran, on what tree, and each test's state. */
 export function writeRecord(lane, state, tree, tests, more = {}) {
   if (!tree) throw new Error("git can't write this checkout's tree");
-  const folder = lanesFolder();
-  mkdirSync(folder, { recursive: true, mode: 0o700 });
-  const file = join(folder, `${tree}-${lane.replace(/\W+/g, '-')}.json`);
-  writeFileSync(file, `${JSON.stringify({ lane, state, host: hostname(), platform: `${process.platform}-${process.arch}`, tree, tests, ...more }, null, 2)}\n`);
+  const { file, record } = recordOf(lane, state, tree, tests, more);
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+  writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
   return file;
 }
+const recordOf = (lane, state, tree, tests, more = {}) => ({
+  file: join(lanesFolder(), `${tree}-${lane.replace(/\W+/g, '-')}.json`),
+  record: { lane, state, host: hostname(), platform: `${process.platform}-${process.arch}`, tree, tests, ...more },
+});
 
 /**
  * What of the unit lane has no kept result to stand on for `key`'s tree: the test files, and `cargo test` when its job has
@@ -937,8 +947,11 @@ export function unrunOf(key, cwd = root) {
   return { unrun, of: files.flat().length };
 }
 
-export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: treeOf } = {}) {
+export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: treeOf, stall } = {}) {
   const failures = [];
+  // A remote lane's far end passes its stall bound: each grant then waits while its class's grants change hands (#3350).
+  // Every other run waits 30 minutes, as section 6's table says.
+  const grantWait = stall === undefined ? ['--wait', '30'] : ['--stall', String(stall)];
   // Loaded only for the preflight, as a copy of this script stands alone without it.
   const { openKept, wholeJob } = key ? require('./proof-kept.mjs') : {};
   // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
@@ -951,6 +964,11 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
   const environment = { ...process.env };
   delete environment.DEEP_BIN_DIR;
   let changed, binaries, built = [], binaryError;
+  // Each command runs in spawnSync, so this process can't answer a signal while it runs: a watcher outside its group
+  // stops the whole tree if this process dies, and writes the lane's record INCONCLUSIVE naming what it stopped, when
+  // no record of the lane's tree is there yet (#3433).
+  const { watchTree } = require('./proof-stop.mjs'), stop = watchTree();
+  if (stop.error) console.log(`NOTE lanes: ${stop.error}, so a stop of this run may leave its commands running`);
   try {
     const selected = [];
     for (const lane of lanes) {
@@ -979,6 +997,12 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
       const tree = treeOf ?? exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
       // The tests the lane's whole cargo test commands list, or null once a listing failed; whether any cargo test ran.
       let listedCargo, cargoRan = false, keptRead = 0;
+      // What the watcher writes should this process die while the lane's commands run: its rows so far, INCONCLUSIVE.
+      const armLane = () => {
+        if (!tree) return stop.arm();
+        const { file, record } = recordOf(lane.name, 'INCONCLUSIVE', tree, tests, findings.length ? { findings } : {});
+        stop.arm(file, record);
+      };
       // The preflight's kept results of this very tree (#3296): a job already done is read, never run again.
       let kept = key && lane.name === 'unit' && key.tree === tree ? openKept(key, (row) => readSkips([row], knownFailures(cwd).skips, timed).covered.length > 0) : null, testFiles = [];
       if (kept) try { testFiles = lane.commands.map((command) => testFilesOf(cwd, command)); } catch (error) {
@@ -1000,6 +1024,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
         const args = kept && shards ? [...rest, `--kept=${JSON.stringify(key)}`] : rest;
         let directory, descriptor, result, results, output = '';
         try {
+          armLane();
           const prior = kept && !shards && kept.jobDone(job, names) ? kept.results(names, job) : null;
           if (prior) keptRead += names.length;
           if (prior) [results, result, output] = [prior, { status: prior.failures.length ? 1 : 0 }, `KEPT ${job}: ${prior.passed.length + prior.failures.length + prior.skips.length} results read from an earlier run of this tree`];
@@ -1026,7 +1051,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
             // of the calling session's through scripts/lease (#1015).
             // The fill holds no grant over the alone block's own run, whose admission and turns are its jobs' (#3297).
             const began = performance.now(), leased = [leaseScript, ...reported?.command ?? [command, ...args]];
-            result = spawnSync(...fill && shards ? [leased[0], leased.slice(1)] : [process.execPath, [throttle, cls, '--wait', '30', '--', ...leased]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
+            result = spawnSync(...fill && shards ? [leased[0], leased.slice(1)] : [process.execPath, [throttle, cls, ...grantWait, '--', ...leased]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
             output = readFileSync(log, 'utf8').trim();
             results = testsOf([command, ...args], cwd, { report, output, status: result.status });
             if (kept && shards) try { keptRead += JSON.parse(readFileSync(report, 'utf8')).kept?.read ?? 0; } catch {}
@@ -1071,10 +1096,12 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
         // names it, so a merge with another machine's rows (parallel-proof §8) can't lose it.
         if (found && (found.lone || (results?.noGrant && found.error === results.noGrant) || !run.tests.some(({ state }) => state === found.state))) findings.push({ state: found.state, note: found.error });
         if (stands(found, failure)) failure = found;
+        // Armed again with this job's rows, for what runs after it (cargo's listing, the next job's builds).
+        armLane();
         // A run the throttle refused ran nothing to list, and listing it would ask the throttle again (#3333).
         if (command === 'cargo' && args[0] === 'test' && !results?.noGrant) {
           cargoRan = true;
-          const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment) : undefined;
+          const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment, grantWait) : undefined;
           if (listing) {
             listedCargo ??= {};
             for (const [target, names] of Object.entries(listing)) listedCargo[target] = [...new Set([...listedCargo[target] ?? [], ...names])];
@@ -1082,6 +1109,15 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
             for (const [, target, name] of run.tests.map(({ id }) => id.match(/^cargo (.+?) › (.+)$/)).filter(Boolean)) if (!Object.hasOwn(listing, target)) (listedCargo[target] ??= []).push(name);
           } else if (listing === null) listedCargo = null;
         }
+      }
+      // The record names the tree the lane started on, so a run that changed it proved another tree (#3336).
+      const after = tree && exactTree(cwd);
+      if (tree && after !== tree) {
+        const paths = after ? spawnSync('git', ['diff-tree', '-r', '--name-only', tree, after], { cwd, encoding: 'utf8' }).stdout.trim().split('\n').filter(Boolean) : [];
+        const found = { state: 'FAIL', error: `the run changed the tree it started on: ${paths.length ? paths.join(', ') : "git can't write the tree after it"}; write to a temporary folder, never the checkout` };
+        findings.push({ state: found.state, note: found.error });
+        if (stands(found, failure)) failure = found;
+        else console.log(`FAIL ${lane.name}: ${found.error}`);
       }
       // The Mac's cargo tests are the reference list; a run elsewhere lists the tests it lacks and is never PASS (#1121).
       const more = {}, absentIds = new Set(), mac = process.platform === 'darwin';
@@ -1120,6 +1156,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
       else console.log(`PASS ${lane.name} (${elapsed} s)`);
       try {
+        stop.disarm();
         if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, { ...more, ...findings.length && { findings }, ...kept && { kept: { read: keptRead, of: testFiles.flat().length } } });
       } catch (error) {
         // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
@@ -1128,6 +1165,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
       }
     }
   } finally {
+    stop.disarm();
     if (binaries) rmSync(binaries, { recursive: true, force: true });
     if (issues) {
       delete process.env.DEEP_OPEN_ISSUES;

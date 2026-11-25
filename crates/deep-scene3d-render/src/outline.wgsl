@@ -10,6 +10,14 @@ struct LineFrame {
     viewport: vec4<f32>,
     light: vec4<f32>,
     px: vec4<f32>,
+    // The rest of scene3d.wgsl's `Frame`, which the buffer holds whole and no line reads.
+    sky_top: vec4<f32>,
+    sky_low: vec4<f32>,
+    inverse_clip: mat4x4<f32>,
+    eye: vec4<f32>,
+    cut: array<vec4<f32>, 4>,
+    cut_info: vec4<u32>,
+    cap: vec4<f32>,
 };
 
 @group(1) @binding(0) var<uniform> line_frame: LineFrame;

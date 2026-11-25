@@ -1,0 +1,49 @@
+#2081: each wrong program, run once on 2026-11-24, Node v24.22.2, vitest 5.0.5, one-minute load about 100. Each ran in one
+scratch tree (packages, node_modules, adapters, contracts, scripts/known-failures.json and this folder, no .git), the base
+a2cbc50d9's files put back before each, under a scratch config (root, include, setupFiles). Every failure below is an
+AssertionError in controls.test.ts. Tests are numbered in the file's order: AC1.1 AC1.2 / AC2.1 to AC2.5 / AC3.1 to AC3.3 /
+AC4. Trimmed to the tests that hold on the base and to each failure's own words.
+
+Part 1. The planted twins of twins.json, laid over the base (their five base failures, BASE-FAILURE.txt, left out)
+
+twins/no-controls, a runner that plants no control (AC1, AC3)
+  FAIL AC1.2  at 72:31   "outcome":"passed","mask":null,"failures":[] ... expected 'passed' to be 'uncounted'
+  FAIL AC3.1  at 72:31   "outcome":"passed","mask":null,"failures":[] ... expected 'passed' to be 'uncounted'
+  FAIL AC3.2  at 72:31   "outcome":"passed","mask":null,"failures":[] ... expected 'passed' to be 'uncounted'
+  FAIL AC3.3  at 194:37  "outcome":"passed","mask":null,"failures":[] ... expected 'passed' not to be 'passed'
+  ok   AC2.5, AC4
+
+twins/command-filters-unread, a runner that reads no filter in the check's command (AC2)
+  FAIL AC2.5  at 157:66  node_modules/.bin/vitest run --testNamePattern=^cart: "outcome":"uncounted" ... expected
+              [ 'uncounted', …(1) ] to deeply equal [ 'passed', …(1) ]
+  ok   AC1.2, AC3.1, AC3.2, AC3.3, AC4
+
+twins/cases-still-listed, the interim listing left in place (AC4)
+  FAIL AC4    at 204:61  a case that passes is no known failure: expected [ [ …(2) ] ] to deeply equal []
+  ok   AC1.2, AC2.5, AC3.1, AC3.2, AC3.3
+
+Part 2. Fix-shaped wrong programs, by hand. A throwaway fix of this job's own, written only to see that every expectation
+can be met, passes all 11 tests. Each program below is that fix with one thing wrong, or the base with one thing changed
+(failures-first). They are kept nowhere: their lines are that fix's, which no change holds.
+
+focus-by-text: a focus read from the text, so a mention in a comment or a string focuses
+  FAIL AC1.1  at 104:33  "mention runs never ran", "mention runs too never ran" ... expected 'failed' to be 'passed'
+
+focused-without-control: a focused file gets no control
+  FAIL AC1.1  at 111:119 test/only.test.ts: its control reported failed, on its own assertion
+  FAIL AC1.2  at 72:31   expected 'passed' to be 'uncounted'
+
+missing-reads-left-out: any missing control is taken as left out
+  FAIL AC1.2  at 72:31   expected 'passed' to be 'uncounted'
+  FAIL AC2.1, AC2.2, AC2.3  at 79:140  a failure names "total is 12" ("adds one and two"), the test left out
+  FAIL AC2.4  at 80:45   what left "cart total is 12" out
+  FAIL AC3.2  at 72:31   expected 'passed' to be 'uncounted'
+  FAIL AC3.3  at 194:37  expected 'passed' not to be 'passed'
+
+failures-first: the run's failures read before its control, the test left out never named
+  FAIL AC1.1  at 104:33  expected 'uncounted' to be 'passed'
+  FAIL AC2.1, AC2.2, AC2.3  at 79:140  a failure names "total is 12" ("adds one and two"), the test left out
+  FAIL AC2.4  at 78:31   expected 'uncounted' to be 'failed'
+
+control-alone-left-out: a package script's filter excuses the control though it leaves no test out
+  FAIL AC3.3  at 194:37  expected 'passed' not to be 'passed'
