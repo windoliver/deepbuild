@@ -149,7 +149,7 @@ export class Core {
     const readstopping = () => this.stopping;
     const readabandoned = () => this.abandoned;
     const readoverrides = () => this.overrides;
-    this.judging = new StopJudging({ settings: this.options, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, reviewRounds: () => this.reviewRounds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable, askingNow: () => this.askingNow() } });
+    this.judging = new StopJudging({ settings: this.options, services: lazyServices({ tasks: () => this.tasks, openItems: () => this.openItems, now: () => this.now, asks: () => this.asks, agents: () => this.agents, box: () => this.box, ledger: () => this.ledger, record: () => this.record, gate: () => this.gate, raw: () => this.raw, leases: () => this.leases, extensions: () => this.extensions, sizing: () => this.sizing, root: () => this.root, holds: () => this.holds, questions: () => this.questions, runner: () => this.runner, checkKinds: () => this.checkKinds, reviewRounds: () => this.reviewRounds, store: () => this.store, trust: () => this.trust, heavy: () => this.heavy, host: () => this.host, runs: () => this.runs, hosts: () => this.hosts, stacks: () => this.stacks, canvasSide: () => this.canvasSide }), state: () => this.state, mcp: () => this.mcp, delivery: () => this.delivery, transcripts: () => this.transcripts, control: () => this.control, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get stopping() { return readstopping(); }, get overrides() { return readoverrides(); }, get blocked() { return readblocked(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting), get abandoned() { return readabandoned(); }, wakeable, askingNow: () => this.askingNow() } });
   }
   private wireSessionMemory(): void {
     this.memory = new SessionMemory({ decisions: this.providers.decisions, cwdOf: this.providers.knowledge.cwdOf, removal: this.providers.knowledge.removal, settings: this.options, services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, raw: () => this.raw, root: () => this.root, store: () => this.store, wikiBuild: () => this.wikiBuild, confirmer: () => this.confirmer, runner: () => this.runner, durable: () => this.durable }), delivery: () => this.delivery, mcp: () => this.mcp, state: () => this.state, events: { connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { config: () => this.config() } });
@@ -161,7 +161,7 @@ export class Core {
   }
   private wireSessionState(): void {
     const readstopping = () => this.stopping;
-    this.state = new SessionState({ settings: this.options, services: lazyServices({ gate: () => this.gate, asks: () => this.asks, now: () => this.now, record: () => this.record, raw: () => this.raw, transcriptReader: () => this.transcriptReader, stacks: () => this.stacks, replicas: () => this.replicas, archivedSessions: () => this.archivedSessions, archiveSession: () => this.archiveSession, runner: () => this.runner, root: () => this.root, siblings: () => this.siblings, sessionStarts: () => this.sessionStarts, people: () => this.people }), judging: () => this.judging, transcripts: () => this.transcripts, delivery: () => this.delivery, mcp: () => this.mcp, memory: () => this.memory, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra), appendSession: (session, agent, kind, data) => this.appendSession(session, agent, kind, data) }, kernel: { get stopping() { return readstopping(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting) }, forgot: (session) => this.forget(session) });
+    this.state = new SessionState({ settings: this.options, services: lazyServices({ hosts: () => this.hosts, gate: () => this.gate, asks: () => this.asks, now: () => this.now, record: () => this.record, raw: () => this.raw, transcriptReader: () => this.transcriptReader, stacks: () => this.stacks, replicas: () => this.replicas, archivedSessions: () => this.archivedSessions, archiveSession: () => this.archiveSession, runner: () => this.runner, root: () => this.root, siblings: () => this.siblings, sessionStarts: () => this.sessionStarts, people: () => this.people }), judging: () => this.judging, transcripts: () => this.transcripts, delivery: () => this.delivery, mcp: () => this.mcp, memory: () => this.memory, flags: () => this.flags, events: { appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra), appendSession: (session, agent, kind, data) => this.appendSession(session, agent, kind, data) }, kernel: { get stopping() { return readstopping(); } }, schedule: { askingSoon: () => this.askingSoon(), queue: (work, starting) => this.queue(work, starting) }, forgot: (session) => this.forget(session) });
   }
   /** What the core itself keeps of a session it forgot (#1866): its denied calls, its turn's sends, what its questions and its handlers' failures said, and the loop rule's mark. */
   private forget(session: string): void {
@@ -189,6 +189,7 @@ export class Core {
   private now!: () => number;
   private durable!: Durable;
   private spool!: Spool;
+  private spoolAt!: (dir: string, host?: string) => Spool;
   private record!: RecordStore;
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
@@ -408,13 +409,9 @@ export class Core {
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
     this.devices = new Devices(this.root.devices);
     this.confirmer = new Confirmer({ devices: this.devices, key: this.root.confirmKey, ...(options.confirm !== undefined ? { stub: options.confirm } : {}), ...(options.polkit !== undefined ? { polkit: options.polkit } : {}), ...(options.plant ? { plant: options.plant } : {}) });
-    this.spool = new Spool({
-      dir: this.root.spool, held: options.held, plant: options.plant, durable: this.durable, stopping: () => this.stopping,
-      raw: this.raw, appendCore: (kind, data) => this.appendCore(kind, data),
-      tryNetwork: (drafts, meta, tries) => this.tryNetwork(drafts, meta, tries),
-      replay: (drafts, meta) => this.replayed(drafts, meta, true),
-      sync: () => this.record.sync(),
-    });
+    // deep-hook's spool in a folder: this machine's own, or one brought here from a host, whose hooks carry its name (#999).
+    this.spoolAt = (dir, host) => new Spool({ dir, held: options.held, plant: options.plant, durable: this.durable, stopping: () => this.stopping, raw: this.raw, appendCore: (kind, data) => this.appendCore(kind, data), tryNetwork: (drafts, meta, tries) => this.tryNetwork(drafts, meta, tries), replay: (drafts, meta) => this.replayed(drafts, host ? { ...meta, host } : meta, true), sync: () => this.record.sync() });
+    this.spool = this.spoolAt(this.root.spool);
     this.holds = new Holds({
       raw: this.raw, asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
@@ -457,7 +454,7 @@ export class Core {
     });
     this.tasks = new AskTasks({
       spaces: this.spaces, renamedSince: this.providers.workspaces.renamedSince,
-      raw: this.raw, asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work,
+      raw: this.raw, asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work, far: (session) => { const host = this.state.sessionHosts.get(session); return host ? { head: (cwd) => this.hosts.sessions.headOf(host, cwd), bytes: (cwd, path) => this.hosts.sessions.bytesOf(host, cwd, path) } : undefined; },
       github: options.github, forge: options.forge, token: async (signal) => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(signal),
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
       reading: (session, agent, text) => this.appendReading(session, agent, text),
@@ -572,7 +569,7 @@ export class Core {
     });
     this.hosts = new Hosts({
       root: this.root.dir, now: this.now, plant: options.plant, raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan); },
-      append: (kind, data, extra) => this.appendCore(kind, data, extra), raw: this.raw,
+      append: (kind, data, extra) => this.appendCore(kind, data, extra), raw: this.raw, replay: (host, dir) => this.spoolAt(dir, host).replay(), on: (session, host) => void this.state.sessionHosts.set(session, host), unknown: (session, agent) => { const live = this.state.live.get(session); if (live) live.state = 'unknown'; return this.state.attention(session, agent, 'unknown'); },
       // Bytes as the host gave them, so their hash is the hash of what was read there (#1945).
       put: async (bytes, kind, source) => (await this.control.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind, source, redaction: 'complete', license: { name: 'local', allows: [] } }), kind)).sha256,
     });
@@ -1170,6 +1167,8 @@ export class Core {
       taken = lines.length;
     }, 200));
   }
+  /** A host's link came up or went down, or its deep-hook spooled (#999; host-sessions.ts): settles once the host's spool is in the record. */
+  hostLink(host: string, state: 'up' | 'down' | 'spool', why: string): Promise<void> { return this.ready.then(() => this.hosts.sessions.link(host, state, why)); }
   /** The hub's lock file is no longer the one it holds (#909): another hub may start on it, so this one appends nothing more. */
   lockLost(path: string): void {
     this.lost = true;
@@ -1234,7 +1233,7 @@ export class Core {
     if (binaries.length && !binaries.some((b) => b.test(args))) return;
     const [last] = (await this.record.raw(`SELECT ts, json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [session.id, `${OLDER_SET}%`, `${NEWER_SET}%`])) as { ts: number; text: string }[];
     if (!last || last.text.startsWith(NEWER_SET)) return;
-    const started = Date.parse((heldStart && meta.fields?.source !== 'resume' ? heldStart : await this.state.startOf(meta.ppid, true)) ?? '');
+    const started = Date.parse((heldStart && meta.fields?.source !== 'resume' ? heldStart : await this.state.startOf(meta.ppid, true, meta.host)) ?? '');
     if (!(started > last.ts)) return;
     await this.queue(() => this.appendReading(session.id, session.agent, `${NEWER_SET} its process started after the sync its row named, so it loads the MCP servers and skills synced since.`));
   }
@@ -1433,7 +1432,7 @@ export class Core {
     if (early) return early;
     const verified = meta.watchOnly || await this.delivery.tokenTaken(meta) ? false : this.delivery.checked(meta, await this.state.verify(meta));
     // A session's first hook from under a run DeepBuild started (#1330): its start.session first, so its first event names the run.
-    if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent, meta.fields?.model).catch(() => undefined);
+    if (meta.session && !meta.host) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent, meta.fields?.model).catch(() => undefined);
     const unread = Boolean(meta.watchOnly && meta.session && !this.state.versioned.has(meta.session));
     if (unread) {
       this.state.versioned.add(meta.session);
@@ -1675,7 +1674,7 @@ export class Core {
       // The person is the hook connection's, and a session is the person's whose connection first sent its hooks (#1337).
       const actor = meta.person ?? OWNER;
       if (meta.session && !this.state.sessionPeople.has(meta.session)) this.state.sessionPeople.set(meta.session, actor);
-      const connection = this.connection(writer, { ...(meta.session ? { session: meta.session } : {}), agent: meta.agent, verified, actor });
+      const connection = this.connection(writer, { ...(meta.session ? { session: meta.session } : {}), agent: meta.agent, verified, actor, ...(meta.host ? { host: meta.host } : {}) });
       // The tasks a prompt opens are appended after it, as the core.
       return [this.append(connection, {
         v: draft.v, id: draft.id, kind: draft.kind, ts: draft.ts, ...(draft.seq !== undefined ? { seq: draft.seq } : {}), ...(draft.subject ? { subject: draft.subject } : {}), data: data as JsonValue,
@@ -1845,7 +1844,8 @@ export class Core {
         }
       } else if (draft.kind === 'user.ask') {
         // The origin joins the prompt to its transcript entry; one it can't place is unknown and opens no ask.
-        const entry = meta.fields?.prompt_id && session ? (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0] : undefined;
+        // A session on a host (#999) keeps its transcript there: its prompt's entry is read there, and nothing else of it.
+        const entry = !meta.fields?.prompt_id || !session ? undefined : meta.host ? await this.hosts.sessions.promptEntry(meta.host, meta.transcript, meta.fields.prompt_id) : (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0];
         // A Codex subagent's prompt carries the root's session ID with an agent_id: no message of yours, nor the root's turn (#39).
         if (childPrompt(meta)) { data.from = 'subagent'; continue; }
         let from = foreign ? 'unknown' : String(this.mapped(meta, draft, { ...meta.fields }, entry ? [entry] : [])?.from ?? data.from);
