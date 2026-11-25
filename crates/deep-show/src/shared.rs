@@ -27,6 +27,7 @@ use deep_canvas::document::{
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
+use deep_canvas::refs::Name;
 use deep_canvas::registry::Sealed;
 use deep_canvas::show::{
     inline_count, order_issues, truncated, unreadable_handles, whole_diff_by, Writer, WriterKind,
@@ -1110,16 +1111,28 @@ fn damaged_file(doc: &str, layers: &Path, sha: &str, rev: u64) -> Issue {
 /// #1801: each refusal that a removed item's dangling name raised (`ref_unresolved` at one of the
 /// fields naming it, or naming it as its value) gets as its `actual` every row that still names
 /// the item in `doc`, as `refs_to` lists them and in its order, so one refusal names them all.
+/// #3379: a removed control's, the same way, its rows never an item's that shares its ID.
 pub(crate) fn name_referrers(
     refusals: &mut [Issue],
     doc: &Value,
-    removed: &[&str],
+    removed: &[Name],
     sealed: &Sealed,
     planted: Option<Planted>,
 ) {
-    for id in removed {
-        let name = deep_canvas::refs::Name::Item(id.to_string());
-        let refs = deep_canvas::refs::refs_to(doc, sealed, &name);
+    if !refusals.iter().any(|i| i.code == "ref_unresolved") {
+        return;
+    }
+    for name in removed {
+        // The other kind of name the ID may also be: its fields are never this name's.
+        let (id, other) = match name {
+            Name::Item(id) => (id, Name::Control(id.clone())),
+            Name::Control(id) => (id, Name::Item(id.clone())),
+            _ => continue,
+        };
+        let (refs, others): (Vec<_>, Vec<_>) =
+            deep_canvas::refs::refs_to_any(doc, sealed, &[name, &other])
+                .into_iter()
+                .partition(|r| &r.name == name);
         if refs.is_empty() {
             continue;
         }
@@ -1130,11 +1143,13 @@ pub(crate) fn name_referrers(
         if planted == Some(Planted::RefusalNamesFirstRef) {
             rows.truncate(1);
         }
+        let at = |r: &deep_canvas::refs::Ref, issue: &Issue| {
+            issue.path == r.path || issue.path.starts_with(&format!("{}/", r.path))
+        };
         for issue in refusals.iter_mut().filter(|i| i.code == "ref_unresolved") {
-            let at_field = refs
-                .iter()
-                .any(|r| issue.path == r.path || issue.path.starts_with(&format!("{}/", r.path)));
-            if at_field || issue.actual == json!(id) {
+            let at_field = refs.iter().any(|r| at(r, issue));
+            let others = others.iter().any(|r| at(r, issue));
+            if at_field || (issue.actual == json!(id) && !others) {
                 issue.actual = Value::Array(rows.clone());
                 if !issue.ids.iter().any(|x| x == id) {
                     issue.ids.push(id.to_string());

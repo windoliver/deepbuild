@@ -181,15 +181,24 @@ fn manifest_of<'a>(events: &'a [Value], ask: &'a Value) -> Option<&'a str> {
     events
         .iter()
         .filter(|event| event["kind"] == "doc.patched" && event["data"]["doc"] == doc)
-        .filter_map(|event| Some((event["data"]["rev"].as_u64()?, event["data"]["hash"].as_str()?)))
+        .filter_map(|event| {
+            Some((
+                event["data"]["rev"].as_u64()?,
+                event["data"]["hash"].as_str()?,
+            ))
+        })
         .max_by_key(|(rev, _)| *rev)
         .map(|(_, hash)| hash)
 }
 
 /// The document `doc:<id>` a pin to one of its revisions, `doc:<id>@<rev>`, names; none for another pin.
 pub fn pinned_doc(pin: &Value) -> Option<&str> {
-    let at = pin["ref"].as_str().filter(|_| pin["kind"] == "doc_revision")?;
-    at.rsplit_once('@').map(|(doc, _)| doc).filter(|doc| doc.starts_with("doc:"))
+    let at = pin["ref"]
+        .as_str()
+        .filter(|_| pin["kind"] == "doc_revision")?;
+    at.rsplit_once('@')
+        .map(|(doc, _)| doc)
+        .filter(|doc| doc.starts_with("doc:"))
 }
 
 thread_local! {

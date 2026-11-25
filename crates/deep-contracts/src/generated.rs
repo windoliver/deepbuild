@@ -103755,6 +103755,371 @@ impl Contract for TurnUsage {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2V;
+
+impl Contract for TurnUsageV2V {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "2").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("2").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2Kind;
+
+impl Contract for TurnUsageV2Kind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"turn.usage\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"turn.usage\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TurnUsageV2DataCovers {
+    Turn,
+    Session,
+}
+
+impl TurnUsageV2DataCovers {
+    /// Every value, in the schema's order (#2854: the handshake list's newest is its last).
+    pub const ALL: &'static [Self] = &[Self::Turn, Self::Session];
+}
+
+impl Contract for TurnUsageV2DataCovers {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "turn" => Ok(Self::Turn),
+            "session" => Ok(Self::Session),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Turn => "turn",
+            Self::Session => "session",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2DataTokens {
+    pub input: i64,
+    pub cached: i64,
+    pub output: i64,
+    pub exact: bool,
+    pub cache_write_5m: i64,
+    pub cache_write_1h: i64,
+}
+
+impl Contract for TurnUsageV2DataTokens {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["input", "cached", "output", "exact", "cache_write_5m", "cache_write_1h"])?;
+        deep_contracts::check_member(members, at, "input", &RULE_4)?;
+        deep_contracts::check_member(members, at, "cached", &RULE_4)?;
+        deep_contracts::check_member(members, at, "output", &RULE_4)?;
+        deep_contracts::check_member(members, at, "cache_write_5m", &RULE_4)?;
+        deep_contracts::check_member(members, at, "cache_write_1h", &RULE_4)?;
+        Ok(Self {
+            input: deep_contracts::required(members, at, "input")?,
+            cached: deep_contracts::required(members, at, "cached")?,
+            output: deep_contracts::required(members, at, "output")?,
+            exact: deep_contracts::required(members, at, "exact")?,
+            cache_write_5m: deep_contracts::required(members, at, "cache_write_5m")?,
+            cache_write_1h: deep_contracts::required(members, at, "cache_write_1h")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("input".to_string(), self.input.to_json()));
+        members.push(("cached".to_string(), self.cached.to_json()));
+        members.push(("output".to_string(), self.output.to_json()));
+        members.push(("exact".to_string(), self.exact.to_json()));
+        members.push(("cache_write_5m".to_string(), self.cache_write_5m.to_json()));
+        members.push(("cache_write_1h".to_string(), self.cache_write_1h.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2DataCostReportedBasis;
+
+impl Contract for TurnUsageV2DataCostReportedBasis {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"reported\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"reported\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2DataCostReported {
+    pub basis: TurnUsageV2DataCostReportedBasis,
+    pub usd: f64,
+}
+
+impl Contract for TurnUsageV2DataCostReported {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["basis", "usd"])?;
+        deep_contracts::check_member(members, at, "usd", &RULE_63)?;
+        Ok(Self {
+            basis: deep_contracts::required(members, at, "basis")?,
+            usd: deep_contracts::required(members, at, "usd")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("basis".to_string(), self.basis.to_json()));
+        members.push(("usd".to_string(), self.usd.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2DataCostEstimatedBasis;
+
+impl Contract for TurnUsageV2DataCostEstimatedBasis {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"estimated\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"estimated\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2DataCostEstimatedAtLeast;
+
+impl Contract for TurnUsageV2DataCostEstimatedAtLeast {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "true").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("true").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2DataCostEstimated {
+    pub basis: TurnUsageV2DataCostEstimatedBasis,
+    pub usd: f64,
+    pub rate_card: String,
+    pub at_least: Option<TurnUsageV2DataCostEstimatedAtLeast>,
+}
+
+impl Contract for TurnUsageV2DataCostEstimated {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["basis", "usd", "rate_card", "at_least"])?;
+        deep_contracts::check_member(members, at, "usd", &RULE_63)?;
+        deep_contracts::check_member(members, at, "rate_card", &RULE_6)?;
+        Ok(Self {
+            basis: deep_contracts::required(members, at, "basis")?,
+            usd: deep_contracts::required(members, at, "usd")?,
+            rate_card: deep_contracts::required(members, at, "rate_card")?,
+            at_least: deep_contracts::optional(members, at, "at_least")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("basis".to_string(), self.basis.to_json()));
+        members.push(("usd".to_string(), self.usd.to_json()));
+        members.push(("rate_card".to_string(), self.rate_card.to_json()));
+        if let Some(value) = &self.at_least {
+            members.push(("at_least".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2DataCostUnpricedBasis;
+
+impl Contract for TurnUsageV2DataCostUnpricedBasis {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"unpriced\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"unpriced\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2DataCostUnpriced {
+    pub basis: TurnUsageV2DataCostUnpricedBasis,
+}
+
+impl Contract for TurnUsageV2DataCostUnpriced {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["basis"])?;
+        Ok(Self {
+            basis: deep_contracts::required(members, at, "basis")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("basis".to_string(), self.basis.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TurnUsageV2DataCost {
+    Reported(TurnUsageV2DataCostReported),
+    Estimated(TurnUsageV2DataCostEstimated),
+    Unpriced(TurnUsageV2DataCostUnpriced),
+}
+
+impl Contract for TurnUsageV2DataCost {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "basis")?.as_str() {
+            "\"reported\"" => Ok(Self::Reported(<TurnUsageV2DataCostReported as Contract>::from_json(value, at)?)),
+            "\"estimated\"" => Ok(Self::Estimated(<TurnUsageV2DataCostEstimated as Contract>::from_json(value, at)?)),
+            "\"unpriced\"" => Ok(Self::Unpriced(<TurnUsageV2DataCostUnpriced as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/basis")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Reported(inner) => inner.to_json(),
+            Self::Estimated(inner) => inner.to_json(),
+            Self::Unpriced(inner) => inner.to_json(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2DataContext {
+    pub used: i64,
+    pub window: i64,
+}
+
+impl Contract for TurnUsageV2DataContext {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["used", "window"])?;
+        deep_contracts::check_member(members, at, "used", &RULE_4)?;
+        deep_contracts::check_member(members, at, "window", &RULE_5)?;
+        Ok(Self {
+            used: deep_contracts::required(members, at, "used")?,
+            window: deep_contracts::required(members, at, "window")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("used".to_string(), self.used.to_json()));
+        members.push(("window".to_string(), self.window.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2Data {
+    pub turn: String,
+    pub model: String,
+    pub covers: TurnUsageV2DataCovers,
+    pub tokens: TurnUsageV2DataTokens,
+    pub cost: TurnUsageV2DataCost,
+    pub context: Option<TurnUsageV2DataContext>,
+}
+
+impl Contract for TurnUsageV2Data {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["turn", "model", "covers", "tokens", "cost", "context"])?;
+        deep_contracts::check_member(members, at, "turn", &RULE_6)?;
+        deep_contracts::check_member(members, at, "model", &RULE_6)?;
+        Ok(Self {
+            turn: deep_contracts::required(members, at, "turn")?,
+            model: deep_contracts::required(members, at, "model")?,
+            covers: deep_contracts::required(members, at, "covers")?,
+            tokens: deep_contracts::required(members, at, "tokens")?,
+            cost: deep_contracts::required(members, at, "cost")?,
+            context: deep_contracts::optional(members, at, "context")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("turn".to_string(), self.turn.to_json()));
+        members.push(("model".to_string(), self.model.to_json()));
+        members.push(("covers".to_string(), self.covers.to_json()));
+        members.push(("tokens".to_string(), self.tokens.to_json()));
+        members.push(("cost".to_string(), self.cost.to_json()));
+        if let Some(value) = &self.context {
+            members.push(("context".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnUsageV2 {
+    pub v: TurnUsageV2V,
+    pub id: String,
+    pub kind: TurnUsageV2Kind,
+    pub subject: String,
+    pub writer: String,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: TurnUsageV2Data,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for TurnUsageV2 {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_81)?;
+        deep_contracts::check_member(members, at, "writer", &RULE_99)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::required(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("subject".to_string(), self.subject.to_json()));
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct UserAskV;
 
 impl Contract for UserAskV {
@@ -110688,6 +111053,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "transcript.archived@3" => <TranscriptArchivedV3 as Contract>::from_json(&value, "")?.to_json(),
         "transcript.archived@4" => <TranscriptArchivedV4 as Contract>::from_json(&value, "")?.to_json(),
         "turn.usage@1" => <TurnUsage as Contract>::from_json(&value, "")?.to_json(),
+        "turn.usage@2" => <TurnUsageV2 as Contract>::from_json(&value, "")?.to_json(),
         "user.ask@1" => <UserAsk as Contract>::from_json(&value, "")?.to_json(),
         "user.ask@2" => <UserAskV2 as Contract>::from_json(&value, "")?.to_json(),
         "variant.spent@1" => <VariantSpent as Contract>::from_json(&value, "")?.to_json(),
