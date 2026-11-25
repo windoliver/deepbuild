@@ -1,11 +1,11 @@
 {
  "criterion": "#3242.28fd1eed",
- "who": "The owner's coding agent, which drafted the text, on the owner's word in the session (\"close the issue\"), as #1336's and #1352's calls were made",
- "when": "2026-11-24T06:33:52Z",
+ "who": "The owner's coding agent, on the owner's word in the session (\"whatever you recommend\"), as the first call on this text was made",
+ "when": "2026-11-25T13:39:12Z",
  "text": {
   "file": "docs/technical-design.md",
-  "sha256": "9bf7be86b492308d51139b11560362c0a1695e1a6dd94e416a0d7bdab08cfe52"
+  "sha256": "410a5f202c0bd305acbc90ecde351663d69ea45cf62f2b98e292580737478313"
  },
  "call": "reads_right",
- "note": "Read whole against the issue's four Scope decisions: each is answered in one item of One hub for a project with its own Not taken, in the issue's words, and agrees with that section's six earlier decisions, the learned layer's quote, scope and audit rules, and Privacy. The four Decided rows say the same in short, each with what reopens it. Three things go past the issue's draft answers: the audit ask is never sent on to a second person, a change whose quote check hasn't been reported isn't applied, and the four Reopens-if cells. The agent that makes this call also drafted the text, so it stands until a person on the project reads it: the others are told on #3242 and can overrule it."
+ "note": "Made again because #3400 changed text the first call was bound to. That call, made 2026-11-24T06:33:52Z on 9bf7be86b492308d51139b11560362c0a1695e1a6dd94e416a0d7bdab08cfe52, was on 11 lines. #3400 adds a clause to one of them, the learned layer's item On a project's hub, and adds four lines this issue's suite also reads because they speak of the audit: two decisions in One hub for a project, what a miss freezes and whose count, and their two Decided rows. The other ten lines are as they were. Read whole, the 15 lines still answer #3242's four decisions as the first call found them, and the added lines contradict none of them. The agent that makes this call drafted #3400's lines, so it stands until a person on the project reads it: the others are told on #3242 and can overrule it."
 }
