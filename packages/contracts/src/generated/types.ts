@@ -11599,6 +11599,25 @@ export interface SessionReading {
   evidence?: Array<string>;
 }
 
+/** session.reading@2 */
+export interface SessionReadingV2 {
+  v: 2;
+  id: string;
+  kind: "session.reading";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reading: string;
+    code: "hooks_cant_run" | "hooks_run_again" | "watch_only" | "denied_ran_anyway" | "mods_watch" | "mods_gone" | "ran_unleased" | "stop_not_held" | "monitor_waiting" | "monitor_ended" | "interrupted" | "older_set" | "newer_set" | "other";
+  };
+  evidence?: Array<string>;
+}
+
 /** session.rules_delivered@1 */
 export interface SessionRulesDelivered {
   v: 1;
@@ -11765,6 +11784,26 @@ export interface SessionStateV2 {
   data: {
     state: "needs you" | "stuck" | "flagged" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "stale" | "says done" | "working" | "queued" | "PASS" | "finished" | "quiet";
     cause: "ask" | "gone" | "waiting" | "words" | "stuck" | "promised" | "failed" | "sent_back" | "blocked" | "invalid" | "inconclusive" | "stale" | "says_done" | "working" | "queued" | "pass" | "interrupted" | "finished" | "quiet";
+  };
+  evidence?: Array<string>;
+}
+
+/** session.state@3 */
+export interface SessionStateV3 {
+  v: 3;
+  id: string;
+  kind: "session.state";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    state: "needs you" | "stuck" | "flagged" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "stale" | "says done" | "working" | "queued" | "PASS" | "finished" | "quiet";
+    cause: "ask" | "gone" | "waiting" | "words" | "stuck" | "promised" | "failed" | "sent_back" | "blocked" | "invalid" | "inconclusive" | "stale" | "says_done" | "working" | "queued" | "pass" | "interrupted" | "finished" | "quiet";
+    entry: "idle" | "running" | "pass" | "fail" | "blocked" | "invalid" | "inconclusive" | "needs_you" | "stale";
   };
   evidence?: Array<string>;
 }

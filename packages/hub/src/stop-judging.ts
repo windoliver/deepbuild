@@ -716,7 +716,7 @@ export class StopJudging {
       // A claim the agent stopped on again is told once, and said once.
       if (slowClaims.includes(claim)) return;
       slowClaims.push(claim);
-      await this.options.events.appendReading(meta.session, meta.agent, `This stop isn't held: ${why}. Its verdict comes with your next message.`).catch(() => undefined);
+      await this.options.events.appendReading(meta.session, meta.agent, `This stop isn't held: ${why}. Its verdict comes with your next message.`, undefined, 'stop_not_held').catch(() => undefined);
     };
     // Something already sends the agent on: the turn isn't ending, so no slow check starts.
     const waiting = () => this.options.schedule.queue(() => this.options.delivery().answers.waitingFor(meta.session));
@@ -890,9 +890,9 @@ export class StopJudging {
     if (!live || !b?.watch) return;
     live.background.delete(id);
     if (live.state === 'working') return;
-    await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, `Its monitor ${backgrounded([b.what])} ended: ${why}.`)).catch(() => undefined);
+    await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, `Its monitor ${backgrounded([b.what])} ended: ${why}.`, undefined, 'monitor_ended')).catch(() => undefined);
     // Another watch still running keeps the row waiting on it; a wake that began a turn meanwhile is judged at its stop.
-    if (watching(live).length) return void await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, waitingOn(watching(live)))).catch(() => undefined);
+    if (watching(live).length) return void await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, waitingOn(watching(live)), undefined, 'monitor_waiting')).catch(() => undefined);
     await this.judgeEnded(session);
   }
 
@@ -1098,7 +1098,7 @@ export class StopJudging {
         this.watchOnlyClaims.add(r.claim);
         if (!this.toldUntrusted.has(r.session)) {
           this.toldUntrusted.add(r.session);
-          await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${[...new Set([...spec.map((c) => c.check), ...releaseNames])].join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`).catch(() => undefined);
+          await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${[...new Set([...spec.map((c) => c.check), ...releaseNames])].join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`, undefined, 'watch_only').catch(() => undefined);
           await this.options.flags().watchOnly(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', 'checks', true);
         }
       }

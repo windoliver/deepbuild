@@ -90,7 +90,7 @@ export function jobRow(job: RunningJob): Row {
 }
 
 /** Each state of the one reading, with the states table's word and status-map entry (crates/deep-app/src/states.rs: TABLE). */
-const ENTRY: Record<Reading['state'], string> = {
+export const ENTRY: Record<Reading['state'], string> = {
   'needs you': 'needs_you', stuck: 'blocked', flagged: 'fail', 'sent back': 'fail', BLOCKED: 'blocked', INVALID: 'invalid', INCONCLUSIVE: 'inconclusive', stale: 'stale',
   'says done': 'running', working: 'running', queued: 'idle', PASS: 'pass', finished: 'idle', quiet: 'idle',
 };
