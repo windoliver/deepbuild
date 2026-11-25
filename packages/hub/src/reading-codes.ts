@@ -39,7 +39,8 @@ const LEGACY: readonly [(t: string) => string, ReadingCode][] = [
   [(t) => like(t, "This stop isn't held%"), 'stop_not_held'],
   [(t) => like(t, 'Waiting on its monitor%'), 'monitor_waiting'],
   [(t) => like(t, 'Its monitor%'), 'monitor_ended'],
-  [(t) => like(t, 'Interrupt:%'), 'interrupted'],
+  // Codex's Interrupt before #3430, and after it any hook's interrupted turn: the words right after the hook's name.
+  [(t) => `${like(t, 'Interrupt:%')} OR (instr(${t}, ': you interrupted this turn') > 0 AND instr(${t}, ': you interrupted this turn') = instr(${t}, ': '))`, 'interrupted'],
   [(t) => starts(t, OLDER_SET), 'older_set'],
   [(t) => starts(t, NEWER_SET), 'newer_set'],
 ];
