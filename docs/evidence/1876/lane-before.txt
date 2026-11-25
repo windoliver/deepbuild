@@ -1,4 +1,4 @@
-# At 501534ea6 (main before this change, the merge base): git archive of AGENTS.md, scripts/, docs/*.md and
+# At b48a47db7 (main before this change, the merge base): git archive of AGENTS.md, scripts/, docs/*.md and
 # the files the checks read into a scratch folder, this change's scripts/design-links.mjs and scripts/design-drift.mjs
 # laid over it, and the open issues as gh listed them on November 24 (1,160).
 $ DEEP_OPEN_ISSUES=open-issues.json node scripts/design-links.mjs
