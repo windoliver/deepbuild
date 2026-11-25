@@ -1,7 +1,0 @@
-{
-  "id": "test/env-swap",
-  "version": "1.0.0",
-  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
-  "environments": ["swap"],
-  "requires": { "preview": ["deep.registerEnvironment"] }
-}
