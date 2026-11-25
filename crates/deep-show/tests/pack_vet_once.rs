@@ -31,11 +31,19 @@ fn a_checked_pack_version_is_not_checked_again_on_a_later_call() {
         let start = Instant::now();
         writeln!(input, "{line}").expect("the core reads");
         let reply = output.next().expect("a reply").expect("a line");
-        (serde_json::from_str(&reply).expect("JSON"), start.elapsed().as_secs_f64())
+        (
+            serde_json::from_str(&reply).expect("JSON"),
+            start.elapsed().as_secs_f64(),
+        )
     };
     let packs = json!([{"id": "deepbuild/lanes", "dir": repo.join("packs/lanes-1.0.0")}]);
-    let world = json!({"evidence": evidence, "sessions": {}, "record": {}, "docs": {}, "packs": packs});
-    assert_eq!(send(json!({"world": world})).0["ok"], true, "the core takes the world");
+    let world =
+        json!({"evidence": evidence, "sessions": {}, "record": {}, "docs": {}, "packs": packs});
+    assert_eq!(
+        send(json!({"world": world})).0["ok"],
+        true,
+        "the core takes the world"
+    );
     let call = json!({"call": {"call": "packs"}});
 
     // A row's `checks` counts this call's store's runs, so only the rest is compared.
@@ -45,11 +53,18 @@ fn a_checked_pack_version_is_not_checked_again_on_a_later_call() {
     };
     let (first, first_s) = send(call.clone());
     let row = held(&first);
-    assert_eq!(row[0], "installed", "the first call checks and installs lanes: {first}");
+    assert_eq!(
+        row[0], "installed",
+        "the first call checks and installs lanes: {first}"
+    );
     let mut later = Vec::new();
     for _ in 0..3 {
         let (again, s) = send(call.clone());
-        assert_eq!(held(&again), row, "a later call changed lanes' row: {again}");
+        assert_eq!(
+            held(&again),
+            row,
+            "a later call changed lanes' row: {again}"
+        );
         later.push(s);
     }
     let fastest = later.iter().cloned().fold(f64::INFINITY, f64::min);
