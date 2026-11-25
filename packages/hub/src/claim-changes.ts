@@ -18,12 +18,20 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
   // A read that fails is recorded unless `missing` allows it (a file the base never had); either way it lists nothing.
   const git = (args: string[], missing = false): Promise<string[]> => new Promise((done) => {
     const left = Math.max(1, Math.ceil(deadline - Date.now()));
-    execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, env, maxBuffer: 1 << 30, timeout: left, killSignal: 'SIGKILL' }, (error, out, err) => {
-      if (error && !(missing && !error.killed)) {
+    // Kept as bytes, split by line: up to 1 GB is more than one string holds.
+    execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, env, encoding: 'buffer', maxBuffer: 1 << 30, timeout: left, killSignal: 'SIGKILL' }, (error, out, err) => {
+      if (error && !(missing && !error.killed && /does not exist in|exists on disk, but not in/.test(String(err)))) {
         const why = (error as { code?: unknown }).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'gave more than 1 GB' : error.killed ? `timed out, past the read's ${Math.ceil(ms)} ms deadline` : `failed: ${String(err).trim().split('\n')[0] || error.message}`;
         unread.push(`git ${args.join(' ')} ${why}`);
       }
-      done(error ? [] : out.split('\n').filter(Boolean));
+      const lines: string[] = [];
+      for (let at = 0; !error && at < out.length;) {
+        const end = out.indexOf(10, at);
+        const line = out.toString('utf8', at, end < 0 ? out.length : end);
+        if (line) lines.push(line);
+        at = end < 0 ? out.length : end + 1;
+      }
+      done(lines);
     });
   });
   const [diff, others, tracked] = await Promise.all([git(['diff', '--name-only', '--no-renames', base]), git(['ls-files', '--others', '--exclude-standard']), git(['ls-files'])]);
