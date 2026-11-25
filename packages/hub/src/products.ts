@@ -116,18 +116,26 @@ export function cloneTree(src: string, dst: string): Promise<{ cloned: true } | 
 }
 
 /**
- * Clones `src` to `dst` as cloneTree does, or copies it where the file system can't clone, such as ext4 (#3377): a
- * check's stack takes and keeps its install and caches either way, as the design's checkout does, never linked. Why
- * neither worked, or nothing. A session's worktree is handed clones only.
+ * Clones `src` to `dst`, or copies it where the file system can't clone, such as ext4 (#3377): a check's stack takes
+ * and keeps its install and caches either way, as the design's checkout does, never linked. A copy that would leave the
+ * volume under the disk floor isn't made. Why neither was, or nothing. A session's worktree is handed clones only.
  */
-function cloneOrCopy(src: string, dst: string): Promise<string | undefined> {
-  return cloneTree(src, dst).then((r) => (r.cloned ? undefined : new Promise((done) => {
-    execFile('cp', ['-a', src, dst], { timeout: 600_000 }, (error, _out, err) => {
+async function cloneOrCopy(src: string, dst: string): Promise<string | undefined> {
+  if (process.platform === 'darwin') {
+    const r = await cloneTree(src, dst);
+    if (r.cloned) return undefined;
+  }
+  // Linux's cp clones where the file system can and copies otherwise, in one pass.
+  const free = freeBytes(dirname(dst));
+  const bytes = await sizeOf(src);
+  if (free - bytes < DISK_FLOOR) return `a copy of ${gb(bytes)} would leave the volume under the ${gb(DISK_FLOOR)} disk floor (${gb(free)} free)`;
+  return new Promise((done) => {
+    execFile('cp', ['-a', ...(process.platform === 'linux' ? ['--reflink=auto'] : []), src, dst], { timeout: 600_000 }, (error, _out, err) => {
       if (!error) return done(undefined);
       try { rmSync(dst, { recursive: true, force: true }); } catch { /* best effort */ }
-      done(`${r.why}; copy: ${String(err).trim() || error.message}`);
+      done(`copy: ${String(err).trim() || error.message}`);
     });
-  })));
+  });
 }
 
 /** The bytes a folder's files hold, and their count. */
