@@ -36,3 +36,4 @@
 - `mac-r3-cd2f6f8b3/fix-1172-rows.txt`: BLOCKED, not a result. Both tests say "deep-app showed no window in 180000 ms": the Mac's screen was locked with the owner away.
 - `mac-r4-1172/` (MacBook Pro, 2026-11-25, fresh clone at the head 4c3d87aaa, screen unlocked, load 12–30): **#1172 AC3 (`rows.test.ts`) passes 2 of 2**, the real program and its wrong-program plant.
 - `guard-4c3d87aaa.txt`: the proof guard at 4c3d87aaa: PASS (14 commits).
+- The owner approved a8af93238 (the three captures): tag `deep/approved/a8af93238c37-sk`, signed on the MacBook Pro. It names all three files, and `git verify-tag` against the merge base's `.deepbuild/approvers` reads `Good "git" signature for JingW6` (SHA256:MZiEdemq6cH5Vx+5ZRdBEnHEW4G+PKJ/7PpXQwkkcho).
