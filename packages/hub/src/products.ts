@@ -126,7 +126,8 @@ async function cloneOrCopy(src: string, dst: string): Promise<string | undefined
     if (r.cloned) return undefined;
   }
   // Linux's cp clones where the file system can and copies otherwise, in one pass.
-  const free = freeBytes(dirname(dst));
+  let free: number;
+  try { free = freeBytes(dirname(dst)); } catch (error) { return `copy: ${(error as Error).message}`; }
   const bytes = await sizeOf(src);
   if (free - bytes < DISK_FLOOR) return `a copy of ${gb(bytes)} would leave the volume under the ${gb(DISK_FLOOR)} disk floor (${gb(free)} free)`;
   return new Promise((done) => {
@@ -393,6 +394,9 @@ export class Products {
     await this.ready;
     const repo = await this.repoId(worktree);
     if (!repo || !existsSync(src)) return;
+    // Held already: nothing to clone or copy.
+    const held = this.found(repo, name, key);
+    if (held) { held.used = this.o.now(); this.save(); return; }
     const stage = join(this.store, '.building', `${repo}-${name}-${randomBytes(4).toString('hex')}`);
     const dst = join(stage, 'src', path);
     mkdirSync(dirname(dst), { recursive: true });
