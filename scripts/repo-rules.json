@@ -1236,6 +1236,10 @@
         "miniz_oxide": {
           "spec": "^0.9",
           "why": "Issue #2892: the player's prebuilt module sets stored as gzip once per build, by the export's own compressor (src/export/gzip.rs); both already in the lockfile."
+        },
+        "ignore": {
+          "spec": "^0.4",
+          "why": "Issue #3299: the build script's source digest skips what the workspace's .gitignore names, by git's own rules; already in the lockfile."
         }
       },
       "dependencies": {
@@ -3256,6 +3260,30 @@
         "wasmparser": {
           "spec": "=0.263.0",
           "why": "Issue #851's blind suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/2700/probe/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../../../crates/deep-canvas",
+          "why": "Issue #2700: the acceptance probe calls the canvas core's public entry, built from each checkout's own copy; test-only, outside the workspace."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2700: the probe prints what it saw as one JSON line, with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
+        }
+      }
+    },
+    "tests/acceptance/2700/probe-reached/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../../../crates/deep-canvas",
+          "why": "Issue #2700: the acceptance probe calls the canvas core's public entry, built from each checkout's own copy; test-only, outside the workspace."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2700: the probe prints what it saw as one JSON line, with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
         }
       }
     }

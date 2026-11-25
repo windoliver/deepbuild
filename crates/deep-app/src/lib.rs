@@ -67,6 +67,7 @@ pub mod panel_check;
 #[cfg(feature = "panel-check")]
 pub mod panel_keys;
 pub mod panel_module;
+pub mod panel_rules;
 pub mod panel_tree;
 pub mod panel_values;
 pub mod pictures;
@@ -392,6 +393,16 @@ pub fn init(cx: &mut App) {
     cx.set_reduce_motion(
         objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion(),
     );
+    // Tab with nothing focused goes to the window's first tab stop (#3233). The toolkit binds Tab under its root's
+    // key context, which a window with no focus never reaches, so no key could reach a panel's press from there.
+    cx.intercept_keystrokes(|event, window, cx| {
+        let tab = event.keystroke.key == "tab" && !event.keystroke.modifiers.modified();
+        if tab && window.focused(cx).is_none() {
+            window.focus_next(cx);
+            cx.stop_propagation();
+        }
+    })
+    .detach();
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")
@@ -402,8 +413,58 @@ pub fn init(cx: &mut App) {
 
 /// Loads a panel directory's `main.js` and mounts its view. A panel loads nothing from the network: one whose
 /// gpui-shell manifest lists a Git dependency is refused before gpui-shell reads it, so nothing is fetched (#326). A
-/// panel that imports the toolkit, or a name off the panel catalog, is refused before it loads too (#1425).
+/// panel that imports the toolkit, or a name off the panel catalog, is refused before it loads too (#1425). So is
+/// one whose first tree breaks a rule of `panel@1`'s current revision (#3233): a press with no name or no key, or
+/// text under the ink floor on its fill. A panel its installer recorded against an earlier revision still loads.
 pub fn mount_panel(
+    runtime: &Rc<ShellRuntime>,
+    dir: &Path,
+    window: &mut Window,
+    cx: &mut App,
+) -> anyhow::Result<Entity<ScriptView>> {
+    let view = mount_panel_unheld(runtime, dir, window, cx)?;
+    if panel_rules::held_to(dir) >= panel_rules::REVISION {
+        draw_once(&view, window, cx)?;
+        if let Some(finding) = panel_rules::of_view(&view, cx).into_iter().next() {
+            anyhow::bail!("{}", finding.text);
+        }
+    }
+    Ok(view)
+}
+
+/// A script builds its tree only when a frame draws its view, so the view is drawn once in a window of its own that
+/// is never shown, of the size of the window it loads into: a panel is checked before it shows.
+fn draw_once(view: &Entity<ScriptView>, window: &Window, cx: &mut App) -> anyhow::Result<()> {
+    struct Once(Entity<ScriptView>);
+    impl Render for Once {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(self.0.clone())
+        }
+    }
+    let options = WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(Bounds {
+            origin: Point::default(),
+            size: window.viewport_size(),
+        })),
+        focus: false,
+        show: false,
+        ..Default::default()
+    };
+    let drawn = view.clone();
+    let scratch: AnyWindowHandle = cx
+        .open_window(options, |_, cx| cx.new(|_| Once(drawn)))?
+        .into();
+    cx.update_window(scratch, |_, scratch, cx| {
+        scratch.refresh();
+        scratch.draw(cx).clear(cx);
+        scratch.remove_window();
+    })
+}
+
+/// The panel host's load (#358): the panel loaded and mounted as [`mount_panel`] does, its trees held by the app
+/// that reads them, `panel-check`, and not here. A replica's `launch` loads a panel this way too: the UI check draws
+/// a panel to say what is wrong with it, a control with no name among it, so the loader's refusal mustn't come first.
+pub fn mount_panel_unheld(
     runtime: &Rc<ShellRuntime>,
     dir: &Path,
     window: &mut Window,

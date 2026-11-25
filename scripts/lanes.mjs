@@ -40,6 +40,12 @@ alone.push('tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-re
 slow.push('tests/acceptance/3178/suites.test.ts');
 slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
 
+// #1876: the design links lane compares the design with files on main, which #2339's first draft doesn't copy into its
+// scratch tree, so its planted tests stop at their control (tests/acceptance/2339/redraft-1876/DISPUTE.md). On the
+// owner's ruling ("Dispute and redraft", Nov 25) its four files, kept as written, run by hand, and their blind redraft,
+// which copies the whole tree, runs in their place.
+byHand.push(...['ac1-planted', 'ac2-invariants', 'ac3-checks', 'ac4-canvas'].map((file) => `tests/acceptance/2339/${file}.test.mjs`));
+
 /**
  * Why each `alone` entry is alone (#3066; docs/parallel-proof.md, section 7), one reason an entry: `binary`, a sibling's
  * cargo build rewrites a binary under it (its files start cargo, read target/, or start a hub, which runs deep-hook

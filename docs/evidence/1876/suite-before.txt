@@ -1,0 +1,38 @@
+# At b48a47db7 (main before this change, the merge base): git archive of what the suite's own scratch copy holds (the
+# top-level files, scripts/, packages/cli/src, packages/contracts, packages/record/src, packages/proof/src, docs/*.md,
+# adapters/*.json and the two crate files) into a scratch folder, tests/acceptance/1876/ laid in unchanged, then the
+# suite. A direct run: the before lane got no bay pair within its 30 minutes (the pull request says so). Each test
+# fails at its own assertion, and each line under a test is the first line of one of its problems.
+$ node --test 'tests/acceptance/1876/*.test.mjs'
+✖ AC1 #1876.eb3b3c11 the CLI row names every command `deep --help` lists, and a planted usage line for a command the design lacks fails the design links lane, naming it
+    the CLI row (docs/technical-design.md:510) doesn't name 7 of the commands `deep --help` lists in packages/cli/src/main.ts: host, land, work, person, library, pack, job
+    the lane passed a planted usage line for `deep ghost` in packages/cli/src/main.ts, a command the CLI row doesn't name
+✖ AC1 #1876.eb3b3c11 the CLI row names no `claim`, and a planted copy of the row that names it fails the design links lane, naming `claim`
+    the lane passed a planted copy of the CLI row that names `claim` (docs/technical-design.md:510)
+✖ AC2 #1876.4ae35244 the Extension API block names every method of packages/contracts/extension-api.json, and a planted `deep.ghost` entry fails the design links lane, naming it
+    the Extension API block (docs/technical-design.md:380 to 459) doesn't name 2 of the methods in packages/contracts/extension-api.json: deep.schedule.read, deep.source.ask
+    the lane passed a planted `deep.ghost` entry in packages/contracts/extension-api.json
+✖ AC3 #1876.93b6ae42 the Hub slots table has a row for every method and variant of packages/contracts/hub-slots.json, and a planted row for `deep.registerGhost` fails the design links lane, naming it
+    the lane passed a planted row for `deep.registerGhost` in packages/contracts/hub-slots.json
+✖ AC4 #1876.281ab39b the Codex flag in the DeepBuild's own jobs line equals the `-s` value of readOnlyJob.args in adapters/codex.facts.json, and a planted facts file with `-s read-only` fails the design links lane, naming the flag
+    the lane passed a planted adapters/codex.facts.json whose launch.readOnlyJob.args has `-s read-only`
+✖ AC5 #1876.8616fced the Proof check kind names `lake comparator` and Kani, and a planted copy of the bullet without Kani fails the design links lane, naming the bullet
+    the lane passed a planted copy of the Proof bullet without Kani (docs/technical-design.md:844)
+✖ AC6 #1876.19d18fbd the Lifecycles list names exactly the objects with a `*.machine@*.json` table in packages/contracts/schemas, and a planted `ghost.machine@1.json` fails the design links lane, naming `ghost`
+    the lane passed a planted packages/contracts/schemas/ghost.machine@1.json
+✖ AC7 #1876.a2923be3 the two ready rules both say a blocker on the baseline list of issues closed before the gate satisfies a blocked-by link, and a planted copy of line 40 without it fails the design links lane, naming the bullet
+    the lane passed a planted copy of the bullet that starts "- In R6: playbooks (" without the baseline list (docs/technical-design.md:57)
+✖ AC8 #1876.23de0760 no line of the design says a complete game takes the engine project route as its only route, and a planted copy of line 2092's old sentence fails the design links lane, naming the line
+    docs/technical-design.md:712 says a complete game takes the engine project route as its only route: "complete game goes through an engine project instead"
+    the lane passed a planted copy of line 2092's old sentence, "Complete games take the engine project route …" (docs/technical-design.md:2166)
+✖ AC8 #1876.23de0760 the Decided row for bounded games names the canvas game shell, and a planted copy of the row without it fails the design links lane
+    the lane passed a planted copy of the Decided row "Bounded games on the canvas" that names no game shell (docs/technical-design.md:2955)
+✖ AC9 #1876.6bec2ce3 the events table names every column packages/record/src/index.ts creates, and a planted column in the record's table fails the design links lane, naming it
+    the lane passed a planted column `ghost` in the events table packages/record/src/index.ts creates
+✖ AC9 #1876.6bec2ce3 the hook protocol's ack and reply carry `v`, and a planted copy of the ack, or of the reply, without it fails the design links lane
+    the lane passed a planted copy of the hook protocol's ack without `v` (docs/technical-design.md:363: { "ack": "01K74FKZVK8Q2X5R7M3N9P4T6W", "hold_until_ms": null })
+    the lane passed a planted copy of the hook protocol's reply without `v` (docs/technical-design.md:366: { "exit": 0, "stdout": "{\"hookSpecificOutput\":{…}}", "stderr": "" })
+ℹ tests 12
+ℹ pass 0
+ℹ fail 12
+ℹ skipped 0
