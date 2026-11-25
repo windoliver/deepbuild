@@ -235,7 +235,7 @@ export class HumanAnswers {
     if (!cwd || pinned?.kind !== 'commit') return;
     const git = (...args: string[]) => new Promise<string>((done) => execFile('git', ['-C', cwd, ...args], { timeout: 2000 }, (_, out) => done(String(out ?? '').trim())));
     const commits = (await git('rev-list', '--reverse', `${pinned.ref}..HEAD`)).split('\n').filter(Boolean);
-    this.options.delivery().switches.set(handle.slice(4), commits.map((c) => c.slice(0, 7)));
+    this.options.delivery().switches.set(handle.slice(4), { session, commits: commits.map((c) => c.slice(0, 7)) });
     const head = await git('rev-parse', 'HEAD^{tree}');
     await this.options.events.appendReading(session, this.options.state().sessions.get(session)!.agent, `Switched ${handle}: tree ${head}`);
   }

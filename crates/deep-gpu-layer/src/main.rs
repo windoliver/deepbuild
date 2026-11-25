@@ -396,6 +396,8 @@ pub enum Planted {
     HalftonePopTakesDotPasses,
     InkFillFlat,
     RimKeepsFirst,
+    /// #1857's wrong program: a look's check admits a line profile's break of 0, and draws it.
+    ProfileAdmitsZeroBreaks,
     /// #1561's wrong programs (tests/acceptance/1561/README.md: Planted programs): a live window
     /// that hands a 2D document's frames no page and none of its look's drawn fields; and a
     /// frame that reuses the last frame's marks drawn with no page.
@@ -890,6 +892,7 @@ impl Planted {
             "halftone_pop_takes_dot_passes" => Planted::HalftonePopTakesDotPasses,
             "ink_fill_flat" => Planted::InkFillFlat,
             "rim_keeps_first" => Planted::RimKeepsFirst,
+            "profile_admits_zero_breaks" => Planted::ProfileAdmitsZeroBreaks,
             "live_passes_no_page" => Planted::LivePassesNoPage,
             "reuse_drops_page" => Planted::ReuseDropsPage,
             "drops_clouds" => Planted::DropsClouds,
