@@ -1,0 +1,12 @@
+{
+  "crates/deep-hook/src/main.rs": [
+    {
+      "find": [
+        "                stderr: reply.stderr,"
+      ],
+      "wrong": [
+        "                stderr: reply.stderr + \"!\","
+      ]
+    }
+  ]
+}
