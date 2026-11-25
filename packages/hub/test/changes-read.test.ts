@@ -87,7 +87,7 @@ describe('the read of what a claim changed (#1869)', () => {
   it('takes an untracked listing past 512 MB, more than one string holds, as the snapshot\'s own untracked read does (1 GB): a claim no check reads passes', async () => {
     // `ls-files --others` lists 600 MB of untracked paths after the real ones; the snapshot lists them with -o, unstubbed.
     const name = `other/${'u'.repeat(244)}.txt`;
-    const stub = `case " $* " in *" ls-files "*"--others "*) "$GIT" "$@"; yes '${name}' | head -n 2400000; exit 0 ;; esac`;
+    const stub = `case " $* " in *" ls-files "*"--others "*) "$GIT" "$@"; case " $* " in *" -z "*) yes '${name}' | head -n 2400000 | tr '\\n' '\\0' ;; *) yes '${name}' | head -n 2400000 ;; esac; exit 0 ;; esac`;
     const { v } = await claimed({ base: TEST, head: { 'src/a.js': 'x\n' }, read: ['test/price.test.js'], stub });
     expect(v?.outcome, `the claim changed no file a check reads, yet reads ${JSON.stringify(v?.reasons)}`).toBe('PASS');
   }, 120_000);
