@@ -1,0 +1,262 @@
+# #3472 acceptance tests: the run on the base, and the planted inputs
+
+## The base (fd9be7a702f7cac74bab5095a2780ebe4d487095, main, no work on the issue), in this checkout, November 25, 2026
+
+The criteria's IDs, computed from the issue's body as GitHub returned it that day (the first 8 hex digits of the SHA-256
+of each `- [ ]` text, trimmed, white space collapsed):
+
+1 #3472.3ffabd82 States people see answers each decision above, with what was not taken, and the Decided tables gain their rows
+2 #3472.afb5879c The plain-words line under Later, as extensions and the line in States people see agree on which surfaces are …
+3 #3472.c86cb9a6 The text names each word of the States people see table and what a person reads for it on a plain surface, or …
+4 #3472.78cc555a The issues that build the answer are filed, each with a design link that lands in the new text
+5 #3472.822bbdc5 One taste call on the text and the sentences, recorded
+
+`node --check` passes on helpers.mjs, doc-lanes.mjs, call-text.mjs and the six test files.
+
+All seven tests fail at their own assertion, each for the reason its criterion names: States people see holds no
+sentence it didn't hold at the base and no anchor the base didn't have, the Decided tables hold the base's 119 rows, no
+issue filed after #3472 cites it, and no call is recorded. (Stack-trace and assertion-object lines dropped.)
+
+$ node --test tests/acceptance/3472/ac1-decisions.test.mjs tests/acceptance/3472/ac2-lines-agree.test.mjs \
+    tests/acceptance/3472/ac3-state-words.test.mjs tests/acceptance/3472/ac5-taste-call.test.mjs
+
+test at tests/acceptance/3472/ac1-decisions.test.mjs:12:1
+✖ AC1 #3472.3ffabd82 what States people see gained since fd9be7a7 holds the five Scope decisions (what a state reads as on a plain surface, the sentences, which surfaces are plain, the words for the levels, who holds a row's sentence to the list), each with "Not taken"
+  AssertionError [ERR_ASSERTION]: States people see does not answer each decision with what was not taken
+  + actual - expected
+
+  + [
+  +   "States people see (docs/technical-design.md#states-people-see) holds no sentence or table cell it didn't hold at fd9be7a7, so it answers no decision"
+  + ]
+  - []
+
+test at tests/acceptance/3472/ac1-decisions.test.mjs:16:1
+✖ AC1 #3472.3ffabd82 the Decided tables gained a row since fd9be7a7, with its question, its decision and what reopens it, that links into States people see, names it or holds the word "plain"
+  AssertionError [ERR_ASSERTION]: the Decided tables did not gain their rows
+  + actual - expected
+
+  + [
+  +   "the Decided tables hold no row they didn't hold at fd9be7a7: of the 119 rows under Decisions in tables headed Question | Decision | Reopens if, all 119 of the base's and no other"
+  + ]
+  - []
+
+test at tests/acceptance/3472/ac2-lines-agree.test.mjs:11:1
+✖ AC2 #3472.afb5879c the line under Later, as extensions that says "plain words" and links States people see, and what States people see gained since fd9be7a7, name the same plain surfaces
+  AssertionError [ERR_ASSERTION]: the two lines do not agree on which surfaces are plain
+  + actual - expected
+
+  + [
+  +   "States people see holds no sentence it didn't hold at fd9be7a7 that names a plain surface, so it has no line for the plain-words line to agree with"
+  + ]
+  - []
+
+test at tests/acceptance/3472/ac3-state-words.test.mjs:11:1
+✖ AC3 #3472.c86cb9a6 what States people see gained since fd9be7a7 names each word of its table, from queued to running
+  AssertionError [ERR_ASSERTION]: the new text does not name each word of the States people see table
+  + actual - expected
+
+  + [
+  +   "what States people see holds it didn't hold at fd9be7a7 never names 15 of the 15 words of its table, so it says nothing of what a person reads for them on a plain surface: queued, working, says done, PASS, sent back, BLOCKED, INVALID, INCONCLUSIVE, needs you, stale, quiet, stuck, flagged, finished, running"
+  + ]
+  - []
+
+test at tests/acceptance/3472/ac5-taste-call.test.mjs:14:1
+✖ AC5 #3472.822bbdc5 docs/evidence/3472/taste-call.json records one person's call that the text reads right, naming by SHA-256 the sentences and table cells it judged: all still in the design, and holding the decisions, each state word and the plain-words line
+  AssertionError [ERR_ASSERTION]: no taste call on the text and the sentences as they are now is recorded
+  + actual - expected
+
+  + [
+  +   "no taste call is recorded: docs/evidence/3472/taste-call.json isn't there"
+  + ]
+  - []
+ℹ tests 5
+ℹ pass 0
+ℹ fail 5
+ℹ skipped 0
+
+The two live files, each run once the same day with gh signed in and GitHub reachable:
+
+$ node --test tests/acceptance/3472/ac4-issues.live.test.mjs
+
+test at tests/acceptance/3472/ac4-issues.live.test.mjs:12:1
+✖ AC4 #3472.78cc555a (live) at least two issues filed after #3472 cite it and hold a design link that lands on an anchor States people see gained since fd9be7a7, and among them are `deep`'s list read by the lane and a lane run that reaches every state
+  AssertionError [ERR_ASSERTION]: the issues that build the answer are not all filed with a design link that lands in the new text; GitHub records no issue filed after #3472 as citing it
+  + actual - expected
+
+  + [
+  +   "States people see holds no anchor the design didn't have at fd9be7a7 (a subheading, or an <a id> in its text), so no design link can land in the new text",
+  +   '0 issues filed after #3472 cite it and hold a design link that lands in the new text (which has no anchor); the list holds at least the 2 the Scope already knows',
+  +   "no issue that builds the answer is `deep`'s list read by the lane: none filed after #3472 cites it, links into the new text and holds /`deep`|\\bdeep(?:'s|’s)/, /\\blists?\\b/i, /\\blanes?\\b/i",
+  +   'no issue that builds the answer is a lane run that reaches every state: none filed after #3472 cites it, links into the new text and holds /\\blanes?\\b/i, /\\bruns?\\b/i, /\\b(?:every|each) state\\b/i'
+  + ]
+  - []
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+ℹ skipped 0
+
+That run read #3472's timeline from GitHub and found no later issue that cites it.
+
+$ node --test tests/acceptance/3472/ac2-doc-lanes.live.test.mjs
+
+test at tests/acceptance/3472/ac2-doc-lanes.live.test.mjs:19:1
+✖ AC2 #3472.afb5879c (live) with the new text in States people see, the doc lanes (design links and names, catalogue drift, public text) find nothing the change brings
+  AssertionError [ERR_ASSERTION]: States people see holds no sentence it didn't hold at fd9be7a7: there is no new text for the doc lanes to hold the design against
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+ℹ skipped 0
+
+It stops at the missing text before it reads GitHub or runs a lane, as #1336's and #1352's did on their bases.
+
+Each live file was run once and not again. After those runs helpers.mjs changed only in names it stopped exporting
+and in judgeCall taking the criterion's ID as an argument; neither live file reads either, and a read of every
+import against the modules' exports finds none missing.
+
+## Why only what the section gained is read
+
+Were all of States people see at the base read as new, it would name every one of its table's fifteen words and hold
+the words of four of the five decisions (all but the levels'), with no `Not taken`. A floor the old text meets proves
+nothing, so every floor is read in the sentences and table cells the section didn't hold at the base.
+
+## Planted inputs and their mutants (in memory, never in this checkout's docs/ and never on GitHub)
+
+Run as plain node scripts from the job's scratch folder, outside the repo, against the judges helpers.mjs exports:
+judgeAnswers, judgeDecided, judgeWords, judgeAgreement, citing, judgeBuilders and judgeCall. 89 cases, each as expected.
+
+The planted design, written for the harness only: after States people see's last paragraph, `<a id="plain-surfaces">`
+and five paragraphs, one for each decision, each ending "Not taken: …", with a table `Word | On a plain surface` of
+fifteen rows after the second; the line under Later naming "The page, the card, the list's rows, notifications, end
+notices and `deep` with no arguments" and ending "a state reads there as [States people see](#plain-surfaces) says";
+and one row, linking `#plain-surfaces`, in a new table under `### Decided for plain surfaces`.
+
+Criterion 1, the text (judgeAnswers on what States people see gained):
+- the base: fails, "holds no sentence or table cell it didn't hold at fd9be7a7, so it answers no decision".
+- the planted design: passes. So do the decisions under a `####` subheading inside the section, and the five
+  paragraphs appended to the section's old opening paragraph.
+- the levels decision left out: fails, "not answered: the words for the levels … lacks /\bmilestones?\b/i,
+  /\battempts?\b/i, …" and `"Not taken" 4 times`.
+- who holds a row's sentence left out: fails, "lacks /\bhub\b/i, /\bwritten\b|\bdrawn\b/i". Which surfaces are plain
+  left out: fails, lacking `deep`. The sentences and the table left out: fails, "not answered: the sentences".
+- one "Not taken" replaced with other words: fails, `"Not taken" 4 times`.
+- the five decisions under a new `###` heading beside the section: fails as the base does.
+- a text whose only "plain" and "surfaces" are an anchor's name and a link's target: fails, lacking `plain` and
+  `surface`.
+
+Criterion 1, the Decided tables (judgeDecided):
+- the base, and the planted design without its row: fails, "the Decided tables hold no row they didn't hold at
+  fd9be7a7 … all 119 of the base's and no other".
+- the planted row in a new Decided table, or at the end of Decided for a hosted hub, or one that only names States
+  people see with no link: passes.
+- a new row about another matter: fails, "none of the 1 rows the Decided tables gained links into States people see,
+  names it or holds the word "plain"".
+- a new row with an empty third cell: fails, "holds all of a question, a decision and what reopens it".
+- the row put in the Yours table: fails as the base does.
+
+Criterion 2, offline (judgeAgreement):
+- the base: fails, "States people see holds no sentence it didn't hold at fd9be7a7 that names a plain surface".
+- the planted design: passes, and with the line under Later linking the section's old anchor too.
+- the new text in States people see and the line under Later left as at the base: fails, "States people see names
+  the list's rows in a new sentence that holds "plain", and the plain-words line under Later, as extensions never
+  names it". The same when the planted line under Later leaves the list's rows out.
+- the new text leaves out end notices, which the line under Later names: fails, "the plain-words line under Later,
+  as extensions names end notices in a sentence on plain words, and what States people see gained never names it".
+- the line under Later names no surface and only points at States people see: fails, "States people see names the
+  card in a new sentence … never names it", and so for each surface.
+- the line under Later no longer links States people see: fails, "holds no line that says "plain words" and links
+  into States people see".
+
+Criterion 3 (judgeWords on what States people see gained):
+- the base: fails, "never names 15 of the 15 words of its table".
+- the planted table: passes. So does a column added to the old table in place of a new table, and six sentences with
+  "queued, working, says done, needs you, quiet, stuck, flagged, finished and running read as they are, since …".
+- the row for stuck left out: fails, "never names 1 of the 15 words of its table … : stuck". The added column with
+  no cell for quiet: fails, naming quiet.
+- PASS named only as "pass", sent back only as "send-back": each fails, naming the word.
+
+Criterion 4, how the issues are found (citing, with a planted gh): a timeline with no cross-reference gives no
+number; later issues are kept and an earlier issue, a pull request, another repository's issue and a comment are not;
+a second page is read; a failed call, an answer that isn't JSON and one that isn't a list each give the reason, which
+the test reports as INCONCLUSIVE.
+
+Criterion 4 (judgeBuilders), two planted issues numbered 9001 and 9002, each with a `### Depends on` line citing
+#3472 and a Design link to `…/docs/technical-design.md#plain-surfaces`:
+- GitHub as it is today (no candidate): fails, on the base as above, and on the planted design with "0 issues filed
+  after #3472 cite it and hold a design link that lands in the new text (#plain-surfaces)".
+- the two, open or one closed as completed; linked by a relative link to a new subheading's slug; with the known
+  words in their titles alone; beside a later issue that cites #3472 for another matter: passes.
+- the run's issue links only `#states-people-see`: fails, "1 issue filed after #3472 cites it … #9002 cites #3472
+  and links #states-people-see, nothing in the new text" and "no issue that builds the answer is a lane run that
+  reaches every state … (#9002 holds its words and no design link that lands in the new text)".
+- the list's issue links only `#verdict` and `#later-as-extensions`, or links the new text only inside a code span:
+  fails the same way, naming what it links.
+- the list's issue doesn't cite #3472, cites another repository's #3472, or was filed before #3472; the run's issue
+  closed as not planned, or a pull request: each fails, "no issue that builds the answer is …".
+- two issues that build other things: fails, naming both known issues. One issue for both and no other: fails,
+  "1 issue filed after #3472 … the list holds at least the 2 the Scope already knows".
+
+Criterion 5 (judgeCall), a record made by callText on the planted design (29 pieces under #states-people-see, 1 under
+#later-as-extensions):
+- no record: fails, "no taste call is recorded: docs/evidence/3472/taste-call.json isn't there".
+- the record on the planted design, with or without other fields, or naming the pieces under `plain-surfaces`: passes.
+- another criterion's ID, `reads_wrong`, no person, no time: each fails, naming the field. `text` as one hash of a
+  whole section, as #1352 shaped it: fails, ""text" isn't a list of …".
+- a call bound to other text, the SHA-256 of other sentences: fails, "the call was made on other text: 2 of the 2
+  sentences and table cells it names under #states-people-see are not in that section now".
+- the PASS sentence reworded after the call: fails, "the call was made on other text: 1 of the 29 …", "never names 1
+  of the 15 words of its table … : PASS" and "the call names 28 of the 29 … not these: "PASS | all good"". A
+  decision's sentence reworded: fails the same way, with `"Not taken" 4 times`.
+- the line under Later edited after the call: fails, "1 of the 1 … under #later-as-extensions" and "the call doesn't
+  name the plain-words line under Later, as extensions as it is now".
+- a later issue adds a sentence to States people see beside the judged text, a row to a Decided table and a
+  paragraph to another section: still passes.
+- a call that names only the table, or only the decisions, or leaves the line under Later out; the pieces named
+  under the wrong section; an anchor the design doesn't have: each fails, naming what is missing.
+
+## The test files on a planted checkout (a scratch folder, never this checkout)
+
+A copy of this folder under `tests/acceptance/3472/` of a scratch folder that also holds the planted
+`docs/technical-design.md`, its git calls reading this repository's objects through `GIT_DIR`. The four offline files:
+- the base's design: all five tests fail, as above.
+- the planted design: both AC1 tests, AC2 and AC3 pass; AC5 fails, no record.
+- the planted design and a record made on it: all five pass.
+- the PASS sentence reworded after the call, or a record that isn't JSON: AC5 alone fails.
+- the planted design without its row for stuck, and a call made on that: AC3 and AC5 fail.
+`call-text.mjs` there prints the 29 pieces and the line under Later, then the `text` value.
+
+## The doc lanes' runner on planted folders (doc-lanes.mjs, in the scratch folder, with a planted list of open issues)
+
+No GitHub: the open issues are a planted file of two issues, one linking `#plain-surfaces`, one linking `#states` and
+an anchor that never existed. The base's folder is written by baseFolder(); a planted copy of it is the lanes' working
+folder.
+- the planted new text: no failure. The design links lane fails on the older issue's dead link and on one entry of
+  `scripts/planned-names.txt` that no planted issue names, and the base's folder gives both too.
+- a link to `#no-such-anchor` in the new text: fails, "design links and names finds what the base's docs don't give:
+  docs/technical-design.md #no-such-anchor (no heading or <a id> …)".
+- `<a id="states">` dropped: fails, naming the design's own link and "#9002 …#states".
+- this checkout as the working folder, with a planted list of no open issues: no failure. The design links lane
+  fails on that one entry, which the base's folder gives too, and the public text lane passes on the change it
+  finds here, this suite's own files: they "name no studied product".
+- with only the docs and `scripts/planned-names.txt` in the base's folder, as #1352's copy wrote it, the design links
+  lane stops at `AGENTS.md` (ENOENT) before it prints a finding; in baseFolder()'s folder it prints its result.
+In every one of these runs the catalogue drift lane was unrun, "reads packages/contracts/dist/index.js, which this
+checkout has not built", and in the planted folders, which are no git repository, so was public text.
+
+## Not exercised
+
+- The catalogue drift lane never ran: this checkout has no `packages/contracts/dist` and nothing was built. Its
+  findings are read by findings(), which was run on a sample of the line that lane prints.
+- No studied name was planted, since the list is salted hashes, so the public text lane was only seen passing.
+- `ac2-doc-lanes.live.test.mjs` stops at the base before `gh issue list`, so that call and the temporary folder it
+  fills ran only through the planted folders above.
+- No issue cites #3472 today, so the live run read its timeline and found no candidate: the reading of a real
+  `cross-referenced` event and the `gh issue view <n> --json number,title,body,state,stateReason` call did not run.
+- gh was signed in, so no INCONCLUSIVE skip was seen live; citing()'s failures were seen with a planted gh only.
+- The live files' pass paths, which need issues and a design this job doesn't write.
+
+## Known limits
+
+A word can sit in what was not taken rather than in the decision; the five `Not taken` are counted, not matched to
+decisions; a surface named as not plain reads as named; an anchor the base didn't have counts wherever in the section
+it sits; an issue is told by words; and who wrote the record isn't something a file tells. The taste call covers the
+first three; the README lists the rest under Not asserted.
