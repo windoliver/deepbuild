@@ -115,4 +115,15 @@ describe('the read of what a claim changed (#1869)', () => {
     const { v } = await claimed({ base: TEST, head: { 'package.json': '{"scripts":{"test":"node a"}}' }, read: ['test/price.test.js'], stub: '' });
     expect(v?.outcome, JSON.stringify(v?.reasons)).toBe('PASS');
   }, 60_000);
+
+  it('a base with no package.json is no failed read under a German locale either, where git words the missing file in German', async () => {
+    const { LC_ALL, LANGUAGE } = process.env;
+    Object.assign(process.env, { LC_ALL: 'de_DE.UTF-8', LANGUAGE: 'de' });
+    try {
+      const { v } = await claimed({ base: TEST, head: { 'package.json': '{"scripts":{"test":"node a"}}' }, read: ['test/price.test.js'], stub: '' });
+      expect(v?.outcome, JSON.stringify(v?.reasons)).toBe('PASS');
+    } finally {
+      for (const [k, x] of Object.entries({ LC_ALL, LANGUAGE })) if (x === undefined) delete process.env[k]; else process.env[k] = x;
+    }
+  }, 60_000);
 });

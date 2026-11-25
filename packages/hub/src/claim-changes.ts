@@ -13,7 +13,8 @@ export interface Changes { changed: string[]; configs: Map<string, string>; scri
 /** Read as the snapshot's git reads are bounded (#1869): fsmonitor off, up to 1 GB of output (its untracked listing's), and all of them ended within `ms`, by SIGKILL. */
 export async function changesOf(cwd: string, base: string, ms: number): Promise<Changes> {
   const deadline = Date.now() + ms;
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+  // In C's locale: a missing base file is known by git's English words.
+  const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), LC_ALL: 'C' };
   const unread: string[] = [];
   // A read that fails is recorded unless `missing` allows it (a file the base never had); either way it lists nothing.
   // Its output is split on `sep`: NUL for the -z path reads (#3114), newline otherwise.
