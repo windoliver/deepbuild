@@ -1,0 +1,1408 @@
+{
+  "spike": 1433,
+  "base": "a1ef97760cbcc9935b8fdadd4a7bef586969ef4d",
+  "gates": {
+    "file": "gates.json",
+    "sha256": "2bdeff35b4c39b62f485761451cf497842dc0f5a77c663f40026e0559a1a3888"
+  },
+  "arms": {
+    "candidate": {
+      "pin": {
+        "revision": "740ce7c4a1fbc7348ff526d9f31ea8df6207a7ed",
+        "mirror": {
+          "sha256": "51cc8ce6ca4c7f2c5caf3903e66bfb071b5be7a0efb63b6e071d11bfc1a0f2fc"
+        }
+      },
+      "harness": {
+        "sha256": "76c99de54bbadc7298a4416f791108d9270b3a097767d6478b87b1f46b888095"
+      },
+      "gates": {
+        "canvas-handoff": {
+          "status": "inconclusive",
+          "why": "not read yet"
+        },
+        "idle": {
+          "status": "inconclusive",
+          "why": "not read yet"
+        },
+        "list-transcript": {
+          "status": "inconclusive",
+          "why": "not read yet"
+        },
+        "text-input": {
+          "status": "inconclusive",
+          "why": "no person has taken it (a person types Pinyin, Kotoeri, dictation and the emoji picker into the candidate's text area)"
+        },
+        "accessibility": {
+          "status": "inconclusive",
+          "why": "no person has taken it (a person walks the candidate's window with VoiceOver on while deep-live reads its tree)"
+        },
+        "question-card": {
+          "status": "inconclusive",
+          "why": "no person has taken it (a person presses the question card with hardware input)"
+        },
+        "panel": {
+          "status": "inconclusive",
+          "why": "not read yet"
+        }
+      }
+    },
+    "gpui-fast": {
+      "version": "0.1.10",
+      "copies": {
+        "gpui-fast": "f539554aee0e994d84014d99e85f3923db613a62a94f248a6559e628bbb0b0be",
+        "gpui-fast-apple": "cd2f932eea173f357ace60f2267cd0c8031123fc788160b61f8566efe51f6bd0"
+      },
+      "carry": [
+        {
+          "file": "vendor/gpui-pre-apple/Cargo.toml",
+          "line": 236,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/Cargo.toml",
+          "line": 240,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/build.rs",
+          "line": 114,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/build.rs",
+          "line": 162,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/gpui_apple.rs",
+          "line": 9,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/held.rs",
+          "line": 1,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_atlas.rs",
+          "line": 12,
+          "issue": 1480
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_atlas.rs",
+          "line": 38,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_atlas.rs",
+          "line": 40,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_atlas.rs",
+          "line": 57,
+          "issue": 1480
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_atlas.rs",
+          "line": 75,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_atlas.rs",
+          "line": 99,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_atlas.rs",
+          "line": 176,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_atlas.rs",
+          "line": 225,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_atlas/rect.rs",
+          "line": 1,
+          "issue": 1480
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 9,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 26,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 28,
+          "issue": 177
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 29,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 30,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 34,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 35,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 36,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 37,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 38,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 39,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 40,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 87,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 106,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 117,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 139,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 140,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 208,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 402,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 403,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 461,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 497,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 526,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 536,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 545,
+          "issue": 177
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 547,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 548,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 557,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 583,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 592,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 751,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 809,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 818,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 821,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 1243,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 1244,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 1247,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+          "line": 1337,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/bgra_surface.rs",
+          "line": 1,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/bgra_surface.rs",
+          "line": 28,
+          "issue": 177
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/bgra_surface.rs",
+          "line": 30,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/bgra_surface.rs",
+          "line": 32,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/bgra_surface.rs",
+          "line": 58,
+          "issue": 177
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/bgra_surface.rs",
+          "line": 59,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/bgra_surface.rs",
+          "line": 60,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/bgra_surface.rs",
+          "line": 136,
+          "issue": 177
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/chrome_layers.rs",
+          "line": 1,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/clear_surface.rs",
+          "line": 1,
+          "issue": 177
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/completions.rs",
+          "line": 1,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/completions.rs",
+          "line": 29,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/completions.rs",
+          "line": 40,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/gpu_ledger.rs",
+          "line": 1,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/gpu_surfaces.rs",
+          "line": 1,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/gpu_surfaces.rs",
+          "line": 30,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/gpu_surfaces.rs",
+          "line": 92,
+          "issue": 711
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/gpu_surfaces.rs",
+          "line": 122,
+          "issue": 711
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/held_counts.rs",
+          "line": 1,
+          "issue": 1431
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/layer_colorspace.rs",
+          "line": 1,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/layer_colorspace.rs",
+          "line": 35,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/presentation.rs",
+          "line": 1,
+          "issue": 140
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/metal_renderer/ycbcr_surface.rs",
+          "line": 1,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders.metal",
+          "line": 11,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders.metal",
+          "line": 12,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders.metal",
+          "line": 13,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders.metal",
+          "line": 1172,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders.metal",
+          "line": 1240,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders_carried.metal",
+          "line": 1,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders_carried.metal",
+          "line": 3,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders_carried.metal",
+          "line": 13,
+          "issue": 377
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders_carried.metal",
+          "line": 26,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders_carried.metal",
+          "line": 41,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders_carried.metal",
+          "line": 79,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders_carried.metal",
+          "line": 89,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders_carried.metal",
+          "line": 140,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre-apple/src/shaders_carried.metal",
+          "line": 168,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre-apple/vendor/gpui/src/color.rs",
+          "line": 765,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-apple/vendor/gpui/src/color.rs",
+          "line": 776,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre-macos/Cargo.toml",
+          "line": 309,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/display_link.rs",
+          "line": 336,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/events.rs",
+          "line": 21,
+          "issue": 542
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/events.rs",
+          "line": 261,
+          "issue": 542
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/events/momentum.rs",
+          "line": 1,
+          "issue": 542
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/gpui_macos.rs",
+          "line": 49,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/gpui_macos.rs",
+          "line": 50,
+          "issue": 542
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 84,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 671,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 841,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 857,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 1110,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 2033,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 2142,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 3143,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 3220,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 3347,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 3366,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 3378,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 3384,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window.rs",
+          "line": 3387,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre-macos/src/window/frame_link.rs",
+          "line": 1,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre/Cargo.toml",
+          "line": 87,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/Cargo.toml",
+          "line": 177,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/Cargo.toml",
+          "line": 488,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/Cargo.toml",
+          "line": 492,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/app.rs",
+          "line": 2051,
+          "issue": 3232
+        },
+        {
+          "file": "vendor/gpui-pre/src/app.rs",
+          "line": 3055,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/context.rs",
+          "line": 223,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context.rs",
+          "line": 11,
+          "issue": 1843
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context.rs",
+          "line": 12,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context.rs",
+          "line": 13,
+          "issue": 1546
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context.rs",
+          "line": 14,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context.rs",
+          "line": 15,
+          "issue": 3232
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context/placement.rs",
+          "line": 11,
+          "issue": 1843
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context/placement.rs",
+          "line": 24,
+          "issue": 1843
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context/placement.rs",
+          "line": 31,
+          "issue": 1843
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context/present_frame.rs",
+          "line": 5,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context/present_frame.rs",
+          "line": 27,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context/request_frame.rs",
+          "line": 7,
+          "issue": 1546
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context/request_frame.rs",
+          "line": 14,
+          "issue": 1546
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context/request_frame.rs",
+          "line": 38,
+          "issue": 1546
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context/scale_factor.rs",
+          "line": 5,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/app/headless_app_context/visibility.rs",
+          "line": 5,
+          "issue": 3232
+        },
+        {
+          "file": "vendor/gpui-pre/src/arena.rs",
+          "line": 151,
+          "issue": 499
+        },
+        {
+          "file": "vendor/gpui-pre/src/color.rs",
+          "line": 765,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre/src/color.rs",
+          "line": 776,
+          "issue": 391
+        },
+        {
+          "file": "vendor/gpui-pre/src/element.rs",
+          "line": 363,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/div.rs",
+          "line": 47,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/div.rs",
+          "line": 2547,
+          "issue": 1427
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/div.rs",
+          "line": 3340,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/div.rs",
+          "line": 3385,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/div/wheel_end.rs",
+          "line": 1,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/img.rs",
+          "line": 257,
+          "issue": 1489
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/img.rs",
+          "line": 296,
+          "issue": 1489
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/img.rs",
+          "line": 325,
+          "issue": 1489
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/img.rs",
+          "line": 328,
+          "issue": 1489
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/img.rs",
+          "line": 390,
+          "issue": 1489
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/img.rs",
+          "line": 785,
+          "issue": 1489
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/list.rs",
+          "line": 913,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/elements/list.rs",
+          "line": 942,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform.rs",
+          "line": 4,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform.rs",
+          "line": 5,
+          "issue": 1480
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform.rs",
+          "line": 21,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform.rs",
+          "line": 89,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform.rs",
+          "line": 90,
+          "issue": 1480
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform.rs",
+          "line": 187,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform.rs",
+          "line": 1713,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform.rs",
+          "line": 1731,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform.rs",
+          "line": 1763,
+          "issue": 1480
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform/a11y_tap.rs",
+          "line": 1,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform/mask_params.rs",
+          "line": 1,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform/mask_rect.rs",
+          "line": 1,
+          "issue": 1480
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform/test/window.rs",
+          "line": 46,
+          "issue": 1843
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform/test/window.rs",
+          "line": 309,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/platform/test/window.rs",
+          "line": 310,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 18,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 56,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 74,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 82,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 90,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 96,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 144,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 159,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 177,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 205,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 229,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 236,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 251,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 266,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 280,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 309,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 344,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 490,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 493,
+          "issue": 2471
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 530,
+          "issue": 2471
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 531,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 564,
+          "issue": 2471
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene.rs",
+          "line": 565,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/scene/chrome.rs",
+          "line": 1,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/text_system/line_layout.rs",
+          "line": 645,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/src/text_system/line_wrapper.rs",
+          "line": 4,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/src/text_system/line_wrapper.rs",
+          "line": 67,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/src/text_system/line_wrapper.rs",
+          "line": 83,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/src/text_system/line_wrapper.rs",
+          "line": 104,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/src/text_system/line_wrapper.rs",
+          "line": 393,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/src/text_system/line_wrapper.rs",
+          "line": 422,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/src/text_system/line_wrapper.rs",
+          "line": 430,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/src/text_system/line_wrapper.rs",
+          "line": 487,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/src/text_system/line_wrapper/breaks.rs",
+          "line": 1,
+          "issue": 1550
+        },
+        {
+          "file": "vendor/gpui-pre/src/view.rs",
+          "line": 186,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/view.rs",
+          "line": 238,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/view.rs",
+          "line": 324,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/view.rs",
+          "line": 541,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/view.rs",
+          "line": 546,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/view.rs",
+          "line": 549,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/view.rs",
+          "line": 560,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/view.rs",
+          "line": 567,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/view.rs",
+          "line": 575,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 69,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 70,
+          "issue": 1480
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 73,
+          "issue": 124
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 74,
+          "issue": 1427
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 75,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 77,
+          "issue": 1551
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 91,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 93,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 856,
+          "issue": 124
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 2287,
+          "issue": 3232
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 3458,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 3496,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window.rs",
+          "line": 5329,
+          "issue": 124
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/a11y.rs",
+          "line": 104,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/a11y.rs",
+          "line": 105,
+          "issue": 3232
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/a11y.rs",
+          "line": 157,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/a11y.rs",
+          "line": 159,
+          "issue": 3232
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/a11y.rs",
+          "line": 188,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/a11y.rs",
+          "line": 189,
+          "issue": 3232
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/a11y.rs",
+          "line": 288,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/a11y/kept.rs",
+          "line": 1,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/a11y/unseen.rs",
+          "line": 1,
+          "issue": 3232
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/chrome_layer.rs",
+          "line": 1,
+          "issue": 1434
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/frame_counts.rs",
+          "line": 1,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/handed.rs",
+          "line": 1,
+          "issue": 1482
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/hits.rs",
+          "line": 1,
+          "issue": 124
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/mask_rect.rs",
+          "line": 1,
+          "issue": 1480
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/mask_rect.rs",
+          "line": 6,
+          "issue": 1480
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/mask_sprite.rs",
+          "line": 1,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/mask_sprite.rs",
+          "line": 10,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/mask_sprite.rs",
+          "line": 59,
+          "issue": 390
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/painted.rs",
+          "line": 1,
+          "issue": 1427
+        },
+        {
+          "file": "vendor/gpui-pre/src/window/present_only.rs",
+          "line": 1,
+          "issue": 1551
+        }
+      ],
+      "harness": {
+        "sha256": "f0f1497ff72e57a2d70aeaa017925f48e1aa9d3aad8249c39f8a74747cd229a7"
+      },
+      "gates": {
+        "list-transcript": {
+          "status": "inconclusive",
+          "why": "not read yet"
+        },
+        "retention-frames": {
+          "status": "inconclusive",
+          "raw": {
+            "file": "raw/gpui-fast-retention-frames.json",
+            "sha256": "9aa731b04e5687d3ae5bb5071c49bf128c6465dcd9bad07802521099f006fe26"
+          },
+          "journey": {
+            "file": "raw/journey.jsonl",
+            "sha256": "de706786c5e1a25e8947861a41ea3cfd300acd6334dc6b84d03c9738bfb86153"
+          },
+          "reading": {
+            "frames": 12,
+            "first_difference": null
+          },
+          "machine": {
+            "model": "Mac17,10",
+            "chip": "Apple M5 Max",
+            "memoryBytes": 68719476736,
+            "power": "ac",
+            "lowPowerMode": true,
+            "thermalState": "nominal",
+            "macosBuild": "26B8119"
+          },
+          "load": 10.98779296875,
+          "why": "read off the reference Air (model \"Mac17,10\", chip \"Apple M5 Max\", memoryBytes 68719476736; the issue runs on Mac15,12, Apple M3, 17179869184 bytes)"
+        },
+        "still-ledger": {
+          "status": "inconclusive",
+          "raw": {
+            "file": "raw/gpui-fast-still-ledger.json",
+            "sha256": "76d99dfc3ed301e7b8cafa65cadbe64c3fd2d72af851dc51fc394fcb6a4bef5b"
+          },
+          "planted": {
+            "file": "raw/gpui-fast-still-ledger.planted.json",
+            "sha256": "5b925359bb961d8f7d7bcd504dff0e31adea60c36031cd5736427a265de9d246"
+          },
+          "reading": {
+            "still_vsyncs": 150,
+            "still_command_buffers": 0,
+            "still_gpu_ns": 0,
+            "uncounted": 0
+          },
+          "machine": {
+            "model": "Mac17,10",
+            "chip": "Apple M5 Max",
+            "memoryBytes": 68719476736,
+            "power": "ac",
+            "lowPowerMode": true,
+            "thermalState": "nominal",
+            "macosBuild": "26B8119"
+          },
+          "load": 10.82861328125,
+          "why": "read off the reference Air (model \"Mac17,10\", chip \"Apple M5 Max\", memoryBytes 68719476736; the issue runs on Mac15,12, Apple M3, 17179869184 bytes)"
+        },
+        "list-shapes": {
+          "status": "inconclusive",
+          "raw": {
+            "file": "raw/gpui-fast-list-shapes.json",
+            "sha256": "c979560ceafa80324dcdabd8fadf34cae2d0d56274af566b71ec1e96f8dfb778"
+          },
+          "reading": {
+            "ships": "shared",
+            "list": {
+              "shared": {
+                "on": 0.346125,
+                "off": 0.376583
+              },
+              "own": {
+                "on": 0.341167,
+                "off": 0.398167
+              }
+            },
+            "label": {
+              "1000": {
+                "on": {
+                  "views_rendered": 1,
+                  "elements_laid_out": 3,
+                  "cpu_ms_p50": 1.3734169999999892,
+                  "cpu_ms_p95": 1.4924159999999915
+                },
+                "off": {
+                  "views_rendered": 1008,
+                  "elements_laid_out": 3023,
+                  "cpu_ms_p50": 2.6124169999999367,
+                  "cpu_ms_p95": 3.1010840000000144
+                }
+              },
+              "3000": {
+                "on": {
+                  "views_rendered": 1,
+                  "elements_laid_out": 3,
+                  "cpu_ms_p50": 3.801458000000025,
+                  "cpu_ms_p95": 4.138292000000092
+                },
+                "off": {
+                  "views_rendered": 3008,
+                  "elements_laid_out": 9023,
+                  "cpu_ms_p50": 7.255999999999972,
+                  "cpu_ms_p95": 7.837500000000091
+                }
+              }
+            }
+          },
+          "machine": {
+            "model": "Mac17,10",
+            "chip": "Apple M5 Max",
+            "memoryBytes": 68719476736,
+            "power": "ac",
+            "lowPowerMode": true,
+            "thermalState": "nominal",
+            "macosBuild": "26B8119"
+          },
+          "load": 13.23681640625,
+          "why": "read off the reference Air (model \"Mac17,10\", chip \"Apple M5 Max\", memoryBytes 68719476736; the issue runs on Mac15,12, Apple M3, 17179869184 bytes); its update times and CPU are readings, not results: lowPowerMode is true, not false; a one-minute load of 13.23681640625 at a run's start or end is at or above the Air's 8 cores"
+        }
+      }
+    }
+  },
+  "lines": {
+    "candidate": "INCONCLUSIVE: canvas-handoff, idle, list-transcript, text-input, accessibility, question-card, panel",
+    "gpui-fast": "INCONCLUSIVE: list-transcript, retention-frames, still-ledger, list-shapes"
+  }
+}
