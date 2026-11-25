@@ -1,0 +1,15 @@
+{
+  "#2750.8eb13c6b": [
+    "squash-takes-head-verdict",
+    "lists-only-judged"
+  ],
+  "#2750.230902ce": [
+    "revert-as-escape"
+  ],
+  "#2750.8f4da496": [
+    "uncovered-as-zero"
+  ],
+  "#2750.099939a8": [
+    "status-on-unjudged"
+  ]
+}
