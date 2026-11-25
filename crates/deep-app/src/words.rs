@@ -316,13 +316,17 @@ impl Render for WordsBox {
             Some(card) => {
                 let down = card.clone();
                 send_control
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        down.update(cx, |card, _| card.pressing(Target::Send));
+                    .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                        down.update(cx, |card, cx| {
+                            card.pressing(Target::Send, event, window, cx)
+                        });
                     })
+                    // A press the card refused keeps your words.
                     .on_click(cx.listener(move |this, _, window, cx| {
-                        card.update(cx, |card, cx| card.pressed(Target::Send, cx));
-                        this.input
-                            .update(cx, |input, cx| input.set_value("", window, cx));
+                        if !card.update(cx, |card, cx| card.pressed(Target::Send, cx)) {
+                            this.input
+                                .update(cx, |input, cx| input.set_value("", window, cx));
+                        }
                     }))
             }
             None => send_control.on_click(cx.listener(|this, _, window, cx| this.send(window, cx))),

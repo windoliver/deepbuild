@@ -5,7 +5,7 @@
 // Each runs a real project through the real supervisor, but for the command's text, read with no run.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ import { openAsks } from '../../asks/src/index.js';
 import type { CheckSpec } from '../../conformance/src/index.js';
 import { openRecord, type RecordStore } from '../../record/src/index.js';
 import { openSupervisor, type Supervisor } from '../../supervisor/src/index.js';
-import { runAddedTests, runCommandCheck, type CommandCheck } from '../src/index.js';
+import { programReadings, runAddedTests, runCommandCheck, type CommandCheck } from '../src/index.js';
 import { listSource } from '../src/listing.js';
 import { under, vitest as vitestReport } from '../src/report.js';
 import { absent, hiddenChild, maskIn, maskOf, programsIn, untraced } from '../src/shell.js';
@@ -558,6 +558,26 @@ describe('a test its file holds that never ran', () => {
     expect(w.failures).toEqual([expect.objectContaining({ test: 'b exists', file: 't.test.mjs', line: 4 })]);
   }, 300_000);
 
+  it('a package script\'s --test-only leaves no focused test\'s control out, and it or a place of Vitest\'s that leaves a failing test out can\'t pass, naming it (#2081)', async () => {
+    const focused = folder({
+      'package.json': JSON.stringify({ type: 'module', scripts: { test: 'node --test --test-only' } }),
+      'o.test.mjs': `import assert from 'node:assert/strict';\nimport { test } from 'node:test';\ntest('a', { only: true }, () => {});\n`,
+    });
+    const run = (checkout: string) => runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'npm test' } }));
+    const o = await run(focused);
+    expect([o.outcome, o.testsRun], `${o.mask} ${o.output.stdout}`).toEqual(['passed', 1]);
+    writeFileSync(join(focused, 'o.test.mjs'), `${readFileSync(join(focused, 'o.test.mjs'), 'utf8')}test('b', () => { assert.fail(); });\n`);
+    const left = (test: string, file: string, line: number, filter: string) => [expect.objectContaining({ test, file, line, assertion: false, message: expect.stringContaining(`${filter} in package.json's test script`) })];
+    const b = await run(focused);
+    expect([b.outcome, b.failures], `${b.mask} ${b.output.stdout}`).toEqual(['failed', left('b', 'o.test.mjs', 4, '--test-only')]);
+    const placed = folder({
+      'package.json': JSON.stringify({ type: 'module', scripts: { test: 'vitest run a.test.js:2' } }),
+      'a.test.js': `import { expect, test } from 'vitest';\ntest('a', () => {});\ntest('b', () => { expect(1).toBe(2); });\n`,
+    }, true);
+    const p = await run(placed);
+    expect([p.outcome, p.failures], `${p.mask} ${p.output.stdout}`).toEqual(['failed', left('b', 'a.test.js', 3, 'a.test.js:2')]);
+  }, 300_000);
+
   it('a node:test file lists the tests a node --test run of it runs, at their lines, with and without --test-only', async () => {
     type Node = { suite: boolean; fn: string; mod: string; options: string; name: string; children: Node[] };
     const { tree } = fc.letrec<{ tree: Node[]; node: Node }>((tie) => ({
@@ -858,6 +878,28 @@ describe('programs the tracers can\'t see into', () => {
       process.env.PATH = saved.PATH;
     }
   }, 120_000);
+
+  it('a program the command or its script names is read once for a claim, by its real file\'s size and modified time; one the run gets no link to reads as absent (#2060)', () => {
+    const at = folder({ 'real/tool': 'v1', 'bin/a-folder/x': '', 'venv/pyvenv.cfg': '', 'venv/bin/venv-tool': '' });
+    symlinkSync('../real/tool', join(at, 'bin/tool'));
+    const cwd = folder({ 'check.sh': 'tool --now\n' });
+    const saved = process.env.PATH;
+    process.env.PATH = `${at}/bin:${at}/venv/bin:/usr/bin:/bin`;
+    try {
+      const read = (claim = new Map<string, string>()) => Object.fromEntries(programReadings('sh check.sh && venv-tool && a-folder && ./by-path && gone', cwd, claim));
+      const reading = (size: number): string => `${size} ${statSync(join(at, 'real/tool')).mtimeMs}`;
+      const claim = new Map<string, string>();
+      const first = read(claim);
+      expect(first).toEqual({ 'a-folder': 'absent', gone: 'absent', sh: 'absent', tool: reading(2), 'venv-tool': 'absent' });
+      writeFileSync(join(at, 'real/tool'), 'version 2');
+      expect(read(claim), 'the same claim').toEqual(first);
+      expect(read().tool, 'the next claim').toBe(reading(9));
+      rmSync(join(at, 'real/tool'));
+      expect(read().tool, 'a claim once its file is gone').toBe('absent');
+    } finally {
+      process.env.PATH = saved;
+    }
+  });
 
   it('a go test run is placed from its report and fails, but its pass is never counted: no tracer saw what it read', async () => {
     need('go');

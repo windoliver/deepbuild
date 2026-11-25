@@ -1,0 +1,87 @@
+Run of tests/acceptance/1941-redraft-3336 on base 3c564bbdd (fresh GitHub clone of main), macOS, Node 24.22.0.
+Command: npx vitest run tests/acceptance/1941-redraft-3336 --reporter=verbose
+Paths redacted: the checkout as <checkout>, the OS temp folder as <tmp>, home as ~.
+
+Expected on this base: the texture-missing scene's 'before' render-back is refused with asset_missing, so the
+test fails at its none(failures, ...) assertion; no TASTE.json is recorded, so even past that it would read
+INCONCLUSIVE, never PASS. The run folder it printed (kept under <tmp>) held 27 PNGs: every one of the
+28 names except texture-missing-before.png, the refused one. Nothing was written under the checkout.
+
+----- vitest output -----
+2026-11-24T03:46:44Z
+19:46  up 4 days, 13 mins, 10 users, load averages: 56.00 88.92 88.43
+
+ RUN  v5.0.5 <checkout>
+
+stdout | tests/acceptance/1941-redraft-3336/taste.test.ts > #1941.afbf01b2 screenshots of each planted-fault scene before and after its named fix, and the one taste call on them > #1941.afbf01b2 the run writes each planted-fault scene before and after its named fix from render-back's own snapshots to a run folder outside the checkout, and the recorded call on exactly those says they look right
+#1941.afbf01b2: this run's screenshots go to <tmp>/deep-1941-taste-NOONZC (kept after the run)
+#1941.afbf01b2: screenshots written from this run's render-backs to <tmp>/deep-1941-taste-NOONZC:
+  framing-cut-before.png  b9690e3f0f4f5ef9c9eb26a81c27e6c7a32d1b3421756c699fe09766913e14b0
+  framing-cut-after.png  e77dca39fc558c676d8f2a477df3159ae5e4dd33cd22c8f983a340a2151b87f2
+  exposure-clipped-before.png  c6ef82f010341fcbace50645eb84f6e70adbae998a2e9e497947929d1c99ac0a
+  exposure-clipped-after.png  9550562c5adee06296ffefc76a64de3d778baeb41b1af1164eb83e56659bc21e
+  contrast-muted-before.png  522654ede9eaf8954a28c5a9f3d8f630c76babd37e7ba0a5a8f429f9a5f1710c
+  contrast-muted-after.png  c648adf250f1292ed0896d125dcf2fe34ddb8f3a275a944c2f1e893ed93814f5
+  overlap-crates-before.png  48242af2fdf5f7139f7e470ac1f4db33f357fa16998879e0987bf484d51a9a1d
+  overlap-crates-after.png  9860aadfd4b035857bffec85608b1c9a1edf0e0c799b2c4a385beb2857cc1646
+  floating-vase-before.png  a4ec2041a4291175226d1851fe881d06a0eea855eaf6c85c3ee1fd75f94387ff
+  floating-vase-after.png  05b5a911474c79ae8529ab063582995fe2f2ff9e95cf046d838bac0b85964ea0
+  scale-door-before.png  286a86c251f40c2e73b6bdc8460b1e5803a451d4c0e5754db9526dd8f18d4b12
+  scale-door-after.png  62ca2602d7aeda0dd5bf7725478b2342cc93b8187eaa192ffb192957ed7d931d
+  texture-missing-before.png  (not drawn)
+  texture-missing-after.png  c5f251fe61fe267add03501030391fd0048fe40270bf5c10dfb3fe212e619179
+  noise-reseeds-before.png  b9cba0be018063111781eb9f374721dad51da5fd6da262bc910cc346c67a2702
+  noise-reseeds-before-next-frame.png  e4e70fd74e04b791da7e377b0ceea688ddf1f4c582a09d2c4ea4e480c6696d42
+  noise-reseeds-after.png  46c504a86f89a6833b776b8f822dca60195d2f59bca9c8ee68c3a6c1d60853cb
+  noise-reseeds-after-next-frame.png  46c504a86f89a6833b776b8f822dca60195d2f59bca9c8ee68c3a6c1d60853cb
+  budget-over-class-before.png  77fe190685ce7abbabe3d07c0a991a45d9827950ad686191ca9d5f921f9cc49d
+  budget-over-class-after.png  1ed5fc7bf6abb1949bc98408a8c3ce39f77aec0600bf7c52f3ddb7b00dfdd8ff
+  coincident-walls-before.png  94c82a5f4b5c0919cac0a75305567c894b86067e96c8560f118944680f8f8562
+  coincident-walls-after.png  94c82a5f4b5c0919cac0a75305567c894b86067e96c8560f118944680f8f8562
+  grid-off-before.png  5010daea58ff5d1ace9e3984cabee087eae623389754cdb3e87be59ca9133e03
+  grid-off-after.png  bcad11ffd649be9d3a215da936e3e6b98b8468a83e82e06f399523e8ef467acc
+  seam-moved-before.png  4fd3643082f17df3a733b97492d6fb3626df914e328c5a75ee1727a211d4979d
+  seam-moved-after.png  bcad11ffd649be9d3a215da936e3e6b98b8468a83e82e06f399523e8ef467acc
+  budget-showpiece-before.png  e1ab4dfbfb7594fff75436f95c370896e8120c8fc224b49c7ea2dc74820da103
+  budget-showpiece-after.png  5eabb80366551fb93d26895585e90e5033ad62191d8fd5fca2c4f03ec0f27bd3
+
+ × tests/acceptance/1941-redraft-3336/taste.test.ts > #1941.afbf01b2 screenshots of each planted-fault scene before and after its named fix, and the one taste call on them > #1941.afbf01b2 the run writes each planted-fault scene before and after its named fix from render-back's own snapshots to a run folder outside the checkout, and the recorded call on exactly those says they look right 86973ms
+   → each planted-fault scene is drawn by render-back before and after its named fix is applied:
+  render-back of texture-missing before its fix (revision 0) isn't presented with a snapshot: {"code":"asset_missing","path":"items/crate-mat/params/maps/base_color","core":"core@0.0.0","set_digest":"cb7524850ed603528e456ac1bbf5b788263d19b707d3d35cc80eac09a835b471"}: expected [ Array(1) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1941-redraft-3336/taste.test.ts > #1941.afbf01b2 screenshots of each planted-fault scene before and after its named fix, and the one taste call on them > #1941.afbf01b2 the run writes each planted-fault scene before and after its named fix from render-back's own snapshots to a run folder outside the checkout, and the recorded call on exactly those says they look right
+AssertionError: each planted-fault scene is drawn by render-back before and after its named fix is applied:
+  render-back of texture-missing before its fix (revision 0) isn't presented with a snapshot: {"code":"asset_missing","path":"items/crate-mat/params/maps/base_color","core":"core@0.0.0","set_digest":"cb7524850ed603528e456ac1bbf5b788263d19b707d3d35cc80eac09a835b471"}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "render-back of texture-missing before its fix (revision 0) isn't presented with a snapshot: {\"code\":\"asset_missing\",\"path\":\"items/crate-mat/params/maps/base_color\",\"core\":\"core@0.0.0\",\"set_digest\":\"cb7524850ed603528e456ac1bbf5b788263d19b707d3d35cc80eac09a835b471\"}",
++ ]
+
+ ❯ none tests/acceptance/1941/helpers.ts:49:73
+     47| /** No failures; the message lists them. */
+     48| export function none(failures: readonly string[], what: string): void {
+     49|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     50| }
+     51| /** A test that can't be judged here fails with this, never passes (AG…
+ ❯ tests/acceptance/1941-redraft-3336/taste.test.ts:93:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  19:46:46
+   Duration  715.94s (tests 100%)
+
+vitest exit 1
+
+----- right after the run (same script): /usr/bin/git -C <checkout> status --porcelain -----
+?? tests/acceptance/1941-redraft-3336/
+(only this redraft's own new folder, written by the drafting job before the run; no tracked file changed, nothing under docs/evidence)

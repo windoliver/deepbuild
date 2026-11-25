@@ -250,6 +250,10 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS events_session ON events (session_id, log_pos);
 CREATE INDEX IF NOT EXISTS events_session_bounds ON events (session_id, log_pos) WHERE kind IN ('session.start', 'session.end');
 CREATE INDEX IF NOT EXISTS events_kind ON events (kind, log_pos);
+CREATE INDEX IF NOT EXISTS events_session_gone ON events (session_id, log_pos) WHERE kind = 'session.gone';
+CREATE INDEX IF NOT EXISTS events_run_key ON events (json_extract(data, '$.key.id')) WHERE kind = 'run.finished';
+CREATE INDEX IF NOT EXISTS events_run_stem ON events (json_extract(data, '$.key.stem')) WHERE kind = 'run.finished';
+CREATE INDEX IF NOT EXISTS events_reading ON events (json_extract(data, '$.reading')) WHERE kind = 'reading.recorded';
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no UPDATE'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no DELETE'); END;
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
