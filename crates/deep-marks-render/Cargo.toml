@@ -81,7 +81,7 @@ path = "../../tests/acceptance/2660/layout_marks.rs"
 
 [[test]]
 name = "acceptance_2660_fast_path"
-path = "../../tests/acceptance/2660/fast_path.rs"
+path = "../../tests/acceptance/2660-redraft-3447/fast_path.rs"
 
 [[test]]
 name = "acceptance_2660_check_templates"
