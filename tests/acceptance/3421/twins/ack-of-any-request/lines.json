@@ -5,7 +5,7 @@
         "        Ok(ack) if ack.ack == id => ack,"
       ],
       "wrong": [
-        "        Ok(ack) => ack,"
+        "        Ok(ack) if !id.is_empty() => ack,"
       ]
     }
   ]
