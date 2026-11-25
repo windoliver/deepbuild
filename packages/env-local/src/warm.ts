@@ -273,7 +273,7 @@ export class WarmStack {
   private async up(file: string, services: string[], wait = true): Promise<string | undefined> {
     if (!services.length) return undefined;
     const named = services.map(quote).join(' ');
-    const fresh = `f=; for s in ${named}; do id=$(${this.compose(file, 'ps -aq "$s"')}) || exit 1; [ -n "$id" ] && "$0" inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' $id | grep -Eq '(^| )[0-9a-f]{64} ' || f="$f $s"; done; [ -z "$f" ] || ${this.compose(file, 'rm -sf $f')}`;
+    const fresh = `f=; for s in ${named}; do id=$(${this.compose(file, 'ps -aq "$s"')}) || exit 1; v=; [ -z "$id" ] || v=$("$0" inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' $id) || exit 1; printf '%s\\n' "$v" | grep -Eq '(^| )[0-9a-f]{64} ' || f="$f $s"; done; [ -z "$f" ] || { ${this.compose(file, 'stop -t 3 $f')} && ${this.compose(file, 'rm -f $f')}; }`;
     const ran = await this.dock(`${fresh} && ${this.compose(file, `up -d ${wait ? '--wait ' : ''}-t 3 --no-deps --no-build --pull never --force-recreate ${named}`)}`, [], BUILD_MS);
     return ran.code === 0 ? undefined : `docker compose rm or up ${services.join(' ')} exited ${String(ran.code)}: ${ran.stderr.trim().split('\n').slice(-1)[0] ?? ''}`;
   }

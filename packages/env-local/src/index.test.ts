@@ -301,7 +301,6 @@ test('a compose step finds the Docker CLI the hub found on its PATH, and no cred
   expect(realpathSync(found('docker'))).toBe(realpathSync(kind.docker!));
 });
 
-
 // A stand-in host that runs each step for real, on the machine; the stack's own run is one it doesn't know.
 const machineHost = (): Host => {
   const unknown = () => Promise.reject(Error('no such run'));
@@ -364,7 +363,7 @@ test('a service whose container holds an anonymous volume is recreated, keeping 
     const up = (stack as unknown as { up: (file: string, services: string[]) => Promise<string | undefined> }).up.bind(stack);
     expect(await up(join(dir, 'compose.json'), ['db', 'web'])).toBeUndefined();
     const ran = readFileSync(calls, 'utf8').trim().split('\n').filter((c) => / (rm|up) /.test(c)).map((c) => c.replace(/^.* (rm|up) /, '$1 '));
-    expect(ran).toEqual(['rm -sf web', "up -d --wait -t 3 --no-deps --no-build --pull never --force-recreate db web"]);
+    expect(ran).toEqual(['rm -f web', "up -d --wait -t 3 --no-deps --no-build --pull never --force-recreate db web"]);
   } finally {
     await downStack(host, stack.id);
   }
