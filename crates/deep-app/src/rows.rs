@@ -576,14 +576,14 @@ pub(crate) fn row_element(
             // An ask's mark is named by its state word, the word deep and the hub's row give every open ask (#1463,
             // #2690): its state-word slot draws its kind (#1461 AC27), and its row's name stays its question.
             row_slot(id, "mark", mark_name(ask, &drawn.value, drawn.entry))
-            .aria_value(drawn.entry.to_owned())
-            .flex_none()
-            .w(s.mark)
-            .h_full()
-            .mr(s.space(1))
-            .flex()
-            .items_center()
-            .child(crate::icons::mark(drawn.entry, drawn.step)),
+                .aria_value(drawn.entry.to_owned())
+                .flex_none()
+                .w(s.mark)
+                .h_full()
+                .mr(s.space(1))
+                .flex()
+                .items_center()
+                .child(crate::icons::mark(drawn.entry, drawn.step)),
         )
         .child(
             // Each slot the row's full height, so the slots read in the row's order, left to right.
@@ -981,6 +981,9 @@ mod tests {
                 "an ask whose row reads {value}"
             );
         }
-        assert_eq!(mark_name(false, "running", "running"), states::glyph("running"));
+        assert_eq!(
+            mark_name(false, "running", "running"),
+            states::glyph("running")
+        );
     }
 }
