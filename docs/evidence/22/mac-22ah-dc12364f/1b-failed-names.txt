@@ -1,0 +1,22 @@
+test ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases ... FAILED
+test ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count ... FAILED
+    ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases
+    ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count
+error: test failed, to rerun pass `-p deep-app --test acceptance_1141`
+test ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb ... FAILED
+    ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb
+error: test failed, to rerun pass `-p deep-app --test acceptance_1141_memory`
+test ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them ... FAILED
+    ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them
+error: test failed, to rerun pass `-p deep-app --test acceptance_34`
+test a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app ... FAILED
+test the_app_reads_the_hubs_health_and_log_as_the_app ... FAILED
+test the_hub_takes_the_views_the_app_reports_shown_and_hidden ... FAILED
+    a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app
+    the_app_reads_the_hubs_health_and_log_as_the_app
+    the_hub_takes_the_views_the_app_reports_shown_and_hidden
+error: test failed, to rerun pass `-p deep-app --test hub_client`
+    `-p deep-app --test acceptance_1141`
+    `-p deep-app --test acceptance_1141_memory`
+    `-p deep-app --test acceptance_34`
+    `-p deep-app --test hub_client`

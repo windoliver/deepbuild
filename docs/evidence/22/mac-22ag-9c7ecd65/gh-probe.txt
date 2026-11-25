@@ -1,0 +1,10 @@
+== 13:31:59 gh issue view 22 and 319 (before the judge)
+{"comments":2,"number":22,"state":"OPEN"}
+exit=0
+{"comments":1,"number":319,"state":"CLOSED"}
+exit=0
+== 13:40:53 gh issue view 22 and 319 (after the judge)
+{"comments":2,"number":22,"state":"OPEN"}
+exit=0
+{"comments":1,"number":319,"state":"CLOSED"}
+exit=0

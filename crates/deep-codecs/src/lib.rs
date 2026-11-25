@@ -1121,8 +1121,9 @@ fn bad(why: String, caps: &Caps) -> Value {
     }
 }
 
-/// A `transcode` job: `role` (base_color, emission, normal, occlusion or data) and `bc` (the
-/// adapter samples BC) choose the format; the texels go to `out` (a file path).
+/// A `transcode` job: `role` (base_color, color, emission, normal, occlusion or data) and `bc` (the
+/// adapter samples BC) choose the format, `alpha_cutoff` is the mask's that samples a base color
+/// (#3257); the texels go to `out` (a file path).
 fn map_job(data: &[u8], job: &Job, planted: &Planted) -> Value {
     let Some(role) = job.s("role").and_then(maps::Role::read) else {
         return json!({"error": "a transcode names its role"});
@@ -1143,7 +1144,9 @@ fn map_job(data: &[u8], job: &Job, planted: &Planted) -> Value {
     } else {
         maps::Blocks::None
     };
-    match maps::ready(data, role, blocks, planted.is("applies_image_gamma")) {
+    let cutoff = job.v.get("alpha_cutoff").and_then(Value::as_f64);
+    let gamma = planted.is("applies_image_gamma");
+    match maps::ready(data, role, cutoff.map(|c| c as f32), blocks, gamma) {
         Ok(r) => match std::fs::write(out, &r.data) {
             Ok(()) => {
                 let mut v = r.json();

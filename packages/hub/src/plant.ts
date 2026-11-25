@@ -175,6 +175,13 @@ export type Plant =
   // a socket, timer or child left per cycle, and a hub that can't give a full collection or its resident memory.
   | 'churn-keeps-ended-session' | 'churn-keeps-reload-listener' | 'churn-leaves-socket' | 'churn-leaves-timer' | 'churn-leaves-child'
   | 'churn-no-full-collection' | 'churn-no-resident-read'
+  // #1866's: what the churn benchmark must catch, each kept with nothing let go (a claim's lane, an ended session's claims,
+  // its usage tail, a permission prompt's ask, a gone session's routes), and a hub that reads a claim from memory alone.
+  | 'churn-keeps-claim-lane' | 'churn-keeps-ended-claims' | 'churn-keeps-usage-tail' | 'churn-keeps-prompt-ask' | 'churn-keeps-gone-routes'
+  | 'claim-reads-only-memory'
+  // #3389's: a state pass that reads only the session an append was made in, and a hub that forgets when the clock ends a
+  // session's state with the session.
+  | 'state-pass-own-session-only' | 'let-go-forgets-time'
   // #2650's: the four stores the churn benchmark must catch, each kept with nothing let go.
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
   // #2402's: a host that counts a hook handler's failures and never clears them.
@@ -348,7 +355,10 @@ export type Plant =
   | 'reply-cap-64kb' | 'pager-drops-edge-row' | 'refusal-schema-12000' | 'unknown-client-64kb'
   // #1576's: a sessions.read that returns every row, a page sent a frame more for each event, and an inbox.read that
   // reads each ask with a query of its own.
-  | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row';
+  | 'reads-every-row' | 'page-hook-frame-per-event' | 'query-per-row'
+  // #2060's: a key with no reading of the programs its check's command names, one that holds the run's own link to each,
+  // one whose base run's holds none, and a reader that skips a program it can't find.
+  | 'key-leaves-out-programs' | 'key-holds-program-link' | 'program-readings-head-only' | 'skips-absent-program';
 const PLANTS: readonly string[] = [
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
@@ -402,6 +412,9 @@ const PLANTS: readonly string[] = [
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
   'churn-no-full-collection', 'churn-no-resident-read',
+  'churn-keeps-claim-lane', 'churn-keeps-ended-claims', 'churn-keeps-usage-tail', 'churn-keeps-prompt-ask', 'churn-keeps-gone-routes',
+  'claim-reads-only-memory',
+  'state-pass-own-session-only', 'let-go-forgets-time',
   'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
   'failures-never-cleared',
   'whose-running-sessions-only',
@@ -479,6 +492,7 @@ const PLANTS: readonly string[] = [
   'canvas-world-built-once',
   'reply-cap-64kb', 'pager-drops-edge-row', 'refusal-schema-12000', 'unknown-client-64kb',
   'reads-every-row', 'page-hook-frame-per-event', 'query-per-row',
+  'key-leaves-out-programs', 'key-holds-program-link', 'program-readings-head-only', 'skips-absent-program',
   'unseen-reads-as-card', 'folds-seen-unseen', 'one-median-per-run',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
@@ -507,6 +521,11 @@ export function plantedSessionEnd(plant: Plant | undefined, session: string): vo
   if (plant === 'churn-leaves-timer') leftTimers.push(setInterval(() => undefined, 2 ** 30).unref());
   if (plant === 'churn-leaves-child') leftChildren.push(spawn('/bin/sleep', ['86400'], { stdio: 'ignore' }));
   if (plant === 'leak-file-per-session') leftFiles.push(openSync('/dev/null', 'r'));
+}
+const keptOf = new Map<string, { kept: unknown; pad: string }>();
+/** What a planted hub keeps of `key` where it would let go of it (#1866), with 32 KiB no other value shares. */
+export function plantedKeeps(plant: Plant | undefined, name: Plant, key: string, kept: unknown): void {
+  if (plant === name) keptOf.set(key, { kept, pad: randomBytes(16_384).toString('hex') });
 }
 /** What a planted hub leaves behind as an extension reloads. */
 export function plantedReload(plant: Plant | undefined): void {

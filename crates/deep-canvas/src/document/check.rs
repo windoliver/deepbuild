@@ -451,6 +451,7 @@ fn finish(
                 Tail::Document => {
                     check_id_maps(lowered, &mut issues);
                     check_controls(lowered, sealed, &mut issues);
+                    check_control_reads(lowered, sealed, &mut issues);
                     check_constraints(lowered, sealed, &mut issues);
                     check_assemblies(lowered, &mut issues);
                     check_viewer_tools(lowered, &mut issues);
@@ -487,6 +488,20 @@ fn in_chunks<T: Send, R: Send>(entries: &mut [T], work: impl Fn(&mut [T]) -> R +
         std::thread::available_parallelism().map_or(1, |n| n.get().min(8))
     };
     in_threads(entries, threads, work)
+}
+
+/// Runs `work` on each index below `count`, a chunk of indexes per core, up to 8, on scoped threads
+/// when std reports more than one core, and on the caller's thread otherwise (#1172: a pack
+/// field's entries, each checked on its own).
+#[inline(never)]
+pub fn each_index(count: usize, work: &(dyn Fn(usize) + Sync)) {
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(8).min(count));
+    let mut indexes: Vec<usize> = (0..count).collect();
+    in_threads(&mut indexes, threads, |chunk| {
+        for i in chunk.iter() {
+            work(*i);
+        }
+    });
 }
 
 /// The steps of a check after its items, in their order.
@@ -1619,12 +1634,12 @@ fn check_item(
             None
         }
         Lookup::Malformed => {
-            issues.push(Issue::error(
-                "out_of_range",
+            // Another tool's word is refused as a pack's census holds it (#3032).
+            issues.push(super::close::no_kind(
                 key,
-                at("kind"),
-                json!(text),
-                "not family.name@major",
+                text,
+                (ctx.packs, ctx.resolved),
+                ctx.sealed.close_fault,
             ));
             None
         }
@@ -2066,6 +2081,22 @@ fn check_key(section: &str, key: &str, issues: &mut Vec<Issue>) {
             format!("{section}/{key}"),
             json!(key),
             &r.what,
+        ));
+    }
+}
+
+/// A declared field that reads a control the document doesn't hold (#3379): `ref_unresolved`
+/// at the field, so a revision that removes or renames a control something still reads is
+/// refused, as one that removes an item something names is.
+fn check_control_reads(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
+    for (id, path, control) in crate::refs::unresolved_controls(doc, sealed) {
+        let what = format!("{id} reads the control {control}, which the document doesn't hold");
+        issues.push(Issue::error(
+            "ref_unresolved",
+            &id,
+            path,
+            json!(control),
+            &what,
         ));
     }
 }

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU, since each file presents and renders back 3D frames on the Metal device through deep-show, and castle.test.ts draws through deep-gpu, both built with cargo" }

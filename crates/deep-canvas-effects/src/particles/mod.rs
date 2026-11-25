@@ -24,6 +24,7 @@ pub mod regions;
 pub mod rule;
 pub mod solve;
 pub mod spec;
+pub mod stepped;
 pub mod surface;
 pub mod turbulence;
 

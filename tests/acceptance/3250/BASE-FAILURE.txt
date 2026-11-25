@@ -1,0 +1,83 @@
+# base: 118ec119f1a769c2125a8a815a72031e3be29248
+# date: 2026-11-24T04:57:33Z
+# node: v24.22.0
+# load: 20:57  up 4 days,  1:24, 13 users, load averages: 110.72 102.34 88.24
+# command: npx vitest run tests/acceptance/3250 --reporter=verbose
+
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-issue-2082-rolled-back-envelope-1c67ff/98177044-fec4-4fef-830e-e45b353ec4f8/scratchpad/blind3250/repo
+
+ × tests/acceptance/3250/stop.test.ts > #3250.1334628e a stop whose transcript gave a write total and no split records a turn.usage@2 whose cost reads "at least", and the session's spend.usd and its deep numbers line both say "at least" 5434ms
+   → the hub writes turn.usage@2 for a Claude Code stop; it wrote {"v":1,"id":"01M85YNGTYWA274H8CS7D7WBX5","kind":"turn.usage","writer":"core","actor":"you","scope":"you","ts":1795496264542,"log_pos":10,"data":{"turn":"01M85YNGHP000000008JV83PD9","model":"claude-opus-4-5","covers":"session","tokens":{"input":1000010,"cached":5000,"output":200,"exact":true},"cost":{"basis":"estimated","usd":6.25755,"rate_card":"anthropic-list-2026-10"}},"evidence":[],"subject":"session:868f4f9d037a45b6a2c661d88a735696","session":"868f4f9d-037a-45b6-a2c6-61d88a735696","project":"work2c2278eb","agent":"claude-code","verified":true}: expected 1 to be 2 // Object.is equality
+ ✓ tests/acceptance/3250/record.test.ts > #3250.b5e3837c a record holding turn.usage@1 events reads the same spend and tokens it read before 5721ms
+ × tests/acceptance/3250/stop.test.ts > #3250.060b349a a stop whose transcript wrote 300,000 one-hour and 800,000 five-minute tokens records both parts in its turn.usage@2, and its input is what turn.usage@1 recorded 6075ms
+   → the hub writes turn.usage@2 for a Claude Code stop; it wrote {"v":1,"id":"01M85YNPWKPBHQQWN1QDKE599W","kind":"turn.usage","writer":"core","actor":"you","scope":"you","ts":1795496270739,"log_pos":11,"data":{"turn":"01M85YNP35000000009P42A99E","model":"claude-opus-4-5","covers":"session","tokens":{"input":1100020,"cached":10000,"output":400,"exact":true},"cost":{"basis":"estimated","usd":8.0151,"rate_card":"anthropic-list-2026-10"}},"evidence":[],"subject":"session:50806120197849188933d31554482aab","session":"50806120-1978-4918-8933-d31554482aab","project":"workf742e450","agent":"claude-code","verified":true}: expected 1 to be 2 // Object.is equality
+ × tests/acceptance/3250/stop.test.ts > #3250.639cf1ce a session whose every record gives its split never reads "at least" anywhere 5131ms
+   → the hub writes turn.usage@2 for a Claude Code stop; it wrote {"v":1,"id":"01M85YNVMX62FFDYTM67WXY200","kind":"turn.usage","writer":"core","actor":"you","scope":"you","ts":1795496275613,"log_pos":10,"data":{"turn":"01M85YNV7000000000Q614GXHR","model":"claude-opus-4-5","covers":"session","tokens":{"input":300010,"cached":5000,"output":200,"exact":true},"cost":{"basis":"estimated","usd":3.00755,"rate_card":"anthropic-list-2026-10"}},"evidence":[],"subject":"session:1d1e34d64d93415e933f671b55782f62","session":"1d1e34d6-4d93-415e-933f-671b55782f62","project":"workdf4b46a7","agent":"claude-code","verified":true}: expected 1 to be 2 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3250/stop.test.ts > #3250.1334628e a stop whose transcript gave a write total and no split records a turn.usage@2 whose cost reads "at least", and the session's spend.usd and its deep numbers line both say "at least"
+AssertionError: the hub writes turn.usage@2 for a Claude Code stop; it wrote {"v":1,"id":"01M85YNGTYWA274H8CS7D7WBX5","kind":"turn.usage","writer":"core","actor":"you","scope":"you","ts":1795496264542,"log_pos":10,"data":{"turn":"01M85YNGHP000000008JV83PD9","model":"claude-opus-4-5","covers":"session","tokens":{"input":1000010,"cached":5000,"output":200,"exact":true},"cost":{"basis":"estimated","usd":6.25755,"rate_card":"anthropic-list-2026-10"}},"evidence":[],"subject":"session:868f4f9d037a45b6a2c661d88a735696","session":"868f4f9d-037a-45b6-a2c6-61d88a735696","project":"work2c2278eb","agent":"claude-code","verified":true}: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/acceptance/3250/stop.test.ts:18:109
+     16|     const usage = await turn(w, [{ input: 10, output: 200, read: 5000,…
+     17|     expect(usage, 'the hub records the stop\'s turn.usage').toBeDefine…
+     18|     expect(versionOf(usage), `the hub writes turn.usage@2 for a Claude…
+       |                                                                                                             ^
+     19|     expect((usage!.data.cost as { basis?: unknown } | undefined)?.basi…
+     20|     expect(saysAtLeast(usage!.data.cost), `the recorded cost reads "at…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/3250/stop.test.ts > #3250.060b349a a stop whose transcript wrote 300,000 one-hour and 800,000 five-minute tokens records both parts in its turn.usage@2, and its input is what turn.usage@1 recorded
+AssertionError: the hub writes turn.usage@2 for a Claude Code stop; it wrote {"v":1,"id":"01M85YNPWKPBHQQWN1QDKE599W","kind":"turn.usage","writer":"core","actor":"you","scope":"you","ts":1795496270739,"log_pos":11,"data":{"turn":"01M85YNP35000000009P42A99E","model":"claude-opus-4-5","covers":"session","tokens":{"input":1100020,"cached":10000,"output":400,"exact":true},"cost":{"basis":"estimated","usd":8.0151,"rate_card":"anthropic-list-2026-10"}},"evidence":[],"subject":"session:50806120197849188933d31554482aab","session":"50806120-1978-4918-8933-d31554482aab","project":"workf742e450","agent":"claude-code","verified":true}: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/acceptance/3250/stop.test.ts:44:109
+     42|     // turn.usage@1's input takes the writes in whole: 10 + 10 input t…
+     43|     expect(tokens?.input, `input is what turn.usage@1 recorded, 1,100,…
+     44|     expect(versionOf(usage), `the hub writes turn.usage@2 for a Claude…
+       |                                                                                                             ^
+     45|     const counted = numbersIn(tokens);
+     46|     expect(counted.filter((c) => c.n === 300_000 && ONE_HOUR.test(c.pa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/3250/stop.test.ts > #3250.639cf1ce a session whose every record gives its split never reads "at least" anywhere
+AssertionError: the hub writes turn.usage@2 for a Claude Code stop; it wrote {"v":1,"id":"01M85YNVMX62FFDYTM67WXY200","kind":"turn.usage","writer":"core","actor":"you","scope":"you","ts":1795496275613,"log_pos":10,"data":{"turn":"01M85YNV7000000000Q614GXHR","model":"claude-opus-4-5","covers":"session","tokens":{"input":300010,"cached":5000,"output":200,"exact":true},"cost":{"basis":"estimated","usd":3.00755,"rate_card":"anthropic-list-2026-10"}},"evidence":[],"subject":"session:1d1e34d64d93415e933f671b55782f62","session":"1d1e34d6-4d93-415e-933f-671b55782f62","project":"workdf4b46a7","agent":"claude-code","verified":true}: expected 1 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ tests/acceptance/3250/stop.test.ts:64:122
+     62|     expect(all.length, 'one turn.usage per stop').toBeGreaterThanOrEqu…
+     63|     // The record the criterion speaks of is the one this issue makes:…
+     64|     for (const e of all) expect(versionOf(e), `the hub writes turn.usa…
+       |                                                                                                                          ^
+     65|     for (const e of all) expect(saysAtLeast(e.data), `a turn.usage of …
+     66|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  3 failed | 1 passed (4)
+   Start at  20:57:37
+   Duration  18.58s (tests 90%, transform 6%, import 4%)
+
+exit 1
