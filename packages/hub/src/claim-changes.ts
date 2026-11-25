@@ -15,20 +15,28 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
   const deadline = Date.now() + ms;
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
   const unread: string[] = [];
-  // A read that fails is recorded unless `missing` allows it (a file the base never had); either way it gives nothing.
-  const git = (args: string[], missing = false): Promise<string> => new Promise((done) => {
+  // A read that fails is recorded unless `missing` allows it (a file the base never had); either way it lists nothing.
+  // Its output is split on `sep`: NUL for the -z path reads (#3114), newline otherwise.
+  const git = (args: string[], sep = 10, missing = false): Promise<string[]> => new Promise((done) => {
     const left = Math.max(1, Math.ceil(deadline - Date.now()));
-    execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, env, maxBuffer: 1 << 30, timeout: left, killSignal: 'SIGKILL' }, (error, out, err) => {
-      if (error && !(missing && !error.killed)) {
+    // Kept as bytes, split by `sep`: up to 1 GB is more than one string holds.
+    execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, env, encoding: 'buffer', maxBuffer: 1 << 30, timeout: left, killSignal: 'SIGKILL' }, (error, out, err) => {
+      if (error && !(missing && !error.killed && /does not exist in|exists on disk, but not in/.test(String(err)))) {
         const why = (error as { code?: unknown }).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'gave more than 1 GB' : error.killed ? `timed out, past the read's ${Math.ceil(ms)} ms deadline` : `failed: ${String(err).trim().split('\n')[0] || error.message}`;
         unread.push(`git ${args.join(' ')} ${why}`);
       }
-      done(error ? '' : out);
+      const lines: string[] = [];
+      for (let at = 0; !error && at < out.length;) {
+        const end = out.indexOf(sep, at);
+        const line = out.toString('utf8', at, end < 0 ? out.length : end);
+        if (line) lines.push(line);
+        at = end < 0 ? out.length : end + 1;
+      }
+      done(lines);
     });
   });
   // Paths as git stores them (#3114): with -z, never quoted and escaped by core.quotePath, so they match a run's reads.
-  const paths = async (args: string[]): Promise<string[]> => (await git(args)).split('\0').filter(Boolean);
-  const [diff, others, tracked] = await Promise.all([paths(['diff', '-z', '--name-only', '--no-renames', base]), paths(['ls-files', '-z', '--others', '--exclude-standard']), paths(['ls-files', '-z'])]);
+  const [diff, others, tracked] = await Promise.all([git(['diff', '-z', '--name-only', '--no-renames', base], 0), git(['ls-files', '-z', '--others', '--exclude-standard'], 0), git(['ls-files', '-z'], 0)]);
   const configs = new Map<string, string>();
   for (const path of new Set([...tracked, ...others].filter(runnerConfig))) {
     const text = await readFile(join(cwd, path), 'utf8').catch(() => undefined);
@@ -36,6 +44,6 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
   }
   // Whether package.json's scripts changed: the script a check runs is its own.
   const scriptsOf = (text: string | undefined): string => { try { return JSON.stringify((JSON.parse(text ?? '{}') as { scripts?: unknown }).scripts ?? null); } catch { return 'unreadable'; } };
-  const scripts = diff.includes('package.json') && scriptsOf(await git(['show', `${base}:package.json`], true)) !== scriptsOf(await readFile(join(cwd, 'package.json'), 'utf8').catch(() => undefined));
+  const scripts = diff.includes('package.json') && scriptsOf((await git(['show', `${base}:package.json`], 10, true)).join('\n')) !== scriptsOf(await readFile(join(cwd, 'package.json'), 'utf8').catch(() => undefined));
   return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts, ...(unread.length ? { unread: unread.join('; ') } : {}) };
 }
