@@ -1574,6 +1574,13 @@ byHand.push('tests/acceptance/96/commit.test.ts', 'tests/acceptance/96/proof.tes
 Object.assign(redrafted, { 'tests/acceptance/3295/late-close.test.mjs': 'tests/acceptance/3295-redraft-fae86cca/' });
 byHand.push('tests/acceptance/3295/late-close.test.mjs');
 
+// #3478: an affected.mjs run waits for its grants on a stall, so three files' tests of its fixed 30-minute wait can't
+// hold (the owner's approval on PR #3483). Each original, kept as written, maps to its blind redraft, which carries the
+// file's other tests, and runs by hand only.
+const stalled = { 'tests/acceptance/1113/waits.test.mjs': 'tests/acceptance/1113-redraft-3478/', 'tests/acceptance/2574/grant.test.mjs': 'tests/acceptance/2574-redraft-3478/', 'tests/acceptance/1115-redraft-2833/no-grant.test.mjs': 'tests/acceptance/1115-redraft-3478/' };
+Object.assign(redrafted, stalled);
+byHand.push(...Object.keys(stalled));
+
 // #3257's folder (blind) runs alone by its lane.json: its files build deep-gpu, the merge base's too, and draw on Metal.
 // ac7-budget.test.ts times the mask map's chain against the merge base's on the reference Mac.
 timed.push('tests/acceptance/3257/ac7-budget.test.ts');
