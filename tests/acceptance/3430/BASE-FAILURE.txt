@@ -1,0 +1,84 @@
+# #3430 acceptance suite on the merge base 1b4929ae7977aa4bfe62b03e0ef39674be9e8a27 (origin/main), macOS darwin-arm64, Node 24.22.0, 2026-11-24
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/3430 --no-file-parallelism   (then tsc -p tests/acceptance/3430/tsconfig.json; home paths written as ~)
+# deep-hook built first: cargo build --locked -q -p deep-hook
+load: { 53.22 41.47 54.10 }
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a742aa4cce5129e54/tests/acceptance/3430
+
+ ❯ canceled.test.ts (5 tests | 4 failed) 131896ms
+   × #3430.98bfee96 a Copilot turn canceled in paseo is recorded with no agent.stop, the gate doesn't run, and its row reads that its turn was interrupted 2437ms
+   × #3430.77661745 a turn that failed with the error "rate limit" is still a failed stop whose cause reads rate_limited 2305ms
+   × #3430.920b7e03 your next prompt in the session clears the interrupted reading a canceled turn left 2394ms
+   × #3430.5c4cf6e4 an outcome the facts don't list marks the session unverified and names the outcome 122520ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  canceled.test.ts > #3430.98bfee96 a Copilot turn canceled in paseo is recorded with no agent.stop, the gate doesn't run, and its row reads that its turn was interrupted
+AssertionError: #3430.98bfee96 paseo canceled this turn ({"kind":"canceled","reason":"Stopped from the paseo app"}): an interrupted turn has no stop, but the record holds agent.stop@5 session 77f4c4e1-15a4-4828-8ab2-8a0c525e400e subject session:77f4c4e115a448288ab28a0c525e400e {"turn":1,"did_work":false,"claim":false,"outcome":"failed","cause":"unknown","usage":null}; plugin errors []: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "agent.stop@5 session 77f4c4e1-15a4-4828-8ab2-8a0c525e400e subject session:77f4c4e115a448288ab28a0c525e400e {\"turn\":1,\"did_work\":false,\"claim\":false,\"outcome\":\"failed\",\"cause\":\"unknown\",\"usage\":null}",
++ ]
+
+ ❯ canceled.test.ts:123:249
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  canceled.test.ts > #3430.77661745 a turn that failed with the error "rate limit" is still a failed stop whose cause reads rate_limited
+AssertionError: #3430.77661745 one failed stop whose cause reads rate_limited: agent.stop@5 session 6d0c6d61-000f-4e63-8305-e8cb018442b3 subject session:6d0c6d61000f4e638305e8cb018442b3 {"turn":1,"did_work":false,"claim":false,"outcome":"failed","cause":"unknown","usage":null}: expected [ { outcome: 'failed', …(1) } ] to deeply equal [ { outcome: 'failed', …(1) } ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "cause": "rate_limited",
++     "cause": "unknown",
+      "outcome": "failed",
+    },
+  ]
+
+ ❯ canceled.test.ts:137:213
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  canceled.test.ts > #3430.920b7e03 your next prompt in the session clears the interrupted reading a canceled turn left
+AssertionError: #3430.920b7e03 before your next prompt, the canceled turn reads interrupted; the session's record: session.activity, session.state, row.set, agent.stop: expected 'flagged: its turn ended failed, with …' to contain 'its turn was interrupted'
+
+Expected: "its turn was interrupted"
+Received: "flagged: its turn ended failed, with no claim (for a reason its agent didn't give)"
+
+ ❯ canceled.test.ts:155:173
+    153|   await ends(w, 't1', CANCELED);
+    154|   const { evs, row } = await landed(w);
+    155|   expect(rowSays(row), `${AC.next} before your next prompt, the cancel…
+       |                                                                                                                                                                             ^
+    156|   // Your next prompt: paseo starts the session's next turn.
+    157|   await turnStarts(w.host, w.f, 't2', 'Carry on, and take the discount…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  canceled.test.ts > #3430.5c4cf6e4 an outcome the facts don't list marks the session unverified and names the outcome
+AssertionError: #3430.5c4cf6e4 the record names the outcome paseo gave (timed_out); the session's record: session.activity@2 session 50d51466-5097-40f8-8b8b-1c3d005e1e2c subject session:50d51466509740f88b8b1c3d005e1e2c {"activity":"turn_start"} verified true; session.state@3 session 50d51466-5097-40f8-8b8b-1c3d005e1e2c subject session:50d51466509740f88b8b1c3d005e1e2c {"state":"working","cause":"working"} verified true; row.set@4 session - subject - {"listed":true,"order":"0|1|~|3|0001795588718055|session:50d51466-5097-40f8-8b8b-1c3d005e1e2c","id":"session:50d51466-5097-40f8-8b8b-1c3d005e1e2c","address":"session/50d51466-5097-40f8-8b8b-1c3d005e1e2c","title":"agent","project":null,"session":"50d51466-5097-40f8-8b8b- verified true; agent.stop@5 session 50d51466-5097-40f8-8b8b-1c3d005e1e2c subject session:50d51466509740f88b8b1c3d005e1e2c {"turn":1,"did_work":false,"claim":false,"outcome":"failed","cause":"unknown","usage":null} verified true; session.state@6 session 50d51466-5097-40f8-8b8b-1c3d005e1e2c subject session:50d51466509740f88b8b1c3d005e1e2c {"state":"flagged","cause":"failed"} verified true; row.set@7 session - subject - {"listed":true,"order":"0|0|~|2|0001795588718412|session:50d51466-5097-40f8-8b8b-1c3d005e1e2c","id":"session:50d51466-5097-40f8-8b8b-1c3d005e1e2c","address":"session/50d51466-5097-40f8-8b8b-1c3d005e1e2c","title":"agent","project":null,"session":"50d51466-5097-40f8-8b8b- verified true: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ canceled.test.ts:171:271
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 1 passed (5)
+   Start at  22:38:26
+   Duration  132.28s (tests 100%)
+
+exit 1
+tsc exit 0
