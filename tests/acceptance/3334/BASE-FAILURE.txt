@@ -1,0 +1,119 @@
+# #3334's acceptance suite on the merge base 3c564bbdd (origin/main), node --test 'tests/acceptance/3334/*.test.mjs'
+# 2026-11-23 on the 12-core Mac it was drafted on, 1-minute load 72 to 82. Home folders are written ~, temporary
+# folders $TMPDIR, this machine's name <host>, the checkout <checkout>.
+#
+# Expected on the base, and seen:
+#   #3334.6c8b5837 FAILS at its assertion: --stall is an unknown flag (BLOCKED throttle: usage, exit 2), not exit 0.
+#   #3334.ed504fe3 FAILS at its assertion: the same usage line, exit 2, not 3 and INCONCLUSIVE no grant.
+#   #3334.f5046205 FAILS at its assertion: the base far end waits 30 min (--wait 30) behind the held build slot,
+#     so the near end is still running at the test's 6-minute bound.
+#   #3334.e38df940 PASSES: the base's 30-minute wait outlasts the fixture's moving queue. Its proof is twin far-fixed-wait.
+#   #3334.5d28f79a PASSES: a failed npm ci reads BLOCKED lane-remote today. Its proof is twin far-swallows-failure.
+
+✔ #3334.5d28f79a a far-end npm ci that itself fails still reads BLOCKED lane-remote and exits 3 (8276.819625ms)
+✔ #3334.e38df940 a remote lane whose far-end npm ci waits behind a build queue that keeps moving past the stall bound gets its grant and reads the lane's own state (49410.904167ms)
+✖ #3334.f5046205 a far end whose build queue stalls past the bound reads INCONCLUSIVE on the near end, exits 2, and its fetched record names the holder (362608.306875ms)
+✖ #3334.6c8b5837 a build --stall 0.05 request behind a line whose grants change hands about every 2 s for 20 s is granted and runs its command (2465.6325ms)
+✖ #3334.ed504fe3 a build --stall 0.05 request behind build grants that never change hands ends INCONCLUSIVE no grant naming each holder, exits 3 and never runs its command (1376.712208ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 2
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 363096.960917
+
+✖ failing tests:
+
+test at tests/acceptance/3334/far-stalled.test.mjs:20:1
+✖ #3334.f5046205 a far end whose build queue stalls past the bound reads INCONCLUSIVE on the near end, exits 2, and its fetched record names the holder (362608.306875ms)
+  AssertionError [ERR_ASSERTION]: the near end ended within 6 minutes of a stall bound of 0.05 min
+  the near end was still running after 6 min
+  npm: []
+  log ($TMPDIR/deep-1122-RDbI7v/far-home/.deepbuild/throttle):
+  {"at":"2026-11-24T03:48:10.358Z","event":"granted","class":"build","grant":"top-level","id":"f2ffb7b0fc0a1eff","pid":63972,"index":1,"load":71.92578125,"cores":12,"wait":10}
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3334/far-stalled.test.mjs:31:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3334/stall.test.mjs:10:1
+✖ #3334.6c8b5837 a build --stall 0.05 request behind a line whose grants change hands about every 2 s for 20 s is granted and runs its command (2465.6325ms)
+  AssertionError [ERR_ASSERTION]: the --stall request behind a moving line is granted, runs its command and exits with its status (0)
+  request: exit 2
+  BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]
+  
+  line:
+  stdout:
+  READY 2
+  
+  stderr:
+  
+  log ($TMPDIR/deep-3334-aFAGvd/table):
+  {"at":"2026-11-24T03:48:08.788Z","event":"granted","class":"build","grant":"top-level","id":"28ef9541931c757d","pid":63066,"index":1,"load":71.92578125,"cores":12,"wait":10}
+  {"at":"2026-11-24T03:48:10.305Z","event":"released","class":"build","id":"28ef9541931c757d","pid":63066}
+  {"at":"2026-11-24T03:48:10.373Z","event":"granted","class":"build","grant":"top-level","id":"bfb9f41982b3c578","pid":63065,"index":1,"load":71.92578125,"cores":12,"wait":10}
+  
+  2 !== 0
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3334/stall.test.mjs:22:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3334/stall.test.mjs:35:1
+✖ #3334.ed504fe3 a build --stall 0.05 request behind build grants that never change hands ends INCONCLUSIVE no grant naming each holder, exits 3 and never runs its command (1376.712208ms)
+  AssertionError [ERR_ASSERTION]: a request whose line stalls exits 3, as a timed-out wait does
+  request: exit 2
+  BLOCKED throttle: usage: throttle.mjs <build|bay-pair|test|timed> [--wait <min>] [--hold <min>] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]
+  
+  log ($TMPDIR/deep-3334-AIQSao/table):
+  {"at":"2026-11-24T03:48:11.809Z","event":"granted","class":"build","grant":"top-level","id":"37e82d31ff2f5b0a","pid":64515,"index":1,"load":71.92578125,"cores":12,"wait":10}
+  
+  2 !== 3
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3334/stall.test.mjs:45:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 3,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+# Planted wrong programs, each in a throwaway implementation (scratch copy of the checkout, not kept) that passed
+# all 5 tests; each twin of twins/README.md failed its test at its assertion:
+## fixed-wait
+✖ #3334.6c8b5837 a build --stall 0.05 request behind a line whose grants change hands about every 2 s for 20 s is granted and runs its command (6368.104958ms)
+✖ #3334.ed504fe3 a build --stall 0.05 request behind build grants that never change hands ends INCONCLUSIVE no grant naming each holder, exits 3 and never runs its command (4438.281291ms)
+  AssertionError [ERR_ASSERTION]: the --stall request behind a moving line is granted, runs its command and exits with its status (0)
+  AssertionError [ERR_ASSERTION]: the line names holder hold-3334-1: "; blocked by build grant 5a842e2a9a76e15d held by pid 97859 since <time> (<command>)"
+## far-fixed-wait
+✖ #3334.e38df940 a remote lane whose far-end npm ci waits behind a build queue that keeps moving past the stall bound gets its grant and reads the lane's own state (11028.7885ms)
+  AssertionError [ERR_ASSERTION]: the near end prints the lane's own state, "PASS unit on <host>", not BLOCKED or INCONCLUSIVE
+## far-blocked
+✖ #3334.f5046205 a far end whose build queue stalls past the bound reads INCONCLUSIVE on the near end, exits 2, and its fetched record names the holder (8013.171208ms)
+  AssertionError [ERR_ASSERTION]: the near end prints "INCONCLUSIVE unit on <host>"
+## far-swallows-failure
+✖ #3334.5d28f79a a far-end npm ci that itself fails still reads BLOCKED lane-remote and exits 3 (4118.338917ms)
+  AssertionError [ERR_ASSERTION]: the run reads "BLOCKED lane-remote"
+## throwaway implementation, no fault
+✔ #3334.5d28f79a a far-end npm ci that itself fails still reads BLOCKED lane-remote and exits 3 (2267.11125ms)
+✔ #3334.e38df940 a remote lane whose far-end npm ci waits behind a build queue that keeps moving past the stall bound gets its grant and reads the lane's own state (33701.838167ms)
+✔ #3334.f5046205 a far end whose build queue stalls past the bound reads INCONCLUSIVE on the near end, exits 2, and its fetched record names the holder (5511.948041ms)
+✔ #3334.6c8b5837 (stall.test.mjs, 12.1 s) and ✔ #3334.ed504fe3 (3.6 s) in the same copy

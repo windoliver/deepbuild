@@ -1,0 +1,12 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 16:15:59 load { 15.01 27.03 84.57 } thermal 0 free KB 39877176
+main head b1a1ff86234e7e080e0e339774ac12ad05813e9b 16:16:02 load { 14.52 26.73 84.13 } thermal 0 free KB 39388164
+setup exit=0 16:16:56 load { 18.14 25.66 80.13 } thermal 0 free KB 38287632
+tests/acceptance/41/app/finder.test.ts exit=1 16:22:04 load { 75.92 63.85 81.40 } thermal 1 free KB 28238020
+tests/acceptance/1454/commands.test.ts exit=1 16:32:44 load { 43.44 96.98 106.32 } thermal 1 free KB 104431260
+tests/acceptance/1454/panel.test.ts exit=1 16:33:58 load { 27.95 80.20 99.14 } thermal 1 free KB 104062936
+tests/acceptance/1454/panel-redraft/refused.test.ts exit=1 16:34:51 load { 23.07 70.75 94.56 } thermal 1 free KB 103972836
+tests/acceptance/1454/canvas.test.ts exit=1 16:34:55 load { 22.34 69.81 94.09 } thermal 1 free KB 103979796
+tests/acceptance/1459/voiceover.test.ts exit=1 16:37:36 load { 13.34 49.05 81.58 } thermal 1 free KB 102324940
+tests/acceptance/41/app/screens.test.ts exit=1 16:37:41 load { 13.95 48.59 81.22 } thermal 1 free KB 102319076
+kills file 164 lines 16:37:47 load { 14.67 48.16 80.88 } thermal 1 free KB 102316776
+secret scan hits=0 16:37:47 load { 14.67 48.16 80.88 } thermal 1 free KB 102316332

@@ -4,10 +4,12 @@ Design: [Plan usage, per account and per task](../../docs/technical-design.md#pl
 [What each agent gives us, and the limits we design around](../../docs/technical-design.md#what-each-agent-gives-us-and-the-limits-we-design-around),
 [Decided](../../docs/technical-design.md#decided).
 
-**Status: BLOCKED.** The 40 runs haven't run, so there is no `record.json`, no reading and no row under Decided.
-Nothing is set meanwhile, as the issue decided. This account has no 5-hour window to read: no probe's stream carried one,
-and `/usage` lists only weekly windows ([below](#the-account-has-no-5-hour-window)). The issue's rule reads the 5-hour
-window, so waiting for the weekly reset doesn't unblock it. The runs are held until you decide how to take them.
+**Status: left to #1796 (Nov 24 2026).** The 40 runs never ran, so there is no `record.json`, no reading and no row
+under Decided. Nothing is set, as the issue decided for the meantime. This account has no 5-hour window to read: no
+probe's stream carried one, and `/usage` listed only weekly windows before and after the weekly reset
+([below](#the-account-has-no-5-hour-window)). The issue's rule reads the 5-hour window, so it can't be applied here.
+You chose to leave the question to #1796, which reads routes from history at no extra spend. The acceptance tests'
+PR (#2907) was closed unmerged.
 
 ## The job and the script
 
@@ -18,7 +20,7 @@ node spikes/2401/record.mjs --claude <path> --own-use <pct/Mtok> --basis "<words
 ```
 
 The last form spends plan usage. It makes one opening run (`lead`, under neither label), then 40 runs alternating
-between the labels. It writes `record.json` in the shape the issue's acceptance tests read (`tests/acceptance/2401/README.md`, on [PR 2907](https://github.com/windoliver/deepbuild/pull/2907)). Raw streams go to
+between the labels. It writes `record.json` in the shape the issue's acceptance tests read (`tests/acceptance/2401/README.md` on [PR 2907](https://github.com/windoliver/deepbuild/pull/2907), closed unmerged). Raw streams go to
 `--streams`, which must be outside the checkout, and the record pins each one by SHA-256.
 
 - **The job** is the review check's. Its prompt is the one `packages/hub/src/kinds.ts` builds, over that file's
@@ -122,25 +124,22 @@ from the `anthropic-ratelimit-unified-*` response headers and says "Windows abse
 here". The probes' events held `seven_day` only, so the server sent no 5-hour header. The 5-hour window is missing from
 the account's state, not hidden by the warning band.
 
+The weekly reset didn't bring one. [`usage-after-reset.json`](usage-after-reset.json) holds the same `/usage` on Nov 24
+2026 at 08:14 UTC, after the reset, through Claude Code 2.1.326 (the 2.1.308 binary was gone), again with 0 turns and
+$0. It lists the same two weekly windows, now at 0% and resetting Dec 1 at 12 am Pacific, and no current-session line.
+The entry's structured `rate_limits` holds only those two weekly limits too.
+
 So the rule can't be applied on this account:
 
 - AC1 leaves out a run missing a 5-hour reading. Every run here misses one, so every run would be left out and the
   reading would be INCONCLUSIVE, whatever the spend.
-- Nothing here shows that the weekly reset brings a 5-hour window. Whether it does can be checked at $0 with the
-  same `/usage` after Nov 24 07:59 UTC; no paid probe is needed for that.
-- Weekly use is at 100% now, so no paid run should start before the reset anyway.
+- The weekly reset didn't bring a 5-hour window (above), so waiting for it changed nothing.
 
-### What you can choose
+### What was chosen
 
-- **Another account that has a 5-hour window.** `/usage` shows a current-session line on such an account. Then run the
-  probes and the 40 runs there, as the issue gives them.
-- **Measure on the weekly window instead.** This changes the issue's rule (it reads the 5-hour window) and AC1's
-  left-out test, so it needs an amendment and the blind job's redraft. At whole-percent steps a run of ~10,000 tokens
-  reads 0, so it also needs blocks of runs per label large enough to move the weekly window several points each: a
-  large share of a week's plan.
-- **Check at $0 after the reset.** Run `/usage` after Nov 24 07:59 UTC. If a current-session line appears, probe and
-  run as planned; if not, take one of the other choices.
-- **Leave it to #1796.** #1796 reads routes from history as history builds up, at no extra spend.
+**Left to #1796 (Nov 24 2026).** The other choices were another account with a 5-hour window, or an amendment to
+measure the weekly window in blocks of runs, at a large share of a week's plan. The script here still runs the issue's
+40 runs on an account that has a 5-hour window.
 
 ## What the label changes besides the rate
 
@@ -158,6 +157,5 @@ runs read the tool lists again from every run's init entry.
 
 ## Checks
 
-The issue's acceptance tests are on [PR 2907](https://github.com/windoliver/deepbuild/pull/2907), not here. They stay
-BLOCKED until the record exists, and that PR carries them with the record. This PR adds no test and changes no code
-outside `spikes/2401/`.
+The issue's acceptance tests are on [PR 2907](https://github.com/windoliver/deepbuild/pull/2907), closed unmerged with
+the question left to #1796. They read BLOCKED there, with no record. This folder holds no test.

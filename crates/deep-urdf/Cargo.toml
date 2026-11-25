@@ -1,0 +1,18 @@
+[package]
+name = "deep-urdf"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.95"
+license = "Apache-2.0"
+publish = false
+
+# Issue #3035: the import job's tool for a robot description, a URDF file in and a canvas document
+# of one item and one body a link, its joints and what had no place out, built to WebAssembly by
+# `node scripts/urdf-wasm.mjs` and run by `packages/jobs/import/urdf/urdf.mjs`, outside the canvas
+# core.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+roxmltree = { version = "=0.21.1", default-features = false, features = ["std"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

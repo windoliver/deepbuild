@@ -1,0 +1,13 @@
+Mac15,12
+Apple M3
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B131
+Now drawing from 'AC Power'
+ lowpowermode         0
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+node v24.22.0
+          Resolution: 2560 x 1664 Retina
+free disk before 56742420 KB
+start 2026-11-15 18:20:59 18:20  up 2 days, 11:23, 2 users, load averages: 14.33 12.53 15.40 thermalState 0
+end 2026-11-15 18:59:54 18:59  up 2 days, 12:01, 2 users, load averages: 3.04 5.52 20.37

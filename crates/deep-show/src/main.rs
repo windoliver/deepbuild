@@ -1138,10 +1138,6 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     .into_iter()
     .filter_map(|(d, f)| Some((d, f?)))
     .collect();
-    let seeds = entries(input, "docs", |d| Some(d.get("document").cloned()))?
-        .into_iter()
-        .filter_map(|(id, seed)| Some((id, seed?)))
-        .collect();
     let quotas = entries(input, "quotas", |q| {
         let cap = |k: &str| match q.get(k) {
             None => Some(None),
@@ -1335,7 +1331,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
                 || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
-                || deep_canvas_input::rows::PLANTED.contains(p)
+                || deep_canvas_input::rows::PLANTED.contains(p) || deep_canvas_marks::data::holds::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
                 || deep_canvas_input::point::PLANTED.contains(p)
                 // #542's in the text field and the scroll control's router.
@@ -1364,7 +1360,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
-                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p)
+                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1810,7 +1806,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         logic_planted,
         calls,
         at,
-        seeds,
+        seeds: shared::seeds(input)?,
+        recorded: Default::default(),
         state: optional(input.get("state"), |s| Some(PathBuf::from(s.as_str()?)))?,
         quotas,
         clock,

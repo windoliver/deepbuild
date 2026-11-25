@@ -9,7 +9,8 @@ import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decision
 import type { Host } from '@deepbuild/supervisor';
 import { writtenOf } from '@deepbuild/wiki';
 import { renamedSince } from '@deepbuild/workspaces';
-import { Core, type CoreProviders } from './core.js';
+import { Core } from './core.js';
+import type { CoreProviders } from './core-providers.js';
 import { openKinds } from './kinds.js';
 import { pageClaims, type IndexFill } from './search.js';
 import { MEMORY_TRANSCRIPTS, projectOf } from './memory.js';
@@ -25,10 +26,12 @@ export function createCore(
   asking?: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void,
   acking?: (session: string) => void,
   scrubbing?: (values: string[]) => void,
+  forgot?: (session: string) => void,
 ): Core {
   const providers: CoreProviders = {
     checks: {
       command: async (...args) => (await import('@deepbuild/checks-command')).runCommandCheck(...args),
+      programs: async (...args) => (await import('@deepbuild/checks-command')).programReadings(...args),
       kinds: (o) => {
         let kinds: Promise<import('./checks-port.js').CheckKinds> | undefined;
         return () => (kinds ??= openKinds(o));
@@ -76,5 +79,5 @@ export function createCore(
     forge: { open: openGitHub, gateTokens, repoOf, revoke, sessionToken },
     workspaces: { create: (o) => new Workspaces(o), renamedSince, intake: (o) => new Intake(o) },
   };
-  return new Core(options, emit, providers, asking, acking, scrubbing);
+  return new Core(options, emit, providers, asking, acking, scrubbing, forgot);
 }

@@ -1,0 +1,20 @@
+
+ RUN  v5.0.5 ~/private/dbc-22e/target/e2e-22
+
+-e:2:76: warning: cast from 'CFArray?' to unrelated type '[[String : Any]]' always fails
+let all = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as! [[String: Any]]
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^   ~~~~~~~~~~~~~~~
+-e:2:76: warning: cast from 'CFArray?' to unrelated type '[[String : Any]]' always fails
+let all = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as! [[String: Any]]
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^   ~~~~~~~~~~~~~~~
+-e:2:76: warning: cast from 'CFArray?' to unrelated type '[[String : Any]]' always fails
+let all = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as! [[String: Any]]
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^   ~~~~~~~~~~~~~~~
+ ✓ app.test.ts (1 test) 86926ms
+   ✓ app 86926ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  08:12:51
+   Duration  87.02s (tests 100%)
+

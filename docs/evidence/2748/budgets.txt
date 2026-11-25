@@ -1,0 +1,13 @@
+
+ RUN  v5.0.5 <checkout>
+
+stdout | tests/acceptance/2748/budgets.test.ts > AC6 #2748.8023bb4b a claim whose diff no pass covers starts no job and gains under 5 ms on its hold, compared with the merge base
+Steps so far: 
+
+ ↓ tests/acceptance/2748/budgets.test.ts > AC6 #2748.8023bb4b a claim whose diff no pass covers starts no job and gains under 5 ms on its hold, compared with the merge base 33ms [INCONCLUSIVE AC6 #2748.8023bb4b not a reference Mac: Mac17,10 / Apple M5 Max / 64 GiB: a budget counts only on a reference Mac on mains power]
+
+ Test Files  1 passed (1)
+      Tests  1 skipped (1)
+   Start at  03:37:40
+   Duration  161ms (tests 71%, transform 12%, import 11%, setup 4%, worker 2%)
+

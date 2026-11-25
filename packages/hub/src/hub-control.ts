@@ -58,7 +58,7 @@ import type { CheckKinds } from './checks-port.js';
 import { Stacks } from './stacks.js';
 import { Starts } from './starts.js';
 import { Drain, drainFor, drainHealth, drainWords } from './drain.js';
-import { argsOf } from './children.js';
+import { ancestorsOf, argsOf } from './children.js';
 
 import { HeavyQueue } from './heavy.js';
 
@@ -124,7 +124,7 @@ export interface HubControlOptions {
     readonly intakeOf: WorkspacesProvider['intake'];
   };
   delivery: () => Pick<AnswerDeliveryPort, "note" | "openOffers" | "placed" | "saveOffered" | "sendBack" | "stopWaiting" | "switches" | "waitAnswer">;
-  judging: () => Pick<StopJudgingPort, "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
+  judging: () => Pick<StopJudgingPort, "keeps" | "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
   state: () => Pick<SessionStatePort, "agentAbove" | "entered" | "liveOf" | "notAnAgent" | "renameSession" | "whySeen" | "rowsSeen" | "seeRow" | "seenBy" | "sessionRows" | "sessionWindow" | "sessions" | "startOf" | "states" | "statesSettled" | "statusSeen">;
   memory: () => Pick<SessionMemoryPort, "lessons" | "memoryAct" | "sessionRules" | "syncRules" | "syncStanding">;
   transcripts: () => Pick<TranscriptsPort, "backfill">;
@@ -202,6 +202,7 @@ export class HubControl {
       case 'numbers.sample': await this.options.state().notAnAgent(context, method); return this.options.services.numbers.sample(Number(params.before), typeof params.manifest === 'string' ? params.manifest : undefined);
       case 'changes.read': return this.readings.change(params);
       case 'evidence.read': return this.evidence.evidence(params);
+      case 'handle.read': return this.evidence.handle(params);
       case 'eval.report': {
         // Keep the report's exact serialization, not an outcome asserted by its caller. replayCheck reads its runs.
         let report: unknown;
@@ -308,6 +309,9 @@ export class HubControl {
       case 'lease.wait': return this.options.services.heavy.wait(params, context.peer, () => this.options.state().agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'lease.started': return this.options.services.heavy.started(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'lease.exited': return this.options.services.heavy.exited(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+      // deep-show's GPU lease (#3219): its place in the one queue, read against any `deep lease` above it, and its release.
+      case 'lease.gpu': return this.options.services.heavy.gpu(params, context.peer, () => this.options.state().agentAbove(context.peer), () => ancestorsOf(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+      case 'lease.release': return this.options.services.heavy.release(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'env.up': return this.work.envUp(params, context);
       case 'env.down': return this.work.envDown(params, context);
       // The steps setup took (#1100), each a `setup.step` event, only as its one list names them.
@@ -421,7 +425,7 @@ export class HubControl {
 
   async job(args: Obj, caller: string | undefined): Promise<Obj> { return this.authority.job(args, caller); }
 
-  async keep(bytes: Uint8Array, source: string): Promise<string> { return this.evidence.keep(bytes, source); }
+  async keep(bytes: Uint8Array, source: string, sealed?: true): Promise<string> { return this.evidence.keep(bytes, source, sealed); }
 
   async stored(put: PutResult, what: string): Promise<Evidence> { return this.evidence.stored(put, what); }
 
