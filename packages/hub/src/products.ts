@@ -121,6 +121,8 @@ export function cloneTree(src: string, dst: string): Promise<{ cloned: true } | 
  * volume under the disk floor isn't made. Why neither was, or nothing. A session's worktree is handed clones only.
  */
 async function cloneOrCopy(src: string, dst: string): Promise<string | undefined> {
+  // As cloneTree, onto nothing: cp onto a folder would copy into it, and its cleanup would remove what was there.
+  if (existsSync(dst)) return `${dst} is there already`;
   if (process.platform === 'darwin') {
     const r = await cloneTree(src, dst);
     if (r.cloned) return undefined;
