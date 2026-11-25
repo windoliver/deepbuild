@@ -302,6 +302,23 @@ test('a compose step finds the Docker CLI the hub found on its PATH, and no cred
 });
 
 
+// A stand-in host that runs each step for real, on the machine; the stack's own run is one it doesn't know.
+const machineHost = (): Host => {
+  const unknown = () => Promise.reject(Error('no such run'));
+  const exits = new Map<string, number | null>();
+  return {
+    name: 'test',
+    start: async (spec: { run: string; argv: string[]; cwd: string; env?: Record<string, string>; output?: { stdout: (c: Buffer) => void } }) => {
+      const ran = spawnSync(spec.argv[0]!, spec.argv.slice(1), { cwd: spec.cwd, env: spec.env });
+      spec.output?.stdout(ran.stdout);
+      exits.set(spec.run, ran.status);
+      return { run: spec.run, status: 'started', pid: 1, pgid: 1, start: '0', leases: [] };
+    },
+    wait: async (run: string) => (exits.has(run) ? { run, code: exits.get(run) ?? null, signal: null, evidence: { stdout: '', stderr: '' } } : unknown()),
+    signal: unknown,
+  } as unknown as Host;
+};
+
 // Docker Desktop's VM shows each host folder it shares under /host_mnt, and `docker inspect` can give a bind's source as
 // the VM sees it. The core places each bind by its host path, so read back as the VM's it's in no tree and the run uncounted.
 test("a container's bind mount reads back as the folder on this machine it binds, not Docker Desktop's /host_mnt view of it", async () => {
@@ -318,26 +335,36 @@ test("a container's bind mount reads back as the folder on this machine it binds
   writeFileSync(join(tools, 'inspect.json'), JSON.stringify(shown));
   writeFileSync(join(tools, 'docker'), `#!/bin/sh\ncase "$1" in context) echo unix:///nonexistent.sock;; ps) echo c1;; inspect) cat '${join(tools, 'inspect.json')}';; esac\n`);
   chmodSync(join(tools, 'docker'), 0o755);
-  // The stand-in host runs each step for real, on the machine.
-  const unknown = () => Promise.reject(Error('no such run'));
-  const exits = new Map<string, number | null>();
-  const host = {
-    name: 'test',
-    start: async (spec: { run: string; argv: string[]; cwd: string; env?: Record<string, string>; output?: { stdout: (c: Buffer) => void } }) => {
-      const ran = spawnSync(spec.argv[0]!, spec.argv.slice(1), { cwd: spec.cwd, env: spec.env });
-      spec.output?.stdout(ran.stdout);
-      exits.set(spec.run, ran.status);
-      return { run: spec.run, status: 'started', pid: 1, pgid: 1, start: '0', leases: [] };
-    },
-    wait: async (run: string) => (exits.has(run) ? { run, code: exits.get(run) ?? null, signal: null, evidence: { stdout: '', stderr: '' } } : unknown()),
-    signal: unknown,
-  } as unknown as Host;
+  const host = machineHost();
   const stack = new WarmStack({ host, compose: { dir: join(dir, 'hub'), docker: join(tools, 'docker') }, products: {} as WarmProducts, take: async () => ({ key: '' }), scrub: () => undefined });
   try {
     stack.project = 'deep-c000';
     const { containers, mounts } = await stack.containers();
     expect(containers.map((c) => c.binds)).toEqual([[init, data]]);
     expect(mounts.map((m) => m.source)).toEqual([init, data]);
+  } finally {
+    await downStack(host, stack.id);
+  }
+});
+
+// Docker Desktop shows a recreated container's new bind as the VM's path, so a service is removed and made anew, but
+// only one whose container holds no anonymous volume: recreating is what carries an anonymous volume (an image's own
+// VOLUME, say a database's data) over to the new container, and removing it would start that service empty.
+test('a service whose container holds an anonymous volume is recreated, keeping it; one with none is removed and made anew', async () => {
+  const dir = repo('http://127.0.0.1:${web}/health');
+  const tools = mkdtempSync(join(tmpdir(), 'env-local-docker-'));
+  dirs.push(tools);
+  const calls = join(tools, 'calls');
+  writeFileSync(join(tools, 'docker'), `#!/bin/sh\necho "$*" >> '${calls}'\ncase "$*" in\n  context*) echo unix:///nonexistent.sock;;\n  *" ps -aq db") echo id-db;;\n  *" ps -aq web") echo id-web;;\n  "inspect "*" id-db") echo "${'a'.repeat(64)} deep-c000_shared ";;\n  "inspect "*" id-web") echo "deep-c000_web-data ";;\nesac\n`);
+  chmodSync(join(tools, 'docker'), 0o755);
+  const host = machineHost();
+  const stack = new WarmStack({ host, compose: { dir: join(dir, 'hub'), docker: join(tools, 'docker') }, products: {} as WarmProducts, take: async () => ({ key: '' }), scrub: () => undefined });
+  try {
+    stack.project = 'deep-c000';
+    const up = (stack as unknown as { up: (file: string, services: string[]) => Promise<string | undefined> }).up.bind(stack);
+    expect(await up(join(dir, 'compose.json'), ['db', 'web'])).toBeUndefined();
+    const ran = readFileSync(calls, 'utf8').trim().split('\n').filter((c) => / (rm|up) /.test(c)).map((c) => c.replace(/^.* (rm|up) /, '$1 '));
+    expect(ran).toEqual(['rm -sf web', "up -d --wait -t 3 --no-deps --no-build --pull never --force-recreate db web"]);
   } finally {
     await downStack(host, stack.id);
   }

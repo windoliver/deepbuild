@@ -266,15 +266,16 @@ export class WarmStack {
   }
 
   /**
-   * Starts the services anew from the file; `wait`, through their own health checks. Each one's container is removed
-   * first, not recreated: on Docker Desktop a container recreated with a new bind source shows it as the VM's
-   * /host_mnt path, which is in no tree the core knows, so the run would be uncounted. Named volumes stay.
+   * Starts the services anew from the file; `wait`, through their own health checks. A service whose container holds no
+   * anonymous volume is removed first and made anew: on Docker Desktop a container recreated with a new bind source can
+   * show it as the VM's /host_mnt path. One that holds one is recreated, which carries its anonymous volumes over.
    */
   private async up(file: string, services: string[], wait = true): Promise<string | undefined> {
     if (!services.length) return undefined;
     const named = services.map(quote).join(' ');
-    const ran = await this.dock(`${this.compose(file, `stop -t 3 ${named}`)} && ${this.compose(file, `rm -f ${named}`)} && ${this.compose(file, `up -d ${wait ? '--wait ' : ''}-t 3 --no-deps --no-build --pull never --force-recreate ${named}`)}`, [], BUILD_MS);
-    return ran.code === 0 ? undefined : `docker compose up ${services.join(' ')} exited ${String(ran.code)}: ${ran.stderr.trim().split('\n').slice(-1)[0] ?? ''}`;
+    const fresh = `f=; for s in ${named}; do id=$(${this.compose(file, 'ps -aq "$s"')}) || exit 1; [ -n "$id" ] && "$0" inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' $id | grep -Eq '(^| )[0-9a-f]{64} ' || f="$f $s"; done; [ -z "$f" ] || ${this.compose(file, 'rm -sf $f')}`;
+    const ran = await this.dock(`${fresh} && ${this.compose(file, `up -d ${wait ? '--wait ' : ''}-t 3 --no-deps --no-build --pull never --force-recreate ${named}`)}`, [], BUILD_MS);
+    return ran.code === 0 ? undefined : `docker compose rm or up ${services.join(' ')} exited ${String(ran.code)}: ${ran.stderr.trim().split('\n').slice(-1)[0] ?? ''}`;
   }
   /** Waits for the database on its own TCP port: Postgres's first start answers on its socket before it is ready. */
   private async dbReady(file: string): Promise<string | undefined> {
