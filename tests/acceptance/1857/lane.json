@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU; looks.test.ts and still.test.ts draw on Metal, and every file runs children held to a deadline and a memory limit" }

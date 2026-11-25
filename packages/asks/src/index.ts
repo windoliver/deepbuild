@@ -77,7 +77,7 @@ const CORE = { writer: 'core' } as const;
  */
 const PAGE = 100;
 /** The kinds `apply` reads, which the core's reads of the log name: an event of any other kind is never decoded (#2646). */
-const APPLIED = ['session.start', 'agent.stop', 'session.continued', 'session.end', 'task.closed', 'ask.created', 'plan.proposed', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'decision.applied', 'ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'default.undone', 'deadline.moved', 'doc.patched', 'ask.batched', 'ask.later', 'approval.held', 'approval.started', 'approval.withdrawn', 'tool.before', 'user.ask', 'verdict.made', 'claim.made', 'tool.after'];
+const APPLIED = ['session.start', 'agent.stop', 'session.continued', 'session.end', 'session.gone', 'task.closed', 'ask.created', 'plan.proposed', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'decision.applied', 'ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'default.undone', 'deadline.moved', 'doc.patched', 'ask.batched', 'ask.later', 'approval.held', 'approval.started', 'approval.withdrawn', 'tool.before', 'user.ask', 'verdict.made', 'claim.made', 'tool.after'];
 /** Time the hub didn't run, down or with the Mac asleep, moves deadlines once it is longer than this (#908). */
 const AWAY = 10_000;
 /** How many ended sessions' closed asks stay in memory; the record keeps them all. */
@@ -94,8 +94,8 @@ class AsksCore implements Asks {
   /** Since when the app has said macOS won't show its notifications (#994). */
   private notificationsOff: number | undefined;
   private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null; agent: string }>();
-  /** The sessions whose verified end the core read, oldest first: past the newest ENDED_KEPT they leave memory (#824). */
-  private readonly endOrder = new Set<string>();
+  /** The sessions whose verified end, or their process's (#1866), the core read, oldest first, each with which: past the newest ENDED_KEPT they leave memory (#824). */
+  private readonly endOrder = new Map<string, string>();
   /**
    * Each session's stops a rule can still read, in log order, and each of them by ID (#85): its newest, and each one a
    * task covers while the task is open or its default can still be undone, which its check and its reset read. The rest
@@ -1187,7 +1187,7 @@ class AsksCore implements Asks {
    * since the record's table doesn't keep the scopes. Its stops and what was said of them (#85) go too.
    */
   private forgetEnded(): void {
-    for (const session of [...this.endOrder].slice(0, Math.max(0, this.endOrder.size - ENDED_KEPT))) {
+    for (const session of [...this.endOrder.keys()].slice(0, Math.max(0, this.endOrder.size - ENDED_KEPT))) {
       // A thread with an ask open reads its sessions' attempts and exceptions, and its session's asks may be among them.
       if (this.openIn(this.threadOf(session)).length) continue;
       // A stop not read yet, or one a block task open or closing covers, is still to be acted on: its resume reads them.
@@ -1282,6 +1282,8 @@ class AsksCore implements Asks {
   private async apply(e: Event): Promise<void> {
     const d: Obj = isObj(e.data) ? e.data : {};
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
+    // A hook of a session whose process read as gone says it runs on.
+    if (e.writer === 'hook' && e.session && e.kind !== 'session.end' && this.endOrder.get(e.session) === 'session.gone') this.endOrder.delete(e.session);
     switch (e.kind) {
       case 'session.start':
         // A session started in another's place in the same process (the session tree's lineage) replaced its attempt.
@@ -1337,14 +1339,12 @@ class AsksCore implements Asks {
         return;
       }
       case 'session.end':
+      case 'session.gone':
         // A session you stopped (its SessionEnd, or the core's end for a Codex process that exited without one, #1023)
         // isn't resumed by a task closing: a continue would wake nobody.
-        if ((e.writer === 'hook' || e.writer === 'core') && e.session) this.ended.set(e.session, e.ts);
+        if (e.kind === 'session.end' && (e.writer === 'hook' || e.writer === 'core') && e.session) this.ended.set(e.session, e.ts);
         // Only a verified end counts toward forgetting: an unverified one ends nothing, as in the hub.
-        if (e.session && !e.unverified) {
-          this.endOrder.add(e.session);
-          this.forgetEnded();
-        }
+        if (e.session && !e.unverified) { this.endOrder.set(e.session, e.kind); this.forgetEnded(); }
         return;
       case 'task.closed': {
         // A task closed by a verdict: the session whose prompt opened it (task_ref session:<id>#<message>), and the

@@ -1,0 +1,27 @@
+{
+  "crates/deep-scene3d-render/src/ao.rs": [
+    {
+      "find": [
+        "    steps: [u32; 4],",
+        "}"
+      ],
+      "wrong": [
+        "    steps: [u32; 4],",
+        "    // #3256's planted wrong program: one more field at the struct's end.",
+        "    more: [f32; 4],",
+        "}"
+      ]
+    },
+    {
+      "find": [
+        "            steps: [contact.map_or(0, |(c, _)| c.samples); 4],",
+        "        };"
+      ],
+      "wrong": [
+        "            steps: [contact.map_or(0, |(c, _)| c.samples); 4],",
+        "            more: [0.0; 4],",
+        "        };"
+      ]
+    }
+  ]
+}

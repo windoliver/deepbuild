@@ -26,6 +26,7 @@ export function createCore(
   asking?: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void,
   acking?: (session: string) => void,
   scrubbing?: (values: string[]) => void,
+  forgot?: (session: string) => void,
 ): Core {
   const providers: CoreProviders = {
     checks: {
@@ -78,5 +79,5 @@ export function createCore(
     forge: { open: openGitHub, gateTokens, repoOf, revoke, sessionToken },
     workspaces: { create: (o) => new Workspaces(o), renamedSince, intake: (o) => new Intake(o) },
   };
-  return new Core(options, emit, providers, asking, acking, scrubbing);
+  return new Core(options, emit, providers, asking, acking, scrubbing, forgot);
 }
