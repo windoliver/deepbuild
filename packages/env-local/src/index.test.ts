@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
@@ -283,3 +283,62 @@ test("a warm run whose app never answers its health route has the app's run clea
     await downStack(host, stack.id);
   }
 }, 30_000);
+
+// Docker Desktop keeps its keychain credential helpers in the folder its CLI is in. A CLI that finds one on its PATH
+// asks the keychain for every build's credentials, which the sandbox denies, so `docker compose build` fails (#2315).
+test('a compose step finds the Docker CLI the hub found on its PATH, and no credential helper kept beside it', () => {
+  fakeDocker('case "$1" in context) echo unix:///nonexistent.sock;; esac');
+  const cli = process.env.PATH!.split(':')[0]!;
+  writeFileSync(join(cli, 'docker-credential-osxkeychain'), '#!/bin/sh\nexit 1\n');
+  chmodSync(join(cli, 'docker-credential-osxkeychain'), 0o755);
+  const hub = mkdtempSync(join(tmpdir(), 'env-local-hub-'));
+  dirs.push(hub);
+  const kind = composeKind(hub);
+  const env = kind.release!.env!;
+  const found = (name: string): string => spawnSync('/bin/sh', ['-c', `command -v ${name}`], { env, encoding: 'utf8' }).stdout.trim();
+  expect(found('docker-credential-osxkeychain'), 'the credential helper beside the CLI').toBe('');
+  expect(found('docker'), 'the CLI on the step\'s PATH').not.toBe('');
+  expect(realpathSync(found('docker'))).toBe(realpathSync(kind.docker!));
+});
+
+
+// Docker Desktop's VM shows each host folder it shares under /host_mnt, and `docker inspect` can give a bind's source as
+// the VM sees it. The core places each bind by its host path, so read back as the VM's it's in no tree and the run uncounted.
+test("a container's bind mount reads back as the folder on this machine it binds, not Docker Desktop's /host_mnt view of it", async () => {
+  const dir = repo('http://127.0.0.1:${web}/health');
+  const [init, data] = [join(dir, 'db', 'init'), join(dir, 'data')];
+  mkdirSync(init, { recursive: true });
+  mkdirSync(data);
+  const tools = mkdtempSync(join(tmpdir(), 'env-local-docker-'));
+  dirs.push(tools);
+  const shown = [{ Config: { Image: 'postgres:16', Labels: { 'com.docker.compose.service': 'db' } }, Mounts: [
+    { Type: 'bind', Source: `/host_mnt${init}`, Destination: '/docker-entrypoint-initdb.d' },
+    { Type: 'bind', Source: data, Destination: '/data' },
+    { Type: 'volume', Source: '/var/lib/docker/volumes/x/_data', Destination: '/var/lib/postgresql/data' }] }];
+  writeFileSync(join(tools, 'inspect.json'), JSON.stringify(shown));
+  writeFileSync(join(tools, 'docker'), `#!/bin/sh\ncase "$1" in context) echo unix:///nonexistent.sock;; ps) echo c1;; inspect) cat '${join(tools, 'inspect.json')}';; esac\n`);
+  chmodSync(join(tools, 'docker'), 0o755);
+  // The stand-in host runs each step for real, on the machine.
+  const unknown = () => Promise.reject(Error('no such run'));
+  const exits = new Map<string, number | null>();
+  const host = {
+    name: 'test',
+    start: async (spec: { run: string; argv: string[]; cwd: string; env?: Record<string, string>; output?: { stdout: (c: Buffer) => void } }) => {
+      const ran = spawnSync(spec.argv[0]!, spec.argv.slice(1), { cwd: spec.cwd, env: spec.env });
+      spec.output?.stdout(ran.stdout);
+      exits.set(spec.run, ran.status);
+      return { run: spec.run, status: 'started', pid: 1, pgid: 1, start: '0', leases: [] };
+    },
+    wait: async (run: string) => (exits.has(run) ? { run, code: exits.get(run) ?? null, signal: null, evidence: { stdout: '', stderr: '' } } : unknown()),
+    signal: unknown,
+  } as unknown as Host;
+  const stack = new WarmStack({ host, compose: { dir: join(dir, 'hub'), docker: join(tools, 'docker') }, products: {} as WarmProducts, take: async () => ({ key: '' }), scrub: () => undefined });
+  try {
+    stack.project = 'deep-c000';
+    const { containers, mounts } = await stack.containers();
+    expect(containers.map((c) => c.binds)).toEqual([[init, data]]);
+    expect(mounts.map((m) => m.source)).toEqual([init, data]);
+  } finally {
+    await downStack(host, stack.id);
+  }
+});

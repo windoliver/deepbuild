@@ -148,6 +148,12 @@ interface WarmOptions {
   plant?: string | undefined;
 }
 
+/**
+ * A bind's source as a path on this machine. Docker Desktop's VM shows each host folder it shares under /host_mnt, and
+ * `docker inspect` sometimes gives a container's bind as the VM's path; one that isn't a path here is that folder's.
+ */
+const hostSource = (source: string): string => (source.startsWith('/host_mnt/') && !existsSync(source) ? source.slice('/host_mnt'.length) : source);
+
 export class WarmStack {
   /** The stack's own run: the shell that holds its leases, and the token its services carry. */
   readonly id = newRun();
@@ -259,10 +265,15 @@ export class WarmStack {
     return ran.code === 0 ? undefined : `its volumes couldn't be made: ${ran.stderr.trim().slice(-300)}`;
   }
 
-  /** Starts the services anew from the file; `wait`, through their own health checks. */
+  /**
+   * Starts the services anew from the file; `wait`, through their own health checks. Each one's container is removed
+   * first, not recreated: on Docker Desktop a container recreated with a new bind source shows it as the VM's
+   * /host_mnt path, which is in no tree the core knows, so the run would be uncounted. Named volumes stay.
+   */
   private async up(file: string, services: string[], wait = true): Promise<string | undefined> {
     if (!services.length) return undefined;
-    const ran = await this.dock(this.compose(file, `up -d ${wait ? '--wait ' : ''}-t 3 --no-deps --no-build --pull never --force-recreate ${services.map(quote).join(' ')}`), [], BUILD_MS);
+    const named = services.map(quote).join(' ');
+    const ran = await this.dock(`${this.compose(file, `stop -t 3 ${named}`)} && ${this.compose(file, `rm -f ${named}`)} && ${this.compose(file, `up -d ${wait ? '--wait ' : ''}-t 3 --no-deps --no-build --pull never --force-recreate ${named}`)}`, [], BUILD_MS);
     return ran.code === 0 ? undefined : `docker compose up ${services.join(' ')} exited ${String(ran.code)}: ${ran.stderr.trim().split('\n').slice(-1)[0] ?? ''}`;
   }
   /** Waits for the database on its own TCP port: Postgres's first start answers on its socket before it is ready. */
@@ -433,7 +444,7 @@ export class WarmStack {
     const mounts: Serving['served']['mounts'] = [];
     const containers = rows.map((c): Container => {
       const service = c.Config.Labels['com.docker.compose.service'] ?? '(no service)';
-      const binds = c.Mounts.filter((m) => m.Type === 'bind');
+      const binds = c.Mounts.filter((m) => m.Type === 'bind').map((m) => ({ ...m, Source: hostSource(m.Source) }));
       for (const m of binds) mounts.push({ service, source: m.Source, target: m.Destination });
       const context = c.Config.Labels['deepbuild.context'];
       const digest = c.Config.Labels['deepbuild.digest'];
