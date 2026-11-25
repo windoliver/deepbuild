@@ -523,17 +523,6 @@ fn openings(event: &Value) -> Vec<(String, String)> {
     }
 }
 
-/// The asks the event may bring in sight, as the notifier reads it: each it opens, and one the hub's list takes in.
-/// The window says one of them where its notification would post nothing (#3232).
-pub(crate) fn opens(event: &Value) -> Vec<String> {
-    let row = &event["data"];
-    let listed = (event["kind"] == "row.set" && row["listed"] == true && listing(row).is_some())
-        .then(|| row["id"].as_str())
-        .flatten();
-    let opened = openings(event).into_iter().map(|(_, handle)| handle);
-    opened.chain(listed.map(str::to_owned)).collect()
-}
-
 /// The notification a session's state posts: DeepBuild and the session's task, then its mark and its state's words.
 pub fn notification_text(table: &Table, session: &str, now: u64) -> String {
     match table.open_asks(Some(session)).first() {

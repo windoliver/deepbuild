@@ -61,12 +61,14 @@ struct Entry {
 }
 
 /// What the window last read of what it says: the record's place, the page shown with its session's state word and
-/// what it was doing, the hub, the asks whose yes the hub holds or held, and the planted receipt's countdown.
+/// what it was doing, the hub, the asks in sight, the asks whose yes the hub holds or held, and the planted
+/// receipt's countdown.
 #[derive(Clone, Default, PartialEq)]
 struct Read {
     to: Option<u64>,
     page: Option<(String, Option<String>, Option<String>)>,
     hub_down: bool,
+    sight: Vec<String>,
     /// The ask answered on the open page, whose hold the record says next, and the asks whose hold was said.
     answered: Option<String>,
     held: Vec<String>,
@@ -303,7 +305,7 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
             .take_while(|event| event["log_pos"].as_u64() > Some(from))
             .collect();
         new.reverse();
-        let mut shown: Vec<String> = Vec::new();
+        let mut opens = was.to.is_none();
         let on_page = |ask: &str| {
             let page = was.page.as_ref().map(|page| page.0.as_str());
             page == Some(Address::ask(ask).to_string().as_str())
@@ -317,7 +319,7 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
         for event in new {
             let core = event["writer"] == "core";
             let subject = event["subject"].as_str().unwrap_or_default();
-            shown.extend(crate::notify::opens(event));
+            opens |= crate::notify::reads(event);
             match event["kind"].as_str().unwrap_or_default() {
                 "ask.answered" if core && on_page(subject) => {
                     next.answered = Some(subject.to_owned())
@@ -340,27 +342,25 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
                 _ => {}
             }
         }
-        // An ask is said where its notification would post: once an event opened or listed it and it is in sight
-        // (#22). One waiting for its batch is said when the core shows it, and the hub's list takes it in.
-        let (open, sight) = if shown.is_empty() {
-            (Vec::new(), Vec::new())
-        } else {
-            (table.open_asks(None), view.needs_you())
-        };
-        for (at, handle) in shown.iter().enumerate() {
-            let ask = open.iter().find(|ask| states::handle(ask) == *handle);
-            let Some(ask) = ask.filter(|_| !shown[..at].contains(handle)) else {
-                continue;
-            };
-            if !sight.iter().any(|row| row["ask"] == handle.as_str()) {
-                continue;
-            }
-            let looking = key && session.is_some_and(|s| ask["session"] == s.id.as_str());
-            if looking || planted("announces-every-ask") {
-                opened.push(asking(&table, ask));
-            }
-            if looking {
-                asked.push(handle.clone());
+        // An ask is said as it comes in sight, where its notification would post (#22): one waiting for its batch
+        // once the core shows it and the hub's list takes it in. The asks in sight are read at the first tick and
+        // on one with an event the notifier reads too.
+        if opens {
+            let sight = view.needs_you();
+            let sight = sight.iter().filter_map(|row| row["ask"].as_str());
+            next.sight = sight.map(str::to_owned).collect();
+            let open = table.open_asks(None);
+            for handle in next.sight.iter().filter(|ask| !was.sight.contains(ask)) {
+                let Some(ask) = open.iter().find(|ask| states::handle(ask) == *handle) else {
+                    continue;
+                };
+                let looking = key && session.is_some_and(|s| ask["session"] == s.id.as_str());
+                if looking || planted("announces-every-ask") {
+                    opened.push(asking(&table, ask));
+                }
+                if looking {
+                    asked.push(handle.clone());
+                }
             }
         }
         // The session on the open page: its state word, never what it is doing.
