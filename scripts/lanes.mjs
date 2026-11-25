@@ -994,6 +994,12 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
       const tree = treeOf ?? exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
       // The tests the lane's whole cargo test commands list, or null once a listing failed; whether any cargo test ran.
       let listedCargo, cargoRan = false, keptRead = 0;
+      // What the watcher writes should this process die while the lane's commands run: its rows so far, INCONCLUSIVE.
+      const armLane = () => {
+        if (!tree) return stop.arm();
+        const { file, record } = recordOf(lane.name, 'INCONCLUSIVE', tree, tests, findings.length ? { findings } : {});
+        stop.arm(file, record);
+      };
       // The preflight's kept results of this very tree (#3296): a job already done is read, never run again.
       let kept = key && lane.name === 'unit' && key.tree === tree ? openKept(key, (row) => readSkips([row], knownFailures(cwd).skips, timed).covered.length > 0) : null, testFiles = [];
       if (kept) try { testFiles = lane.commands.map((command) => testFilesOf(cwd, command)); } catch (error) {
@@ -1015,11 +1021,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
         const args = kept && shards ? [...rest, `--kept=${JSON.stringify(key)}`] : rest;
         let directory, descriptor, result, results, output = '';
         try {
-          // What the watcher writes should this process die in the job: the lane's rows so far, INCONCLUSIVE.
-          if (tree) {
-            const { file, record } = recordOf(lane.name, 'INCONCLUSIVE', tree, tests, findings.length ? { findings } : {});
-            stop.arm(file, record);
-          } else stop.arm();
+          armLane();
           const prior = kept && !shards && kept.jobDone(job, names) ? kept.results(names, job) : null;
           if (prior) keptRead += names.length;
           if (prior) [results, result, output] = [prior, { status: prior.failures.length ? 1 : 0 }, `KEPT ${job}: ${prior.passed.length + prior.failures.length + prior.skips.length} results read from an earlier run of this tree`];
@@ -1059,8 +1061,6 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
         } catch (error) {
           result = { status: null, error };
         } finally {
-          // The command is over: a death from here on leaves the lane no record, never one short of this job's rows.
-          stop.disarm();
           try {
             if (descriptor !== undefined) closeSync(descriptor);
             if (directory) rmSync(directory, { recursive: true, force: true });
@@ -1093,6 +1093,8 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
         // names it, so a merge with another machine's rows (parallel-proof §8) can't lose it.
         if (found && (found.lone || (results?.noGrant && found.error === results.noGrant) || !run.tests.some(({ state }) => state === found.state))) findings.push({ state: found.state, note: found.error });
         if (stands(found, failure)) failure = found;
+        // Armed again with this job's rows, for what runs after it (cargo's listing, the next job's builds).
+        armLane();
         // A run the throttle refused ran nothing to list, and listing it would ask the throttle again (#3333).
         if (command === 'cargo' && args[0] === 'test' && !results?.noGrant) {
           cargoRan = true;
@@ -1151,6 +1153,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
       else console.log(`PASS ${lane.name} (${elapsed} s)`);
       try {
+        stop.disarm();
         if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, { ...more, ...findings.length && { findings }, ...kept && { kept: { read: keptRead, of: testFiles.flat().length } } });
       } catch (error) {
         // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.

@@ -18,6 +18,9 @@ const LOOK_MS = 500;
 const OWN_MS = 8_000, GRACE_MS = 3_000;
 // Each watcher names itself here by PID and start, so another's, whose tree it was launched in, leaves it be.
 const WATCHERS = join(tmpdir(), `deep-stop-watchers-${process.getuid?.() ?? 'user'}`);
+// deadline: a ps that hangs is a listing that failed, so no watcher waits on one for good.
+const PS = { encoding: 'utf8', timeout: 10_000, killSignal: 'SIGKILL', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } };
+const startOf = (pid) => spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], PS).stdout?.trim();
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const writeAtomic = (file, text) => {
   const temporary = join(dirname(file), `.${process.pid}.tmp`);
@@ -25,9 +28,15 @@ const writeAtomic = (file, text) => {
   renameSync(temporary, file);
 };
 const writeJson = (file, value) => writeAtomic(file, `${JSON.stringify(value, null, 2)}\n`);
-/** `pid <n> (<command>)` for each stopped process, or why none could be listed: the words a record carries. */
-export const named = ({ stopped, error }) => (error ? `the stop could not list the run's processes: ${error}`
-  : `the stop ended ${stopped.length} processes${stopped.length ? `: ${stopped.map(({ pid, command }) => `pid ${pid} (${command})`).join(', ')}` : ''}`);
+/**
+ * `pid <n> (<command>)` for each process of the tree the stop ended (one that ended with its parent too), and why the
+ * run's processes couldn't be listed: the words a record carries.
+ */
+export const named = ({ stopped, error }) => {
+  const list = stopped.length ? `: ${stopped.map(({ pid, command }) => `pid ${pid} (${command})`).join(', ')}` : '';
+  return error ? `the stop could not list the run's processes: ${error}${stopped.length ? `; it signalled the ${stopped.length} it knew${list}` : ''}`
+    : `the stop ended ${stopped.length} processes${list}`;
+};
 
 let shared;
 /**
@@ -37,7 +46,8 @@ let shared;
  * was stopped; `disarm()` after the command. A watcher that can't start says why in `error`, and its calls do nothing.
  */
 export function watchTree() {
-  if (shared?.live()) return shared;
+  // A watcher that couldn't start stays so for this process: each call would otherwise pay for another try.
+  if (shared?.error || shared?.live()) return shared;
   let folder;
   try {
     folder = mkdtempSync(join(tmpdir(), 'deep-stop-'));
@@ -74,7 +84,8 @@ export function watchTree() {
       disarm() { rmSync(armed, { force: true }); },
       stop(root) {
         const result = join(folder, `stopped-${++asked}.json`);
-        if (!live()) return { stopped: [], error: "the stop's watcher is gone" };
+        // A watcher killed outright leaves its entry; its number, since taken, is checked by start before a signal.
+        if (!live() || startOf(pid) !== start) return { stopped: [], error: "the stop's watcher is gone" };
         writeJson(join(folder, 'stop.json'), { root, result });
         try { process.kill(pid, 'SIGUSR1'); } catch {}
         // deadline: the watcher's wait for a group of its own, its SIGTERM grace and its SIGKILL; past 30 s it said nothing.
@@ -96,23 +107,24 @@ export function watchTree() {
  * reader. Its own listing, not throttle.mjs's: a test's copy of the lanes may stand a stub in for the throttle.
  */
 function table() {
-  const listing = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,pgid=,stat=,lstart='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
+  const listing = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,pgid=,stat=,lstart='], { ...PS, maxBuffer: 1 << 26 });
   if (listing.status !== 0) throw Error(`ps failed: ${listing.error?.message ?? listing.stderr.trim()}`);
   return new Map(listing.stdout.split('\n').map((line) => line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/)).filter(Boolean)
     .map(([, pid, ppid, pgid, stat, start]) => [Number(pid), { ppid: Number(ppid), pgid: Number(pgid), stat, start }]));
 }
 /** The command lines of `pids`, by pid. */
 function lines(pids) {
-  const env = { ...process.env, LC_ALL: 'C' };
+  const env = { ...PS.env };
   delete env.COLUMNS;
-  const listing = spawnSync('ps', ['-ww', '-o', 'pid=,args=', '-p', pids.join(',')], { encoding: 'utf8', env });
-  return new Map(listing.stdout.split('\n').map((line) => line.match(/^\s*(\d+)\s+(.*)$/)).filter(Boolean).map(([, pid, args]) => [Number(pid), args]));
+  const listing = spawnSync('ps', ['-ww', '-o', 'pid=,args=', '-p', pids.join(',')], { ...PS, env });
+  return new Map((listing.stdout ?? '').split('\n').map((line) => line.match(/^\s*(\d+)\s+(.*)$/)).filter(Boolean).map(([, pid, args]) => [Number(pid), args]));
 }
 
 /** Lists `caller`'s tree while it is armed, and stops the run's part of it when asked or when the caller dies. */
 function watch(caller, folder) {
   // Named in the registry before the first look, so no other watcher's look takes this one for a run's.
-  const own = spawnSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } }).stdout.trim();
+  const own = startOf(process.pid);
+  if (!own) process.exit(1);
   mkdirSync(WATCHERS, { recursive: true, mode: 0o700 });
   writeAtomic(join(WATCHERS, String(process.pid)), own);
   process.on('exit', () => rmSync(join(WATCHERS, String(process.pid)), { force: true }));
@@ -181,7 +193,13 @@ function watch(caller, folder) {
       signal(fresh.filter(({ pgid }) => all || groups.has(pgid)), 'SIGTERM');
       return now;
     };
-    try { add(); } catch (error) { return { stopped: [], error: error.message }; }
+    // Without a listing, what the looks before knew is signalled, by PID alone.
+    let error;
+    try { add(); } catch (failed) {
+      error = failed.message;
+      for (const entry of known.values()) if (pick(entry)) tree.set(entry.pid, entry);
+      signal([...tree.values()].filter(({ pgid }) => groups.has(pgid)), 'SIGTERM');
+    }
     const left = () => {
       let now;
       try { now = add(); } catch { return [...tree.values()]; }
@@ -197,7 +215,7 @@ function watch(caller, folder) {
     signal(left(), 'SIGKILL');
     // A long command line keeps its head (the program) and its tail (the file it runs, often last).
     const short = (line) => (line.length > 600 ? `${line.slice(0, 300)} … ${line.slice(-300)}` : line);
-    return { stopped: [...tree.values()].map(({ pid }) => ({ pid, command: short(argv.get(pid) ?? '?') })) };
+    return { stopped: [...tree.values()].map(({ pid }) => ({ pid, command: short(argv.get(pid) ?? '?') })), ...error && { error } };
   };
   let stopping = false;
   // A stop the run asks for: the tree under the command it names, whose group is its own (measureOnce's capture).
@@ -218,7 +236,7 @@ function watch(caller, folder) {
       // the caller's number is checked against its start too: a number since taken is no caller.
       known.clear();
       if (!gone && ++ticks % 20 === 0) {
-        const start = spawnSync('ps', ['-o', 'lstart=', '-p', String(caller)], { encoding: 'utf8', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
+        const start = spawnSync('ps', ['-o', 'lstart=', '-p', String(caller)], PS);
         gone = start.status === 0 && start.stdout.trim() !== callerStart;
       }
       // Planted (#3433.cd15df63): the run's end is ignored, so the watcher runs on.
