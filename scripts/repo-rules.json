@@ -2893,6 +2893,26 @@
         }
       }
     },
+    "docs/spikes/3444/own-device/Cargo.toml": {
+      "dependencies": {
+        "wgpu": {
+          "spec": "=30.0.1",
+          "why": "Spike #3444: timestamp query sets on the wgpu the app pins, on Metal, with its internal counters on; outside the workspace with its own lockfile, so nothing it pins reaches the app."
+        },
+        "pollster": {
+          "spec": "^0.4",
+          "why": "Spike #3444: blocks on wgpu's adapter, device and error-scope futures in the headless probe."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Spike #3444: the probe's report of each attempt, keys in order."
+        },
+        "log": {
+          "spec": "^0.4",
+          "why": "Spike #3444: the logger that collects wgpu-hal's errors, Metal's own words among them, into the probe's report."
+        }
+      }
+    },
     "tests/acceptance/533/wat/Cargo.toml": {
       "dependencies": {
         "wat": {
