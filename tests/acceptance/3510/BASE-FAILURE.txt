@@ -1,0 +1,133 @@
+# #3510's acceptance suite on the merge base b48a47db7 (origin/main), node --test 'tests/acceptance/3510/*.test.mjs'
+# 2026-11-25 on the 20-core Linux machine it was drafted on, 1-minute load about 140, inside a memory-capped unit.
+# Home folders are written ~, the checkout <checkout>, this job's scratch copies <scratch copy>.
+#
+# Expected on the base, and seen:
+#   #3510.7fd1b181 FAILS at its assertion: the call's granted entry carries wait: 30 and no stall, not stall: 720.
+#   #3510.9618ba88 FAILS at its assertion: the base waits 30 min (wait: 30) behind the held build slots, so the call
+#     is still waiting at the test's 5-minute bound.
+#   #3510.a06361ca PASSES: the base's 30-minute wait outlasts the moving line. Its proof is twin fixed-wait.
+#   #3510.773f906e PASSES: the base's 30-minute wait outlasts the holders' 8 s. Its proof is twin fixed-wait.
+#   #3510.87170af2 PASSES: regression protection; a call under its caller's grant passes through today.
+
+✖ #3510.7fd1b181 with DEEP_TEST_GRANT_STALL unset and the table empty, a buildBinaries call returns its bin holding the binary, and its top-level build grant is logged with stall 720 and no wait (10642.20001ms)
+✔ #3510.773f906e with DEEP_TEST_GRANT_STALL at 0.2 and every build slot held for 8 s, a top-level timed --wait 0.05 request made after the call joined the line ends INCONCLUSIVE no grant, and the call then gets its build grant and returns its bin holding the binary (17315.594825ms)
+✔ #3510.a06361ca with DEEP_TEST_GRANT_STALL at 0.05, a buildBinaries call behind a line of build holders whose grants change hands about every 2 s for 20 s gets its build grant and returns its bin holding the binary (26405.558674ms)
+✖ #3510.9618ba88 with DEEP_TEST_GRANT_STALL at 0.05 and every build slot held past the bound, a buildBinaries call throws INCONCLUSIVE no grant: no build grant changed hands within 0.05 min for test binaries within 5 minutes, cargo never starts, bin holds no binary, and its timeout entry carries stall 0.05 (303173.02624ms)
+✔ #3510.87170af2 with every build slot held, a buildBinaries call made by the command of throttle.mjs build that holds one of them returns its bin holding the binary: the log reads passed for its request and no second granted for its process (10498.848436ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 3
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 303600.126698
+
+✖ failing tests:
+
+test at tests/acceptance/3510/default-stall.test.mjs:8:1
+✖ #3510.7fd1b181 with DEEP_TEST_GRANT_STALL unset and the table empty, a buildBinaries call returns its bin holding the binary, and its top-level build grant is logged with stall 720 and no wait (10642.20001ms)
+  AssertionError [ERR_ASSERTION]: the call's granted entry carries stall: 720
+  call: exit 0
+  stdout:
+  CALLING 857914
+  RETURNED "/tmp/deep-1115-E9F1om/run/bin"
+  
+  stderr:
+  
+  log (/tmp/deep-1115-E9F1om/throttle):
+  {"at":"2026-11-25T19:41:23.904Z","event":"granted","class":"build","grant":"top-level","id":"b1a6486913754159","pid":857914,"index":1,"load":141.83,"cores":20,"wait":30}
+  {"at":"2026-11-25T19:41:25.196Z","event":"passed","class":"build","pid":858989,"through":"build:b1a6486913754159"}
+  {"at":"2026-11-25T19:41:32.070Z","event":"released","class":"build","id":"b1a6486913754159","pid":857914}
+  
+  undefined !== 720
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3510/default-stall.test.mjs:22:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 720,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3510/stalled-line.test.mjs:12:1
+✖ #3510.9618ba88 with DEEP_TEST_GRANT_STALL at 0.05 and every build slot held past the bound, a buildBinaries call throws INCONCLUSIVE no grant: no build grant changed hands within 0.05 min for test binaries within 5 minutes, cargo never starts, bin holds no binary, and its timeout entry carries stall 0.05 (303173.02624ms)
+  AssertionError [ERR_ASSERTION]: the call behind a line that never moved threw within 5 minutes of a stall bound of 0.05 min
+  call: still waiting after 5 min
+  stdout:
+  CALLING 858393
+  
+  stderr:
+  
+  log (/tmp/deep-1115-5SFwww/throttle):
+  {"at":"2026-11-25T19:41:23.055Z","event":"granted","class":"build","grant":"top-level","id":"f0a3f11f59ba6b0d","pid":857943,"index":1,"load":141.83,"cores":20,"wait":10}
+  {"at":"2026-11-25T19:41:23.192Z","event":"granted","class":"build","grant":"top-level","id":"01b06f8b59507ae2","pid":857935,"index":2,"load":141.83,"cores":20,"wait":10}
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3510/stalled-line.test.mjs:23:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+# ---------------------------------------------------------------------------------------------------------------
+# The same suite against a throwaway implementation in a scratch copy of the checkout (not kept, proves nothing
+# about the real change): buildBinaries asks acquire('build', { stall }) with DEEP_TEST_GRANT_STALL or 720 and
+# throws the stall's words. 5 of 5 passed.
+
+✔ #3510.7fd1b181 with DEEP_TEST_GRANT_STALL unset and the table empty, a buildBinaries call returns its bin holding the binary, and its top-level build grant is logged with stall 720 and no wait (14530.174145ms)
+✔ #3510.773f906e with DEEP_TEST_GRANT_STALL at 0.2 and every build slot held for 8 s, a top-level timed --wait 0.05 request made after the call joined the line ends INCONCLUSIVE no grant, and the call then gets its build grant and returns its bin holding the binary (21915.363407ms)
+✔ #3510.a06361ca with DEEP_TEST_GRANT_STALL at 0.05, a buildBinaries call behind a line of build holders whose grants change hands about every 2 s for 20 s gets its build grant and returns its bin holding the binary (23920.03822ms)
+✔ #3510.9618ba88 with DEEP_TEST_GRANT_STALL at 0.05 and every build slot held past the bound, a buildBinaries call throws INCONCLUSIVE no grant: no build grant changed hands within 0.05 min for test binaries within 5 minutes, cargo never starts, bin holds no binary, and its timeout entry carries stall 0.05 (9457.025607ms)
+✔ #3510.87170af2 with every build slot held, a buildBinaries call made by the command of throttle.mjs build that holds one of them returns its bin holding the binary: the log reads passed for its request and no second granted for its process (14376.070402ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 24319.850333
+
+# ---------------------------------------------------------------------------------------------------------------
+# The same suite against a scratch copy holding twins/fixed-wait/scripts/proof-binaries.mjs (the base's file asking
+# acquire('build', { wait: 0.05 })). The two tests that name the twin fail at their assertions; it happens to fail
+# #3510.7fd1b181 and #3510.9618ba88 too (no stall logged; the wait's words, not the stall's); #3510.87170af2 passes.
+
+✖ #3510.773f906e with DEEP_TEST_GRANT_STALL at 0.2 and every build slot held for 8 s, a top-level timed --wait 0.05 request made after the call joined the line ends INCONCLUSIVE no grant, and the call then gets its build grant and returns its bin holding the binary (13044.611459ms)
+✖ #3510.7fd1b181 with DEEP_TEST_GRANT_STALL unset and the table empty, a buildBinaries call returns its bin holding the binary, and its top-level build grant is logged with stall 720 and no wait (14293.622668ms)
+✔ #3510.87170af2 with every build slot held, a buildBinaries call made by the command of throttle.mjs build that holds one of them returns its bin holding the binary: the log reads passed for its request and no second granted for its process (13548.091585ms)
+✖ #3510.9618ba88 with DEEP_TEST_GRANT_STALL at 0.05 and every build slot held past the bound, a buildBinaries call throws INCONCLUSIVE no grant: no build grant changed hands within 0.05 min for test binaries within 5 minutes, cargo never starts, bin holds no binary, and its timeout entry carries stall 0.05 (11150.54572ms)
+✖ #3510.a06361ca with DEEP_TEST_GRANT_STALL at 0.05, a buildBinaries call behind a line of build holders whose grants change hands about every 2 s for 20 s gets its build grant and returns its bin holding the binary (12067.710165ms)
+ℹ cancelled 0
+ℹ duration_ms 14960.78347
+ℹ fail 4
+ℹ pass 1
+ℹ skipped 0
+ℹ suites 0
+ℹ tests 5
+ℹ todo 0
+
+test at tests/acceptance/3510/default-stall.test.mjs:8:1
+  AssertionError [ERR_ASSERTION]: the call's granted entry carries stall: 720
+      at TestContext.<anonymous> (file://<scratch copy>/tests/acceptance/3510/default-stall.test.mjs:22:10)
+test at tests/acceptance/3510/drain.test.mjs:10:1
+  AssertionError [ERR_ASSERTION]: the call kept its place while the holders held and the timed request drained; buildBinaries threw: INCONCLUSIVE no grant: no build grant came within 0.05 min for test binaries
+  THREW "INCONCLUSIVE no grant: no build grant came within 0.05 min for test binaries"
+      at TestContext.<anonymous> (file://<scratch copy>/tests/acceptance/3510/drain.test.mjs:34:10)
+test at tests/acceptance/3510/moving-line.test.mjs:11:1
+  AssertionError [ERR_ASSERTION]: a call whose line keeps moving never leaves it; buildBinaries threw: INCONCLUSIVE no grant: no build grant came within 0.05 min for test binaries
+  THREW "INCONCLUSIVE no grant: no build grant came within 0.05 min for test binaries"
+      at TestContext.<anonymous> (file://<scratch copy>/tests/acceptance/3510/moving-line.test.mjs:28:10)
+test at tests/acceptance/3510/stalled-line.test.mjs:12:1
+  AssertionError [ERR_ASSERTION]: buildBinaries throws an error whose message starts "INCONCLUSIVE no grant: no build grant changed hands within 0.05 min for test binaries"; it threw "INCONCLUSIVE no grant: no build grant came within 0.05 min for test binaries"
+  THREW "INCONCLUSIVE no grant: no build grant came within 0.05 min for test binaries"
+      at TestContext.<anonymous> (file://<scratch copy>/tests/acceptance/3510/stalled-line.test.mjs:26:10)
