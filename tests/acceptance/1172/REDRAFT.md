@@ -4,6 +4,7 @@ Redrafted blind at origin/main 678622403 from the issue, its comments, `docs/tec
 Second redraft (2026-11-22), of the first one at 7c8d9a28d, for two disputes a review raised against it.
 Third redraft (2026-11-23), of the second at a6bcb6351, for a dispute from a Mac run (below, Third redraft).
 Fourth redraft (2026-11-23), of the third at 0560a1718, for a dispute from a Mac run on AC1's and AC2's row count (below, Fourth redraft).
+Fifth redraft (2026-11-24), of the fourth at c6bdfac2f, for a review's dispute that AC5's after-reading could see nothing (below, Fifth redraft).
 
 ## Why
 
@@ -226,3 +227,55 @@ loop. `shell.test.ts`, which only #1172's tests read, switches its calls.
 
 `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1172 judges`: 1 file, 28 passed (16 before, 12 new).
 `npx tsc -p tests/acceptance/1172/tsconfig.json`: clean. The Mac tests (`shell.test.ts` AC1, AC2) were not run.
+
+## Fifth redraft (2026-11-24)
+
+Redrafted blind at c6bdfac2f from the issue, its comments, `docs/technical-design.md` and this folder only; no
+implementation code and no PR was read.
+
+### The dispute
+
+An independent review of the fourth redraft: in `popout.test.ts`, step 3's reading of the main window after the pop-out
+checked only absences, fewer `Needs you` heading nodes and lines than before, and each ask's question at or under its
+card's share. Nothing required that the reading saw the main window at all. So a program whose main window goes blank on
+pop-out passed AC5, and so did one capture or tree read taken mid-relayout that came back empty, since `settled` stops at
+the first passing reading. That breaks invariant 2: a reading that sees nothing never passes. The original blind test
+located the main window by a node it still required (`Sessions`); the second redraft matched the window by frame instead,
+and the anchor went with it.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `keeps` in `popout.test.ts`: for each fixture session, the main window's tree holds an `AXButton` whose name holds its task's title, and one pixel line holds that title | Design, Needs-you view, "One list and one page": the list holds the Needs you heading and its rows, "then a heading per project with its session rows"; only Needs you pops out (AC5, the decision: the criterion is "the list's Needs you heading and ask rows leaving"). README, Pinned item 2: "each sidebar row an `AXButton` (role `Button`) whose name holds its task's title"; AC1 reads the same rows (`shellFailuresCard`). The titles (`Cart totals`, `Release notes`) are short enough to sit whole on a row, unlike the questions (third redraft) |
+| Step 3's reading (`left`) starts from `keeps`, so it fails unless it sees the session rows on the tree and the pixels | Invariant 2; the dispute |
+| Step 2's reading (`unready`) also requires `keeps`, so the before and after readings require the same thing | "The same reading saw them before the press" (README, AC5 row): a right program that fails `keeps` fails before the pop-out, not as a pop-out fault |
+
+No helper changed: `keeps` is local to `popout.test.ts` and uses `helpers.ts`'s existing `nodes`, `reads`, `sees` and type
+`FixtureSession`. No judge case was added: `keeps` reads an app, and the dispute's wrong input (an empty tree, no OCR lines)
+fails it on its face, one failure per session per surface.
+
+### Which wrong programs now fail
+
+- A main window that goes blank, or loses the list, on pop-out: no session row on the tree or the pixels.
+- A transient empty reading (empty tree or no OCR lines) after the pop-out: it fails, so `settled` keeps reading until a
+  reading that sees the session rows also shows the heading and rows gone.
+- A pop-out that takes the whole list, session rows included, out of the main window.
+
+A right program still passes: the decision lets the selected ask's card stay, which `keeps` doesn't read, and the session
+rows stay in the list.
+
+### Not settled
+
+1. **The `Tasks` heading.** AC1's helpers require a node named `Tasks` (#1348's rename, second redraft); `keeps` does not,
+   since the design names only "a heading per project", and the session rows already anchor the reading.
+2. **Folded sessions.** The design folds quiet sessions into one row per project. The fixture's sessions both hold open asks,
+   and AC1 already wants both as rows; a right program that folds them once their asks leave Needs you would fail `keeps`.
+   No source says popping the view out makes a session quiet.
+3. **The page.** The kept card is still not required (item 5 above); the anchor is the list's session rows, not the page.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run tests/acceptance/1172/judges.test.ts`: 1 file, 28 passed (unchanged). `npx tsc -p
+tests/acceptance/1172/tsconfig.json --noEmit`: clean. `node scripts/repo-rules.mjs`: exit 0. `popout.test.ts` was not run
+(it needs the Mac).

@@ -16,7 +16,7 @@
 // and digits (`drawsRow`, REDRAFT.md's third redraft). So a reading that sees nothing can't pass, and the new window must
 // hold and draw them the same way, so a view that merely disappears can't either.
 import { describe, expect, it } from 'vitest';
-import { App, appBinary, blocked, captureWindow, drawsRow, makeWorld, nodes, ocr, reads, ROW_START, settled, sees, sleep, tempDir, useCleanup, type Ask, type Line, type Node, type Win } from './helpers.ts';
+import { App, appBinary, blocked, captureWindow, drawsRow, makeWorld, nodes, ocr, reads, ROW_START, settled, sees, sleep, tempDir, useCleanup, type Ask, type FixtureSession, type Line, type Node, type Win } from './helpers.ts';
 
 useCleanup();
 const MINUTES = 60_000;
@@ -68,6 +68,21 @@ function lacks(where: string, s: Seen, asks: readonly Ask[]): string[] {
   return out;
 }
 
+/**
+ * What the main window keeps of the list once Needs you leaves it: each session's row, an `AXButton` holding its task's
+ * title (README, Pinned item 2; AC1), drawn on the pixels. The design's list holds Needs you, then a heading per project
+ * with its session rows (Needs-you view, "One list and one page"), and only Needs you pops out. So a reading of the main
+ * window that sees none of it, blank or caught mid-relayout, fails instead of passing on absences alone.
+ */
+function keeps(where: string, s: Seen, sessions: readonly FixtureSession[]): string[] {
+  const out: string[] = [];
+  for (const session of sessions) {
+    if (!nodes(s.tree).some((n) => n.role === 'AXButton' && n.name.includes(session.task))) out.push(`${where}'s tree has no row for session "${session.task}"`);
+    if (!reads(s.lines, session.task)) out.push(`${where}'s pixels don't draw session "${session.task}"'s row: they read ${sees(s.lines)}`);
+  }
+  return out;
+}
+
 describe('#1172 a popped-out view leaves the main window', () => {
   it('AC5 after Needs you pops out to its own window, its heading and rows leave the main window and the new window draws them', async () => {
     const world = await makeWorld();
@@ -95,7 +110,7 @@ describe('#1172 a popped-out view leaves the main window', () => {
       let before: Seen | undefined;
       const unready = await settled(async () => {
         before = await look(main!, 'before');
-        const out = lacks('before the pop-out, the main window', before, asks);
+        const out = [...lacks('before the pop-out, the main window', before, asks), ...keeps('before the pop-out, the main window', before, world.sessions)];
         if (!cardOpen(before.tree, selected)) out.push(`a press on ${selected.handle}'s row opened no card with its options in the main window`);
         for (const a of asks) if (a !== selected && anyOption(before.tree, a)) out.push(`with ${selected.handle} selected, the main window still holds ${a.handle}'s card`);
         for (const label of [selected.option.label, selected.other]) if (!reads(before.lines, label)) out.push(`${selected.handle}'s card isn't on the main window's pixels: they lack "${label}"`);
@@ -117,7 +132,8 @@ describe('#1172 a popped-out view leaves the main window', () => {
 
       const left = await settled(async () => {
         const after = await look(main!, 'main');
-        const out: string[] = [];
+        // The main window keeps its session rows, so this reading must see them: absences alone pass a blank window.
+        const out: string[] = keeps('after the pop-out, the main window', after, world.sessions);
         if (after.headingNodes >= before!.headingNodes) out.push(`the main window's tree still holds the "${HEADING}" heading (${after.headingNodes} node(s), ${before!.headingNodes} before)`);
         if (after.headingLines >= before!.headingLines) out.push(`the main window still draws the "${HEADING}" heading on its pixels: they read ${sees(after.lines)}`);
         for (const a of asks) {
