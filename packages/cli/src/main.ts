@@ -260,11 +260,12 @@ const groupOf = (line: string): number => {
 // A flag that takes a value, given twice where no form of its command shows it repeating, fits none of the command's
 // forms (#3461): one reading for every command, so none takes the first or the last value. Each flag of a form is read
 // from its usage line, up to the description: a flag followed by a value, then `...` where it repeats. A flag with no
-// value, such as --json, is read by its command as before, and what follows -- is another program's.
-// The forms read are those whose leading words fit the arguments' (`deep start approve` or `deep start`), else all of
-// the command's.
-const valueFlags = (args: readonly string[]): Map<string, boolean> => {
+// value, such as --json, is read by its command as before. The forms read are those whose leading words fit the
+// arguments' (`deep start approve` or `deep start`), else all of the command's. Returned: each value flag and whether it
+// repeats, and the flags whose value may be left out (`--slice [<cursor>]`).
+const valueFlags = (args: readonly string[]): [Map<string, boolean>, Set<string>] => {
   const repeats = new Map<string, boolean>();
+  const optional = new Set<string>();
   const lines = usage.filter((one) => commandsOf(one).includes(args[0] ?? ''));
   const formOf = (line: string) => line.split(/\s{2,}/)[0]!.split(' ').slice(2);
   const fits = (line: string) => {
@@ -284,22 +285,27 @@ const valueFlags = (args: readonly string[]): Map<string, boolean> => {
       const value = (upTo: number) => words.slice(at + 1, upTo + 1).join(' ');
       while (end + 1 < words.length && (value(end).match(/</g) ?? []).length > (value(end).match(/>/g) ?? []).length) end++;
       repeats.set(flag, (repeats.get(flag) ?? false) || /^\.\.\.\]*$/.test(words[end + 1] ?? ''));
+      if (words[at + 1]!.startsWith('[')) optional.add(flag);
     });
   }
-  return repeats;
+  return [repeats, optional];
 };
-/** The first flag `args` gives twice that its command's usage shows once, if any. */
+/**
+ * The first flag `args` gives twice that its command's usage shows once, if any. A flag's value is the next word, as
+ * each command reads it, even one that looks like a flag; an optional value only when it doesn't start with -. After
+ * --, the next word is a handle, a query or an option, never a flag; flags may follow it, as deep find reads them.
+ */
 const givenTwice = (args: readonly string[]): string | undefined => {
-  const flags = valueFlags(args);
+  const [flags, optional] = valueFlags(args);
   const seen = new Set<string>();
-  const own = args.includes('--') ? args.slice(1, args.indexOf('--')) : args.slice(1);
+  const own = args.slice(1);
   for (let at = 0; at < own.length; at++) {
     const flag = own[at]!;
+    if (flag === '--') at++;
     if (!flags.has(flag)) continue;
     if (seen.has(flag) && !flags.get(flag)) return flag;
     seen.add(flag);
-    // Its value is the next word, unless that is another of the command's flags (--slice's value is optional).
-    if (!flags.has(own[at + 1] ?? '')) at++;
+    if (!optional.has(flag) || !(own[at + 1] ?? '-').startsWith('-')) at++;
   }
   return undefined;
 };
