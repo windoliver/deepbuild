@@ -462,7 +462,8 @@ fn draw_once(view: &Entity<ScriptView>, window: &Window, cx: &mut App) -> anyhow
 }
 
 /// The panel host's load (#358): the panel loaded and mounted as [`mount_panel`] does, its trees held by the app
-/// that reads them, `panel-check`, and not here.
+/// that reads them, `panel-check`, and not here. A replica's `launch` loads a panel this way too: the UI check draws
+/// a panel to say what is wrong with it, a control with no name among it, so the loader's refusal mustn't come first.
 pub fn mount_panel_unheld(
     runtime: &Rc<ShellRuntime>,
     dir: &Path,

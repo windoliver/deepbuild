@@ -692,8 +692,6 @@ impl Replica {
                     Some(dir) => {
                         let runtime = deep_app::new_runtime();
                         let loaded = runtime.map_err(|e| e.to_string()).and_then(|runtime| {
-                            // Unheld: the UI check draws a panel to say what is wrong with it, a control with no
-                            // name among it, so the loader's own refusal (#3233) mustn't come first.
                             let view = deep_app::mount_panel_unheld(&runtime, &dir, window, cx)
                                 .map_err(|e| format!("{e:#}"))?;
                             match (&area, replacing) {
