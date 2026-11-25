@@ -7,7 +7,7 @@
 // window's pixels (README: The surface). The replica is only compared with, never judged in its place.
 import { describe, expect, it } from 'vitest';
 import {
-  answer, answeredRowFailures, App, appBinary, loaded, inconclusive, makeWorld, menuCount, nodes, replicaBinary, settled, shellFailuresAnswered, shellFailuresCard, tempDir, useCleanup, readJson, childProcess, type World,
+  answer, answeredFailures, App, appBinary, loaded, inconclusive, makeWorld, menuCount, nodes, replicaBinary, settled, shellFailuresCard, shellFailuresKept, tempDir, useCleanup, readJson, childProcess, type World,
 } from './helpers.ts';
 
 useCleanup();
@@ -54,13 +54,13 @@ describe('#1172 the app a person runs', () => {
     const answered = Date.now();
     let elapsed = Infinity;
     for (let reading = await app.tree(); Date.now() - answered < 10_000; reading = await app.tree()) {
-      // The answered ask's row may keep its slot, drawn answered (#1461; REDRAFT.md, Sixth redraft): the window reads 2 when
-      // no node offers it as open, and the menu bar reads 2.
-      if (menuCount(reading) === 2 && !answeredRowFailures(reading.windows.map((w) => w.tree), asked!, world.asks).length) { elapsed = reading.t1 - answered; break; }
+      // The answered ask's list row may keep its slot drawn answered (#1461), and its page may say it was answered (design,
+      // Address; REDRAFT.md, Seventh redraft): the window reads 2 when nothing offers it as open, and the menu bar reads 2.
+      if (menuCount(reading) === 2 && !answeredFailures(reading.windows.map((w) => w.tree), asked!, world.asks, world.sessions.map((s) => s.task)).length) { elapsed = reading.t1 - answered; break; }
     }
-    const after = await settled(() => shellFailuresAnswered(world, app, { rows: rest, count: 2 }), 3000);
+    const after = await settled(() => shellFailuresKept(world, app, { rows: rest, count: 2 }), 3000);
     await app.stop();
-    expect(after, 'once answered, the window draws 2 open rows (the answered one kept at most as one row drawn answered) and the menu bar reads 2').toEqual([]);
+    expect(after, 'once answered, the window draws 2 open rows (the answered one kept at most as one list row and one page, each drawn answered) and the menu bar reads 2').toEqual([]);
     if (elapsed > 1000 && loaded()) inconclusive(`the window and the menu bar read 2 ${Math.round(elapsed)} ms after the answer, past 1 s, with the machine's load above half its cores`);
     expect(elapsed, 'ms from the answer to the window and the menu bar reading 2').toBeLessThanOrEqual(1000);
   }, 8 * MINUTES);

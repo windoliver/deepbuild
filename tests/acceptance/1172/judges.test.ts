@@ -2,7 +2,7 @@
 // judge AC1, AC2, AC4 and AC5 lean on must pass a right reading and fail the wrong ones, so a failure on the real app is
 // the app's, not the judge's.
 import { describe, expect, it } from 'vitest';
-import { answeredLineFailures, answeredRowFailures, askRowFailures, askRowFailuresAnswered, drawsRow, gridLaw, groundAndInk, hex, type Ask, type Line, type Node, type Picture, type Rgb } from './helpers.ts';
+import { answeredFailures, answeredListLineFailures, askRowFailures, drawsRow, gridLaw, groundAndInk, hex, type Ask, type Line, type Node, type Picture, type Rgb } from './helpers.ts';
 
 const GROUND: Rgb = [255, 255, 255];
 const FIVE: Rgb = [216, 27, 154];
@@ -129,7 +129,7 @@ describe('#1172 (judges) a Needs you row apart from an open card, on the tree', 
   });
 });
 
-describe('#1172 (judges) an answered ask kept in its slot, drawn answered (Sixth redraft)', () => {
+describe('#1172 (judges) an answered ask: its list row drawn answered and its page saying so (Seventh redraft)', () => {
   const ask = (n: number, question: string, one: string, two: string): Ask => ({
     handle: `ask:0${n}`, question, option: { id: 'one', label: one }, other: two, session: 's', task: 't',
   });
@@ -139,45 +139,59 @@ describe('#1172 (judges) an answered ask kept in its slot, drawn answered (Sixth
     ask(3, 'Which layout for the changelog?', 'Keep a list', 'Write prose'),
   ];
   const [first, second, third] = asks as [Ask, Ask, Ask];
-  const node = (role: string, name: string, ...children: Node[]): Node => ({ role, name, frame: [0, 0, 1, 1], children });
-  const row = (a: Ask, word = 'How it looks'): Node => node('AXButton', a.question, node('AXStaticText', a.question), node('AXStaticText', word), node('AXStaticText', 'in 1 d'));
-  const card = (a: Ask): Node => node('AXGroup', 'armed', node('AXStaticText', a.question), node('AXButton', a.option.label), node('AXButton', a.other));
-  const list = (...rows: Node[]): Node => node('AXGroup', '', node('AXStaticText', 'Needs you'), ...rows);
-  const win = (...children: Node[]): Node => node('AXWindow', '', ...children);
-  const lines = (...texts: string[]): Line[] => texts.map((text) => ({ text, box: [0, 0, 1, 1] }));
+  const tasks = ['Cart totals', 'Release notes'];
+  /** The list spans x 0 to 260 and the page x 300 to 1000, as the design's two regions, list on the left (#1461). */
+  const L = [8, 0, 244, 32];
+  const P = [400, 0, 600, 32];
+  const node = (frame: number[], role: string, name: string, ...children: Node[]): Node => ({ role, name, frame, children });
+  const row = (a: Ask, word = 'How it looks'): Node => node(L, 'AXButton', a.question, node(L, 'AXStaticText', a.question), node(L, 'AXStaticText', word));
+  const session = (t: string): Node => node([0, 0, 260, 32], 'AXButton', t);
+  const list = (...rows: Node[]): Node => node([0, 0, 260, 900], 'AXGroup', 'Tasks', node(L, 'AXStaticText', 'Needs you'), ...rows, ...tasks.map(session));
+  /** The page's closed card as the disputed Mac capture drew it: the question, then what became of it, no options. */
+  const receipt = (a: Ask, said = `Answered "${a.option.label}" at 12:12 from deep inbox. Nothing is left to answer.`): Node =>
+    node(P, 'AXGroup', '', node(P, 'AXStaticText', a.question), node(P, 'AXStaticText', said));
+  const card = (a: Ask): Node => node(P, 'AXGroup', 'armed', node(P, 'AXStaticText', a.question), node(P, 'AXButton', a.option.label), node(P, 'AXButton', a.other));
+  const win = (...children: Node[]): Node => node([0, 0, 1512, 982], 'AXWindow', '', ...children);
+  const judge = (w: Node): string => answeredFailures([w], first, asks, tasks).join('\n');
+  const lines = (...texts: [string, number][]): Line[] => texts.map(([text, x]) => ({ text, box: [x, 0, 200, 20] }));
 
-  it('control: the answered row kept in its slot, drawn answered, beside two open rows and the next card, passes', () => {
-    const w = [win(list(row(first, 'Answered'), row(second), row(third)), card(second))];
-    expect(answeredRowFailures(w, first, asks)).toEqual([]);
-    expect(askRowFailuresAnswered(w, asks, [second, third])).toEqual([]);
+  it('control: the list row kept drawn answered and the page\'s closed card saying it was answered pass (the review\'s right program)', () => {
+    expect(judge(win(list(row(first, 'Answered'), row(second), row(third)), receipt(first)))).toBe('');
   });
-  it('control: the answered row gone passes', () => {
-    expect(askRowFailuresAnswered([win(list(row(second), row(third)), card(second))], asks, [second, third])).toEqual([]);
+  it('control: the page alone saying it was answered, the row gone, passes; so does nothing at all', () => {
+    expect(judge(win(list(row(second), row(third)), receipt(first)))).toBe('');
+    expect(judge(win(list(row(second), row(third)), card(second)))).toBe('');
   });
-  it('wrong program: the answered ask kept as a still-open row fails, naming it', () => {
-    expect(askRowFailuresAnswered([win(list(row(first), row(second), row(third)))], asks, [second, third]).join('\n')).toMatch(/answered ask:01's row .* still reads as open/);
+  it('wrong program: the answered ask kept as a still-open list row fails, naming the list', () => {
+    expect(judge(win(list(row(first), row(second), row(third)), receipt(first)))).toMatch(/answered ask:01 .* still reads as open in the list/);
   });
-  it('wrong program: a row that reads "Not answered" still reads as open', () => {
-    expect(answeredRowFailures([win(list(row(first, 'Not answered'), row(second), row(third)))], first, asks).join('\n')).toMatch(/still reads as open/);
+  it('wrong program: two list rows for the answered ask, both drawn answered, fail', () => {
+    expect(judge(win(list(row(first, 'Answered'), row(first, 'Answered'), row(second), row(third))))).toMatch(/at most 1 node in the list, drawn answered; it has 2/);
   });
-  it('wrong program: two rows for the answered ask, both drawn answered, fail', () => {
-    expect(answeredRowFailures([win(list(row(first, 'Answered'), row(first, 'Answered'), row(second), row(third)))], first, asks).join('\n')).toMatch(/at most 1 row, drawn answered, for answered ask:01 .* it has 2/);
+  it('wrong program: the answered ask\'s card still offering its options on the page fails', () => {
+    expect(judge(win(list(row(first, 'Answered'), row(second), row(third)), card(first)))).toMatch(/still offers answered ask:01's options/);
   });
-  it('wrong program: the answered ask\'s card still offering its options fails, even with its row drawn answered', () => {
-    expect(answeredRowFailures([win(list(row(first, 'Answered'), row(second), row(third)), card(first))], first, asks).join('\n')).toMatch(/still offers answered ask:01's options/);
+  it('wrong program: the page still showing the question with no word of the answer fails, naming the page', () => {
+    expect(judge(win(list(row(second), row(third)), receipt(first, 'Pick one')))).toMatch(/still reads as open in the page/);
   });
-  it('wrong program: a wanted ask whose row is gone still fails beside a kept answered row', () => {
-    expect(askRowFailuresAnswered([win(list(row(first, 'Answered'), row(third)))], asks, [second, third]).join('\n')).toMatch(/1 row for ask:02 .* it has 0/);
+  it.each([['Unanswered'], ['Not answered'], ['Not  Answered'], ['not yet Answered'], ["isn't Answered"], ['to be Answered'], ['never Answered']])('wrong program: a list row reading "%s" still reads as open', (word) => {
+    expect(judge(win(list(row(first, word), row(second), row(third))))).toMatch(/still reads as open in the list/);
   });
-  it('control: on the pixels, the disputed Mac run\'s line and a cut row drawn answered pass', () => {
-    expect(answeredLineFailures(lines('Needs you 2', 'Which header colour on the login page? Answered "Blue header" at 12:12 from deep inbox. Nothing is left to answe…'), first)).toEqual([]);
-    expect(answeredLineFailures(lines('Needs you 2', 'Which header co… Answered 12:12'), first)).toEqual([]);
-    expect(answeredLineFailures(lines('Needs you 2', 'Which font for th… How it looks'), first)).toEqual([]);
+  it('blocked, never a pass: with no session row the list can\'t be told from the page', () => {
+    expect(answeredFailures([win(row(first, 'Answered'))], first, asks, tasks).join('\n')).toMatch(/can't tell the list from the page/);
   });
-  it('wrong program: on the pixels, the answered row still drawn open fails, naming it', () => {
-    expect(answeredLineFailures(lines('Needs you 2', 'Which header co… How it looks'), first).join('\n')).toMatch(/still draw answered ask:01's row as open/);
+  it('control: on the pixels, the list row cut and drawn answered and the page\'s receipt line pass', () => {
+    const read = lines(['Which header co… Answered 12:12', 10], ['Which header colour on the login page? Answered "Blue header" at 12:12 from deep inbox. Nothing is left to answe…', 700]);
+    expect(answeredListLineFailures(read, first, 520)).toEqual([]);
   });
-  it('wrong program: on the pixels, the answered question on two lines fails', () => {
-    expect(answeredLineFailures(lines('Which header co… Answered', 'Which header colour on the login page? Answered'), first).join('\n')).toMatch(/on 2 lines/);
+  it('wrong program: on the pixels, the list row still drawn open fails, though the page says answered', () => {
+    const read = lines(['• Which header co... How it looks', 10], ['Which header colour on the login page? Answered "Blue header"', 700]);
+    expect(answeredListLineFailures(read, first, 520).join('\n')).toMatch(/still draw answered ask:01's row as open/);
+  });
+  it('wrong program: on the pixels, a list line reading "Not answered" fails', () => {
+    expect(answeredListLineFailures(lines(['Which header co… Not answered', 10]), first, 520).join('\n')).toMatch(/still draw answered ask:01's row as open/);
+  });
+  it('wrong program: on the pixels, two list lines drawing the answered row fail', () => {
+    expect(answeredListLineFailures(lines(['Which header co… Answered', 10], ['Which header co… Answered', 10]), first, 520).join('\n')).toMatch(/on 2 lines/);
   });
 });

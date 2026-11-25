@@ -6,6 +6,7 @@ Third redraft (2026-11-23), of the second at a6bcb6351, for a dispute from a Mac
 Fourth redraft (2026-11-23), of the third at 0560a1718, for a dispute from a Mac run on AC1's and AC2's row count (below, Fourth redraft).
 Fifth redraft (2026-11-24), of the fourth at c6bdfac2f, for a review's dispute that AC5's after-reading could see nothing (below, Fifth redraft).
 Sixth redraft (2026-11-25), of the fifth at 766efa508, for a dispute from a Mac run on AC2's answered row (below, Sixth redraft).
+Seventh redraft (2026-11-25), of the sixth at 3e7cd3fea, for a review's dispute that a right page fails the sixth (below, Seventh redraft).
 
 ## Why
 
@@ -355,4 +356,81 @@ row drawn answered; the answered question on two lines; a wanted ask's row gone 
 ### Run here (Linux, no Mac)
 
 `npx vitest run --root tests/acceptance/1172 judges`: 1 file, 38 passed (28 before, 10 new). `npx tsc -p
+tests/acceptance/1172/tsconfig.json --noEmit`: clean. `shell.test.ts` AC2 was not run (it needs the Mac).
+
+## Seventh redraft (2026-11-25)
+
+Redrafted blind on 311cd158b (the sixth, 3e7cd3fea, with main merged) from the same sources as the sixth; no
+implementation code and no PR was read.
+
+### The dispute
+
+An independent review of the sixth: the disputed Mac line, the whole question then `Answered "Blue header" at 12:12 from
+deep inbox. Nothing is left to answe…`, is the page, the answered ask's closed card, not the list row; on the Mac a list
+row OCRs cut with its state word (`• Which header co... How it looks`, third redraft). A closed card has no option
+`AXButton`s, so `askNodes` counts its question as a row. A right program that keeps the list row drawn answered (#1461)
+while the page shows the closed card has 2 nodes and 2 lines, and fails the sixth's judges; its timing loop never stops.
+The sixth's "Still not settled 2" assumed only one of the two shows, which the capture contradicts: the page drew the
+receipt with two asks still open. The review also found the word match too loose ("not yet answered", "isn't answered",
+"to be answered", "Not  answered" read as answered).
+
+### Ruling: the page may say the ask was answered
+
+- Design, Keymap, placement, window, Address: "an address that no longer resolves says what it was and what became of
+  it". The page was on `ask/<id>` (the window "opens on the first open ask", and AC2 answers that ask); after an answer
+  from elsewhere the page may stay there and say the ask was answered.
+- #1807 (open): "The page moves to the next ask at once, except while a hold counts down on the card you just answered";
+  this speaks of an answer made on the card. #1461's "Answering an ask selects the next one" likewise. Neither says an
+  answer from `deep` moves the page, and #1461's "Nothing moves under the pointer" and the design's "opens and never
+  answers" leave selection to the person. So the closed card on the page is allowed, not required; the page may also
+  move on.
+- The list row: #1461 as in the sixth ("keeps its slot", "drawn answered").
+
+So the answered ask may hold at most one node in the list and one on the page, each reading answered, and nothing that
+offers its options.
+
+### Telling the list from the page
+
+The design's window "has two regions", the list and the page, and #1461 puts "the list on the left … and the page on the
+right". README item 2 makes each session row an `AXButton` whose name holds its task's title; those rows are the list's.
+So `listEdge` is the session rows' right edge on the tree (screen points), and a node whose frame's centre is left of it is
+the list's; on the pixels the edge is mapped into the capture by the main window's frame (`probe windows` and the probe's
+tree share screen points; the capture is the window at its backing scale). No session row: `can't tell the list from the
+page`, a failure, never a pass (invariant 2).
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `ANSWERED_WORD`: the state word `Answered`, capitalised, not after `not`, `n't`, `yet`, `be` or `never` and any spaces; `unanswered` has no word start | #1807 "Its state word is the receipt ("Answered", …)"; the Mac capture's `Answered "Blue header"`; the review's examples |
+| `answeredFailures` (tree): at most one node holding the question in the list and at most one on the page; each reads `Answered` in it or in the nearest nodes above it that hold no other ask's question (the closed card's question and its receipt sit side by side; the list stops the climb); the ask's two options nowhere as `AXButton`s | Above; invariant 4 |
+| `answeredListLineFailures` (pixels): of the lines left of the list's edge, at most one draws the answered row (`drawsRow`), and it reads `Answered`. Page lines are left to the tree: a closed card may draw its question and its receipt on separate lines | Above; the design's row is one line |
+| `askRowFailuresKept`, `shellFailuresKept`: as the sixth's `askRowFailuresAnswered` and `shellFailuresAnswered`, with these judges. `shell.test.ts` AC2's timing loop and after-reading call them | As the sixth |
+| The sixth's `answeredRowFailures`, `askRowFailuresAnswered`, `answeredLineFailures`, `shellFailuresAnswered` and their 10 judge cases are removed: nothing calls them now. Against main, `helpers.ts` still changes by added lines only | AGENTS.md: delete additions left without a caller |
+| `judges.test.ts`: 18 cases | AGENTS.md, Proof |
+
+### Which wrong programs fail (pinned in `judges.test.ts`)
+
+Controls that pass: the list row drawn answered plus the page's closed card saying it was answered (the review's right
+program); the page alone saying so; neither; on the pixels, the cut row drawn answered beside the page's receipt line.
+
+Wrong programs that fail: a still-open list row (its kind word), even beside a page that says answered, on the tree and on
+the pixels; two list rows drawn answered; the card still offering its options on the page; the page showing the question
+with no word of the answer; a row reading `Unanswered`, `Not answered`, `Not  Answered`, `not yet Answered`,
+`isn't Answered`, `to be Answered` or `never Answered`; a list line reading `Not answered`; two list lines; a tree with no
+session row (can't tell list from page).
+
+### Still not settled
+
+1. **The row must go eventually** (sixth, item 1): still judged only by #1461's own AC.
+2. **The list's edge.** Read from the session rows' frames; a program whose session rows don't span the list, or whose
+   page starts left of their right edge, could misplace a node. OCR merging a list line with a page line on the same
+   baseline would put the merged line by its centre; Vision reads the two regions apart in the third redraft's captures.
+3. **What the page says.** Only that something near the question reads `Answered`. #1807's other receipts ("Starts in
+   8 s", "Allowed · ran") are for holds and approvals, not AC2's pick-one ask.
+4. **The menu bar's reading.** Not revisited.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 46 passed (28 from before the sixth, 18 new). `npx tsc -p
 tests/acceptance/1172/tsconfig.json --noEmit`: clean. `shell.test.ts` AC2 was not run (it needs the Mac).
