@@ -189,11 +189,21 @@ function usage(rule, payload, entries) {
   };
 }
 
+// A hook whose payload field says what it is (`by`, #3430), as paseo's turn outcome does: the entry its value lists,
+// or none for a value it doesn't list. Any other hook is its own entry.
+function entryOf(rule, payload) {
+  if (!rule.by) return { rule, at: [] };
+  const value = get(payload, rule.by.field);
+  return typeof value === 'string' && Object.hasOwn(rule.by.values, value) ? { rule: rule.by.values[value], at: ['by', 'values', value] } : undefined;
+}
+
 function map(facts, payload, transcript) {
   const hook = payload.hook_event_name;
-  const rule = facts.mapping[hook];
+  const entry = entryOf(facts.mapping[hook], payload);
+  if (!entry) return [];
+  const { rule, at: by } = entry;
   const common = fill(facts.mapping.common, payload);
-  const event = { kind: rule.kind, data: { ...common, ...fill(rule.data, payload) }, rule: pointer('mapping', hook) };
+  const event = { kind: rule.kind, data: { ...common, ...fill(rule.data, payload) }, rule: pointer('mapping', hook, ...by) };
   if (rule.origin) {
     // A prompt whose payload names a subagent (the common template's `subagent`) is a child's, which its parent wrote:
     // never yours, as the core reads a Codex child's prompt (#39).
@@ -228,7 +238,7 @@ function map(facts, payload, transcript) {
     // A facts file without a stop section names a stop's cause from one payload field alone.
     const error = payload[rule.cause.field];
     const known = Object.hasOwn(rule.cause.values, error);
-    Object.assign(event, { data: { ...event.data, cause: known ? rule.cause.values[error] : rule.cause.otherwise }, rule: pointer('mapping', hook, 'cause', known ? 'values' : 'otherwise', ...(known ? [error] : [])) });
+    Object.assign(event, { data: { ...event.data, cause: known ? rule.cause.values[error] : rule.cause.otherwise }, rule: pointer('mapping', hook, ...by, 'cause', known ? 'values' : 'otherwise', ...(known ? [error] : [])) });
   }
   return [event];
 }
@@ -243,9 +253,15 @@ export function mapHook({ facts, version, payload, transcript = [], turns = new 
   const hook = payload?.hook_event_name;
   if (!schemas) return { events: [], verified: false, readings: [{ code: 'version_not_covered', field: 'version', version }] };
   if (typeof hook !== 'string' || !Object.hasOwn(schemas, hook)) return { events: [], verified: false, readings: [{ code: 'unknown_event', field: 'hook_event_name', version }] };
-  const { verified, readings } = verify(schemas[hook], payload, version);
+  const checked = verify(schemas[hook], payload, version);
+  const { readings } = checked;
   // A hook the version lists that no mapping entry names, such as Claude Code's FileChanged (#120), maps to no event.
-  const events = Object.hasOwn(facts.mapping, hook) ? map(facts, payload, transcript) : [];
+  const rule = Object.hasOwn(facts.mapping, hook) ? facts.mapping[hook] : undefined;
+  const events = rule ? map(facts, payload, transcript) : [];
+  // A value its `by` doesn't list (#3430) maps to no event, and the payload is unverified, as a retyped field is.
+  const unlisted = Boolean(rule?.by) && !entryOf(rule, payload);
+  if (unlisted) readings.push({ code: 'unlisted_value', field: rule.by.field, version });
+  const verified = checked.verified && !unlisted;
   const turnRule = facts.turnWithoutPrompt;
   const turn = turnRule && payload[turnRule.payloadField];
   if (turnRule && turn !== undefined && !turns.has(turn)) {

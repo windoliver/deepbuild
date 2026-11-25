@@ -348,7 +348,7 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   const said = (await query(`WITH coded AS MATERIALIZED (SELECT r.session_id, json_extract(r.data, '$.reading') AS text, ${readingCode('r')} AS code, r.ts, r.log_pos FROM ${events('r')} WHERE r.kind = 'session.reading' AND r.session_id IS NOT NULL${of('r.session_id')}) SELECT * FROM coded r WHERE
     (r.code IN (${NOTED.map((c) => `'${c}'`).join(', ')}) AND (r.code <> 'stop_not_held' OR NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent')))
     OR (r.code = 'monitor_waiting' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND (later.kind = 'session.end' OR (later.kind = 'agent.stop' AND json_extract(later.data, '$.child') IS NULL) OR (later.kind = 'session.reading' AND ${readingCode('later')} = 'monitor_ended'))))
-    OR (r.code = 'interrupted' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = r.session_id AND a.kind = 'user.ask' AND a.log_pos > r.log_pos))
+    OR (r.code = 'interrupted' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = r.session_id AND (a.kind = 'user.ask' OR (a.kind = 'session.activity' AND json_extract(a.data, '$.activity') = 'turn_start')) AND a.log_pos > r.log_pos))
     ORDER BY r.log_pos`)) as { session_id: string; text: string; code: ReadingCode; ts: number; log_pos: number }[];
   const noted = said.filter((r) => NOTED.includes(r.code));
   // Hooks that can run again (#993) take back each "hooks can't run" before them, and show nothing of their own.
@@ -364,7 +364,7 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   }
   // A session waiting on its monitor (#997): the newest of its monitor readings says so, with no stop of its own or end since.
   const watching = new Map(said.filter((r) => r.code === 'monitor_waiting').map((r) => [r.session_id, { text: r.text, at: { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos } }]));
-  // A turn you interrupted, with no prompt since (#39).
+  // A turn you interrupted, with no prompt or turn start since (#39, #3430).
   const interrupted = new Map(said.filter((r) => r.code === 'interrupted').map((r) => [r.session_id, { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos }]));
   // Each session's newest stop of its own: a hook after it, such as Claude Code's idle-prompt notification, is no later
   // stop, and nor is a subagent's.
