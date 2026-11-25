@@ -552,7 +552,7 @@ pub fn draw_offscreen(
     renderer: &mut Renderer,
     scene: &Scene,
     look: &Look3,
-    mut post: Option<&mut dyn Post>,
+    post: Option<&mut dyn Post>,
 ) -> Option<Vec<u8>> {
     let texture = draw_offscreen_texture(device, renderer, scene, look, post);
     read_texture(device, &texture, scene.size, 4)
@@ -565,7 +565,7 @@ pub fn draw_offscreen_texture(
     renderer: &mut Renderer,
     scene: &Scene,
     look: &Look3,
-    post: Option<&mut dyn Post>,
+    mut post: Option<&mut dyn Post>,
 ) -> wgpu::Texture {
     let size = scene.size;
     let texture = texture2d(
