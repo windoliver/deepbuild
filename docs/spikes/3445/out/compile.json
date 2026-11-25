@@ -1,27 +1,27 @@
 {
  "kind": "core",
- "date": "2026-11-25T08:45:43.446Z",
+ "date": "2026-11-25T19:28:12.722Z",
  "fingerprint": {
   "model": "Mac17,10",
   "chip": "Apple M5 Max",
   "memoryBytes": 68719476736,
   "power": "ac",
-  "lowPowerMode": true,
+  "lowPowerMode": false,
   "thermalState": "nominal",
   "macosBuild": "26B8119"
  },
  "cores": 18,
- "lease": "timed:f521613098c85ede",
+ "lease": "timed:a50904de23b0851c",
  "load": {
   "start": [
-   8.826171875,
-   28.07568359375,
-   45.67529296875
+   20.95458984375,
+   21.02685546875,
+   21.6806640625
   ],
   "end": [
-   8.0830078125,
-   25.14990234375,
-   43.68701171875
+   22.16455078125,
+   21.423828125,
+   21.80419921875
   ]
  },
  "binary": {
@@ -110,3591 +110,3591 @@
  ],
  "replies": [
   {
-   "pid": 24852,
+   "pid": 89266,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596343846.9111,
-   "repliedMs": 1795596349421.2048,
+   "startedMs": 1795634893009.709,
+   "repliedMs": 1795634897032.0227,
    "primes": true,
    "compiles": 109,
-   "compileNs": 2103716912,
+   "compileNs": 1575828372,
    "programs": [
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 17006667
+     "ns": 12974791
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 14193917
+     "ns": 10382250
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14171750
+     "ns": 9922458
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14001583
+     "ns": 11292459
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 13596083
+     "ns": 10847500
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 13552792
+     "ns": 10232667
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 13546125
+     "ns": 9979500
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 13539667
+     "ns": 9934166
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 13592958
+     "ns": 9861750
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 13526125
+     "ns": 9714333
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 22541459
+     "ns": 15976833
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 22122125
+     "ns": 16499416
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 22129000
+     "ns": 16274959
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 21967750
+     "ns": 16162167
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 22007000
+     "ns": 16448041
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21907333
+     "ns": 15956333
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 21922750
+     "ns": 16224667
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 22005375
+     "ns": 15778250
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22369125
+     "ns": 16855375
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22606167
+     "ns": 17199042
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21930125
+     "ns": 15829042
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21725584
+     "ns": 16280708
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27583125
+     "ns": 20577750
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27437458
+     "ns": 20930583
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 27349166
+     "ns": 21319250
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 27777083
+     "ns": 20475375
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27473083
+     "ns": 20025333
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27066875
+     "ns": 20690125
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 26995542
+     "ns": 19978791
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 27388083
+     "ns": 21217000
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 27195291
+     "ns": 20004208
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 26980417
+     "ns": 20041875
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27156500
+     "ns": 20269709
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27563250
+     "ns": 20064792
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 28291791
+     "ns": 21963000
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27603167
+     "ns": 20457208
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27642917
+     "ns": 23222000
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27738500
+     "ns": 20739792
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27450625
+     "ns": 22042541
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27413083
+     "ns": 21550208
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25643416
+     "ns": 18472666
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25331334
+     "ns": 18653125
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 24971209
+     "ns": 22411166
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 24697541
+     "ns": 20244833
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24786167
+     "ns": 19924208
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24858916
+     "ns": 18554709
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 24789750
+     "ns": 19801000
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 24894417
+     "ns": 18556250
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24742750
+     "ns": 19845500
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24704750
+     "ns": 18322125
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25359666
+     "ns": 18979958
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
-     "ns": 24738459
+     "ns": 18853959
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24859375
+     "ns": 18393167
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24773500
+     "ns": 17883375
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24692000
+     "ns": 17668417
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24748333
+     "ns": 17341167
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24791417
+     "ns": 17898375
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24700916
+     "ns": 18608916
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24839875
+     "ns": 18194125
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24935333
+     "ns": 18745667
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24683875
+     "ns": 18125459
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 24725042
+     "ns": 18107167
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 24697500
+     "ns": 17545125
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24807875
+     "ns": 18578709
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24630416
+     "ns": 19171791
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12882417
+     "ns": 9183375
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12761083
+     "ns": 9544667
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17505917
+     "ns": 12326833
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17351791
+     "ns": 12888083
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17305959
+     "ns": 12462625
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17244791
+     "ns": 15749250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17447416
+     "ns": 13793750
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17564333
+     "ns": 12958625
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17435084
+     "ns": 12983875
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17296625
+     "ns": 12522291
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17366500
+     "ns": 12458334
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17364750
+     "ns": 12291375
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
-     "ns": 12398208
+     "ns": 8962500
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17366250
+     "ns": 13110334
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18075417
+     "ns": 13345250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18049042
+     "ns": 13130292
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 17902625
+     "ns": 13175792
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 17843625
+     "ns": 13103459
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 17937458
+     "ns": 13424459
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 17905916
+     "ns": 13536625
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 18026416
+     "ns": 14831083
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 17926250
+     "ns": 13343167
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 18730708
+     "ns": 13810792
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 21222292
+     "ns": 13275083
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 18256542
+     "ns": 13027041
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 17948208
+     "ns": 12932791
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1819125
+     "ns": 1172459
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1542375
+     "ns": 1063542
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1578417
+     "ns": 1284208
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1412000
+     "ns": 1344916
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 1778458
+     "ns": 1392125
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 1713959
+     "ns": 1398209
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10443458
+     "ns": 7922708
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10492917
+     "ns": 7377250
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10294791
+     "ns": 7819375
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10514500
+     "ns": 7241625
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10345625
+     "ns": 8386333
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10292542
+     "ns": 7484833
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10147709
+     "ns": 7250541
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10208750
+     "ns": 7908916
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10155958
+     "ns": 7389750
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10207666
+     "ns": 7186125
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10112625
+     "ns": 7749000
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10069166
+     "ns": 7207500
     }
    ]
   },
   {
-   "pid": 24852,
+   "pid": 89266,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596349421.2383,
-   "repliedMs": 1795596349448.012,
+   "startedMs": 1795634897032.0537,
+   "repliedMs": 1795634897054.3538,
    "primes": true
   },
   {
-   "pid": 24852,
+   "pid": 89266,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596349448.0383,
-   "repliedMs": 1795596351280.5217,
+   "startedMs": 1795634897054.379,
+   "repliedMs": 1795634898389.651,
    "primes": true
   },
   {
-   "pid": 24852,
+   "pid": 89266,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596351280.5425,
-   "repliedMs": 1795596351280.7368,
+   "startedMs": 1795634898389.6687,
+   "repliedMs": 1795634898389.8262,
    "primes": true
   },
   {
-   "pid": 25105,
+   "pid": 90770,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596351294.696,
-   "repliedMs": 1795596356783.8613,
+   "startedMs": 1795634898402.0852,
+   "repliedMs": 1795634902385.1943,
    "compiles": 109,
-   "compileNs": 2096337001,
+   "compileNs": 1584987962,
    "programs": [
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 14983083
+     "ns": 10580375
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 14815750
+     "ns": 10551459
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14311500
+     "ns": 10609167
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14483542
+     "ns": 10400792
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 13934708
+     "ns": 9829375
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 13627625
+     "ns": 9733959
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 13520250
+     "ns": 10405875
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 13503750
+     "ns": 11227959
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 13485375
+     "ns": 13234375
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 13445250
+     "ns": 10102708
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 22182666
+     "ns": 15871416
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 21926042
+     "ns": 16535917
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 21930208
+     "ns": 17357917
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 21788166
+     "ns": 15647000
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21992083
+     "ns": 16214500
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21855000
+     "ns": 16182625
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 21817417
+     "ns": 16347125
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 21903458
+     "ns": 16520458
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22553791
+     "ns": 15762125
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22223459
+     "ns": 15852209
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21867875
+     "ns": 16373834
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21788167
+     "ns": 17398709
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27634250
+     "ns": 20242084
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27561792
+     "ns": 20793708
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 27492917
+     "ns": 20029000
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 27651000
+     "ns": 25509666
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27832208
+     "ns": 21349875
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27259791
+     "ns": 19877708
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 27208250
+     "ns": 20471041
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 27484250
+     "ns": 19809208
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 27267500
+     "ns": 20580583
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 27205042
+     "ns": 20885166
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27221500
+     "ns": 20017083
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27185417
+     "ns": 19932875
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27587791
+     "ns": 20246084
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27390667
+     "ns": 22399792
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27385584
+     "ns": 20584417
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27364875
+     "ns": 20104333
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27268625
+     "ns": 21182917
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27123875
+     "ns": 19967792
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25278416
+     "ns": 18099209
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25000416
+     "ns": 18654417
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 24592083
+     "ns": 18147625
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 24749375
+     "ns": 18597750
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24612667
+     "ns": 18211250
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24617292
+     "ns": 17969416
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 24632125
+     "ns": 26201833
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 24577375
+     "ns": 23875333
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24689167
+     "ns": 22386458
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24678458
+     "ns": 18481250
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25220125
+     "ns": 19103583
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
-     "ns": 24551584
+     "ns": 19755542
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24516458
+     "ns": 18815792
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24857833
+     "ns": 18467875
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24587125
+     "ns": 19480417
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24588917
+     "ns": 18200166
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24535875
+     "ns": 17845167
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24571834
+     "ns": 17917791
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24591541
+     "ns": 18572458
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24614042
+     "ns": 18893459
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24657375
+     "ns": 17958125
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 24627709
+     "ns": 18313916
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 24380666
+     "ns": 18827167
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24639667
+     "ns": 18849708
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24677292
+     "ns": 17897958
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12859542
+     "ns": 9861041
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12381625
+     "ns": 9052875
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17795042
+     "ns": 12931292
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17449000
+     "ns": 12898750
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17411375
+     "ns": 12700709
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17494042
+     "ns": 12558458
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17502084
+     "ns": 12472125
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17441834
+     "ns": 12700833
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17465750
+     "ns": 13248250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17419208
+     "ns": 12988042
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17483917
+     "ns": 13451209
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17468625
+     "ns": 12380083
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
-     "ns": 12500916
+     "ns": 9301667
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17504750
+     "ns": 12571583
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18073250
+     "ns": 13085167
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18048667
+     "ns": 14469500
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 18016209
+     "ns": 14009792
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 17983959
+     "ns": 13694083
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 18263916
+     "ns": 13321250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 18024167
+     "ns": 13906375
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 18380083
+     "ns": 13123125
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 18288417
+     "ns": 14008666
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 18127000
+     "ns": 13052666
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 18254291
+     "ns": 12839167
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 18245125
+     "ns": 13034041
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 18529708
+     "ns": 12890750
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1627167
+     "ns": 1160250
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1237583
+     "ns": 1490750
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1717917
+     "ns": 1200250
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1515792
+     "ns": 1396667
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 2037583
+     "ns": 1433834
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 2047458
+     "ns": 1525375
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10421375
+     "ns": 7603292
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10282000
+     "ns": 7966042
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10240250
+     "ns": 7530625
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10526083
+     "ns": 7425292
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10443417
+     "ns": 7250209
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10456500
+     "ns": 7573042
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10174250
+     "ns": 7141542
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10109791
+     "ns": 7410375
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10107417
+     "ns": 7402917
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10065000
+     "ns": 7544375
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10459375
+     "ns": 7541625
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10345625
+     "ns": 7593125
     }
    ]
   },
   {
-   "pid": 25105,
+   "pid": 90770,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596356783.8818,
-   "repliedMs": 1795596356811.5115
+   "startedMs": 1795634902385.2114,
+   "repliedMs": 1795634902406.8145
   },
   {
-   "pid": 25105,
+   "pid": 90770,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596356811.5344,
-   "repliedMs": 1795596358633.2847
+   "startedMs": 1795634902406.8374,
+   "repliedMs": 1795634903741.926
   },
   {
-   "pid": 25105,
+   "pid": 90770,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596358633.2976,
-   "repliedMs": 1795596358633.4407
+   "startedMs": 1795634903741.9355,
+   "repliedMs": 1795634903742.0632
   },
   {
-   "pid": 25350,
+   "pid": 92285,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596358646.0352,
-   "repliedMs": 1795596364089.4653,
+   "startedMs": 1795634903754.5112,
+   "repliedMs": 1795634907731.347,
    "compiles": 109,
-   "compileNs": 2112146755,
+   "compileNs": 1564413462,
    "programs": [
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 15223292
+     "ns": 10811875
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 14232959
+     "ns": 10243083
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14342750
+     "ns": 10506333
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14115416
+     "ns": 9978125
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 13613208
+     "ns": 9873375
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 13534875
+     "ns": 10005916
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 13530708
+     "ns": 10435792
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 13613666
+     "ns": 9460041
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 13674958
+     "ns": 10237000
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 13652250
+     "ns": 10197084
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 22226542
+     "ns": 17000375
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 22008917
+     "ns": 16378792
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 21933667
+     "ns": 15762584
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 22069084
+     "ns": 15638417
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 22002041
+     "ns": 15980625
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 22013208
+     "ns": 16032375
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 22036000
+     "ns": 16442708
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 22022167
+     "ns": 15598958
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22150625
+     "ns": 16286500
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22291917
+     "ns": 15943500
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21977958
+     "ns": 15901166
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21901458
+     "ns": 15335917
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27749833
+     "ns": 21511333
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27842959
+     "ns": 19949083
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 27637833
+     "ns": 19518000
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 28150375
+     "ns": 20418625
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27813625
+     "ns": 21422583
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27685417
+     "ns": 19680875
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 27378000
+     "ns": 19743667
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 27683834
+     "ns": 20412584
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 27461291
+     "ns": 19646375
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 27430459
+     "ns": 19880917
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27444875
+     "ns": 20498667
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27362292
+     "ns": 19838375
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27455708
+     "ns": 20656750
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27688500
+     "ns": 20134500
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27508416
+     "ns": 20558917
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27273334
+     "ns": 21207125
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27237666
+     "ns": 20423417
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27234334
+     "ns": 22357417
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25373291
+     "ns": 19871500
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25216125
+     "ns": 18653833
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 24744417
+     "ns": 18192459
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 24828958
+     "ns": 18279625
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24675084
+     "ns": 18511875
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24693625
+     "ns": 18473458
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 24895459
+     "ns": 17921542
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 25673500
+     "ns": 18295917
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 25109958
+     "ns": 17938208
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24881875
+     "ns": 19161667
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25285792
+     "ns": 18693333
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
-     "ns": 24822708
+     "ns": 18025458
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 25072667
+     "ns": 19197125
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24774666
+     "ns": 18205292
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24742166
+     "ns": 18411917
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24669375
+     "ns": 18892000
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24754584
+     "ns": 18794791
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24739667
+     "ns": 18298167
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24843208
+     "ns": 18718584
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24836125
+     "ns": 17724959
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24706667
+     "ns": 18451625
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 25039875
+     "ns": 19324792
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 25399666
+     "ns": 17833417
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 25085125
+     "ns": 20368042
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24768667
+     "ns": 25403666
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12791750
+     "ns": 12297500
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12580084
+     "ns": 9111083
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17503916
+     "ns": 12918667
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17627708
+     "ns": 12865500
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17594792
+     "ns": 12687458
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17480458
+     "ns": 12769667
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17521375
+     "ns": 12210334
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17891584
+     "ns": 12604958
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17626584
+     "ns": 12580625
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17474875
+     "ns": 12577541
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17474084
+     "ns": 13008166
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17461084
+     "ns": 12476791
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
-     "ns": 12414667
+     "ns": 8771000
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17476209
+     "ns": 13042000
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18049750
+     "ns": 15279917
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18015166
+     "ns": 14230667
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 17879167
+     "ns": 13983250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 17954708
+     "ns": 13327625
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 18302875
+     "ns": 12716584
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 18383583
+     "ns": 13598917
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 18189958
+     "ns": 13296083
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 18135250
+     "ns": 13153916
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 18104292
+     "ns": 12913459
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 18074709
+     "ns": 13414791
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 18033834
+     "ns": 12781625
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 17962750
+     "ns": 14006083
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1582625
+     "ns": 1129625
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1209292
+     "ns": 1362584
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1705000
+     "ns": 1503125
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1437125
+     "ns": 1776167
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 1781041
+     "ns": 1492125
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 2066709
+     "ns": 1490667
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10350917
+     "ns": 7735000
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10066584
+     "ns": 7205458
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10582459
+     "ns": 7332625
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10254208
+     "ns": 7411709
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10378416
+     "ns": 7584000
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 12652625
+     "ns": 7688750
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 12852167
+     "ns": 7897917
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10551500
+     "ns": 7393291
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10999333
+     "ns": 7294916
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10764584
+     "ns": 7424084
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10685458
+     "ns": 7431667
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10381833
+     "ns": 7082542
     }
    ]
   },
   {
-   "pid": 25350,
+   "pid": 92285,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596364089.4795,
-   "repliedMs": 1795596364116.6128
+   "startedMs": 1795634907731.3613,
+   "repliedMs": 1795634907752.294
   },
   {
-   "pid": 25350,
+   "pid": 92285,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596364116.6262,
-   "repliedMs": 1795596366047.9473
+   "startedMs": 1795634907752.3044,
+   "repliedMs": 1795634909087.6729
   },
   {
-   "pid": 25350,
+   "pid": 92285,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596366047.9595,
-   "repliedMs": 1795596366048.0852
+   "startedMs": 1795634909087.6816,
+   "repliedMs": 1795634909087.7761
   },
   {
-   "pid": 25601,
+   "pid": 93794,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596366061.032,
-   "repliedMs": 1795596371470.317,
+   "startedMs": 1795634909098.8508,
+   "repliedMs": 1795634913072.6545,
    "compiles": 109,
-   "compileNs": 2106642671,
+   "compileNs": 1563046121,
    "programs": [
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 15214792
+     "ns": 10526500
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 14444542
+     "ns": 10731083
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14419625
+     "ns": 11034917
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14898083
+     "ns": 10423625
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 14684125
+     "ns": 9972500
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 14279625
+     "ns": 9775166
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 13897709
+     "ns": 9863208
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 14657333
+     "ns": 9896042
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 14066167
+     "ns": 10130250
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 14437333
+     "ns": 9818250
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 23587875
+     "ns": 15780583
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 22118459
+     "ns": 16785250
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 22230666
+     "ns": 17518500
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 21822750
+     "ns": 16081625
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21772583
+     "ns": 17008458
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21810333
+     "ns": 15850000
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 22022625
+     "ns": 16104875
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 21786334
+     "ns": 16322625
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22025000
+     "ns": 16935666
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 21970083
+     "ns": 16465417
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 22241208
+     "ns": 16036458
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21975417
+     "ns": 16857125
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27765125
+     "ns": 20565666
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27923292
+     "ns": 19699959
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 27630833
+     "ns": 20294666
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 28285584
+     "ns": 21279625
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27841917
+     "ns": 20726292
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27386709
+     "ns": 20000333
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 27294416
+     "ns": 19661709
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 27647792
+     "ns": 20211666
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 27395167
+     "ns": 20204459
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 27309625
+     "ns": 21134125
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27468708
+     "ns": 21458042
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27267959
+     "ns": 19983792
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27618084
+     "ns": 20207834
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27430959
+     "ns": 19645791
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 28274875
+     "ns": 19795541
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27418667
+     "ns": 20209167
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27202917
+     "ns": 19790291
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27028833
+     "ns": 20326625
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25281083
+     "ns": 18483875
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25118875
+     "ns": 17899667
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 24706833
+     "ns": 18110875
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 24626500
+     "ns": 18155875
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24583292
+     "ns": 17991041
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24703334
+     "ns": 17920084
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 24665209
+     "ns": 18599875
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 24572000
+     "ns": 17695750
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24692958
+     "ns": 24035083
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24666375
+     "ns": 21158500
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25178333
+     "ns": 18454667
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
-     "ns": 24590000
+     "ns": 18307333
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24618667
+     "ns": 18678333
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24710042
+     "ns": 18060917
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24637709
+     "ns": 18554833
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24572541
+     "ns": 18016125
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24590875
+     "ns": 17283834
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24532542
+     "ns": 17478167
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24798667
+     "ns": 17721292
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24580958
+     "ns": 17710167
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24594500
+     "ns": 17379958
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 24677458
+     "ns": 20151750
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 24480459
+     "ns": 17628375
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24846208
+     "ns": 17791500
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24634792
+     "ns": 17715333
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12646875
+     "ns": 9583625
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12450542
+     "ns": 9139416
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17392167
+     "ns": 13162167
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17365334
+     "ns": 12643375
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17265625
+     "ns": 12614750
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17940917
+     "ns": 12218750
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17518542
+     "ns": 12844875
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17561709
+     "ns": 13227208
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17443208
+     "ns": 12522375
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17460708
+     "ns": 12459666
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17454375
+     "ns": 12572458
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17488917
+     "ns": 12841417
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
-     "ns": 12457000
+     "ns": 8652417
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17627333
+     "ns": 12847333
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 20304667
+     "ns": 12789458
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18556791
+     "ns": 13579208
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 18406875
+     "ns": 13126833
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 18232291
+     "ns": 13023292
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 18344125
+     "ns": 13950375
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 18291333
+     "ns": 13440833
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 18051084
+     "ns": 13296958
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 18040250
+     "ns": 13398500
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 18077875
+     "ns": 13592458
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 18020625
+     "ns": 14714000
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 17967000
+     "ns": 13221209
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 17841708
+     "ns": 13449083
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1561750
+     "ns": 1235084
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1207125
+     "ns": 920417
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1672042
+     "ns": 1290625
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1477250
+     "ns": 1021875
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 2059167
+     "ns": 1223584
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 1846958
+     "ns": 1258416
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10196875
+     "ns": 7305292
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10185041
+     "ns": 7905875
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10240208
+     "ns": 7480250
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10203209
+     "ns": 8258292
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10184541
+     "ns": 7473958
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10173875
+     "ns": 7334167
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10317833
+     "ns": 7329875
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10188750
+     "ns": 7468917
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10134417
+     "ns": 9957708
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10275166
+     "ns": 9778916
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10145458
+     "ns": 10476958
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10150791
+     "ns": 10316958
     }
    ]
   },
   {
-   "pid": 25601,
+   "pid": 93794,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596371470.333,
-   "repliedMs": 1795596371497.4001
+   "startedMs": 1795634913072.715,
+   "repliedMs": 1795634913093.4207
   },
   {
-   "pid": 25601,
+   "pid": 93794,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596371497.4143,
-   "repliedMs": 1795596373350.8997
+   "startedMs": 1795634913093.4739,
+   "repliedMs": 1795634914481.4946
   },
   {
-   "pid": 25601,
+   "pid": 93794,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596373350.9106,
-   "repliedMs": 1795596373351.0554
+   "startedMs": 1795634914481.5015,
+   "repliedMs": 1795634914481.6448
   },
   {
-   "pid": 25839,
+   "pid": 95305,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596373364.539,
-   "repliedMs": 1795596378774.2424,
+   "startedMs": 1795634914492.8713,
+   "repliedMs": 1795634918495.497,
    "compiles": 109,
-   "compileNs": 2115121501,
+   "compileNs": 1583234913,
    "programs": [
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 14992875
+     "ns": 11533166
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 14560417
+     "ns": 10604750
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14282208
+     "ns": 10821459
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14258875
+     "ns": 10267125
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 14371625
+     "ns": 9921708
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 22004292
+     "ns": 9947250
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 14089750
+     "ns": 10409125
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 13574208
+     "ns": 9981916
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 14020542
+     "ns": 10015167
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 13638375
+     "ns": 10346750
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 22725583
+     "ns": 17099333
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 22554666
+     "ns": 17198417
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 22124584
+     "ns": 16096916
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 22052667
+     "ns": 15969625
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 22018084
+     "ns": 17508125
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21973833
+     "ns": 16885542
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 22321250
+     "ns": 16743042
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 21901000
+     "ns": 16293000
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22014333
+     "ns": 16407541
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22256167
+     "ns": 16595875
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 22173875
+     "ns": 16914250
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21907333
+     "ns": 15505166
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 28027375
+     "ns": 19974958
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27660833
+     "ns": 20887375
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 27797625
+     "ns": 20186042
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 27909916
+     "ns": 20838042
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27830584
+     "ns": 22033542
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27295167
+     "ns": 21490833
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 27531875
+     "ns": 19602625
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 27689916
+     "ns": 20843166
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 28239875
+     "ns": 20151292
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 27567750
+     "ns": 20469167
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27457667
+     "ns": 24077583
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27542583
+     "ns": 20904209
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27600500
+     "ns": 20554291
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27540625
+     "ns": 19222625
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27466875
+     "ns": 23285084
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27447417
+     "ns": 21089834
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27414666
+     "ns": 20304875
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27340667
+     "ns": 21399417
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25685125
+     "ns": 19617750
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25205125
+     "ns": 18847500
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 25143625
+     "ns": 18150500
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 25147291
+     "ns": 18637583
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24774166
+     "ns": 18632292
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 25160375
+     "ns": 18516541
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 25033125
+     "ns": 19181125
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 24999875
+     "ns": 18550292
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24805292
+     "ns": 19642583
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24781167
+     "ns": 19048166
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25342000
+     "ns": 18923000
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
-     "ns": 24976334
+     "ns": 18834083
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 25304500
+     "ns": 18948875
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24871292
+     "ns": 18687208
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24748125
+     "ns": 18666875
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24975542
+     "ns": 19072416
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 25196959
+     "ns": 18916708
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24706792
+     "ns": 18772084
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24735167
+     "ns": 18480917
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24814958
+     "ns": 18583709
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 25016834
+     "ns": 18047500
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 24746875
+     "ns": 18334083
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 24629000
+     "ns": 17875333
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24491500
+     "ns": 18525834
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24604584
+     "ns": 17482000
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12695875
+     "ns": 8872333
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12465458
+     "ns": 9671292
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17507292
+     "ns": 13637417
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17429000
+     "ns": 13279667
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17709375
+     "ns": 12975250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17425042
+     "ns": 12414250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17376875
+     "ns": 13714083
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17343875
+     "ns": 12454791
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17358333
+     "ns": 12757792
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17402459
+     "ns": 12477125
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17458958
+     "ns": 12258542
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17606500
+     "ns": 12264000
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
-     "ns": 12424833
+     "ns": 8600333
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17338000
+     "ns": 12489541
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18059375
+     "ns": 13235417
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18036708
+     "ns": 13579375
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 17897917
+     "ns": 13694084
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 17899125
+     "ns": 13442250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 18027000
+     "ns": 12752458
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 18046583
+     "ns": 13174041
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 17961042
+     "ns": 13010167
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 18022458
+     "ns": 12896416
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 18009167
+     "ns": 13555500
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 18016542
+     "ns": 13110708
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 17881625
+     "ns": 13618167
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 17896916
+     "ns": 14750583
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1565542
+     "ns": 1285959
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1201750
+     "ns": 1180333
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1687458
+     "ns": 1324875
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1511875
+     "ns": 1051792
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 2042000
+     "ns": 1438333
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 2405417
+     "ns": 1409833
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10389583
+     "ns": 8568958
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10080875
+     "ns": 8848791
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10339083
+     "ns": 8295583
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10602708
+     "ns": 7834459
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10082500
+     "ns": 7745750
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10148250
+     "ns": 7587667
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10108541
+     "ns": 8245666
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10144209
+     "ns": 8086417
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10100792
+     "ns": 8261958
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10051833
+     "ns": 8076292
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10150875
+     "ns": 9972625
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10137791
+     "ns": 7978875
     }
    ]
   },
   {
-   "pid": 25839,
+   "pid": 95305,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596378774.2576,
-   "repliedMs": 1795596378801.6277
+   "startedMs": 1795634918495.5237,
+   "repliedMs": 1795634918516.6682
   },
   {
-   "pid": 25839,
+   "pid": 95305,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596378801.6477,
-   "repliedMs": 1795596380619.578
+   "startedMs": 1795634918516.7798,
+   "repliedMs": 1795634919854.92
   },
   {
-   "pid": 25839,
+   "pid": 95305,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596380619.5908,
-   "repliedMs": 1795596380619.721
+   "startedMs": 1795634919854.9282,
+   "repliedMs": 1795634919855.0447
   },
   {
-   "pid": 26083,
+   "pid": 96797,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596380632.5186,
-   "repliedMs": 1795596386047.5679,
+   "startedMs": 1795634919866.9539,
+   "repliedMs": 1795634923874.3086,
    "compiles": 109,
-   "compileNs": 2102026498,
+   "compileNs": 1568016043,
    "programs": [
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 14874416
+     "ns": 10862542
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b0491e694ed43b4a2bc3e1417893c42fdda6239fcf3f6d09e096d0b2bf2ee996",
-     "ns": 14422375
+     "ns": 10602375
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14195125
+     "ns": 10412958
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "3914875878016a2f6cf4aa7110d77e18213db9712d323081f6c77c15e6bb2493",
-     "ns": 14132291
+     "ns": 11041875
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 13560541
+     "ns": 9538708
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "b2ea3fb5c27b96824fad1c6ab6452a24698fc918659038465ce413372514ae07",
-     "ns": 13445209
+     "ns": 9780708
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 13456041
+     "ns": 9768833
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "e50c8a5f133cb4ab093bbf915438b0acf39c0c890bf13ed5953774d5c6fd7ba2",
-     "ns": 13466833
+     "ns": 9833292
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 13510750
+     "ns": 9922541
     },
     {
      "pack": "deepbuild/modslib@1.0.0",
      "program": "896f8c8d83b502320b09935f7c5f7f2a8a05d214fcae871d17a6385ae7d39eeb",
-     "ns": 13466834
+     "ns": 9985292
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 22307208
+     "ns": 16452916
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "e3564538326059dc1b06d2b1923f38601d110166ec4213cd1c56afe8794540fb",
-     "ns": 21942167
+     "ns": 15775541
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 21877458
+     "ns": 16447709
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "f9e8cf292f1685dab8fca143bdec1861d94228984fabeefdd05476a993acfa1e",
-     "ns": 21857584
+     "ns": 16884958
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21762250
+     "ns": 16524959
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 21844833
+     "ns": 16538541
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 21921083
+     "ns": 15857041
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "2dd2b94e040cc950aa388a6c3923a70ccb601ba06ec6b5eafa816af021be0609",
-     "ns": 21819750
+     "ns": 16142083
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22767791
+     "ns": 15957084
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "3943cd29bc9d0b9c09143af39b74d4fbb04a47aa76fe3a58eb0f08111105ea0b",
-     "ns": 22413250
+     "ns": 16378792
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 22604208
+     "ns": 16441792
     },
     {
      "pack": "deepbuild/lanes@1.0.0",
      "program": "aa1fec63db53a41a2e4d6dd37582cecf8516026ead74b00b8f4801df56528f42",
-     "ns": 22679958
+     "ns": 15893875
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27913583
+     "ns": 20549000
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "ef049b2c23eb3c71a14e8b30fab0579caff8f60e74c7706295f1cb1ace5e72fb",
-     "ns": 27751750
+     "ns": 20999125
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 27559500
+     "ns": 22633833
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "a1c46d3ff9cec7dc6a7b582ee075863fff0b5da5df80d4070b02ce090a429d02",
-     "ns": 27646541
+     "ns": 21630459
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27653875
+     "ns": 20679625
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "9febdc8f3f07c06b40f71328eb319e713d1a3c6f2aff31dbbe584b29dea77d81",
-     "ns": 27962042
+     "ns": 20382209
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 27756333
+     "ns": 20986250
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d858d5c52212b4dcb5d65b120e0db2a33acd5d684c498f782b60db565d136861",
-     "ns": 28079833
+     "ns": 20242334
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 27702250
+     "ns": 20140833
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "92dc30c7da6dcae217a56514efc9febb6a712bb123ccb8a261a3abb0f40c03dd",
-     "ns": 27459417
+     "ns": 20304416
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27379917
+     "ns": 20021375
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27619833
+     "ns": 21172959
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27949000
+     "ns": 20372958
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "05e422159ec2768b8feeab908aee2bf96ff12b1fbb954e6fd37c08f36c6972c0",
-     "ns": 27531334
+     "ns": 20241666
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27548459
+     "ns": 22027583
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d0e0d07579c214a08abb00185dbdc222d30b2931e04441a6dbb9aa479728fcff",
-     "ns": 27461042
+     "ns": 20255709
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27299125
+     "ns": 19736917
     },
     {
      "pack": "deepbuild/process@1.0.0",
      "program": "d596f8e76f1fee90ee7bc9dcec331585dfb1bb3bb271594478e25e047a2dd5ed",
-     "ns": 27158750
+     "ns": 20476042
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25810125
+     "ns": 18855125
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25522625
+     "ns": 18863583
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 24863458
+     "ns": 17625459
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "77c6cbe0aabe3630b0dbfafe04b42629d8634d3ae6eb53eb1ff2dfdcd6108401",
-     "ns": 24888250
+     "ns": 18515542
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24888084
+     "ns": 18243041
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "3b3f4006df6fe793d0b5436698d260b1fe50d8319ab21cd04ae27136f10f5b4d",
-     "ns": 24744875
+     "ns": 18047500
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 24788375
+     "ns": 17548750
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "5f23dc00389e0a7c371c9ca7123b33d42ddacfe82bc8c0e13cc907e34fee684d",
-     "ns": 25043125
+     "ns": 17560042
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24759625
+     "ns": 18394084
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24798125
+     "ns": 18877667
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "85957103aae6a86e642dc4f027dec14a5d087cbeaee449637eb9ab4a0af15561",
-     "ns": 25319625
+     "ns": 20294834
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "8f0879811b458238393eb3a6db4fae4288f374ed6577e6a52e70ccf64181d503",
-     "ns": 24816500
+     "ns": 18250791
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "1b682633c4965cb0bfdd711cba0ccac29671e0c9df82f2d8de3f8a38fe3483af",
-     "ns": 24618833
+     "ns": 18212167
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24685041
+     "ns": 19230834
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "95480581c8bda7218c6bbb59337fc3669c9711b98c55433be7f23ef443ab1fc8",
-     "ns": 24642917
+     "ns": 18593708
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24611291
+     "ns": 19878083
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "31783c49de2cc0c33e04bf7c28bcd05c9b594303ca7eaf84ac1675e998296bc7",
-     "ns": 24737334
+     "ns": 18688042
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24750166
+     "ns": 20404416
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "f371f25ba2394a9bf2d5f25836c99bb7e6137fd6037ba6dd0f7bc46aecc01810",
-     "ns": 24716416
+     "ns": 19980042
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24696167
+     "ns": 19728125
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "e752daed45ec51d80b179bd50a6e4248a12b8724ca5bd2362b73196d91c95542",
-     "ns": 24650958
+     "ns": 18073458
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 24647292
+     "ns": 18682250
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "a714594691925c7ff7179eab6ae1cf1c6c13def19121a81e43f1e2e46d5bcac8",
-     "ns": 24719833
+     "ns": 18238917
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24792458
+     "ns": 18864917
     },
     {
      "pack": "deepbuild/circuit@1.0.0",
      "program": "18b16ee708b526883883c29d5d8eb55c1e7830fddd470b57af5b9d663e33f8b7",
-     "ns": 24600625
+     "ns": 18327417
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12930541
+     "ns": 9649125
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d69b261178ed6fe4c083e32c67e63e2f6dc6eb241358e4250ce79bc4fa4e6962",
-     "ns": 12485334
+     "ns": 9598250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17402416
+     "ns": 12628542
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "082143b303740e02b2adc08ee1eb182c84d16d71dae16fe4ef3ed3b3652bf86b",
-     "ns": 17530875
+     "ns": 13054917
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17493292
+     "ns": 13415000
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "8170ed9e174bdec7fdea96900ac7b0cc10deb59aff50735acef6e7291116ed1a",
-     "ns": 17451292
+     "ns": 12453250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17516417
+     "ns": 13041667
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "caef2ceb7d15e8998549c6385dbb93ace70f3b6511ce1901613787d90906c749",
-     "ns": 17412625
+     "ns": 14046833
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17471708
+     "ns": 12377500
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "a3c6e180b9636cac1a5d9b0a00a2f53d607ec55f630c7a89529321f62e830d48",
-     "ns": 17463834
+     "ns": 12932417
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17566416
+     "ns": 12681291
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17573334
+     "ns": 12640083
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7300ee90bb9380f5927e206cf7d975f9a0e4a0ff5cbd2fd1b444b73d311d24bc",
-     "ns": 12492625
+     "ns": 8928542
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9d4d605fdfb541d8895d8ab0d3427631b90a1e660be85c8c24f0fd74a4595657",
-     "ns": 17459459
+     "ns": 12528416
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18109167
+     "ns": 12886250
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "3c82376c8ac5b680b58182a2f6bb97b3f878728bba2b55354204d7b4a3eebf27",
-     "ns": 18086458
+     "ns": 13186458
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 18029584
+     "ns": 12511167
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "31cbd4e0d221dfc46bfde98a0927f68bff3eed1b17cdab97186b0bcebca0f3a1",
-     "ns": 17980167
+     "ns": 13441542
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 18072000
+     "ns": 13532042
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "66ad77c23fd07bbc65f0b6ad86a4eb3a67a418f000c230fabb0c135824b3e4b3",
-     "ns": 18001208
+     "ns": 13334000
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 18169708
+     "ns": 14453292
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "7439d30e7ad70f1bab28311ff5421ada50a7a47b0d019963143ae5e78243e578",
-     "ns": 18376167
+     "ns": 13248000
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 18150458
+     "ns": 13695833
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "9b584ab0caa6b3cc121cfe807677ae61159a41e70419de78ace61125729673e4",
-     "ns": 17926084
+     "ns": 13656292
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 17869334
+     "ns": 12791208
     },
     {
      "pack": "deepbuild/separation@1.0.0",
      "program": "d6f3605160e3cb773e7e22c9998fc3de88b079dd386751b9be17ddb23562a668",
-     "ns": 17876625
+     "ns": 16403375
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1690875
+     "ns": 1234000
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "260c9d5993ef28b8605b18bc78db29f17ff6c11e5f7c833698cf927eadf0e28a",
-     "ns": 1592792
+     "ns": 1185166
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1677792
+     "ns": 1376583
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "db724e63f479a9a2f419f16ddae3fd8304c61877b2843b866361c70e62c4b7e1",
-     "ns": 1706417
+     "ns": 1200500
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 1884041
+     "ns": 1313750
     },
     {
      "pack": "deepbuild/interfaces@1.0.0",
      "program": "1ce4365e26036bbdd5ed4702e8a9e4b1409fb8da0aaecc2e5fb129c8e45f9fa6",
-     "ns": 2052208
+     "ns": 1546000
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10475625
+     "ns": 7537708
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "f1244d523ed647963c5c93c2f5b11fcd111446295408d0af83b38b7e0c3ebda3",
-     "ns": 10221958
+     "ns": 7779750
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10281458
+     "ns": 7389708
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10108583
+     "ns": 7093542
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10111333
+     "ns": 7536458
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10098042
+     "ns": 6992625
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10075667
+     "ns": 6997041
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10067958
+     "ns": 7572209
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10086375
+     "ns": 7545125
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10109292
+     "ns": 7424917
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 10039250
+     "ns": 7689250
     },
     {
      "pack": "deepbuild/sense@1.0.0",
      "program": "07f0f4832a83c3d7d1b3f0e2f31ce111c9301ee7839c6853847d7018e96efd09",
-     "ns": 9977042
+     "ns": 7609917
     }
    ]
   },
   {
-   "pid": 26083,
+   "pid": 96797,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596386047.5842,
-   "repliedMs": 1795596386074.1162
+   "startedMs": 1795634923874.322,
+   "repliedMs": 1795634923893.1113
   },
   {
-   "pid": 26083,
+   "pid": 96797,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596386074.1304,
-   "repliedMs": 1795596387891.8303
+   "startedMs": 1795634923893.1223,
+   "repliedMs": 1795634925220.0256
   },
   {
-   "pid": 26083,
+   "pid": 96797,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596387891.8433,
-   "repliedMs": 1795596387891.972
+   "startedMs": 1795634925220.0327,
+   "repliedMs": 1795634925220.1301
   }
  ],
  "processes": [
   {
-   "pid": 24852,
+   "pid": 89266,
    "primes": true,
    "load": [
     [
-     8.826171875,
-     28.07568359375,
-     45.67529296875
+     20.95458984375,
+     21.02685546875,
+     21.6806640625
     ],
     [
-     8.23095703125,
-     27.31494140625,
-     45.19921875
+     21.9189453125,
+     21.2255859375,
+     21.74658203125
     ]
    ],
-   "startedMs": 1795596343846.9111,
-   "worldRepliedMs": 1795596343964.9883,
-   "exitedMs": 1795596351292.5725,
+   "startedMs": 1795634893009.709,
+   "worldRepliedMs": 1795634893096.355,
+   "exitedMs": 1795634898400.4282,
    "replyBytes": [
     55703,
     55703,
-    2534,
+    2658,
     2581
    ],
    "packs": [
@@ -3828,27 +3828,27 @@
    "stderr": []
   },
   {
-   "pid": 25105,
+   "pid": 90770,
    "primes": false,
    "load": [
     [
-     8.23095703125,
-     27.31494140625,
-     45.19921875
+     21.9189453125,
+     21.2255859375,
+     21.74658203125
     ],
     [
-     7.97216796875,
-     26.9443359375,
-     44.96337890625
+     22.56591796875,
+     21.37109375,
+     21.794921875
     ]
    ],
-   "startedMs": 1795596351294.696,
-   "worldRepliedMs": 1795596351376.7642,
-   "exitedMs": 1795596358644.506,
+   "startedMs": 1795634898402.0852,
+   "worldRepliedMs": 1795634898462.8445,
+   "exitedMs": 1795634903753.3462,
    "replyBytes": [
     55703,
     55703,
-    2432,
+    2410,
     2581
    ],
    "packs": [
@@ -3982,27 +3982,27 @@
    "stderr": []
   },
   {
-   "pid": 25350,
+   "pid": 92285,
    "primes": false,
    "load": [
     [
-     7.97216796875,
-     26.9443359375,
-     44.96337890625
+     22.56591796875,
+     21.37109375,
+     21.794921875
     ],
     [
-     7.9150390625,
-     26.30419921875,
-     44.525390625
+     22.9208984375,
+     21.46435546875,
+     21.8251953125
     ]
    ],
-   "startedMs": 1795596358646.0352,
-   "worldRepliedMs": 1795596358725.7485,
-   "exitedMs": 1795596366059.5085,
+   "startedMs": 1795634903754.5112,
+   "worldRepliedMs": 1795634903815.1057,
+   "exitedMs": 1795634909097.7366,
    "replyBytes": [
     55703,
     55703,
-    2562,
+    2681,
     2581
    ],
    "packs": [
@@ -4136,27 +4136,27 @@
    "stderr": []
   },
   {
-   "pid": 25601,
+   "pid": 93794,
    "primes": false,
    "load": [
     [
-     7.9150390625,
-     26.30419921875,
-     44.525390625
+     22.9208984375,
+     21.46435546875,
+     21.8251953125
     ],
     [
-     8.24169921875,
-     26.06640625,
-     44.33447265625
+     23.4072265625,
+     21.58935546875,
+     21.8671875
     ]
    ],
-   "startedMs": 1795596366061.032,
-   "worldRepliedMs": 1795596366143.4724,
-   "exitedMs": 1795596373362.9783,
+   "startedMs": 1795634909098.8508,
+   "worldRepliedMs": 1795634909159.5037,
+   "exitedMs": 1795634914491.6873,
    "replyBytes": [
     55703,
     55703,
-    2598,
+    2659,
     2581
    ],
    "packs": [
@@ -4290,27 +4290,27 @@
    "stderr": []
   },
   {
-   "pid": 25839,
+   "pid": 95305,
    "primes": false,
    "load": [
     [
-     8.24169921875,
-     26.06640625,
-     44.33447265625
+     23.4072265625,
+     21.58935546875,
+     21.8671875
     ],
     [
-     7.82958984375,
-     25.38916015625,
-     43.8798828125
+     23.53466796875,
+     21.6455078125,
+     21.88525390625
     ]
    ],
-   "startedMs": 1795596373364.539,
-   "worldRepliedMs": 1795596373446.4277,
-   "exitedMs": 1795596380630.87,
+   "startedMs": 1795634914492.8713,
+   "worldRepliedMs": 1795634914553.1167,
+   "exitedMs": 1795634919865.4658,
    "replyBytes": [
     55703,
     55703,
-    2614,
+    2661,
     2581
    ],
    "packs": [
@@ -4444,27 +4444,27 @@
    "stderr": []
   },
   {
-   "pid": 26083,
+   "pid": 96797,
    "primes": false,
    "load": [
     [
-     7.82958984375,
-     25.38916015625,
-     43.8798828125
+     23.53466796875,
+     21.6455078125,
+     21.88525390625
     ],
     [
-     8.0830078125,
-     25.14990234375,
-     43.68701171875
+     22.16455078125,
+     21.423828125,
+     21.80419921875
     ]
    ],
-   "startedMs": 1795596380632.5186,
-   "worldRepliedMs": 1795596380713.4485,
-   "exitedMs": 1795596387903.014,
+   "startedMs": 1795634919866.9539,
+   "worldRepliedMs": 1795634919928.7678,
+   "exitedMs": 1795634925230.525,
    "replyBytes": [
     55703,
     55703,
-    2515,
+    2532,
     2581
    ],
    "packs": [
@@ -4600,7 +4600,7 @@
  ],
  "marks": {
   "file": "compile.marks.jsonl",
-  "sha256": "b937ecf004c3879b61aded9183dc591a6352bc2d94a8e81d6a6adfc6f9570bd7",
+  "sha256": "4c0d30e237ae28e5343cefe767bbed9b2383b00bb9536e6cfa4bd917d49e13a2",
   "lines": 996
  }
 }

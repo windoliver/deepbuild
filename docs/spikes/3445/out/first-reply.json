@@ -1,27 +1,27 @@
 {
  "kind": "core",
- "date": "2026-11-25T08:44:58.261Z",
+ "date": "2026-11-25T19:27:40.702Z",
  "fingerprint": {
   "model": "Mac17,10",
   "chip": "Apple M5 Max",
   "memoryBytes": 68719476736,
   "power": "ac",
-  "lowPowerMode": true,
+  "lowPowerMode": false,
   "thermalState": "nominal",
   "macosBuild": "26B8119"
  },
  "cores": 18,
- "lease": "timed:f521613098c85ede",
+ "lease": "timed:a50904de23b0851c",
  "load": {
   "start": [
-   10.41748046875,
-   31.46337890625,
-   47.76513671875
+   27.80078125,
+   22.12841796875,
+   22.078125
   ],
   "end": [
-   8.826171875,
-   28.07568359375,
-   45.67529296875
+   20.95458984375,
+   21.02685546875,
+   21.6806640625
   ]
  },
  "binary": {
@@ -105,297 +105,297 @@
  ],
  "replies": [
   {
-   "pid": 23212,
+   "pid": 80138,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596298678.8616,
-   "repliedMs": 1795596305751.8628,
+   "startedMs": 1795634861005.5857,
+   "repliedMs": 1795634865021.6013,
    "primes": true
   },
   {
-   "pid": 23212,
+   "pid": 80138,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596305751.8809,
-   "repliedMs": 1795596305778.8062,
+   "startedMs": 1795634865021.6138,
+   "repliedMs": 1795634865041.6091,
    "primes": true
   },
   {
-   "pid": 23212,
+   "pid": 80138,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596305778.8376,
-   "repliedMs": 1795596307643.167,
+   "startedMs": 1795634865041.63,
+   "repliedMs": 1795634866409.7886,
    "primes": true
   },
   {
-   "pid": 23212,
+   "pid": 80138,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596307643.1897,
-   "repliedMs": 1795596307643.3574,
+   "startedMs": 1795634866409.8123,
+   "repliedMs": 1795634866410.0317,
    "primes": true
   },
   {
-   "pid": 23524,
+   "pid": 81698,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596307658.402,
-   "repliedMs": 1795596312931.5886
+   "startedMs": 1795634866422.4062,
+   "repliedMs": 1795634870301.5647
   },
   {
-   "pid": 23524,
+   "pid": 81698,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596312931.6077,
-   "repliedMs": 1795596312958.6045
+   "startedMs": 1795634870301.578,
+   "repliedMs": 1795634870323.1125
   },
   {
-   "pid": 23524,
+   "pid": 81698,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596312958.6294,
-   "repliedMs": 1795596314802.5278
+   "startedMs": 1795634870323.1335,
+   "repliedMs": 1795634871682.7874
   },
   {
-   "pid": 23524,
+   "pid": 81698,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596314802.537,
-   "repliedMs": 1795596314802.6792
+   "startedMs": 1795634871682.8308,
+   "repliedMs": 1795634871682.9646
   },
   {
-   "pid": 23774,
+   "pid": 83169,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596314815.4539,
-   "repliedMs": 1795596320050.4111
+   "startedMs": 1795634871694.907,
+   "repliedMs": 1795634875549.1375
   },
   {
-   "pid": 23774,
+   "pid": 83169,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596320050.4246,
-   "repliedMs": 1795596320077.4993
+   "startedMs": 1795634875549.1536,
+   "repliedMs": 1795634875569.1953
   },
   {
-   "pid": 23774,
+   "pid": 83169,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596320077.5093,
-   "repliedMs": 1795596321927.1985
+   "startedMs": 1795634875569.2053,
+   "repliedMs": 1795634876927.9185
   },
   {
-   "pid": 23774,
+   "pid": 83169,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596321927.208,
-   "repliedMs": 1795596321927.3289
+   "startedMs": 1795634876927.9277,
+   "repliedMs": 1795634876928.0154
   },
   {
-   "pid": 24022,
+   "pid": 84638,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596321939.717,
-   "repliedMs": 1795596327231.2244
+   "startedMs": 1795634876939.2598,
+   "repliedMs": 1795634880840.0762
   },
   {
-   "pid": 24022,
+   "pid": 84638,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596327231.2473,
-   "repliedMs": 1795596327258.6775
+   "startedMs": 1795634880840.2095,
+   "repliedMs": 1795634880860.0771
   },
   {
-   "pid": 24022,
+   "pid": 84638,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596327258.689,
-   "repliedMs": 1795596329055.9055
+   "startedMs": 1795634880860.0864,
+   "repliedMs": 1795634882209.6091
   },
   {
-   "pid": 24022,
+   "pid": 84638,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596329055.9155,
-   "repliedMs": 1795596329056.0332
+   "startedMs": 1795634882209.6177,
+   "repliedMs": 1795634882209.7078
   },
   {
-   "pid": 24262,
+   "pid": 86137,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596329068.727,
-   "repliedMs": 1795596334332.8079
+   "startedMs": 1795634882221.7388,
+   "repliedMs": 1795634886055.8064
   },
   {
-   "pid": 24262,
+   "pid": 86137,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596334332.821,
-   "repliedMs": 1795596334359.715
+   "startedMs": 1795634886055.928,
+   "repliedMs": 1795634886075.5332
   },
   {
-   "pid": 24262,
+   "pid": 86137,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596334359.7268,
-   "repliedMs": 1795596336202.618
+   "startedMs": 1795634886075.5427,
+   "repliedMs": 1795634887428.6807
   },
   {
-   "pid": 24262,
+   "pid": 86137,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596336202.628,
-   "repliedMs": 1795596336202.7478
+   "startedMs": 1795634887428.6897,
+   "repliedMs": 1795634887428.7798
   },
   {
-   "pid": 24505,
+   "pid": 87588,
    "reply": 1,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596336215.262,
-   "repliedMs": 1795596341517.746
+   "startedMs": 1795634887440.7725,
+   "repliedMs": 1795634891288.3342
   },
   {
-   "pid": 24505,
+   "pid": 87588,
    "reply": 2,
    "call": "deep_kinds",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596341517.7593,
-   "repliedMs": 1795596341544.881
+   "startedMs": 1795634891288.346,
+   "repliedMs": 1795634891309.321
   },
   {
-   "pid": 24505,
+   "pid": 87588,
    "reply": 3,
    "call": "costs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596341544.892,
-   "repliedMs": 1795596343366.27
+   "startedMs": 1795634891309.3313,
+   "repliedMs": 1795634892659.095
   },
   {
-   "pid": 24505,
+   "pid": 87588,
    "reply": 4,
    "call": "packs",
    "build": {
     "profile": "release",
     "toolchain": "rustc 1.99.1 (58cf8f9c3 2026-10-13)"
    },
-   "startedMs": 1795596343366.2793,
-   "repliedMs": 1795596343366.391
+   "startedMs": 1795634892659.1042,
+   "repliedMs": 1795634892659.2178
   }
  ],
  "processes": [
   {
-   "pid": 23212,
+   "pid": 80138,
    "primes": true,
    "load": [
     [
-     10.41748046875,
-     31.46337890625,
-     47.76513671875
+     27.80078125,
+     22.12841796875,
+     22.078125
     ],
     [
-     10.0517578125,
-     30.69091796875,
-     47.2998046875
+     26.775390625,
+     22.009765625,
+     22.03662109375
     ]
    ],
-   "startedMs": 1795596298678.8616,
-   "worldRepliedMs": 1795596300493.5088,
-   "exitedMs": 1795596307656.531,
+   "startedMs": 1795634861005.5857,
+   "worldRepliedMs": 1795634861102.1821,
+   "exitedMs": 1795634866421.281,
    "replyBytes": [
     55703,
     55703,
-    2555,
+    2451,
     2581
    ],
    "packs": [
@@ -529,27 +529,27 @@
    "stderr": []
   },
   {
-   "pid": 23524,
+   "pid": 81698,
    "primes": false,
    "load": [
     [
-     10.0517578125,
-     30.69091796875,
-     47.2998046875
+     26.775390625,
+     22.009765625,
+     22.03662109375
     ],
     [
-     9.72705078125,
-     30.28076171875,
-     47.0576171875
+     25.271484375,
+     21.77685546875,
+     21.9541015625
     ]
    ],
-   "startedMs": 1795596307658.402,
-   "worldRepliedMs": 1795596307743.4077,
-   "exitedMs": 1795596314814.2603,
+   "startedMs": 1795634866422.4062,
+   "worldRepliedMs": 1795634866487.3647,
+   "exitedMs": 1795634871694.0847,
    "replyBytes": [
     55703,
     55703,
-    2575,
+    2497,
     2581
    ],
    "packs": [
@@ -683,27 +683,27 @@
    "stderr": []
   },
   {
-   "pid": 23774,
+   "pid": 83169,
    "primes": false,
    "load": [
     [
-     9.72705078125,
-     30.28076171875,
-     47.0576171875
+     25.271484375,
+     21.77685546875,
+     21.9541015625
     ],
     [
-     9.15966796875,
-     29.48095703125,
-     46.57763671875
+     24.12841796875,
+     21.59765625,
+     21.8896484375
     ]
    ],
-   "startedMs": 1795596314815.4539,
-   "worldRepliedMs": 1795596314897.0535,
-   "exitedMs": 1795596321938.5774,
+   "startedMs": 1795634871694.907,
+   "worldRepliedMs": 1795634871755.6758,
+   "exitedMs": 1795634876938.4548,
    "replyBytes": [
     55703,
     55703,
-    2437,
+    2679,
     2581
    ],
    "packs": [
@@ -837,27 +837,27 @@
    "stderr": []
   },
   {
-   "pid": 24022,
+   "pid": 84638,
    "primes": false,
    "load": [
     [
-     9.15966796875,
-     29.48095703125,
-     46.57763671875
+     24.12841796875,
+     21.59765625,
+     21.8896484375
     ],
     [
-     8.74609375,
-     29.0576171875,
-     46.328125
+     23.23681640625,
+     21.45458984375,
+     21.83740234375
     ]
    ],
-   "startedMs": 1795596321939.717,
-   "worldRepliedMs": 1795596322021.1147,
-   "exitedMs": 1795596329067.407,
+   "startedMs": 1795634876939.2598,
+   "worldRepliedMs": 1795634877000.965,
+   "exitedMs": 1795634882220.7563,
    "replyBytes": [
     55703,
     55703,
-    2611,
+    2537,
     2581
    ],
    "packs": [
@@ -991,27 +991,27 @@
    "stderr": []
   },
   {
-   "pid": 24262,
+   "pid": 86137,
    "primes": false,
    "load": [
     [
-     8.74609375,
-     29.0576171875,
-     46.328125
+     23.23681640625,
+     21.45458984375,
+     21.83740234375
     ],
     [
-     8.63720703125,
-     28.3642578125,
-     45.8798828125
+     22.2568359375,
+     21.28076171875,
+     21.7734375
     ]
    ],
-   "startedMs": 1795596329068.727,
-   "worldRepliedMs": 1795596329149.2075,
-   "exitedMs": 1795596336214.1238,
+   "startedMs": 1795634882221.7388,
+   "worldRepliedMs": 1795634882283.6768,
+   "exitedMs": 1795634887439.6597,
    "replyBytes": [
     55703,
     55703,
-    2598,
+    2602,
     2581
    ],
    "packs": [
@@ -1145,27 +1145,27 @@
    "stderr": []
   },
   {
-   "pid": 24505,
+   "pid": 87588,
    "primes": false,
    "load": [
     [
-     8.63720703125,
-     28.3642578125,
-     45.8798828125
+     22.2568359375,
+     21.28076171875,
+     21.7734375
     ],
     [
-     8.826171875,
-     28.07568359375,
-     45.67529296875
+     20.95458984375,
+     21.02685546875,
+     21.6806640625
     ]
    ],
-   "startedMs": 1795596336215.262,
-   "worldRepliedMs": 1795596336297.7827,
-   "exitedMs": 1795596343378.0999,
+   "startedMs": 1795634887440.7725,
+   "worldRepliedMs": 1795634887502.482,
+   "exitedMs": 1795634892670.413,
    "replyBytes": [
     55703,
     55703,
-    2534,
+    2554,
     2581
    ],
    "packs": [

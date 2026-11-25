@@ -10,11 +10,11 @@ run outputs in `out/`.
 <!-- conditions -->
 | Run | Output | Mac | Power | Low Power Mode | Thermal state | Lease | 1-minute load at its start and end | Counts as |
 |---|---|---|---|---|---|---|---|---|
-| The first reply | `out/first-reply.json` | Mac17,10, Apple M5 Max, macOS 26B8119 | ac | on | nominal | `timed:f521613098c85ede` | 10.42, 8.83 | a reading: Low Power Mode is on |
-| The compile table | `out/compile.json` | Mac17,10, Apple M5 Max, macOS 26B8119 | ac | on | nominal | `timed:f521613098c85ede` | 8.83, 8.08 | a reading: Low Power Mode is on |
-| The checks in | `out/epochs-in-again.json` | Mac17,10, Apple M5 Max, macOS 26B8119 | ac | on | nominal | `timed:f521613098c85ede` | 6.46, 6.55 | a reading: Low Power Mode is on |
-| The checks out | `out/epochs-out-again.json` | Mac17,10, Apple M5 Max, macOS 26B8119 | ac | on | nominal | `timed:f521613098c85ede` | 6.37, 6.46 | a reading: Low Power Mode is on |
-| The twin that mostly writes | `out/tracker/writes-logic.json` | Mac17,10, Apple M5 Max, macOS 26B8119 | ac | on | nominal | `timed:f521613098c85ede` | 6.41, 6.37 | a reading: Low Power Mode is on |
+| The first reply | `out/first-reply.json` | Mac17,10, Apple M5 Max, macOS 26B8119 | ac | off | nominal | `timed:a50904de23b0851c` | 27.80, 20.95 | a reading: the load is above its 18 cores |
+| The compile table | `out/compile.json` | Mac17,10, Apple M5 Max, macOS 26B8119 | ac | off | nominal | `timed:a50904de23b0851c` | 20.95, 22.16 | a reading: the load is above its 18 cores |
+| The checks in | `out/epochs-in-again.json` | Mac17,10, Apple M5 Max, macOS 26B8119 | ac | off | nominal | `timed:a50904de23b0851c` | 23.76, 22.18 | a reading: the load is above its 18 cores |
+| The checks out | `out/epochs-out-again.json` | Mac17,10, Apple M5 Max, macOS 26B8119 | ac | off | nominal | `timed:a50904de23b0851c` | 23.76, 23.76 | a reading: the load is above its 18 cores |
+| The twin that mostly writes | `out/tracker/writes-logic.json` | Mac17,10, Apple M5 Max, macOS 26B8119 | ac | off | nominal | `timed:a50904de23b0851c` | 23.57, 23.76 | a reading: the load is above its 18 cores |
 
 **5 of the 5 runs are readings, not results.** The numbers below are what those runs gave; none of them settles a criterion until the runs are taken again under the issue's `Runs on:` line.
 <!-- /conditions -->
@@ -22,9 +22,9 @@ run outputs in `out/`.
 ## The three answers
 
 <!-- answers -->
-- The first reply waits more than 1 s on compiling: yes, 2106.6 ms inside the calls the compile counter counts (109 compiles, pid 25601). No task is filed yet.
-- The checks cost a live step more than 5%: no, 0.3745 ns per fuel unit with them in and 0.3736 with them out, 0.24% more.
-- A step that mostly writes costs more than twice the record's ns per fuel unit: yes, 0.8867 against the record's 0.25, 3.55 times. No task is filed yet.
+- The first reply waits more than 1 s on compiling: yes, 1568.0 ms inside the calls the compile counter counts (109 compiles, pid 96797). No task is filed yet.
+- The checks cost a live step more than 5%: no, 0.2517 ns per fuel unit with them in and 0.2503 with them out, 0.57% more.
+- A step that mostly writes costs more than twice the record's ns per fuel unit: yes, 0.6224 against the record's 0.25, 2.49 times. No task is filed yet.
 <!-- /answers -->
 
 ## Files
@@ -83,8 +83,11 @@ run outputs in `out/`.
   beforehand by the benchmark's own cargo command, so under the timed grant that command finds `deep-logic` built and
   compiles nothing. The outputs are kept as the benchmark printed them; the lease and the load of each run are in
   the `.run.json` beside it.
-- **The lease.** `readings.sh` takes every timed reading under one `timed` grant of `scripts/throttle.mjs`, which is
-  exclusive of every other grant on the machine.
+- **The lease and the conditions.** `readings.sh` takes every timed reading under one `timed` grant of
+  `scripts/throttle.mjs`, which is exclusive of every other grant on the machine. It reads nothing off mains power
+  or with Low Power Mode on, starts a run only once the 1-minute load is under 15 of the 18 cores, and takes a run
+  again whose own record says it ran off the issue's `Runs on:` line. The throttle holds only this repository's
+  builds and tests, so the load other programs make is waited out, never stopped.
 
 ## Compiling on the way to the first reply
 
@@ -93,10 +96,10 @@ run outputs in `out/`.
 <!-- first-reply -->
 | Build | First reply, ms, five fresh processes | Median | A warm process's reply, ms | Load at start and end | Inside the counted calls, ms (compiles) |
 |---|---|---|---|---|---|
-| the base (the result) | 5273.2, 5235.0, 5291.5, 5264.1, 5302.5 | 5273.2 | 27.0, 27.1, 27.4, 26.9, 27.1 | 10.42, 8.83 | not read: no timing |
-| the base with `patches/timing.patch` | 5489.2, 5443.4, 5409.3, 5409.7, 5415.0 | 5415.0 | 27.6, 27.1, 27.1, 27.4, 26.5 | 8.83, 8.08 | 2096.3, 2112.1, 2106.6, 2115.1, 2102.0 (109) |
-| with `parallel-compilation` (the unmerged branch) | 4293.1, 4268.0, 4351.2, 4409.6, 4304.9 | 4304.9 | 25.3, 27.3, 27.0, 27.2, 27.6 | 8.08, 7.06 | not read: no timing |
-| with `parallel-compilation` and `patches/timing.patch` | 4350.6, 4418.8, 4392.8, 4431.5, 4354.7 | 4392.8 | 27.7, 27.1, 26.6, 31.5, 27.4 | 7.06, 6.21 | 1111.0, 1107.0, 1106.5, 1111.5, 1111.4 (109) |
+| the base (the result) | 3879.2, 3854.2, 3900.8, 3834.1, 3847.6 | 3854.2 | 21.5, 20.0, 19.9, 19.6, 21.0 | 27.80, 20.95 | not read: no timing |
+| the base with `patches/timing.patch` | 3983.1, 3976.8, 3973.8, 4002.6, 4007.4 | 3983.1 | 21.6, 20.9, 20.7, 21.1, 18.8 | 20.95, 22.16 | 1585.0, 1564.4, 1563.0, 1583.2, 1568.0 (109) |
+| with `parallel-compilation` (the unmerged branch) | 3238.5, 3205.4, 3252.6, 3300.0, 3300.5 | 3252.6 | 22.8, 22.4, 20.3, 23.2, 23.2 | 22.16, 21.06 | not read: no timing |
+| with `parallel-compilation` and `patches/timing.patch` | 3373.3, 3405.6, 3414.7, 3341.4, 3369.6 | 3373.3 | 22.9, 21.5, 20.8, 20.3, 21.8 | 21.06, 23.93 | 858.6, 878.2, 888.6, 854.6, 876.1 (109) |
 <!-- /first-reply -->
 
 ### Each shipped pack's programs
@@ -107,19 +110,19 @@ run outputs in `out/`.
 | art@1.0.0 | none | | | 0 | 0 |
 | blender@1.0.0 | none | | | 0 | 0 |
 | chrome-fx@1.0.0 | none | | | 0 | 0 |
-| circuit@1.0.0 | `85957103aae6` | `objects/plug.wasm` | 247408 | 3 | 75.578 |
-|  | `77c6cbe0aabe` | `objects/plug.wasm` | 243307 | 2 | 49.333 |
-|  | `3b3f4006df6f` | `objects/plug.wasm` | 243260 | 2 | 49.287 |
-|  | `5f23dc00389e` | `objects/kettle.wasm` | 243260 | 2 | 49.237 |
-|  | `1b682633c496` | `objects/fault.wasm` | 243402 | 3 | 73.978 |
-|  | `8f0879811b45` | `objects/kettle.wasm` | 243307 | 1 | 24.590 |
-|  | `95480581c8bd` | `objects/plug.wasm` | 243136 | 2 | 49.348 |
-|  | `31783c49de2c` | `objects/kettle.wasm` | 243136 | 2 | 49.163 |
-|  | `f371f25ba239` | `objects/fault.wasm` | 243277 | 2 | 49.331 |
-|  | `e752daed45ec` | `objects/battery.wasm` | 243192 | 2 | 49.175 |
-|  | `a71459469192` | `objects/phase.wasm` | 242904 | 2 | 49.158 |
-|  | `18b16ee708b5` | `objects/lamp_own.wasm` | 242904 | 2 | 49.481 |
-| | **circuit@1.0.0 in all** | 12 programs | | 25 | **617.660** |
+| circuit@1.0.0 | `85957103aae6` | `objects/plug.wasm` | 247408 | 3 | 58.014 |
+|  | `77c6cbe0aabe` | `objects/plug.wasm` | 243307 | 2 | 36.141 |
+|  | `3b3f4006df6f` | `objects/plug.wasm` | 243260 | 2 | 36.291 |
+|  | `5f23dc00389e` | `objects/kettle.wasm` | 243260 | 2 | 35.109 |
+|  | `1b682633c496` | `objects/fault.wasm` | 243402 | 3 | 55.484 |
+|  | `8f0879811b45` | `objects/kettle.wasm` | 243307 | 1 | 18.251 |
+|  | `95480581c8bd` | `objects/plug.wasm` | 243136 | 2 | 37.825 |
+|  | `31783c49de2c` | `objects/kettle.wasm` | 243136 | 2 | 38.566 |
+|  | `f371f25ba239` | `objects/fault.wasm` | 243277 | 2 | 40.384 |
+|  | `e752daed45ec` | `objects/battery.wasm` | 243192 | 2 | 37.802 |
+|  | `a71459469192` | `objects/phase.wasm` | 242904 | 2 | 36.921 |
+|  | `18b16ee708b5` | `objects/lamp_own.wasm` | 242904 | 2 | 37.192 |
+| | **circuit@1.0.0 in all** | 12 programs | | 25 | **467.979** |
 | composites@1.0.0 | none | | | 0 | 0 |
 | explain@1.0.0 | none | | | 0 | 0 |
 | familiar@1.0.0 | none | | | 0 | 0 |
@@ -128,57 +131,57 @@ run outputs in `out/`.
 | fx@1.0.0 | none | | | 0 | 0 |
 | godot@1.0.0 | none | | | 0 | 0 |
 | godot@1.1.0 | none | | | 0 | 0 |
-| interfaces@1.0.0 | `260c9d5993ef` | `objects/door.wasm` | 4778 | 2 | 2.769 |
-|  | `db724e63f479` | `objects/net.wasm` | 6652 | 2 | 3.149 |
-|  | `1ce4365e2603` | `objects/slide.wasm` | 9331 | 2 | 3.906 |
-| | **interfaces@1.0.0 in all** | 3 programs | | 6 | **9.824** |
-| lanes@1.0.0 | `e35645383260` | `objects/straight.wasm` | 235382 | 2 | 45.706 |
-|  | `f9e8cf292f16` | `objects/merge.wasm` | 235827 | 2 | 44.053 |
-|  | `aa1fec63db53` | `objects/straight.wasm`, `objects/straight_own.wasm` | 235254 | 4 | 87.800 |
-|  | `2dd2b94e040c` | `objects/merge.wasm` | 235715 | 2 | 43.809 |
-|  | `3943cd29bc9d` | `objects/lift.wasm` | 238496 | 2 | 43.995 |
-| | **lanes@1.0.0 in all** | 5 programs | | 12 | **265.363** |
+| interfaces@1.0.0 | `260c9d5993ef` | `objects/door.wasm` | 4778 | 2 | 2.419 |
+|  | `db724e63f479` | `objects/net.wasm` | 6652 | 2 | 2.577 |
+|  | `1ce4365e2603` | `objects/slide.wasm` | 9331 | 2 | 2.860 |
+| | **interfaces@1.0.0 in all** | 3 programs | | 6 | **7.856** |
+| lanes@1.0.0 | `e35645383260` | `objects/straight.wasm` | 235382 | 2 | 32.228 |
+|  | `f9e8cf292f16` | `objects/merge.wasm` | 235827 | 2 | 33.333 |
+|  | `aa1fec63db53` | `objects/straight.wasm`, `objects/straight_own.wasm` | 235254 | 4 | 65.399 |
+|  | `2dd2b94e040c` | `objects/merge.wasm` | 235715 | 2 | 31.999 |
+|  | `3943cd29bc9d` | `objects/lift.wasm` | 238496 | 2 | 32.336 |
+| | **lanes@1.0.0 in all** | 5 programs | | 12 | **195.295** |
 | math@1.0.0 | none | | | 0 | 0 |
-| modslib@1.0.0 | `b0491e694ed4` | `objects/stack.wasm` | 126831 | 2 | 29.659 |
-|  | `391487587801` | `objects/edits.wasm` | 126831 | 2 | 29.318 |
-|  | `b2ea3fb5c27b` | `objects/stack.wasm` | 123750 | 2 | 28.964 |
-|  | `e50c8a5f133c` | `objects/edits.wasm` | 123750 | 2 | 28.555 |
-|  | `896f8c8d83b5` | `objects/archer_own.wasm` | 123750 | 2 | 28.503 |
-| | **modslib@1.0.0 in all** | 5 programs | | 10 | **144.999** |
-| process@1.0.0 | `ef049b2c23eb` | `objects/steady.wasm` | 278942 | 2 | 55.688 |
-|  | `a1c46d3ff9ce` | `objects/blocked.wasm` | 279018 | 2 | 55.916 |
-|  | `9febdc8f3f07` | `objects/steady.wasm` | 275876 | 2 | 55.229 |
-|  | `d858d5c52212` | `objects/blocked.wasm` | 275952 | 2 | 54.942 |
-|  | `92dc30c7da6d` | `objects/grant.wasm` | 276358 | 2 | 54.705 |
-|  | `d596f8e76f1f` | `objects/steady.wasm`, `objects/steady_own.wasm` | 275876 | 4 | 108.968 |
-|  | `05e422159ec2` | `objects/blocked.wasm` | 275952 | 2 | 55.049 |
-|  | `d0e0d07579c2` | `objects/grant.wasm` | 276358 | 2 | 55.694 |
-| | **process@1.0.0 in all** | 8 programs | | 18 | **496.191** |
-| sense@1.0.0 | `f1244d523ed6` | `objects/driver.wasm` | 70207 | 2 | 20.382 |
-|  | `07f0f4832a83` | `objects/driver.wasm`, `objects/driver_own.wasm` | 71181 | 10 | 102.014 |
-| | **sense@1.0.0 in all** | 2 programs | | 12 | **122.396** |
-| separation@1.0.0 | `d69b261178ed` | `objects/crossing.wasm` | 119763 | 2 | 25.097 |
-|  | `082143b30374` | `objects/crossing.wasm` | 162845 | 2 | 34.758 |
-|  | `8170ed9e174b` | `objects/wide.wasm` | 161885 | 2 | 35.207 |
-|  | `caef2ceb7d15` | `objects/breach.wasm` | 162813 | 2 | 35.080 |
-|  | `a3c6e180b963` | `objects/delayed.wasm` | 162787 | 2 | 34.904 |
-|  | `9d4d605fdfb5` | `objects/narrow.wasm` | 163288 | 3 | 52.571 |
-|  | `7300ee90bb93` | `objects/breach.wasm` | 119735 | 1 | 12.457 |
-|  | `3c82376c8ac5` | `objects/crossing.wasm` | 172499 | 2 | 38.861 |
-|  | `31cbd4e0d221` | `objects/wide.wasm` | 171539 | 2 | 36.639 |
-|  | `66ad77c23fd0` | `objects/breach.wasm` | 172467 | 2 | 36.635 |
-|  | `7439d30e7ad7` | `objects/delayed.wasm` | 172441 | 2 | 36.091 |
-|  | `9b584ab0caa6` | `objects/narrow.wasm` | 172942 | 2 | 36.099 |
-|  | `d6f3605160e3` | `objects/approach_own.wasm` | 171539 | 2 | 35.809 |
-| | **separation@1.0.0 in all** | 13 programs | | 26 | **450.208** |
+| modslib@1.0.0 | `b0491e694ed4` | `objects/stack.wasm` | 126831 | 2 | 21.465 |
+|  | `391487587801` | `objects/edits.wasm` | 126831 | 2 | 21.455 |
+|  | `b2ea3fb5c27b` | `objects/stack.wasm` | 123750 | 2 | 19.319 |
+|  | `e50c8a5f133c` | `objects/edits.wasm` | 123750 | 2 | 19.602 |
+|  | `896f8c8d83b5` | `objects/archer_own.wasm` | 123750 | 2 | 19.908 |
+| | **modslib@1.0.0 in all** | 5 programs | | 10 | **101.749** |
+| process@1.0.0 | `ef049b2c23eb` | `objects/steady.wasm` | 278942 | 2 | 41.548 |
+|  | `a1c46d3ff9ce` | `objects/blocked.wasm` | 279018 | 2 | 44.264 |
+|  | `9febdc8f3f07` | `objects/steady.wasm` | 275876 | 2 | 41.062 |
+|  | `d858d5c52212` | `objects/blocked.wasm` | 275952 | 2 | 41.229 |
+|  | `92dc30c7da6d` | `objects/grant.wasm` | 276358 | 2 | 40.445 |
+|  | `d596f8e76f1f` | `objects/steady.wasm`, `objects/steady_own.wasm` | 275876 | 4 | 81.407 |
+|  | `05e422159ec2` | `objects/blocked.wasm` | 275952 | 2 | 40.615 |
+|  | `d0e0d07579c2` | `objects/grant.wasm` | 276358 | 2 | 42.283 |
+| | **process@1.0.0 in all** | 8 programs | | 18 | **372.853** |
+| sense@1.0.0 | `f1244d523ed6` | `objects/driver.wasm` | 70207 | 2 | 15.317 |
+|  | `07f0f4832a83` | `objects/driver.wasm`, `objects/driver_own.wasm` | 71181 | 10 | 73.851 |
+| | **sense@1.0.0 in all** | 2 programs | | 12 | **89.168** |
+| separation@1.0.0 | `d69b261178ed` | `objects/crossing.wasm` | 119763 | 2 | 19.247 |
+|  | `082143b30374` | `objects/crossing.wasm` | 162845 | 2 | 25.683 |
+|  | `8170ed9e174b` | `objects/wide.wasm` | 161885 | 2 | 25.868 |
+|  | `caef2ceb7d15` | `objects/breach.wasm` | 162813 | 2 | 27.088 |
+|  | `a3c6e180b963` | `objects/delayed.wasm` | 162787 | 2 | 25.310 |
+|  | `9d4d605fdfb5` | `objects/narrow.wasm` | 163288 | 3 | 37.850 |
+|  | `7300ee90bb93` | `objects/breach.wasm` | 119735 | 1 | 8.929 |
+|  | `3c82376c8ac5` | `objects/crossing.wasm` | 172499 | 2 | 26.073 |
+|  | `31cbd4e0d221` | `objects/wide.wasm` | 171539 | 2 | 25.953 |
+|  | `66ad77c23fd0` | `objects/breach.wasm` | 172467 | 2 | 26.866 |
+|  | `7439d30e7ad7` | `objects/delayed.wasm` | 172441 | 2 | 27.701 |
+|  | `9b584ab0caa6` | `objects/narrow.wasm` | 172942 | 2 | 27.352 |
+|  | `d6f3605160e3` | `objects/approach_own.wasm` | 171539 | 2 | 29.195 |
+| | **separation@1.0.0 in all** | 13 programs | | 26 | **333.115** |
 | unreal@1.0.0 | none | | | 0 | 0 |
 | verbs@1.0.0 | none | | | 0 | 0 |
-| **The table** | | | | 109 | **2106.643** |
-| **The run's own total** (pid 25601) | every call the compile counter counts | 0 outside a pack's check | | 109 | **2106.643** |
+| **The table** | | | | 109 | **1568.016** |
+| **The run's own total** (pid 96797) | every call the compile counter counts | 0 outside a pack's check | | 109 | **1568.016** |
 <!-- /compile -->
 
 <!-- repeats -->
-109 counted calls compiled 48 different programs: 61 calls compiled a program this process had already compiled, 1155.9 ms of the 2106.6 ms.
+109 counted calls compiled 48 different programs: 61 calls compiled a program this process had already compiled, 861.7 ms of the 1568.0 ms.
 <!-- /repeats -->
 
 ### Where the first reply's time goes
@@ -186,15 +189,15 @@ run outputs in `out/`.
 <!-- where -->
 | Where | ms |
 |---|---|
-| From `main` to the seal | 68.8 |
+| From `main` to the seal | 50.5 |
 | From the seal to the world line's answer | 0.1 |
-| The first call: its line read to its reply written | 5326.7 |
-| … of it, the pack checks (`check_ms`, 21 packs) | 5283.9 |
-| … of them, inside `Program::new` | 2152.0 |
-| …… `Module::new` (the calls the counter counts) | 2106.6 |
-| …… `Engine::new` | 0.9 |
-| …… the offset map and the memory's size | 44.4 |
-| The harness's clock for the same reply (from before the process starts) | 5409.3 |
+| The first call: its line read to its reply written | 3945.5 |
+| … of it, the pack checks (`check_ms`, 21 packs) | 3913.8 |
+| … of them, inside `Program::new` | 1600.8 |
+| …… `Module::new` (the calls the counter counts) | 1568.0 |
+| …… `Engine::new` | 1.2 |
+| …… the offset map and the memory's size | 31.5 |
+| The harness's clock for the same reply (from before the process starts) | 4007.4 |
 <!-- /where -->
 
 The harness's clock also holds what comes before `main` and the pipe each way. Each pack's share:
@@ -202,28 +205,28 @@ The harness's clock also holds what comes before `main` and the pipe each way. E
 <!-- checks -->
 | Pack, in the order checked | Its check, ms | Inside `Module::new`, ms | Compiles | Different programs |
 |---|---|---|---|---|
-| composites@1.0.0 | 0.5 | 0.0 | 0 | 0 |
-| modslib@1.0.0 | 240.3 | 145.0 | 10 | 5 |
-| chrome-fx@1.0.0 | 22.5 | 0.0 | 0 | 0 |
+| composites@1.0.0 | 0.4 | 0.0 | 0 | 0 |
+| modslib@1.0.0 | 167.4 | 101.7 | 10 | 5 |
+| chrome-fx@1.0.0 | 16.2 | 0.0 | 0 | 0 |
 | godot@1.0.0 | 0.3 | 0.0 | 0 | 0 |
-| art@1.0.0 | 6.0 | 0.0 | 0 | 0 |
-| fx@1.0.0 | 13.6 | 0.0 | 0 | 0 |
-| lanes@1.0.0 | 475.7 | 265.4 | 12 | 5 |
-| process@1.0.0 | 1397.0 | 496.2 | 18 | 8 |
-| godot@1.1.0 | 0.4 | 0.0 | 0 | 0 |
-| circuit@1.0.0 | 966.5 | 617.7 | 25 | 12 |
-| familiar@1.1.0 | 12.2 | 0.0 | 0 | 0 |
-| familiar@1.0.0 | 8.1 | 0.0 | 0 | 0 |
-| separation@1.0.0 | 691.4 | 450.2 | 26 | 13 |
-| verbs@1.0.0 | 14.6 | 0.0 | 0 | 0 |
+| art@1.0.0 | 4.3 | 0.0 | 0 | 0 |
+| fx@1.0.0 | 9.5 | 0.0 | 0 | 0 |
+| lanes@1.0.0 | 346.2 | 195.3 | 12 | 5 |
+| process@1.0.0 | 1029.4 | 372.9 | 18 | 8 |
+| godot@1.1.0 | 0.3 | 0.0 | 0 | 0 |
+| circuit@1.0.0 | 721.7 | 468.0 | 25 | 12 |
+| familiar@1.1.0 | 10.1 | 0.0 | 0 | 0 |
+| familiar@1.0.0 | 7.2 | 0.0 | 0 | 0 |
+| separation@1.0.0 | 509.8 | 333.1 | 26 | 13 |
+| verbs@1.0.0 | 14.2 | 0.0 | 0 | 0 |
 | blender@1.0.0 | 0.3 | 0.0 | 0 | 0 |
-| explain@1.0.0 | 143.7 | 0.0 | 0 | 0 |
-| foley@1.0.0 | 990.2 | 0.0 | 0 | 0 |
+| explain@1.0.0 | 119.9 | 0.0 | 0 | 0 |
+| foley@1.0.0 | 738.3 | 0.0 | 0 | 0 |
 | unreal@1.0.0 | 0.2 | 0.0 | 0 | 0 |
-| interfaces@1.0.0 | 37.9 | 9.8 | 6 | 3 |
-| sense@1.0.0 | 253.5 | 122.4 | 12 | 2 |
-| math@1.0.0 | 8.9 | 0.0 | 0 | 0 |
-| **All 21** | **5283.9** | **2106.6** | 109 | 48 |
+| interfaces@1.0.0 | 28.7 | 7.9 | 6 | 3 |
+| sense@1.0.0 | 183.1 | 89.2 | 12 | 2 |
+| math@1.0.0 | 6.3 | 0.0 | 0 | 0 |
+| **All 21** | **3913.8** | **1568.0** | 109 | 48 |
 <!-- /checks -->
 
 ### Whether a compiled module can be kept across starts
@@ -273,19 +276,20 @@ measured at around a 10% slowdown". A live step passes no deadline, so nothing e
 
 The benchmark was run twice a side under the one grant: in, out, then out, in. The pair read is the first whose two
 runs each keep their five readings within 5% of their median, since a run that spreads further can't settle a 5%
-question. That rule was written after the first set of readings, whose first run with the checks in spread 24.5%
-while its three neighbours spread under 1.5%; it is in `analyze.mjs` and holds for every set taken after it.
+question. That rule was written after the first set of readings (this branch's `452fb33c3`), whose first run with
+the checks in spread 24.5% while its three neighbours spread under 1.5%; it is in `analyze.mjs` and holds for every
+set taken after it.
 
 <!-- epochs -->
 | Epoch checks | Output | ns per fuel unit in the app, five runs | Median | Spread of the five | The benchmark's own (3 places) | Fuel: the benchmark, its twin | Steps |
 |---|---|---|---|---|---|---|---|
-| in | `out/epochs-in.json` | 0.5907, 0.6480, 0.5164, 0.5032, 0.5919 | 0.5907 | 24.5% | 0.591 | 4800007, 47 | 20 |
-| out | `out/epochs-out.json` | 0.3737, 0.3745, 0.3785, 0.3736, 0.3736 | 0.3737 | 1.3% | 0.374 | 4800007, 47 | 20 |
-| out (read) | `out/epochs-out-again.json` | 0.3735, 0.3736, 0.3736, 0.3736, 0.3736 | 0.3736 | 0.0% | 0.374 | 4800007, 47 | 20 |
-| in (read) | `out/epochs-in-again.json` | 0.3763, 0.3752, 0.3738, 0.3745, 0.3744 | 0.3745 | 0.7% | 0.375 | 4800007, 47 | 20 |
+| in | `out/epochs-in.json` | 0.2530, 0.2500, 0.2544, 0.2523, 0.2558 | 0.2530 | 2.3% | 0.253 | 4800007, 47 | 20 |
+| out | `out/epochs-out.json` | 0.2716, 0.2502, 0.2501, 0.2500, 0.2491 | 0.2501 | 9.0% | 0.25 | 4800007, 47 | 20 |
+| out (read) | `out/epochs-out-again.json` | 0.2503, 0.2550, 0.2511, 0.2493, 0.2502 | 0.2503 | 2.3% | 0.25 | 4800007, 47 | 20 |
+| in (read) | `out/epochs-in-again.json` | 0.2517, 0.2587, 0.2509, 0.2489, 0.2553 | 0.2517 | 3.9% | 0.252 | 4800007, 47 | 20 |
 | the record (`crates/deep-logic/metering.json`), with them in |  | 0.2499, 0.2499, 0.2503, 0.2517, 0.2507 | 0.2503 | 0.7% | 0.25 | 4800007, 47 | 20 |
 
-The pair read is `out/epochs-in-again.json` and `out/epochs-out-again.json`: with the checks in, a fuel unit costs 0.24% more than with them out.
+The pair read is `out/epochs-in-again.json` and `out/epochs-out-again.json`: with the checks in, a fuel unit costs 0.57% more than with them out.
 <!-- /epochs -->
 
 ## The page tracker
@@ -310,21 +314,21 @@ rewrite charges the tracker no fuel, so both forms of a program are charged the 
 <!-- tracker -->
 | Program | Rewritten as | Fuel a step | ns per fuel unit, five runs | Median | Against the record's 0.25 | ns an iteration |
 |---|---|---|---|---|---|---|
-| metering | a logic item's (the tracker after each store) | 4800007 | 0.3750, 0.3740, 0.3773, 0.3743, 0.3761 | 0.3750 | 1.50× | 15.00 |
-| metering | a plain program | 4800007 | 0.3733, 0.3733, 0.3733, 0.3733, 0.3275 | 0.3733 | 1.49× | 14.93 |
-| writes | a logic item's (the tracker after each store) | 4790807 | 0.8912, 0.8842, 0.8885, 0.8867, 0.8859 | 0.8867 | 3.55× | 180.00 |
-| writes | a plain program | 4790807 | 0.0696, 0.0693, 0.0693, 0.0693, 0.0693 | 0.0693 | 0.28× | 14.07 |
-| writes-marked-inline | a plain program | 5351307 | 0.0278, 0.0278, 0.0278, 0.0279, 0.0278 | 0.0278 | 0.11× | 25.20 |
+| metering | a logic item's (the tracker after each store) | 4800007 | 0.2496, 0.2510, 0.2519, 0.2511, 0.2732 | 0.2511 | 1.00× | 10.04 |
+| metering | a plain program | 4800007 | 0.2514, 0.2510, 0.2510, 0.2531, 0.2532 | 0.2514 | 1.01× | 10.06 |
+| writes | a logic item's (the tracker after each store) | 4790807 | 0.6207, 0.6270, 0.6224, 0.6290, 0.6149 | 0.6224 | 2.49× | 126.36 |
+| writes | a plain program | 4790807 | 0.0487, 0.0487, 0.0487, 0.0489, 0.0487 | 0.0487 | 0.19× | 9.89 |
+| writes-marked-inline | a plain program | 5351307 | 0.0195, 0.0195, 0.0195, 0.0196, 0.0195 | 0.0195 | 0.08× | 17.72 |
 <!-- /tracker -->
 
 ## What each change would return, what it would put at risk, and the recommendation
 
 <!-- returns -->
-- **A program compiled once a process.** 61 of the 109 counted calls compiled bytes the same process had already compiled. Without them the run would have spent 950.7 ms inside the counted calls in place of 2106.6 ms: 1155.9 ms back, 21.4% of that process's first reply.
-- **`parallel-compilation`.** The first reply's median went from 5273.2 ms to 4304.9 ms, 968.3 ms back; the time inside the counted calls, by the timing builds, from 2106.6 ms to 1111.0 ms. The same 109 calls are still made.
-- **What isn't compiling.** Of the 5283.9 ms the 21 checks took, 3131.9 ms were outside `Program::new`: linking, rewriting and running each fixture, and the checks of packs that hold no program.
-- **The epoch checks.** 0.3745 ns per fuel unit with them in, 0.3736 with them out: taking them out would return 0.24% of a step that runs like the benchmark.
-- **The tracker.** In the twin that mostly writes, a store costs 0.22 ns as a plain program and 2.81 ns as a logic item's, so the tracker's call is 2.59 ns a store, 92.2% of the step. With the same mark written inline, for a bitmap of one word, a store costs 0.39 ns: 2.42 ns a store back. In the benchmark's own program, which stores once in 40 instructions, the tracker is 0.5% of a fuel unit.
+- **A program compiled once a process.** 61 of the 109 counted calls compiled bytes the same process had already compiled. Without them the run would have spent 706.3 ms inside the counted calls in place of 1568.0 ms: 861.7 ms back, 21.5% of that process's first reply.
+- **`parallel-compilation`.** The first reply's median went from 3854.2 ms to 3252.6 ms, 601.6 ms back; the time inside the counted calls, by the timing builds, from 1568.0 ms to 876.1 ms. The same 109 calls are still made.
+- **What isn't compiling.** Of the 3913.8 ms the 21 checks took, 2313.1 ms were outside `Program::new`: linking, rewriting and running each fixture, and the checks of packs that hold no program.
+- **The epoch checks.** 0.2517 ns per fuel unit with them in, 0.2503 with them out: taking them out would return 0.57% of a step that runs like the benchmark.
+- **The tracker.** In the twin that mostly writes, a store costs 0.15 ns as a plain program and 1.97 ns as a logic item's, so the tracker's call is 1.82 ns a store, 92.2% of the step. With the same mark written inline, for a bitmap of one word, a store costs 0.28 ns: 1.70 ns a store back. In the benchmark's own program, which stores once in 40 instructions, the tracker is -0.1% of a fuel unit.
 <!-- /returns -->
 
 ### Compiling: compile a program once a process
@@ -372,11 +376,12 @@ rewrite charges the tracker no fuel, so both forms of a program are charged the 
 
 ## What this spike doesn't hold
 
-- Every timed run above was taken with Low Power Mode on, so each is a reading and no criterion is settled (the
-  table at the top). Nothing else about the runs was off: one timed grant, loads of 6 to 10 on 18 cores.
+- Whether a run counts is in the table at the top, written from each run's own record. A run that doesn't is a
+  reading, and the criteria it bears on aren't settled.
 - The base's canvas core doesn't seal in release (How a reading was taken). The spike read around it with a ledger
   of its own; the base itself needs its ledger written again, which main already has.
-- No task is filed. The two the readings point to are drafted, and wait for results.
+- A task is filed only for an answer that is yes on runs that count. The three answers at the top say which are
+  filed; until then the tasks the readings point to are drafts.
 - The web player's engine, the engine's version, step blocks and the ceiling's formula are other tasks' (#2324,
   #212, #3442).
 
