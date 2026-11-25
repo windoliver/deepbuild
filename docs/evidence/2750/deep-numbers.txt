@@ -1,0 +1,14 @@
+$ deep numbers refresh
+Read 1 of 1 repos from the forge: acme/shop.
+$ deep numbers   # the landed.none line of its output, on the suite fixture with the revert and the three refused days
+landed.none acme/shop: 0.2727272727272727 share OVER BUDGET · github · observed · 1s [{"commits":11,"PASS":7,"FAIL":1,
+"none":3,"off":1,"no_session":1,"tree":1,"never_judged":1},{"commit":"13afc9049e0df6109d5e8af54fc5b44cab6fe1b0","judge
+d":"PASS"},{"commit":"95b28ce4cd7b447a7740f771b876f9f3993e3804","judged":"PASS"},{"commit":"2abc28bf4aab5071c53830f10a
+ca564419fd1b13","judged":"FAIL"},{"commit":"c40f988532911915c4e14135a5a8bb3696a99468","judged":"PASS"},{"commit":"258a
+fbb5322f87f3b231353c049116f08fe028f8","judged":"none","cause":"off"},{"commit":"81f67622a4d7f1704f972143bcf72238842213
+bb","judged":"PASS"},{"commit":"fcd29c911c741b8075d0f9d0aaea29d1da69ef0f","judged":"none","cause":"no_session","pusher
+":"sam"},{"commit":"02b35f649a83bbb3c6a79855bcdd5c5b21baaea4","judged":"PASS"},{"commit":"a4041743413435dac8fe44fad14a
+89478f77eada","judged":"none","cause":"tree","verdict":"PASS","verdict_commit":"e76cebc13f055726fc35e8ab71b650b70095c0
+3f"},{"commit":"a73e3f34d08660aa123526734c1d0da607c461ed","judged":"PASS"},{"commit":"e1e25924a30eac4eddaaa656cc9d4277
+8f6dac2a","judged":"PASS","reverts":"258afbb5322f87f3b231353c049116f08fe028f8","counted":"never_judged"},{"missing":tr
+ue,"from":"2026-11-19","to":"2026-11-21"}]
