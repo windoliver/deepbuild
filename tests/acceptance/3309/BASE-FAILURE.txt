@@ -1,0 +1,94 @@
+# Base run of tests/acceptance/3309 on 33075a35a (head of PR #3308), 2026-11-23, MacBook Pro, Node 24.22.0
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/3309 --no-file-parallelism
+# 1-minute load 71.9 on 12 cores at the start (other sessions' runs). promise.test.ts was BLOCKED in this run by its own
+# precondition (deep-hook let the prompt through in 250 ms, before any hold); it was rerun alone at once (second run below).
+
+## Run 1: all three files
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3309
+
+ ❯ sibling.test.ts (1 test | 1 failed) 12961ms
+   ❯ #3309.5263c09a A sibling notice handed in a reply whose deep-hook was already gone while it was built goes with the session's next hook, once (1)
+     × #3309.5263c09a session B changes the file A changed; A's prompt "Also look at https://github.com/acme/shop/issues/7 while you are in the cart." carries the notice in a reply built while its issue read is held and after deep-hook was stopped; the notice reaches A exactly once, with "Then round the cart total to cents." 12803ms
+ ❯ promise.test.ts (1 test | 1 failed) 18309ms
+   ❯ #3309.c1997961 A promised check carried in a prompt reply deep-hook never read goes with the session's next prompt that reaches the model, once (1)
+     × #3309.c1997961 a check promised at a stop comes due and waits for the next prompt; it goes into "Now add a test for total.ts."'s reply, which misses deep-hook's hold (the planted late reply); it reaches the agent exactly once, with "Then run the tests for total.ts." 18061ms
+ ❯ note.test.ts (1 test | 1 failed) 7950ms
+   ❯ #3309.c730ec7c A note from the app carried in a prompt reply deep-hook never read goes with the session's next prompt that reaches the model, once (1)
+     × #3309.c730ec7c a note sent from the app while a turn runs goes into "Now add a test for total.ts."'s reply, which misses deep-hook's hold (the planted late reply); it reaches the agent exactly once, with "Then run the tests for total.ts." 7818ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  note.test.ts > #3309.c730ec7c A note from the app carried in a prompt reply deep-hook never read goes with the session's next prompt that reaches the model, once > #3309.c730ec7c a note sent from the app while a turn runs goes into "Now add a test for total.ts."'s reply, which misses deep-hook's hold (the planted late reply); it reaches the agent exactly once, with "Then run the tests for total.ts."
+AssertionError: the note from the app ("Keep the 1.07 rate for Lisbon orders, note 8a3699c7.", request rb2697fe8d6d37dde, session.note 01M858S71Z6Z7952V185V6CMZN), carried in "Now add a test for total.ts."'s reply that deep-hook never read, must reach the agent exactly once over the run (not zero, not twice); hook replies carrying it: []; the record's user.ask for it: [{"id":"01M858S73Z1NYY57XW8WMK35J1","log_pos":15,"text":"Keep the 1.07 rate for Lisbon orders, note 8a3699c7. (request rb2697fe8d6d37dde)"}]; prompts that reached the model: ["Fix the cart total, then stop.","Now add a test for total.ts.","Then run the tests for total.ts."]; "Then run the tests for total.ts."'s reply: {"model":true,"runs":[{"command":"exec '<checkout>/target/debug/deep-hook' claude-code UserPromptSubmit","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ note.test.ts:44:447
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  promise.test.ts > #3309.c1997961 A promised check carried in a prompt reply deep-hook never read goes with the session's next prompt that reaches the model, once > #3309.c1997961 a check promised at a stop comes due and waits for the next prompt; it goes into "Now add a test for total.ts."'s reply, which misses deep-hook's hold (the planted late reply); it reaches the agent exactly once, with "Then run the tests for total.ts."
+Error: BLOCKED: deep-hook let "Now add a test for total.ts." through in 250 ms, before any hold (1-minute load 68.8 on 12 cores), so the planted late reply was never reached; rerun on a quieter machine: {"model":true,"runs":[{"command":"exec '<checkout>/target/debug/deep-hook' claude-code UserPromptSubmit","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":"deep-hook: spooled 01M858S2FP4G5MFYQW3EH7DWF7, but its sync didn't finish within the hook's 50 ms\n"}]}
+ ❯ lostPrompt ../3305/helpers.ts:72:39
+
+ ❯ promise.test.ts:40:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  sibling.test.ts > #3309.5263c09a A sibling notice handed in a reply whose deep-hook was already gone while it was built goes with the session's next hook, once > #3309.5263c09a session B changes the file A changed; A's prompt "Also look at https://github.com/acme/shop/issues/7 while you are in the cart." carries the notice in a reply built while its issue read is held and after deep-hook was stopped; the notice reaches A exactly once, with "Then round the cart total to cents."
+AssertionError: the notice notice:01M858RE6GJMQ399C8E1VRM4CT ("DeepBuild: session dd83f3fa (claude-code) also changed src/cart.js, line 2, in its worktree (a behavior change), and this session changes it too.", recorded delivered via UserPromptSubmit) from session dd83f3fa-5c45-4250-9f23-bfa64732ab3f, handed in "Also look at https://github.com/acme/shop/issues/7 while you are in the cart."'s reply after deep-hook was gone, must reach session 120ffb18-4315-4c1b-b129-92e48d9fb981 exactly once (not zero, not twice); replies carrying it: []; the record's notice.delivered for it: [{"notice":"notice:01M858RE6GJMQ399C8E1VRM4CT","via":"UserPromptSubmit","log_pos":63}]; "Then round the cart total to cents." told: "": expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ sibling.test.ts:95:460
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  3 failed (3)
+   Start at  14:34:40
+   Duration  40.58s (tests 98%, transform 1%, import 1%)
+
+
+## Run 2: promise.test.ts alone (1-minute load 66.8)
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3309
+
+ ❯ promise.test.ts (1 test | 1 failed) 23512ms
+   ❯ #3309.c1997961 A promised check carried in a prompt reply deep-hook never read goes with the session's next prompt that reaches the model, once (1)
+     × #3309.c1997961 a check promised at a stop comes due and waits for the next prompt; it goes into "Now add a test for total.ts."'s reply, which misses deep-hook's hold (the planted late reply); it reaches the agent exactly once, with "Then run the tests for total.ts." 23360ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  promise.test.ts > #3309.c1997961 A promised check carried in a prompt reply deep-hook never read goes with the session's next prompt that reaches the model, once > #3309.c1997961 a check promised at a stop comes due and waits for the next prompt; it goes into "Now add a test for total.ts."'s reply, which misses deep-hook's hold (the planted late reply); it reaches the agent exactly once, with "Then run the tests for total.ts."
+AssertionError: the promised check 01M858SSKBMJTVJHBYDDVM0WG0 ("I'll check the deploy again in 5 seconds.", due and waiting since promise.due 01M858T887333NWM5WXZYCP9FN), carried in "Now add a test for total.ts."'s reply that deep-hook never read, must reach the agent exactly once over the run (not zero, not twice); hook replies carrying it: []; the record's promise events: [{"kind":"promise.set","log_pos":13,"data":{"promise":"01M858SSKBMJTVJHBYDDVM0WG0","quote":"I'll check the deploy again in 5 seconds.","due":1795473340915,"times_set":1,"end":1795559740915}},{"kind":"promise.due","log_pos":18,"data":{"promise":"01M858SSKBMJTVJHBYDDVM0WG0","due":1795473340915,"route":"wake"}},{"kind":"promise.due","log_pos":20,"data":{"promise":"01M858SSKBMJTVJHBYDDVM0WG0","due":1795473340915,"route":"next_hook"}},{"kind":"promise.woken","log_pos":26,"data":{"promise":"01M858SSKBMJTVJHBYDDVM0WG0","via":"next_prompt"}}]; prompts that reached the model: ["Deploy the fix and make sure it is up.","Now add a test for total.ts.","Then run the tests for total.ts."]; "Then run the tests for total.ts."'s reply: {"model":true,"runs":[{"command":"exec '<checkout>/target/debug/deep-hook' claude-code UserPromptSubmit","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ promise.test.ts:50:471
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  14:35:31
+   Duration  23.80s (tests 100%)
+
