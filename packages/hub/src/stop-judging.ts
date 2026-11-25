@@ -9,7 +9,7 @@ import { basename, join } from 'node:path';
 import { duration, type Delivery } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
-import { endsEmpty, freshCount, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallRule } from '@deepbuild/gate';
+import { endsEmpty, freshCount, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, validityReads, type PaidKind, type SessionLog, type StallRule } from '@deepbuild/gate';
 import { type WindowReport } from '@deepbuild/runner';
 import { type Grant } from '@deepbuild/supervisor';
 import { recordVerdict, verdictHash, verdictLine, type Result, type Verdict } from '@deepbuild/verdicts';
@@ -849,7 +849,7 @@ export class StopJudging {
     }
     // The head as the turn's last commits left it, read by the chain follow() started.
     await live.reading?.catch(() => undefined);
-    const commit = live.head ?? (await headOf(meta.cwd).catch(() => undefined))?.sha ?? '0'.repeat(40);
+    const commit = live.head ?? (await this.options.state().head(meta.session, meta.cwd).catch(() => undefined))?.sha ?? '0'.repeat(40);
     const ts = this.options.services.now();
     const id = ulid(ts);
     const task_ref = await this.turnTaskOf(meta.session, live);
@@ -1046,17 +1046,18 @@ export class StopJudging {
       // What the claim leaves open becomes open items before any verdict is made on it (#323). Read beside the session's
       // log for the validity gate and the project's trust for its spec checks, none of which waits on another (#82).
       // The spec as you approved it (#1864): the claim's base commit's, never the worktree's; a difference is a proposal.
-      const approved = r.joins ? undefined : await approvedSpec(r.cwd, r.base);
-      if (approved) void this.proposeSpecDrift(r, approved.oid).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
+      // A session on a host (#999): its spec is read from the commit there, its trust is its agent's there, what the validity gate reads of its folder is brought here, and its checks run there.
+      const host = this.options.state().sessionHosts.get(r.session), remote = host && this.options.services.hosts.sessions, approved = r.joins ? undefined : remote ? await remote.spec(host!, r.cwd, r.base) : await approvedSpec(r.cwd, r.base);
+      if (approved && !host) void this.proposeSpecDrift(r, approved.oid).catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s spec drift was not proposed: ${error instanceof Error ? error.message : String(error)}\n`));
       const spec = approved ? approvedChecks(approved) : [];
       const pr = r.joins ? undefined : await this.prOf(r.session);
       const releaseNames = approved && pr ? releaseSpec(approved.spec).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
       // The wiki's review passes for a claim on a PR (#2748), those whose scope covers what it changed, read beside what follows.
-      const passes = pr && this.options.settings.plant !== 'review-without-caller' ? passesAt(this.options.services.root.dir, this.options.settings.plant, r.cwd, r.base) : undefined;
+      const passes = pr && !host && this.options.settings.plant !== 'review-without-caller' ? passesAt(this.options.services.root.dir, this.options.settings.plant, r.cwd, r.base) : undefined;
       passes?.catch(() => undefined);
-      const reads = Promise.all([r.definition === 'pending' ? undefined : this.sessionLog(r.session), hasSpec ? this.projectTrusted(r.cwd) : false]);
+      const reads = Promise.all([r.definition === 'pending' ? undefined : this.sessionLog(r.session), hasSpec ? (remote ? Promise.all([this.options.services.trust.trusted(r.cwd).catch(() => false), remote.trusted(host!, r.cwd)]).then((t) => t.some(Boolean)) : this.projectTrusted(r.cwd)) : false]);
       reads.catch(() => undefined);
-      if (!r.joins) {
+      if (!r.joins && !host) {
         await this.options.services.openItems.atClaim({ session: r.session, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', task: r.task, cwd: r.cwd, base: r.base, message, transcript: this.options.state().sessions.get(r.session)?.transcript, pr: await this.prOf(r.session), same })
           .catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s open items were not read: ${error instanceof Error ? error.message : String(error)}\n`));
       }
@@ -1066,7 +1067,8 @@ export class StopJudging {
       // The validity gate reads the claim against its definition: a claim with none yet, and none on its way, has nothing to be read against.
       // A number's cited query is the numbers check's to re-run (#1537), never a run or a file the session had to make or read.
       const [[log, trusted], checkKinds] = await Promise.all([reads, this.options.services.checkKinds()]);
-      const findings = log === undefined ? [] : validityGate({ claim: { claim: r.claim, message: checkKinds.uncited(cited) }, checkout: r.cwd, deliverables: r.deliverables, session: log }).map((f) => f.why);
+      const gated = { claim: { claim: r.claim, message: checkKinds.uncited(cited) }, deliverables: r.deliverables };
+      const findings = (log === undefined ? [] : remote ? await remote.viewed(host!, r.cwd, validityReads(gated), (checkout) => validityGate({ ...gated, checkout, session: log })) : validityGate({ ...gated, checkout: r.cwd, session: log })).map((f) => f.why);
       // A claim that fails the validity gate goes back naming what's missing, before any check runs.
       if (findings.length) return { fast: [], slow: [], snapshot: r.commit, readyAt: this.options.services.now(), findings };
       // The planted wrong program runs no check before the definition locks, the repo's spec included.
@@ -1133,14 +1135,14 @@ export class StopJudging {
           const { run, out } = await passes;
           for (const pass of run) add(`review pass ${pass.id}`, review && { ...review, pass, out } as CheckSpec, `review pass ${pass.id} ${r.base}..${r.commit}`);
         }
-        for (const n of await checkKinds.claimChecks(cited, r.cwd, r.base, r.definition === 'locked' ? (await this.options.services.tasks.scopeOf(r.task)).sample : null)) { checks.push(n.check); kinded.set(n.check.check, { spec: n.spec, of }); }
+        for (const n of host ? [] : await checkKinds.claimChecks(cited, r.cwd, r.base, r.definition === 'locked' ? (await this.options.services.tasks.scopeOf(r.task)).sample : null)) { checks.push(n.check); kinded.set(n.check.check, { spec: n.spec, of }); }
       }
       if (kinded.size) this.kindChecks.set(r.claim, kinded);
       // Each told command runs once on the claim's snapshot as the agent's own check: failing, it sends the claim back
       // with its output; passing, it proves nothing, as the agent's own checks never pass a claim.
       for (const command of told) checks.push({ check: command, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'own' });
       if (told.length) this.told.set(r.claim, new Set(told));
-      const ran = await this.options.services.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, ...(r.joins ? { joins: true } : {}), ...(r.state ? { state: r.state } : {}) });
+      const ran = await this.options.services.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, ...(r.joins ? { joins: true } : {}), ...(r.state ? { state: r.state } : {}), ...(host ? { host } : {}) });
       // The verdict is written beside the stop's reply, which waits for it only where it reads the record (#82).
       const written = this.judged(r.claim);
       this.verdictWrites.set(r.claim, written);
@@ -1356,10 +1358,11 @@ export class StopJudging {
    * through host@1, whatever the head's trust; an untrusted head gets no hosts and no credentials, which no drafted
    * check has anyway.
    */
-  async runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant; memory?: Admission }): Promise<string> {
+  async runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant; host?: string; memory?: Admission }): Promise<string> {
     // A spec check is a command alone: nothing of it is written. A drafted check and each expected output it
     // references are written from their approved bytes (#322), never through a link that leaves the checkout.
-    if (r.approved !== null && this.options.settings.plant !== 'runs-disk-bytes') {
+    // On a host (#999) there is no checkout to lay them in: its run first proves the files there are the bytes approved.
+    if (r.approved !== null && !r.host && this.options.settings.plant !== 'runs-disk-bytes') {
       for (const { path, sha256 } of [{ path: r.check, sha256: r.approved }, ...(r.references ?? [])]) {
         writeApproved(r.cwd, path, await this.options.services.store.read(sha256), path === r.check ? 0o500 : 0o400);
       }
@@ -1383,14 +1386,14 @@ export class StopJudging {
     // Only the approved run goes outside: a drafted check's approved bytes, or the command the approved spec gives the
     // check, never a deep_run of the worktree's line or a told command under a name the block lists (#1864).
     const scope = await this.claimScope(r.claim);
-    const approved = scope && (await approvedSpec(scope.cwd, scope.base)).spec;
+    const approved = scope && !r.host && (await approvedSpec(scope.cwd, scope.base)).spec;
     const outside = approved && (r.approved !== null || checksIn(approved).get(r.check)?.run === r.command) ? outsideOf(approved, r.check) : undefined;
     const build = outside && (() => this.builtOutside(r.cwd, outside.build));
     if (heldOut && build) heldOut.build = build;
     else await build?.();
     // A check of another kind runs its spec through the kinds the hub holds, within its kind's budget unless it names a deadline (#1537).
     const kinded = this.kindChecks.get(r.claim)?.get(r.check);
-    const { run } = await this.options.services.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, ...(outside ? { outside: true } : {}), env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? (await this.options.services.checkKinds()).deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, heldOut, r.stack && this.options.services.stacks.wanted(r.cwd) ? r.stack : undefined, r.memory);
+    const { run } = await this.options.services.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', `${r.host && r.approved !== null ? this.options.services.hosts.sessions.proven(r.host, [{ path: r.check, sha256: r.approved }, ...(r.references ?? [])]) : ''}${r.command}`], command: r.command, ...(outside ? { outside: true } : {}), env: r.env ?? {}, cwd: r.cwd, ...(r.host ? { host: r.host } : {}), grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? (await this.options.services.checkKinds()).deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, heldOut, r.stack && this.options.services.stacks.wanted(r.cwd) ? r.stack : undefined, r.memory);
     if (paid) {
       const charge = () => this.options.services.ledger.charge(this.options.events.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
       void this.options.services.runs.ended(String(run)).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
