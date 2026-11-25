@@ -2,7 +2,7 @@
 
 #3478 has an `affected.mjs` run ask for its grant with a stall of 720 minutes in place of section 6's fixed 30-minute wait. `tests/acceptance/1113/waits.test.mjs` › `#1113.a0183037 an affected.mjs job waits up to 30 minutes for its grant, its node --test block as test` reads `wait: 30` from every top-level entry of the run's throttle log. On the change the run's entry carries `stall: 720` and no `wait`, so the original fails (`NaN !== 30`). This folder redrafts that one test from #1113's criterion (as `tests/acceptance/1113/README.md` quotes it), #3478's text, the design (Dogfooding; `docs/parallel-proof.md` section 6) and the base `1b4929ae7`, drafted by a blind job.
 
-The original is not edited or deleted; a person approves the swap (#3478's Scope records the owner's approval, 2026-11-25, on PR #3483). Run with:
+The original file is deleted, as #2833 retired its originals (the owner's approval, 2026-11-25, on PR #3483, recorded in #3478's Scope); git history keeps it. Run with:
 
 ```
 node --test tests/acceptance/1113-redraft-3478/waits.test.mjs
@@ -20,7 +20,7 @@ What the redraft keeps: the same run (`scripts/affected.mjs` in this checkout on
 
 ## Kept as they are
 
-- `1113/waits.test.mjs` › #1113.a0183037 a lane command waits up to 30 minutes for its grant, as build for an unlisted command, and › #1113.a0183037 a measured run's top-level timed waits up to 60 minutes: preflight, and perf started by hand: carried here with their names, criterion IDs and assertions unchanged, so that this file stands in for the original, which runs by hand only once the redraft is listed. Lane commands and measured runs are out of #3478's scope.
+- `1113/waits.test.mjs` › #1113.a0183037 a lane command waits up to 30 minutes for its grant, as build for an unlisted command, and › #1113.a0183037 a measured run's top-level timed waits up to 60 minutes: preflight, and perf started by hand: carried here with their names, criterion IDs and assertions unchanged, so that this file takes the place of the original, which is deleted. Lane commands and measured runs are out of #3478's scope.
 - Every other file of `tests/acceptance/1113/`, its helpers, fixtures, twins and `twins.json` (the redraft keeps the criterion ID).
 
 ## On the base and on the change

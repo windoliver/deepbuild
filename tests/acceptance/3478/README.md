@@ -25,13 +25,14 @@ npm ci                                   # once, if node_modules is missing
 node --test 'tests/acceptance/3478/*.test.mjs'
 ```
 
-There are 5 tests in five files. Against a throwaway implementation on the 20-core Linux machine they were drafted
-on, at a 1-minute load of 68 to 176, the five files run together took 22 to 99 s. On the merge base
+There are 6 tests in six files. Against a throwaway implementation on the 20-core Linux machine they were drafted
+on, at a 1-minute load of 68 to 176, the first five files run together took 22 to 99 s; `redrafts.test.mjs`, added
+with the seventh criterion, reads one listing of this checkout (38 s on the base at a load near 40). On the merge base
 `stalled-build.test.mjs` waits out its 5-minute bound (the base run waits 30 minutes), so the suite there takes about
 5 minutes. A run of `affected.mjs` that hasn't ended 8 minutes after its start fails its test, and each file's worst
 case is its one test's 15-minute limit. No test needs an idle machine and none holds a
 port, so there is no `lane.json`: every test has its own HOME and its own throttle table (`DEEP_THROTTLE_TABLE`), and
-never reads or writes `~/.deepbuild/throttle`.
+never reads or writes `~/.deepbuild/throttle`. `redrafts.test.mjs` starts no run: `--list` only lists.
 
 ## Criteria to tests
 
@@ -46,6 +47,7 @@ criterion's text, as `scripts/proof-change.mjs` derives it).
 | `#3478.981101c5` With `DEEP_TEST_GRANT_STALL` at 0.05 and every build slot held past the bound, the run prints the build line's `INCONCLUSIVE no grant`, an `INCONCLUSIVE` line for each file and a summary ending `no job started`, exits 2 within 5 minutes; its tests never ran | `stalled-build.test.mjs` | Every build slot of the table is held for nine minutes and nothing else changes. Two files are selected, one that builds `fixture-a` and one that builds nothing. Within 5 minutes of its start the run ends: a line of its output starts `INCONCLUSIVE no grant: no build grant changed hands within 0.05 min for the run's binaries; no test grant was asked for`; for each of the two files a line starts `INCONCLUSIVE ` and names it; its last `affected:` line starts `INCONCLUSIVE affected: ` and ends `no job started`; it exits 2; neither planted test ran; the log holds no top-level test grant | The base (it waits 30 minutes, so it is still waiting at the 5-minute bound) |
 | `#3478.b300c126` With `DEEP_TEST_GRANT_STALL` at 0.2, every build slot held for 8 s, and a top-level `throttle.mjs timed --wait 0.05` request made after the run joined the line, the timed request ends `INCONCLUSIVE no grant`, and the run then gets its build grant and reads its tests' own results | `drain.test.mjs` | Every build slot is held. Once the run is seen waiting in the build line, a top-level `node scripts/throttle.mjs timed --wait 0.05 -- <command>` is started on the same table, and the holders let go 8 s after the run joined. The timed request prints a line starting `INCONCLUSIVE no grant`, exits 3 and never runs its command. The run never prints `INCONCLUSIVE no grant`; the log's `timeout` entry of class `timed` comes before the run's top-level build grant; the run takes a top-level test grant; the planted test built its binary, and the `--results` file reads its file `PASS` | Twin `fixed-build-wait`. The base passes this test |
 | `#3478.cfd0c346` With `DEEP_TEST_GRANT_WAIT` set, the run's waits and lines are as before: `tests/acceptance/2574-redraft-2833/` and `tests/acceptance/2820/` pass unchanged | none here | No new test: the criterion is those two suites, unchanged, passing on the change. `2574-redraft-2833/grant.test.mjs` (`#2574.AC2d`) and `2820/failures.test.mjs` (`#2820.AC5b`) set `DEEP_TEST_GRANT_WAIT` to 0.02 and read `no test grant came within 0.02 min`, a build `timeout` entry with `wait: 0.02`, each file `INCONCLUSIVE` and a non-zero exit | By reading, not run: a run that ignores `DEEP_TEST_GRANT_WAIT` once the stall is in fails `#2820.AC5b` (its `timeout` entry carries no `wait: 0.02`) and `#2574.AC2d` (no `came within 0.02 min` line) |
+| `#3478.1c95ae53` The blind redrafts `1113-redraft-3478/`, `2574-redraft-3478/` and `1115-redraft-3478/` take their originals' place: each redrafted test passes on the change and fails on the merge base, each carried test reads as its original did, the three original files are gone from the checkout, and `affected.mjs --list` on a change to `scripts/affected.mjs` selects the three redraft folders' files | `redrafts.test.mjs`, for the checkout and the listing; the redrafts' own runs on the base and on the change are in each folder's `REDRAFT.md` | None of `tests/acceptance/1113/waits.test.mjs`, `tests/acceptance/2574/grant.test.mjs` and `tests/acceptance/1115-redraft-2833/no-grant.test.mjs` exists in this checkout. `node scripts/affected.mjs --list scripts/affected.mjs` in this checkout, with a HOME of the test's own, exits 0 and names files a run would start. Each of the three redraft folders holds at least one test file in the checkout, and every test file in it is on a `<lane> <runner>: …` line that a run of the change starts (not one ending `(--<flag> runs them)`; a `SKIP <file> (by hand)` line selects nothing) | The base, for both halves: it has no redraft folder and holds all three originals. The base with the three redraft folders copied in and nothing else changed fails on the originals alone, so a change that adds the folders and keeps an original fails too |
 
 `twins.json` names each twin, and `twins/README.md` says exactly what each plants.
 
@@ -129,6 +131,9 @@ wait.
 - **A stalled test line**: the scope's `INCONCLUSIVE no grant: no test grant changed hands within <min> min`, holders
   named, each file `INCONCLUSIVE`, `no job started`, exit 2. It is in the scope and in no criterion, so no test here.
 - **`DEEP_TEST_GRANT_WAIT` set** (sixth criterion): proven by the two existing suites, run unchanged on the change.
+- **The seventh criterion on the change**: `redrafts.test.mjs` was run on the base only (it fails, as it must) and
+  on the base with the redraft folders copied in (it fails on the originals). It was not run by this job against a
+  checkout with the originals deleted, so its passing is the change's run to show.
 - **The drain being unchanged**: only the fifth criterion's one case runs; #2744's own suite covers a stuck drain.
 - **Section 6's grant-wait table and `affected.mjs` paragraph**: docs, read by diff review.
 - **The guard's signed approval tag** for `scripts/affected.mjs`: a person's.
@@ -167,6 +172,7 @@ about the real change. `BASE-FAILURE.txt` is the suite's run on the merge base, 
 - `moving-build.test.mjs`, `moving-test.test.mjs`: the run behind a build line and a test line that keep moving.
 - `stalled-build.test.mjs`: the run behind a build line that stands still.
 - `drain.test.mjs`: the run through a timed request's drain.
+- `redrafts.test.mjs`: the originals gone from the checkout, and the listing on a change to `scripts/affected.mjs`.
 - `twins.json`, `twins/README.md`, `twins/fixed-build-wait/`, `twins/fixed-test-wait/`: the planted wrong programs.
 - `BASE-FAILURE.txt`: the run on the base and the planted runs, home paths written as `~`.
 

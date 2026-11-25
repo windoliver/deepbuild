@@ -2,7 +2,7 @@
 
 #3478 has an `affected.mjs` run ask for its test grant with a stall of 720 minutes (`throttle.mjs test --stall 720`) in place of the fixed 30-minute wait. `tests/acceptance/2574/grant.test.mjs` › `#2574.AC2c` asserts the 30 minutes: the grant's log entry carries `wait: 30` and the call is `throttle.mjs test --wait 30 --`. On the change the entry carries `stall: 720` and no `wait`, so the original fails. This folder redrafts that one test from #2574's AC2 (as `tests/acceptance/2574/README.md` quotes it), #3478's text, the design (Dogfooding; `docs/parallel-proof.md` section 6) and the base `1b4929ae7`, drafted by a blind job.
 
-The original is not edited or deleted; a person approves the swap (#3478's Scope records the owner's approval, 2026-11-25, on PR #3483). Run with:
+The original file is deleted, as #2833 retired its originals (the owner's approval, 2026-11-25, on PR #3483, recorded in #3478's Scope); git history keeps it. Run with:
 
 ```
 node --test tests/acceptance/2574-redraft-3478/grant.test.mjs
@@ -20,7 +20,7 @@ What the redraft keeps of the criterion: the run's grant is its one top-level te
 
 ## Kept as they are
 
-- `2574/grant.test.mjs` › #2574.AC2a and › #2574.AC2e are carried here with their names, criterion IDs and assertions unchanged, so that this file stands in for the original, which runs by hand only once the redraft is listed. AC2a shares AC2c's one run, as in the original. `within`'s timer gained a `// deadline:` comment, since the wait ratchet starts a new file at zero; nothing else differs (`diff ../2574/grant.test.mjs grant.test.mjs`).
+- `2574/grant.test.mjs` › #2574.AC2a and › #2574.AC2e are carried here with their names, criterion IDs and assertions unchanged, so that this file takes the place of the original, which is deleted. AC2a shares AC2c's one run, as in the original. `within`'s timer gained a `// deadline:` comment, since the wait ratchet starts a new file at zero; nothing else differs (`diff ../2574/grant.test.mjs grant.test.mjs`).
 - #2574.AC2b and #2574.AC2d already run from `tests/acceptance/2574-redraft-2833/grant.test.mjs` and are not repeated here. AC2d sets `DEEP_TEST_GRANT_WAIT`, which #3478 leaves as it was.
 - `tests/acceptance/2574/helpers.mjs`, `2574/shards-linux.test.mjs` (AC1) and `2574/wide.test.mjs` (AC3).
 

@@ -12,6 +12,7 @@
 #   #3478.ee81cf50, #3478.a5864770, #3478.b300c126 PASS: the base's 30-minute wait outlasts every line these tests
 #     make, as the issue expects (it names only the planted program as failing). Their proof is their twins, below.
 #   #3478.cfd0c346 has no test here: tests/acceptance/2574-redraft-2833/ and tests/acceptance/2820/, unchanged.
+#   #3478.1c95ae53 (added later, its own run below) FAILS at its assertion.
 #
 # A later run on the base, at a load of 138 to 176, read the same but for #3478.a5864770, which failed at its
 # 8-minute bound: its sandbox's table had stopped, table.lock naming a live throttle.mjs process (README: a table
@@ -105,6 +106,72 @@ test at tests/acceptance/3478/stalled-build.test.mjs:11:1
     operator: '==',
     diff: 'simple'
   }
+
+# ---------------------------------------------------------------------------------------------------------------
+# The seventh criterion's test, redrafted 2026-11-25 to the criterion's new text (the originals are deleted):
+# node --test tests/acceptance/3478/redrafts.test.mjs on the merge base 1b4929ae7, 1-minute load about 40.
+# Expected on the base, and seen:
+#   #3478.1c95ae53 FAILS at its assertion: the base has no redraft folder, and the three original files are in
+#     the checkout.
+
+✖ #3478.1c95ae53 the three original files are gone from the checkout, and on a change to scripts/affected.mjs affected.mjs --list selects the three redraft folders' files (25170.463666ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+test at tests/acceptance/3478/redrafts.test.mjs:35:1
+✖ #3478.1c95ae53 the three original files are gone from the checkout, and on a change to scripts/affected.mjs affected.mjs --list selects the three redraft folders' files (25170.463666ms)
+  AssertionError [ERR_ASSERTION]: the redrafts have not taken their originals' place
+  exit 0
+  stdout:
+  parallel node: tests/acceptance/1113/waits.test.mjs tests/acceptance/1114/affected.test.mjs tests/acceptance/1114/failures.test.mjs tests/acceptance/1114/timed-list.test.mjs tests/acceptance/1115-redraft-2833/no-grant.test.mjs tests/acceptance/1115/affected.test.mjs tests/acceptance/1115/decisions.test.mjs tests/acceptance/111 …
+  alone vitest: tests/acceptance/1015/redraft/own-repo.test.ts tests/acceptance/33/bootstrap.test.ts
+  alone node: tests/acceptance/2144/lint-on-main.test.mjs
+  timed vitest: tests/acceptance/2569/main.test.ts (--timed runs them)
+  slow vitest: tests/acceptance/2086-redraft-2047/ac1-workspace-clippy.test.ts (--slow runs them)
+  slow node: tests/acceptance/1114/lanes.test.mjs (--slow runs them)
+  SKIP tests/acceptance/1015/own-repo.test.ts (by hand)
+  SKIP tests/acceptance/2848/refill.test.mjs (by hand)
+  SETTLED no list: ~/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
+  
+  stderr:
+  
+  + actual - expected
+  
+    {
+  +   'originals still in the checkout': [
+  +     'tests/acceptance/1113/waits.test.mjs',
+  +     'tests/acceptance/2574/grant.test.mjs',
+  +     'tests/acceptance/1115-redraft-2833/no-grant.test.mjs'
+  +   ],
+  +   'redraft folders not selected': [
+  +     'tests/acceptance/1113-redraft-3478/',
+  +     'tests/acceptance/2574-redraft-3478/',
+  +     'tests/acceptance/1115-redraft-3478/'
+  +   ]
+  -   'originals still in the checkout': [],
+  -   'redraft folders not selected': []
+    }
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3478/redrafts.test.mjs:51:10)
+
+# The same test on the base with the three redraft folders copied in and nothing else changed (not kept so): the
+# folders' files are listed, and the test still FAILS at its assertion, on the originals alone.
+
+✖ #3478.1c95ae53 the three original files are gone from the checkout, and on a change to scripts/affected.mjs affected.mjs --list selects the three redraft folders' files (42704.545485ms)
+  + actual - expected
+  
+    {
+  +   'originals still in the checkout': [
+  +     'tests/acceptance/1113/waits.test.mjs',
+  +     'tests/acceptance/2574/grant.test.mjs',
+  +     'tests/acceptance/1115-redraft-2833/no-grant.test.mjs'
+  +   ],
+  -   'originals still in the checkout': [],
+      'redraft folders not selected': []
+    }
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3478/redrafts.test.mjs:51:10)
 
 # ---------------------------------------------------------------------------------------------------------------
 # The planted wrong programs (twins/README.md), redrafted against the implementation once it existed: each is the

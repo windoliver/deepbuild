@@ -2,7 +2,7 @@
 
 `tests/acceptance/1115-redraft-2833/no-grant.test.mjs` fills the test class with another session's holders and expects an `affected.mjs` run to end with no grant within seconds. Its run's wait is short because `tests/acceptance/1115/helpers.mjs`'s throttle shim rewrites the `--wait` argument of a `throttle.mjs test` call to 0.02 minutes. #3478 has the run ask `throttle.mjs test --stall 720`: there is no `--wait` argument for the shim to rewrite, the run keeps its place until the holders leave (280 s), then gets a grant and reads `PASS`, and the two `#1115.1f2f1fa0` tests of an `affected.mjs` run fail. This folder redrafts those two from #1115's criterion (as `tests/acceptance/1115/README.md` quotes it), #3478's text, the design (Dogfooding; `docs/parallel-proof.md` section 6) and the base `1b4929ae7`, drafted by a blind job.
 
-The originals are not edited or deleted; a person approves the swap (#3478's Scope records the owner's approval, 2026-11-25, on PR #3483). Run with:
+The original file is deleted, as #2833 retired its originals (the owner's approval, 2026-11-25, on PR #3483, recorded in #3478's Scope); git history keeps it. Run with:
 
 ```
 node --test tests/acceptance/1115-redraft-3478/no-grant.test.mjs
@@ -28,7 +28,7 @@ The shim stays in the fixture tree (`shimThrottle: true`) because the second tes
 - `no-grant.test.mjs` › #1115.1f2f1fa0 a unit lane whose vitest job ended with no grant reads INCONCLUSIVE, not FAIL: carried with its name, criterion ID and assertions unchanged. A lane's vitest job still asks `throttle.mjs test --wait 30` (lane commands are out of #3478's scope), which the shim shortens as before.
 - `tests/acceptance/1115/helpers.mjs`, shim included, and `tests/acceptance/1115-redraft-2833/helpers.mjs`.
 - `tests/acceptance/1115/twins.json`: the redrafts keep the criterion ID, so it maps them too.
-- `tests/acceptance/1115/no-grant.test.mjs`, already redrafted under #2833 and run by hand only.
+- Not kept: `tests/acceptance/1115-redraft-2833/no-grant.test.mjs`, the original here, is deleted. Its own original, `tests/acceptance/1115/no-grant.test.mjs`, was already gone from the base: the #2833 proposal (`7280d78f8`) retired it in favour of that redraft.
 
 ## On the base and on the change
 
