@@ -8,6 +8,7 @@ import { openRecord } from '@deepbuild/record';
 import { expect, it } from 'vitest';
 import { listText } from '../src/list.js';
 import { buildRows, orderOf, rowVersion } from '../src/rows.js';
+import { SizeScope } from '../src/scope.js';
 import { sessionStates } from '../src/status.js';
 import { ulid } from '../src/wire.js';
 
@@ -99,4 +100,27 @@ it('is listed under its host\'s name, as a session here is under its project\'s'
     expect(lines[lines.indexOf(HOST) + 1], text).toMatch(new RegExp(`^  ${on.title}  claude-code  working`));
     expect(lines[lines.indexOf(here.project ?? 'no repo') + 1], text).toMatch(new RegExp(`^  ${here.title}  claude-code  working`));
   });
+});
+
+it('its stop is not sized here, where its folder is not: nothing is measured, recorded or sent back', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-host-scope-'));
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+  try {
+    const scope = new SizeScope({
+      raw: (query, params) => record.raw(query, params), append: async (connection, input) => { await record.append(connection, input); },
+      connection: (session) => ({ writer: 'core', actor: 'you', scope: 'you', session }), now: Date.now,
+      asks: () => { throw Error('no ask is raised in this test'); }, pin: async () => ({ kind: 'evidence', ref: '0'.repeat(64) }), keep: async () => '0'.repeat(64),
+      scopeOf: async () => ({ kind: 'feature', plan: null }), evidence: dir, accepted: undefined,
+      onHost: (session) => session === S,
+    });
+    // The folder is the host's: this machine holds no such path, so measuring it here fails.
+    const stop = { claim: `claim:${ulid(Date.now())}`, task: `task:${ulid(Date.now())}`, agent: 'claude-code', cwd: join(dir, 'a-folder-on-the-host'), base: '0'.repeat(40), requirements: [], reached: [], holds: false, deadline: Date.now() + 60_000 };
+    expect(await scope.atStop({ ...stop, session: S })).toBeUndefined();
+    expect(await record.raw(`SELECT 1 FROM events WHERE kind = 'claim.sized'`)).toEqual([]);
+    // A session here is measured as before: the same folder, missing here, can't be.
+    await expect(scope.atStop({ ...stop, session: HERE })).rejects.toThrow();
+  } finally {
+    await record.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -473,7 +473,7 @@ export class Core {
       raw: this.raw, append: (connection, input) => this.append(connection, input),
       connection: (session, agent) => this.connection('core', { session, agent }), asks: () => this.asks, now: this.now,
       pin: (cwd, question) => this.mcp.pinOf(cwd, question), keep: (bytes, source) => this.control.keep(bytes, source), scopeOf: (task) => this.tasks.scopeOf(task),
-      evidence: this.root.evidence, accepted: options.accepted,
+      evidence: this.root.evidence, accepted: options.accepted, onHost: (session) => this.state.sessionHosts.has(session),
     });
     this.openItems = new OpenItems({
       raw: this.raw, append: (connection, input) => this.append(connection, input), now: this.now, plant: options.plant,
