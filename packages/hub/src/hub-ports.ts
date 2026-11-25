@@ -2,7 +2,7 @@
 
 import { type Delivery, type Resolver } from '@deepbuild/asks';
 
-import { type Connection } from '@deepbuild/record';
+import { type Connection, type EventInput } from '@deepbuild/record';
 
 import { type PromiseState } from './promises.js';
 import { Answers, type Answer } from './answers.js';
@@ -216,7 +216,6 @@ export interface SessionStatePort {
   states: Map<string, string>;
   statesRead: boolean;
   stating: Promise<void> | undefined;
-  touched: Set<string> | 'all';
   rows: Map<string, Placed>;
   rowsFirst: boolean;
   versioned: Set<string>;
@@ -230,6 +229,7 @@ export interface SessionStatePort {
   goneSessions(): Promise<void>;
   sessionOver(session: Session): void;
   archivedThreads(): Promise<void>;
+  appended(input: EventInput, session: string | undefined): void;
   stateSoon(): void;
   seeRow(id: string): Promise<Obj>;
   statesSettled(): Promise<void>;

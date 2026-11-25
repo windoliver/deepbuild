@@ -1,0 +1,31 @@
+{
+  "crates/deep-scene3d-render/src/ao.rs": [
+    {
+      "find": [
+        "    opts: [u32; 4],"
+      ],
+      "wrong": [
+        "    // #3256's planted wrong program: opts typed [f32; 4]; every offset and the size are as they were.",
+        "    opts: [f32; 4],"
+      ]
+    },
+    {
+      "find": [
+        "            opts: [",
+        "                ao.samples,",
+        "                u32::from(ao.multi_bounce),",
+        "                u32::from(ao.specular),",
+        "                1,",
+        "            ],"
+      ],
+      "wrong": [
+        "            opts: [",
+        "                ao.samples as f32,",
+        "                f32::from(u8::from(ao.multi_bounce)),",
+        "                f32::from(u8::from(ao.specular)),",
+        "                1.0,",
+        "            ],"
+      ]
+    }
+  ]
+}
