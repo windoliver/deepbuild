@@ -534,12 +534,15 @@ async function runGroups(groups, places, files, vitest, node, label, { env = {},
 // takes a turn on the machine's pool (#3221). A run asked under a caller's build or test grant is admitted at once with
 // no slot, and one asked under a job's turn passes through on it; one that took its own grant gives it back before the
 // timed files, which then ask as the caller would. With no grant in the wait, no job started, and every file reads INCONCLUSIVE.
-// DEEP_TEST_GRANT_WAIT sets the wait in minutes, for tests.
+// The run waits for each of its two grants on a stall (#3478): it keeps its place while the class's grants change hands,
+// and leaves once none has for 720 minutes, a hung holder's bound. DEEP_TEST_GRANT_STALL sets that bound in minutes, for
+// tests; DEEP_TEST_GRANT_WAIT, when set, gives a fixed wait of that many minutes instead.
 const HELD = 'DEEP_AFFECTED_HELD';
+const grantWait = () => process.env.DEEP_TEST_GRANT_WAIT === undefined ? { stall: Number(process.env.DEEP_TEST_GRANT_STALL ?? '720') } : { wait: Number(process.env.DEEP_TEST_GRANT_WAIT) };
 async function queued(args, files, started, prep) {
   const marker = join(mkdtempSync(join(tmpdir(), 'deep-affected-grant-')), 'started');
-  const wait = process.env.DEEP_TEST_GRANT_WAIT ?? '30';
-  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE_RUN: String(shardsRoom(prep.shards.length)), [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '', prep }) } });
+  const [[bound, minutes]] = Object.entries(grantWait());
+  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', `--${bound}`, String(minutes), '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE_RUN: String(shardsRoom(prep.shards.length)), [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '', prep }) } });
   // A terminal's SIGINT reaches the whole group; a SIGTERM or SIGHUP sent to this process alone is passed on.
   process.on('SIGINT', () => {});
   for (const signal of ['SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
@@ -577,7 +580,7 @@ const tick = () => new Promise((done) => setImmediate(done));
 /**
  * What the run makes before it asks for its test grant (#2820), so no test slot waits on cargo: its shards, and in the
  * worktree and each shard the Rust binaries its selected tests need, those read through DEEP_BIN_DIR and the builds an
- * untimed test starts itself (binaryPlan), all on one build grant of the run's own, waited for as long as its test grant,
+ * untimed test starts itself (binaryPlan), all on one build grant of the run's own, waited for as its test grant is,
  * each with its test's profile. A run that builds no binary takes none. The shards stay the run's through its
  * wait, so what was built in them is still theirs when its tests start. A stop is seen before each checkout's builds, not between one checkout's. Returns what the
  * run's test-grant child reads, or the exit status, having printed why.
@@ -592,13 +595,13 @@ async function prepare(untimed, timedFiles, alone, listedFiles, started) {
     const plan = binaryPlan(root, untimed);
     if (timedFiles.length) plan.names = [...new Set([...plan.names, ...binaryNames(root, timedFiles)])];
     if (plan.names.length || plan.builds.length) {
-      const wait = Number(process.env.DEEP_TEST_GRANT_WAIT ?? '30');
+      const bound = grantWait();
       try {
-        grant = acquire('build', { wait });
+        grant = acquire('build', bound);
       } catch (error) {
         throw Error(`BLOCKED throttle: ${error.message}`);
       }
-      if (!grant) return unrun('INCONCLUSIVE', listedFiles, started, `INCONCLUSIVE no grant: no build grant came within ${wait} min for the run's binaries; no test grant was asked for`, 'for want of a build grant');
+      if (!grant) return unrun('INCONCLUSIVE', listedFiles, started, `INCONCLUSIVE no grant: no build grant ${bound.stall === undefined ? `came within ${bound.wait}` : `changed hands within ${bound.stall}`} min for the run's binaries; no test grant was asked for`, 'for want of a build grant');
       process.env.DEEP_THROTTLE = grant.token;
     }
     // A stop while the run waited ended it; from here one is seen between the builds, which run synchronously.
