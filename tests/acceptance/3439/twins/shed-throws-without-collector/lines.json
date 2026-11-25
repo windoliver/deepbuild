@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/settle.ts": [
+    {
+      "find": [
+        "  if (collects()) (globalThis as unknown as { gc: Collect }).gc({ type: 'major', execution: 'sync', flavor: 'last-resort' });"
+      ],
+      "wrong": [
+        "  (globalThis as unknown as { gc: Collect }).gc({ type: 'major', execution: 'sync', flavor: 'last-resort' });"
+      ]
+    }
+  ]
+}
