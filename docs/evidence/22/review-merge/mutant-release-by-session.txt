@@ -1,0 +1,9 @@
+381:                    released.push((row["session"].clone(), thread)); // MUTANT: release by session
+test record::tests::a_panel_waits_for_the_exception_of_another_session_on_the_thread ... FAILED
+thread 'record::tests::a_panel_waits_for_the_exception_of_another_session_on_the_thread' (3079656) panicked at crates/deep-app/src/record.rs:1305:9:
+  left: ("folded", "folded")
+ right: ("queued", "queued")
+test result: FAILED. 117 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+error: test failed, to rerun pass `-p deep-app --lib`
+[exit 101]
+restored

@@ -1,0 +1,85 @@
+{
+  "id": "familiar.directional_light",
+  "version": "1.0",
+  "title": "Directional light",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's DirectionalLight: its intensity is the illuminance in lux on a surface that faces it, kept as light.sun@1's illuminance; it shines from its position toward its target.",
+  "inputs": {
+    "color": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "intensity": {
+      "type": "number",
+      "default": 1,
+      "unit": "lx",
+      "min": 0,
+      "about": "the illuminance on a surface that faces the light"
+    },
+    "position": {
+      "type": "vec3",
+      "default": [
+        0,
+        1,
+        0
+      ],
+      "unit": "m",
+      "about": "the library's default (0, 1, 0); the light shines from here toward target"
+    },
+    "target": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": "where the light points: the library's target object's position"
+    }
+  },
+  "let": {
+    "e0": "(floor(color / 65536) % 256) / 255",
+    "l0": "e0 <= 0.04045 ? e0 / 12.92 : pow((e0 + 0.055) / 1.055, 2.4)",
+    "e1": "(floor(color / 256) % 256) / 255",
+    "l1": "e1 <= 0.04045 ? e1 / 12.92 : pow((e1 + 0.055) / 1.055, 2.4)",
+    "e2": "(color % 256) / 255",
+    "l2": "e2 <= 0.04045 ? e2 / 12.92 : pow((e2 + 0.055) / 1.055, 2.4)",
+    "a0": "target[0] - position[0]",
+    "a1": "target[1] - position[1]",
+    "a2": "target[2] - position[2]",
+    "al": "sqrt(a0 * a0 + a1 * a1 + a2 * a2)",
+    "target": "al > 0 ? target : unmapped()",
+    "pitch": "deg(asin(max(-1, min(1, a1 / al))))",
+    "yaw": "deg(atan2(-a0, -a2))"
+  },
+  "steps": {
+    "light": {
+      "op": "item",
+      "kind": "light.sun@1",
+      "params": {
+        "illuminance": "intensity",
+        "color": [
+          "l0",
+          "l1",
+          "l2"
+        ]
+      },
+      "at": {
+        "pos": [
+          "position[0]",
+          "position[1]",
+          "position[2]"
+        ],
+        "rot": [
+          "pitch",
+          "yaw",
+          0
+        ]
+      }
+    }
+  }
+}

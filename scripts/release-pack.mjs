@@ -11,15 +11,30 @@ import { spawnSync } from 'node:child_process';
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { preflightRefusal } from './preflight-record.mjs';
 import { contentsOf, extract } from './release-artifacts.mjs';
 
+// process.exit and a stop signal both skip the finally below, so each removes the temporary folder itself. A child
+// stopped with the pack's process group fails its step. A listener runs only on an event-loop turn, which this
+// synchronous script would never give before it finished, so it yields one after each step and before writing <out>:
+// a stop that left the child running, or landed between steps, then ends the pack there. One that lands while <out>
+// is written removes what this run wrote there, and the last turn comes after the cleanup, before success is said.
+let work;
+const written = [];
+// What it wrote to <out> goes first, the seconds-long removal of the clean checkout after.
+const drop = () => {
+  for (const file of written) rmSync(file, { force: true });
+  if (work) rmSync(work, { recursive: true, force: true });
+};
 const fail = (message) => {
   console.error(`release-pack: ${message}`);
+  drop();
   process.exit(1);
 };
+for (const [signal, number] of [['SIGINT', 2], ['SIGTERM', 15], ['SIGHUP', 1]]) process.on(signal, () => { drop(); process.exit(128 + number); }); // on, not once: a second stop mid-cleanup is not fatal
+const turn = () => new Promise((settle) => setImmediate(settle));
 const run = (cmd, args, cwd) => {
   const r = spawnSync(cmd, args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
   if (r.status !== 0) fail(`${cmd} ${args.join(' ')} failed: ${r.stderr || r.error}`);
@@ -57,11 +72,40 @@ if (keyArg) {
   }
 }
 
-const work = mkdtempSync(join(tmpdir(), 'release-pack-'));
+await turn();
+const archives = [];
+work = mkdtempSync(join(tmpdir(), 'release-pack-'));
+// SIGKILL, as a test's timeout or its group stop sends it, runs nothing here. So a watcher in its own session, started
+// through a launcher that exits at once and so outside this process's tree and group, removes the folder once this
+// pack is gone, however it went, and no process names the folder on its command line: a child that outlived it and
+// writes there by path (the clone, the stage, tar) ends first. One named only by its cwd (npm pack, git checkout) can
+// no longer create anything there once the folder is gone. A watcher stopped itself, as a unit's teardown stops it,
+// removes the folder then.
+const WATCH = `const { execFileSync } = require('child_process');
+const { existsSync, rmSync } = require('fs');
+const [pid, dir] = process.argv.slice(-2);
+const drop = () => { rmSync(dir, { recursive: true, force: true }); process.exit(0); };
+const named = () => {
+  try {
+    return execFileSync('ps', ['-axww', '-o', 'pid=,command='], { encoding: 'utf8', maxBuffer: 1 << 28 }).split('\\n').some((l) => l.includes(dir) && Number.parseInt(l, 10) !== process.pid);
+  } catch (error) {
+    if (error.code === 'ENOENT') return false; // no ps to ask: only the pack is waited for
+    throw error; // one that failed this time is asked again on the next poll
+  }
+};
+process.on('SIGTERM', drop);
+setInterval(() => {
+  if (!existsSync(dir)) process.exit(0);
+  try { process.kill(+pid, 0); return; } catch { /* the pack is gone */ }
+  try { if (!named()) drop(); } catch { /* the next poll tries again */ }
+}, 500);`;
+const LAUNCH = `require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(WATCH)}, ...process.argv.slice(-2)], { detached: true, stdio: 'ignore', cwd: '/' }).unref();`;
+spawnSync(process.execPath, ['-e', LAUNCH, String(process.pid), resolve(work)], { detached: true, stdio: 'ignore', cwd: '/' });
 try {
   const clean = join(work, 'checkout');
   run('git', ['clone', '-q', '--no-hardlinks', repo, clean], work);
   run('git', ['checkout', '-q', '--detach', wanted], clean);
+  await turn();
 
   const readJson = (dir) => JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
   const root = readJson(clean);
@@ -74,7 +118,6 @@ try {
 
   const staged = join(work, 'archives');
   mkdirSync(staged);
-  const archives = [];
   const problems = [];
   // A repo whose published packages are laid out by a build (#41) has scripts/release-stage.mjs: it runs in the
   // clean checkout, and each folder its stage.json lists is packed and read back like a workspace package. One with a
@@ -87,6 +130,7 @@ try {
       dirs.push(join(stageDir, p.dir));
       if (p.built) builtOf.set(join(stageDir, p.dir), join(stageDir, p.built));
     }
+    await turn();
   }
   for (const dir of dirs) {
     const meta = readJson(dir);
@@ -119,16 +163,23 @@ try {
     const into = join(work, 'holds', filename);
     extract(file, into);
     archives.push({ name: meta.name, file: filename, sha256: createHash('sha256').update(readFileSync(file)).digest('hex'), holds: contentsOf(into) });
+    await turn();
   }
   if (problems.length) fail(`nothing was written or published:\n  ${problems.join('\n  ')}`);
 
   mkdirSync(out, { recursive: true });
-  for (const a of archives) copyFileSync(join(staged, a.file), join(out, a.file));
+  const put = (file, bytes) => {
+    written.push(file);
+    if (bytes) writeFileSync(file, bytes);
+    else copyFileSync(join(staged, basename(file)), file);
+  };
+  for (const a of archives) put(join(out, a.file));
   const manifest = Buffer.from(`${JSON.stringify({ commit: wanted, archives }, null, 2)}\n`);
-  writeFileSync(join(out, 'manifest.json'), manifest);
+  put(join(out, 'manifest.json'), manifest);
   // Ed25519 over exactly the manifest's bytes, as the installer checks it.
-  if (key) writeFileSync(join(out, 'manifest.json.sig'), sign(null, manifest, key));
-  console.log(`release-pack: ${archives.length} archives from ${wanted} recorded in ${join(out, 'manifest.json')}`);
+  if (key) put(join(out, 'manifest.json.sig'), sign(null, manifest, key));
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
+await turn();
+console.log(`release-pack: ${archives.length} archives from ${wanted} recorded in ${join(out, 'manifest.json')}`);

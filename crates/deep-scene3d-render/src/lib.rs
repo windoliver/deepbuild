@@ -78,8 +78,8 @@ pub use crate::diag::{draw_offscreen_diag, white, Diag, DiagCounts};
 pub use crate::mesh::tangents_derived;
 use crate::mesh::{Mesh, MESHES};
 pub use crate::module::{
-    draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
-    LIGHT, PYRAMID_NS_PER_PX,
+    draw_offscreen, draw_offscreen_texture, timed, AfterFrame, Counts, HdrFrame, Module3,
+    PostFrame, Profiler, Shared, LIGHT, PYRAMID_NS_PER_PX,
 };
 use crate::passes::{geometry_pass, glass_pass, per_pixel_pass, resolve_ids};
 pub use crate::planted::Planted;

@@ -73,7 +73,7 @@ const TABLES: readonly TableDef[] = [
   T('turn_events', ['event_id'], 'event_id TEXT, session_id TEXT, turn_idx INTEGER, eff_seq INTEGER, eff_id TEXT, log_pos INTEGER'),
   T('session_readings', ['session_id', 'reading'], 'session_id TEXT, reading TEXT, since INTEGER'),
   // The list every reader shows (#1463): each row the core built, as its newest row.set gives it, in the list's order.
-  T('rows', ['id'], 'id TEXT, ord TEXT, row TEXT, log_pos INTEGER'),
+  T('rows', ['id'], 'id TEXT, ord TEXT, row TEXT, log_pos INTEGER', ["json_extract(row, '$.title')"]),
   // The wiki's claims in force (#355), each from its newest change in force, with its sources and its links, and
   // their text in SQLite FTS5: the default index deep_search reads, rebuilt like every table here.
   T('wiki_claims', ['handle'], 'handle TEXT, page TEXT, claim TEXT, text TEXT, known TEXT, proof INTEGER, scope TEXT, change TEXT, state TEXT, log_pos INTEGER'),

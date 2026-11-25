@@ -459,6 +459,26 @@ impl Session {
     }
 }
 
+impl Scheduler<'_> {
+    /// This scheduler as it stands, its cache and tables with it, on a borrow of `sealed` that
+    /// may outlive the one it was built with (#3262): `sealed` is the set it was built on. A host
+    /// that keeps its sessions while what it borrowed beside the set is replaced carries the
+    /// scheduler on with them.
+    pub fn on<'t>(self, sealed: &'t Sealed) -> Scheduler<'t> {
+        Scheduler {
+            sealed,
+            options: self.options,
+            cache: self.cache,
+            tables: self.tables,
+            hashes: self.hashes,
+            json_written: self.json_written,
+            look_hook: self.look_hook,
+            writer: self.writer,
+            deferred: self.deferred,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

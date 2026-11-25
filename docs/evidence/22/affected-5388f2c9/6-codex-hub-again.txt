@@ -1,0 +1,41 @@
+start Sun Nov 15 03:28:41 PM PST 2026; load 45.05 32.99 29.71
+=== <worktree> at 1ee92de02, load 45.05
+exit 1
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > ends the run as a FAIL, and that FAIL reaches the agent in the same turn 7367ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > is measured from the stop: one that no longer fits what is left of the hold is not held 4447ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > a hold that ends with the check still going says why, and the verdict comes with your next message 14183ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > an answer waiting before the stop starts no slow check; one that comes during the hold ends the hold 10677ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > is said once, and its verdict told once, however many stops the claim has 3455ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > a held stop's verdict line, once delivered, is not repeated at the next prompt 64866ms
+ × packages/hub/test/codex-hub.test.ts > a subagent's stop > a child's rollout never binds the root across a restart, and only SubagentStart may name one 1792ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 29 passed (30)
+=== <worktree> at 1ee92de02, load 45.96
+exit 1
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > ends the run as a FAIL, and that FAIL reaches the agent in the same turn 10855ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > is measured from the stop: one that no longer fits what is left of the hold is not held 6506ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > a hold that ends with the check still going says why, and the verdict comes with your next message 13356ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > an answer waiting before the stop starts no slow check; one that comes during the hold ends the hold 4402ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > is said once, and its verdict told once, however many stops the claim has 3475ms
+ × packages/hub/test/codex-hub.test.ts > a slow check's deadline > a held stop's verdict line, once delivered, is not repeated at the next prompt 3132ms
+ × packages/hub/test/codex-hub.test.ts > a subagent's stop > is no boundary of the root's turn across a hub restart 3907ms
+ × packages/hub/test/codex-hub.test.ts > a subagent's stop > a child's rollout never binds the root across a restart, and only SubagentStart may name one 2482ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/codex-hub.test.ts > a slow check's deadline > a held stop's verdict line, once delivered, is not repeated at the next prompt
+AssertionError: exit 0, stdout "", stderr "deep-hook: spooled 01M7GRVTK9Z4EFRDKSNS2WECBN, but its sync didn't finish within the hook's 50 ms\n": expected undefined to be truthy
+AssertionError: expected false to be true // Object.is equality
+=== <main-2252dfd6> at 2252dfd6f, load 41.01
+exit 1
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > ends the run as a FAIL, and that FAIL reaches the agent in the same turn 12223ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > is measured from the stop: one that no longer fits what is left of the hold is not held 6901ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > a hold that ends with the check still going says why, and the verdict comes with your next message 15218ms
+ × packages/hub/test/codex-hub.test.ts > a slow check's deadline > an answer waiting before the stop starts no slow check; one that comes during the hold ends the hold 35865ms
+   → timed out after 30000 ms waiting for the ask
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > is said once, and its verdict told once, however many stops the claim has 6387ms
+ ✓ packages/hub/test/codex-hub.test.ts > a slow check's deadline > a held stop's verdict line, once delivered, is not repeated at the next prompt 64291ms
+ × packages/hub/test/codex-hub.test.ts > two Codex threads on one daemon > files each ask under its own thread, though the shared deep mcp met only the first 43306ms
+   → timed out after 30000 ms waiting for the ask
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/codex-hub.test.ts > a slow check's deadline > an answer waiting before the stop starts no slow check; one that comes during the hold ends the hold
+AssertionError: timed out after 30000 ms waiting for the ask
+done Sun Nov 15 03:37:21 PM PST 2026

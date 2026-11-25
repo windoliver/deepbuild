@@ -1,0 +1,102 @@
+Base 5fcfb690ba6592ad567c303ecf67054dbcbdfc3c, on a Mac17,10 (a reference Mac), 2026-11-23, the machine's one-minute
+load far over 1 a core. `deep-gpu` was built in the checkout by the job's caller (`cargo build --locked -j 8 --bin
+deep-gpu`, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0; the binary's SHA-256 starts ddaaa31f901c6a76). Each file's
+own `cargo build --locked --bin deep-gpu` found it fresh and compiled nothing: the binary's size, time and hash were
+the same after the six files as before them. Everything below ran once, under one test grant of scripts/throttle.mjs.
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/853/tsconfig.json
+    passes, no error.
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/853
+    --no-file-parallelism --testTimeout=3600000 <file>
+    one file at a time, 32 s in all: 11 tests, 11 fail, each at an assertion (AssertionError), none at load, none
+    passes. Nothing was written to docs/evidence/853/.
+
+What the base answers, which every failure below comes from. It draws a document that holds a `particles.stepped@1`
+item as if the item weren't there: frames, no `carried` row, no refusal. Asked to `read` the item's buffer it answers
+`{"code": "bad_input", "reason": "read sand.buffer: sand has no output buffer"}` and draws nothing. `golden` on the
+buffer reads BLOCKED, no_snapshot. A logic item whose read is `drops.in_gate`, or `drops.buffer`, is refused by the
+logic module alike: `{"code": "logic_refused", "refusal": {…, "refusals": [{"rule": "read", "what": "drops.in_gate
+names no control or logic item of this piece", "read": "drops.in_gate"}]}}`. `deep-gpu run --planted
+particles_step_by_frame_time` and `--planted particles_collide_at_end` exit 2 with `{"ok": false, "code":
+"bad_input"}`. So each test fails for the missing kind: its buffer, its stepping or its reading isn't there.
+
+ac1-pour.test.ts: 2 tests, both FAIL.
+  #853.fe931abe the pile's height at the centre at 5 s matches a seeded run's within 1%, and seeking … to 2.5 s
+    ac1-pour.test.ts:67 (helpers.ts: view3dFrames)  AssertionError: the pour played to 10 s and sought back to 2.5 s:
+      view3d drew its frames: expected 'bad_input: "read sand.buffer: sand has no output buffer"' to be ''
+  #853.fe931abe the buffer at 2.5 s is one buffer played at 60, 30 and 144 frames a second; a planted module …
+    ac1-pour.test.ts:50, in ratesProblems, from :98, the right program's run  AssertionError: the pour played at 60
+      frames a second: view3d drew its frames: expected 'bad_input: "read sand.buffer: sand has no output buffer"'
+      to be ''
+    The planted run wasn't reached: the check its right twin must pass fails first.
+
+ac2-collide.test.ts: 2 tests, both FAIL.
+  #853.22cd6328 particles at rest on a kinematic floor are never under it at a step it moves, and bounce off it …
+    ac2-collide.test.ts:56  AssertionError: the lift: view3d drew its frames: expected 'bad_input: "read
+      beads.buffer: beads has no output buffer"' to be ''
+  #853.22cd6328 none of 1,024 particles … passes through a static wall in 600 steps; a planted step …
+    ac2-collide.test.ts:39, in corridorProblems, from :72, the right program's run  AssertionError: the corridor:
+      view3d drew its frames: expected 'bad_input: "read shots.buffer: shots has no output buffer"' to be ''
+    The planted run wasn't reached.
+
+ac3-machines.test.ts: 3 tests, all FAIL.
+  #853.a87d0063 two runs on one machine reach the same buffer hash at every checkpoint
+    ac3-machines.test.ts:59, in play, from :70  AssertionError: the first run of the pour: view3d drew its frames:
+      expected 'bad_input: "read sand.buffer: sand has no output buffer"' to be ''
+  #853.a87d0063 a comparison of the same run on a second machine reads INCONCLUSIVE, naming the class same_machine …
+    ac3-machines.test.ts:84  AssertionError: the pour opened at 2.5 s: view3d drew its frames: expected 'bad_input:
+      "read sand.buffer: sand has no output buffer"' to be ''
+  #853.a87d0063 an export of the pour reads the bake by hash and matches its live frames at 20 sampled times …
+    ac3-machines.test.ts:126  AssertionError: the live play of the pour: view3d drew its frames: expected
+      'bad_input: "read sand.buffer: sand has no output buffer"' to be ''
+
+ac4-readings.test.ts: 1 test, FAILS.
+  #853.8a18357d a logic item that reads the count of particles inside a region gets … ; a planted logic item …
+    ac4-readings.test.ts:46  AssertionError: the document whose logic item reads the published reading passes the
+      check: expected [ … ] to deeply equal []
+      "the drops, counted by a logic item that reads drops.in_gate: view3d drew no frame and answered
+       {"code":"logic_refused", … "what":"drops.in_gate names no control or logic item of this piece",
+       "read":"drops.in_gate"}"
+    The base publishes no reading of particles, so the right document fails the check; the planted document wasn't
+    reached. The probe put the base's answer to it through the refusal's judge: "a logic item that names drops.buffer
+    isn't refused as a checked document is ({code: "refused", issues})", so the planted half fails at the base too.
+
+ac5-budgets.test.ts: 2 tests, both FAIL.
+  #853.efbe6335 over 300 steps of 1,000,000 particles the checkpoint ring stays inside its byte budget …
+    ac5-budgets.test.ts:44  AssertionError: the flood played 300 steps: view3d drew its frames: expected 'bad_input:
+      "read flood.buffer: flood has no output buffer"' to be ''
+  #853.efbe6335 one step of 1,000,000 particles takes under 4 ms of GPU on the reference Mac …
+    ac5-budgets.test.ts:63 (helpers.ts: carriedOn)  AssertionError: timed run 0 of the flood: frame 1 (reply entry 1)
+      reports carried.flood.buffer; it reports no carried output: expected undefined to be defined
+    This test asks for no `read`, so the base drew its six runs of 301 frames, without the particles; no step ran, so
+    no timing was judged.
+
+ac6-taste.test.ts: 1 test, FAILS.
+  #853.a7fb57f6 the check run takes screenshots of the sand pile at 5 s and of particles bouncing off the moving floor …
+    ac6-taste.test.ts:57 (helpers.ts: carriedOn)  AssertionError: sand-pile-5s.png: frame 300 (reply entry 0) reports
+      carried.sand.buffer; it reports no carried output: expected undefined to be defined
+    It fails before a file is kept: docs/evidence/853/ wasn't created.
+
+The probe, before the files were run (16 s, the base's binary alone, the suite's own documents and readers):
+  - The pour's, the corridor's and the flood's documents less their particles item draw: a `physics.world@1` with no
+    `backend` field and only static boxes is baked. The lift less its beads draws 151 frames; the drawn floor's top is
+    within 2.2e-16 m of judges.ts's liftTop at every frame 50 to 150 (the test allows 1e-5), and the kinematic body's
+    own pose, drawn through a world output, within 5.7e-8 m: 0 m until frame 60, 0.02 m at 61, 1.2 m from 120 on.
+  - The 110-byte tally passes the logic module's check and runs. Reading `counter.n`, an i32 array of one element
+    another logic item writes its step's number into, it puts through the driver and `evaluate` the values 0, 0, 1,
+    2, … 10 at frames 0 to 11: at step k it reads what step k − 1 wrote, the order this suite takes for a reading.
+  - A live frame and an export frame of the tray with 4,096 closed-form particles, at frames 15, 30, 45 and 60: one
+    pixel hash each under `samples: {live: 1, export: 1}`, the export opened at the frame or played to it; four
+    different pictures. Under the look's default samples (1 live, 16 in an export) every one differs.
+  - A stepped operator (64 words, each plus 1 a step, a ring of 3 buffers): `carried`, `read`, `seeks` and `timings`
+    read through helpers.ts as written; frame k reads step k; the ring on each of 601 frames is judges.ts's ringHeld,
+    and the checkpoints taken its ringTaken; the seek from 600 to 150 restores {from: 0, steps: 150} with the play's
+    hash; 60, 30 and 144 frames a second give one buffer at step 150; `decide` and `golden` read PASS on the
+    recording, FAIL one ulp off, and INCONCLUSIVE, environment_changed, class same_machine, no numbers, naming both
+    GPUs under another GPU's name, which secondMachineProblems passes and, given this machine's PASS, fails.
+
+Not run: scripts/affected.mjs, preflight, any other suite, and nothing on an implementation (none was seen). No test
+passes at the base, so none is listed as passing. Unproven by any run: every assertion past each test's first, and
+both `--planted` runs, which only an implementation reaches; their judges were run on planted sets of numbers instead
+(judges.ts: plantedSetFailures, no failure).

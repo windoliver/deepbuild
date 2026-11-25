@@ -104,6 +104,12 @@ const at = (value: unknown, path: string): unknown => path.split('.').reduce<unk
  * holds none. Read from the file's last 64 KiB; kept once found, since a session doesn't change version.
  */
 const versions = new Map<string, string>();
+/** How many of the newest transcripts' versions are kept (#1866): an older one's file is read again. */
+const VERSIONS_KEPT = 256;
+function keepVersion(transcript: string, version: string): void {
+  versions.set(transcript, version);
+  if (versions.size > VERSIONS_KEPT) versions.delete(versions.keys().next().value!);
+}
 export function versionOf(transcript: string): string | undefined {
   const known = versions.get(transcript);
   if (known || !transcript) return known;
@@ -122,8 +128,7 @@ export function versionOf(transcript: string): string | undefined {
       try { entry = JSON.parse(lines[i]!); } catch { continue; }
       const version = isObj(entry) ? entry.version : undefined;
       if (typeof version !== 'string' || !version) continue;
-      if (versions.size > 4096) versions.clear();
-      versions.set(transcript, version);
+      keepVersion(transcript, version);
       return version;
     }
     // Codex's rollout names it once, in the session_meta that opens the file, whose line may outrun the window.
@@ -131,8 +136,7 @@ export function versionOf(transcript: string): string | undefined {
     readSync(fd, head, 0, head.length, 0);
     const named = /"cli_version"\s*:\s*"([^"]+)"/.exec(head.toString('utf8'))?.[1];
     if (named) {
-      if (versions.size > 4096) versions.clear();
-      versions.set(transcript, named);
+      keepVersion(transcript, named);
       return named;
     }
   } catch {
