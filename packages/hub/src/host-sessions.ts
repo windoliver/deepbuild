@@ -8,6 +8,8 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
+import { runnerConfig } from '@deepbuild/gate';
+import { scriptsOf, type Changes } from './claim-changes.js';
 import { claudeCommand, longestDeadline, ourGroups, withHooks } from './claude-settings.js';
 import { shellQuote as q } from './shell.js';
 import { syncPath, writeAtomic } from './vfs.js';
@@ -66,6 +68,18 @@ printf 'oid\t%s\ntext\t%s\n' "$o" "$(GIT_NO_REPLACE_OBJECTS=1 git -C "$1" -c cor
  */
 const FILES = String.raw`r=$(realpath -e -- "$1" 2>/dev/null) || { echo read; exit 0; }; max=$2; shift 2; i=0
 for p; do f=$(realpath -e -- "$r/$p" 2>/dev/null) && case "$f" in "$r"/*) [ -f "$f" ] && printf 'file\t%s\t%s\n' "$i" "$(head -c "$max" < "$f" | base64 -w0)" ;; esac; i=$((i + 1)); done; echo read`;
+/**
+ * What a folder there changed against a commit (#3511), as claim-changes reads it here: the files that differ from it,
+ * the untracked ones and the tracked ones with their index flags, each list in base64 with its paths unquoted, then
+ * package.json as the commit and the folder hold it. Each git read ends within `$3` seconds; one that fails says so
+ * on a line of its own, with its exit status.
+ */
+const CHANGES = String.raw`cd -- "$1" || { printf 'unread\t%s\n' "$(printf 'the folder %s could not be entered' "$1" | base64 -w0)"; echo read; exit 0; }
+g() { LC_ALL=C timeout -k 1 "$S" git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.quotePath=false "$@" 2>/dev/null; }
+one() { n=$1; shift; if o=$(g "$@"); then printf '%s\t%s\n' "$n" "$(printf '%s' "$o" | base64 -w0)"; else x=$?; printf 'unread\t%s\n' "$(printf 'git %s exited %s' "$*" "$x" | base64 -w0)"; fi; }
+S=$3; one diff diff --name-only --no-renames "$2"; one others ls-files --others --exclude-standard; one tracked ls-files -v
+one has ls-tree --name-only "$2" -- package.json; if [ -n "$(g ls-tree --name-only "$2" -- package.json)" ]; then one was show "$2:package.json"; fi
+[ -f package.json ] && printf 'now\t%s\n' "$(head -c 1048576 package.json | base64 -w0)"; echo read`;
 /** A prompt's own entry in a session's transcript there, among its last 4 MiB, as turn-loops' turnFrom finds one here. */
 const PROMPT = String.raw`[ -f "$1" ] && tail -c 4194304 -- "$1" | grep -F -- "$2" | grep -F -m 1 '"promptId"'; true`;
 /** Claude Code's own record there of the folders you trusted. */
@@ -250,6 +264,36 @@ export class HostSessions {
     const r = asked.length ? await this.o.hosts.read(host, [cwd, String(max), ...asked], FILES) : { code: 0, stdout: 'read\n', stderr: '' };
     if (r.code !== 0 || !r.stdout.endsWith('read\n')) throw Error(`the session's folder on ${host} couldn't be read over SSH: ${r.stderr.trim().slice(-300)}`);
     return new Map(r.stdout.split('\n').map((l) => l.split('\t')).filter((l) => l[0] === 'file' && asked[Number(l[1])] !== undefined).map((l) => [asked[Number(l[1])]!, Buffer.from(l[2] ?? '', 'base64')]));
+  }
+  /**
+   * What a claim changed in its session's folder on its host against `base`, as changesOf reads one here (#3511), all
+   * of it within `ms`. A read that failed there, a link that didn't answer and a read past `ms` are its `unread`,
+   * naming which: then nothing is known of what it changed.
+   */
+  async changes(host: string, cwd: string, base: string, ms: number): Promise<Changes> {
+    const unread = (why: string): Changes => ({ changed: [], configs: new Map(), scripts: false, unread: `on ${host}, ${why}` });
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<Changes>((done) => { timer = setTimeout(() => done(unread(`the read of what the claim changed ran past its ${Math.ceil(ms)} ms deadline`)), ms); });
+    const read = (async (): Promise<Changes> => {
+      const r = await this.o.hosts.read(host, [cwd, base, String(Math.max(1, Math.floor(ms / 1000)))], CHANGES);
+      if (r.code !== 0 || !r.stdout.endsWith('read\n')) return unread(`the read of what the claim changed didn't end (ssh exit ${String(r.code)}: ${r.stderr.trim().slice(-200)})`);
+      const lines = r.stdout.split('\n').map((l) => l.split('\t'));
+      const text = (name: string): string[] => lines.filter((l) => l[0] === name).map((l) => Buffer.from(l[1] ?? '', 'base64').toString('utf8'));
+      const list = (name: string): string[] => text(name).flatMap((t) => t.split('\n').filter(Boolean));
+      const failed = text('unread');
+      if (failed.length) return unread(failed.join('; '));
+      const [diff, others, flagged] = [list('diff'), list('others'), list('tracked')];
+      // A file the index is told not to compare (assume-unchanged, skip-worktree) is never listed as changed, and a
+      // path git still quotes names no file: either way what changed isn't known.
+      const hidden = flagged.filter((l) => /^[a-zS] /.test(l)).map((l) => l.slice(2));
+      if (hidden.length) return unread(`git compares ${hidden.length} file${hidden.length === 1 ? '' : 's'} with nothing (${hidden.slice(0, 3).join(', ')}): the index is told to assume ${hidden.length === 1 ? 'it' : 'them'} unchanged`);
+      const tracked = flagged.map((l) => l.slice(2));
+      const quoted = [...diff, ...others, ...tracked].find((path) => path.startsWith('"'));
+      if (quoted) return unread(`git names a path it can't list plainly (${quoted})`);
+      const configs = new Map([...await this.files(host, cwd, [...new Set([...tracked, ...others].filter(runnerConfig))], 1 << 20)].map(([path, bytes]) => [path, bytes.toString('utf8')]));
+      return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts: diff.includes('package.json') && scriptsOf(text('was')[0]) !== scriptsOf(text('now')[0]) };
+    })().catch((error: unknown) => unread(error instanceof Error ? error.message : String(error)));
+    return Promise.race([read, late]).finally(() => clearTimeout(timer));
   }
   /** A file a session's folder on its host holds, whole: a drafted check's bytes, as ask-tasks' bytesOf reads one here. */
   async bytesOf(host: string, cwd: string, path: string): Promise<Uint8Array | undefined> {

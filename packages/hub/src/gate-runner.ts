@@ -88,6 +88,8 @@ export interface GateOptions {
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
   start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant; memory?: Admission; /** The host the run is on, in `cwd` there (#999). */ host?: string }): Promise<string>;
+  /** What a claim changed in its session's folder on a host against `base`, read there within `ms` (#3511); a failed read is its `unread`, never no change. */
+  changesOn?(host: string, cwd: string, base: string, ms: number): Promise<Changes>;
   /** The call that spent a task's held-out variant, by its files (#3229); a runner without it knows of none. */
   spent?(task: string, files: Record<string, string>): Spent | undefined;
   /** The start a check's stack needs now, added to its expected time (#580). */
@@ -173,7 +175,7 @@ const LOAD_WAIT_MS = 30 * 60_000;
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
 /** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
 interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
-export interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
+export interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean; /** The host its session is on (#999): its runs there record no read files. */ host?: string }
 /** The least time a read of what a claim changed is given (#1869). */
 const READ_FLOOR_MS = 5_000;
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
@@ -568,7 +570,7 @@ export class GateRunner {
   private ownChanged(c: Claim, e: Entry): string[] {
     if (!c.changes || e.check.check === DEFINITION) return [];
     const plant = this.o.plant === 'edited-check-approved' || this.o.plant === 'own-files-test-folders-only' ? this.o.plant : undefined;
-    return ownChanges(c.changes, this.headOf(e)?.read ?? [], plant);
+    return ownChanges(c.changes, c.host ? null : this.headOf(e)?.read ?? [], plant);
   }
   /** The files a check's last run on the snapshot read under the test, fixture and script folders: its own (#875). */
   private ownOf(e: Entry): string[] {
@@ -630,7 +632,7 @@ export class GateRunner {
         const mine = e.check.source === 'own' || unread ? [] : this.ownChanged(c, e);
         const { runs, needed } = this.unspent(c, e, this.runsOf(c, e, carried), spent);
         if (unread) owns.push(`${e.check.check} counts as the agent's own: what the claim changed couldn't be read (${unread})`);
-        if (mine.length) owns.push(`${e.check.check} counts as the agent's own: the claim changed ${mine.join(', ')}, which it loads`);
+        if (mine.length) owns.push(`${e.check.check} counts as the agent's own: the claim changed ${mine.join(', ')}, which ${c.host ? `it may load (its run on ${c.host} records no read files)` : 'it loads'}`);
         return {
           check: e.check.check, command: e.check.command, source: mine.length || unread ? 'own' as const : e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
           ...(needed !== undefined ? { needed } : {}), ...(e.check.min_tests !== undefined ? { min_tests: e.check.min_tests } : {}),
@@ -740,7 +742,7 @@ export class GateRunner {
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
   async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; state?: StatePin; host?: string }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
-    if (r.host) return stopOnHost({ claims: this.claims, definition: (c, d, s) => this.definitionEntry(c, d, s), cantStart: (e, error) => this.cantStart(e, error), o: this.o }, { ...r, host: r.host });
+    if (r.host) return stopOnHost({ claims: this.claims, definition: (c, d, s) => this.definitionEntry(c, d, s), cantStart: (e, error) => this.cantStart(e, error), o: this.o, readMs: Math.max(READ_FLOOR_MS, (r.stopAt + this.o.hold_ms - this.o.now()) / 2) }, { ...r, host: r.host });
     // The snapshot and the checkout share one budget (#31): past it the claim is INCONCLUSIVE, naming the reason and
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();

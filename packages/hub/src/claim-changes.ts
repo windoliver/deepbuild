@@ -10,6 +10,8 @@ import { runnerConfig } from '@deepbuild/gate';
  * and, where a read of them failed or ran past its deadline, which one and why (#1869): then nothing is known of what it changed.
  */
 export interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean; unread?: string }
+/** A package.json's scripts, as text to compare: whether they changed is whether a check's script target did. */
+export const scriptsOf = (text: string | undefined): string => { try { return JSON.stringify((JSON.parse(text ?? '{}') as { scripts?: unknown }).scripts ?? null); } catch { return 'unreadable'; } };
 /** Read as the snapshot's git reads are bounded (#1869): fsmonitor off, up to 1 GB of output (its untracked listing's), and all of them ended within `ms`, by SIGKILL. */
 export async function changesOf(cwd: string, base: string, ms: number): Promise<Changes> {
   const deadline = Date.now() + ms;
@@ -42,7 +44,6 @@ export async function changesOf(cwd: string, base: string, ms: number): Promise<
     if (text !== undefined) configs.set(path, text);
   }
   // Whether package.json's scripts changed: the script a check runs is its own.
-  const scriptsOf = (text: string | undefined): string => { try { return JSON.stringify((JSON.parse(text ?? '{}') as { scripts?: unknown }).scripts ?? null); } catch { return 'unreadable'; } };
   const scripts = diff.includes('package.json') && scriptsOf((await git(['show', `${base}:package.json`], true)).join('\n')) !== scriptsOf(await readFile(join(cwd, 'package.json'), 'utf8').catch(() => undefined));
   return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts, ...(unread.length ? { unread: unread.join('; ') } : {}) };
 }

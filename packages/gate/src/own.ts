@@ -51,11 +51,13 @@ function loadedByTool(changes: Changes): ReadonlySet<string> {
  * those under the repo's test, fixture and script folders; and, wherever they lie, the files the test tool loads by its
  * own discovery rules: a runner's config, pytest's conftest.py, and any file a runner config names, such as a setup
  * file; and the root package.json when its scripts changed and the run read it. `configs` holds each runner config
- * the claim's tree has, by path, with its text; `scripts`, whether the claim changed package.json's scripts.
+ * the claim's tree has, by path, with its text; `scripts`, whether the claim changed package.json's scripts. A `read`
+ * of null is a run that recorded none (one on a host, #3511): what isn't known never reads as not read, so every
+ * changed file counts as read.
  */
-export function ownChanges(changes: Changes, read: readonly string[], plant?: ChangesPlant): string[] {
+export function ownChanges(changes: Changes, read: readonly string[] | null, plant?: ChangesPlant): string[] {
   if (plant === 'edited-check-approved') return [];
-  const reads = new Set(read);
+  const reads = read === null ? { has: () => true } : new Set(read);
   // A package.json whose scripts changed, which the run read: the script target it runs is the check's own.
   const script = (path: string): boolean => path === 'package.json' && changes.scripts && reads.has(path);
   const loaded = plant === 'own-files-test-folders-only' ? undefined : loadedByTool(changes);
