@@ -186,6 +186,11 @@ pub struct Notifier {
     told_at: Option<u64>,
     /// The asks this notifier saw opened, which notify once they show (#1345).
     opened: HashSet<String>,
+    /// The asks that came due and posted nothing, for the session you're looking at or with notifications off, since
+    /// they were last taken: what the window says instead (#3232).
+    unposted: Vec<String>,
+    /// The asks the window said as they opened (#3232): each posts nothing when it comes due.
+    said: HashSet<String>,
 }
 
 impl Notifier {
@@ -204,7 +209,19 @@ impl Notifier {
             told: HashSet::new(),
             told_at: None,
             opened: HashSet::new(),
+            unposted: Vec::new(),
+            said: HashSet::new(),
         }
+    }
+
+    /// The window said the ask `handle` as it opened (#3232): it posts nothing, so nothing is heard twice.
+    pub fn said(&mut self, handle: String) {
+        self.said.insert(handle);
+    }
+
+    /// The asks that came due and posted nothing since this was last asked, in the order they came due (#3232).
+    pub fn take_unposted(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.unposted)
     }
 
     /// The app read `setting` at `now`: asks missed while it was off and still open post once it allows.
@@ -391,6 +408,9 @@ impl Notifier {
         // its first ask, saying how many it holds.
         let mut batches: Vec<(&[String], usize, usize)> = Vec::new();
         for (handle, _) in due {
+            if self.said.remove(&handle) {
+                continue;
+            }
             let Some(ask) = open.iter().find(|ask| states::handle(ask) == handle) else {
                 continue;
             };
@@ -401,10 +421,12 @@ impl Notifier {
             }
             let session = ask["session"].as_str().unwrap_or_default();
             if looking_at == Some(session) {
+                self.unposted.push(handle);
                 continue;
             }
             if self.setting.off() {
                 if !self.missed.iter().any(|(ask, _)| *ask == handle) {
+                    self.unposted.push(handle.clone());
                     self.missed.push((handle, session.to_owned()));
                 }
                 continue;
@@ -468,7 +490,7 @@ pub fn reads(event: &Value) -> bool {
 }
 
 /// The asks a showing of the core's holds (#1345): `ask.batched`, at a visit or at once.
-fn showing(event: &Value) -> Option<Vec<String>> {
+pub(crate) fn showing(event: &Value) -> Option<Vec<String>> {
     (event["kind"] == "ask.batched" && event["writer"] == "core").then(|| {
         event["data"]["asks"]
             .as_array()

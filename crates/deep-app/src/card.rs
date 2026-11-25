@@ -391,7 +391,13 @@ pub fn tick(now: u64, cx: &mut App) {
     shown.update(cx, |card, cx| {
         // The card draws again when its state differs from the one it drew: arming, or a move that presented it again
         // after it drew (#1482). A tick that changes neither draws nothing.
+        let seq = card.controller.as_ref().map(Controller::seq);
         let replaced = card.catch_up();
+        // Its content changed and it was presented again, unarmed: the window says so (#3232).
+        let again = card.controller.as_ref().filter(|c| Some(c.seq()) != seq);
+        if let Some(question) = again.map(|c| c.model().question.clone()) {
+            crate::said::question_changed(&ask, &question, cx);
+        }
         let moved = replaced
             || card
                 .controller_mut()
