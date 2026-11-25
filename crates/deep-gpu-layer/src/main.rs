@@ -67,6 +67,7 @@ mod scene;
 mod seam;
 mod serve;
 mod session3;
+mod shader_layout;
 mod simplify;
 mod spawn;
 mod status;
