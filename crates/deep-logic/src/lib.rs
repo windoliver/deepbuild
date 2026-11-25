@@ -15,10 +15,12 @@ pub mod bindings;
 pub mod budget;
 pub mod carry;
 pub mod checks;
+pub mod circuit;
 pub mod draws;
 pub mod first_party;
 mod fixtures;
 pub mod fog;
+mod golden;
 pub mod grid_bot;
 pub mod interfaces;
 pub mod judder;
@@ -54,6 +56,7 @@ use deep_canvas::registry::{BuildSet, Registry};
 use deep_canvas_sandbox::rewrite;
 use serde_json::{json, Map, Value};
 
+use golden::{checkpoint_hashes, runtime_digest, ulps};
 pub use module::module;
 use piece::{History, Piece};
 use world::{track_of, Entry, Record, World};
@@ -130,19 +133,6 @@ fn cpu() -> String {
     named
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| std::env::consts::ARCH.to_string())
-}
-
-/// How many representable f64 values lie between a and b.
-fn ulps(a: f64, b: f64) -> u64 {
-    let ordered = |x: f64| {
-        let i = x.to_bits() as i64;
-        if i < 0 {
-            i64::MIN - i
-        } else {
-            i
-        }
-    };
-    ordered(a).abs_diff(ordered(b))
 }
 
 const F: i64 = 705_600_000;
@@ -251,36 +241,6 @@ fn track(piece: &Piece, line: &Value, steps: i64, planted: &Planted) -> Option<V
     }
     entries.sort_by_key(|e| (e.t, e.player, e.seq));
     Some(entries)
-}
-
-/// A golden's checkpoint hashes from each item's checkpoints: each one's step and deep hash, and
-/// never the time taking it took (`ns`), which differs from run to run.
-fn checkpoint_hashes(checkpoints: &Value) -> Value {
-    let hashes = |list: &Value| -> Option<Value> {
-        let list = list.as_array()?.iter();
-        Some(
-            list.map(|c| json!({"step": c["step"], "deep_hash": c["deep_hash"]}))
-                .collect(),
-        )
-    };
-    let items = checkpoints.as_object().into_iter().flatten();
-    Value::Object(
-        items
-            .filter_map(|(id, list)| Some((id.clone(), hashes(list)?)))
-            .collect(),
-    )
-}
-
-/// The runtime digest a golden carries: the seal's, of the set this crate's runner holds, the
-/// logic and sandbox modules (Registry and seal: runtime digest; #1920). Both are bit and
-/// canonical, so a new patch of the sandbox's engine leaves it as it was.
-fn runtime_digest() -> String {
-    Registry::new(BuildSet::Full)
-        .with(module())
-        .with(deep_canvas_sandbox::module::module())
-        .seal()
-        .expect("the logic and sandbox modules seal together")
-        .runtime_digest
 }
 
 /// The logic module in this process: its planted twin, the layouts each item ID has had, and
@@ -1034,7 +994,7 @@ impl Logic {
                     .map(|e| {
                         let (kind, from, offset) = match &e.read {
                             piece::Read::Control => ("control", Value::Null, 0),
-                            piece::Read::Reading { .. } | piece::Read::World | piece::Read::Draws => unreachable!("refused above"),
+                            piece::Read::Reading { .. } | piece::Read::World | piece::Read::Count | piece::Read::Centre | piece::Read::Draws => unreachable!("refused above"),
                             piece::Read::Array { item, offset } => ("array", json!(item), *offset),
                             piece::Read::Seed => ("seed", Value::Null, 0),
                             piece::Read::Carry => ("carry", Value::Null, 0),

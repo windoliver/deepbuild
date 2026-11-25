@@ -27,7 +27,12 @@ impl Hub<'_> {
             self.media.exports
         ));
         self.media.exports += 1;
-        let result = self.export_inner(job, doc, &scratch);
+        // #231: the receipt's `wall` runs from the command to the file, and its `prepare` holds
+        // what the export compiles and decodes from here on.
+        let began = self.began();
+        self.media.readings = job.readings.clone();
+        let result = self.export_inner(job, doc, &scratch, began);
+        self.media.readings = Vec::new();
         self.media.captions = None;
         // #518: an encode job the export opened and didn't finish is ended first, so its tool
         // has let go of what it wrote before that is removed.
@@ -50,10 +55,13 @@ impl Hub<'_> {
                 if self.scenario.planted != Some(Planted::ReceiptOmitsRuntimeDigest) {
                     receipt["runtime_digest"] = json!(self.startup.sealed.runtime_digest);
                 }
-                let readback = receipt.as_object_mut().and_then(|r| r.remove("readback"));
+                let mut beside = |key: &str| receipt.as_object_mut().and_then(|r| r.remove(key));
+                let lifted = ["readback", "work", "reports"].map(|key| (key, beside(key)));
                 let mut reply = json!({"outcome": "exported", "receipt": receipt});
-                if let Some(r) = readback {
-                    reply["readback"] = r;
+                for (key, value) in lifted {
+                    if let Some(v) = value {
+                        reply[key] = v;
+                    }
                 }
                 reply
             }
@@ -71,6 +79,7 @@ impl Hub<'_> {
         job: &Job,
         mut doc: Value,
         scratch: &Path,
+        began: work::Began,
     ) -> Result<Value, Value> {
         let refuse = |code: &str| json!({"code": code});
         if job.software {
@@ -556,8 +565,14 @@ impl Hub<'_> {
             .map(|b| f32::from_le_bytes(*b))
             .collect();
         drop(pcm);
-        // #157: the machine's GPU lease, held while the export draws and reads its frames.
-        let lease = Lease::take();
+        // #157, #3219: the machine's GPU lease, exclusive, held while the export draws and reads its frames.
+        let planted = self.scenario.module_planted.clone();
+        let lease = crate::kit::lease::GpuLease::take(
+            crate::kit::lease::Mode::Exclusive,
+            "deep-show export",
+            None,
+            planted.as_deref(),
+        );
         let first = start_number + frames.start as u64;
         let tc_start = match self.scenario.planted {
             Some(Planted::RangeRestartsTimecode) => start_number,
@@ -572,6 +587,8 @@ impl Hub<'_> {
         let looping =
             passes && doc.pointer("/transport/loop").and_then(Value::as_str) == Some("wrap");
         let seen = run.seen.take().ok_or_else(|| refuse("no_frames"))?;
+        // #231: which frames were held: the frame before them again.
+        let held = seen.held();
         let (hashes, reads, wrap) = seen.finish(looping).map_err(|()| {
             stopped(
                 frames.end - 1,
@@ -580,6 +597,7 @@ impl Hub<'_> {
             )
         })?;
         // #157: frames.finite, film.blank and film.wrap, from what the GPU read of each frame.
+        let guarded = std::time::Instant::now();
         let mut issues = std::mem::take(&mut run.nonfinite);
         issues.extend(self.frame_guards(
             &doc,
@@ -593,9 +611,15 @@ impl Hub<'_> {
         if !issues.is_empty() {
             return Err(json!({"outcome": "failed", "code": "export.frames", "issues": issues}));
         }
+        run.phases.guards += guarded.elapsed();
         let size = run.size;
         let encoder =
             self.sink_finish(sink, job, &target, &entry, &temp, &audio, hz, &tc, tc_start)?;
+        // #231: what the hand-off took, and how long the tool was busy encoding.
+        let spent = |i: usize| encoder["spent"][i].as_f64().unwrap_or(0.0).max(0.0);
+        run.phases.handoff += std::time::Duration::from_secs_f64(spent(0));
+        run.phases.encode += std::time::Duration::from_secs_f64(spent(1));
+        let (guarded, prepared) = (std::time::Instant::now(), self.preparing());
         // #518: a delivery check that fails comes after every frame is hashed: its reply holds
         // the hashes the receipt would have held.
         let hashed = |mut e: Value| {
@@ -608,7 +632,9 @@ impl Hub<'_> {
         let (mut probe, mut read, mut found) = (Value::Null, None, Vec::new());
         // The probe is the build's own encoder's: a plug-in's tool is held to its delivery alone.
         let own = matches!(tool.as_ref().map(|t| &t.run), Some(tools::Run::Own(_)));
-        if target == "video" && own {
+        // #231: a draft runs film.blank and frames.finite, above, but not the delivery decode:
+        // neither the colour probe nor the read of its own bytes.
+        if target == "video" && own && !job.draft {
             match self.color_probe(job, size, (p, q), scratch) {
                 Ok(p) => probe = p,
                 Err(e) if e["outcome"] == "failed" => {
@@ -617,7 +643,7 @@ impl Hub<'_> {
                 Err(e) => return Err(e),
             }
         }
-        if target == "video" || target == "png" {
+        if (target == "video" || target == "png") && !job.draft {
             let pcm = mix.as_ref().map(|_| (&raw[..], 2, hz));
             let d = fidelity::Delivery {
                 path: &temp,
@@ -635,6 +661,7 @@ impl Hub<'_> {
                     .then_some(&run.kept[..]),
                 priming: encoder.pointer("/audio/priming").and_then(Value::as_i64),
                 reads: &reads,
+                held: &held,
             };
             match self.read_delivery(&d) {
                 Ok(r) => read = Some(r),
@@ -651,9 +678,14 @@ impl Hub<'_> {
                 json!({"outcome": "failed", "code": "export.delivery", "issues": found}),
             ));
         }
+        let preparing = self.preparing() - prepared;
+        run.phases.guards += guarded.elapsed().saturating_sub(preparing);
+        if let Some(n) = read.as_ref().and_then(|r| r.fidelity["redrawn"].as_u64()) {
+            (run.work.redraws, run.work.rehashes) = (n, n);
+        }
         // #502: the readings of the decoded delivery, held to the profile too.
         let mut delivered = None;
-        if sound.is_some() {
+        if sound.is_some() && !job.draft {
             let Some((rate, channels, samples)) = read.as_ref().and_then(|r| r.pcm.as_ref()) else {
                 return Err(
                     json!({"code": "delivery_unread", "why": "the delivery holds no sound"}),
@@ -670,6 +702,16 @@ impl Hub<'_> {
             let _ = std::fs::remove_file(&temp);
             let _ = std::fs::remove_dir_all(&temp);
         };
+        // #231: a draft is marked in the store by its bytes before it takes its name, so no Send
+        // ever takes it; a delivery of the same bytes clears that mark.
+        let marked = match job.draft {
+            true => self.mark_draft(&temp),
+            false => self.clear_drafts(&temp),
+        };
+        if marked.is_err() {
+            drop_temp();
+            return Err(refuse("export_unwritable"));
+        }
         // #502: the sidecars, beside the delivery under its name, whole or not at all.
         let mut sidecars: Vec<(PathBuf, PathBuf)> = Vec::new();
         if let Some(l) = &laid {
@@ -711,6 +753,8 @@ impl Hub<'_> {
             let _ = std::fs::remove_file(&out);
             return Err(json!({"code": "export_unwritable", "why": e.to_string()}));
         }
+        // #231: the file is at its name: the receipt's `wall` runs from the command to here.
+        let wall = began.wall();
         // Planted: the png writer writes a baked channel back into the document.
         if target == "png" && self.scenario.planted == Some(Planted::TargetWritesBakedChannel) {
             self.bake_back(&job.doc, &doc);
@@ -724,12 +768,7 @@ impl Hub<'_> {
             .session
             .clone()
             .unwrap_or_else(|| format!("process {}", std::process::id()));
-        let key = adapter
-            .as_ref()
-            .and_then(|a| a["name"].as_str())
-            .unwrap_or("gpu")
-            .to_string();
-        let lease = lease.release(&holder, &key);
+        let lease = lease.release(&holder, planted.as_deref());
         let hidden: Vec<&String> = match entry["hidden"].as_str() {
             Some("listed") => doc["items"]
                 .as_object()
@@ -750,7 +789,8 @@ impl Hub<'_> {
             "timecode": {"start": self.label(&tc, tc_start), "last": self.label(&tc, tc_start + count.max(1) as u64 - 1), "drop_frame": job.drop_frame},
             "encoder": encoder["encoder"],
             "handoff": encoder["handoff"].as_str().unwrap_or("copy"),
-            "timing": {"open": encoder["open"]},
+            "purpose": if job.draft { "draft" } else { "delivery" },
+            "reused_frames": run.work.reused,
             "adapter": adapter.unwrap_or_else(|| json!({"name": null, "software": false})),
             "shards": n,
             "hidden": hidden,
@@ -802,7 +842,27 @@ impl Hub<'_> {
                 "violations": [],
             });
         }
+        // #231: each phase's busy time beside the wall time from the command to the file, which
+        // is now at its name; #518's `open` stays beside them.
+        // `prepare` holds every compile and asset decode the export made, whenever it happened,
+        // as the reply's `reports` list them; an export that made none started warm.
+        let under_draw = self.guard_planted(Guard::BooksCompilesUnderDraw);
+        let (reports, prepared) = self.reports(began.mark, under_draw);
+        run.phases.prepare = prepared;
+        let made = |list: &str| reports[list].as_array().is_some_and(|l| !l.is_empty());
+        let cold = made("compiles") || made("decodes");
+        receipt["start"] = json!(if cold { "cold" } else { "warm" });
+        // Planted: `wall` is the sum of the phases, which overlap.
+        let wall = match self.guard_planted(Guard::WallSumsPhases) {
+            true => run.phases.sum(),
+            false => wall,
+        };
+        receipt["timing"] = run.phases.json(wall);
+        receipt["timing"]["open"] = encoder["open"].clone();
         let mut reply = json!(receipt);
+        // The export's work counters and its reports, which the reply holds beside the receipt.
+        reply["work"] = run.work.json(!self.guard_planted(Guard::HashesOnCpu));
+        reply["reports"] = reports;
         if job.readback {
             reply["readback"] = json!({"frames": run.back});
         }
@@ -881,6 +941,7 @@ impl Hub<'_> {
                 },
                 |r| r.writer.clone(),
             ),
+            patch: None,
             hash,
             state: "current",
             doc: baked,

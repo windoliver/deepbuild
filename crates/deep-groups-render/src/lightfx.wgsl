@@ -53,13 +53,17 @@ struct U {
 @group(0) @binding(1) var src: texture_2d<f32>;
 // Each occluder segment's ends in px, a.xy then b.xy.
 @group(0) @binding(2) var<storage, read> segs: array<vec4<f32>>;
-// Each casting light's 1025 bin offsets, then its bins: per outline a word with RUN set and its
-// winding number round the light plus 32768, then its segments' indices. A bin holds every
-// segment a pixel centred in it can meet at any of its points.
+// Each casting light's 1025 bin offsets, then its 1024 bins' corners, then its bins: per outline
+// a word with RUN set and its winding number round the light plus 32768, then its segments'
+// indices. A bin holds every segment a pixel centred in it can meet at any of its points. A
+// bin's corner is the segment its split starts from, twice, plus 1 where the outline lies on
+// the side a ray reads as 0 or more.
 @group(0) @binding(3) var<storage, read> words: array<u32>;
-// Each casting light's bins' near and far, px from a point light or along a sun's rays: nearer
-// than near nothing in the bin blocks a pixel, and from far on an outline blocks all of it.
-@group(0) @binding(4) var<storage, read> bounds: array<vec2<f32>>;
+// #2844: each casting light's bins' zones, px from a point light or along a sun's rays: nearer
+// than x nothing in the bin blocks a pixel; from y on an outline blocks all of it; and from z to
+// w a pixel is behind one outline's silhouette and nothing else, blocked on the outline's side
+// of the ray through the bin's corner.
+@group(0) @binding(4) var<storage, read> bounds: array<vec4<f32>>;
 // What the layer drew before the group, where the pass lays the lit children over it.
 @group(0) @binding(5) var back: texture_2d<f32>;
 // #2053: the run's normal page, as stored.
@@ -69,6 +73,8 @@ const BINS: f32 = 1024.0;
 const RUN: u32 = 0x80000000u;
 // How far from its centre a pixel is tested at most, with room for what f32 loses.
 const FOOT: f32 = 0.46;
+// The least part of its two products a side is, 2^-20, for its sign to be sure in f32.
+const SURE: f32 = 0.00000095367431640625;
 
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
@@ -119,7 +125,8 @@ fn share(i: u32, p: vec2<f32>) -> f32 {
         key = length(v);
     }
     let bound = bounds[bins.y + bin];
-    if (key + FOOT <= bound.x) {
+    // Past an outline's near side a pixel is inside it, which the planted pass shadows.
+    if (key + FOOT <= bound.x && (u.flags & 8u) == 0u) {
         return 1.0;
     }
     if (key - FOOT >= bound.y) {
@@ -138,6 +145,19 @@ fn share(i: u32, p: vec2<f32>) -> f32 {
     let inside_too = vec4<bool>((u.flags & 8u) != 0u);
     let none = vec4<i32>(0);
     let zero = vec4<f32>(0.0);
+    if (key - FOOT >= bound.z && key + FOOT <= bound.w) {
+        // Behind one silhouette alone: lit where the corner lies on the outline's side of the
+        // ray. A point as near the corner's ray as f32 can tell is left to the segments.
+        let corner = words[bins.x + u32(BINS) + 1u + bin];
+        let s = segs[corner >> 1u];
+        let ax = vec4<f32>(s.x) - x;
+        let ay = vec4<f32>(s.y) - y;
+        let sa = dx * ay - dy * ax;
+        if (all(abs(sa) > (abs(dx * ay) + abs(dy * ax)) * SURE)) {
+            let lit = (sa >= zero) == vec4<bool>((corner & 1u) != 0u);
+            return dot(select(vec4<f32>(0.0), vec4<f32>(0.25), lit), vec4<f32>(1.0));
+        }
+    }
     var k = words[bins.x + bin];
     let end = words[bins.x + bin + 1u];
     var crossings = none;
@@ -236,6 +256,10 @@ fn lit(pos: vec4<f32>, casts: bool) -> vec4<f32> {
                     reach = 1.0 - sqrt(q);
                 }
             }
+        }
+        // #2844: a light out of reach adds nothing, and casts nothing to test.
+        if (casts && reach == 0.0) {
+            continue;
         }
         var term = l.at.w * reach * l.color.rgb;
         let h = u.heights[i / 4u][i % 4u];

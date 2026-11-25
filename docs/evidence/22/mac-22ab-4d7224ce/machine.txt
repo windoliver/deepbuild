@@ -1,0 +1,16 @@
+Mac15,12
+Apple M3
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B131
+Now drawing from 'AC Power'
+ lowpowermode         0
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+node v24.22.0
+          Resolution: 2560 x 1664 Retina
+          Resolution: 3840 x 2160 (2160p/4K UHD 1 - Ultra High Definition)
+          UI Looks like: 1920 x 1080 @ 30.00Hz
+free disk before 58812892 KB
+start 2026-11-18 12:24:48 12:24  up 5 days,  5:26, 2 users, load averages: 6.90 5.90 4.83 thermalState 1
+free disk after 41306344 KB
+end 2026-11-18 13:38:33 13:38  up 5 days,  6:40, 2 users, load averages: 7.64 10.73 22.71

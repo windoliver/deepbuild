@@ -1,0 +1,35 @@
+{
+  "id": "dial.grid",
+  "version": "1.0",
+  "title": "Grid",
+  "license": "MIT",
+  "author": "the #1857 acceptance suite",
+  "description": "per_side rows.",
+  "inputs": {
+    "per_side": {
+      "type": "integer",
+      "default": 2,
+      "min": 1,
+      "max": 1024,
+      "about": "how many rows, cells a row and dots a cell"
+    }
+  },
+  "steps": {
+    "rows": {
+      "op": "recipe",
+      "kind": "dial.row@1",
+      "params": {
+        "per_side": "per_side"
+      },
+      "repeat": {
+        "count": "per_side",
+        "as": "i"
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "rows"
+    ]
+  }
+}

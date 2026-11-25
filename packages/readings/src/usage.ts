@@ -6,33 +6,45 @@ import { join } from 'node:path';
 import type { Cost } from './types.js';
 
 export interface Tokens { input: number; output: number; cache_write: number; cache_read: number }
-/** USD per million tokens. A model is priced by its exact name, or that name with a `-<date>` after it; any other model is unpriced. */
-export interface RateCard { name: string; models: Record<string, { input: number; output: number; cache_write: number; cache_read: number }> }
-export interface UsageCount { totals: Tokens & { unknown_turns: number }; turns: { turn: string; usage: Tokens | null }[]; cost: Cost }
+/** `cache_write`'s two parts, by the lifetime each record's own split gives; what is left of it came with no split. */
+export interface Split extends Tokens { cache_write_5m: number; cache_write_1h: number }
+/**
+ * USD per million tokens; `cache_write` is the five-minute write's price and `cache_write_1h` the one-hour write's. A
+ * model is priced by its exact name, or that name with a `-<date>` after it; any other model is unpriced, and so is a
+ * model whose row lacks either write price, so no write is ever priced by the other kind's.
+ */
+export interface RateCard { name: string; models: Record<string, { input: number; output: number; cache_write?: number; cache_write_1h?: number; cache_read: number }> }
+export interface UsageCount { totals: Split & { unknown_turns: number }; turns: { turn: string; usage: Tokens | null }[]; cost: Cost }
 
-const price = (input: number, output: number, cache_write: number, cache_read: number) => ({ input, output, cache_write, cache_read });
-const OPUS_41 = price(15, 75, 18.75, 1.5);
-const OPUS_45 = price(5, 25, 6.25, 0.5);
-const SONNET_4 = price(3, 15, 3.75, 0.3);
-const MYTHOS = price(10, 50, 12.5, 1);
-const MYTHOS_51 = price(10, 50, 12.5, 0.25);
-/** Anthropic's list prices, from the table ccusage reads (LiteLLM's), as it stood on 2026-10-30. */
+const price = (input: number, output: number, cache_write: number, cache_write_1h: number, cache_read: number) => ({ input, output, cache_write, cache_write_1h, cache_read });
+const OPUS_41 = price(15, 75, 18.75, 30, 1.5);
+const OPUS_45 = price(5, 25, 6.25, 10, 0.5);
+const SONNET_4 = price(3, 15, 3.75, 6, 0.3);
+const MYTHOS = price(10, 50, 12.5, 20, 1);
+const MYTHOS_51 = price(10, 50, 12.5, 20, 0.25);
+/**
+ * Anthropic's list prices, from the table ccusage reads (LiteLLM's), as it stood on 2026-10-30. The write prices are
+ * its prompt caching page's two, read on 2026-11-22: five minutes at 1.25 times the input price, one hour at 2 times.
+ */
 const SHIPPED_RATE_CARD: RateCard = {
   name: 'anthropic-list-2026-10',
   models: {
     'claude-fable-5': MYTHOS, 'claude-fable-5-1': MYTHOS_51, 'claude-mythos-5': MYTHOS, 'claude-mythos-5-1': MYTHOS_51,
-    'claude-opus-5-5': price(4, 20, 5, 0.2), 'claude-opus-5': OPUS_45,
-    'claude-sonnet-5-5': price(2, 10, 2.5, 0.1), 'claude-sonnet-5': price(2, 10, 2.5, 0.2),
-    'claude-haiku-5-5': price(0.1, 0.5, 0.125, 0.01),
+    'claude-opus-5-5': price(4, 20, 5, 8, 0.2), 'claude-opus-5': OPUS_45,
+    'claude-sonnet-5-5': price(2, 10, 2.5, 4, 0.1), 'claude-sonnet-5': price(2, 10, 2.5, 4, 0.2),
+    'claude-haiku-5-5': price(0.1, 0.5, 0.125, 0.2, 0.01),
     'claude-opus-4-8': OPUS_45, 'claude-opus-4-7': OPUS_45, 'claude-opus-4-6': OPUS_45, 'claude-opus-4-5': OPUS_45,
     'claude-opus-4-1': OPUS_41, 'claude-opus-4': OPUS_41,
     'claude-sonnet-4-6': SONNET_4, 'claude-sonnet-4-5': SONNET_4, 'claude-sonnet-4': SONNET_4, 'claude-3-7-sonnet': SONNET_4,
-    'claude-haiku-4-5': price(1, 5, 1.25, 0.1), 'claude-3-5-haiku': price(0.8, 4, 1, 0.08),
+    'claude-haiku-4-5': price(1, 5, 1.25, 2, 0.1), 'claude-3-5-haiku': price(0.8, 4, 1, 1.6, 0.08),
   },
 };
 const priceOf = (card: RateCard, model: string): RateCard['models'][string] | undefined => card.models[model] ?? card.models[model.replace(/-\d{8}$/, '')];
-const empty = (): Tokens => ({ input: 0, output: 0, cache_write: 0, cache_read: 0 });
+const empty = (): Split => ({ input: 0, output: 0, cache_write: 0, cache_write_5m: 0, cache_write_1h: 0, cache_read: 0 });
 const add = (to: Tokens, t: Tokens): void => { to.input += t.input; to.output += t.output; to.cache_write += t.cache_write; to.cache_read += t.cache_read; };
+const addSplit = (to: Split, t: Split): void => { add(to, t); to.cache_write_5m += t.cache_write_5m; to.cache_write_1h += t.cache_write_1h; };
+/** Whether a row can price a model's tokens: it holds both write prices, whichever kinds the tokens wrote. */
+const prices = (p: RateCard['models'][string]): p is Required<RateCard['models'][string]> => typeof p.cache_write === 'number' && typeof p.cache_write_1h === 'number';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -49,7 +61,7 @@ interface Turn { turn: string; usage: Tokens; unknown: boolean; replied: boolean
 /** Folds a transcript's lines, in any number of files, into message-level counts. */
 class Counter {
   private readonly seen = new Set<string>();
-  readonly models = new Map<string, Tokens>();
+  readonly models = new Map<string, Split>();
   readonly totals = empty();
   private readonly turns = new Map<string, Turn>();
   private current: Turn | undefined;
@@ -63,7 +75,7 @@ class Counter {
     if (e.type === 'user') {
       if (!beginsTurn(e, e.message) || typeof e.uuid !== 'string') return;
       // A replayed line is the turn it was, with what it already counted.
-      this.current = this.turns.get(e.uuid) ?? { turn: e.uuid, usage: empty(), unknown: false, replied: false };
+      this.current = this.turns.get(e.uuid) ?? { turn: e.uuid, usage: { input: 0, output: 0, cache_write: 0, cache_read: 0 }, unknown: false, replied: false };
       this.turns.set(e.uuid, this.current);
     } else if (e.type === 'assistant' && e.message.model !== '<synthetic>') {
       if (this.current) this.current.replied = true;
@@ -71,10 +83,15 @@ class Counter {
       if (!isObj(usage)) { if (this.current) this.current.unknown = true; return; }
       if (typeof id !== 'string' || this.seen.has(id)) return;
       this.seen.add(id);
-      const t: Tokens = { input: whole(usage.input_tokens), output: whole(usage.output_tokens), cache_write: whole(usage.cache_creation_input_tokens), cache_read: whole(usage.cache_read_input_tokens) };
-      add(this.totals, t);
+      // The write total stays the record's own; its split is counted only as far as that total holds it.
+      const cache_write = whole(usage.cache_creation_input_tokens);
+      const split = isObj(usage.cache_creation) ? usage.cache_creation : {};
+      const cache_write_1h = Math.min(whole(split.ephemeral_1h_input_tokens), cache_write);
+      const cache_write_5m = Math.min(whole(split.ephemeral_5m_input_tokens), cache_write - cache_write_1h);
+      const t: Split = { input: whole(usage.input_tokens), output: whole(usage.output_tokens), cache_write, cache_write_5m, cache_write_1h, cache_read: whole(usage.cache_read_input_tokens) };
+      addSplit(this.totals, t);
       const name = typeof model === 'string' ? model : 'unknown';
-      add(this.models.get(name) ?? (this.models.set(name, empty()), this.models.get(name)!), t);
+      addSplit(this.models.get(name) ?? (this.models.set(name, empty()), this.models.get(name)!), t);
       if (this.current) add(this.current.usage, t);
     }
   }
@@ -83,14 +100,17 @@ class Counter {
     return [...this.turns.values()].map((t) => ({ turn: t.turn, usage: t.unknown || !t.replied ? null : t.usage }));
   }
   cost(card: RateCard): Cost {
-    let usd = 0;
+    let usd = 0, unsplit = 0;
     if (!this.models.size) return { basis: 'unpriced' };
     for (const [model, t] of this.models) {
       const p = priceOf(card, model);
-      if (!p) return { basis: 'unpriced' };
-      usd += (t.input * p.input + t.output * p.output + t.cache_write * p.cache_write + t.cache_read * p.cache_read) / 1e6;
+      // A write no split names is priced as a five-minute one, the least it can have cost.
+      const five = t.cache_write - t.cache_write_1h;
+      if (!p || !prices(p)) return { basis: 'unpriced' };
+      usd += (t.input * p.input + t.output * p.output + five * p.cache_write + t.cache_write_1h * p.cache_write_1h + t.cache_read * p.cache_read) / 1e6;
+      unsplit += t.cache_write - t.cache_write_5m - t.cache_write_1h;
     }
-    return { basis: 'estimated', usd, rate_card: card.name };
+    return { basis: 'estimated', usd, rate_card: card.name, ...(unsplit ? { at_least: true as const } : {}) };
   }
 }
 
@@ -115,7 +135,7 @@ export function countUsage(paths: string[], options: { rateCard?: RateCard } = {
 export class UsageTail {
   private readonly counter = new Counter();
   private readonly files = new Map<string, number>();
-  async read(transcript: string): Promise<{ tokens: Tokens; cost: Cost; model: string | null }> {
+  async read(transcript: string): Promise<{ tokens: Split; cost: Cost; model: string | null }> {
     const folder = join(transcript.replace(/\.jsonl$/, ''), 'subagents');
     const subs = await readdir(folder).catch(() => [] as string[]);
     for (const path of [transcript, ...subs.filter((n) => n.endsWith('.jsonl')).map((n) => join(folder, n))]) await this.feed(path);

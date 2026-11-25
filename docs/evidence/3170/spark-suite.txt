@@ -1,0 +1,13 @@
+== head a7db2f5bf933484547094d954d1dade13d9c2cfa, Sun Nov 22 07:49:49 PM PST 2026: node --test --test-concurrency=1 tests/acceptance/3170/*.test.mjs
+✔ #3170.618b6b1f on Linux, given a folder that can't make a reflink copy, the copy-on-write test reads BLOCKED and names the fix (240.456727ms)
+✔ #3170.4db366cf cargo test -p deep-hook --test cli --locked passes on the Spark, the copy-on-write test with it (4047.120732ms)
+✔ #3170.f6002c7f a lane's cargo test on the Spark runs with DEEP_TEST_COW_DIR naming a folder that makes a reflink copy (657.161151ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5069.2846
+== exit 0

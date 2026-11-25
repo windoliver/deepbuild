@@ -607,14 +607,20 @@ fn streamed<R: BufRead, W: Write>(
         &json!({"ready": {"format": format, "bytes": bytes, "open_seconds": open}}),
         None,
     );
-    let mut buf = Vec::new();
+    // #231: the frame last taken, which a repeat (a frame with no bytes) is taken as again; each
+    // answer says how long the frame took here.
+    let (mut buf, mut last) = (Vec::new(), Vec::new());
     for k in first..first + n {
         let head = pipe.next(&mut buf).ok_or(None)?;
+        let taken = std::time::Instant::now();
         if head["frame"].as_u64() != Some(k) {
             return Err(Some(error(format!(
                 "frame {k} is next, not {}",
                 head["frame"]
             ))));
+        }
+        if head["repeat"].as_bool() == Some(true) {
+            std::mem::swap(&mut buf, &mut last);
         }
         if buf.len() != bytes {
             return Err(Some(error(format!(
@@ -629,7 +635,9 @@ fn streamed<R: BufRead, W: Write>(
             Sink::Pngs(p) => p.push(k, &buf),
         }
         .map_err(Some)?;
-        pipe.reply(&json!({"frame": k}), None);
+        std::mem::swap(&mut buf, &mut last);
+        let seconds = taken.elapsed().as_secs_f64();
+        pipe.reply(&json!({"frame": k, "seconds": seconds}), None);
     }
     if pipe.next(&mut buf).ok_or(None)?["end"] != true {
         return Err(Some(error(format!("{n} frames, then the end"))));
@@ -1307,11 +1315,14 @@ mod tests {
         let frames: Vec<(Vec<u8>, bool)> = (0..4u8).map(|k| (nv12_drawn(k), k == 0)).collect();
         let fed = path(&dir, "piped.mp4");
         let replies = piped(&piped_job("h264", &fed, 64, 0, 4), &frames, true, "none");
+        // #518: the ready reply also carries the encoder's open, timed where it happens.
+        let mut said = replies[0].0.clone();
+        let open = said["ready"]
+            .as_object_mut()
+            .and_then(|r| r.remove("open_seconds"));
+        assert!(open.and_then(|s| s.as_f64()).is_some_and(|s| s >= 0.0));
         let ready = json!({"ready": {"format": "nv12", "bytes": 64 * 64 * 3 / 2}});
-        assert_eq!(
-            [&replies[0].0, &replies[1].0],
-            [&ready, &json!({"frame": 0})]
-        );
+        assert_eq!([&said, &replies[1].0], [&ready, &json!({"frame": 0})]);
         assert!(std::fs::read(&out).unwrap() == std::fs::read(&fed).unwrap());
         // Stdin closes after two frames of four: nothing more is said, and no file is left.
         let cut = path(&dir, "cut.mp4");

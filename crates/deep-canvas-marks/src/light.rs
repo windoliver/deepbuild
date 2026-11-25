@@ -223,7 +223,7 @@ impl Light {
         at: impl Fn(f64, f64) -> [f64; 2],
     ) {
         let shadows = shadow::build(&self.lights, &self.occluders.outlines, zoom);
-        for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        for (i, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             if px[3] == 0 {
                 continue;
             }

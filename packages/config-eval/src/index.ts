@@ -1,7 +1,8 @@
 // @deepbuild/config-eval (#112): configuration evals. A change to instruction files, skills, hooks, guards or policy
 // is replayed on real past tasks before it lands: each task's own words, in a checkout of the commit it started from,
 // once with the base's files and once with the change's, each repeat graded blind by a judge of another model family,
-// and compared by the record's one comparison rule under a plan frozen before either side runs. It runs on your
+// and compared by the record's one comparison rule under a plan frozen before either side runs. The judge grades the
+// changes a run made, never what its agent said of them, and only once it has scored a control (#3245). It runs on your
 // machine or in a lane you dispatch, never in hosted CI on push (design: The learned layer, How we know version 0 works).
 import { execFile } from 'node:child_process';
 import { randomBytes, randomInt } from 'node:crypto';
@@ -9,6 +10,7 @@ import { lstat, mkdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import { compareReplay, planHash, type Comparison, type ReplayPlan, type ReplayRun } from '@deepbuild/record';
+import { askOf, control, NO_CHANGE } from './control.js';
 import { defaultLauncher } from './launcher.js';
 import type { Grant, Launch } from '@deepbuild/supervisor';
 
@@ -26,9 +28,10 @@ export interface RecordedCall {
 }
 /**
  * A real past task, as read from the transcript archive: the handle of the message that asked for it, when, the repo,
- * the commit it started from, your words, and the outside calls its session made, when it made one.
+ * the commit it started from, your words, the outside calls its session made, when it made one, and whether its session
+ * changed a file (a work task), which the plan freezes.
  */
-export interface ReplayTask { id: string; at: number; repo: string; commit: string; prompt: string; recording?: RecordedCall[] }
+export interface ReplayTask { id: string; at: number; repo: string; commit: string; prompt: string; recording?: RecordedCall[]; work?: boolean }
 /** The agent's whole view: its model, prompt, folder and environment; and the recording its outside calls are answered from. */
 export interface AgentRun { model: string; prompt: string; cwd: string; env: Record<string, string>; recording?: RecordedCall[] }
 /** One outside call a run made, and whether the recording answered it. */
@@ -79,6 +82,12 @@ export interface EvalReport {
   calls: ReplayCall[];
   /** Each pair either side of which made a call the recording can't answer, with those calls; it counts as a failed pair. */
   diverged: { task: string; calls: ReplayCall[] }[];
+  /** The tasks graded on words: their original session changed no file, so a run's reply is its output. */
+  words: string[];
+  /** Each run whose output doesn't fit the judge's cap, in characters: it was never sent, and its grade is missing. */
+  oversize: { task: string; side: 'base' | 'change'; repeat: number; size: number; cap: number }[];
+  /** The first judge request, before any agent, and its scores of the right change and of no change: null where it gave none. Absent when nothing is graded. */
+  control?: { sha256: string; request: JudgeRequest; right: number | null; none: number | null };
 }
 
 /** The metrics the eval captures: the judge's grade of a run's output, and the tokens the agent reported. */
@@ -87,8 +96,10 @@ const METRICS = new Set(['grade', 'tokens']);
 const ON_PUSH = new Set(['push', 'pull_request', 'pull_request_target', 'merge_group']);
 /** Agent runs at once: enough to replay 20 tasks within two hours, few enough to stay inside a plan window. */
 const AT_ONCE = 4;
-/** What a judge is shown of one output, at most: a task's six outputs stay well inside its context. */
+/** An output longer than this, in characters, is never shown to a judge: a task's six outputs stay well inside its context. */
 const OUTPUT_CAP = 20_000;
+/** Drafted: a judge that scores no change this or above in the control decides nothing. */
+const NONE_BELOW = 0.5;
 /** The agents' share of the stated time; the judge grades the last tasks in the rest. */
 const AGENTS_SHARE = 0.85;
 /** Kept back from the judge at the end, for stopping runs and removing their checkouts. */
@@ -135,11 +146,10 @@ async function checkout(task: ReplayTask, files: Record<string, string>, root: s
   }
   return { dir, start: (await git(dir, ['rev-parse', 'HEAD'])).trim() };
 }
-/** What the judge sees of a run: the agent's final reply and the files it added or changed, never the variant's own files. */
-async function workOf(dir: string, start: string, reply: string, variantFiles: string[]): Promise<string> {
+/** The files a run added or changed, as a diff, never the variant's own files and no word of the agent's. */
+async function changesOf(dir: string, start: string, variantFiles: string[]): Promise<string> {
   await git(dir, ['add', '-A']);
-  const patch = await git(dir, ['diff', '--cached', '--no-color', '--no-ext-diff', start, '--', '.', ...variantFiles.map((f) => `:(exclude)${f}`)]);
-  return `Final reply:\n${reply}\n\nChanges:\n${patch || '(none)'}`.slice(0, OUTPUT_CAP);
+  return (await git(dir, ['diff', '--cached', '--no-color', '--no-ext-diff', start, '--', '.', ...variantFiles.map((f) => `:(exclude)${f}`)])) || NO_CHANGE;
 }
 
 const refusedComparison = (reason: string): Comparison => ({ outcome: 'refused', reason, n: 0, measures: [], tasks: [], broke: [] });
@@ -174,8 +184,11 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
   const started = performance.now();
   const { plan, root } = options;
   const hash = planHash(plan);
-  const refusedWith = (reason: string): EvalReport => ({
+  const worded = new Set(plan.words);
+  const words = [...plan.tasks, ...plan.fitted].filter((t) => worded.has(t));
+  const refusedWith = (reason: string, opened?: EvalReport['control']): EvalReport => ({
     plan, hash, runs: [], after: refusedComparison(reason), before: refusedComparison(reason), held: false, usage: { ms: performance.now() - started, plan_share: null }, calls: [], diverged: [],
+    words, oversize: [], ...(opened ? { control: opened } : {}),
   });
   const why = refusal(options);
   if (why) return refusedWith(why);
@@ -184,6 +197,17 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
   // The agents' runs end by their share of the budget, and the judge's by the budget less the time to wrap up.
   const deadlines = { work: Date.now() + plan.budget.ms * AGENTS_SHARE, judge: Date.now() + plan.budget.ms - Math.min(WRAP_UP_MS, plan.budget.ms * 0.05) };
   try { launcher = options.launcher ?? defaultLauncher(plan, env, deadlines, options.signal, options.execute, options.read); } catch (error) { return refusedWith(error instanceof Error ? error.message : String(error)); }
+
+  const graded = plan.measures.some((m) => m.name === 'grade');
+  let opened: EvalReport['control'];
+  if (graded) {
+    await options.checkpoint?.(accountOf(plan.models.judge));
+    opened = await openWithControl(plan.models.judge, launcher);
+    const { right, none } = opened;
+    if (right === null || none === null || none >= NONE_BELOW || none >= right) {
+      return refusedWith(`the judge ${plan.models.judge} scored no change ${none ?? 'nothing'} and a change that does what was asked ${right ?? 'nothing'} in the control, so its grades decide nothing: no change must score below ${NONE_BELOW} and below that change`, opened);
+    }
+  }
 
   const byId = new Map(options.tasks.map((t) => [t.id, t]));
   await options.checkpoint?.('claude-code');
@@ -203,8 +227,8 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
   const leads = new Map(shuffle(all.map((_, i) => (i % 2 ? 'base' as const : 'change' as const))).map((side, i) => [all[i]!, side]));
   const left = new Map(all.map((task) => [task, 2 * plan.repeats]));
   const grading: Promise<void>[] = [];
-  const graded = plan.measures.some((m) => m.name === 'grade');
   const runs: ReplayRun[] = [];
+  const oversize: EvalReport['oversize'] = [];
   const calls: ReplayCall[] = [];
   const outputs = new Map<ReplayRun, string>();
   const nothing = (): Record<string, number | null> => Object.fromEntries(plan.measures.map((m) => [m.name, null]));
@@ -214,7 +238,7 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
       runs.push(r);
       try { await replay(job, r); } finally {
         left.set(job.task, left.get(job.task)! - 1);
-        if (graded && left.get(job.task) === 0) grading.push(grade(plan, byId.get(job.task)!, leads.get(job.task)!, runs, outputs, launcher, options.checkpoint));
+        if (graded && left.get(job.task) === 0) grading.push(grade(plan, byId.get(job.task)!, worded.has(job.task), leads.get(job.task)!, runs, outputs, launcher, options.checkpoint));
       }
     }
   };
@@ -236,7 +260,9 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
       if (!result.ok || made.some((c) => !c.answered)) return;
       r.ok = true;
       if ('tokens' in r.metrics) r.metrics.tokens = result.usage ? result.usage.input + result.usage.output : null;
-      outputs.set(r, await workOf(dir, out.start, result.result ?? '', Object.keys(files)));
+      const output = worded.has(job.task) ? result.result ?? '' : await changesOf(dir, out.start, Object.keys(files));
+      if (graded && output.length > OUTPUT_CAP) oversize.push({ task: job.task, side: job.side, repeat: r.repeat, size: output.length, cap: OUTPUT_CAP });
+      else outputs.set(r, output);
     } catch {
       r.ok = false;
       r.metrics = nothing();
@@ -246,38 +272,54 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
   };
   await Promise.all(Array.from({ length: AT_ONCE }, next));
   await Promise.all(grading);
-  runs.sort((a, b) => a.task.localeCompare(b.task) || a.side.localeCompare(b.side) || a.repeat - b.repeat);
+  for (const list of [runs, calls, oversize]) list.sort((a, b) => a.task.localeCompare(b.task) || a.side.localeCompare(b.side) || a.repeat - b.repeat);
   const usedAtEnd = usedAtStart === null ? null : ((await launcher.planUsed?.()) ?? null);
   const after = compareReplay({ plan, runs });
-  calls.sort((a, b) => a.task.localeCompare(b.task) || a.side.localeCompare(b.side) || a.repeat - b.repeat);
   const unanswered = calls.filter((c) => !c.answered);
   const diverged = [...new Set(unanswered.map((c) => c.task))].map((task) => ({ task, calls: unanswered.filter((c) => c.task === task) }));
   return {
     plan, hash, runs, after, before: compareReplay({ plan, runs }, plan.fitted), held: after.outcome === 'regresses', calls, diverged,
+    words, oversize, ...(opened ? { control: opened } : {}),
     usage: { ms: performance.now() - started, plan_share: usedAtStart !== null && usedAtEnd !== null && usedAtEnd >= usedAtStart ? usedAtEnd - usedAtStart : null },
   };
+}
+
+const accountOf = (judge: string): 'claude-code' | 'codex' => (/^claude/.test(judge) ? 'claude-code' : 'codex');
+const labelOf = (k: number): string => String.fromCharCode(65 + (k % 26)) + (k >= 26 ? String(Math.floor(k / 26)) : '');
+/** The judge's score for a label, or null when it gave none from 0 to 1. */
+function scoreOf(grades: Grade[], label: string): number | null {
+  const score = grades.find((g) => g.label === label)?.score;
+  return typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 1 ? score : null;
+}
+
+/** The eval's first request: the control, in an order that favors neither output, with the judge's scores of it. */
+async function openWithControl(model: string, launcher: Launcher): Promise<NonNullable<EvalReport['control']>> {
+  const { prompt, sha256, right, none } = control();
+  const order = shuffle<'right' | 'none'>(['right', 'none']);
+  const request: JudgeRequest = { model, prompt, outputs: order.map((o, k) => ({ label: labelOf(k), text: { right, none }[o] })) };
+  let grades: Grade[] = [];
+  try { grades = await launcher.judge(request); } catch { grades = []; }
+  const scored = (o: 'right' | 'none'): number | null => scoreOf(grades, labelOf(order.indexOf(o)));
+  return { sha256, request, right: scored('right'), none: scored('none') };
 }
 
 /**
  * Grades one task's outputs blind, in one request: both sides under labels that name no side, the side that leads
  * alternating over the tasks in a shuffled order. A grade the judge didn't give stays missing.
  */
-async function grade(plan: ReplayPlan, task: ReplayTask, lead: 'base' | 'change', runs: ReplayRun[], outputs: Map<ReplayRun, string>, launcher: Launcher, checkpoint: EvalOptions['checkpoint']): Promise<void> {
+async function grade(plan: ReplayPlan, task: ReplayTask, words: boolean, lead: 'base' | 'change', runs: ReplayRun[], outputs: Map<ReplayRun, string>, launcher: Launcher, checkpoint: EvalOptions['checkpoint']): Promise<void> {
   // The runs are in their shuffled start order.
   const shown = runs.filter((r) => r.task === task.id && outputs.has(r));
   if (!shown.length) return;
   const first = shown.findIndex((r) => r.side === lead);
   if (first > 0) shown.unshift(...shown.splice(first, 1));
-  const labels = shown.map((_, k) => String.fromCharCode(65 + (k % 26)) + (k >= 26 ? String(Math.floor(k / 26)) : ''));
+  const labels = shown.map((_, k) => labelOf(k));
   const request: JudgeRequest = {
     model: plan.models.judge,
-    prompt: `A developer asked a coding agent:\n\n${task.prompt}\n\nEach output below is one agent's attempt at that request: its final reply and the changes it made. Score each from 0 (does not do what was asked) to 1 (does it fully and correctly), on its own merits.`,
+    prompt: askOf(task.prompt, words),
     outputs: shown.map((r, k) => ({ label: labels[k]!, text: outputs.get(r)! })),
   };
   let grades: Grade[] = [];
-  try { await checkpoint?.(/^claude/.test(request.model) ? 'claude-code' : 'codex'); grades = await launcher.judge(request); } catch { grades = []; }
-  shown.forEach((r, k) => {
-    const score = grades.find((g) => g.label === labels[k])?.score;
-    r.metrics.grade = typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 1 ? score : null;
-  });
+  try { await checkpoint?.(accountOf(request.model)); grades = await launcher.judge(request); } catch { grades = []; }
+  shown.forEach((r, k) => { r.metrics.grade = scoreOf(grades, labels[k]!); });
 }

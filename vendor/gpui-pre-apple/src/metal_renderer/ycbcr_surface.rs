@@ -31,6 +31,16 @@ pub(super) fn pipeline(device: &metal::DeviceRef, library: &metal::LibraryRef) -
     )
 }
 
+/// The format GPUI's stock surface path asserts a buffer has, `full_range`; with the stock fragment planted, the
+/// buffer's own, so that path draws any NV12 as GPUI ships.
+pub(super) fn stock_takes(image_buffer: &CVPixelBuffer, full_range: u32) -> u32 {
+    if gpu_surfaces::planted() == gpu_surfaces::Planted::StockFragment {
+        CVPixelBufferGetPixelFormatType(image_buffer)
+    } else {
+        full_range
+    }
+}
+
 /// The column-major transform from (Y, Cb, Cr, 1), each read as 0..1, to R'G'B'.
 fn transform(limited: bool, kr: f32, kb: f32) -> [[f32; 4]; 4] {
     let kg = 1.0 - kr - kb;
@@ -117,7 +127,7 @@ impl MetalRenderer {
         };
         let y_texture = plane_texture(0, objc2_metal::MTLPixelFormat::R8Unorm);
         let cb_cr_texture = plane_texture(1, objc2_metal::MTLPixelFormat::RG8Unorm);
-        command_encoder.set_render_pipeline_state(&self.ycbcr_pipeline_state);
+        command_encoder.set_render_pipeline_state(&self.bgra_surfaces.ycbcr);
         command_encoder.set_vertex_bytes(
             SurfaceInputIndex::TextureSize as u64,
             mem::size_of_val(&texture_size) as u64,

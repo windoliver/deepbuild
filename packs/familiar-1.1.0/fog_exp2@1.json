@@ -1,0 +1,48 @@
+{
+  "id": "familiar.fog_exp2",
+  "version": "1.0",
+  "title": "Exponential squared fog",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's FogExp2: a fog of one color whose share grows as 1 − exp(−(density × d)²), as sky@1's fog under fog_curve exp2, with d read from the eye. A document draws its first sky@1 alone, so one of these words a document.",
+  "inputs": {
+    "color": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "density": {
+      "type": "number",
+      "default": 0.00025,
+      "unit": "1/m",
+      "min": 0,
+      "about": ""
+    }
+  },
+  "let": {
+    "e0": "(floor(color / 65536) % 256) / 255",
+    "l0": "e0 <= 0.04045 ? e0 / 12.92 : pow((e0 + 0.055) / 1.055, 2.4)",
+    "e1": "(floor(color / 256) % 256) / 255",
+    "l1": "e1 <= 0.04045 ? e1 / 12.92 : pow((e1 + 0.055) / 1.055, 2.4)",
+    "e2": "(color % 256) / 255",
+    "l2": "e2 <= 0.04045 ? e2 / 12.92 : pow((e2 + 0.055) / 1.055, 2.4)"
+  },
+  "steps": {
+    "sky": {
+      "op": "item",
+      "kind": "sky@1",
+      "params": {
+        "fog": [
+          "l0",
+          "l1",
+          "l2",
+          1
+        ],
+        "fog_density": "density",
+        "fog_curve": "exp2"
+      }
+    }
+  }
+}

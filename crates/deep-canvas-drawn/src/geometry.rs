@@ -338,7 +338,14 @@ pub fn profiled(outline: &Outline, p: &Profile, id: &str) -> Vec<Run> {
                 if stop > from + 1 {
                     runs.push((from, stop));
                 }
-                from = s.partition_point(|at| *at < next + gap);
+                // A break always moves on: an `every` and `gap` too small to show in the arc
+                // length would hold it at one point for ever. Planted (#1857): no such guard.
+                let reached = s.partition_point(|at| *at < next + gap);
+                from = if p.unguarded {
+                    reached
+                } else {
+                    reached.max(from + 1)
+                };
                 if from >= n - 1 {
                     break;
                 }

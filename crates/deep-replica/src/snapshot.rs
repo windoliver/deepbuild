@@ -280,14 +280,15 @@ pub fn role_name(role: Role) -> String {
 /// in the order the frame drew them (which is the element tree's order, the order the
 /// accessibility tree lists them in too), nested by its element path under the nearest such
 /// ancestor, under one `window` root. Bounds are the layout bounds at the window's scale, rounded
-/// to whole device pixels.
+/// to whole device pixels. An element the frame drew but paints nothing of is in it too, as GPUI
+/// puts it in the accessibility tree: one at opacity 0 at rest, one with no width, one its
+/// parent clips away (#1620). Whether a person sees it is the drive's `visible`, not this tree's.
 pub fn from_observed(window: &Window) -> Snapshot {
     let scale = window.scale_factor();
     let viewport = window.viewport_size();
     let device = |value: Pixels| (f32::from(value) * scale).round() as i64;
     let observed: Vec<(Vec<ElementId>, Node)> = snapshots(window)
         .into_iter()
-        .filter(|element| element.visible())
         .filter_map(|element| {
             let role = element.role()?;
             let bounds = element.bounds();

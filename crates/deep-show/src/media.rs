@@ -129,6 +129,29 @@ pub struct Media {
         std::collections::BTreeMap<String, std::sync::Arc<deep_canvas_scene3d::light::Texels>>,
     /// #1801: each asset's size as its file gave it, by SHA-256; `None` for one with none.
     pub(crate) sizes: std::collections::BTreeMap<String, Option<deep_canvas::cost::AssetSize>>,
+    /// #231: each asset the decode worker decoded for this process, in order: the asset and the
+    /// seconds its decode took; and their sum.
+    pub(crate) decodes: Vec<(String, f64)>,
+    pub(crate) decoding: std::time::Duration,
+    /// #231: the export that is running's `readings`: the record's changes on the film's clock,
+    /// each `{t, handle, value?, state?, as_of?}`; and, planted, the time past which its frames
+    /// read none of them.
+    pub(crate) readings: Vec<Value>,
+    pub(crate) readings_until: Option<i64>,
+    /// #231: whether this process has begun an export: its first one's `wall` counts from the
+    /// process's start.
+    pub(crate) exported: bool,
+}
+
+/// #231: the asset a decode worker's job reads: its SHA-256 when its path is the evidence
+/// store's (`<2 hex>/<62 hex>`), else the path.
+fn asset_of(job: &Value) -> String {
+    let path = job["path"].as_str().unwrap_or_default();
+    let mut parts = path.rsplit('/');
+    match (parts.next(), parts.next()) {
+        (Some(rest), Some(head)) if head.len() == 2 && rest.len() == 62 => format!("{head}{rest}"),
+        _ => path.to_string(),
+    }
 }
 
 /// #503: a worker's refusal answers with its `code` and what it names at the reply's top level
@@ -158,6 +181,15 @@ pub(crate) fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
         Planted::VideoDropsFrame300 => "video_drops_frame_300",
         _ => return None,
     })
+}
+
+/// #1488: the run's image service, which every snapshot draws a still through, runs the planted
+/// decoder that ignores a photo's EXIF orientation when the run plants it in the worker too.
+pub(crate) fn plant_images(planted: Option<Planted>) {
+    if worker_planted(planted) == Some("decoder_ignores_orientation") {
+        let plant = deep_images::Plant::IgnoresOrientation;
+        deep_images::shared().configure(deep_images::BUDGET, deep_images::ENTRIES, plant);
+    }
 }
 
 impl Hub<'_> {
@@ -274,7 +306,41 @@ impl Hub<'_> {
             }
         }
         let h = slot.as_mut().expect("started");
-        (h.ask(&job), h.pid)
+        let at = std::time::Instant::now();
+        let answered = (h.ask(&job), h.pid);
+        // #231: an asset's decode is reported, with the time it took.
+        if role == DECODE_WORKER && matches!(job["op"].as_str(), Some("decode" | "transcode")) {
+            let took = at.elapsed();
+            self.media
+                .decodes
+                .push((asset_of(&job), took.as_secs_f64()));
+            self.media.decoding += took;
+        }
+        answered
+    }
+
+    /// #1488: the still at `path` converted at intake by the decode worker: the PNG it wrote and
+    /// the source are put in the evidence store, and the reply is the PNG's asset.
+    fn convert(&mut self, path: &str) -> Result<Value, String> {
+        let n = self.media.exports;
+        self.media.exports += 1;
+        let out = std::env::temp_dir().join(format!("deep-still-{}-{n}.png", std::process::id()));
+        let job = json!({"op": "convert", "path": path, "out": out.to_string_lossy()});
+        let (reply, _) = self.media_job(DECODE_WORKER, job);
+        let png = std::fs::read(&out);
+        let _ = std::fs::remove_file(&out);
+        let Some(sha) = reply.pointer("/asset/sha256").and_then(Value::as_str) else {
+            return Ok(reply);
+        };
+        let png = png.map_err(|e| e.to_string())?;
+        let source = std::fs::read(path).map_err(|e| e.to_string())?;
+        let evidence = &self.scenario.evidence;
+        let kept = evidence::put(evidence, &png).map_err(|e| e.to_string())?;
+        let input = evidence::put(evidence, &source).map_err(|e| e.to_string())?;
+        if kept != sha || reply.pointer("/asset/made_by/input") != Some(&json!(input)) {
+            return Err("the converted picture or its source changed on the way".into());
+        }
+        Ok(reply)
     }
 
     /// #518: ends the encode tool's process when a job it was asked to open was dropped
@@ -311,6 +377,11 @@ impl Hub<'_> {
             MediaCall::Import(path) => {
                 let (mut reply, pid) =
                     self.media_job(DECODE_WORKER, json!({"op": "probe", "path": path}));
+                // #1488: a still in a format draw code doesn't read converts to a PNG in the
+                // worker; the PNG and its source are kept by their hashes, the PNG the asset.
+                if reply.pointer("/asset/probe/streams/0/convert") == Some(&json!("png")) {
+                    reply = self.convert(path).unwrap_or_else(|e| json!({"error": e}));
+                }
                 reply["worker"] = json!({"pid": pid});
                 hoist(reply)
             }

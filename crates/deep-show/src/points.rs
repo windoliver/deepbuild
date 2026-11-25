@@ -559,7 +559,7 @@ impl Hub<'_> {
         } else {
             c.margin
         };
-        let (_, targets) = self.gpu3()?.draw_scene(scene, look, false)?;
+        let targets = self.gpu3()?.draw_ids(scene, look)?;
         let ids = pointer::Ids {
             size: targets.size,
             ids: &targets.ids,
