@@ -443,8 +443,8 @@ class AsksCore implements Asks {
       const riders = chosen ? this.open().filter((a) => this.rides(a) === ask) : [];
       // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
       // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
-      // A card with a target only the agent read saves your answer for this ask only (#1098).
-      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
+      // A card with a target only the agent read (#1098), or for a plug-in's send, saves your answer for this ask only.
+      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && this.keys.alone(ask) === null ? this.scopeOf(ask) : null;
       await allThrough([this.options.record.append(asCore(connection), {
         v: pictures ? 7 : v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
@@ -856,8 +856,8 @@ class AsksCore implements Asks {
       if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
       const answer = ask.closed?.outcome === 'answered' ? ask.closed.answer : undefined;
       if (answer === undefined || !ask.options.some((o) => o.id === answer)) throw new AskRefused(`${ask.handle} wasn't answered with an option, so there is no decision to save`, { ask: ask.handle });
-      const unplaced = this.unplaced(ask);
-      if (unplaced.length) throw new AskRefused(`${ask.handle} goes to ${unplaced.map((t) => t.ref).join(', ')}, which nothing you typed or approved names, so your answer holds for this ask only`, { field: 'scope', ask: ask.handle });
+      const alone = this.keys.alone(ask);
+      if (alone !== null) throw new AskRefused(`${ask.handle} ${alone}, so your answer holds for this ask only`, { field: 'scope', ask: ask.handle });
       let at: string;
       if (scope === 'all') at = 'all';
       else if (scope === 'session') {
@@ -922,7 +922,7 @@ class AsksCore implements Asks {
       if (held.state !== 'active') throw new AskRefused(`${decision} is ${held.state}, so it can't widen`, { field: 'decision', ask: ask.handle });
       if (held.key !== ask.data.key) throw new AskRefused(`${decision} answers another question than ${ask.handle}, so a wider scope wouldn't cover it`, { field: 'decision', ask: ask.handle });
       const lines = linesOf(ask.data.subject);
-      if (needsPerson(ask.data).length || this.unplaced(ask).length || (held.bound !== null && lines !== null && lines > held.bound)) throw new AskRefused(`${decision} can't cover ${ask.handle} at any scope`, { field: 'decision', ask: ask.handle });
+      if (needsPerson(ask.data).length || this.keys.alone(ask) !== null || (held.bound !== null && lines !== null && lines > held.bound)) throw new AskRefused(`${decision} can't cover ${ask.handle} at any scope`, { field: 'decision', ask: ask.handle });
       const option = ask.options.find((o) => o.id === held.answer);
       if (!option) throw new AskRefused(`${ask.handle} has no option ${held.answer}`, { option: held.answer });
       const widened = await this.saveAt(connection, ask, 'all', held.answer, false);
@@ -1100,7 +1100,6 @@ class AsksCore implements Asks {
   }
 
   private rides(ask: Ask): Ask | undefined { return this.showing.rides(ask); }
-  private unplaced(ask: Ask): CardTarget[] { return this.keys.unplaced(ask); }
   /**
    * Places each target of a plan from the record of the ask's session (#1098): the prompts a person typed in it, the
    * decisions covering the ask and the plans they were saved from, the remotes its worktree configures, and its
@@ -1172,7 +1171,7 @@ class AsksCore implements Asks {
   /** What an answer to the ask would be saved as, said as what answering will do (nothing is saved yet, #1455), and how many other open asks that decision would then answer. */
   private savesOf(ask: Ask): Card['saves'] {
     if (ask.fold || ask.theirs || !ask.options.length) return null;
-    if (this.unplaced(ask).length) return { scope: 'Answering saves it for this ask only', also: 0 };
+    if (this.keys.alone(ask) !== null) return { scope: 'Answering saves it for this ask only', also: 0 };
     const scope = this.scopeOf(ask);
     if (scope === null) return null;
     const project = this.sessions.get(ask.session)?.project;
