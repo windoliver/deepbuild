@@ -1581,3 +1581,7 @@ timed.push('tests/acceptance/3257/ac7-budget.test.ts');
 // #1857's folder (blind) runs alone by its lane.json. cap.test.ts and budgets.test.ts each judge a check's time and a
 // child's peak on the reference Mac.
 timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
+
+// #2750's folder (blind) runs alone by its lane.json: each test starts real hubs, a forge on 127.0.0.1 and git
+// repositories. budgets.test.ts times a rebuild from the event log on the reference Mac.
+timed.push('tests/acceptance/2750/budgets.test.ts');
