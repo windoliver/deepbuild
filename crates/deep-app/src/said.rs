@@ -68,6 +68,8 @@ struct Read {
     to: Option<u64>,
     page: Option<(String, Option<String>, Option<String>)>,
     hub_down: bool,
+    /// #3232's planted line: the session on the open page, with what its row was last doing.
+    did: Option<(String, String)>,
     sight: Vec<String>,
     /// The ask answered on the open page, whose hold the record says next, and the asks whose hold was said.
     answered: Option<String>,
@@ -180,18 +182,14 @@ fn say(change: Change, alone: bool, now: u64, cx: &mut App) {
     }
 }
 
-/// An open ask's change: its question, and in the planted window what its session was doing.
-fn asking(table: &states::Table, ask: &Value) -> Change {
-    let session = ask["session"].as_str().unwrap_or_default();
-    let doing = table
-        .row_of(&format!("session:{session}"))
-        .and_then(|row| row["doing"]["words"].as_str())
-        .filter(|_| planted("ask-line-starts-with-doing"));
+/// An open ask's change: its question, and in the planted window what its session was last doing.
+fn asking(ask: &Value, did: Option<&(String, String)>) -> Change {
+    let did = did.filter(|(session, _)| ask["session"] == session.as_str());
     Change {
         key: states::handle(ask),
         ask: true,
         words: crate::question::visible(ask["data"]["question"].as_str().unwrap_or_default()),
-        first: doing.map(str::to_owned),
+        first: did.map(|(_, doing)| doing.clone()),
     }
 }
 
@@ -200,14 +198,15 @@ pub fn asks(handles: &[String], now: u64, cx: &mut App) {
     if handles.is_empty() || !crate::open::is_key(cx) {
         return;
     }
-    let told = &cx.default_global::<Said>().told;
+    let said = cx.default_global::<Said>();
+    let (told, did) = (&said.told, said.read.did.clone());
     let new: Vec<&String> = handles.iter().filter(|h| !told.contains(h)).collect();
     let changes = record::with_view(|view| {
         let table = view.table();
         let open = table.open_asks(None);
         let found = |handle: &String| open.iter().find(|ask| states::handle(ask) == *handle);
         new.iter()
-            .filter_map(|handle| found(handle).map(|ask| asking(&table, ask)))
+            .filter_map(|handle| found(handle).map(|ask| asking(ask, did.as_ref())))
             .collect::<Vec<_>>()
     });
     for change in changes.unwrap_or_default() {
@@ -356,7 +355,7 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
                 };
                 let looking = key && session.is_some_and(|s| ask["session"] == s.id.as_str());
                 if looking || planted("announces-every-ask") {
-                    opened.push(asking(&table, ask));
+                    opened.push(asking(ask, next.did.as_ref()));
                 }
                 if looking {
                     asked.push(handle.clone());
@@ -367,6 +366,11 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
         let row = session.and_then(|s| table.row_of(&format!("session:{}", s.id)));
         let word = row.and_then(|row| row["word"].as_str()).map(str::to_owned);
         let doing = row.and_then(|row| row["doing"]["words"].as_str());
+        // #3232's planted line starts with what the open page's session was last doing.
+        let last = doing.filter(|_| planted("ask-line-starts-with-doing"));
+        if let (Some(s), Some(doing)) = (session, last) {
+            next.did = Some((s.id.clone(), doing.to_owned()));
+        }
         if let (Some(row), Some(s), Some((address, before, did))) =
             (row, session, was.page.as_ref())
         {
