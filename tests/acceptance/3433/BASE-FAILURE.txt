@@ -1,0 +1,173 @@
+# #3433 acceptance suite on the merge base 16dd75036 (origin/main), macOS darwin-arm64, Node 24.22.0, 2026-11-24
+# node --test 'tests/acceptance/3433/*.test.mjs'   (home paths written as ~)
+
+✔ #3433.cd15df63 a lane run that ends by itself writes its record by its tests, with no stop finding, and leaves no process of the stop running (12089.51675ms)
+✖ #3433.d424696d the same lane run stopped by SIGKILL to the lanes.mjs process's whole group leaves no process its command started alive 15 s later, and the record reads INCONCLUSIVE naming them (37380.765125ms)
+✖ #3433.46eec7ed a lanes.mjs lane run whose command starts a grandchild in a process group of its own, stopped by SIGTERM to the lanes.mjs process alone, leaves no process its command started alive 15 s later, and its record reads INCONCLUSIVE with a finding naming each process stopped, by PID and command (37445.027333ms)
+✖ #3433.bf4b249a a measureOnce captured run past its timeout, whose command starts a grandchild in a process group of its own and waits, throws ETIMEDOUT, and 2 s later no process the command started is alive (5115.581625ms)
+✖ #3433.0ced7c1d measureOnce's ETIMEDOUT error names each process the stop ended, by PID and command (3042.494209ms)
+✖ #3433.0ced7c1d perf's BLOCKED perf line for a copy's checks past their allowance names each process the stop ended, by PID and command (3263.079375ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 1
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 37482.080375
+
+✖ failing tests:
+
+test at tests/acceptance/3433/lane-group-kill.test.mjs:8:1
+✖ #3433.d424696d the same lane run stopped by SIGKILL to the lanes.mjs process's whole group leaves no process its command started alive 15 s later, and the record reads INCONCLUSIVE naming them (37380.765125ms)
+  AssertionError [ERR_ASSERTION]: 15 s after SIGKILL to lanes.mjs's group, processes its command started still run
+  exit: {"code":null,"signal":"SIGKILL"}
+  output:
+  RUN stop-3433
+  
+  records: []
+  processes: [{"role":"runner","pid":37528,"start":"Tue Nov 24 22:56:57 2026","alive":false},{"role":"file","pid":37531,"start":"Tue Nov 24 22:56:57 2026","alive":false},{"role":"grandchild","pid":37532,"start":"Tue Nov 24 22:56:57 2026","alive":true,"command":"~/.nvm/versions/node/v24.22.0/bin/node /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3433-lane-group-kill-9Lpxi2/grandchild-3433.mjs /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3433-lane-group-kill-9Lpxi2/pids"}]
+  + actual - expected
+  
+  + [
+  +   'grandchild 37532'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/agent-a04b39a504ebef9a4/tests/acceptance/3433/lane-group-kill.test.mjs:16:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'grandchild 37532' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3433/lane-term.test.mjs:9:1
+✖ #3433.46eec7ed a lanes.mjs lane run whose command starts a grandchild in a process group of its own, stopped by SIGTERM to the lanes.mjs process alone, leaves no process its command started alive 15 s later, and its record reads INCONCLUSIVE with a finding naming each process stopped, by PID and command (37445.027333ms)
+  AssertionError [ERR_ASSERTION]: 15 s after SIGTERM to lanes.mjs, processes its command started still run
+  exit: {"code":null,"signal":"SIGTERM"}
+  output:
+  RUN stop-3433
+  
+  records: []
+  processes: [{"role":"runner","pid":37494,"start":"Tue Nov 24 22:56:57 2026","alive":true,"command":"~/.nvm/versions/node/v24.22.0/bin/node --test --test-reporter=file://~/private/deepbuild-core/.claude/worktrees/agent-a04b39a504ebef9a4/scripts/proof-reporter.mjs --test-reporter-destination=/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-preflight-output-du0Nxe/report --test-reporter=spec --test-reporter-destination=stdout tests/fixture-3433.test.mjs"},{"role":"file","pid":37510,"start":"Tue Nov 24 22:56:57 2026","alive":true,"command":"~/.nvm/versions/node/v24.22.0/bin/node --test-concurrency=0 --heap-prof-interval=524288 --use-system-ca --stack-trace-limit=10 --report-signal=SIGUSR2 --heapsnapshot-near-heap-limit=0 --tls-cipher-list=TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA256:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA --watch-kill-signal=SIGTERM --inspect-publish-uid=stderr,http --test-isolation=process --test-coverage-lines=0 --cpu-prof-interval=1000 --test-coverage-functions=0 --max-http-header-size=16384 --test-timeout=0 --inspect-port=127.0.0.1:9229 --use-largepages=off --experimental-addon-modules --test-coverage-branches=0 --network-family-autoselection-attempt-timeout=250 --secure-heap-min=2 --v8-pool-size=4 --secure-heap=0 --node-snapshot --trace-event-file-pattern=node_trace.${rotation}.log tests/fixture-3433.test.mjs"},{"role":"grandchild","pid":37529,"start":"Tue Nov 24 22:56:57 2026","alive":true,"command":"~/.nvm/versions/node/v24.22.0/bin/node /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3433-lane-term-0SgH3j/grandchild-3433.mjs /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3433-lane-term-0SgH3j/pids"}]
+  + actual - expected
+  
+  + [
+  +   'runner 37494',
+  +   'file 37510',
+  +   'grandchild 37529'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/agent-a04b39a504ebef9a4/tests/acceptance/3433/lane-term.test.mjs:13:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'runner 37494', 'file 37510', 'grandchild 37529' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3433/measure-stop.test.mjs:25:1
+✖ #3433.bf4b249a a measureOnce captured run past its timeout, whose command starts a grandchild in a process group of its own and waits, throws ETIMEDOUT, and 2 s later no process the command started is alive (5115.581625ms)
+  AssertionError [ERR_ASSERTION]: 2 s after ETIMEDOUT these processes the command started still run: 36966 (~/.nvm/versions/node/v24.22.0/bin/node /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3433-measure-tree-lJ3MrT/grandchild-3433.mjs /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-3433-measure-tree-lJ3MrT/pids)
+  + actual - expected
+  
+  + [
+  +   'grandchild 36966'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/agent-a04b39a504ebef9a4/tests/acceptance/3433/measure-stop.test.mjs:31:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'grandchild 36966' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3433/measure-stop.test.mjs:34:1
+✖ #3433.0ced7c1d measureOnce's ETIMEDOUT error names each process the stop ended, by PID and command (3042.494209ms)
+  AssertionError [ERR_ASSERTION]: the ETIMEDOUT error names the lead it stopped, pid 41444 with its command (lead-3433.mjs), on one line:
+  spawnSync /usr/bin/time ETIMEDOUT
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/agent-a04b39a504ebef9a4/tests/acceptance/3433/measure-stop.test.mjs:42:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3433/perf-line.test.mjs:11:1
+✖ #3433.0ced7c1d perf's BLOCKED perf line for a copy's checks past their allowance names each process the stop ended, by PID and command (3263.079375ms)
+  AssertionError [ERR_ASSERTION]: perf's BLOCKED perf line names the lead the stop ended, pid 37881 with its command (checks.mjs), on one line:
+  BLOCKED perf: spawnSync /usr/bin/time ETIMEDOUT
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/agent-a04b39a504ebef9a4/tests/acceptance/3433/perf-line.test.mjs:50:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+# ---------------------------------------------------------------------------------------------------------------
+# Summary of the other runs (in a copy of the checkout in this job's scratch folder, not kept; README: How I checked)
+
+## A throwaway implementation (a watcher process outside the run's group listing its tree every 200 ms): all 6 pass
+✔ #3433.cd15df63 a lane run that ends by itself writes its record by its tests, with no stop finding, and leaves no process of the stop running (14721.875583ms)
+✔ #3433.d424696d the same lane run stopped by SIGKILL to the lanes.mjs process's whole group leaves no process its command started alive 15 s later, and the record reads INCONCLUSIVE naming them (9401.442625ms)
+✔ #3433.46eec7ed a lanes.mjs lane run whose command starts a grandchild in a process group of its own, stopped by SIGTERM to the lanes.mjs process alone, leaves no process its command started alive 15 s later, and its record reads INCONCLUSIVE with a finding naming each process stopped, by PID and command (9758.251ms)
+✔ #3433.bf4b249a a measureOnce captured run past its timeout, whose command starts a grandchild in a process group of its own and waits, throws ETIMEDOUT, and 2 s later no process the command started is alive (3821.408417ms)
+✔ #3433.0ced7c1d measureOnce's ETIMEDOUT error names each process the stop ended, by PID and command (10526.961ms)
+✔ #3433.0ced7c1d perf's BLOCKED perf line for a copy's checks past their allowance names each process the stop ended, by PID and command (5090.680417ms)
+
+## Planted: the stop helper spawned without `detached` (it runs in lanes.mjs's own group): fails at "15 s after SIGKILL to lanes.mjs's group, processes its command started still run"
+✖ #3433.d424696d the same lane run stopped by SIGKILL to the lanes.mjs process's whole group leaves no process its command started alive 15 s later, and the record reads INCONCLUSIVE naming them (37474.077375ms)
+✖ #3433.d424696d the same lane run stopped by SIGKILL to the lanes.mjs process's whole group leaves no process its command started alive 15 s later, and the record reads INCONCLUSIVE naming them (37474.077375ms)
+
+## Planted: the stop helper never exits after the run ends: fails at "processes of the run are still running 5 s after it ended" (the leftover is the helper)
+✖ #3433.cd15df63 a lane run that ends by itself writes its record by its tests, with no stop finding, and leaves no process of the stop running (14020.459ms)
+✖ #3433.cd15df63 a lane run that ends by itself writes its record by its tests, with no stop finding, and leaves no process of the stop running (14020.459ms)
+
+## Planted: the stop ends the tree but the ETIMEDOUT message names nothing: both #3433.0ced7c1d tests fail at their names assertion; #3433.bf4b249a passes
+✔ #3433.bf4b249a a measureOnce captured run past its timeout, whose command starts a grandchild in a process group of its own and waits, throws ETIMEDOUT, and 2 s later no process the command started is alive (3753.476375ms)
+✖ #3433.0ced7c1d measureOnce's ETIMEDOUT error names each process the stop ended, by PID and command (10355.745375ms)
+✖ #3433.0ced7c1d perf's BLOCKED perf line for a copy's checks past their allowance names each process the stop ended, by PID and command (3798.0035ms)
+✖ #3433.0ced7c1d measureOnce's ETIMEDOUT error names each process the stop ended, by PID and command (10355.745375ms)
+✖ #3433.0ced7c1d perf's BLOCKED perf line for a copy's checks past their allowance names each process the stop ended, by PID and command (3798.0035ms)
+
+# ---------------------------------------------------------------------------------------------------------------
+# Second run on the merge base, 2026-11-24, after the waits were marked for scripts/wait-ratchet.mjs (no assertion or
+# bound changed). Load averages 37 to 43 on 12 cores. The same five tests fail at the same assertions and
+# #3433.cd15df63 passes, except perf-line.test.mjs: perf's own timed grant waited on the load gate (load >= cores),
+# so perf printed nothing in the 240 s bound and the test failed at its first assertion ("perf printed a BLOCKED perf
+# line ...", status null). A rerun of that file alone at load 37 to 43 did the same. The first run above (light load)
+# is its base result.
+pass #3433.cd15df63 (25289 ms)
+FAIL #3433.d424696d (39533 ms): 15 s after SIGKILL to lanes.mjs's group, processes its command started still run
+FAIL #3433.46eec7ed (39561 ms): 15 s after SIGTERM to lanes.mjs, processes its command started still run
+FAIL #3433.bf4b249a (5337 ms): 2 s after ETIMEDOUT these processes the command started still run: the grandchild
+FAIL #3433.0ced7c1d measureOnce (3126 ms): the ETIMEDOUT error names the lead it stopped ...
+FAIL #3433.0ced7c1d perf (240639 ms): perf printed a BLOCKED perf line ... naming ETIMEDOUT; status null (load gate)

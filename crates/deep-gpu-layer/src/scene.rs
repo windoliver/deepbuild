@@ -260,6 +260,7 @@ fn xor_texels(w: u32, h: u32) -> Arc<[u8]> {
     out.into()
 }
 
+deep_gpu::paired! { gpu: "scene.wgsl", Region;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Default)]
 struct Gpu {
@@ -271,6 +272,7 @@ struct Gpu {
     _pad: [u32; 2],
     one: [u32; 4],
     zero: [u32; 4],
+}
 }
 
 fn record(region: &Region, origin: [i64; 2], frame: u64) -> Gpu {

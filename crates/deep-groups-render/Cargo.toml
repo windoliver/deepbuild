@@ -27,3 +27,8 @@ naga = { version = "30", default-features = false, features = ["wgsl-in"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 wgpu = { version = "30", default-features = false }
+
+[features]
+# Issue #3256 criterion 4's planted comparison (tests/acceptance/3256): the shader side's offsets and size summed
+# from the host's field sizes. No shipped build has it.
+plant-3256-host-sizes = []

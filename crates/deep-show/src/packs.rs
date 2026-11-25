@@ -10,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use deep_canvas::document::packs::Resolved;
-use deep_canvas::document::{CheckResult, Expansion, Issue, Pack, Packs};
+use deep_canvas::document::{CheckResult, Expansion, Issue, Pack, PackPlanted, Packs};
 use deep_canvas::registry::Sealed;
 use serde_json::{json, Map, Value};
 
@@ -445,6 +445,72 @@ pub fn notes(list: Option<&Value>) -> Option<Vec<Value>> {
             Some(n.clone())
         })
         .collect()
+}
+
+/// #1857's wrong programs of the expansion, by the names its acceptance suite gives them: a
+/// count that refuses nothing until everything is expanded, and a nested recipe step that copies
+/// the document's items for each nested instance.
+pub const PLANTED: [&str; 2] = ["expansion_counts_after", "expansion_copies_items"];
+
+/// The expansion's and the pack check's wrong programs the scenario plants.
+pub(crate) fn planted(scenario: &crate::hub::Scenario) -> PackPlanted {
+    use crate::hub::Planted;
+    let module = scenario.module_planted.as_deref();
+    PackPlanted {
+        seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
+        drops_stroke: scenario.planted == Some(Planted::ExpansionDropsStroke),
+        overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
+        skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
+        key_by_name: matches!(
+            scenario.planted,
+            Some(Planted::PacksKeyedByName | Planted::LoaderDrawsMissingWithInstalled)
+        ),
+        each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
+        each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
+        orphan_drops: scenario.planted == Some(Planted::OrphanLoadDropsBrokenOut),
+        orphan_hands_id: scenario.planted == Some(Planted::OrphanLoadHandsIdToExpansion),
+        rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
+        kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
+        migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
+        migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
+        migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
+        migrate_params_only: matches!(
+            scenario.planted,
+            Some(Planted::MigrationRenamesParamsOnly | Planted::MoveRewritesKindOnly)
+        ),
+        migrate_channels_only: scenario.planted
+            == Some(Planted::MigrationRewritesChannelTargetsOnly),
+        drops_moved: scenario.planted == Some(Planted::LoaderDropsMovedInstances),
+        walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
+            .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
+        // #222: the planted cue-list expander.
+        expander: scenario
+            .module_planted
+            .as_deref()
+            .filter(|p| deep_canvas_motion::cues::planted(p))
+            .map(|p| &*Box::leak(p.to_string().into_boxed_str())),
+        counts_after_expanding: module == Some(PLANTED[0]),
+        copies_items_per_nested: module == Some(PLANTED[1]),
+    }
+}
+
+/// #202's planted expander: an instance's inputs walked through a std hash map, whose order a
+/// fresh random state picks, so two expansions of one example differ in their bytes. It redraws
+/// until the order differs from the previous walk's, which three inputs would match by chance.
+fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    thread_local! {
+        static LAST: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let last = LAST.with(|l| l.borrow().clone());
+    for _ in 0..64 {
+        let walked: std::collections::HashMap<String, Value> = inputs.clone().into_iter().collect();
+        let order: Vec<String> = walked.keys().cloned().collect();
+        if order != last || inputs.len() < 2 {
+            LAST.with(|l| *l.borrow_mut() = order);
+            return walked.into_iter().collect();
+        }
+    }
+    inputs
 }
 
 /// The planted cache (#1961): each expansion of `doc`'s instances kept by the instance's kind

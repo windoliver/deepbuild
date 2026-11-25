@@ -135,7 +135,10 @@ fn mib(bytes: u64) -> f64 {
 /// its scene has none of them, what a renderer that never drew them holds; and when they come
 /// back it draws them as its first frame would.
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "INCONCLUSIVE (platform): needs Metal, whose device reports what it holds; off macOS deep_gpu::memory::allocated reads nothing")]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "INCONCLUSIVE (platform): needs Metal, whose device reports what it holds; off macOS deep_gpu::memory::allocated reads nothing"
+)]
 fn a_scene_that_stopped_using_them_holds_none_of_their_memory() {
     let _turn = TURN.lock().unwrap_or_else(|e| e.into_inner());
     let gpu = Gpu::open(Backend::Gpu).expect("this test runs on the machine's GPU");
@@ -176,7 +179,10 @@ fn a_scene_that_stopped_using_them_holds_none_of_their_memory() {
 
 /// The glyph atlas is made by the first frame that draws a label: a scene with none holds none.
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "INCONCLUSIVE (platform): needs Metal, whose device reports what it holds; off macOS deep_gpu::memory::allocated reads nothing")]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "INCONCLUSIVE (platform): needs Metal, whose device reports what it holds; off macOS deep_gpu::memory::allocated reads nothing"
+)]
 fn a_scene_with_no_label_holds_no_glyph_atlas() {
     let _turn = TURN.lock().unwrap_or_else(|e| e.into_inner());
     let gpu = Gpu::open(Backend::Gpu).expect("this test runs on the machine's GPU");
@@ -208,7 +214,10 @@ fn a_scene_with_no_label_holds_no_glyph_atlas() {
 
 /// The key light's single map is held while a post module reads it, and let go once none does.
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "INCONCLUSIVE (platform): needs Metal, whose device reports what it holds; off macOS deep_gpu::memory::allocated reads nothing")]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "INCONCLUSIVE (platform): needs Metal, whose device reports what it holds; off macOS deep_gpu::memory::allocated reads nothing"
+)]
 fn a_frame_no_post_module_reads_the_key_lights_map_in_holds_no_map() {
     let _turn = TURN.lock().unwrap_or_else(|e| e.into_inner());
     let gpu = Gpu::open(Backend::Gpu).expect("this test runs on the machine's GPU");

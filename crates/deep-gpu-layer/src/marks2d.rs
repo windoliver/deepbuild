@@ -163,7 +163,10 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
         } else {
             deep_canvas_marks::look::Distance::Everywhere
         };
-        (layer::palette_where(&call["look"], "light", at)?, None)
+        (
+            layer::palette_where(&palette_look(app, &call["look"]), "light", at)?,
+            None,
+        )
     } else if role_map {
         let palette = layer::palette(&call["look"], "light")?;
         let look = Look3::from_roles(palette.clone());
@@ -240,6 +243,22 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     })
 }
 
+/// The look the palette's check reads: whole, or under #1857's planted parser without its line
+/// profiles' breaks, which that check refuses and the palette never reads.
+fn palette_look<'a>(app: &App, look: &'a Value) -> std::borrow::Cow<'a, Value> {
+    if app.planted != Some(Planted::ProfileAdmitsZeroBreaks) {
+        return std::borrow::Cow::Borrowed(look);
+    }
+    let mut look = look.clone();
+    let lines = look.get_mut("lines").and_then(Value::as_object_mut);
+    for line in lines.into_iter().flat_map(|m| m.values_mut()) {
+        if let Some(profile) = line.get_mut("profile").and_then(Value::as_object_mut) {
+            profile.remove("breaks");
+        }
+    }
+    std::borrow::Cow::Owned(look)
+}
+
 /// The bare `Type` of a call's look with its drawn fields, for a document of its size (#149).
 pub(crate) fn drawn_type(app: &App, look: &Value, doc: &Map<String, Value>) -> Result<Type, Value> {
     let size = pair(&doc["size"]).unwrap_or([0, 0]).map(f64::from);
@@ -258,8 +277,10 @@ pub(crate) fn drawn_type(app: &App, look: &Value, doc: &Map<String, Value>) -> R
     if def.get("roles").is_none() {
         return Ok(Type::default());
     }
-    let drawn =
-        deep_canvas_marks::drawn::read_look(def, size).map_err(|r| refused(r.code, r.path))?;
+    // A drawn field's refusal names its field as `path`, as a look's own check does (#1857).
+    let unguarded = app.planted == Some(Planted::ProfileAdmitsZeroBreaks);
+    let drawn = deep_canvas_marks::drawn::read_look_in(def, size, unguarded)
+        .map_err(|r| json!({"ok": false, "code": r.code, "path": r.path, "reason": r.path}))?;
     Ok(Type {
         drawn,
         first_rim: app.planted == Some(Planted::RimKeepsFirst),

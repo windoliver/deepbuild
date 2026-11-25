@@ -182,6 +182,9 @@ interface ProductsOptions {
   guard(given: Obj): Promise<{ status: string; reason?: string }>;
 }
 
+/** How many of the newest starts are kept, each for the hook's record that follows its reply. */
+const STARTS_KEPT = 64;
+
 export class Products {
   readonly store: string;
   private readonly indexFile: string;
@@ -286,7 +289,7 @@ export class Products {
     if (!started) {
       started = this.start(session, cwd);
       this.starts.set(hook, started);
-      if (this.starts.size > 1000) this.starts.delete(this.starts.keys().next().value!);
+      if (this.starts.size > STARTS_KEPT) this.starts.delete(this.starts.keys().next().value!);
     }
     return started;
   }
