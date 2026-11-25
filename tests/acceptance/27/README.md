@@ -213,10 +213,11 @@ This job edits nothing outside this folder.
    | `repeat-reaches-you` (new) | deep_ask raises its ask without asking the resolvers, so a repeated question reaches you | AC2 |
    | `waiter-never-wakes`, `wake-assumed`, `skip-default-at-deadline`, `waiter-outlives-session`, `answer-skips-held-stop`, `waiter-checks-every-5s` (merged) | as #25, #318 and #16 define them | AC1, AC3, AC4, AC5 |
 
-   `packages/hub/src/plant.ts` keeps its exports (`Plant`, `plantOf`, `activePlant`): each twin replaces it whole.
-   The `waiter-outlives-session` twin also replaces `packages/hub/src/setup.ts` with the base's copy whose waiter
-   entry carries the plant to deep-hook's waiter (as #25's twin does); if the change edits `setup.ts`, that twin's
-   copy must follow it.
+   `packages/hub/src/plant.ts` keeps its exports (`Plant`, `plantOf`, `activePlant`): each twin is its `lines.json`
+   in #1832's line form (`tests/acceptance/1832/README.md`), whose edits make `plantOf` and `activePlant` return the
+   twin's plant whatever `DEEP_HUB_PLANT` says. The `waiter-outlives-session` twin also edits
+   `packages/hub/src/setup.ts`'s waiter entry so it carries the plant to deep-hook's waiter (as #25's twin does); if
+   the change edits the lines a twin finds, that twin's `lines.json` must follow them.
 3. **`scripts/lanes.mjs`**: `tests/acceptance/27/` in `alone` (its files start hubs; `budgets.test.ts` must run with
    nothing beside it), or the fast files in `alone` and `budgets.test.ts` in a check lane of its own run with
    `--no-file-parallelism`; and `tests/acceptance/27/session.live.test.ts` in `byHand` and in the release lane
@@ -233,7 +234,8 @@ This job edits nothing outside this folder.
 
 IDs are `#27.<first 8 hex of SHA-256 of the criterion's text, trimmed, whitespace collapsed, the leading "- [ ] "
 dropped>` (`scripts/proof-change.mjs`). Every test name and check message starts with its ID. `twins.json` maps each
-criterion to its twin folders under `twins/`, each holding `packages/hub/src/plant.ts` (and `setup.ts` for one).
+criterion to its twin folders under `twins/`, each holding only `lines.json`: its edits of `packages/hub/src/plant.ts`
+(and of `setup.ts` for one) in #1832's line form.
 
 | ID | Criterion (short) | Tests | Wrong program each fails on |
 |---|---|---|---|
@@ -251,6 +253,7 @@ criterion to its twin folders under `twins/`, each holding `packages/hub/src/pla
 - `wake.test.ts` (AC1), `repeat.test.ts` (AC2), `desktop.test.ts` (AC3), `waits.test.ts` and `outcomes.test.ts`
   (AC4), `budgets.test.ts` (AC5), `session.live.test.ts` and `live.ts` (AC1 and AC2 live), `MANUAL.md` (AC3).
 - `fixtures/claude.mjs` (#25's stand-in, copied), `fixtures/stub-bin.sh`.
-- `twins.json`, `twins/<plant>/packages/hub/src/plant.ts` (and `setup.ts`): the planted wrong programs for the proof lane.
+- `twins.json`, `twins/<plant>/lines.json` (edits of `plant.ts`, and of `setup.ts` for one, in #1832's line form): the
+  planted wrong programs for the proof lane.
 - `BASE-FAILURE.txt`: the run at the base, and why each test fails or which twin kills it.
 - `tsconfig.json`: the root options with `noEmit`.

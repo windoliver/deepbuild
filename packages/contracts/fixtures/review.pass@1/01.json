@@ -1,0 +1,52 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7A",
+  "kind": "review.pass",
+  "subject": "claim:01K74FKZVK8Q2X5R7M3N9P4T6V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "claim": "claim:01K74FKZVK8Q2X5R7M3N9P4T6V",
+    "commit": "2222222222222222222222222222222222222222",
+    "pass": "audit",
+    "model": "claude-sonnet-5-5",
+    "sent": [
+      {
+        "rule": "audit",
+        "sites": [
+          {
+            "file": "src/ui/cart.ts",
+            "line": 10,
+            "quote": "return JSON.parse(JSON.stringify(items)).length;"
+          }
+        ]
+      }
+    ],
+    "follow_ups": [
+      {
+        "file": "src/ui/cart.ts",
+        "line": 6,
+        "quote": "const saved = JSON.parse(raw);"
+      }
+    ],
+    "replays": [
+      {
+        "pr": 12,
+        "head": "3333333333333333333333333333333333333333",
+        "key": "4444444444444444444444444444444444444444444444444444444444444444",
+        "found": 1,
+        "of": 1,
+        "carried": true
+      },
+      {
+        "pr": 17,
+        "head": "5555555555555555555555555555555555555555",
+        "key": "6666666666666666666666666666666666666666666666666666666666666666",
+        "found": 1,
+        "of": 1
+      }
+    ]
+  }
+}

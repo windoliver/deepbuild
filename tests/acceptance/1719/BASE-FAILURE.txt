@@ -1,0 +1,307 @@
+#1719's blind acceptance suite, run on the base commit c8d9684f0 ("Merge pull request #3268 …"), every file once, on macOS
+(Apple silicon, Metal), with the command in the README, deep-show and deep-gpu already built there by the same cargo
+line. The load lines are the machine's own (18 cores, shared with other work); no test asserts a time.
+
+Result: 8 tests, 8 failed, each at its criterion's own assertion (the fixture checks before it pass, so each document is
+presented, with no issue, and rendered back):
+
+- AC1 #1719.7d3b0d01 names the share: 100.00% of the red box's snapshot, presenting's and render_back's, is #ffffff.
+- AC2 #1719.57f3f19b: the castle's snapshots read FLIP mean 0.5321 and worst window 0.9695 against both of view3d's frames
+  in castle-dusk@1; the failure names the look. The test stops there, before its planted run: the unknown name
+  render_back_drops_look answers {"ok":false,"code":"bad_input"} (checked by hand).
+- AC3 #1719.a8f28cf0: the two looks' snapshots have one pixel hash, 991330f3….
+- AC4 #1719.da234c2b: neither reply carries an issue at look/asset, and each carries a snapshot.
+- AC5 #1719.60109185: 99.26% of the small box's snapshot is #f2f0ea and no reply carries a snapshot_blank notice. (The
+  castle half, no such notice, passes at the base.)
+- AC6 #1719.ce14bb8d names the item: with sparks the snapshot has the pixel hash it has without it, 2de0ecd2….
+- AC7 #1719.32afa26e names the light: the slab's mean luma is 0.7575 on both sides of the box under sun.
+- AC8 #1719.15766d54 names the items: the box's mean red is 0.0790 with declared and with tint, as without.
+
+The run's output, home folders written as ~:
+
+load before: 17:18  up 10 days, 27 mins, 13 users, load averages: 141.55 129.72 152.20
+head: c8d9684f003419173cf19bbc0171593acd5e0829
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1719-58d3b1/agent-a93de529843ea594e/tests/acceptance/1719
+
+stdout | look.test.ts > AC1 a lit scene in castle-dusk@1 > AC1 #1719.7d3b0d01 the red box document renders back with the box region's mean red at least 0.2 above its green, and no color over 60% of the frame
+PROOF #1719 AC1 presenting: {"png":"b1806875679d6ac384f6cc378d27b06dc8cce23e42869026c840bb8a45ff208f","most_common":"#ffffff","share":1,"box_red":1,"box_green":1}
+PROOF #1719 AC1 render_back: {"png":"b1806875679d6ac384f6cc378d27b06dc8cce23e42869026c840bb8a45ff208f","most_common":"#ffffff","share":1,"box_red":1,"box_green":1}
+
+stdout | look.test.ts > AC3 two looks with different tone maps > AC3 #1719.a8f28cf0 changing only look.asset between two looks with different tone maps changes the snapshot's pixel hash
+PROOF #1719 AC3 presenting: {"tone-filmic@1":"991330f37f939055fb85f55af940ff9149b1759a6c632f37bc7ca464d5902012","tone-neutral@1":"991330f37f939055fb85f55af940ff9149b1759a6c632f37bc7ca464d5902012"}
+PROOF #1719 AC3 render_back: {"tone-filmic@1":"991330f37f939055fb85f55af940ff9149b1759a6c632f37bc7ca464d5902012","tone-neutral@1":"991330f37f939055fb85f55af940ff9149b1759a6c632f37bc7ca464d5902012"}
+
+stdout | look.test.ts > AC4 a look the store doesn't hold > AC4 #1719.da234c2b a document naming a look whose asset isn't in the store is answered with an issue at look/asset, and no snapshot drawn in another look
+PROOF #1719 AC4 presenting: {"issue":null,"outcome":"presented","snapshots":[{"sha256":"8f17f4e6e9a791726094f6388b310e9a6fb39a9078a152d8e2c6d4c750fe8aad","w":320,"h":240}]}
+PROOF #1719 AC4 render_back: {"issue":null,"outcome":"presented","snapshots":[{"sha256":"8f17f4e6e9a791726094f6388b310e9a6fb39a9078a152d8e2c6d4c750fe8aad","w":320,"h":240}]}
+
+stdout | look.test.ts > AC5 a snapshot of one color > AC5 #1719.60109185 a 3D snapshot whose most common color covers at least 98% of it carries a snapshot_blank notice with that share; the clean castle carries none
+PROOF #1719 AC5 presenting, the small box: {"most_common":"#f2f0ea","share":0.9925520833333333,"notices":[]}
+PROOF #1719 AC5 presenting, the castle: {"most_common":{"color":"#ffffff","share":0.3849697265625},"notices":[]}
+PROOF #1719 AC5 render_back, the small box: {"most_common":"#f2f0ea","share":0.9925520833333333,"notices":[]}
+PROOF #1719 AC5 render_back, the castle: {"most_common":{"color":"#ffffff","share":0.3849697265625},"notices":[]}
+
+ ❯ look.test.ts (4 tests | 4 failed) 58433ms
+   ❯ AC1 a lit scene in castle-dusk@1 (1)
+     × AC1 #1719.7d3b0d01 the red box document renders back with the box region's mean red at least 0.2 above its green, and no color over 60% of the frame 15290ms
+   ❯ AC3 two looks with different tone maps (1)
+     × AC3 #1719.a8f28cf0 changing only look.asset between two looks with different tone maps changes the snapshot's pixel hash 12781ms
+   ❯ AC4 a look the store doesn't hold (1)
+     × AC4 #1719.da234c2b a document naming a look whose asset isn't in the store is answered with an issue at look/asset, and no snapshot drawn in another look 4730ms
+   ❯ AC5 a snapshot of one color (1)
+     × AC5 #1719.60109185 a 3D snapshot whose most common color covers at least 98% of it carries a snapshot_blank notice with that share; the clean castle carries none 17040ms
+stdout | post.test.ts > AC6 particles > AC6 #1719.ce14bb8d a document with one particles@1 emitter in front of a dark slab renders back with a pixel hash different from the same document without it
+PROOF #1719 AC6 presenting: {"with_sparks":"2de0ecd2010ac278d184dfa37bcc64d7e59c881d35a9b71bc834a2fa56c75861","without":"2de0ecd2010ac278d184dfa37bcc64d7e59c881d35a9b71bc834a2fa56c75861"}
+PROOF #1719 AC6 render_back: {"with_sparks":"2de0ecd2010ac278d184dfa37bcc64d7e59c881d35a9b71bc834a2fa56c75861","without":"2de0ecd2010ac278d184dfa37bcc64d7e59c881d35a9b71bc834a2fa56c75861"}
+
+stdout | post.test.ts > AC7 a painted box's shadow > AC7 #1719.32afa26e a painted box on a painted slab under a sun with shadow: true renders back with the slab's mean luma on the box's shadow side at least 0.1 below its sunlit side
+PROOF #1719 AC7 presenting: {"shadow_side":0.7575121568627409,"sunlit_side":0.7575121568627409}
+PROOF #1719 AC7 render_back: {"shadow_side":0.7575121568627409,"sunlit_side":0.7575121568627409}
+
+stdout | post.test.ts > AC8 a document's own GPU operator > AC8 #1719.15766d54 a one-box document holding a gpu.pass@1 item that adds 0.6 to red renders back with the box region's mean red at least 0.3 above the same document's without the item
+PROOF #1719 AC8 presenting, declared: {"red_with":0.07895283031028794,"red_without":0.07895283031028794}
+PROOF #1719 AC8 render_back, declared: {"red_with":0.07895283031028794,"red_without":0.07895283031028794}
+PROOF #1719 AC8 presenting, tint: {"red_with":0.07895283031028794,"red_without":0.07895283031028794}
+PROOF #1719 AC8 render_back, tint: {"red_with":0.07895283031028794,"red_without":0.07895283031028794}
+
+ ❯ post.test.ts (3 tests | 3 failed) 64123ms
+   ❯ AC6 particles (1)
+     × AC6 #1719.ce14bb8d a document with one particles@1 emitter in front of a dark slab renders back with a pixel hash different from the same document without it 21855ms
+   ❯ AC7 a painted box's shadow (1)
+     × AC7 #1719.32afa26e a painted box on a painted slab under a sun with shadow: true renders back with the slab's mean luma on the box's shadow side at least 0.1 below its sunlit side 7077ms
+   ❯ AC8 a document's own GPU operator (1)
+     × AC8 #1719.15766d54 a one-box document holding a gpu.pass@1 item that adds 0.6 to red renders back with the box region's mean red at least 0.3 above the same document's without the item 23752ms
+stdout | castle.test.ts > AC2 the castle in castle-dusk@1 > AC2 #1719.57f3f19b render-back of the castle at 0 s matches view3d's final frame of the same document, look and size by the GPU goldens' comparison, and a planted render-back that drops the document's look fails, naming the look
+PROOF #1719 AC2 presenting: ["live: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05)","render_back: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05)"]
+PROOF #1719 AC2 render_back: ["live: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05)","render_back: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05)"]
+
+ ❯ castle.test.ts (1 test | 1 failed) 115391ms
+   ❯ AC2 the castle in castle-dusk@1 (1)
+     × AC2 #1719.57f3f19b render-back of the castle at 0 s matches view3d's final frame of the same document, look and size by the GPU goldens' comparison, and a planted render-back that drops the document's look fails, naming the look 103309ms
+
+ Test Files  3 failed (3)
+      Tests  8 failed (8)
+   Start at  17:18:38
+   Duration  240.29s (tests 100%)
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  castle.test.ts > AC2 the castle in castle-dusk@1 > AC2 #1719.57f3f19b render-back of the castle at 0 s matches view3d's final frame of the same document, look and size by the GPU goldens' comparison, and a planted render-back that drops the document's look fails, naming the look
+AssertionError: render-back of the castle matches view3d's final frame:
+  presenting isn't view3d's final frame of the castle in its look, castle-dusk@1: against view3d's live: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05); against its render_back: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05)
+  render_back isn't view3d's final frame of the castle in its look, castle-dusk@1: against view3d's live: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05); against its render_back: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "presenting isn't view3d's final frame of the castle in its look, castle-dusk@1: against view3d's live: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05); against its render_back: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05)",
++   "render_back isn't view3d's final frame of the castle in its look, castle-dusk@1: against view3d's live: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05); against its render_back: FAIL, FLIP mean 0.5321 (at most 0.01), worst 16 × 16 window 0.9695 (at most 0.05)",
++ ]
+
+ ❯ none helpers.ts:43:60
+     41| /** No failures; the message lists them, each naming what failed. */
+     42| export function none(failures: readonly string[], what: string): void {
+     43|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     44| }
+     45| /** Every object in a JSON value, itself included. */
+ ❯ castle.test.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  look.test.ts > AC1 a lit scene in castle-dusk@1 > AC1 #1719.7d3b0d01 the red box document renders back with the box region's mean red at least 0.2 above its green, and no color over 60% of the frame
+AssertionError: the red box document renders back as a lit red box:
+  presenting: 100.00% of the frame is one color, #ffffff, past 60%
+  presenting: the box's region holds a mean red of 1.000, 0.000 above its green, under 0.2
+  render_back: 100.00% of the frame is one color, #ffffff, past 60%
+  render_back: the box's region holds a mean red of 1.000, 0.000 above its green, under 0.2: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "presenting: 100.00% of the frame is one color, #ffffff, past 60%",
++   "presenting: the box's region holds a mean red of 1.000, 0.000 above its green, under 0.2",
++   "render_back: 100.00% of the frame is one color, #ffffff, past 60%",
++   "render_back: the box's region holds a mean red of 1.000, 0.000 above its green, under 0.2",
++ ]
+
+ ❯ none helpers.ts:43:60
+     41| /** No failures; the message lists them, each naming what failed. */
+     42| export function none(failures: readonly string[], what: string): void {
+     43|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     44| }
+     45| /** Every object in a JSON value, itself included. */
+ ❯ look.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  look.test.ts > AC3 two looks with different tone maps > AC3 #1719.a8f28cf0 changing only look.asset between two looks with different tone maps changes the snapshot's pixel hash
+AssertionError: changing only look.asset between a filmic and a neutral look changes the snapshot's pixel hash:
+  presenting: in look.asset tone-filmic@1 and in tone-neutral@1 the snapshot has one pixel hash, 991330f37f939055fb85f55af940ff9149b1759a6c632f37bc7ca464d5902012
+  render_back: in look.asset tone-filmic@1 and in tone-neutral@1 the snapshot has one pixel hash, 991330f37f939055fb85f55af940ff9149b1759a6c632f37bc7ca464d5902012: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "presenting: in look.asset tone-filmic@1 and in tone-neutral@1 the snapshot has one pixel hash, 991330f37f939055fb85f55af940ff9149b1759a6c632f37bc7ca464d5902012",
++   "render_back: in look.asset tone-filmic@1 and in tone-neutral@1 the snapshot has one pixel hash, 991330f37f939055fb85f55af940ff9149b1759a6c632f37bc7ca464d5902012",
++ ]
+
+ ❯ none helpers.ts:43:60
+     41| /** No failures; the message lists them, each naming what failed. */
+     42| export function none(failures: readonly string[], what: string): void {
+     43|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     44| }
+     45| /** Every object in a JSON value, itself included. */
+ ❯ look.test.ts:71:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  look.test.ts > AC4 a look the store doesn't hold > AC4 #1719.da234c2b a document naming a look whose asset isn't in the store is answered with an issue at look/asset, and no snapshot drawn in another look
+AssertionError: a document naming a look the store doesn't hold is answered with an issue at look/asset and no snapshot:
+  presenting: the reply to a document in lost-look@1, whose asset isn't in the store, carries no issue at look/asset: {"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"8f17f4e6e9a791726094f6388b310e9a6fb39a9078a152d8e2c6d4c750fe8aad","w":320,"h":240}],"changed":[],"unchanged":[],"created":["box","cam"],"removed":[],"visible":[{"id":"box","box":[97.2005161267515,57.20051612675149,125.59896774649701,125.59896774649701],"px":15876,"at":[159,119]}],"hidden":[],"batches":[],"outcome":"presented","backends":{"fonts":{"name
+  presenting: the reply carries a snapshot, drawn in some other look than lost-look@1, which the store doesn't hold: [{"sha256":"8f17f4e6e9a791726094f6388b310e9a6fb39a9078a152d8e2c6d4c750fe8aad","w":320,"h":240}]
+  render_back: the reply to a document in lost-look@1, whose asset isn't in the store, carries no issue at look/asset: {"rev":0,"t":0,"outcome":"presented","snapshots":[{"sha256":"8f17f4e6e9a791726094f6388b310e9a6fb39a9078a152d8e2c6d4c750fe8aad","w":320,"h":240}],"backends":{"fonts":{"name":"fonts.bundled","version":"1.1.0"},"cpu":{"name":"aarch64","version":"1.0.0"},"headless":{"name":"headless.vello-cpu","version":"0.3.0"}},"visible":[{"id":"box","box":[97.2005161267515,57.20051612675149,125.59896774649701,125.59896774649701],"px":15876,"at":[159,119]}],"hidden":[],"core":"core@0.0.0","set_digest":"46ce7e0f354
+  render_back: the reply carries a snapshot, drawn in some other look than lost-look@1, which the store doesn't hold: [{"sha256":"8f17f4e6e9a791726094f6388b310e9a6fb39a9078a152d8e2c6d4c750fe8aad","w":320,"h":240}]: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "presenting: the reply to a document in lost-look@1, whose asset isn't in the store, carries no issue at look/asset: {\"rev\":1,\"expansions\":[],\"issues\":[],\"issues_evidence\":\"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\"snapshots\":[{\"sha256\":\"8f17f4e6e9a791726094f6388b310e9a6fb39a9078a152d8e2c6d4c750fe8aad\",\"w\":320,\"h\":240}],\"changed\":[],\"unchanged\":[],\"created\":[\"box\",\"cam\"],\"removed\":[],\"visible\":[{\"id\":\"box\",\"box\":[97.2005161267515,57.20051612675149,125.59896774649701,125.59896774649701],\"px\":15876,\"at\":[159,119]}],\"hidden\":[],\"batches\":[],\"outcome\":\"presented\",\"backends\":{\"fonts\":{\"name",
++   "presenting: the reply carries a snapshot, drawn in some other look than lost-look@1, which the store doesn't hold: [{\"sha256\":\"8f17f4e6e9a791726094f6388b310e9a6fb39a9078a152d8e2c6d4c750fe8aad\",\"w\":320,\"h\":240}]",
++   "render_back: the reply to a document in lost-look@1, whose asset isn't in the store, carries no issue at look/asset: {\"rev\":0,\"t\":0,\"outcome\":\"presented\",\"snapshots\":[{\"sha256\":\"8f17f4e6e9a791726094f6388b310e9a6fb39a9078a152d8e2c6d4c750fe8aad\",\"w\":320,\"h\":240}],\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.1.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"},\"headless\":{\"name\":\"headless.vello-cpu\",\"version\":\"0.3.0\"}},\"visible\":[{\"id\":\"box\",\"box\":[97.2005161267515,57.20051612675149,125.59896774649701,125.59896774649701],\"px\":15876,\"at\":[159,119]}],\"hidden\":[],\"core\":\"core@0.0.0\",\"set_digest\":\"46ce7e0f354",
++   "render_back: the reply carries a snapshot, drawn in some other look than lost-look@1, which the store doesn't hold: [{\"sha256\":\"8f17f4e6e9a791726094f6388b310e9a6fb39a9078a152d8e2c6d4c750fe8aad\",\"w\":320,\"h\":240}]",
++ ]
+
+ ❯ none helpers.ts:43:60
+     41| /** No failures; the message lists them, each naming what failed. */
+     42| export function none(failures: readonly string[], what: string): void {
+     43|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     44| }
+     45| /** Every object in a JSON value, itself included. */
+ ❯ look.test.ts:100:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  look.test.ts > AC5 a snapshot of one color > AC5 #1719.60109185 a 3D snapshot whose most common color covers at least 98% of it carries a snapshot_blank notice with that share; the clean castle carries none
+AssertionError: a snapshot of one color carries a snapshot_blank notice with its share, and the clean castle's carries none:
+  presenting: 99.26% of the small box's snapshot is one color, #f2f0ea, and the reply carries no snapshot_blank notice
+  render_back: 99.26% of the small box's snapshot is one color, #f2f0ea, and the reply carries no snapshot_blank notice: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "presenting: 99.26% of the small box's snapshot is one color, #f2f0ea, and the reply carries no snapshot_blank notice",
++   "render_back: 99.26% of the small box's snapshot is one color, #f2f0ea, and the reply carries no snapshot_blank notice",
++ ]
+
+ ❯ none helpers.ts:43:60
+     41| /** No failures; the message lists them, each naming what failed. */
+     42| export function none(failures: readonly string[], what: string): void {
+     43|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     44| }
+     45| /** Every object in a JSON value, itself included. */
+ ❯ look.test.ts:132:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  post.test.ts > AC6 particles > AC6 #1719.ce14bb8d a document with one particles@1 emitter in front of a dark slab renders back with a pixel hash different from the same document without it
+AssertionError: the particles@1 item sparks changes the snapshot's pixel hash:
+  presenting: with the particles@1 item sparks (count 2,000, at 1 s) the snapshot has the pixel hash it has without it, 2de0ecd2010ac278d184dfa37bcc64d7e59c881d35a9b71bc834a2fa56c75861: sparks drew nothing
+  render_back: with the particles@1 item sparks (count 2,000, at 1 s) the snapshot has the pixel hash it has without it, 2de0ecd2010ac278d184dfa37bcc64d7e59c881d35a9b71bc834a2fa56c75861: sparks drew nothing: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "presenting: with the particles@1 item sparks (count 2,000, at 1 s) the snapshot has the pixel hash it has without it, 2de0ecd2010ac278d184dfa37bcc64d7e59c881d35a9b71bc834a2fa56c75861: sparks drew nothing",
++   "render_back: with the particles@1 item sparks (count 2,000, at 1 s) the snapshot has the pixel hash it has without it, 2de0ecd2010ac278d184dfa37bcc64d7e59c881d35a9b71bc834a2fa56c75861: sparks drew nothing",
++ ]
+
+ ❯ none helpers.ts:43:60
+     41| /** No failures; the message lists them, each naming what failed. */
+     42| export function none(failures: readonly string[], what: string): void {
+     43|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     44| }
+     45| /** Every object in a JSON value, itself included. */
+ ❯ post.test.ts:56:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  post.test.ts > AC7 a painted box's shadow > AC7 #1719.32afa26e a painted box on a painted slab under a sun with shadow: true renders back with the slab's mean luma on the box's shadow side at least 0.1 below its sunlit side
+AssertionError: the light.sun@1 sun casts the painted box's shadow on the painted slab:
+  presenting: the light.sun@1 sun casts no shadow of the box: the slab's mean luma is 0.7575 on the box's shadow side and 0.7575 on its sunlit side, 0.0000 apart, under 0.1
+  render_back: the light.sun@1 sun casts no shadow of the box: the slab's mean luma is 0.7575 on the box's shadow side and 0.7575 on its sunlit side, 0.0000 apart, under 0.1: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "presenting: the light.sun@1 sun casts no shadow of the box: the slab's mean luma is 0.7575 on the box's shadow side and 0.7575 on its sunlit side, 0.0000 apart, under 0.1",
++   "render_back: the light.sun@1 sun casts no shadow of the box: the slab's mean luma is 0.7575 on the box's shadow side and 0.7575 on its sunlit side, 0.0000 apart, under 0.1",
++ ]
+
+ ❯ none helpers.ts:43:60
+     41| /** No failures; the message lists them, each naming what failed. */
+     42| export function none(failures: readonly string[], what: string): void {
+     43|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     44| }
+     45| /** Every object in a JSON value, itself included. */
+ ❯ post.test.ts:82:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  post.test.ts > AC8 a document's own GPU operator > AC8 #1719.15766d54 a one-box document holding a gpu.pass@1 item that adds 0.6 to red renders back with the box region's mean red at least 0.3 above the same document's without the item
+AssertionError: the document's own gpu.pass@1 item adds red to the box's region:
+  presenting: with the gpu.pass@1 item declared the box's region holds a mean red of 0.0790, 0.0000 above the 0.0790 without it, under 0.3: declared never ran
+  render_back: with the gpu.pass@1 item declared the box's region holds a mean red of 0.0790, 0.0000 above the 0.0790 without it, under 0.3: declared never ran
+  presenting: with the gpu.pass@1 item tint the box's region holds a mean red of 0.0790, 0.0000 above the 0.0790 without it, under 0.3: tint never ran
+  render_back: with the gpu.pass@1 item tint the box's region holds a mean red of 0.0790, 0.0000 above the 0.0790 without it, under 0.3: tint never ran: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "presenting: with the gpu.pass@1 item declared the box's region holds a mean red of 0.0790, 0.0000 above the 0.0790 without it, under 0.3: declared never ran",
++   "render_back: with the gpu.pass@1 item declared the box's region holds a mean red of 0.0790, 0.0000 above the 0.0790 without it, under 0.3: declared never ran",
++   "presenting: with the gpu.pass@1 item tint the box's region holds a mean red of 0.0790, 0.0000 above the 0.0790 without it, under 0.3: tint never ran",
++   "render_back: with the gpu.pass@1 item tint the box's region holds a mean red of 0.0790, 0.0000 above the 0.0790 without it, under 0.3: tint never ran",
++ ]
+
+ ❯ none helpers.ts:43:60
+     41| /** No failures; the message lists them, each naming what failed. */
+     42| export function none(failures: readonly string[], what: string): void {
+     43|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     44| }
+     45| /** Every object in a JSON value, itself included. */
+ ❯ post.test.ts:123:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+exit 1
+wall: 242 s
+load after: 17:22  up 10 days, 31 mins, 13 users, load averages: 205.70 172.38 165.34

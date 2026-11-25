@@ -172,9 +172,10 @@ harness = false
 
 # Issue #992: the sidebar row the app draws for a record, which tests/acceptance/992 compares with `deep status`.
 # #3100: only those tests run it, by name with the cases they write in DH992_APP_CASES, so a workspace run leaves it.
+# #3172: its file is the blind redraft beside the suite, which states INCONCLUSIVE off macOS (#3172.f7060cf1).
 [[test]]
 name = "acceptance_992_app"
-path = "../../tests/acceptance/992/app.rs"
+path = "../../tests/acceptance/992-redraft-3172/app.rs"
 harness = false
 test = false
 
@@ -228,3 +229,9 @@ path = "../../tests/acceptance/1550/probe.rs"
 [[example]]
 name = "acceptance_1550_redraft_probe"
 path = "../../tests/acceptance/1550/redraft/probe.rs"
+
+# Issue #2660 criterion 6: the terminal's acceptance test, written blind in tests/acceptance/2660
+# (here, not in deep-canvas-cells, whose canvas lint refuses `unsafe` and a target outside it).
+[[test]]
+name = "acceptance_2660_terminal"
+path = "../../tests/acceptance/2660/terminal.rs"

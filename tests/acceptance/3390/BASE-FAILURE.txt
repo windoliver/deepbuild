@@ -1,0 +1,268 @@
+# The suite on the base, 550fa914263d6dc018ae9a223e725dbf7f609fce, with nothing but these files added, in one test grant of
+# scripts/throttle.mjs: node node_modules/vitest/vitest.mjs run --root tests/acceptance/3390 --no-file-parallelism
+# --testTimeout=600000 --reporter=verbose. macOS 27.2, node v24.22.2, 18 cores, load average 125 as it began. The packages
+# and the debug deep-hook are the base's own sources' builds (README, How to run). <repo> is the checkout, <tmp> a temp
+# folder of a test.
+#
+# An earlier grant ran nothing of the product: this Mac's cleanup had emptied the worktree's target/ while the run waited,
+# so no hub could start ("no deep-hook is built"), all 12 tests BLOCKED at their setup. The run below put deep-hook back
+# first, and is the only reading.
+#
+# Each of the 12 tests fails, each at a named assertion that says what is wrong, none at its setup or a timeout:
+#   AC1  the second call of ext.stocks.set_alert is held, not done, its ask closed
+#   AC2  the second call is held, not declined
+#   AC3  ext.desk.retire_symbol's ask was decided for you by the decision saved from your yes to ext.desk.pin_symbol
+#   AC4  the second send's ask was decided for you; the card says the answer is saved for the repo, and one is superseded
+#        before it can be answered; the answer is saved as a decision, and saveDecision saves more, at each scope
+#   AC5  the first send's ask is superseded (2: other inputs, the same input)
+#   AC6  the older call retried is held by its superseded ask, while the newer ask is open and after your yes to it
+#   AC7  after the restart the change is held by another ask and never runs; the send raises a second ask.created
+#   AC8  the call decided in another session is held on its retry; overruled, it raises no new ask
+#
+# Test Files  5 failed (5); Tests  12 failed (12)
+
+FAILED  AC1 #3390.69999517  saved.test.ts > AC1 the second call returns done with its report on its first try; its one ask closes as decided for you by the decision saved from the first yes, its input enters once, and no open ask is left (7456 ms)
+      AssertionError: the call of ext.stocks.set_alert under request req-657e23852d225e98 with {"symbol":"INTC","above":30} runs on its first try, by the decision decision:01M87K2FWV8D2M8XH0KSVA6874 saved from your yes to ask:01M87K2EZKK3SC5KQZN0ZGV1Q2: {"jsonrpc":"2.0","id":"deep-actions#6","result":{"content":[{"type":"text","text":"{\"status\":\"held\",\"ask\":\"ask:01M87K2GKDDGF3G4H2MR8V3WYN\",\"reason\":\"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K2GKDDGF3G4H2MR8V3WYN; once you say yes, call it again with the same request ID.\"}"}],"isError":false,"structuredContent":{"status":"held","ask":"ask:01M87K2GKDDGF3G4H2MR8V3WYN","reason":"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K2GKDDGF3G4H2MR8V3WYN; once you say yes, call it again with the same request ID."}}}: expected { isError: false, status: 'held' } to deeply equal { isError: false, status: 'done' }
+
+      - Expected
+      + Received
+
+        {
+          "isError": false,
+      -   "status": "done",
+      +   "status": "held",
+        }
+        at saved.test.ts:30:8
+
+FAILED  AC2 #3390.a14577e2  saved.test.ts > AC2 the second call returns declined with its ask, which closed as decided for you by the decision saved from the first no, and nothing enters (5865 ms)
+      AssertionError: the call of ext.stocks.set_alert under request req-56125028002493ad with {"symbol":"INTC","above":30} is declined, by the decision decision:01M87K2NPF9TT0GZEDSRV7GYS7 saved from your no to ask:01M87K2NB8F6Q3D2GNAS3WEAXQ: {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"held\",\"ask\":\"ask:01M87K2PBEKB5TBGZYZWFQ6RRC\",\"reason\":\"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K2PBEKB5TBGZYZWFQ6RRC; once you say yes, call it again with the same request ID.\"}"}],"isError":false,"structuredContent":{"status":"held","ask":"ask:01M87K2PBEKB5TBGZYZWFQ6RRC","reason":"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K2PBEKB5TBGZYZWFQ6RRC; once you say yes, call it again with the same request ID."}}}: expected { isError: false, status: 'held' } to deeply equal { isError: false, status: 'declined' }
+
+      - Expected
+      + Received
+
+        {
+          "isError": false,
+      -   "status": "declined",
+      +   "status": "held",
+        }
+        at saved.test.ts:59:8
+
+FAILED  AC3 #3390.0ff85ad5  saved.test.ts > AC3 another change action of the plug-in, given the same input, is held by an ask no saved decision closes, and runs once on your yes to it (6484 ms)
+      AssertionError: the call of ext.desk.retire_symbol under request req-7f413bbccade3c53 with {"symbol":"NVDA","note":"watch the earnings call"} is held by ask:01M87K2WDYFSB0Y43DKBG2Z9DT, which waits for your own answer and stays open (at once): ext.desk.retire_symbol's ask isn't decided for you: expected { …(2) } to deeply equal { ask: 'open', decided: [] }
+
+      - Expected
+      + Received
+
+        {
+      -   "ask": "open",
+      -   "decided": [],
+      +   "ask": "decided_for_you by decision:01M87K2VQHR48EP8MYTVFAMEK4",
+      +   "decided": [
+      +     "decision:01M87K2VQHR48EP8MYTVFAMEK4",
+      +   ],
+        }
+        at saved.test.ts:84:5
+
+FAILED  AC4 #3390.78c40059  sends.test.ts > AC4 after your yes to a send, the same send under another request ID, with the same input and then with another, is held by an ask of its own that stays open, and runs once on your yes to it (8371 ms)
+      AssertionError: the call of ext.stocks.send_digest under request req-2c2fbc4aa30f2152 with {"to":"a@example.invalid"} is held by ask:01M87K1N723F9XZ5NPHGZJ6JP0, which waits for your own answer and stays open (at once): ext.stocks.send_digest's ask isn't decided for you: expected { …(2) } to deeply equal { ask: 'open', decided: [] }
+
+      - Expected
+      + Received
+
+        {
+      -   "ask": "open",
+      -   "decided": [],
+      +   "ask": "decided_for_you by decision:01M87K1MFEB3M397T7J8898TB3",
+      +   "decided": [
+      +     "decision:01M87K1MFEB3M397T7J8898TB3",
+      +   ],
+        }
+        at sends.test.ts:50:7
+
+FAILED  AC4 #3390.78c40059  sends.test.ts > AC4 a send ask's card reads Answering saves it for this ask only with also 0, no decision.created names the ask, and the asks core refuses saveDecision of it (7524 ms)
+      AssertionError: the card of ask:01M87K1VHE0036ET1CE5WAWV72, raised by the call of ext.stocks.send_digest under request req-accceee18192bb92 with {"to":"a@example.invalid"}, says your answer holds for this ask only: expected null to deeply equal { …(2) }
+
+      - Expected:
+      {
+        "also": 0,
+        "scope": "Answering saves it for this ask only",
+      }
+
+      + Received:
+      null
+        at sends.test.ts:77:115
+
+      AssertionError: the card of ask:01M87K1VPC92HK7MR8APJYC2E9, raised by the call of ext.stocks.send_digest under request req-fcf66101c578ccfd with {"to":"b@example.invalid"}, says your answer holds for this ask only: expected { …(2) } to deeply equal { …(2) }
+
+      - Expected
+      + Received
+
+        {
+          "also": 0,
+      -   "scope": "Answering saves it for this ask only",
+      +   "scope": "Answering saves it for this repo (work7638f5ac)",
+        }
+        at sends.test.ts:77:115
+
+      AssertionError: ask:01M87K1VHE0036ET1CE5WAWV72, raised by the call of ext.stocks.send_digest under request req-accceee18192bb92 with {"to":"a@example.invalid"}, is open and takes your answer: expected 'superseded' to be 'open' // Object.is equality
+
+      Expected: "open"
+      Received: "superseded"
+        at sends.test.ts:82:92
+
+      AssertionError: your answer to ask:01M87K1VPC92HK7MR8APJYC2E9, raised by the call of ext.stocks.send_digest under request req-fcf66101c578ccfd with {"to":"b@example.invalid"}, is saved as no decision: expected [ { …(4) } ] to deeply equal []
+
+      - Expected
+      + Received
+
+      - []
+      + [
+      +   {
+      +     "answer": "decline",
+      +     "ask": "ask:01M87K1VPC92HK7MR8APJYC2E9",
+      +     "key": "291e0a1567f3396d75523984286123a5f0383079b57ae52bf54f10accdb85b0d",
+      +     "scope": "repo:work7638f5ac",
+      +   },
+      + ]
+        at sends.test.ts:90:136
+
+      AssertionError: the asks core refuses saveDecision of ask:01M87K1VPC92HK7MR8APJYC2E9, raised by the call of ext.stocks.send_digest under request req-fcf66101c578ccfd with {"to":"b@example.invalid"}, at session: "saved decision:01M87K1WYTPRMWQHWPWDPVQN83": expected false to be true // Object.is equality
+
+      - Expected
+      + Received
+
+      - true
+      + false
+        at sends.test.ts:98:209
+
+      AssertionError: the asks core refuses saveDecision of ask:01M87K1VPC92HK7MR8APJYC2E9, raised by the call of ext.stocks.send_digest under request req-fcf66101c578ccfd with {"to":"b@example.invalid"}, at repo: "saved decision:01M87K1WZAMQZV0AV7Q7AGN2JR": expected false to be true // Object.is equality
+
+      - Expected
+      + Received
+
+      - true
+      + false
+        at sends.test.ts:98:209
+
+      AssertionError: the asks core refuses saveDecision of ask:01M87K1VPC92HK7MR8APJYC2E9, raised by the call of ext.stocks.send_digest under request req-fcf66101c578ccfd with {"to":"b@example.invalid"}, at all: "saved decision:01M87K1WZG5EJ4ZG3N1GV8G0T1": expected false to be true // Object.is equality
+
+      - Expected
+      + Received
+
+      - true
+      + false
+        at sends.test.ts:98:209
+
+      AssertionError: no decision.created names a send's ask: expected [ …(4) ] to deeply equal []
+
+      - Expected
+      + Received
+
+      - []
+      + [
+      +   "ask:01M87K1VPC92HK7MR8APJYC2E9",
+      +   "ask:01M87K1VPC92HK7MR8APJYC2E9",
+      +   "ask:01M87K1VPC92HK7MR8APJYC2E9",
+      +   "ask:01M87K1VPC92HK7MR8APJYC2E9",
+      + ]
+        at sends.test.ts:104:117
+
+FAILED  AC5 #3390.d4dd7cfe  sends.test.ts > AC5 two sends with different inputs held at once: two open asks, none superseded; your yes to the older runs it alone, and the newer waits for and runs on its own (5809 ms)
+      AssertionError: the call of ext.stocks.send_digest under request req-edb8d53d127d36cd with {"to":"a@example.invalid"} is held by ask:01M87K21GY342BGSTQEY99X84P, which waits for your own answer and stays open (at once): ext.stocks.send_digest's ask isn't decided for you: expected { ask: 'superseded', decided: [] } to deeply equal { ask: 'open', decided: [] }
+
+      - Expected
+      + Received
+
+        {
+      -   "ask": "open",
+      +   "ask": "superseded",
+          "decided": [],
+        }
+        at twoAtOnce sends.test.ts:118:27
+
+FAILED  AC5 #3390.d4dd7cfe  sends.test.ts > AC5 two sends with the same input held at once: two open asks, none superseded; your yes to the newer runs it alone, and the older waits for and runs on its own (6002 ms)
+      AssertionError: the call of ext.stocks.send_digest under request req-6f8228fc96bc526b with {"to":"a@example.invalid"} is held by ask:01M87K27PV5KAFM9ZVY7340PB9, which waits for your own answer and stays open (at once): ext.stocks.send_digest's ask isn't decided for you: expected { ask: 'superseded', decided: [] } to deeply equal { ask: 'open', decided: [] }
+
+      - Expected
+      + Received
+
+        {
+      -   "ask": "open",
+      +   "ask": "superseded",
+          "decided": [],
+        }
+        at twoAtOnce sends.test.ts:118:27
+
+FAILED  AC6 #3390.51839cb2  superseded.test.ts > AC6 the older call retried waits on the newer ask, raising none of its own, and after your yes to that one it is done, its ask decided for you by the decision saved from that yes (6816 ms)
+      AssertionError: the call of ext.stocks.set_alert under request req-0d054157e18f7b03 with {"symbol":"NVDA","above":200}, retried while ask:01M87K441WM5KP7T43WVZEK10R is open, is held by that ask, which superseded its own (ask:01M87K43X5JCJZE4XHQNC70R20): {"jsonrpc":"2.0","id":"deep-actions#5","result":{"content":[{"type":"text","text":"{\"status\":\"held\",\"ask\":\"ask:01M87K43X5JCJZE4XHQNC70R20\",\"reason\":\"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K43X5JCJZE4XHQNC70R20; once you say yes, call it again with the same request ID.\"}"}],"isError":false,"structuredContent":{"status":"held","ask":"ask:01M87K43X5JCJZE4XHQNC70R20","reason":"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K43X5JCJZE4XHQNC70R20; once you say yes, call it again with the same request ID."}}}: expected { Object (isError, status, ...) } to deeply equal { Object (isError, status, ...) }
+
+      - Expected
+      + Received
+
+        {
+      -   "ask": "ask:01M87K441WM5KP7T43WVZEK10R",
+      +   "ask": "ask:01M87K43X5JCJZE4XHQNC70R20",
+          "isError": false,
+          "status": "held",
+        }
+        at superseded.test.ts:20:8
+
+      AssertionError: the call of ext.stocks.set_alert under request req-0d054157e18f7b03 with {"symbol":"NVDA","above":200}, retried after your yes to ask:01M87K441WM5KP7T43WVZEK10R, runs by the decision decision:01M87K4524A1RFRPDY1S4WT119 saved from it: {"jsonrpc":"2.0","id":"deep-actions#6","result":{"content":[{"type":"text","text":"{\"status\":\"held\",\"ask\":\"ask:01M87K43X5JCJZE4XHQNC70R20\",\"reason\":\"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K43X5JCJZE4XHQNC70R20; once you say yes, call it again with the same request ID.\"}"}],"isError":false,"structuredContent":{"status":"held","ask":"ask:01M87K43X5JCJZE4XHQNC70R20","reason":"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K43X5JCJZE4XHQNC70R20; once you say yes, call it again with the same request ID."}}}: expected { isError: false, status: 'held' } to deeply equal { isError: false, status: 'done' }
+
+      - Expected
+      + Received
+
+        {
+          "isError": false,
+      -   "status": "done",
+      +   "status": "held",
+        }
+        at superseded.test.ts:31:8
+
+FAILED  AC7 #3390.c9e68b9b  restart.test.ts > AC7 a change you said yes to runs once after a hub restart, and after a second restart returns its result and runs nothing again (10080 ms)
+      AssertionError: the call of ext.stocks.set_alert under request req-9e118301ca7c7a14 with {"symbol":"NVDA","above":200}, called again after a hub restart on your yes, returns its result; it raised ["ask:01M87K3785CWJ65M5RZPMM2QMS"] and answered {"jsonrpc":"2.0","id":"deep-actions#5","result":{"content":[{"type":"text","text":"{\"status\":\"held\",\"ask\":\"ask:01M87K3785CWJ65M5RZPMM2QMS\",\"reason\":\"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K3785CWJ65M5RZPMM2QMS; once you say yes, call it again with the same request ID.\"}"}],"isError":false,"structuredContent":{"status":"held","ask":"ask:01M87K3785CWJ65M5RZPMM2QMS","reason":"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K3785CWJ65M5RZPMM2QMS; once you say yes, call it again with the same request ID."}}}: expected { isError: false, status: 'held' } to deeply equal { isError: false, status: 'done' }
+
+      - Expected
+      + Received
+
+        {
+          "isError": false,
+      -   "status": "done",
+      +   "status": "held",
+        }
+        at restart.test.ts:30:5
+
+FAILED  AC7 #3390.c9e68b9b  restart.test.ts > AC7 a send you said yes to runs once on that yes after a hub restart, with no second ask, and after a second restart returns its result and runs nothing again (9675 ms)
+      AssertionError: the call of ext.stocks.send_digest under request req-941108d0a4cd1153 with {"to":"a@example.invalid"}, the only call of the session that asks, asks once: no second ask.created when called again after a hub restart on your yes, which answered {"jsonrpc":"2.0","id":"deep-actions#10","result":{"content":[{"type":"text","text":"{\"status\":\"held\",\"ask\":\"ask:01M87K3GPK4YCE692RJ3DWY1FV\",\"reason\":\"DeepBuild is holding ext.stocks.send_digest: it waits for your answer to ask:01M87K3GPK4YCE692RJ3DWY1FV; once you say yes, call it again with the same request ID.\"}"}],"isError":false,"structuredContent":{"status":"held","ask":"ask:01M87K3GPK4YCE692RJ3DWY1FV","reason":"DeepBuild is holding ext.stocks.send_digest: it waits for your answer to ask:01M87K3GPK4YCE692RJ3DWY1FV; once you say yes, call it again with the same request ID."}}}: expected [ …(2) ] to deeply equal [ 'ask:01M87K3C9Y0H184EYP17TNB4Z1' ]
+
+      - Expected
+      + Received
+
+        [
+          "ask:01M87K3C9Y0H184EYP17TNB4Z1",
+      +   "ask:01M87K3GPK4YCE692RJ3DWY1FV",
+        ]
+        at restart.test.ts:48:5
+
+FAILED  AC8 #3390.b1f77607  overruled.test.ts > AC8 the call held in session A, its ask decided for you by your yes in session B, is done on its retry and enters once (7487 ms)
+      AssertionError: the call of ext.stocks.set_alert under request req-82597c97d3970f40 with {"symbol":"NVDA","above":200} in session A, decided for you by decision:01M87K3R5ZC5C8709JT0F7DMSY, runs on its retry: {"jsonrpc":"2.0","id":"deep-actions#6","result":{"content":[{"type":"text","text":"{\"status\":\"held\",\"ask\":\"ask:01M87K3QA0J2VBN4CDH02TP26A\",\"reason\":\"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K3QA0J2VBN4CDH02TP26A; once you say yes, call it again with the same request ID.\"}"}],"isError":false,"structuredContent":{"status":"held","ask":"ask:01M87K3QA0J2VBN4CDH02TP26A","reason":"DeepBuild is holding ext.stocks.set_alert: it waits for your answer to ask:01M87K3QA0J2VBN4CDH02TP26A; once you say yes, call it again with the same request ID."}}}: expected { isError: false, status: 'held' } to deeply equal { isError: false, status: 'done' }
+
+      - Expected
+      + Received
+
+        {
+          "isError": false,
+      -   "status": "done",
+      +   "status": "held",
+        }
+        at overruled.test.ts:39:162
+
+FAILED  AC8 #3390.b1f77607  overruled.test.ts > AC8 with the decision overruled before the retry, the retry enters nothing and is held by a new ask, which stays open (6109 ms)
+      AssertionError: the call of ext.stocks.set_alert under request req-bf0040c5b4b88d4a with {"symbol":"NVDA","above":200} asks again, once, in its own session, since ask:01M87K3X9BEW655K3DX4CYB47E was decided by a decision you overruled: expected [] to have a length of 1 but got +0
+
+      - Expected
+      + Received
+
+      - 1
+      + 0
+        at overruled.test.ts:56:133

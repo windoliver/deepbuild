@@ -2,7 +2,7 @@
 //! with its extra (the round a claim was sent back in, the checks' expected time, when a quiet session was last
 //! seen), and draws the look's status-map entry and glyph for it. The state comes from the record alone.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::OnceLock;
 
 use serde_json::Value;
@@ -492,6 +492,10 @@ pub struct Table {
     titles: HashMap<String, Option<String>>,
     /// Every ask an event is about, read as the core reads it.
     readings: HashMap<String, Reading>,
+    /// Each taste call raised, by handle: its session and its question (#3234).
+    tastes: HashMap<String, (String, String)>,
+    /// Each session's taste calls answered where none of their pictures was drawn, by question (#3234).
+    unseen: HashMap<String, Vec<String>>,
     /// The ask.created events, in log order, of every ask some event could still leave open.
     asks: Vec<Value>,
     /// Each reading's newest value and the time it is as of, in ms (#1172).
@@ -511,9 +515,6 @@ pub struct Table {
     agents: Vec<(String, Value)>,
     /// The asks each ask showed beside in its newest showing of several, the core's, in batch order (#1345).
     batches: HashMap<String, Vec<String>>,
-    /// Every ask a showing of the core's held, and whether the record holds any showing at all (#1345).
-    shown: HashSet<String>,
-    showings: bool,
 }
 
 /// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
@@ -633,6 +634,29 @@ impl Table {
         if kind == "ask.created" && !self.readings.get(&handle(event)).is_some_and(Reading::done) {
             self.asks.push(event.clone());
         }
+        // A taste call answered where none of the pictures it judges was drawn reads so beside it (#3234).
+        if kind == "ask.created" && event["data"]["kind"] == "taste" {
+            if let Some(session) = event["session"].as_str() {
+                let question = event["data"]["question"].as_str().unwrap_or_default();
+                self.tastes
+                    .insert(handle(event), (session.to_owned(), question.to_owned()));
+            }
+        }
+        if kind == "ask.answered" && event["writer"] == "core" {
+            let pictures = event["data"]["pictures"].as_array();
+            let unseen = pictures.is_some_and(|pictures| {
+                !pictures.is_empty() && pictures.iter().all(|picture| picture["shown"] != true)
+            });
+            let taste = event["subject"]
+                .as_str()
+                .and_then(|ask| self.tastes.get(ask));
+            if let (true, Some((session, question))) = (unseen, taste) {
+                self.unseen
+                    .entry(session.clone())
+                    .or_default()
+                    .push(question.clone());
+            }
+        }
         if kind == "reading.recorded" {
             let data = &event["data"];
             if let (Some(reading), Some(value)) = (data["reading"].as_str(), data["value"].as_f64())
@@ -649,8 +673,6 @@ impl Table {
                 .flatten()
                 .filter_map(|item| item["ask"].as_str().map(str::to_owned))
                 .collect();
-            self.showings = true;
-            self.shown.extend(asks.iter().cloned());
             if asks.len() > 1 {
                 for ask in &asks {
                     self.batches.insert(ask.clone(), asks.clone());
@@ -910,6 +932,11 @@ impl Table {
         }
     }
 
+    /// The session's taste calls answered where none of their pictures was drawn, by question (#3234).
+    pub fn unseen(&self, session: &str) -> &[String] {
+        self.unseen.get(session).map_or(&[], Vec::as_slice)
+    }
+
     /// A session's newest readings, oldest first, at most [`READINGS`].
     pub fn readings(&self, session: &str) -> &[String] {
         self.sessions.get(session).map_or(&[], |s| &s.readings)
@@ -968,11 +995,6 @@ impl Table {
     /// The asks `handle` showed beside in its newest showing of several, itself among them; empty when it showed alone (#1345).
     pub fn batch(&self, handle: &str) -> &[String] {
         self.batches.get(handle).map_or(&[], Vec::as_slice)
-    }
-
-    /// Whether a showing of the core's held `handle`; `None` for a record that holds no showing at all (#1345).
-    pub fn shown(&self, handle: &str) -> Option<bool> {
-        self.showings.then(|| self.shown.contains(handle))
     }
 
     pub fn deadline(&self, ask: &Value) -> Option<u64> {

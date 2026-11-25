@@ -1,0 +1,146 @@
+# #3036's tests run against the base, commit 5f5791e2d211cc2ac6cb9498917e387a3a7361b4, before any implementation
+#
+# Run on 2026-11-22 in a checkout of the base (no crate edited), on a 16-inch MacBook Pro (Mac17,10, one of the
+# reference models), with the base's deep-show (cargo build --locked --bin deep-show --no-default-features --features
+# full) and deep-gpu (cargo build --locked --bin deep-gpu) already built (toolchain 1.99.1, CARGO_INCREMENTAL=0,
+# CARGO_PROFILE_DEV_DEBUG=0), Node v24.22.0, vitest 5.0.5. One file at a time:
+#
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run \
+#     --root tests/acceptance/3036 --no-file-parallelism --testTimeout=3600000 <file>
+#
+# Each file's own cargo build found its binary fresh and compiled no workspace crate. All 11 tests fail, each at an
+# assertion of its own, none at load, and none passes. Every judge's self-check on its planted sets, which each test
+# runs first, passed. ac6-taste.test.ts wrote nothing: docs/evidence/3036/ did not exist before its run or after.
+# The type-check passes: node node_modules/typescript/bin/tsc -p tests/acceptance/3036/tsconfig.json
+
+ac1-groove.test.ts (2 tests | 2 failed), 3.5 s
+  × AC1 #3036.ea21520e the groove's drawn depth on the centre line is depth within 1 mm and its width at half depth
+    is half of width within 5%, read from the plate's evaluated drawn surface
+      AssertionError: the lane whose plate keeps tracks behind the rolling ball is presented:
+        the check raises an error: {"check":"document.validate","code":"unknown_field","severity":"error",
+          "ids":["ground"],"path":"items/ground/params/tracks","actual":{"items":"rollers","width":0.4,"depth":0.05},
+          "what":"plate@1.0 does not define `tracks`", …}
+        the show's outcome is "refused", not presented
+      ❯ presented helpers.ts ❯ read ac1-groove.test.ts:43 ❯ ac1-groove.test.ts:53
+    The base's plate keeps no tracks: the document check refuses the field, so no groove is drawn to read.
+  × AC1 #3036.ea21520e a planted plate that lowers by depth only at the samples, with nothing between them
+    (tracks_lower_at_samples_only), fails, naming the gap
+      AssertionError: deep-show run (its calls deep_show, deep_query, terrain_rays, its planted program
+        tracks_lower_at_samples_only) accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true
+      ❯ runShow helpers.ts ❯ read ac1-groove.test.ts:42 ❯ ac1-groove.test.ts:60
+    The base has no planted program of that name.
+
+ac2-hop.test.ts (2 tests | 2 failed), 3.3 s
+  × AC2 #3036.c665f650 the groove is drawn before and after the hop and not under it, within one sample's spacing at
+    each end
+      AssertionError: the lane whose plate keeps tracks behind the hopping ball is presented:
+        the check raises an error: {… "code":"unknown_field" … "path":"items/ground/params/tracks" …}
+        the show's outcome is "refused", not presented
+      ❯ presented helpers.ts ❯ read ac2-hop.test.ts:41 ❯ ac2-hop.test.ts:48
+  × AC2 #3036.c665f650 a planted plate that reads the item's ground position alone (tracks_read_ground_position) draws
+    through the hop and fails, naming the span
+      AssertionError: deep-show run (its calls deep_show, deep_query, terrain_rays, its planted program
+        tracks_read_ground_position) accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true
+      ❯ runShow helpers.ts ❯ read ac2-hop.test.ts:40 ❯ ac2-hop.test.ts:55
+
+ac3-physics.test.ts (2 tests | 2 failed), 4.8 s
+  × AC3 #3036.4fdba809 the physics step hashes of the roll are the same with tracks on and off, and a second ball
+    rolled across the groove takes the path it takes without it
+      AssertionError: the yard whose plate keeps tracks, its world on the plate as built is presented:
+        the check raises an error: {… "code":"unknown_field" … "path":"items/ground/params/tracks" …}
+        the show's outcome is "refused", not presented
+      ❯ presented helpers.ts ❯ rolls ac3-physics.test.ts:63 ❯ ac3-physics.test.ts:102
+    With no document with tracks shown, there is no roll with tracks on to compare.
+  × AC3 #3036.4fdba809 a planted plate that feeds its heights to the physics shape (tracks_feed_physics_shape) fails,
+    naming the step
+      AssertionError: deep-show run (its calls deep_show, terrain_rays, deep_show, terrain_rays, its planted program
+        tracks_feed_physics_shape) accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true
+      ❯ runShow helpers.ts ❯ rolls ac3-physics.test.ts:59 ❯ ac3-physics.test.ts:112
+
+ac4-seek.test.ts (2 tests | 2 failed), 5.8 s
+  × AC4 #3036.e57d7497 20 sampled times hash the same seeked and played
+      AssertionError: the groove is drawn at 10 s: the same lane without tracks has another frame 100:
+        expected 'a9fb5b953986a1270f6e93a70e7fc58b78f11…' not to be 'a9fb5b953986a1270f6e93a70e7fc58b78f11…'
+      ❯ ac4-seek.test.ts:51
+    At the base `view3d` draws the lane with `tracks` as it draws the lane without: no groove is in what is compared.
+    The assertion before it passed there (the 20 played frames all differ: the ball moves), and the seeks were never
+    judged.
+  × AC4 #3036.e57d7497 a planted plate that keeps the surface from the frame before (--planted tracks_keep_last_frame)
+    fails at the first seek
+      AssertionError: deep-gpu run --planted tracks_keep_last_frame exits 0 (no signal); stdout:
+        {"ok":false,"code":"bad_input"}; stderr: : expected 2 to be +0
+      ❯ runGpu helpers.ts ❯ film ac4-seek.test.ts:35 ❯ ac4-seek.test.ts:58
+
+ac5-span-cap.test.ts (2 tests | 2 failed), 4.3 s
+  × AC5 #3036.69707b1e with span: 5s the groove behind the ball is 5 s long
+      AssertionError: the lane whose plate keeps 5 s of tracks is presented:
+        the check raises an error: {… "code":"unknown_field" … "path":"items/ground/params/tracks",
+          "actual":{"items":"rollers","width":0.4,"depth":0.05,"span":5} …}
+        the show's outcome is "refused", not presented
+      ❯ presented helpers.ts ❯ ac5-span-cap.test.ts:45
+  × AC5 #3036.69707b1e a plate with 5,000 samples alive is refused at check, naming the count
+      AssertionError: the plate that reads 8 balls over 26 s at 24 frames a second is refused at check, naming the
+        count 5,000:
+        no error names ground at items/ground/params/tracks with the count 5000 in its actual; the issues:
+        [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["ground"],
+          "path":"items/ground/params/tracks","actual":{"items":"crowd","width":0.4,"depth":0.05,"span":26}, …}]
+      ❯ ac5-span-cap.test.ts:55
+    The base does refuse the show, but for the field it doesn't know, and its error names no count. The refusal
+    judge is checked to fail exactly that issue (spanJudgesFailTheirPlants), so a refusal for that reason can't pass.
+
+ac6-taste.test.ts (1 test | 1 failed), 3.8 s
+  × AC6 #3036.28aa4780 the check run takes one still of wheel tracks across a field from the renderer's own output,
+    and the recorded call on exactly that still says they read as tracks; with none the run is INCONCLUSIVE, never PASS
+      AssertionError: the tracks are in the still: the same field without tracks draws another frame:
+        expected 'cbaf12dad1291b429ce619734b63f2bb7e9be…' not to be 'cbaf12dad1291b429ce619734b63f2bb7e9be…'
+      ❯ ac6-taste.test.ts:33
+    At the base the field with `tracks` is drawn as the field without. The test stops there, before it keeps a
+    picture or reads a taste call.
+
+ Test Files  6 failed (6)        Tests  11 failed (11)
+
+# Probes at the base, not kept (node scripts driving target/debug/deep-show run and target/debug/deep-gpu run with a
+# scenario on stdin, as the helpers do). To probe a fixture the base refuses for `tracks`, the same document was
+# probed without the field.
+#
+# What the base answers for `tracks`, and for a planted name it doesn't know
+# - deep_show of a plate with `params.tracks`: outcome "refused", one error, document.validate's unknown_field at
+#   items/ground/params/tracks, ids ["ground"], actual the block as written, "plate@1.0 does not define `tracks`".
+#   A call on that document after it answers {"code": "no_revision"}.
+# - view3d of a session document whose plate has `params.tracks`: answered, not refused, and each frame has the pixel
+#   hash of the same document without the field (the film's frame 100, the field's frame 240).
+# - deep-show run with scenario planted "tracks_lower_at_samples_only": {"ok": false, "code": "bad_input"}, exit 0.
+#   deep-gpu run --planted tracks_keep_last_frame: {"ok": false, "code": "bad_input"}, exit 2.
+# - terrain_rays with `t` on a plate without tracks: answered as without it (the base reads no `t`).
+#
+# The lane (criteria 1, 2, 5), without tracks
+# - The roll and the hop are each presented with no issue: a document at 2 frames a second is accepted.
+# - deep_query at the 21 times answers the keyed places exactly: roll (-5, 0.75, 0) … (5, 0.75, 0); hop (-0.5, 1, 0)
+#   at 4.5 s, (0, 1.25, 0) at 5 s. placeFailures: none.
+# - All 681 rays of criterion 1 (201 on the row z = 0, 3 × 160 across) meet the drawn surface, each at y 0.5 on its
+#   ray. `physics` meets nothing for 61 of them and `pick` for 47 (rays that run along the height field's edges);
+#   the lane's tests read `drawn` alone.
+# - The cap's document without tracks (8 balls at rest, 30 s at 24 frames a second) is presented with no issue.
+#
+# The yard (criterion 3), without tracks
+# - As first written (the first ball from (-6, 0.75, 0) at 2.5 m/s, no locks), the base's first ball rolled 9.08 m in
+#   5 s and drifted 0.46 m off its line: the fixture was wrong. As corrected (from (-7, 0.75, 0) at 3.5 m/s, each
+#   ball's body held to its line by `locks`): the first ball rolls from x -7 to x 4.66 m (11.66 m) with z exactly 0,
+#   its lowest point within 6.1 mm of the plate; the second stays at x -4 exactly, its lowest point within 1.7 mm,
+#   reaches z -0.45 m at step 212 with the first ball at x -1.83 m (it passed x -4 at step 114), and ends at
+#   z 2.31 m. yardFailures: none. The bake answers 601 step hashes, all different.
+# - `physics` rays cast exactly at the plate's 159 × 59 inner samples: 4,565 of 9,381 meet nothing. Cast 13 mm along
+#   +x and 7 mm along +z of each sample, all 9,381 are answered, at 0.5 or 0.5000001192092896 m. The suite's nodes
+#   were moved there.
+# - The two steps of ac3-physics.test.ts, made on the yard without tracks as both documents: step hashes equal, the
+#   second ball's path equal, the line as built. The same world with a trench of the tracks' profile written along
+#   z = 0 into its height field: the step hashes part at step 1 (600 of 601 differ) and the second ball's path at
+#   step 245, so a physics shape that took the groove would fail the criterion's check, naming the step.
+# - `eval` at 1, 2.5 and 4.5 s answers each drawn ball where its body is after that many steps: the world's outputs
+#   move the items the plate's collection names.
+#
+# view3d (criteria 4 and 6), without tracks
+# - The film: 101 frames, all 101 pixel hashes different; frames 100 and 4 opened alone by `from` have the played
+#   frames' hashes. The lane is in the frame from end to end.
+# - The field: drawn, shadows on. As first written the camera stood behind the cart's start and the ruts' place took a
+#   thin strip of the frame; it was moved to (-6.5, 2.4, -1.3) m looking at (4, 0, 2.3) m, with the cart about 13 m off.

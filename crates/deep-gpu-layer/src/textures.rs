@@ -1,9 +1,10 @@
 //! Issue #423: a view3d call's texture maps and glTF imports (canvas primitives: Material:
 //! texture maps; Asset: meshes). Every map a document's solids sample is made ready for the GPU
-//! once per run in the decode worker, a process of its own (deep-codecs), kept by the image's hash
-//! and its format, so a second document naming the same hashes transcodes nothing; the receipt
-//! names each map's source and format, and the document's decoded-image cap counts the bytes the
-//! device holds. A `mesh.asset@1` that names a file's scene reports what its import made of the
+//! once per run in the decode worker, a process of its own (deep-codecs), kept by the image's hash,
+//! its role and the cutoff a mask samples it at, so a second document naming the same hashes
+//! transcodes nothing; the receipt names each map's source and format and, for a mask's, the share
+//! of each level it keeps (#3257), and the document's decoded-image cap counts the bytes the device
+//! holds. A `mesh.asset@1` that names a file's scene reports what its import made of the
 //! file's materials and textures, and keeps each texture in the evidence store by hash with the
 //! asset's license.
 
@@ -12,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use deep_canvas::gauge::{Gauge, Kept, Place};
-use deep_canvas_scene3d::light::{map_field, map_role, map_uses, Texels, DECODED_CAP};
+use deep_canvas_scene3d::light::{map_field, map_uses, MapUse, Texels, DECODED_CAP};
 use deep_canvas_scene3d::scene::Scene;
 use deep_codecs::{Caps, Helper, DECODE_WORKER};
 use serde_json::{json, Value};
@@ -23,11 +24,15 @@ use crate::{refused, App, Planted};
 /// either bound, the maps no document has drawn for longest go first.
 pub static READY: Gauge = Gauge::new("Made::ready", Place::Heap, 512, 512_000_000);
 
-/// What the run's decode worker made, by `<sha>:<role>`.
+/// A map the decode worker made ready: its texels, its source's format, and the share of each
+/// level a mask keeps.
+type Ready = (Arc<Texels>, String, Value);
+
+/// What the run's decode worker made, by `<map key>:<role>`.
 pub struct Made {
     pub decoder: Option<Helper>,
     // cache: entries 512, bytes 512_000_000
-    pub ready: Kept<String, (Arc<Texels>, String)>,
+    pub ready: Kept<String, Ready>,
     /// The videos' probes and their latest decoded frames (#503).
     pub videos: crate::video::Cache,
 }
@@ -47,12 +52,12 @@ fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
     (p == Some(Planted::AppliesImageGamma)).then_some("applies_image_gamma")
 }
 
-/// The job role a map's hash is made for (scene3d's `map_role`). The planted programs read a
-/// metallic-roughness or a normal map as sRGB color (#423 AC4, AC6).
-fn role(roles: &BTreeSet<&str>, planted: Option<Planted>) -> &'static str {
-    match (map_role(roles), planted) {
-        ("normal", Some(Planted::NormalMapAsSrgb)) => "base_color",
-        ("data", Some(Planted::MrFromSrgb)) if roles.contains("metallic_roughness") => "base_color",
+/// The job role a map is made for. The planted programs read a metallic-roughness or a normal map
+/// as sRGB color (#423 AC4, AC6).
+fn role(of: &MapUse, planted: Option<Planted>) -> &'static str {
+    match (of.role(), planted) {
+        ("normal", Some(Planted::NormalMapAsSrgb)) => "color",
+        ("data", Some(Planted::MrFromSrgb)) if of.fields.contains("metallic_roughness") => "color",
         (r, _) => r,
     }
 }
@@ -69,7 +74,7 @@ pub fn decoder(app: &mut App) -> Result<&mut Helper, Value> {
     Ok(app.made.decoder.as_mut().expect("started"))
 }
 
-/// The scene's maps made ready: its texels by hash and the receipt, or the cap's refusal. A
+/// The scene's maps made ready: its texels by key and the receipt, or the cap's refusal. A
 /// `doc` material's map whose image isn't in `paths` is refused at its field (#1729).
 pub fn prepare(
     app: &mut App,
@@ -82,20 +87,22 @@ pub fn prepare(
     let mut receipt = Vec::new();
     let mut decoded = 0u64;
     app.made.ready.turn();
-    for (sha, roles) in map_uses(scene) {
-        let role = role(&roles, planted);
-        let key = format!("{sha}:{role}");
+    for (map, of) in map_uses(scene) {
+        let role = role(&of, planted);
+        let key = format!("{map}:{role}");
+        let sha = &of.sha;
         let transcoded = !app.made.ready.touch(&key);
         if transcoded {
-            let Some(path) = paths.get(&sha) else {
-                match map_field(doc, &sha) {
+            let Some(path) = paths.get(sha) else {
+                match map_field(doc, sha) {
                     Some(field) => return Err(refused("asset_missing", field)),
                     None => continue,
                 }
             };
             let out =
                 std::env::temp_dir().join(format!("deep-gpu-map-{}-{key}", std::process::id()));
-            let job = json!({"op": "transcode", "path": path, "role": role, "bc": cfg!(target_os = "macos"), "out": out});
+            let job = json!({"op": "transcode", "path": path, "role": role, "alpha_cutoff": of.cutoff,
+                             "bc": cfg!(target_os = "macos"), "out": out});
             let reply = decoder(app)?.ask(&job);
             let (Some(format), Some(size), Some(mips)) = (
                 reply["format"].as_str(),
@@ -118,14 +125,18 @@ pub fn prepare(
             };
             let source = reply["source"].as_str().unwrap_or("png").to_string();
             let bytes = t.data.len() as u64;
-            app.made
-                .ready
-                .insert(key.clone(), (Arc::new(t), source), bytes);
+            let ready = (Arc::new(t), source, reply["kept"].clone());
+            app.made.ready.insert(key.clone(), ready, bytes);
         }
-        let (t, source) = app.made.ready.peek(&key).expect("made ready above");
+        let (t, source, kept) = app.made.ready.peek(&key).expect("made ready above");
         decoded += t.data.len() as u64;
-        receipt.push(json!({"sha256": sha, "source": source, "format": t.format, "roles": roles, "transcoded": transcoded}));
-        texels.insert(sha, t.clone());
+        let mut row = json!({"sha256": sha, "source": source, "format": t.format, "roles": of.fields, "transcoded": transcoded});
+        if !kept.is_null() {
+            row["alpha_cutoff"] = json!(of.cutoff);
+            row["kept"] = kept.clone();
+        }
+        receipt.push(row);
+        texels.insert(map, t.clone());
     }
     app.made.ready.evict();
     if decoded > DECODED_CAP {

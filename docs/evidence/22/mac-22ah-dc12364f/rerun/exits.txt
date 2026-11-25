@@ -1,0 +1,4 @@
+rerun head dc12364fb210256310f18e31c2357a32f32f3818 22:00:41 load { 7.93 11.79 23.10 } front [Finder]
+rerun app exit=0 22:02:20 load { 19.52 14.30 22.85 } front [Claude]
+rerun signin exit=0 22:02:38 load { 24.19 15.71 23.16 } front [Claude]
+RERUN DONE 22:02:38 load { 24.19 15.71 23.16 } front [Claude]

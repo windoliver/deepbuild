@@ -8,6 +8,10 @@ import { isDeepStrictEqual } from 'node:util';
 import { readApprovals } from './proof-approvals.mjs';
 
 const metrics = ['p50Ms', 'p95Ms', 'peakBytes'];
+// What a budget runs and builds is bare by this module's own setting, never by the machine's: an empty RUSTC_WRAPPER is no
+// wrapper over any cargo config, so a machine's compile cache never reaches a budget (docs/parallel-proof.md, section 4).
+// Read at each start, so a caller's CARGO_TARGET_DIR set just before reaches the child.
+const bare = () => ({ ...process.env, RUSTC_WRAPPER: '' });
 
 export function summarize(samples) {
   if (!samples.length || samples.some(({ ms, peakBytes }) => !Number.isFinite(ms) || ms < 0 || !Number.isSafeInteger(peakBytes) || peakBytes <= 0))
@@ -212,7 +216,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
   try {
     if (build) writeFileSync(counted, '');
     const argv = build ? [build.run, follow && build.library ? build.library : '-', ...command] : command;
-    const env = build ? { ...process.env, DEEP_COUNT_LOG: counted } : process.env;
+    const env = build ? { ...bare(), DEEP_COUNT_LOG: counted } : bare();
     const loadStart = loadavg()[0];
     const started = performance.now();
     // A captured run leads its own process group: spawnSync stops only /usr/bin/time at the timeout or
@@ -325,7 +329,7 @@ export function warm(cwd) {
   const steps = [['npm', 'run', 'build'], ['cargo', 'test', '--workspace', '--locked', '--no-run'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings']];
   // The #56 spike keeps its dependencies apart from the root's, and its benches are perf tasks.
   if (existsSync(join(cwd, 'spikes/hub-core/package-lock.json'))) steps.unshift(['npm', 'ci', '--prefix', 'spikes/hub-core', '--no-audit', '--no-fund']);
-  for (const [command, ...args] of steps) spawnSync(command, args, { cwd, stdio: 'ignore' });
+  for (const [command, ...args] of steps) spawnSync(command, args, { cwd, stdio: 'ignore', env: bare() });
 }
 
 // A copy of a tree made ready to run in: the checks and benches read git, so it gets its own throwaway repository,
@@ -333,7 +337,7 @@ export function warm(cwd) {
 // compare with main (repo-rules' size) do the same work on both sides instead of skipping it in the copy. Then its
 // packages and warm builds, kept in CARGO_TARGET_DIR.
 export function prepareCopy(directory) {
-  const run = (command, args, options = {}) => execFileSync(command, args, { cwd: directory, encoding: 'utf8', timeout: 120_000, maxBuffer: 128 * 1024 * 1024, ...options });
+  const run = (command, args, options = {}) => execFileSync(command, args, { cwd: directory, encoding: 'utf8', timeout: 120_000, maxBuffer: 128 * 1024 * 1024, env: bare(), ...options });
   const git = (...args) => run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=DeepBuild perf', '-c', 'user.email=perf@example.invalid', ...args], { stdio: 'pipe' });
   git('init', '-q');
   git('add', '-A');
@@ -600,9 +604,9 @@ export function judgeTask(budget, established, cwd, baseCwd, machineOf = fingerp
 // A task's report is its command's last stdout line; `<bench> judge` reads it on stdin and prints its verdict.
 export function judgeTargets(budget, cwd) {
   const last = (out) => JSON.parse(out.trim().split('\n').at(-1));
-  const ran = spawnSync(budget.command[0], budget.command.slice(1), { cwd, encoding: 'utf8', timeout: 3_600_000, maxBuffer: 512 * 1024 * 1024 });
+  const ran = spawnSync(budget.command[0], budget.command.slice(1), { cwd, encoding: 'utf8', timeout: 3_600_000, maxBuffer: 512 * 1024 * 1024, env: bare() });
   if (ran.status !== 0) return { status: 'BLOCKED', reason: `${budget.command.join(' ')} exited ${ran.status}: ${ran.stderr.slice(-1000)}` };
-  const judged = spawnSync(budget.command[0], [budget.command[1], 'judge'], { cwd, encoding: 'utf8', input: JSON.stringify({ current: last(ran.stdout), base: null }) });
+  const judged = spawnSync(budget.command[0], [budget.command[1], 'judge'], { cwd, encoding: 'utf8', input: JSON.stringify({ current: last(ran.stdout), base: null }), env: bare() });
   if (judged.status !== 0) return { status: 'BLOCKED', reason: `the judge exited ${judged.status}: ${judged.stderr.slice(-1000)}` };
   return last(judged.stdout);
 }

@@ -1,0 +1,48 @@
+head 862fdbb9e2439f133f53efc65824fbc151a6c002, the two tests added, no fix; Sun Nov 15 05:19:02 PM PST 2026
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ packages/asks/test/sign-in.test.ts (6 tests | 2 failed) 1111ms
+   × under setup's 8-hour batches an agent's ask that names a sign-in probe waits for its batch: only the core files a sign-in task (#22) 96ms
+   × under setup's 8-hour batches a lapsed sign-in in a session whose agent the record never named shows at once, by its sign-in signature (#22) 101ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/asks/test/sign-in.test.ts > under setup's 8-hour batches an agent's ask that names a sign-in probe waits for its batch: only the core files a sign-in task (#22)
+AssertionError: an agent's word that its ask is a sign-in skips no batch: expected 'shown' to be 'queued' // Object.is equality
+
+Expected: "queued"
+Received: "shown"
+
+ ❯ packages/asks/test/sign-in.test.ts:198:131
+    196|   const agent: Connection = { writer: `mcp:${S1}`, ...who, session: S1…
+    197|   const handle = await asks.raise(agent, 'deep_ask.unblock', { ...stru…
+    198|   expect((await asks.inbox()).find((r) => r.ask === handle)?.status, '…
+       |                                                                                                                                   ^
+    199| });
+    200|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/asks/test/sign-in.test.ts > under setup's 8-hour batches a lapsed sign-in in a session whose agent the record never named shows at once, by its sign-in signature (#22)
+AssertionError: the task the sign-in probe closes shows at once: expected 'queued' to be 'shown' // Object.is equality
+
+Expected: "shown"
+Received: "queued"
+
+ ❯ packages/asks/test/sign-in.test.ts:208:83
+    206|   now = T0 + 4 * 3_600_000 + 60_000;
+    207|   await lapses(S1);
+    208|   expect(await signInStatus(), 'the task the sign-in probe closes show…
+       |                                                                                   ^
+    209| });
+    210|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  17:18:52
+   Duration  1.55s (tests 77%, transform 15%, import 7%, setup 1%)
+

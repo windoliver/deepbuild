@@ -13,7 +13,7 @@ struct Draw {
     view: vec4<f32>,
     // Its size at birth and at death, its opacity at birth and at death.
     life: vec4<f32>,
-    // Its draw (0 dot, 1 spark, 2 puff, 3 streak, 4 ribbon), half-resolution shading, its stop
+    // Its draw (0 dot, 1 spark, 2 puff, 3 streak, 4 ribbon, 5 grain), half-resolution shading, its stop
     // count, and the planted block copy (#1173).
     kind: vec4<f32>,
     // A ribbon's (#450): the item's count, its segments, its width in px, its taper and its fade.
@@ -307,6 +307,9 @@ fn shade(in: Out, at: vec2<f32>) -> vec4<f32> {
     } else if draw.kind.x == 2.0 {
         // A puff: a wide soft gaussian, faint.
         shape = 0.35 * exp(-3.0 * r2);
+    } else if draw.kind.x == 5.0 {
+        // A grain (#853): lit at its middle, darker at its rim, drawn over what is behind it.
+        shape = 0.55 + 0.45 * (1.0 - r2);
     } else if draw.kind.x >= 3.0 {
         // A streak or a ribbon: soft across, full along.
         shape = (1.0 - at.y * at.y) * in.alpha;

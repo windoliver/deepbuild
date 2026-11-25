@@ -1,0 +1,18 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "process.ended",
+  "subject": "run:LEASEA1B2C3D4E5F6MI0QZ",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "run": "run:LEASEA1B2C3D4E5F6MI0QZ",
+    "pid": 4242,
+    "used": {
+      "memory_peak_mb": 1180,
+      "cpu_s": 42.5
+    }
+  }
+}

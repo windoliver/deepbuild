@@ -342,7 +342,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                     .current(doc)
                     .expect("a layer on screen has a current revision")
                     .doc;
-                hub.arranged(doc, current)
+                crate::hub::only_layer(&hub.arranged(doc, current), &row.layer)
                     .as_object()
                     .expect("a revision is an object")
                     .clone()
@@ -362,8 +362,10 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
             },
         };
         let size = crate::snapshot::px([panel[2] * scale, panel[3] * scale]);
-        // A document a session holds draws from it at `t` (its tables and vectors inlined, #1162).
-        let session_drawn = if hub.shown(doc).is_none() {
+        // A document a session holds draws from it at `t` (its tables and vectors inlined, #1162);
+        // one of several writers' layers draws as a shared document's does.
+        let alone = |r: &crate::hub::Row| r.doc["layers"].as_object().is_none_or(|l| l.len() < 2);
+        let session_drawn = if hub.shown(doc).is_none() && hub.current(doc).is_some_and(alone) {
             hub.window_drawn(doc, &panel_id, t)
         } else {
             None
@@ -395,13 +397,13 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 return refused("unsupported_platform");
             }
             // #1729: its assets and maps from the evidence store, as render-back reads them.
-            let Ok((scene, look)) = hub.evaluate3d(&Value::Object(stamped.clone()), t, drawn_size)
-            else {
+            let Ok(frame) = hub.evaluate3d(&Value::Object(stamped.clone()), t, drawn_size) else {
                 continue;
             };
-            let Some(mut drawn) = hub.gpu3().and_then(|g| g.draw(&scene, &look)) else {
+            let Some(mut drawn) = hub.gpu3().and_then(|g| g.draw(&frame)) else {
                 continue;
             };
+            let scene = frame.staged.scene;
             for (id, b) in scene.boxes() {
                 let b = b.map(|v| v / scale);
                 let at = [panel[0] + b[0], panel[1] + b[1], b[2], b[3]];

@@ -1,0 +1,26 @@
+{
+  "title": "mcp.handshake@1",
+  "description": "The MCP handshake revisions DeepBuild's own MCP servers implement (#2854): deep mcp, deep mcp actions, deep-hook's mcp actions and the reading tools. A server answers initialize with the client's protocolVersion when it is one of these, matched as a whole string, and with the newest, the list's last, for any other string or none. Each agent's facts name the revision its client opens with, and the corpus check holds that revision to this list.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "protocolVersion": {
+      "type": "string",
+      "enum": [
+        "2025-06-18",
+        "2025-11-25"
+      ],
+      "description": "A held revision, oldest first; the last is the newest.",
+      "x-closure": {
+        "closed": "each value is a handshake revision all four servers implement; a revision outside the list is one they don't, and is answered with the newest",
+        "reopens": "a new major, adding a revision once the four servers are checked against what it changes",
+        "mark": "exhaustive"
+      }
+    }
+  },
+  "required": [
+    "protocolVersion"
+  ],
+  "additionalProperties": false
+}

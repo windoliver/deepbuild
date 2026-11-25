@@ -4,7 +4,7 @@
 use std::io::{BufRead, Write};
 
 use deep_physics_rapier::runner::{
-    centre, contact, fast, kit, laws, links, vehicle, walk, Run, BAD_INPUT, PLANTED,
+    centre, contact, fast, kit, laws, links, through, vehicle, walk, Run, BAD_INPUT, PLANTED,
 };
 
 fn main() {
@@ -25,6 +25,7 @@ fn main() {
                         || centre::PLANTED.contains(&name.as_str())
                         || fast::PLANTED.contains(&name.as_str())
                         || links::PLANTED.contains(&name.as_str())
+                        || through::PLANTED.contains(&name.as_str())
                         || laws::PLANTED.contains(&name.as_str())) =>
             {
                 planted = Some(name.as_str())

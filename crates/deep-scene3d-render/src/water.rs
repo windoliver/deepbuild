@@ -36,8 +36,15 @@ pub struct Planted {
     pub calm_ignores_shore: bool,
     /// #968: a flow in one phase, its offset jumping back at every wrap.
     pub flow_single_phase: bool,
+    /// #3034: the surface from below drawn with an index of 1, whatever the water's: no cone, so
+    /// it shows what is above it at every angle and mirrors nothing.
+    pub no_cone: bool,
+    /// #3034: under water, a color dims by its point's depth below the surface in place of the
+    /// distance seen.
+    pub tint_by_depth: bool,
 }
 
+deep_gpu::paired! { params: "water.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Params {
@@ -69,6 +76,11 @@ struct Params {
     // grid over them: its origin and its cells per m.
     touch: [f32; 4],
     touch_grid: [f32; 4],
+    // #3034: whether the frame is under water, the index of refraction and the planted tint; and
+    // what a ray shows above the water where nothing stands and no sky's pass draws, w 1 when so.
+    under: [f32; 4],
+    above: [f32; 4],
+}
 }
 
 /// The light the water's foam and its fill read.
@@ -79,6 +91,47 @@ pub struct Lighting {
     pub sun: f64,
     /// The sky's ambient radiance, linear.
     pub ambient: [f64; 3],
+}
+
+impl Lighting {
+    /// The scene's: its key sun's, and its sky's ambient light.
+    pub(crate) fn of(scene: &Scene) -> Lighting {
+        let sun = scene.sun.as_ref();
+        Lighting {
+            toward: sun.map_or([0.0, 1.0, 0.0], |s| s.toward),
+            sun: sun.map_or(0.0, |s| s.illuminance / std::f64::consts::PI),
+            ambient: scene.sky.as_ref().map_or([0.3; 3], |s| s.ambient[0]),
+        }
+    }
+}
+
+/// #3034: the color deep water takes: its absorption color under the sky's ambient light, as
+/// the shading pass fills with it.
+fn deep(scene: &Scene, water: &Water) -> [f64; 3] {
+    let lit = Lighting::of(scene).ambient;
+    std::array::from_fn(|k| water.absorption[k] * lit[k])
+}
+
+/// #3034: what scene3d.wgsl's `Env` holds of a frame under water: the eye (w 1 in perspective);
+/// the surface at rest, 1 ÷ the absorption's depth, and 1 where a ray is in the water up to the
+/// surface or 2 where all of it is, as in the view the water's mirror draws; and the color deep
+/// water takes, w 1 for the planted tint by the depth below the surface.
+pub(crate) fn under(scene: &Scene, planted: Planted) -> Option<[[f32; 4]; 3]> {
+    let (top, w) = (scene.under?, scene.water.as_ref()?);
+    let cam = &scene.camera;
+    let whole = if top.is_finite() { 1.0 } else { 2.0 };
+    Some([
+        crate::v4(cam.eye, f64::from(u8::from(cam.perspective))),
+        [w.level as f32, (1.0 / w.depth) as f32, whole, 0.0],
+        crate::v4(deep(scene, w), f64::from(u8::from(planted.tint_by_depth))),
+    ])
+}
+
+/// #3034: under water, where a ray that meets nothing ends when the sky's pass draws no
+/// background (`sky`): the color deep water takes.
+pub(crate) fn far(scene: &Scene, sky: bool) -> Option<[f64; 3]> {
+    let under = scene.under.is_some() && !sky;
+    Some(deep(scene, scene.water.as_ref().filter(|_| under)?))
 }
 
 /// What a frame's water reads from the frame around it.
@@ -93,6 +146,9 @@ pub struct Frame<'a> {
     pub picks: &'a BTreeMap<String, u32>,
     pub lighting: Lighting,
     pub planted: Planted,
+    /// #3034: what a ray shows above the water where nothing stands, linear, in a frame whose
+    /// sky draws no background: the ground.
+    pub above: Option<[f64; 3]>,
 }
 
 /// The geometry pass's object IDs and depth resolved again, with the pass's timestamps.
@@ -898,6 +954,18 @@ impl Waterer {
                 flow_dims,
                 touch,
                 touch_grid,
+                under: [
+                    f32::from(u8::from(scene.under.is_some())),
+                    if frame.planted.no_cone {
+                        1.0
+                    } else {
+                        water.ior as f32
+                    },
+                    f32::from(u8::from(frame.planted.tint_by_depth)),
+                    0.0,
+                ],
+                above: (frame.above)
+                    .map_or([0.0; 4], |c| [c[0] as f32, c[1] as f32, c[2] as f32, 1.0]),
             };
             if self.parts.len() == self.draws.len() {
                 self.parts.push(Part {

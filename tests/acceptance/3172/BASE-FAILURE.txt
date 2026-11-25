@@ -1,0 +1,925 @@
+#3172's acceptance suite on the base, 61aa8eb06bb8e41f93ddff044b5a9df8771fbab6 (origin/main), with only
+tests/acceptance/3172/ added. Paths are redacted: <checkout> is the checkout, <tmp> the temporary folder, <home> a home.
+
+On the base:
+- AC1 (#3172.5a315338): its 4 tests fail at their assertions on both machines, for the expected reason: each target that
+  prints "<its name>: INCONCLUSIVE; <reason>" or "<its name>: BLOCKED; <reason>" reads
+  FAIL "the target failed outside any test it reported", the 18 + 1 Spark targets too.
+- AC2 (#3172.531b8e24): its 3 tests pass on both machines (a target with no such line reads FAIL, as today). Each fails
+  at its assertion on a planted wrong program (twins.json, twins/README.md): runs at the end of this file.
+- AC3 (#3172.f7060cf1): its test skips on the Mac, INCONCLUSIVE (platform). On the Spark it fails at its assertion:
+  acceptance_992_app prints BLOCKED, not INCONCLUSIVE.
+
+=============================================================================================================
+1. The Mac (darwin arm64), the base
+=============================================================================================================
+uname: Darwin arm64; node v24.22.0; cargo 1.99.1 (5f94df478 2026-08-27); load: { 94.50 95.30 86.81 }
+$ node --test 'tests/acceptance/3172/*.test.mjs'
+﹣ #3172.f7060cf1 acceptance_992_app off macOS prints "acceptance_992_app: INCONCLUSIVE; <reason naming its platform>" and exits non-zero, as its 18 neighbours do (0.426625ms) # INCONCLUSIVE (platform): this needs a machine off macOS, such as the Spark (Linux on aarch64), and this machine is darwin-arm64; it is unrun here
+✔ #3172.531b8e24 a target that exits 1 printing no "<its name>: INCONCLUSIVE; …" or "…: BLOCKED; …" line reads FAIL (3074.278709ms)
+✔ #3172.531b8e24 a target that exits 1 printing no such line reads FAIL in a run where other targets print theirs (2633.990667ms)
+✔ #3172.531b8e24 a target that exits 1 printing another target's "<name>: INCONCLUSIVE; <reason>" line reads FAIL (2055.364834ms)
+✖ #3172.5a315338 a target that prints "<its name>: INCONCLUSIVE; <reason>", reports no test and exits 1 is read INCONCLUSIVE with that reason, never FAIL or PASS (3130.375417ms)
+✖ #3172.5a315338 a target that prints "<its name>: BLOCKED; <reason>", reports no test and exits 1 is read BLOCKED, never FAIL or PASS (2653.969666ms)
+✖ #3172.5a315338 in one run, a target's INCONCLUSIVE line and another's BLOCKED line are each read as their own, with their reasons, beside a target that fails (2225.713416ms)
+✖ #3172.5a315338 the Spark's cargo test at 0c73a8a4: each of the issue's 19 targets is read as its line says, an INCONCLUSIVE one with its reason, never FAIL or PASS (965.355125ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 3
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 9184.989667
+
+✖ failing tests:
+
+test at tests/acceptance/3172/inconclusive.test.mjs:18:1
+✖ #3172.5a315338 a target that prints "<its name>: INCONCLUSIVE; <reason>", reports no test and exits 1 is read INCONCLUSIVE with that reason, never FAIL or PASS (3130.375417ms)
+  AssertionError [ERR_ASSERTION]: cargo -p fixture-3172 --test inconclusive_target reads INCONCLUSIVE, once, as the target
+  $ cargo test --workspace --locked --no-fail-fast  (exit 101)
+  Blocking waiting for file lock on package cache
+      Blocking waiting for file lock on package cache
+     Compiling fixture-3172 v0.0.0 (<tmp>/deep-3172-ACvXWX/workspace/fixture)
+     Compiling fixture-3172-beside v0.0.0 (<tmp>/deep-3172-ACvXWX/workspace/beside)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 1.92s
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172-92e2734748d6efdb)
+  
+  running 1 test
+  test tests::two_is_two ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+       Running inconclusive_target.rs (target/debug/deps/inconclusive_target-515c9ec9ed4c9c86)
+  inconclusive_target: INCONCLUSIVE; the fixture's renderer runs on macOS only, so nothing ran
+  error: test failed, to rerun pass `-p fixture-3172 --test inconclusive_target`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-ACvXWX/workspace/target/debug/deps/inconclusive_target-515c9ec9ed4c9c86` (exit status: 1)
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172_beside-a226ea8f5ef168eb)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  error: 1 target failed:
+      `-p fixture-3172 --test inconclusive_target`
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo -p fixture-3172 --test inconclusive_target",
+     "state": "FAIL",
+     "message": "the target failed outside any test it reported"
+    }
+   ],
+   "passed": [
+    "cargo -p fixture-3172 --lib › tests::two_is_two"
+   ]
+  }
+  + actual - expected
+  
+    [
+      [
+        'cargo -p fixture-3172 --test inconclusive_target',
+  +     'FAIL'
+  -     'INCONCLUSIVE'
+      ]
+    ]
+  
+      at readsOnly (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:20:19)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'cargo -p fixture-3172 --test inconclusive_target', 'FAIL' ] ],
+    expected: [ [ 'cargo -p fixture-3172 --test inconclusive_target', 'INCONCLUSIVE' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3172/inconclusive.test.mjs:24:1
+✖ #3172.5a315338 a target that prints "<its name>: BLOCKED; <reason>", reports no test and exits 1 is read BLOCKED, never FAIL or PASS (2653.969666ms)
+  AssertionError [ERR_ASSERTION]: cargo -p fixture-3172 --test blocked_target reads BLOCKED, once, as the target
+  $ cargo test --workspace --locked --no-fail-fast  (exit 101)
+  Compiling fixture-3172 v0.0.0 (<tmp>/deep-3172-1xaXzK/workspace/fixture)
+     Compiling fixture-3172-beside v0.0.0 (<tmp>/deep-3172-1xaXzK/workspace/beside)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 1.31s
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172-92e2734748d6efdb)
+  
+  running 1 test
+  test tests::two_is_two ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+       Running blocked_target.rs (target/debug/deps/blocked_target-ce3a2afd3d462321)
+  blocked_target: BLOCKED; the fixture's record is missing, so no row was read
+  error: test failed, to rerun pass `-p fixture-3172 --test blocked_target`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-1xaXzK/workspace/target/debug/deps/blocked_target-ce3a2afd3d462321` (exit status: 1)
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172_beside-a226ea8f5ef168eb)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  error: 1 target failed:
+      `-p fixture-3172 --test blocked_target`
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo -p fixture-3172 --test blocked_target",
+     "state": "FAIL",
+     "message": "the target failed outside any test it reported"
+    }
+   ],
+   "passed": [
+    "cargo -p fixture-3172 --lib › tests::two_is_two"
+   ]
+  }
+  + actual - expected
+  
+    [
+      [
+        'cargo -p fixture-3172 --test blocked_target',
+  +     'FAIL'
+  -     'BLOCKED'
+      ]
+    ]
+  
+      at readsOnly (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:26:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'cargo -p fixture-3172 --test blocked_target', 'FAIL' ] ],
+    expected: [ [ 'cargo -p fixture-3172 --test blocked_target', 'BLOCKED' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3172/inconclusive.test.mjs:29:1
+✖ #3172.5a315338 in one run, a target's INCONCLUSIVE line and another's BLOCKED line are each read as their own, with their reasons, beside a target that fails (2225.713416ms)
+  AssertionError [ERR_ASSERTION]: inconclusive_target reads INCONCLUSIVE, once
+  $ cargo test --workspace --locked --no-fail-fast  (exit 101)
+  Compiling fixture-3172 v0.0.0 (<tmp>/deep-3172-QYkBeM/workspace/fixture)
+     Compiling fixture-3172-beside v0.0.0 (<tmp>/deep-3172-QYkBeM/workspace/beside)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 0.99s
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172-92e2734748d6efdb)
+  
+  running 1 test
+  test tests::two_is_two ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+       Running blocked_target.rs (target/debug/deps/blocked_target-ce3a2afd3d462321)
+  blocked_target: BLOCKED; the fixture's record is missing, so no row was read
+  error: test failed, to rerun pass `-p fixture-3172 --test blocked_target`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-QYkBeM/workspace/target/debug/deps/blocked_target-ce3a2afd3d462321` (exit status: 1)
+       Running inconclusive_target.rs (target/debug/deps/inconclusive_target-515c9ec9ed4c9c86)
+  inconclusive_target: INCONCLUSIVE; the fixture's renderer runs on macOS only, so nothing ran
+  error: test failed, to rerun pass `-p fixture-3172 --test inconclusive_target`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-QYkBeM/workspace/target/debug/deps/inconclusive_target-515c9ec9ed4c9c86` (exit status: 1)
+       Running plain_failure.rs (target/debug/deps/plain_failure-d6dfb1fb1088d41c)
+  plain_failure: the fixture could not open its window
+  error: test failed, to rerun pass `-p fixture-3172 --test plain_failure`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-QYkBeM/workspace/target/debug/deps/plain_failure-d6dfb1fb1088d41c` (exit status: 1)
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172_beside-a226ea8f5ef168eb)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  error: 3 targets failed:
+      `-p fixture-3172 --test blocked_target`
+      `-p fixture-3172 --test inconclusive_target`
+      `-p fixture-3172 --test plain_failure`
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo -p fixture-3172 --test blocked_target",
+     "state": "FAIL",
+     "message": "the target failed outside any test it reported"
+    },
+    {
+     "id": "cargo -p fixture-3172 --test inconclusive_target",
+     "state": "FAIL",
+     "message": "the target failed outside any test it reported"
+    },
+    {
+     "id": "cargo -p fixture-3172 --test plain_failure",
+     "state": "FAIL",
+     "message": "the target failed outside any test it reported"
+    }
+   ],
+   "passed": [
+    "cargo -p fixture-3172 --lib › tests::two_is_two"
+   ]
+  }
+  + actual - expected
+  
+    [
+      [
+        'cargo -p fixture-3172 --test inconclusive_target',
+  +     'FAIL'
+  -     'INCONCLUSIVE'
+      ]
+    ]
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:33:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'cargo -p fixture-3172 --test inconclusive_target', 'FAIL' ] ],
+    expected: [ [ 'cargo -p fixture-3172 --test inconclusive_target', 'INCONCLUSIVE' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3172/inconclusive.test.mjs:41:1
+✖ #3172.5a315338 the Spark's cargo test at 0c73a8a4: each of the issue's 19 targets is read as its line says, an INCONCLUSIVE one with its reason, never FAIL or PASS (965.355125ms)
+  AssertionError [ERR_ASSERTION]: of the 19 targets, 19 are read otherwise than their lines say
+  + actual - expected
+  
+  + [
+  +   'cargo -p deep-app --test spike_402 reads FAIL cargo -p deep-app --test spike_402: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1425 reads FAIL cargo -p deep-replica --test acceptance_1425: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1425_ac3 reads FAIL cargo -p deep-replica --test acceptance_1425_ac3: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1454_panel_redraft reads FAIL cargo -p deep-replica --test acceptance_1454_panel_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1620_planted_loader reads FAIL cargo -p deep-replica --test acceptance_1620_planted_loader: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels reads FAIL cargo -p deep-replica --test acceptance_326_panels: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels_planted reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels_planted_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_surfaces reads FAIL cargo -p deep-replica --test acceptance_326_surfaces: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_327_card reads FAIL cargo -p deep-replica --test acceptance_327_card: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_327_planted reads FAIL cargo -p deep-replica --test acceptance_327_planted: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_883 reads FAIL cargo -p deep-replica --test acceptance_883: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_883_ac3_redraft reads FAIL cargo -p deep-replica --test acceptance_883_ac3_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_994_sound reads FAIL cargo -p deep-replica --test acceptance_994_sound: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_994_window reads FAIL cargo -p deep-replica --test acceptance_994_window: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test card_size reads FAIL cargo -p deep-replica --test card_size: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test headless reads FAIL cargo -p deep-replica --test headless: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_992_app reads FAIL cargo -p deep-replica --test acceptance_992_app: the target failed outside any test it reported, not BLOCKED'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:54:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'cargo -p deep-app --test spike_402 reads FAIL cargo -p deep-app --test spike_402: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1425 reads FAIL cargo -p deep-replica --test acceptance_1425: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1425_ac3 reads FAIL cargo -p deep-replica --test acceptance_1425_ac3: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1454_panel_redraft reads FAIL cargo -p deep-replica --test acceptance_1454_panel_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1620_planted_loader reads FAIL cargo -p deep-replica --test acceptance_1620_planted_loader: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels reads FAIL cargo -p deep-replica --test acceptance_326_panels: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels_planted reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels_planted_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_surfaces reads FAIL cargo -p deep-replica --test acceptance_326_surfaces: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_327_card reads FAIL cargo -p deep-replica --test acceptance_327_card: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_327_planted reads FAIL cargo -p deep-replica --test acceptance_327_planted: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_883 reads FAIL cargo -p deep-replica --test acceptance_883: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_883_ac3_redraft reads FAIL cargo -p deep-replica --test acceptance_883_ac3_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_994_sound reads FAIL cargo -p deep-replica --test acceptance_994_sound: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_994_window reads FAIL cargo -p deep-replica --test acceptance_994_window: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test card_size reads FAIL cargo -p deep-replica --test card_size: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test headless reads FAIL cargo -p deep-replica --test headless: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_992_app reads FAIL cargo -p deep-replica --test acceptance_992_app: the target failed outside any test it reported, not BLOCKED' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+
+=============================================================================================================
+2. The Spark (Linux aarch64), the base. The tree is `git archive 61aa8eb06` without docs/evidence and docs/images,
+   plus docs/evidence/1121/spark-test-0c73a8a4.txt and this suite, in a folder of its own.
+   $ ssh spark; source ~/.cargo/env; PATH=~/.nvm/versions/node/v24.22.0/bin:$PATH
+=============================================================================================================
+uname: Linux aarch64; node v24.22.0; cargo 1.99.1 (5f94df478 2026-08-27); rustc 1.99.1 (58cf8f9c3 2026-10-13); load: 9.92 7.94 7.07
+$ node --test tests/acceptance/3172/*.test.mjs
+✖ #3172.f7060cf1 acceptance_992_app off macOS prints "acceptance_992_app: INCONCLUSIVE; <reason naming its platform>" and exits non-zero, as its 18 neighbours do (467.203694ms)
+✔ #3172.531b8e24 a target that exits 1 printing no "<its name>: INCONCLUSIVE; …" or "…: BLOCKED; …" line reads FAIL (710.032823ms)
+✔ #3172.531b8e24 a target that exits 1 printing no such line reads FAIL in a run where other targets print theirs (278.855485ms)
+✔ #3172.531b8e24 a target that exits 1 printing another target's "<name>: INCONCLUSIVE; <reason>" line reads FAIL (273.512063ms)
+✖ #3172.5a315338 a target that prints "<its name>: INCONCLUSIVE; <reason>", reports no test and exits 1 is read INCONCLUSIVE with that reason, never FAIL or PASS (704.538263ms)
+✖ #3172.5a315338 a target that prints "<its name>: BLOCKED; <reason>", reports no test and exits 1 is read BLOCKED, never FAIL or PASS (270.817416ms)
+✖ #3172.5a315338 in one run, a target's INCONCLUSIVE line and another's BLOCKED line are each read as their own, with their reasons, beside a target that fails (285.516385ms)
+✖ #3172.5a315338 the Spark's cargo test at 0c73a8a4: each of the issue's 19 targets is read as its line says, an INCONCLUSIVE one with its reason, never FAIL or PASS (103.343202ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 3
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1403.494895
+
+✖ failing tests:
+
+test at tests/acceptance/3172/app-992.test.mjs:12:1
+✖ #3172.f7060cf1 acceptance_992_app off macOS prints "acceptance_992_app: INCONCLUSIVE; <reason naming its platform>" and exits non-zero, as its 18 neighbours do (467.203694ms)
+  AssertionError [ERR_ASSERTION]: acceptance_992_app off macOS states INCONCLUSIVE, not BLOCKED
+  acceptance_992_app (exit 1):
+  acceptance_992_app: BLOCKED; the replica runs on macOS only, so no sidebar row was read
+  
+  + actual - expected
+  
+  + 'BLOCKED'
+  - 'INCONCLUSIVE'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3172/app-992.test.mjs:33:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'BLOCKED',
+    expected: 'INCONCLUSIVE',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3172/inconclusive.test.mjs:18:1
+✖ #3172.5a315338 a target that prints "<its name>: INCONCLUSIVE; <reason>", reports no test and exits 1 is read INCONCLUSIVE with that reason, never FAIL or PASS (704.538263ms)
+  AssertionError [ERR_ASSERTION]: cargo -p fixture-3172 --test inconclusive_target reads INCONCLUSIVE, once, as the target
+  $ cargo test --workspace --locked --no-fail-fast  (exit 101)
+  Blocking waiting for file lock on package cache
+      Blocking waiting for file lock on package cache
+      Blocking waiting for file lock on package cache
+     Compiling fixture-3172 v0.0.0 (/tmp/deep-3172-Qi34sM/workspace/fixture)
+     Compiling fixture-3172-beside v0.0.0 (/tmp/deep-3172-Qi34sM/workspace/beside)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 0.59s
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172-a361f597d1e798e6)
+  
+  running 1 test
+  test tests::two_is_two ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+       Running inconclusive_target.rs (target/debug/deps/inconclusive_target-c0888dc635b1902f)
+  inconclusive_target: INCONCLUSIVE; the fixture's renderer runs on macOS only, so nothing ran
+  error: test failed, to rerun pass `-p fixture-3172 --test inconclusive_target`
+  
+  Caused by:
+    process didn't exit successfully: `/tmp/deep-3172-Qi34sM/workspace/target/debug/deps/inconclusive_target-c0888dc635b1902f` (exit status: 1)
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172_beside-cb686a97bea7946a)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  error: 1 target failed:
+      `-p fixture-3172 --test inconclusive_target`
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo -p fixture-3172 --test inconclusive_target",
+     "state": "FAIL",
+     "message": "the target failed outside any test it reported"
+    }
+   ],
+   "passed": [
+    "cargo -p fixture-3172 --lib › tests::two_is_two"
+   ]
+  }
+  + actual - expected
+  
+    [
+      [
+        'cargo -p fixture-3172 --test inconclusive_target',
+  +     'FAIL'
+  -     'INCONCLUSIVE'
+      ]
+    ]
+  
+      at readsOnly (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:20:19)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'cargo -p fixture-3172 --test inconclusive_target', 'FAIL' ] ],
+    expected: [ [ 'cargo -p fixture-3172 --test inconclusive_target', 'INCONCLUSIVE' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3172/inconclusive.test.mjs:24:1
+✖ #3172.5a315338 a target that prints "<its name>: BLOCKED; <reason>", reports no test and exits 1 is read BLOCKED, never FAIL or PASS (270.817416ms)
+  AssertionError [ERR_ASSERTION]: cargo -p fixture-3172 --test blocked_target reads BLOCKED, once, as the target
+  $ cargo test --workspace --locked --no-fail-fast  (exit 101)
+  Compiling fixture-3172 v0.0.0 (/tmp/deep-3172-pJUdPv/workspace/fixture)
+     Compiling fixture-3172-beside v0.0.0 (/tmp/deep-3172-pJUdPv/workspace/beside)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172-a361f597d1e798e6)
+  
+  running 1 test
+  test tests::two_is_two ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+       Running blocked_target.rs (target/debug/deps/blocked_target-3e17655ed022bd24)
+  blocked_target: BLOCKED; the fixture's record is missing, so no row was read
+  error: test failed, to rerun pass `-p fixture-3172 --test blocked_target`
+  
+  Caused by:
+    process didn't exit successfully: `/tmp/deep-3172-pJUdPv/workspace/target/debug/deps/blocked_target-3e17655ed022bd24` (exit status: 1)
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172_beside-cb686a97bea7946a)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  error: 1 target failed:
+      `-p fixture-3172 --test blocked_target`
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo -p fixture-3172 --test blocked_target",
+     "state": "FAIL",
+     "message": "the target failed outside any test it reported"
+    }
+   ],
+   "passed": [
+    "cargo -p fixture-3172 --lib › tests::two_is_two"
+   ]
+  }
+  + actual - expected
+  
+    [
+      [
+        'cargo -p fixture-3172 --test blocked_target',
+  +     'FAIL'
+  -     'BLOCKED'
+      ]
+    ]
+  
+      at readsOnly (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:26:3)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'cargo -p fixture-3172 --test blocked_target', 'FAIL' ] ],
+    expected: [ [ 'cargo -p fixture-3172 --test blocked_target', 'BLOCKED' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3172/inconclusive.test.mjs:29:1
+✖ #3172.5a315338 in one run, a target's INCONCLUSIVE line and another's BLOCKED line are each read as their own, with their reasons, beside a target that fails (285.516385ms)
+  AssertionError [ERR_ASSERTION]: inconclusive_target reads INCONCLUSIVE, once
+  $ cargo test --workspace --locked --no-fail-fast  (exit 101)
+  Compiling fixture-3172 v0.0.0 (/tmp/deep-3172-IeMHRW/workspace/fixture)
+     Compiling fixture-3172-beside v0.0.0 (/tmp/deep-3172-IeMHRW/workspace/beside)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172-a361f597d1e798e6)
+  
+  running 1 test
+  test tests::two_is_two ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+       Running blocked_target.rs (target/debug/deps/blocked_target-3e17655ed022bd24)
+  blocked_target: BLOCKED; the fixture's record is missing, so no row was read
+  error: test failed, to rerun pass `-p fixture-3172 --test blocked_target`
+  
+  Caused by:
+    process didn't exit successfully: `/tmp/deep-3172-IeMHRW/workspace/target/debug/deps/blocked_target-3e17655ed022bd24` (exit status: 1)
+       Running inconclusive_target.rs (target/debug/deps/inconclusive_target-c0888dc635b1902f)
+  inconclusive_target: INCONCLUSIVE; the fixture's renderer runs on macOS only, so nothing ran
+  error: test failed, to rerun pass `-p fixture-3172 --test inconclusive_target`
+  
+  Caused by:
+    process didn't exit successfully: `/tmp/deep-3172-IeMHRW/workspace/target/debug/deps/inconclusive_target-c0888dc635b1902f` (exit status: 1)
+       Running plain_failure.rs (target/debug/deps/plain_failure-6342af92f3c3a0c2)
+  plain_failure: the fixture could not open its window
+  error: test failed, to rerun pass `-p fixture-3172 --test plain_failure`
+  
+  Caused by:
+    process didn't exit successfully: `/tmp/deep-3172-IeMHRW/workspace/target/debug/deps/plain_failure-6342af92f3c3a0c2` (exit status: 1)
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172_beside-cb686a97bea7946a)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  error: 3 targets failed:
+      `-p fixture-3172 --test blocked_target`
+      `-p fixture-3172 --test inconclusive_target`
+      `-p fixture-3172 --test plain_failure`
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo -p fixture-3172 --test blocked_target",
+     "state": "FAIL",
+     "message": "the target failed outside any test it reported"
+    },
+    {
+     "id": "cargo -p fixture-3172 --test inconclusive_target",
+     "state": "FAIL",
+     "message": "the target failed outside any test it reported"
+    },
+    {
+     "id": "cargo -p fixture-3172 --test plain_failure",
+     "state": "FAIL",
+     "message": "the target failed outside any test it reported"
+    }
+   ],
+   "passed": [
+    "cargo -p fixture-3172 --lib › tests::two_is_two"
+   ]
+  }
+  + actual - expected
+  
+    [
+      [
+        'cargo -p fixture-3172 --test inconclusive_target',
+  +     'FAIL'
+  -     'INCONCLUSIVE'
+      ]
+    ]
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:33:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'cargo -p fixture-3172 --test inconclusive_target', 'FAIL' ] ],
+    expected: [ [ 'cargo -p fixture-3172 --test inconclusive_target', 'INCONCLUSIVE' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3172/inconclusive.test.mjs:41:1
+✖ #3172.5a315338 the Spark's cargo test at 0c73a8a4: each of the issue's 19 targets is read as its line says, an INCONCLUSIVE one with its reason, never FAIL or PASS (103.343202ms)
+  AssertionError [ERR_ASSERTION]: of the 19 targets, 19 are read otherwise than their lines say
+  + actual - expected
+  
+  + [
+  +   'cargo -p deep-app --test spike_402 reads FAIL cargo -p deep-app --test spike_402: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1425 reads FAIL cargo -p deep-replica --test acceptance_1425: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1425_ac3 reads FAIL cargo -p deep-replica --test acceptance_1425_ac3: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1454_panel_redraft reads FAIL cargo -p deep-replica --test acceptance_1454_panel_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1620_planted_loader reads FAIL cargo -p deep-replica --test acceptance_1620_planted_loader: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels reads FAIL cargo -p deep-replica --test acceptance_326_panels: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels_planted reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels_planted_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_surfaces reads FAIL cargo -p deep-replica --test acceptance_326_surfaces: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_327_card reads FAIL cargo -p deep-replica --test acceptance_327_card: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_327_planted reads FAIL cargo -p deep-replica --test acceptance_327_planted: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_883 reads FAIL cargo -p deep-replica --test acceptance_883: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_883_ac3_redraft reads FAIL cargo -p deep-replica --test acceptance_883_ac3_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_994_sound reads FAIL cargo -p deep-replica --test acceptance_994_sound: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_994_window reads FAIL cargo -p deep-replica --test acceptance_994_window: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test card_size reads FAIL cargo -p deep-replica --test card_size: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test headless reads FAIL cargo -p deep-replica --test headless: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_992_app reads FAIL cargo -p deep-replica --test acceptance_992_app: the target failed outside any test it reported, not BLOCKED'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3172/inconclusive.test.mjs:54:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'cargo -p deep-app --test spike_402 reads FAIL cargo -p deep-app --test spike_402: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1425 reads FAIL cargo -p deep-replica --test acceptance_1425: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1425_ac3 reads FAIL cargo -p deep-replica --test acceptance_1425_ac3: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1454_panel_redraft reads FAIL cargo -p deep-replica --test acceptance_1454_panel_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1620_planted_loader reads FAIL cargo -p deep-replica --test acceptance_1620_planted_loader: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels reads FAIL cargo -p deep-replica --test acceptance_326_panels: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels_planted reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels_planted_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_surfaces reads FAIL cargo -p deep-replica --test acceptance_326_surfaces: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_327_card reads FAIL cargo -p deep-replica --test acceptance_327_card: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_327_planted reads FAIL cargo -p deep-replica --test acceptance_327_planted: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_883 reads FAIL cargo -p deep-replica --test acceptance_883: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_883_ac3_redraft reads FAIL cargo -p deep-replica --test acceptance_883_ac3_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_994_sound reads FAIL cargo -p deep-replica --test acceptance_994_sound: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_994_window reads FAIL cargo -p deep-replica --test acceptance_994_window: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test card_size reads FAIL cargo -p deep-replica --test card_size: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test headless reads FAIL cargo -p deep-replica --test headless: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_992_app reads FAIL cargo -p deep-replica --test acceptance_992_app: the target failed outside any test it reported, not BLOCKED' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+
+=============================================================================================================
+3. Twin no-line-inconclusive (#3172.531b8e24), the Mac: an APFS clone of the checkout with
+   twins/no-line-inconclusive/scripts/lanes.mjs laid over scripts/lanes.mjs.
+   $ node --test tests/acceptance/3172/fail.test.mjs
+   All three AC2 tests fail at their assertions.
+=============================================================================================================
+✖ #3172.531b8e24 a target that exits 1 printing no "<its name>: INCONCLUSIVE; …" or "…: BLOCKED; …" line reads FAIL (5204.205583ms)
+✖ #3172.531b8e24 a target that exits 1 printing no such line reads FAIL in a run where other targets print theirs (6062.497666ms)
+✖ #3172.531b8e24 a target that exits 1 printing another target's "<name>: INCONCLUSIVE; <reason>" line reads FAIL (3549.666875ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15304.831167
+
+✖ failing tests:
+
+test at tests/acceptance/3172/fail.test.mjs:15:1
+✖ #3172.531b8e24 a target that exits 1 printing no "<its name>: INCONCLUSIVE; …" or "…: BLOCKED; …" line reads FAIL (5204.205583ms)
+  AssertionError [ERR_ASSERTION]: cargo -p fixture-3172 --test plain_failure prints no line of its own state, so it reads FAIL
+  $ cargo test --workspace --locked --no-fail-fast  (exit 101)
+  Compiling fixture-3172 v0.0.0 (<tmp>/deep-3172-Rmivf0/workspace/fixture)
+     Compiling fixture-3172-beside v0.0.0 (<tmp>/deep-3172-Rmivf0/workspace/beside)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 3.38s
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172-92e2734748d6efdb)
+  
+  running 1 test
+  test tests::two_is_two ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+  
+       Running plain_failure.rs (target/debug/deps/plain_failure-d6dfb1fb1088d41c)
+  plain_failure: the fixture could not open its window
+  error: test failed, to rerun pass `-p fixture-3172 --test plain_failure`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-Rmivf0/workspace/target/debug/deps/plain_failure-d6dfb1fb1088d41c` (exit status: 1)
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172_beside-a226ea8f5ef168eb)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  error: 1 target failed:
+      `-p fixture-3172 --test plain_failure`
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo -p fixture-3172 --test plain_failure",
+     "state": "INCONCLUSIVE",
+     "message": "the target failed outside any test it reported"
+    }
+   ],
+   "passed": [
+    "cargo -p fixture-3172 --lib › tests::two_is_two"
+   ]
+  }
+  + actual - expected
+  
+    [
+      [
+        'cargo -p fixture-3172 --test plain_failure',
+  +     'INCONCLUSIVE'
+  -     'FAIL'
+      ]
+    ]
+  
+      at readsFail (file://<twin copy>/tests/acceptance/3172/fail.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<twin copy>/tests/acceptance/3172/fail.test.mjs:16:3)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'cargo -p fixture-3172 --test plain_failure', 'INCONCLUSIVE' ] ],
+    expected: [ [ 'cargo -p fixture-3172 --test plain_failure', 'FAIL' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3172/fail.test.mjs:19:1
+✖ #3172.531b8e24 a target that exits 1 printing no such line reads FAIL in a run where other targets print theirs (6062.497666ms)
+  AssertionError [ERR_ASSERTION]: cargo -p fixture-3172 --test plain_failure prints no line of its own state, so it reads FAIL
+  $ cargo test --workspace --locked --no-fail-fast  (exit 101)
+  Blocking waiting for file lock on package cache
+     Compiling fixture-3172 v0.0.0 (<tmp>/deep-3172-IFvHJo/workspace/fixture)
+     Compiling fixture-3172-beside v0.0.0 (<tmp>/deep-3172-IFvHJo/workspace/beside)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 2.99s
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172-92e2734748d6efdb)
+  
+  running 1 test
+  test tests::two_is_two ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+       Running blocked_target.rs (target/debug/deps/blocked_target-ce3a2afd3d462321)
+  blocked_target: BLOCKED; the fixture's record is missing, so no row was read
+  error: test failed, to rerun pass `-p fixture-3172 --test blocked_target`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-IFvHJo/workspace/target/debug/deps/blocked_target-ce3a2afd3d462321` (exit status: 1)
+       Running inconclusive_target.rs (target/debug/deps/inconclusive_target-515c9ec9ed4c9c86)
+  inconclusive_target: INCONCLUSIVE; the fixture's renderer runs on macOS only, so nothing ran
+  error: test failed, to rerun pass `-p fixture-3172 --test inconclusive_target`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-IFvHJo/workspace/target/debug/deps/inconclusive_target-515c9ec9ed4c9c86` (exit status: 1)
+       Running plain_failure.rs (target/debug/deps/plain_failure-d6dfb1fb1088d41c)
+  plain_failure: the fixture could not open its window
+  error: test failed, to rerun pass `-p fixture-3172 --test plain_failure`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-IFvHJo/workspace/target/debug/deps/plain_failure-d6dfb1fb1088d41c` (exit status: 1)
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172_beside-a226ea8f5ef168eb)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  error: 3 targets failed:
+      `-p fixture-3172 --test blocked_target`
+      `-p fixture-3172 --test inconclusive_target`
+      `-p fixture-3172 --test plain_failure`
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo -p fixture-3172 --test blocked_target",
+     "state": "INCONCLUSIVE",
+     "message": "the target failed outside any test it reported"
+    },
+    {
+     "id": "cargo -p fixture-3172 --test inconclusive_target",
+     "state": "INCONCLUSIVE",
+     "message": "the target failed outside any test it reported"
+    },
+    {
+     "id": "cargo -p fixture-3172 --test plain_failure",
+     "state": "INCONCLUSIVE",
+     "message": "the target failed outside any test it reported"
+    }
+   ],
+   "passed": [
+    "cargo -p fixture-3172 --lib › tests::two_is_two"
+   ]
+  }
+  + actual - expected
+  
+    [
+      [
+        'cargo -p fixture-3172 --test plain_failure',
+  +     'INCONCLUSIVE'
+  -     'FAIL'
+      ]
+    ]
+  
+      at readsFail (file://<twin copy>/tests/acceptance/3172/fail.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<twin copy>/tests/acceptance/3172/fail.test.mjs:20:3)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'cargo -p fixture-3172 --test plain_failure', 'INCONCLUSIVE' ] ],
+    expected: [ [ 'cargo -p fixture-3172 --test plain_failure', 'FAIL' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3172/fail.test.mjs:23:1
+✖ #3172.531b8e24 a target that exits 1 printing another target's "<name>: INCONCLUSIVE; <reason>" line reads FAIL (3549.666875ms)
+  AssertionError [ERR_ASSERTION]: cargo -p fixture-3172 --test borrowed_line prints no line of its own state, so it reads FAIL
+  $ cargo test --workspace --locked --no-fail-fast  (exit 101)
+  Compiling fixture-3172 v0.0.0 (<tmp>/deep-3172-lwv4uN/workspace/fixture)
+     Compiling fixture-3172-beside v0.0.0 (<tmp>/deep-3172-lwv4uN/workspace/beside)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 1.02s
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172-92e2734748d6efdb)
+  
+  running 1 test
+  test tests::two_is_two ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+  
+       Running borrowed_line.rs (target/debug/deps/borrowed_line-c435d255ebf01058)
+  inconclusive_target: INCONCLUSIVE; the fixture's renderer runs on macOS only, so nothing ran
+  error: test failed, to rerun pass `-p fixture-3172 --test borrowed_line`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-lwv4uN/workspace/target/debug/deps/borrowed_line-c435d255ebf01058` (exit status: 1)
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172_beside-a226ea8f5ef168eb)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  error: 1 target failed:
+      `-p fixture-3172 --test borrowed_line`
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo -p fixture-3172 --test borrowed_line",
+     "state": "INCONCLUSIVE",
+     "message": "the target failed outside any test it reported"
+    }
+   ],
+   "passed": [
+    "cargo -p fixture-3172 --lib › tests::two_is_two"
+   ]
+  }
+  + actual - expected
+  
+    [
+      [
+        'cargo -p fixture-3172 --test borrowed_line',
+  +     'INCONCLUSIVE'
+  -     'FAIL'
+      ]
+    ]
+  
+      at readsFail (file://<twin copy>/tests/acceptance/3172/fail.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<twin copy>/tests/acceptance/3172/fail.test.mjs:24:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'cargo -p fixture-3172 --test borrowed_line', 'INCONCLUSIVE' ] ],
+    expected: [ [ 'cargo -p fixture-3172 --test borrowed_line', 'FAIL' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+=============================================================================================================
+4. Twin any-name-line (#3172.531b8e24), the Mac, laid the same way.
+   $ node --test tests/acceptance/3172/fail.test.mjs
+   The borrowed-line test fails at its assertion; the other two pass (no-line-inconclusive fails them).
+=============================================================================================================
+✔ #3172.531b8e24 a target that exits 1 printing no "<its name>: INCONCLUSIVE; …" or "…: BLOCKED; …" line reads FAIL (2765.259958ms)
+✔ #3172.531b8e24 a target that exits 1 printing no such line reads FAIL in a run where other targets print theirs (2552.504542ms)
+✖ #3172.531b8e24 a target that exits 1 printing another target's "<name>: INCONCLUSIVE; <reason>" line reads FAIL (4472.804834ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9899.188791
+
+✖ failing tests:
+
+test at tests/acceptance/3172/fail.test.mjs:23:1
+✖ #3172.531b8e24 a target that exits 1 printing another target's "<name>: INCONCLUSIVE; <reason>" line reads FAIL (4472.804834ms)
+  AssertionError [ERR_ASSERTION]: cargo -p fixture-3172 --test borrowed_line prints no line of its own state, so it reads FAIL
+  $ cargo test --workspace --locked --no-fail-fast  (exit 101)
+  Compiling fixture-3172 v0.0.0 (<tmp>/deep-3172-OK2K9H/workspace/fixture)
+     Compiling fixture-3172-beside v0.0.0 (<tmp>/deep-3172-OK2K9H/workspace/beside)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 2.05s
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172-92e2734748d6efdb)
+  
+  running 1 test
+  test tests::two_is_two ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+  
+       Running borrowed_line.rs (target/debug/deps/borrowed_line-c435d255ebf01058)
+  inconclusive_target: INCONCLUSIVE; the fixture's renderer runs on macOS only, so nothing ran
+  error: test failed, to rerun pass `-p fixture-3172 --test borrowed_line`
+  
+  Caused by:
+    process didn't exit successfully: `<tmp>/deep-3172-OK2K9H/workspace/target/debug/deps/borrowed_line-c435d255ebf01058` (exit status: 1)
+       Running unittests src/lib.rs (target/debug/deps/fixture_3172_beside-a226ea8f5ef168eb)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+  error: 1 target failed:
+      `-p fixture-3172 --test borrowed_line`
+  --- cargoResults
+  {
+   "failures": [
+    {
+     "id": "cargo -p fixture-3172 --test borrowed_line",
+     "state": "INCONCLUSIVE",
+     "message": "the fixture's renderer runs on macOS only, so nothing ran"
+    }
+   ],
+   "passed": [
+    "cargo -p fixture-3172 --lib › tests::two_is_two"
+   ]
+  }
+  + actual - expected
+  
+    [
+      [
+        'cargo -p fixture-3172 --test borrowed_line',
+  +     'INCONCLUSIVE'
+  -     'FAIL'
+      ]
+    ]
+  
+      at readsFail (file://<twin copy>/tests/acceptance/3172/fail.test.mjs:12:10)
+      at TestContext.<anonymous> (file://<twin copy>/tests/acceptance/3172/fail.test.mjs:24:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'cargo -p fixture-3172 --test borrowed_line', 'INCONCLUSIVE' ] ],
+    expected: [ [ 'cargo -p fixture-3172 --test borrowed_line', 'FAIL' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+=============================================================================================================
+5. Checks of the tests themselves, on throwaway programs not kept (so not wrong programs, and not in twins/):
+   - The Mac: with a reader in scripts/lanes.mjs that takes a target's own "<its name>: INCONCLUSIVE|BLOCKED; <reason>"
+     line when it reported no test (twins/any-name-line's reader with the name compared), the whole suite passes
+     (7 pass, AC3's 1 skips).
+   - The Spark: with tests/acceptance/992/app.rs's line changed from BLOCKED to INCONCLUSIVE in the Spark's own copy
+     (restored after), app-992.test.mjs passes:
+     ✔ #3172.f7060cf1 acceptance_992_app off macOS prints "acceptance_992_app: INCONCLUSIVE; <reason naming its platform>" and exits non-zero, as its 18 neighbours do (133.089269ms)

@@ -1,0 +1,210 @@
+# #2062's planted wrong programs (twins/, twins.json), each laid over a right program on the base
+# 7cb1e5c4a62cd797b00839bb2c27d730937303f6, and the whole suite run once against it, in the grant and with the command
+# and machine of BASE-FAILURE.txt. The right program was written from the issue and the design only and is not kept
+# here: a row matches when `row.digests?.[minor]` is the use's digest, a tie goes to the smaller ID by `<`, and a reopen
+# that fails clears its windows and is forgotten, so the next land or tick tries it again. All eight tests pass on it.
+#
+#   refuses-undigested    #2062.9bf72360  fails AC2's first test alone: "the edge from test/u to test/p over x@1, with no
+#                                         digest stated and none kept, is wired: test/u's install isn't refused"
+#   cs-locale-tie         #2062.1c13446a  fails AC3's two tests alone, the first: "test/u's use of x@1, which test/chart
+#                                         and test/czar both match, resolves to test/chart: expected 'test/czar' to be
+#                                         'test/chart'"
+#   keeps-failed-windows  #2062.926f3013  fails AC5 alone: "the 10:00 minute's rollup counts 3 values of checkout:
+#                                         expected 5 to be 3"
+
+## right
+
+PASS  reopen.test.ts  AC4 #2062.1800089a the first land after a failed read of the record rejects, naming the read; the second succeeds, and its minute's rollup holds its batch AC4 the record's first read fails once: the first land rejects, naming it, the second succeeds, and the closed minute's rollup holds that batch
+PASS  reopen.test.ts  AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series
+PASS  wiring.test.ts  AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge AC1 u, whose use states a digest, is refused at its install beside p, whose row keeps none, and nothing is wired
+PASS  wiring.test.ts  AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge AC1 p, whose row keeps none, is refused at its install beside u, installed first, and nothing is wired
+PASS  wiring.test.ts  AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 AC2 the same pair with no digest on u's use is wired: the install isn't refused, and p's next version reaches u along the edge
+PASS  wiring.test.ts  AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 AC2 a provider whose row keeps the use's digest for minor 0 is wired
+PASS  wiring.test.ts  AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart
+PASS  wiring.test.ts  AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit
+
+## cs-locale-tie
+
+PASS  reopen.test.ts  AC4 #2062.1800089a the first land after a failed read of the record rejects, naming the read; the second succeeds, and its minute's rollup holds its batch AC4 the record's first read fails once: the first land rejects, naming it, the second succeeds, and the closed minute's rollup holds that batch
+PASS  reopen.test.ts  AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series
+PASS  wiring.test.ts  AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge AC1 u, whose use states a digest, is refused at its install beside p, whose row keeps none, and nothing is wired
+PASS  wiring.test.ts  AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge AC1 p, whose row keeps none, is refused at its install beside u, installed first, and nothing is wired
+PASS  wiring.test.ts  AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 AC2 the same pair with no digest on u's use is wired: the install isn't refused, and p's next version reaches u along the edge
+PASS  wiring.test.ts  AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 AC2 a provider whose row keeps the use's digest for minor 0 is wired
+FAILED  wiring.test.ts  AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart
+      AssertionError: test/u's use of x@1, which test/chart and test/czar both match, resolves to test/chart: expected 'test/czar' to be 'test/chart' // Object.is equality
+FAILED  wiring.test.ts  AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit
+      AssertionError: test/u's use of x@1, which test/a-b and test/a_b both match, resolves to test/a-b: expected 'test/a_b' to be 'test/a-b' // Object.is equality
+
+exit 1  after 19 s
+--- stdout
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/2062/wiring.test.ts > AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge > AC1 u, whose use states a digest, is refused at its install beside p, whose row keeps none, and nothing is wired 1294ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge > AC1 p, whose row keeps none, is refused at its install beside u, installed first, and nothing is wired 1241ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 > AC2 the same pair with no digest on u's use is wired: the install isn't refused, and p's next version reaches u along the edge 2163ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 > AC2 a provider whose row keeps the use's digest for minor 0 is wired 1847ms
+ × tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart 3878ms
+   → test/u's use of x@1, which test/chart and test/czar both match, resolves to test/chart: expected 'test/czar' to be 'test/chart' // Object.is equality
+ × tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit 2104ms
+   → test/u's use of x@1, which test/a-b and test/a_b both match, resolves to test/a-b: expected 'test/a_b' to be 'test/a-b' // Object.is equality
+ ✓ tests/acceptance/2062/reopen.test.ts > AC4 #2062.1800089a the first land after a failed read of the record rejects, naming the read; the second succeeds, and its minute's rollup holds its batch > AC4 the record's first read fails once: the first land rejects, naming it, the second succeeds, and the closed minute's rollup holds that batch 1373ms
+ ✓ tests/acceptance/2062/reopen.test.ts > AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series > AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series 2493ms
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 6 passed (8)
+   Start at  01:34:24
+   Duration  18.09s (tests 97%, import 2%, transform 1%)
+
+JSON report written to <scratch>
+
+--- stderr
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart
+AssertionError: test/u's use of x@1, which test/chart and test/czar both match, resolves to test/chart: expected 'test/czar' to be 'test/chart' // Object.is equality
+
+Expected: "test/chart"
+Received: "test/czar"
+
+ ❯ tests/acceptance/2062/wiring.test.ts:78:119
+     76|     expect(got.order, `the cs locale sorts ${czar} before ${chart}, so…
+     77|     expect(got.edges.map((e) => [e.user, e.uses]), `${U}'s use of ${X}…
+     78|     expect(got.edges[0]!.provider, `${U}'s use of ${X}, which ${chart}…
+       |                                                                                                                       ^
+     79|   }, 300_000);
+     80|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit
+AssertionError: test/u's use of x@1, which test/a-b and test/a_b both match, resolves to test/a-b: expected 'test/a_b' to be 'test/a-b' // Object.is equality
+
+Expected: "test/a-b"
+Received: "test/a_b"
+
+ ❯ tests/acceptance/2062/wiring.test.ts:85:123
+     83|     const edges = await tie([underscore, hyphen]);
+     84|     expect(edges.map((e) => [e.user, e.uses]), `${U}'s use of ${X} is …
+     85|     expect(edges[0]!.provider, `${U}'s use of ${X}, which ${hyphen} an…
+       |                                                                                                                           ^
+     86|   }, 300_000);
+     87| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+## keeps-failed-windows
+
+PASS  reopen.test.ts  AC4 #2062.1800089a the first land after a failed read of the record rejects, naming the read; the second succeeds, and its minute's rollup holds its batch AC4 the record's first read fails once: the first land rejects, naming it, the second succeeds, and the closed minute's rollup holds that batch
+FAILED  reopen.test.ts  AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series
+      AssertionError: the 10:00 minute's rollup counts 3 values of checkout: expected 5 to be 3 // Object.is equality
+PASS  wiring.test.ts  AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge AC1 u, whose use states a digest, is refused at its install beside p, whose row keeps none, and nothing is wired
+PASS  wiring.test.ts  AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge AC1 p, whose row keeps none, is refused at its install beside u, installed first, and nothing is wired
+PASS  wiring.test.ts  AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 AC2 the same pair with no digest on u's use is wired: the install isn't refused, and p's next version reaches u along the edge
+PASS  wiring.test.ts  AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 AC2 a provider whose row keeps the use's digest for minor 0 is wired
+PASS  wiring.test.ts  AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart
+PASS  wiring.test.ts  AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit
+
+exit 1  after 17 s
+--- stdout
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/2062/wiring.test.ts > AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge > AC1 u, whose use states a digest, is refused at its install beside p, whose row keeps none, and nothing is wired 1271ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge > AC1 p, whose row keeps none, is refused at its install beside u, installed first, and nothing is wired 1233ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 > AC2 the same pair with no digest on u's use is wired: the install isn't refused, and p's next version reaches u along the edge 1183ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 > AC2 a provider whose row keeps the use's digest for minor 0 is wired 1372ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart 3832ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit 2109ms
+ ✓ tests/acceptance/2062/reopen.test.ts > AC4 #2062.1800089a the first land after a failed read of the record rejects, naming the read; the second succeeds, and its minute's rollup holds its batch > AC4 the record's first read fails once: the first land rejects, naming it, the second succeeds, and the closed minute's rollup holds that batch 1295ms
+ × tests/acceptance/2062/reopen.test.ts > AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series > AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series 2479ms
+   → the 10:00 minute's rollup counts 3 values of checkout: expected 5 to be 3 // Object.is equality
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 7 passed (8)
+   Start at  01:34:43
+   Duration  16.38s (tests 98%, import 2%, transform 1%)
+
+JSON report written to <scratch>
+
+--- stderr
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2062/reopen.test.ts > AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series > AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series
+AssertionError: the 10:00 minute's rollup counts 3 values of checkout: expected 5 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 5
+
+ ❯ tests/acceptance/2062/reopen.test.ts:76:139
+     74|     const rollup = await h.rollup(SOURCE, 'minute', MINUTE);
+     75|     expect(Object.keys(rollup ?? {}).sort(), 'the 10:00 minute\'s roll…
+     76|     for (const series of ['checkout', 'search']) expect(rollup![series…
+       |                                                                                                                                           ^
+     77|   }, 300_000);
+     78| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+## refuses-undigested
+
+PASS  reopen.test.ts  AC4 #2062.1800089a the first land after a failed read of the record rejects, naming the read; the second succeeds, and its minute's rollup holds its batch AC4 the record's first read fails once: the first land rejects, naming it, the second succeeds, and the closed minute's rollup holds that batch
+PASS  reopen.test.ts  AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series
+PASS  wiring.test.ts  AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge AC1 u, whose use states a digest, is refused at its install beside p, whose row keeps none, and nothing is wired
+PASS  wiring.test.ts  AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge AC1 p, whose row keeps none, is refused at its install beside u, installed first, and nothing is wired
+FAILED  wiring.test.ts  AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 AC2 the same pair with no digest on u's use is wired: the install isn't refused, and p's next version reaches u along the edge
+      AssertionError: the edge from test/u to test/p over x@1, with no digest stated and none kept, is wired: test/u's install isn't refused: expected 'the edge test/u uses x@1 doesn\'t mat…' to be null
+PASS  wiring.test.ts  AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 AC2 a provider whose row keeps the use's digest for minor 0 is wired
+PASS  wiring.test.ts  AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart
+PASS  wiring.test.ts  AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit
+
+exit 1  after 20 s
+--- stdout
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/2062/reopen.test.ts > AC4 #2062.1800089a the first land after a failed read of the record rejects, naming the read; the second succeeds, and its minute's rollup holds its batch > AC4 the record's first read fails once: the first land rejects, naming it, the second succeeds, and the closed minute's rollup holds that batch 1405ms
+ ✓ tests/acceptance/2062/reopen.test.ts > AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series > AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series 2519ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge > AC1 u, whose use states a digest, is refused at its install beside p, whose row keeps none, and nothing is wired 1471ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge > AC1 p, whose row keeps none, is refused at its install beside u, installed first, and nothing is wired 1345ms
+ × tests/acceptance/2062/wiring.test.ts > AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 > AC2 the same pair with no digest on u's use is wired: the install isn't refused, and p's next version reaches u along the edge 428ms
+   → the edge from test/u to test/p over x@1, with no digest stated and none kept, is wired: test/u's install isn't refused: expected 'the edge test/u uses x@1 doesn\'t mat…' to be null
+ ✓ tests/acceptance/2062/wiring.test.ts > AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 > AC2 a provider whose row keeps the use's digest for minor 0 is wired 3072ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart 4596ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit 2233ms
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 7 passed (8)
+   Start at  01:35:00
+   Duration  19.11s (tests 97%, transform 2%, import 1%)
+
+JSON report written to <scratch>
+
+--- stderr
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2062/wiring.test.ts > AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 > AC2 the same pair with no digest on u's use is wired: the install isn't refused, and p's next version reaches u along the edge
+AssertionError: the edge from test/u to test/p over x@1, with no digest stated and none kept, is wired: test/u's install isn't refused: expected 'the edge test/u uses x@1 doesn\'t mat…' to be null
+
+- Expected:
+null
+
++ Received:
+"the edge test/u uses x@1 doesn't match test/p's x@1 at minor 0: they first differ at /, so test/u isn't installed"
+
+ ❯ tests/acceptance/2062/wiring.test.ts:51:135
+     49|     const first = await installs(provider(P, 'no digests'));
+     50|     if (first !== null) throw Error(`set-up: ${P}, which provides ${X}…
+     51|     expect(await installs(user('no digest')), `${EDGE}, with no digest…
+       |                                                                                                                                       ^
+     52|     // A `uses` row with no digest isn't extension.manifest@1's, so `u…
+     53|     // the composition graph holds shows in the record when the provid…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯

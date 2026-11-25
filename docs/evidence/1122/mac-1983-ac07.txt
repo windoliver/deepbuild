@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/fix-1885-command-hub-token-9c8031
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  18:34:04
+   Duration  978ms (tests 93%, transform 5%, import 1%, setup 1%)
+

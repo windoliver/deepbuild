@@ -83,6 +83,7 @@ impl Run {
             lint: self.lint,
             ccd_on_kinematic: self.ccd_on_kinematic,
             set_applies_both: self.set_applies_both,
+            through: self.through,
             views: std::cell::RefCell::default(),
         }
     }
