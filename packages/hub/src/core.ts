@@ -2096,13 +2096,13 @@ export class Core {
    * nothing records nothing, so that turn's usage reads unknown.
    */
   private async recordUsage(meta: HookMeta): Promise<void> {
-    let usage: Obj | undefined;
+    let usage: Obj | undefined, v = 1;
     if (meta.agent === 'claude-code') {
       const tail = this.state.tails.get(meta.session) ?? new UsageTail();
       this.state.tails.set(meta.session, tail);
       const { tokens, cost, model } = await tail.read(meta.transcript);
       // turn.usage@2 (#3250): the cache writes' two lifetimes apart, inside input as before, and the count's "at least".
-      if (model) usage = { turn: this.state.live.get(meta.session)?.turnAsk ?? meta.fields?.prompt_id ?? meta.id, model, covers: 'session', tokens: { input: tokens.input + tokens.cache_write, cached: tokens.cache_read, output: tokens.output, exact: true, cache_write_5m: tokens.cache_write_5m, cache_write_1h: tokens.cache_write_1h }, cost };
+      if (model) v = 2, usage = { turn: this.state.live.get(meta.session)?.turnAsk ?? meta.fields?.prompt_id ?? meta.id, model, covers: 'session', tokens: { input: tokens.input + tokens.cache_write, cached: tokens.cache_read, output: tokens.output, exact: true, cache_write_5m: tokens.cache_write_5m, cache_write_1h: tokens.cache_write_1h }, cost };
     } else if (meta.agent === 'codex') {
       const text = await readFile(meta.transcript, 'utf8').catch(() => '');
       const lines = text.split('\n').flatMap((l) => { try { return [JSON.parse(l) as JsonValue]; } catch { return []; } });
@@ -2110,7 +2110,7 @@ export class Core {
       usage = registry().get('codex').readUsage?.(lines).at(-1) as unknown as Obj | undefined;
     }
     if (!usage) return;
-    await this.appendCore('turn.usage', usage, { subject: `session:${letters(meta.session)}`, v: meta.agent === 'claude-code' ? 2 : 1 }, { session: meta.session, agent: meta.agent });
+    await this.appendCore('turn.usage', usage, { subject: `session:${letters(meta.session)}`, v }, { session: meta.session, agent: meta.agent });
   }
 
   private askingQueued = false;
