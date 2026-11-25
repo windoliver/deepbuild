@@ -13,7 +13,10 @@ Base 58b4a8cb2 (scratch worktree), the branch's failing files only:
   base-321: Tests  1 failed | 1 passed (2)
   base-39: Tests  3 failed | 4 passed (7)
 
-Every branch failure fails at the base too, except:
+Correction (final review, 2026-11-25): the base reruns of 321 and 39 are not a valid comparison. They failed for another reason: the disk filled during them.
+  base-321 AC1 failed with "the storage refused the write: database or disk is full" (exit 3 on deep inbox answer). On the branch, AC1 failed differently: the yes was counted, but the resent `git push origin main` was denied by guard push-needs-ask, because a held push starts only after its 10 s hold with Undo. The test sends the call again at once. This scenario has no Codex subagent prompt, so #2764's filter does not apply. Main's run (train17's known-failure split) decides whether 321's AC1 fails on main.
+  base-39 AC2 is BLOCKED on the same disk-full write. Only AC8 there failed on its own assertion.
+Every other branch failure fails at the base too, under the same name, except:
   packages/hub/test/claim-numbers.test.ts 'keeps a failure on a large sample...': a 60 s timeout; run alone on the branch it passed once and failed once (load), and it doesn't touch holds.
 Not compared (environment, BLOCKED or by shape):
   tests/acceptance/1156: BLOCKED, no python-dbusmock on this machine.
