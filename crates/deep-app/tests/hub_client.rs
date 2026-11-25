@@ -2,7 +2,7 @@
 //! setting names one, as a forwarded socket would; with no setting it starts a hub of its own on a temp home,
 //! from the repo's built CLI, and stops it by PID afterwards.
 
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
@@ -149,8 +149,9 @@ fn the_hub_takes_the_views_the_app_reports_shown_and_hidden() {
     }
 }
 
-/// Issue #3481: `deep-app --hub-check` against the hub, from an app home holding `token`: its exit and its output.
-fn hub_check(target: &Target, token: &str) -> (Option<i32>, String) {
+/// Issue #3481: `deep-app --hub-check` against the hub at `socket`, from an app home holding `token`: its exit and its
+/// output.
+fn hub_check(socket: &std::path::Path, token: &str) -> (Option<i32>, String) {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let home = PathBuf::from(format!(
         "/tmp/dac-{}-{}",
@@ -160,7 +161,7 @@ fn hub_check(target: &Target, token: &str) -> (Option<i32>, String) {
     let root = home.join(".deepbuild");
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("control.token"), token).unwrap();
-    let address = json!({ "hub": { "address": format!("unix:{}", target.socket.display()) } });
+    let address = json!({ "hub": { "address": format!("unix:{}", socket.display()) } });
     std::fs::write(root.join("config.json"), address.to_string()).unwrap();
     let ran = Command::new(env!("CARGO_BIN_EXE_deep-app"))
         .arg("--hub-check")
@@ -179,7 +180,7 @@ fn hub_check(target: &Target, token: &str) -> (Option<i32>, String) {
 #[test]
 fn the_hub_check_fails_when_the_hub_refuses_the_apps_hello() {
     let target = target();
-    let (code, output) = hub_check(&target, &format!("{}x", target.token));
+    let (code, output) = hub_check(&target.socket, &format!("{}x", target.token));
     assert!(
         code.is_some_and(|code| code != 0),
         "a refused hello must fail the check, not pass it: exit {code:?}, {output}"
@@ -192,10 +193,39 @@ fn the_hub_check_fails_when_the_hub_refuses_the_apps_hello() {
         output.contains("credential"),
         "the check names the refusal: {output}"
     );
-    let (code, output) = hub_check(&target, &target.token);
+    let (code, output) = hub_check(&target.socket, &target.token);
     assert_eq!(code, Some(0), "the hub's own token passes: {output}");
     assert!(
         output.contains("hub ok"),
         "the hub's own token passes: {output}"
+    );
+}
+
+#[test]
+fn the_hub_check_fails_when_the_hub_drops_the_app_after_its_hello() {
+    // A stand-in hub whose hello covers the app: it takes the app's hello, then closes before any call.
+    let dir = PathBuf::from(format!("/tmp/dad-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let socket = dir.join("hub.sock");
+    let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut writer = stream.try_clone().unwrap();
+        let hello = json!({ "v": 1, "hello": "deep-hub", "start": "stand-in", "contract": hub::CONTRACT, "features": hub::NEEDS });
+        writeln!(writer, "{hello}").unwrap();
+        BufReader::new(stream)
+            .read_line(&mut String::new())
+            .unwrap();
+        writeln!(writer, "{}", json!({ "v": 1, "role": "app" })).unwrap();
+    });
+    let (code, output) = hub_check(&socket, "token");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        code.is_some_and(|code| code != 0),
+        "a hub that drops the app after its hello must fail the check: exit {code:?}, {output}"
+    );
+    assert!(
+        !output.contains("hub ok"),
+        "a dropped connection is no hub ok: {output}"
     );
 }

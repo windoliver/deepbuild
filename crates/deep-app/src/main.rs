@@ -173,7 +173,11 @@ fn main() {
                 );
                 std::process::exit(1);
             }
-            Err(error) => {
+            // A hub that stops answering after the hello hasn't answered either.
+            Err(error)
+            | Ok(Err(
+                error @ (deep_app::hub::HubError::Io(_) | deep_app::hub::HubError::Protocol(_)),
+            )) => {
                 eprintln!(
                     "deep-app: the hub at {} didn't answer: {error:?}",
                     deep_app::hub::address().display()

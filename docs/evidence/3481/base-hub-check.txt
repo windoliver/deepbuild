@@ -1,4 +1,4 @@
-# cargo test -p deep-app --test hub_client on main 1b4929ae7 with only the new test added (2026-11-25, Linux)
+# cargo test -p deep-app --test hub_client on main 1b4929ae7 with only the new test added (2026-11-25 UTC, Linux)
 running 4 tests
 test a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app ... ok
 test the_hub_takes_the_views_the_app_reports_shown_and_hidden ... ok

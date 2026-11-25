@@ -519,7 +519,7 @@ impl RecordReader {
     }
 
     /// `deep-app --hub-check` (#41): connects as the window does, once, making the calls it makes on connect. The
-    /// outer error is a hub that never took the app's hello (#3481); the inner one, a call it refused after the hello.
+    /// outer error is a hub that never took the app's hello (#3481); the inner one, an error after the hello.
     pub fn check(&mut self) -> Result<Result<(), HubError>, HubError> {
         let client = self.greet()?;
         Ok(self.join(client).and_then(|()| self.fold()))
