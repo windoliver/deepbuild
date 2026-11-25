@@ -1,0 +1,13 @@
+diff --git a/crates/deep-sandbox-wasmtime/src/lib.rs b/crates/deep-sandbox-wasmtime/src/lib.rs
+index 57f85dcfe..9c328670e 100644
+--- a/crates/deep-sandbox-wasmtime/src/lib.rs
++++ b/crates/deep-sandbox-wasmtime/src/lib.rs
+@@ -115,7 +115,7 @@ impl Program {
+             .wasm_backtrace_max_frames(std::num::NonZeroUsize::new(1))
+             .cranelift_nan_canonicalization(false)
+             .consume_fuel(faults.wasmtime_fuel)
+-            .epoch_interruption(true)
++            .epoch_interruption(false)
+             .max_wasm_stack(NATIVE_STACK)
+             .wasm_simd(false)
+             .wasm_relaxed_simd(false)

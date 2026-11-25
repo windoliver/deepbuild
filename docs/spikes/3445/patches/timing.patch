@@ -1,0 +1,240 @@
+diff --git a/crates/deep-logic/src/fixtures.rs b/crates/deep-logic/src/fixtures.rs
+index 9db5a4fe1..a52ada228 100644
+--- a/crates/deep-logic/src/fixtures.rs
++++ b/crates/deep-logic/src/fixtures.rs
+@@ -181,7 +181,9 @@ impl Logic {
+         );
+         let assets = Value::Object(assets);
+         let mut records = Vec::new();
++        let _library = deep_sandbox_wasmtime::spike3445::scope("library", &lib.label);
+         for id in &lib.fixtures {
++            let _fixture = deep_sandbox_wasmtime::spike3445::scope("fixture", id);
+             let missing = || {
+                 vec![
+                     json!({"rule": "fixture", "what": format!("{}'s fixture {id} isn't a fixture the piece carries", lib.label), "library": lib.label, "fixture": id}),
+@@ -266,6 +268,7 @@ impl Logic {
+     pub(crate) fn pack_check(&mut self, line: &Value) -> Result<Value, Value> {
+         let pack_v = line.get("pack").ok_or_else(|| bad("pack"))?;
+         let pack = Pack::parse(pack_v).ok_or_else(|| bad("pack"))?;
++        let _pack = deep_sandbox_wasmtime::spike3445::scope("pack_check", &pack.id);
+         let assets = line
+             .get("assets")
+             .and_then(Value::as_object)
+diff --git a/crates/deep-logic/src/interfaces.rs b/crates/deep-logic/src/interfaces.rs
+index 99113acc2..463448fe5 100644
+--- a/crates/deep-logic/src/interfaces.rs
++++ b/crates/deep-logic/src/interfaces.rs
+@@ -450,6 +450,9 @@ impl crate::Logic {
+                 fixtures: &[],
+                 needs: &[],
+             };
++            let _interface = deep_sandbox_wasmtime::spike3445::scope("interface_kit", &iface.name);
++            let _under = deep_sandbox_wasmtime::spike3445::scope("under", &label);
++            let _fixture = deep_sandbox_wasmtime::spike3445::scope("fixture", &t.example);
+             let (fixture, mut line) = Self::fixture_call(piece_v, iface, &under, &t.example)?;
+             line["call"] = json!("judge");
+             line["rules"] = fixture.get("rules").cloned().unwrap_or(json!({}));
+@@ -606,6 +609,9 @@ impl crate::Logic {
+         under: &UnderTest,
+         id: &str,
+     ) -> Result<Value, (Vec<Value>, bool)> {
++        let _interface = deep_sandbox_wasmtime::spike3445::scope("interface", &iface.name);
++        let _under = deep_sandbox_wasmtime::spike3445::scope("under", under.label);
++        let _fixture = deep_sandbox_wasmtime::spike3445::scope("fixture", id);
+         let (fixture, line) =
+             Self::fixture_call(piece_v, iface, under, id).map_err(|r| (r, false))?;
+         let expect = fixture.get("expect").cloned().unwrap_or(Value::Null);
+diff --git a/crates/deep-logic/src/world/world_impl.rs b/crates/deep-logic/src/world/world_impl.rs
+index 5263876d9..f511ea978 100644
+--- a/crates/deep-logic/src/world/world_impl.rs
++++ b/crates/deep-logic/src/world/world_impl.rs
+@@ -6,6 +6,10 @@ impl World {
+     /// A fresh instance of `item` running `bytes`. #2662: its own program is compiled once, for
+     /// every world of the piece; other bytes (a counted rewrite) are compiled for this runner.
+     pub(super) fn runner(item: &Item, bytes: &[u8]) -> Result<Runner, Failed> {
++        #[cfg(not(target_arch = "wasm32"))]
++        let _item = deep_sandbox_wasmtime::spike3445::scope("item", &item.id);
++        #[cfg(not(target_arch = "wasm32"))]
++        let _program = deep_sandbox_wasmtime::spike3445::scope("program", &item.program);
+         #[cfg(not(target_arch = "wasm32"))]
+         let made = if std::ptr::eq(bytes, item.bytes.as_slice()) {
+             let compiled = match item.compiled.get() {
+diff --git a/crates/deep-sandbox-wasmtime/src/lib.rs b/crates/deep-sandbox-wasmtime/src/lib.rs
+index 57f85dcfe..240f7308b 100644
+--- a/crates/deep-sandbox-wasmtime/src/lib.rs
++++ b/crates/deep-sandbox-wasmtime/src/lib.rs
+@@ -77,6 +77,59 @@ pub fn compiles() -> u64 {
+     COMPILES.load(Ordering::Relaxed)
+ }
+ 
++/// Spike #3445, never shipped: one JSON line on stderr, `spike3445 {...}`, for each mark and each
++/// compile, with the nanoseconds since the first call here and the names in scope on this thread.
++#[cfg(not(target_arch = "wasm32"))]
++pub mod spike3445 {
++    use std::cell::RefCell;
++    use std::sync::atomic::{AtomicU64, Ordering};
++    use std::sync::OnceLock;
++    use std::time::Instant;
++
++    static START: OnceLock<Instant> = OnceLock::new();
++    /// The nanoseconds every counted compile took, whole (`Program::new`), and in `Module::new`.
++    pub static PROGRAM_NS: AtomicU64 = AtomicU64::new(0);
++    pub static MODULE_NS: AtomicU64 = AtomicU64::new(0);
++    thread_local!(static SCOPE: RefCell<Vec<(String, String)>> = const { RefCell::new(Vec::new()) });
++
++    pub fn ns() -> u64 {
++        START.get_or_init(Instant::now).elapsed().as_nanos() as u64
++    }
++
++    /// A name in scope until the guard drops.
++    pub struct Scope;
++    impl Drop for Scope {
++        fn drop(&mut self) {
++            SCOPE.with(|s| {
++                s.borrow_mut().pop();
++            });
++        }
++    }
++    pub fn scope(kind: &str, name: &str) -> Scope {
++        SCOPE.with(|s| s.borrow_mut().push((kind.to_string(), name.to_string())));
++        Scope
++    }
++
++    pub fn line(mut fields: serde_json::Value) {
++        let scope: Vec<serde_json::Value> = SCOPE.with(|s| {
++            s.borrow()
++                .iter()
++                .map(|(k, n)| serde_json::json!([k, n]))
++                .collect()
++        });
++        fields["at"] = serde_json::json!(ns());
++        fields["scope"] = serde_json::json!(scope);
++        fields["compiles"] = serde_json::json!(super::compiles());
++        fields["total_program_ns"] = serde_json::json!(PROGRAM_NS.load(Ordering::Relaxed));
++        fields["total_module_ns"] = serde_json::json!(MODULE_NS.load(Ordering::Relaxed));
++        eprintln!("spike3445 {fields}");
++    }
++
++    pub fn mark(what: &str) {
++        line(serde_json::json!({"mark": what}));
++    }
++}
++
+ /// #2662: a program compiled once. Each `runner` is a fresh instance of it in a store of its own,
+ /// so every runner keeps its own memory, globals, fuel and trap.
+ #[cfg(not(target_arch = "wasm32"))]
+@@ -106,10 +159,12 @@ impl Program {
+         faults: Faults,
+         written: bool,
+     ) -> Result<Program, String> {
++        let mut spike = [std::time::Instant::now(); 5];
+         let (sized, shift) = match pages {
+             Some(p) => deep_canvas_sandbox::rewrite::sized(bytes, p)?,
+             None => (bytes.to_vec(), 0),
+         };
++        spike[1] = std::time::Instant::now();
+         let mut config = Config::new();
+         config
+             .wasm_backtrace_max_frames(std::num::NonZeroUsize::new(1))
+@@ -126,12 +181,26 @@ impl Program {
+             .wasm_custom_page_sizes(false)
+             .wasm_wide_arithmetic(false);
+         let engine = Engine::new(&config).map_err(|e| e.to_string())?;
++        spike[2] = std::time::Instant::now();
+         COMPILES.fetch_add(1, Ordering::Relaxed);
+         let module = Module::new(&engine, &sized).map_err(|e| e.to_string())?;
++        spike[3] = std::time::Instant::now();
++        let map = offsets(bytes).into();
++        spike[4] = std::time::Instant::now();
++        let ns = |a: usize, b: usize| (spike[b] - spike[a]).as_nanos() as u64;
++        spike3445::PROGRAM_NS.fetch_add(ns(0, 4), Ordering::Relaxed);
++        spike3445::MODULE_NS.fetch_add(ns(2, 3), Ordering::Relaxed);
++        // `compile` names the bytes `Module::new` was handed; `given`, the program before its memory was sized.
++        spike3445::line(serde_json::json!({
++            "compile": deep_canvas_sandbox::rewrite::hash(&sized), "given": deep_canvas_sandbox::rewrite::hash(bytes),
++            "bytes": sized.len(), "pages": pages,
++            "sized_ns": ns(0, 1), "engine_ns": ns(1, 2), "module_new_ns": ns(2, 3), "offsets_ns": ns(3, 4),
++            "program_new_ns": ns(0, 4),
++        }));
+         Ok(Program {
+             engine,
+             module,
+-            map: offsets(bytes).into(),
++            map,
+             shift,
+             written,
+             faults,
+diff --git a/crates/deep-show/src/canvas_side.rs b/crates/deep-show/src/canvas_side.rs
+index 7518790f6..6415efec8 100644
+--- a/crates/deep-show/src/canvas_side.rs
++++ b/crates/deep-show/src/canvas_side.rs
+@@ -69,6 +69,7 @@ pub(super) fn serve(
+     let mut kept: Option<hub::Hub> = None;
+     let mut carried = None;
+     while let Some(line) = carried.take().or_else(|| next().map(object)) {
++        deep_sandbox_wasmtime::spike3445::mark("line");
+         let mut call = match line.map(|input| side.line(input, &mut kept)) {
+             None => {
+                 answer(bad_input());
+@@ -95,7 +96,9 @@ pub(super) fn serve(
+         };
+         loop {
+             answer(side.play(&mut hub, startup, call));
+-            call = match next().map(|line| object(line).map(call_of)) {
++            let read = next();
++            deep_sandbox_wasmtime::spike3445::mark("line");
++            call = match read.map(|line| object(line).map(call_of)) {
+                 None => return,
+                 Some(Some(Ok(call))) => call,
+                 Some(Some(Err(input))) => {
+diff --git a/crates/deep-show/src/main.rs b/crates/deep-show/src/main.rs
+index 89b282283..b627f0ca6 100644
+--- a/crates/deep-show/src/main.rs
++++ b/crates/deep-show/src/main.rs
+@@ -2794,6 +2794,7 @@ fn clock_ms() -> f64 {
+ }
+ 
+ fn main() {
++    deep_sandbox_wasmtime::spike3445::mark("main");
+     // #225: the check times each vector field's integration by this host's clock.
+     deep_canvas_marks::vector_field::time_with(Some(clock_ms));
+     let args: Vec<String> = std::env::args().skip(1).collect();
+@@ -2897,6 +2898,7 @@ fn main() {
+             std::process::exit(2);
+         }
+     };
++    deep_sandbox_wasmtime::spike3445::mark("sealed");
+     let stdin = io::stdin();
+     let mut lines = stdin.lock().lines();
+     if command == "canvas" {
+@@ -2909,6 +2911,7 @@ fn main() {
+         canvas_side::serve(startup, next, |reply| {
+             let _ = writeln!(out, "{reply}");
+             let _ = out.flush();
++            deep_sandbox_wasmtime::spike3445::mark("answered");
+         });
+         return;
+     }
+diff --git a/crates/deep-show/src/packs.rs b/crates/deep-show/src/packs.rs
+index b7024f06c..50a4479a2 100644
+--- a/crates/deep-show/src/packs.rs
++++ b/crates/deep-show/src/packs.rs
+@@ -104,6 +104,8 @@ pub fn install(
+     vet: Vet<'_>,
+ ) -> Value {
+     // #161: the pack check's wall time, from reading the folder to its verdict.
++    let _install = deep_sandbox_wasmtime::spike3445::scope("install", id);
++    deep_sandbox_wasmtime::spike3445::mark("install");
+     let started = std::time::Instant::now();
+     let mut layouts = Vec::new();
+     let key = (id.to_string(), dir.to_path_buf());
+@@ -146,6 +148,9 @@ pub fn install(
+         }
+     };
+     let check_ms = started.elapsed().as_secs_f64() * 1e3;
++    deep_sandbox_wasmtime::spike3445::line(
++        json!({"mark": "installed", "outcome": outcome, "version": version, "check_ms": check_ms}),
++    );
+     let issues: Vec<Value> = issues.iter().map(Issue::to_json).collect();
+     // One row per version: a refused republish leaves the row of the version first published,
+     // and a version offered again after a refusal takes its row once admitted.

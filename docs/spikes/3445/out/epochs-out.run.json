@@ -1,0 +1,39 @@
+{
+ "kind": "bench",
+ "date": "2026-11-25T08:47:55.913Z",
+ "fingerprint": {
+  "model": "Mac17,10",
+  "chip": "Apple M5 Max",
+  "memoryBytes": 68719476736,
+  "power": "ac",
+  "lowPowerMode": true,
+  "thermalState": "nominal",
+  "macosBuild": "26B8119"
+ },
+ "cores": 18,
+ "lease": "timed:f521613098c85ede",
+ "load": {
+  "start": [
+   6.52978515625,
+   20.1552734375,
+   39.89501953125
+  ],
+  "end": [
+   6.4072265625,
+   19.9033203125,
+   39.6904296875
+  ]
+ },
+ "command": "node benchmarks/logic.mjs",
+ "tree": {
+  "commit": "aafef31316f7da8f741647a5934a717d9019ffff",
+  "status": [
+   "M crates/deep-sandbox-wasmtime/src/lib.rs"
+  ],
+  "diffSha256": "6b3a06988a39646d5d1599eec4126081228975288f05913ff77909248ae28640"
+ },
+ "out": {
+  "file": "epochs-out.json",
+  "sha256": "5ce57cbc2e69b73c5472a8c4ef230e44b6733e6e8bb50371eb0ad7db6d17bb64"
+ }
+}

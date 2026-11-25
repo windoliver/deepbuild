@@ -1,0 +1,4 @@
+{
+ "out/golden-2324.json": "node docs/spikes/3445/measure.mjs golden --logic <epochs-out>/deep-logic --build <epochs-out>/build.json --fixture tests/acceptance/2324/fixtures/base-golden.json --out docs/spikes/3445/out/golden-2324.json",
+ "out/golden-2662.json": "DEEP_2662_PRINT=1 cargo test --release --locked -p deep-logic --test acceptance_2662_goldens -- --nocapture, in the copy of main with patches/epochs-out.patch applied: the line `FIXTURE golden.json <golden>` it prints, without its first two words"
+}

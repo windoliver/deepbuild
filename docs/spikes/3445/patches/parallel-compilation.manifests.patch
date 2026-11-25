@@ -1,0 +1,26 @@
+diff --git a/crates/deep-logic/Cargo.toml b/crates/deep-logic/Cargo.toml
+index 9019e11e3..136da1a9d 100644
+--- a/crates/deep-logic/Cargo.toml
++++ b/crates/deep-logic/Cargo.toml
+@@ -29,7 +29,7 @@ web-time = "=1.1.0"
+ # #172: the web player steps the same bytes on the browser's engine through deep-sandbox-wasmtime's
+ # web runner, and reads no thread CPU time there.
+ [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+-wasmtime = { version = "=49.0.5", default-features = false, features = ["cranelift", "runtime", "std", "addr2line"] }
++wasmtime = { version = "=49.0.5", default-features = false, features = ["cranelift", "runtime", "std", "addr2line", "parallel-compilation"] }
+ libc = "0.2"
+ 
+ [[bin]]
+diff --git a/crates/deep-sandbox-wasmtime/Cargo.toml b/crates/deep-sandbox-wasmtime/Cargo.toml
+index 96d8d0c8e..c7e83c73a 100644
+--- a/crates/deep-sandbox-wasmtime/Cargo.toml
++++ b/crates/deep-sandbox-wasmtime/Cargo.toml
+@@ -18,7 +18,7 @@ wat = "=1.263.0"
+ web-time = "=1.1.0"
+ 
+ [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+-wasmtime = { version = "=49.0.5", default-features = false, features = ["cranelift", "runtime", "std", "addr2line"] }
++wasmtime = { version = "=49.0.5", default-features = false, features = ["cranelift", "runtime", "std", "addr2line", "parallel-compilation"] }
+ 
+ # #172: in the web player the browser's own WebAssembly engine runs the rewritten bytes, reached
+ # through the page's JavaScript; wasmparser reads the program's global types there.

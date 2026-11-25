@@ -1,0 +1,16 @@
+{
+ "label": "epochs-out",
+ "base": "aafef31316f7da8f741647a5934a717d9019ffff",
+ "patches": [{"file":"patches/epochs-out.patch","sha256":"6b3a06988a39646d5d1599eec4126081228975288f05913ff77909248ae28640"}],
+ "example": {"file": "tracker.rs", "sha256": "166e58ade3cac859312a359c633ab21f562e4e4a6d4b68bbc06bd8e5b6adfa7c"},
+ "ledger": null,
+ "command": "cargo build --release --locked -j 10 -p deep-logic --bin deep-logic --example spike3445_tracker",
+ "finished": "Finished `release` profile [optimized] target(s)",
+ "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+ "date": "2026-11-25T06:18:01Z",
+ "sha256": {
+  "deep-show": null,
+  "deep-logic": "28b3896557c88a3b7eb9c619982bd0324efe410472e00e2bfda62b3454f93ee2",
+  "spike3445_tracker": "6d413dfc2319cf7fdbab74c698dcefc29aaf050da8ebb849ce53428d6958228e"
+ }
+}
