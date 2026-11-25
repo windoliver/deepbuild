@@ -1,16 +1,17 @@
 //! Issue #1729: a 3D revision evaluated as every draw of it here draws it (canvas primitives:
 //! Render-back; Material: texture maps): its assets read from the evidence store by the hash the
 //! document names, and every map its solids sample made ready for the GPU as deep-gpu's view makes
-//! them, in the run's decode worker, once per run by the image's hash and its role, within the
-//! document's 64 MiB decoded-image cap. A map a glTF file holds is read from that file; a
-//! material's map whose image isn't in the store is answered `asset_missing` at its field.
+//! them, in the run's decode worker, once per run by the image's hash, its role and the cutoff a
+//! mask samples it at, within the document's 64 MiB decoded-image cap. A map a glTF file holds is
+//! read from that file; a material's map whose image isn't in the store is answered
+//! `asset_missing` at its field.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use deep_canvas::document::packs::resolve;
 use deep_canvas_effects::particles::spec::Refusal;
-use deep_canvas_scene3d::light::{map_field, map_role, map_uses, Texels, DECODED_CAP};
+use deep_canvas_scene3d::light::{map_field, map_uses, MapUse, Texels, DECODED_CAP};
 use deep_canvas_scene3d::scene::Scene;
 use deep_codecs::DECODE_WORKER;
 use deep_effects_render::scene::{staged, Staged};
@@ -77,7 +78,7 @@ impl Hub<'_> {
         })
     }
 
-    /// The texels of every map `scene` samples, by the image's hash.
+    /// The texels of every map `scene` samples, by the map's key.
     fn texels(
         &mut self,
         doc: &Value,
@@ -85,18 +86,17 @@ impl Hub<'_> {
     ) -> Result<BTreeMap<String, Arc<Texels>>, Unfit> {
         let mut out = BTreeMap::new();
         let mut decoded = 0u64;
-        for (sha, uses) in map_uses(scene) {
-            let role = map_role(&uses);
-            let key = format!("{sha}:{role}");
+        for (map, of) in map_uses(scene) {
+            let key = format!("{map}:{}", of.role());
             if !self.media.maps.contains_key(&key) {
-                let Some(t) = self.transcode(doc, &sha, role)? else {
+                let Some(t) = self.transcode(doc, &of)? else {
                     continue;
                 };
                 self.media.maps.insert(key.clone(), Arc::new(t));
             }
             let t = self.media.maps[&key].clone();
             decoded += t.data.len() as u64;
-            out.insert(sha, t);
+            out.insert(map, t);
         }
         if decoded > DECODED_CAP {
             return Err(unfit("over_budget", "maps"));
@@ -104,9 +104,10 @@ impl Hub<'_> {
         Ok(out)
     }
 
-    /// Map `sha` made ready for `role` in the decode worker; `None` for an image that is neither
-    /// in the store nor a material's map, which draws without it.
-    fn transcode(&mut self, doc: &Value, sha: &str, role: &str) -> Result<Option<Texels>, Unfit> {
+    /// Map `of` made ready in the decode worker; `None` for an image that is neither in the store
+    /// nor a material's map, which draws without it.
+    fn transcode(&mut self, doc: &Value, of: &MapUse) -> Result<Option<Texels>, Unfit> {
+        let (sha, role) = (of.sha.as_str(), of.role());
         let root = self.scenario.evidence.clone();
         let field = map_field(doc, sha);
         if crate::evidence::read(&root, sha).is_none() && !embedded(doc, sha, &root) {
@@ -119,7 +120,7 @@ impl Hub<'_> {
         let path = root.join(&sha[..2]).join(&sha[2..]);
         let out =
             std::env::temp_dir().join(format!("deep-show-map-{}-{sha}-{role}", std::process::id()));
-        let job = json!({"op": "transcode", "path": path, "role": role,
+        let job = json!({"op": "transcode", "path": path, "role": role, "alpha_cutoff": of.cutoff,
                          "bc": cfg!(target_os = "macos"), "out": out});
         let (reply, _) = self.media_job(DECODE_WORKER, job);
         let side = |k: usize| u32::try_from(reply["size"][k].as_u64()?).ok();

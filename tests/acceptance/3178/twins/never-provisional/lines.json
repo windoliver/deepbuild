@@ -1,0 +1,15 @@
+{
+  "packages/hub/src/starts.ts": [
+    {
+      "find": [
+        "  async inWorkRun(session: string): Promise<boolean> {"
+      ],
+      "wrong": [
+        "  async inWorkRun(session: string): Promise<boolean> {",
+        "    // The twin never-provisional (tests/acceptance/3178/README.md): every session reads as one a work run started, so",
+        "    // a choice with a recommendation waits on you instead of going on provisionally (#84's rule broken).",
+        "    if (session) return true;"
+      ]
+    }
+  ]
+}

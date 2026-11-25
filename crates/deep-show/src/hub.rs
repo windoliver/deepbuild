@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use deep_canvas::document::{
-    canonical_in, check_costed, check_sized, Expansion, Issue, Notice, PackPlanted, Packs,
+    canonical_in, check_costed, check_sized, Expansion, Issue, Notice, Packs,
 };
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
@@ -953,40 +953,7 @@ impl<'a> Hub<'a> {
         {
             sched.look_hook = Some(crate::planted::look_hook);
         }
-        let pack_planted = PackPlanted {
-            seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
-            drops_stroke: scenario.planted == Some(Planted::ExpansionDropsStroke),
-            overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
-            skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
-            key_by_name: matches!(
-                scenario.planted,
-                Some(Planted::PacksKeyedByName | Planted::LoaderDrawsMissingWithInstalled)
-            ),
-            each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
-            each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
-            orphan_drops: scenario.planted == Some(Planted::OrphanLoadDropsBrokenOut),
-            orphan_hands_id: scenario.planted == Some(Planted::OrphanLoadHandsIdToExpansion),
-            rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
-            kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
-            migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
-            migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
-            migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
-            migrate_params_only: matches!(
-                scenario.planted,
-                Some(Planted::MigrationRenamesParamsOnly | Planted::MoveRewritesKindOnly)
-            ),
-            migrate_channels_only: scenario.planted
-                == Some(Planted::MigrationRewritesChannelTargetsOnly),
-            drops_moved: scenario.planted == Some(Planted::LoaderDropsMovedInstances),
-            walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
-                .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
-            // #222: the planted cue-list expander.
-            expander: scenario
-                .module_planted
-                .as_deref()
-                .filter(|p| deep_canvas_motion::cues::planted(p))
-                .map(|p| &*Box::leak(p.to_string().into_boxed_str())),
-        };
+        let pack_planted = crate::packs::planted(scenario);
         let mut hub = Hub {
             scenario,
             startup,
@@ -1257,7 +1224,7 @@ impl<'a> Hub<'a> {
     }
 
     /// The record's readings as the scheduler reads them, from outside the document.
-    fn readings(&self) -> BTreeMap<String, Value> {
+    pub(crate) fn readings(&self) -> BTreeMap<String, Value> {
         self.scenario
             .record
             .iter()
@@ -2519,25 +2486,6 @@ impl BandRow {
 
 /// A revision's check time and its `kind_rules` check's own time, when asked for (#202), in ms.
 type CheckTimes = (f64, Option<Map<String, Value>>);
-
-/// #202's planted expander: an instance's inputs walked through a std hash map, whose order a
-/// fresh random state picks, so two expansions of one example differ in their bytes. It redraws
-/// until the order differs from the previous walk's, which three inputs would match by chance.
-fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
-    thread_local! {
-        static LAST: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
-    }
-    let last = LAST.with(|l| l.borrow().clone());
-    for _ in 0..64 {
-        let walked: std::collections::HashMap<String, Value> = inputs.clone().into_iter().collect();
-        let order: Vec<String> = walked.keys().cloned().collect();
-        if order != last || inputs.len() < 2 {
-            LAST.with(|l| *l.borrow_mut() = order);
-            return walked.into_iter().collect();
-        }
-    }
-    inputs
-}
 
 /// The store's packs with each one a pack requires (`requires.packs`, by its name) before it, in
 /// the order offered otherwise (#142).

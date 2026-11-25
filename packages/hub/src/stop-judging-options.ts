@@ -58,7 +58,7 @@ export interface StopJudgingOptions {
   };
   state: () => Pick<SessionStatePort, "attention" | "live" | "sessions" | "startOf">;
   mcp: () => Pick<McpOperationsPort, "pinOf">;
-  delivery: () => Pick<AnswerDeliveryPort, "cap" | "deliver" | "handed" | "offer" | "promiseCarried" | "releases" | "unwoken" | "waiting" | "answers">;
+  delivery: () => Pick<AnswerDeliveryPort, "cap" | "deliver" | "handed" | "offer" | "promiseCarried" | "releases" | "routes" | "unwoken" | "waiting" | "answers">;
   transcripts: () => Pick<TranscriptsPort, "cursors">;
   control: () => Pick<HubControlPort, "onSwitchedTree">;
   flags: () => Pick<SessionFlagsPort, "watchOnly">;

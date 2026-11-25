@@ -78,6 +78,7 @@ fn behind(
     )
 }
 
+deep_gpu::paired! { uniform: "backdrop.wgsl", Backdrop;
 /// backdrop.wgsl's `Backdrop`.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -86,6 +87,7 @@ struct Uniform {
     eye: [f32; 4],
     forward: [f32; 4],
     k: [f32; 4],
+}
 }
 
 /// The video background's pipeline, its group's layout and its uniform, made the first frame one
