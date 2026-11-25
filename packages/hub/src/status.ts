@@ -348,7 +348,7 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   const said = (await query(`SELECT * FROM (SELECT r.session_id, json_extract(r.data, '$.reading') AS text, r.ts, r.log_pos,
     (json_extract(r.data, '$.reading') LIKE '%watch-only%' OR json_extract(r.data, '$.reading') LIKE 'DeepBuild denied % and it ran anyway%' OR json_extract(r.data, '$.reading') LIKE 'Its Claude Code home loads no mod%' OR json_extract(r.data, '$.reading') LIKE 'Hooks can run again%' OR json_extract(r.data, '$.reading') LIKE '% ran unleased: %' OR (json_extract(r.data, '$.reading') LIKE 'This stop isn''t held%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND later.kind = 'user.ask' AND json_extract(later.data, '$.from') <> 'subagent'))) AS noted,
     (json_extract(r.data, '$.reading') LIKE 'Waiting on its monitor%' AND NOT EXISTS (SELECT 1 FROM events later WHERE later.session_id = r.session_id AND later.log_pos > r.log_pos AND (later.kind = 'session.end' OR (later.kind = 'agent.stop' AND json_extract(later.data, '$.child') IS NULL) OR (later.kind = 'session.reading' AND json_extract(later.data, '$.reading') LIKE 'Its monitor%')))) AS watching,
-    (json_extract(r.data, '$.reading') LIKE 'Interrupt:%' AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = r.session_id AND a.kind = 'user.ask' AND a.log_pos > r.log_pos)) AS interrupted
+    (instr(json_extract(r.data, '$.reading'), ': you interrupted this turn') > 0 AND instr(json_extract(r.data, '$.reading'), ': you interrupted this turn') = instr(json_extract(r.data, '$.reading'), ': ') AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = r.session_id AND (a.kind = 'user.ask' OR (a.kind = 'session.activity' AND json_extract(a.data, '$.activity') = 'turn_start')) AND a.log_pos > r.log_pos)) AS interrupted
     FROM ${events('r')} WHERE r.kind = 'session.reading' AND r.session_id IS NOT NULL${of('r.session_id')}) WHERE noted OR watching OR interrupted ORDER BY log_pos`)) as { session_id: string; text: string; ts: number; log_pos: number; noted: number | null; watching: number | null; interrupted: number | null }[];
   const noted = said.filter((r) => r.noted);
   // Hooks that can run again (#993) take back each "hooks can't run" before them, and show nothing of their own.
@@ -364,7 +364,7 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   }
   // A session waiting on its monitor (#997): the newest of its monitor readings says so, with no stop of its own or end since.
   const watching = new Map(said.filter((r) => r.watching).map((r) => [r.session_id, { text: r.text, at: { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos } }]));
-  // A turn you interrupted, with no prompt since (#39).
+  // A turn you interrupted, by the reading that follows the hook's name, with no prompt or turn start since (#39, #3430).
   const interrupted = new Map(said.filter((r) => r.interrupted).map((r) => [r.session_id, { kind: 'session.reading', ts: r.ts, log_pos: r.log_pos }]));
   // Each session's newest stop of its own: a hook after it, such as Claude Code's idle-prompt notification, is no later
   // stop, and nor is a subagent's.

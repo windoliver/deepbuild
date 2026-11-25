@@ -1433,7 +1433,9 @@ export class Core {
   private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, replayed = false, waited = false, placing = false): Promise<{ settled: Promise<void> }> {
     const early = await this.routeHook(drafts, meta, writer, replayed, waited, placing);
     if (early) return early;
-    const verified = meta.watchOnly || await this.delivery.tokenTaken(meta) ? false : this.delivery.checked(meta, await this.state.verify(meta));
+    const verified = meta.watchOnly || meta.unlisted || await this.delivery.tokenTaken(meta) ? false : this.delivery.checked(meta, await this.state.verify(meta));
+    // A payload value its facts don't list (#3430): the hook is recorded unverified, with the reading that names it.
+    if (meta.unlisted && meta.session) await this.appendReading(meta.session, meta.agent, meta.unlisted, meta.id).catch(() => undefined);
     // A session's first hook from under a run DeepBuild started (#1330): its start.session first, so its first event names the run.
     if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent, meta.fields?.model).catch(() => undefined);
     const unread = Boolean(meta.watchOnly && meta.session && !this.state.versioned.has(meta.session));

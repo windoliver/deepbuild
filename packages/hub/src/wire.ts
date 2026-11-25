@@ -122,6 +122,10 @@ export interface HookMeta {
   blockedBy?: string[];
   /** What a hook said beside its turn, for the core to append as a session.reading (#39). */
   reading?: string;
+  /** The hook ends a turn you interrupted, its facts' turn.interrupted (#39, #3430): no stop, no claim. */
+  interrupted?: boolean;
+  /** A reading naming a payload value the facts don't list (#3430), for the core to record the hook unverified. */
+  unlisted?: string;
   /** A caller name the payload's own fields contradict, for the core to append once per session as a reading (#993). */
   caller?: string;
   /** Set by the server on a hook whose agent's hook program the last check found can't run (#993): its gates watch-only. */
