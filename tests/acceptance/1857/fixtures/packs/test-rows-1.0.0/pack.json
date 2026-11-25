@@ -1,0 +1,16 @@
+{
+  "name": "rows",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack whose sheet repeats a nested recipe, one rect, 1,024 times.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "rows.sheet@1": "rows.sheet@1.json",
+    "rows.row@1": "rows.row@1.json"
+  }
+}

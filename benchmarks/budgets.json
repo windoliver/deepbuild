@@ -2313,6 +2313,18 @@
       "limits": {},
       "initialReason": "Issue #3220 first measurement (#3220.c2610cec): the merge base keeps no run's peak and admits no run on one. One process opens a record and the supervisor, runs one sandboxed program that holds 64 MiB for 2 s so every scan of it keeps its peak and CPU, and reads what it used; then keeps 10,000 keys' clean peaks and decides 1,000 admissions of a key with three clean runs, printing the median time of one against the criterion's 1 ms. The process starts a scan makes stay in tests/acceptance/3220/ac9-budgets.test.ts, counted against the merge base's 2. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
       "criteria": ["#3220.c2610cec"]
+    },
+    {
+      "id": "canvas-nested-check",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "nested-check"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1857 first measurement (#1857.df51c34e): the merge base copies the document's items for each nested instance. One process checks a board of 4,999 rects and one instance whose step repeats a nested recipe 1,024 times through `deep-show run`, so p50 includes Node's and the binary's start; the criterion's own 1 s, read on the check's clock, stays in tests/acceptance/1857/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": ["#1857.df51c34e"]
     }
   ]
 }

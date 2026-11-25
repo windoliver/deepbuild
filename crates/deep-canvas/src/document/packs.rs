@@ -86,6 +86,10 @@ pub struct Planted {
     pub orphan_hands_id: bool,
     /// #222: a canvas module's planted wrong expansion of its own kind, by name.
     pub expander: Option<&'static str>,
+    /// #1857: the expansion's count refuses nothing until everything is expanded.
+    pub counts_after_expanding: bool,
+    /// #1857: a nested recipe step copies the document's items for each nested instance.
+    pub copies_items_per_nested: bool,
 }
 
 /// A planted expander's walk over an instance's inputs (#202).
@@ -1929,27 +1933,28 @@ pub fn expand(
         .map(|(id, _)| id.clone())
         .collect();
     let mut order = 0u64;
+    let mut spent = Spent::of(planted);
     for id in instances {
         let Some(item) = items.get(&id) else { continue };
         let kind = super::kind_text(item).unwrap_or_default().to_string();
         let Some((pack, recipe)) = resolved.recipe(&kind) else {
             continue;
         };
-        let Some(expansion) = expand_one(
+        let Some(expansion) = expand_counted(
             items,
             &id,
-            item.clone(),
             (pack, recipe),
             resolved,
-            std::slice::from_ref(&recipe.id),
             planted,
             &mut order,
+            &mut spent,
             issues,
         ) else {
             continue;
         };
         out.push(expansion);
     }
+    spent.settle(issues);
     parts::resolve(items, &out);
     out
 }
@@ -2027,18 +2032,15 @@ pub fn derived_of(
             scratch.insert(broken.to_string(), held.clone());
         }
     }
-    let mut issues = Vec::new();
-    let mut order = 0;
-    expand_one(
+    expand_counted(
         &mut scratch,
         instance,
-        item.clone(),
         (pack, recipe),
         resolved,
-        std::slice::from_ref(&recipe.id),
         Planted::default(),
-        &mut order,
-        &mut issues,
+        &mut 0,
+        &mut Spent::default(),
+        &mut Vec::new(),
     )?;
     scratch.shift_remove(instance);
     Some(scratch)
@@ -2145,8 +2147,9 @@ fn truthy(v: &Value) -> bool {
     }
 }
 
+mod cap;
 mod expand;
-use expand::*;
+use cap::{expand_counted, Spent};
 
 fn at_path(id: &str, step: &str) -> String {
     format!("items/{id}/steps/{step}/at")
@@ -2339,61 +2342,9 @@ impl Template {
         }
     }
 
+    /// Its value in `scope`, counted against a cap of its own (Recipe: cost).
     pub fn eval(&self, scope: &[(String, Value)]) -> Result<Value, String> {
-        match &self.form {
-            Form::Expr(Expr::Name(name)) if !scope.iter().any(|(k, _)| k == name) => {
-                Ok(self.source.clone())
-            }
-            Form::Expr(expr) => expr.value(scope),
-            Form::Literal => Ok(self.source.clone()),
-            Form::Refused(e) => Err(e.clone()),
-            Form::List(list) => list
-                .iter()
-                .map(|t| t.eval(scope))
-                .collect::<Result<Vec<_>, _>>()
-                .map(Value::Array),
-            Form::Map(map) => {
-                let mut out = Map::new();
-                for (k, t) in map {
-                    out.insert(k.clone(), t.eval(scope)?);
-                }
-                Ok(Value::Object(out))
-            }
-            Form::Repeat(r) => {
-                let elements: Vec<Value> = match (&r.count, &r.over) {
-                    (Some(c), _) => {
-                        let n = c.eval(scope)?;
-                        if !(0.0..=MAX_REPEAT as f64).contains(&n) || n.fract() != 0.0 {
-                            return Err(format!("a repeat counts 0 to {MAX_REPEAT}, not {n}"));
-                        }
-                        (0..n as u64).map(|i| json!(i)).collect()
-                    }
-                    (_, Some(o)) => match o.value(scope)? {
-                        Value::Array(a) if a.len() as u64 <= MAX_REPEAT => a,
-                        other => {
-                            return Err(format!(
-                                "a repeat is over a list of at most {MAX_REPEAT}, not {other}"
-                            ))
-                        }
-                    },
-                    _ => Vec::new(),
-                };
-                let mut inner = scope.to_vec();
-                let base = inner.len();
-                let mut out = Vec::with_capacity(elements.len());
-                for (i, e) in elements.into_iter().enumerate() {
-                    inner.truncate(base);
-                    inner.push(("i".into(), json!(i)));
-                    inner.push((r.as_.clone(), e));
-                    for (name, l) in &r.lets {
-                        let v = l.value(&inner)?;
-                        inner.push((name.clone(), v));
-                    }
-                    out.push(r.of.eval(&inner)?);
-                }
-                Ok(Value::Array(out))
-            }
-        }
+        self.eval_in(scope, &mut Spent::default())
     }
 }
 
