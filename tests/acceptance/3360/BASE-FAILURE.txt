@@ -1,0 +1,20 @@
+#3360 acceptance suite at the base dbbddd5dd94d544e7f782519b91bcf73f58141eb, run once (macOS, load 25.10).
+DEEP_BIN_DIR = a deep-show built at the base. Command: npx vitest run tests/acceptance/3360 (vitest 5.0.5).
+Trimmed to the failure lines.
+
+ ❯ tests/acceptance/3360/readers.test.ts (2 tests | 2 failed) 1450ms
+     × #3360.5bf370a9 deep show of the fixture at 0s with include issues lists no copy.missing and no flip.unmapped 696ms
+     × #3360.80772b65 at 0s counter.presses reads 0, the caption shows the labels entry 0, and choices shows its child dot 681ms
+
+ FAIL  #3360.5bf370a9
+AssertionError: deep show lists no copy.missing and no flip.unmapped issue:
+  copy.missing ids ["caption"] actual {"table":"labels","key":1138747060,"array":"counter.presses","step":0}
+  copy.missing ids ["labels"] actual {"table":"labels","key":1138747060,"array":"counter.presses","step":0,"row":0}
+  flip.unmapped ids ["choices"] actual {"value":1138747060,"array":"counter.presses","step":0}: expected [ …(3) ] to deeply equal []
+
+ FAIL  #3360.80772b65 (three soft assertions, each failing)
+AssertionError: counter.presses at 0 s: {"counter.presses":1138747060}: expected 1138747060 to be +0 // Object.is equality
+AssertionError: the caption draws the labels entry 0 ("Ready"); the frame draws {"caption":"Counting","labels":"Counting"}: expected 'Counting' to be 'Ready' // Object.is equality
+AssertionError: choices shows dot: the pixel at the dot's center [40,60] is the dot's, not the ground [255,255,255,255]: expected [ 255, 255, 255, 255 ] to not deeply equal [ 255, 255, 255, 255 ]
+
+      Tests  2 failed (2)

@@ -291,6 +291,7 @@ export class HubControl {
       case 'host.ran': return this.options.services.hosts.ran(params.ask, params.run);
       case 'host.changes': return this.options.services.hosts.changes(params.host);
       case 'host.remove': return this.options.services.hosts.remove(params.host);
+      case 'host.add': return this.options.services.hosts.sessions.add(params.host);
       case 'start.approve': return this.options.services.sessionStarts.approve(params, context);
       case 'start.session':
         { const held = this.drain.read(); if (held) throw refuse('unavailable', '/method', `${drainWords(drainFor(held, context.role))} Start it again then.`, method, true); }
