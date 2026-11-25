@@ -308,8 +308,9 @@ fn run_view(
         };
         std::fs::read(assets.get(sha)?).ok()
     };
-    // Each scene import's report, and every image's path by hash for the decode worker.
+    // Each import's report; every image's path by hash for the decode worker and paper (#1871).
     let mut map_paths = args.assets.clone();
+    let paper = Map::from_iter(args.assets.iter().map(|(k, p)| (k.clone(), json!(p))));
     // #428's planted import: dispersion dropped from each report and drawn as 0.
     let drops_dispersion = app.planted == Some(Planted::DropsDispersion);
     let import_report = crate::textures::imports(
@@ -778,9 +779,8 @@ fn run_view(
                 fx.settings = settings;
             }
             if args.look.drawn.is_some() {
-                let assets = Map::new();
                 *lock(&opened.drawn) =
-                    crate::drawn::frame3(&args.doc, &args.look, &assets, &scene, app.composed())?;
+                    crate::drawn::frame3(&args.doc, &args.look, &paper, &scene, app.composed())?;
             }
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
@@ -1436,7 +1436,7 @@ fn run_view(
                     }
                     let kept_fx = std::mem::replace(&mut lock(&fx).settings, settings);
                     let drawn_k =
-                        crate::drawn::frame3(&args.doc, &look_k, &Map::new(), &sc, app.composed())?;
+                        crate::drawn::frame3(&args.doc, &look_k, &paper, &sc, app.composed())?;
                     let kept_drawn = std::mem::replace(&mut *lock(&opened.drawn), drawn_k);
                     let mut kept_layer = None;
                     if let (Some(own), Some(stage), Some(status)) = (
