@@ -160,6 +160,7 @@ test('hung checks are stopped at the budget with its margin, their children too'
   assert.equal(result.error, undefined, `preflight never ended: ${result.stdout}`);
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /FAIL preflight budget: the checks ran past 6\.00 s, the budget with its margin, and were stopped\n\s+Fix: .+/);
+  assert.doesNotMatch(result.stdout, /FAIL preflight budget: checks took/, 'one cause, one FAIL line');
   assert.match(result.stdout, /BLOCKED perf: /);
   assert.equal(pids.length, 2, 'the checks started their child');
   assert.deepEqual(pids.filter(alive), [], 'the checks and their child were stopped');
@@ -191,10 +192,13 @@ test('a Ctrl-C to preflight stops the measured checks and their children', async
   let stdout = '';
   // exit, not close: a check left running holds preflight's output open.
   const exited = once(child, 'exit');
-  await new Promise((hung) => child.stdout.setEncoding('utf8').on('data', (chunk) => {
+  const hung = new Promise((started) => child.stdout.setEncoding('utf8').on('data', (chunk) => {
     stdout += chunk;
-    if (stdout.includes('checks hung')) hung();
+    if (stdout.includes('checks hung')) started();
   }));
+  // deadline: a preflight that ends, or never starts its checks, fails here instead of waiting for ever.
+  const late = new Promise((next) => setTimeout(next, 60_000).unref());
+  assert.equal(await Promise.race([hung.then(() => 'hung'), exited.then(() => 'exited'), late.then(() => 'late')]), 'hung', stdout);
   pids = JSON.parse(readFileSync(join(cwd, 'pids'), 'utf8'));
   process.kill(-child.pid, 'SIGINT');
   await exited;
