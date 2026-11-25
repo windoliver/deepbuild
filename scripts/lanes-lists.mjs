@@ -1043,6 +1043,12 @@ alone.push('tests/acceptance/1561/');
 // and ac8 judges the shadows' GPU budget on the reference Mac.
 alone.push('tests/acceptance/2032/', 'tests/acceptance/2032-redraft-ac8/');
 timed.push('tests/acceptance/2032/ac8-budget.test.ts', 'tests/acceptance/2032-redraft-ac8/ac8-budget.test.ts');
+// #2844's ac1 registers #2032's redrafted budget test under #2844's criterion: it builds deep-gpu, draws on Metal and
+// judges the shadows' GPU budget with each run's load.
+timed.push('tests/acceptance/2844/ac1-budget.test.ts');
+// #2844's redraft holds criterion 2 on moving scenes of its own: it builds deep-gpu here and at the merge base and
+// draws on Metal.
+alone.push('tests/acceptance/2844-redraft-moving/');
 // #2053's files each build deep-gpu or deep-canvas-render and draw on Metal; ac6 also builds both at the merge base,
 // and ac7 judges the paged lights' GPU budget on the reference Mac.
 alone.push('tests/acceptance/2053/');
@@ -1551,6 +1557,13 @@ byHand.push('tests/acceptance/1815/shown.test.ts');
 // reference Mac, by hand, gated by environmentProblem().
 byHand.push('tests/acceptance/1866/budgets.long.test.ts');
 timed.push('tests/acceptance/1866/budgets.long.test.ts');
+
+// #96's AC6, AC9, AC14 and Proof run as their blind redraft, 96-redraft-1412/, on the owner's ruling ("Use the
+// redraft", Nov 24): the first draft validates every recorded event as doc.patched@1, which can't carry the revision
+// hash the design's Revision text and #1412 require, so no program passes both (96-redraft-1412/DISPUTE.md). Its
+// commit.test.ts (AC6, AC14), proof.test.ts and AC9, moved unchanged into undo-ac9-first-draft.test.ts, are kept by hand.
+alone.push('tests/acceptance/96-redraft-1412/');
+byHand.push('tests/acceptance/96/commit.test.ts', 'tests/acceptance/96/proof.test.ts', 'tests/acceptance/96/undo-ac9-first-draft.test.ts');
 
 // #3295: the before lane lays the change's files under the test paths over the merge base, crates/*/tests included, so
 // the original suite's #3295.fae86cca test runs the fixed late-close test there and passes by construction. The

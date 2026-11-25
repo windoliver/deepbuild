@@ -15,7 +15,7 @@ const report = process.env.DEEP_CHECK_REPORT;
 const reporter = (name) => fileURLToPath(new URL(name, import.meta.url));
 // Each tool's own process, by its entry script. Each transforms afresh, whether or not it reports: a cache in the
 // checkout, which only a checksum of its own guards, would run code no source holds. The runner's reporter joins the
-// tool's default one.
+// tool's default one, before it in Vitest (onTestRunEnd, vitest-reporter.mjs).
 const vitest = entry.endsWith('/vitest/vitest.mjs');
 const jest = /\/jest(-cli)?\/bin\/jest\.js$/.test(entry);
 // Only Vitest 5 has the module cache option; an earlier one refuses it, and has no such cache to turn off. Only
@@ -26,7 +26,7 @@ if (jest) process.argv.push('--watchman=false', '--no-cache');
 // Vitest gets its reporter as a data: URL of the runner's file, which Vite imports natively: by its path, Vite
 // transforms it afresh on every run (the module cache is off), several ms of each run's time.
 const inlined = (name) => `data:text/javascript;base64,${readFileSync(reporter(name)).toString('base64')}`;
-const tool = vitest ? () => ['--reporter=default', `--reporter=${inlined('vitest-reporter.mjs')}`]
+const tool = vitest ? () => [`--reporter=${inlined('vitest-reporter.mjs')}`, '--reporter=default']
   : jest ? () => ['--reporters=default', `--reporters=${reporter('jest-reporter.mjs')}`] : null;
 // pnpm's own shell emulator runs a package script's programs itself, so no shell line shows how the script ends.
 if (/\/pnpm\/bin\/pnpm\.c?js$/.test(entry)) process.argv.splice(2, 0, '--config.shell-emulator=false');
