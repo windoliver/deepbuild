@@ -300,10 +300,9 @@ fn scripts(dir: &Path) -> Result<Vec<PathBuf>, String> {
                     &path,
                     "it is neither a file nor a folder".to_owned(),
                 ));
-            } else if script(&path.to_string_lossy())
-                && !(path == dir.join(SERVED)
-                    && std::fs::read_to_string(&path).is_ok_and(|text| text == source()))
-            {
+            } else if script(&path.to_string_lossy()) && path != dir.join(SERVED) {
+                // The served module is DeepBuild's: `serve` rewrites it before gpui-shell reads it, whatever an
+                // earlier build or the panel left there.
                 found.push(path);
             }
         }
@@ -438,6 +437,20 @@ fn imports(source: &str) -> Vec<Import> {
         }
         at
     };
+    // Each `(`'s matching `)`, found in one pass.
+    let mut closes = BTreeMap::new();
+    let mut open = Vec::new();
+    for (at, &byte) in bytes.iter().enumerate() {
+        match byte {
+            b'(' => open.push(at),
+            b')' => {
+                if let Some(start) = open.pop() {
+                    closes.insert(start, at);
+                }
+            }
+            _ => {}
+        }
+    }
     for (at, word) in calls {
         let end = at + word.len();
         let after = token(end);
@@ -447,7 +460,11 @@ fn imports(source: &str) -> Vec<Import> {
             _ if word == "require" && templates.contains(&after) => after,
             _ => continue,
         };
-        if method(&code[..at], bytes, source.as_bytes(), after) {
+        if bytes.get(after) == Some(&b'(')
+            && closes
+                .get(&after)
+                .is_some_and(|&close| method(&code[..at], bytes, source.as_bytes(), close))
+        {
             continue;
         }
         let plain = starts
@@ -464,12 +481,12 @@ fn imports(source: &str) -> Vec<Import> {
     found.into_iter().map(|(_, import)| import).collect()
 }
 
-/// Whether the `(` at `open` begins the parameters of a method named `import` or `require`, `import(name) {`, not a
-/// call: the name stands where only a method's can (`before` ends with `{`, `}`, `;`, `,`, `*`, `static`, `get`,
-/// `set` or `async`), and its `)` is followed by `{` on the same line, with only white space between in the source (a
-/// template's blanked text is no white space: ``import(m)`${{}}` `` is a call). A call there followed by `{` doesn't
-/// parse; one elsewhere may (`class A extends import(n) {}`), so it stays a call.
-fn method(before: &str, code: &[u8], source: &[u8], open: usize) -> bool {
+/// Whether the `(` whose `)` is at `close` begins the parameters of a method named `import` or `require`,
+/// `import(name) {`, not a call: the name stands where only a method's can (`before` ends with `{`, `}`, `;`, `,`, `*`,
+/// `static`, `get`, `set` or `async`), and its `)` is followed by `{` on the same line, with only white space between
+/// in the source (a template's blanked text is no white space: ``import(m)`${{}}` `` is a call). A call there followed
+/// by `{` doesn't parse; one elsewhere may (`class A extends import(n) {}`), so it stays a call.
+fn method(before: &str, code: &[u8], source: &[u8], close: usize) -> bool {
     let before = before.trim_end();
     let name_place = before.ends_with(['{', '}', ';', ',', '*'])
         || ["static", "get", "set", "async"]
@@ -478,22 +495,7 @@ fn method(before: &str, code: &[u8], source: &[u8], open: usize) -> bool {
     if !name_place {
         return false;
     }
-    let mut depth = 0;
-    let mut at = open;
-    while let Some(&byte) = code.get(at) {
-        match byte {
-            b'(' => depth += 1,
-            b')' => {
-                depth -= 1;
-                if depth == 0 {
-                    break;
-                }
-            }
-            _ => {}
-        }
-        at += 1;
-    }
-    at += 1;
+    let mut at = close + 1;
     while source.get(at).is_some_and(|&b| space(b)) {
         at += 1;
     }
@@ -1171,6 +1173,25 @@ mod tests {
                 ("./side.mjs".to_owned(), 7),
             ]
         );
+        // A tagged `` require`…` `` is a call, whatever parentheses come later on the line.
+        assert_eq!(
+            read("x;\nrequire`gpui-kit`; function f(a) {}"),
+            vec![("?".to_owned(), 2)]
+        );
+    }
+
+    #[test]
+    fn calls_that_never_close_are_read_in_one_pass() {
+        // Each `import(` used to scan to the end of the file for its `)`: 50 000 of them took minutes.
+        let source = ";import(".repeat(50_000);
+        let started = std::time::Instant::now();
+        let found = imports(&source);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "{:?}",
+            started.elapsed()
+        );
+        assert!(!found.is_empty() && found.iter().all(|i| i.specifier.is_err()));
     }
 
     #[test]
@@ -1267,7 +1288,7 @@ mod tests {
             ("@deepbuild/gpui-kit.d.ts", ""),
         ];
         assert_eq!(write(&typed), Ok(()));
-        // A page entry or a served module the panel brought itself is read like any script.
+        // A page entry the panel brought itself is read like any script.
         let page =
             "import { View, div } from \"@deepbuild/panel\";\nimport \"./.deepbuild-page.js\";\n";
         let refused = write(&[
@@ -1276,12 +1297,18 @@ mod tests {
         ])
         .unwrap_err();
         assert!(refused.contains(".deepbuild-page.js:1"), "{refused}");
-        let served = "export * from \"gpui-kit\";";
-        assert!(write(&[
-            ("main.js", "import \"./@deepbuild/panel.js\";"),
-            (SERVED, served)
-        ])
-        .is_err());
+        // The served module left by an earlier load, by another build or brought by the panel, is DeepBuild's to
+        // write: `serve` rewrites it before gpui-shell reads it, so it neither refuses the panel nor runs.
+        let stale = "// Written by DeepBuild each time it loads this panel (#1425)\nexport { quotes } from \"deepbuild\";\nexport { View, div } from \"gpui-kit\";";
+        assert_eq!(
+            write(&[
+                ("main.js", "import { View } from \"@deepbuild/panel\";"),
+                (SERVED, stale)
+            ]),
+            Ok(())
+        );
+        serve(&dir).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join(SERVED)).unwrap(), source());
         assert_eq!(
             write(&[
                 ("main.js", "import { View } from \"@deepbuild/panel\";"),
