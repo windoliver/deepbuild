@@ -2,11 +2,11 @@
 // never as a child of the terminal or hook that first needed it: launchd on macOS, a systemd user service on
 // Linux. A dev hub (--root) is started in a session of its own, so it outlives its terminal too.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, watch, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, openSync, realpathSync, rmSync, watch, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { hubAddress, installedPrograms, installedRoot, lastingNode, onPath, rootOf, underTemp, type Root } from './paths.js';
+import { controlToken, hubAddress, installedPrograms, installedRoot, lastingNode, onPath, type Root, rootOf, rootToken, underTemp } from './paths.js';
 import { notAnswered, Unanswered } from './client.js';
 import { line } from './wire.js';
 
@@ -23,6 +23,7 @@ const CORE_WAIT_MS = 120_000;
  */
 const STATUS_REPLY_MS = 25_000;
 const STEP_MS = 10;
+const ASK_MS = 1000;
 /** The file limit the login service raises the hub's to: a connection per hook in flight, the record, evidence and runs. */
 const FILES = 8192;
 type Obj = Record<string, unknown>;
@@ -85,8 +86,9 @@ function connect(path: string, timeoutMs = 2000): Promise<Connection> {
 const answers = (path: string, timeoutMs = 2000) => connect(path, timeoutMs).then((c) => { c.close(); return true; }, () => false);
 /** The hub's hello at `path`, which names its start ID and contract; undefined when no hub answers. */
 export const helloAt = (path: string): Promise<Obj | undefined> => connect(path).then((c) => { c.close(); return c.hello; }, () => undefined);
-async function waitForHub(path: string): Promise<boolean> {
-  const deadline = Date.now() + WAIT_MS;
+/** `again`, when given, asks the service manager once more about every ASK_MS while no hub answers (#2570). */
+async function waitForHub(path: string, deadline: number, again?: () => void): Promise<boolean> {
+  let asked = Date.now();
   let wake = () => {};
   let watcher: ReturnType<typeof watch> | undefined;
   try {
@@ -96,6 +98,10 @@ async function waitForHub(path: string): Promise<boolean> {
   try {
     while (Date.now() < deadline) {
       if (await answers(path, Math.min(2000, deadline - Date.now()))) return true;
+      if (again && Date.now() - asked >= ASK_MS) {
+        asked = Date.now();
+        again();
+      }
       await new Promise<void>((done) => {
         // A socket file may appear before listen(), with no second filesystem event. Keep that race short too.
         const retry = setTimeout(done, Math.min(STEP_MS, Math.max(0, deadline - Date.now())));
@@ -139,6 +145,31 @@ async function waitForStop(path: string, connection: Connection): Promise<void> 
     connection.close();
   }
 }
+/**
+ * Waits for a hub that is still exiting (#2570), for as long as a hub gets to answer: one told to stop closes its
+ * socket before its process ends, and holds the root's lock until then. A start asked for in between starts nothing:
+ * a dev hub refuses on the lock, and a service manager does nothing for a job that still runs, then leaves one that
+ * exits 0 stopped. Whether a hub answers meanwhile: one that is starting holds the lock too. It waits until `deadline`;
+ * the new hub's wait then gets 15 s of its own from the ask, as before (the owner's reading of #2570's second criterion).
+ * 'held' when the budget ran out with the lock still held: a hub started then would come up after the start failed.
+ */
+async function exiting(root: { lock: string; socket: string }, deadline: number): Promise<'answers' | 'free' | 'held'> {
+  // No lock file: no hub ever ran on this root, so none is exiting. SQLite loads only past here.
+  if (!existsSync(root.lock)) return 'free';
+  const { takeLock } = await import('./lock.js');
+  while (Date.now() < deadline) {
+    let lock;
+    // A lock file that can't be opened is the hub's to report, as before: it says why in its log.
+    try { lock = takeLock(root.lock); } catch { return 'free'; }
+    if (lock) {
+      lock.release();
+      return 'free';
+    }
+    if (await answers(root.socket)) return 'answers';
+    await new Promise((done) => setTimeout(done, STEP_MS));
+  }
+  return 'held';
+}
 
 /**
  * `hub.stop` of the installed hub as this process (#1865): the hello names `peer`, so the hub asks the OS to confirm you
@@ -175,13 +206,13 @@ export async function stopAsPeer(path: string, token: string, params: Obj, peer:
 }
 
 /**
- * One control call on the hub at `path`, as the CLI, with the token `tokenFile` holds: the hub's hello within
- * `timeoutMs`, and the call's reply within `replyMs`; with `peer`, the call names that process as its caller.
+ * One control call on the hub at `path`, as the CLI, presenting `token`: the hub's hello within `timeoutMs`, and the
+ * call's reply within `replyMs`; with `peer`, the call names that process as its caller.
  */
-export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000, replyMs = timeoutMs, peer?: { pid: number; start: string }): Promise<Obj> {
+export async function control(path: string, token: string, method: string, params: Obj = {}, timeoutMs = 2000, replyMs = timeoutMs, peer?: { pid: number; start: string }): Promise<Obj> {
   const c = await connect(path, timeoutMs);
   try {
-    c.send({ hello: 'cli', token: readFileSync(tokenFile, 'utf8').trim(), ...(peer ? { peer } : {}) });
+    c.send({ hello: 'cli', token, ...(peer ? { peer } : {}) });
     const hello = await c.next();
     if (hello.error) throw Error(`the hub refused the CLI's credential: ${JSON.stringify(hello.error)}`);
     c.send({ id: method, method, params });
@@ -327,7 +358,7 @@ export const serviceFile = (): string => definition([], '').file;
 async function coreAnswers(root: Root): Promise<number> {
   let token: string;
   try {
-    token = readFileSync(root.token, 'utf8').trim();
+    token = rootToken(root);
   } catch {
     return 0;
   }
@@ -356,12 +387,21 @@ async function coreAnswers(root: Root): Promise<number> {
  */
 export async function startHub(options: { root?: string; cli: string; quiet?: boolean }): Promise<number> {
   const root = rootOf(options.root ?? installedRoot());
+  const deadline = Date.now() + WAIT_MS;
+  const noHub = () => {
+    process.stderr.write(`deep hub start: no hub answered at unix:${root.socket} within ${WAIT_MS / 1000} s; see ${join(root.logs, 'hub.log')}\n`);
+    return 3;
+  };
   const up = async (already: boolean): Promise<number> => {
     const code = await coreAnswers(root);
     if (code === 0 && !options.quiet) process.stdout.write(`The hub is up${already ? '; it was already running' : ''}.\n`);
     return code;
   };
   if (await answers(root.socket)) return up(true);
+  const old = await exiting(root, deadline);
+  // A hub that answers while the old one exits was started by someone else: this start started nothing.
+  if (old === 'answers') return up(true);
+  if (old === 'held') return noHub();
   mkdirSync(root.logs, { recursive: true, mode: 0o700 });
   // An installed version's login service runs the versions folder's current link, which every update keeps, never a
   // version's own folder (#41); a checkout's runs its own CLI through Node.
@@ -378,9 +418,12 @@ export async function startHub(options: { root?: string; cli: string; quiet?: bo
       return 3;
     }
   }
-  if (await waitForHub(root.socket)) return up(false);
-  process.stderr.write(`deep hub start: no hub answered at unix:${root.socket} within ${WAIT_MS / 1000} s; see ${join(root.logs, 'hub.log')}\n`);
-  return 3;
+  // An installed hub's old process can still run after its lock is free, and a service manager does nothing for a job it
+  // still counts as running, then leaves it stopped once it exits 0 (#2570). So it is asked again while no hub answers:
+  // `launch` starts a stopped job and leaves a running one alone. An error on a later ask is the first ask's to report.
+  const again = options.root ? undefined : () => void launch(serviceFile());
+  if (await waitForHub(root.socket, Date.now() + WAIT_MS, again)) return up(false);
+  return noHub();
 }
 
 /** `deep hub status [--root <folder>]`: the hub's health as one JSON line; 3 when no hub could be read. */
@@ -392,9 +435,9 @@ export async function hubStatus(options: { root?: string }): Promise<number> {
     process.stderr.write(`deep hub status: ${error instanceof Error ? error.message : String(error)}\n`);
     return 3;
   }
-  const tokenFile = rootOf(options.root ?? installedRoot()).token;
   try {
-    process.stdout.write(`${JSON.stringify(await control(path, tokenFile, 'hub.health', {}, 2000, STATUS_REPLY_MS))}\n`);
+    const token = options.root ? rootToken(rootOf(options.root)) : controlToken(path);
+    process.stdout.write(`${JSON.stringify(await control(path, token, 'hub.health', {}, 2000, STATUS_REPLY_MS))}\n`);
     return 0;
   } catch (error) {
     // No socket, nothing listening, or a home whose hub never wrote its token: the one sentence (#1812).
@@ -412,7 +455,7 @@ function stopFailed(path: string, error: unknown): number {
 export async function stopHub(options: { root: string }): Promise<number> {
   const root = rootOf(options.root);
   try {
-    await control(root.socket, root.token, 'hub.stop');
+    await control(root.socket, rootToken(root), 'hub.stop');
   } catch (error) {
     return stopFailed(root.socket, error);
   }

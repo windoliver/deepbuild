@@ -1,0 +1,15 @@
+{
+  "name": "weave",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack whose one step holds a param of three {repeat} lists, one in the other, 1,024 each.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "weave.mat@1": "weave.mat@1.json"
+  }
+}

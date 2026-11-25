@@ -25,6 +25,10 @@ DeepBuild is in its design phase. The [issues](https://github.com/windoliver/dee
 - Add screenshots or a video for anything a user sees.
 - List anything still open.
 
+## Security reports
+
+A report that fits the private list in SECURITY.md and isn't public yet is handled in the private advisory, and its public issue is filed when its fix has merged, naming the fix. An agent that finds such a fault tells the person it works for and files nothing public. Issues already open stay as they are. <!-- security rule -->
+
 ## Agents
 
 Agent-written contributions are welcome. Say which agent and model you used. You're responsible for the change, and [AGENTS.md](AGENTS.md) applies to you and your agent.

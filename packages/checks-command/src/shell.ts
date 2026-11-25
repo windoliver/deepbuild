@@ -209,6 +209,16 @@ export function filtersIn(command: string): Filter[] {
   });
   return filters;
 }
+/** The filters the scripts a command runs give their tools, each with the script's file: read through them as masks are (`maskOf`). */
+export function scriptFilters(command: string, cwd: string, depth = 0): (Filter & { file: string })[] {
+  if (depth >= 4) return [];
+  return segmentsOf(command).flatMap((segment) => {
+    const script = scriptOf(segment, cwd) ?? packageScriptOf(segment, cwd);
+    if (!script) return [];
+    const text = script.lines.join('\n');
+    return [...filtersIn(text).map((f) => ({ ...f, file: script.file })), ...scriptFilters(text, cwd, depth + 1)];
+  });
+}
 /** The program the command starts with, a plain name or path, when the shell can't find it on `path`: the command can't start. */
 export function absent(command: string, cwd: string, path: string): string | null {
   const first = wordsOf(segmentsOf(command)[0] ?? '').find((w) => !ASSIGNMENT.test(w));

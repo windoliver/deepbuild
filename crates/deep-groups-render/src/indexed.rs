@@ -27,6 +27,7 @@ const ONE: f64 = 16.0;
 const REACH: f64 = 11_000.0;
 const NO_LIGHT: u32 = u32::MAX;
 
+deep_gpu::paired! { prim: "indexed.wgsl", Prim; "indexed_up.wgsl", Prim;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable, PartialEq)]
 pub struct Prim {
@@ -39,7 +40,9 @@ pub struct Prim {
     r_inner: u32,
     light: u32,
 }
+}
 
+deep_gpu::paired! { params: "indexed.wgsl", Params; "indexed_up.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Params {
@@ -51,6 +54,7 @@ struct Params {
     light_max: u32,
     scale: u32,
     palette: u32,
+}
 }
 
 const FLAG_BLEND: u32 = 1;
@@ -768,7 +772,7 @@ impl Reader {
         let taken = tap.buffer.lock().unwrap_or_else(|e| e.into_inner()).take();
         let (buffer, size) = taken.ok_or("the index target wasn't drawn")?;
         let words = read_indices(d, &buffer, size)?;
-        Ok(words.chunks_exact(2).map(|w| w[0]).collect())
+        Ok(words.as_chunks::<2>().0.iter().map(|w| w[0]).collect())
     }
 }
 

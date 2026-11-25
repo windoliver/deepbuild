@@ -1,0 +1,10 @@
+# node --test --test-concurrency=1 tests/acceptance/2173-redraft-2047/ac1-exits-0.test.mjs at merge ed824b3f7 (main 2a5bd60fd) plus the png row, Node v24.22.2, exit 0
+✔ AC1 #2173.222063e6 node scripts/repo-rules.mjs exits 0 on main, apart from the lines under tests/acceptance/ open issue #3139 holds (38542.590375ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 38667.635541

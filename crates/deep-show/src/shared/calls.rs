@@ -1,9 +1,13 @@
 use super::*;
 use crate::states::{keys_unchanged, taken_for_creates};
+pub use paths::paths_of;
+use paths::{merge_paths, written_paths};
+
+mod paths;
 
 impl Hub<'_> {
     /// Opens every shared document: from the state folder's record when it has one (a restart),
-    /// else at revision 0, the stored document.
+    /// else at revision 0, the stored document; and each minted one the hub's record holds (#1721).
     pub fn open_shared(&mut self) {
         let scenario = self.scenario;
         for (id, seed) in &scenario.seeds {
@@ -17,29 +21,7 @@ impl Hub<'_> {
             if let Some(found) = self.admission_issues(id, &doc) {
                 issues.extend(found);
             }
-            let mut shared = Shared {
-                id: id.clone(),
-                doc,
-                owners: Owners::new(),
-                revs: vec![Rev {
-                    rev: 0,
-                    base_rev: 0,
-                    writer: None,
-                    patch: None,
-                    reason: String::new(),
-                    changed: BTreeSet::new(),
-                    before: BTreeMap::new(),
-                    paths: Paths::new(),
-                    envelope_before: None,
-                    issues: Rc::new(issues),
-                    notices: OnceCell::from(checked.notices),
-                    hash: OnceCell::new(),
-                    current_at: None,
-                }],
-                lost: BTreeMap::new(),
-                older: BTreeSet::new(),
-                referrers: None,
-            };
+            let mut shared = Shared::open(id, doc, issues, checked.notices);
             if let Some(state) = &self.scenario.state {
                 restore(
                     &mut shared,
@@ -52,6 +34,7 @@ impl Hub<'_> {
             shared.find_older();
             self.shared.insert(id.clone(), shared);
         }
+        self.open_recorded();
     }
 
     /// The index of the revision a read shows: the newest one current at the hub's time.
@@ -85,6 +68,10 @@ impl Hub<'_> {
     /// A patch or an undo, checked at `checked` (the clock's time, else 0) after arriving at
     /// `arrived`: its reply, the Patch result.
     pub fn patch(&mut self, call: &PatchCall, arrived: Option<i64>, checked: i64) -> Value {
+        self.as_shared(&call.doc, |hub| hub.patch_shared(call, arrived, checked))
+    }
+
+    fn patch_shared(&mut self, call: &PatchCall, arrived: Option<i64>, checked: i64) -> Value {
         let mut reply = Map::new();
         let outcome = self.check_patch(call, checked, &mut reply);
         let current_rev = self.shared.get(&call.doc).map_or(0, |s| s.current().rev);
@@ -203,6 +190,9 @@ impl Hub<'_> {
         let Some((writer, session)) = self.acting(&call.via) else {
             return refused("ref_unresolved", "session", "the call binds to no session");
         };
+        if let Some(issue) = self.unread_issue(&call.doc) {
+            return Outcome::Refused(vec![issue]);
+        }
         if !self.shared.contains_key(&call.doc) {
             return refused("ref_unresolved", "doc", "no shared document has this ID");
         }
@@ -244,7 +234,8 @@ impl Hub<'_> {
             }
         }
         let shared = &self.shared[&call.doc];
-        let cur = shared.current().rev;
+        let (cur, next_rev) = (shared.current().rev, shared.next_rev());
+        let minted = shared.numbers.is_some();
         let (patch, base, undoing) = match &call.body {
             Body::Patch(p) => (p.clone(), p["base"].as_u64().unwrap_or(cur), None),
             Body::Undo { patch, of } => {
@@ -481,6 +472,12 @@ impl Hub<'_> {
             }
         };
         patched.before.extend(overwritten.before);
+        if let Some(row) = minted
+            .then(|| crate::hub::current_in(&self.revisions, &call.doc))
+            .flatten()
+        {
+            minted::break_outs(&row.doc, &mut shared.doc, &layer, &mut patched);
+        }
         // #1415: ops that leave every item's content key and the envelope as they were change
         // nothing: no revision, no undo step. Planted: it commits a new revision, as the base did.
         let envelope =
@@ -498,7 +495,9 @@ impl Hub<'_> {
         // expands the recipe instances again (#306): the one check, never per frame.
         let mut expansions = None;
         let mut notices = Vec::new();
-        let issues = if added.is_some() || removed_entries.is_some() {
+        let mut skipped = Vec::new();
+        // A minted document's is checked in full, as its whole revision is (#1721).
+        let issues = if added.is_some() || removed_entries.is_some() || minted {
             None
         } else {
             if shared.referrers.as_ref().is_none_or(|(rev, _)| *rev != cur) {
@@ -506,7 +505,7 @@ impl Hub<'_> {
             }
             let (_, referrers) = shared.referrers.as_ref().expect("made above");
             recheck_with(
-                &shared.doc,
+                &mut shared.doc,
                 &last,
                 &changed,
                 &self.startup.sealed,
@@ -525,6 +524,7 @@ impl Hub<'_> {
             );
             let result = check_sized(&shared.doc, sealed, &self.packs, &sizes);
             expansions = Some(result.expansions);
+            skipped = crate::verdict::unknown_items(&result.notices);
             notices = result.notices;
             result.issues
         });
@@ -584,6 +584,7 @@ impl Hub<'_> {
             &patched.before,
             &self.look.light,
             &self.startup.sealed,
+            minted,
         ) {
             Ok(cost) => cost,
             Err(issue) => {
@@ -612,6 +613,24 @@ impl Hub<'_> {
                 return refused("over_quota", "items", &what);
             }
         }
+        // #1721: a minted document's revision is its session's too: what it draws is checked as a
+        // whole revision's is.
+        let mut form = None;
+        if minted {
+            let now = shared.doc.clone();
+            let drawn = expansions.as_deref().unwrap_or_default();
+            let (made, found) = self.form_of(&call.doc, &now, drawn, skipped, &issues);
+            let errors: Vec<Issue> = found
+                .into_iter()
+                .filter(|i| i.severity == "error")
+                .collect();
+            if !errors.is_empty() {
+                take_back(self.shared.get_mut(&call.doc).expect("open"), &patched);
+                return Outcome::Refused(errors);
+            }
+            form = Some(made);
+        }
+        let shared = self.shared.get_mut(&call.doc).expect("open");
         let achieved = patched.achieved(&shared.doc);
         let (undo, ids) = (patched.undo(&shared.doc), patched.ids.clone());
         // A dry run returns what the commit would, and commits nothing.
@@ -651,7 +670,7 @@ impl Hub<'_> {
         let patch_id = patch["patch"].as_str().unwrap_or_default().to_string();
         let current_at = self.scenario.clock.map(|c| c.latch_from(checked));
         let next = Rev {
-            rev: cur + 1,
+            rev: next_rev,
             base_rev: base,
             writer: Some(writer.clone()),
             patch: Some(patch_id.clone()),
@@ -679,6 +698,9 @@ impl Hub<'_> {
             current_at,
         };
         if self.commit(&call.doc, next, session, &recorded_by(&call.via), &achieved) {
+            if let Some(form) = form {
+                self.adopt(&call.doc, form);
+            }
             if let Some(expansions) = expansions {
                 let doc = &self.shared[&call.doc].doc;
                 let planted = self.scenario.planted;
@@ -712,7 +734,7 @@ impl Hub<'_> {
             shared.lost.entry(writer.text()).or_default().push(patch_id);
         }
         Outcome::Applied(Box::new(Applied {
-            rev: cur + 1,
+            rev: next_rev,
             achieved,
             cost,
             undo,
@@ -761,10 +783,11 @@ impl Hub<'_> {
         }
         let shared = &self.shared[doc];
         if let Some(state) = &self.scenario.state {
-            // The layers it changed: its items' layers before and after, and every layer whose
-            // entry in `layers` or whose other entries it changed.
+            // The layers it changed: its items' layers before and after (those it migrated
+            // included, which only `before` lists), and every layer whose entry in `layers` or
+            // whose other entries it changed.
             let mut layers: BTreeSet<String> = BTreeSet::new();
-            for id in &next.changed {
+            for id in next.changed.iter().chain(next.before.keys()) {
                 let now = shared.doc["items"][id]["layer"].as_str();
                 let was = next.before.get(id).and_then(|w| w.as_ref());
                 for l in [now, was.and_then(|w| w["layer"].as_str())]
@@ -786,10 +809,26 @@ impl Hub<'_> {
                     }
                 }
             }
+            let mut files: Vec<Vec<u8>> = layers
+                .iter()
+                .map(|layer| layer_file(doc, &shared.doc, &shared.owners, layer))
+                .collect();
+            // #1412: what no layer file holds, the document's own fields and the entries no
+            // layer owns, when it changed them.
+            let own_before = next
+                .envelope_before
+                .as_ref()
+                .map(|(fields, owners)| own_fields(fields, owners));
+            let own_now = shared
+                .doc
+                .as_object()
+                .map(|f| own_fields(f, &shared.owners));
+            if own_before.is_some_and(|was| own_now.as_ref() != Some(&was)) {
+                files.push(envelope_file(doc, own_now.unwrap_or_default()));
+            }
             let mut written = Vec::new();
-            for layer in &layers {
-                let bytes = layer_file(doc, &shared.doc, &shared.owners, layer);
-                match evidence::put(&state.join("layers"), &bytes) {
+            for bytes in &files {
+                match evidence::put(&state.join("layers"), bytes) {
                     Ok(sha) => written.push(sha),
                     Err(_) => return false,
                 }
@@ -801,11 +840,16 @@ impl Hub<'_> {
             let record = state.join("record.jsonl");
             let log_pos = fs::read_to_string(&record).map_or(0, |t| t.lines().count()) + 1;
             let writer = next.writer.as_ref().expect("a commit has a writer");
+            // #1412: the event carries the revision's hash, which a restart checks it against.
+            let hash = canonical_in(&shared.doc, &self.startup.sealed.kinds())
+                .map_or(String::new(), |c| c.sha256);
+            let _ = next.hash.set(hash.clone());
+            let thread = (writer.kind == WriterKind::Agent).then(|| writer.id.clone());
             let ts = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_millis() as u64);
             let event = json!({
-                "v": 1,
+                "v": 2,
                 "id": ulid_of(&format!("{doc}|{}|{patch}", next.rev)),
                 "kind": "doc.patched",
                 "subject": format!("doc:{doc}"),
@@ -820,6 +864,9 @@ impl Hub<'_> {
                     "patch": patch,
                     "writer": writer.kind.name(),
                     "achieved": achieved,
+                    "hash": hash,
+                    "layer": writer.layer_id(),
+                    "thread": thread,
                 },
                 "evidence": written,
             });
@@ -836,7 +883,6 @@ impl Hub<'_> {
         self.shared
             .get_mut(doc)
             .expect("committed to an open document")
-            .revs
             .push(next);
         true
     }
@@ -942,45 +988,15 @@ impl Hub<'_> {
                 ));
             }
         }
-        // The writer's layer, emptied, then filled with the payload's entries.
-        if let Some(Value::Object(items)) = doc.get_mut("items") {
-            items.retain(|_, i| i["layer"].as_str() != Some(layer.as_str()));
-        }
-        drop_owned(&mut doc, &mut owners, &layer);
-        let mut view = Map::new();
-        let empty = Map::new();
-        for map in std::iter::once("items").chain(ID_MAPS.iter().copied()) {
-            let mut stamped = Map::new();
-            for (id, entry) in payload
-                .get(map)
-                .and_then(Value::as_object)
-                .unwrap_or(&empty)
-            {
-                let mut entry = entry.clone();
-                if map == "items" {
-                    if let Some(l) = entry.get("layer") {
-                        let path = format!("items/{id}/layer");
-                        issues.push(Issue::error("unknown_field", id, path, l.clone(), claimed));
-                    }
-                    entry["layer"] = json!(layer);
-                }
-                if doc[map].get(id).is_some() {
-                    let what = "another writer's layer holds this ID";
-                    let path = format!("{map}/{id}");
-                    issues.push(Issue::error("not_your_layer", id, path, json!(id), what));
-                    continue;
-                }
-                if !doc[map].is_object() {
-                    doc[map] = json!({});
-                }
-                doc[map][id] = entry.clone();
-                if map != "items" {
-                    owners.insert((map.to_string(), id.clone()), layer.clone());
-                }
-                stamped.insert(id.clone(), entry);
+        let items = payload.get("items").and_then(Value::as_object);
+        for (id, entry) in items.into_iter().flatten() {
+            if let Some(l) = entry.get("layer") {
+                let path = format!("items/{id}/layer");
+                issues.push(Issue::error("unknown_field", id, path, l.clone(), claimed));
             }
-            view.insert(map.to_string(), Value::Object(stamped));
         }
+        // The writer's layer, emptied, then filled with the payload's entries.
+        let view = fill_layer(&mut doc, &mut owners, &payload, &layer, &mut issues);
 
         // Diffed against what the writer's layer held; the planted twin against everything.
         let whole = self.scenario.planted == Some(Planted::DiffsWholeDocument);
@@ -992,7 +1008,6 @@ impl Hub<'_> {
                     was_owners.get(&(map.to_string(), id.to_string())) == Some(&layer)
                 }
         };
-        let view = Value::Object(view);
         let diff = whole_diff_by(
             Some(was_doc),
             &view,
@@ -1030,9 +1045,16 @@ impl Hub<'_> {
         let unreadable = unreadable_handles(&doc, |h| self.can_read(&writer, h));
         issues.extend(unreadable.into_iter().filter(|i| i.ids.iter().any(mine)));
         let mut drawn = None;
-        // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does.
+        // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does,
+        // with its 2D items over its 3D frame (#1722).
         let three = deep_canvas_scene3d::scene::has_3d(&doc);
-        if !three && !issues.iter().any(|i| i.severity == "error" && !i.carried) {
+        let fit = !issues.iter().any(|i| i.severity == "error" && !i.carried);
+        if three && fit {
+            match self.items2d(&doc, show.t) {
+                Ok(d) => drawn = d,
+                Err(Unfit { code, path }) => issues.push(unfit_issue(code, path)),
+            }
+        } else if fit {
             // Each recipe instance's derived items draw in its place (#306).
             let shown = drawable(&crate::packs::drawn(&doc, &result.expansions));
             // #499: a video image item draws its frame at the revision's time.
@@ -1138,17 +1160,7 @@ impl Hub<'_> {
     pub fn read(&mut self, doc: &str, via: Option<&Via>) -> Value {
         let reader = via.and_then(|v| self.acting(v)).map(|(w, _)| w);
         let (Some(k), Some(shared)) = (self.shown(doc), self.shared.get(doc)) else {
-            // A deep_show document (one writer's layer, #393) reads as its current revision,
-            // stored as its check stamped it (#1162).
-            let current = self
-                .revisions
-                .get(doc)
-                .and_then(|rows| rows.iter().find(|r| r.state == "current"));
-            return match current {
-                Some(row) => json!({"rev": row.rev, "hash": row.hash, "draws": draws(&row.doc),
-                                    "issues": [], "document": row.doc}),
-                None => json!({"outcome": "refused", "code": "ref_unresolved"}),
-            };
+            return json!({"outcome": "refused", "code": "ref_unresolved"});
         };
         let (shown, owners) = shared.at(k);
         let layer = reader.as_ref().and_then(|w| layer_of(&shown, w));
@@ -1156,7 +1168,11 @@ impl Hub<'_> {
         let issues: Vec<Value> = shared.revs[k]
             .issues
             .iter()
-            .filter(|i| reader.is_none() || i.ids.iter().any(in_layer))
+            .filter(|i| {
+                reader.is_none()
+                    || i.ids.iter().any(in_layer)
+                    || shared.stopped.as_ref() == Some(*i)
+            })
             .map(Issue::to_json)
             .collect();
         let mut reply = Map::new();
@@ -1409,53 +1425,6 @@ fn planted_fix(planted: Option<Planted>, issues: &mut [Value]) {
     }
 }
 
-/// The `(ID, path)` pairs a patch's ops write, the path below the item; `None` when an op writes
-/// a whole item (a create, delete, move or reorder).
-fn written_paths(patch: &Value) -> Option<Paths> {
-    let mut out = Paths::new();
-    for op in patch["ops"].as_array()? {
-        let (Some("set" | "unset"), Some(id), Some(path)) =
-            (op["op"].as_str(), op["id"].as_str(), op["path"].as_str())
-        else {
-            return None;
-        };
-        let rest = path.strip_prefix(&format!("items/{id}/"))?;
-        out.insert((id.to_string(), rest.to_string()));
-    }
-    Some(out)
-}
-
-/// The planted path-granular rebase's merge: each path the patch wrote on its base, set to what
-/// it holds there in the current document.
-fn merge_paths(doc: &mut Value, on_base: &Value, patch: &Value) -> Patched {
-    let mut done = Patched::default();
-    for (id, path) in written_paths(patch).unwrap_or_default() {
-        let before = doc["items"].get(&id).cloned();
-        done.before.entry(id.clone()).or_insert(before);
-        let parts: Vec<&str> = path.split('/').collect();
-        let mut from = &on_base["items"][&id];
-        for p in &parts {
-            from = &from[*p];
-        }
-        let value = from.clone();
-        let Some((last, head)) = parts.split_last() else {
-            continue;
-        };
-        let mut at = &mut doc["items"][&id];
-        for p in head {
-            at = &mut at[*p];
-        }
-        match (value.is_null(), at.as_object_mut()) {
-            (true, Some(map)) => {
-                map.shift_remove(*last);
-            }
-            (false, _) => at[*last] = value,
-            _ => {}
-        }
-    }
-    done
-}
-
 /// A patch's coalesce key.
 fn coalesce_key(call: &PatchCall) -> Option<&str> {
     match &call.body {
@@ -1493,40 +1462,6 @@ impl Hub<'_> {
             "current": null,
         })
     }
-}
-
-/// The paths a revision wrote, as `(ID, path)`: `""` for an item it created or deleted, else
-/// each field of the item it changed, and each member of `params` and `at` (Patch: an undo is
-/// refused if another writer has touched those paths since).
-pub fn paths_of(before: &BTreeMap<String, Option<Value>>, doc: &Value) -> Paths {
-    let mut out = Paths::new();
-    for (id, was) in before {
-        match (was, doc["items"].get(id)) {
-            (Some(Value::Object(a)), Some(Value::Object(b))) => {
-                let keys: BTreeSet<&String> = a.keys().chain(b.keys()).collect();
-                for k in keys.into_iter().filter(|k| a.get(*k) != b.get(*k)) {
-                    match (a.get(k), b.get(k)) {
-                        (Some(Value::Object(x)), Some(Value::Object(y)))
-                            if k == "params" || k == "at" =>
-                        {
-                            let members: BTreeSet<&String> = x.keys().chain(y.keys()).collect();
-                            for m in members.into_iter().filter(|m| x.get(*m) != y.get(*m)) {
-                                out.insert((id.clone(), format!("{k}/{m}")));
-                            }
-                        }
-                        _ => {
-                            out.insert((id.clone(), k.clone()));
-                        }
-                    }
-                }
-            }
-            (a, b) if a.as_ref() != b => {
-                out.insert((id.clone(), String::new()));
-            }
-            _ => {}
-        }
-    }
-    out
 }
 
 /// #1801: the patch less its `delete` ops that name no item but an entry of another map keyed

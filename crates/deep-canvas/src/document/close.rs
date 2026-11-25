@@ -7,6 +7,7 @@
 use serde_json::{json, Map, Value};
 
 use super::packs::{Packs, Resolved};
+use super::Issue;
 use crate::kinds::{Entry, Registry, Version};
 use crate::registry::Fault;
 
@@ -163,6 +164,28 @@ pub fn census(word: &str, packs: &Packs, fault: Option<Fault>) -> Vec<Value> {
         out.push(entry);
     }
     out
+}
+
+/// The refusal of kind text `text` on item `id` that is no `family.name@major` (#3032). Where it
+/// is a word an installed pack's census maps or refuses, such as another tool's class name, its
+/// close names hold what each pack says of it, and its fix names the pack with the word's target
+/// and conversion, or its reason and what to write instead; the word is never taken for its target.
+pub fn no_kind(
+    id: &str,
+    text: &str,
+    (packs, resolved): (&Packs, &Resolved<'_>),
+    fault: Option<Fault>,
+) -> Issue {
+    let at = format!("items/{id}/kind");
+    let mut issue = Issue::error("out_of_range", id, at, json!(text), "not family.name@major");
+    let mut close = census(text, packs, fault);
+    close.truncate(MOST);
+    let fix = census_fix(&close, resolved);
+    if !fix.is_empty() {
+        issue.fix = fix.join(" ");
+        issue.close = close;
+    }
+    issue
 }
 
 /// The fix's sentences for the census entries in `close`, in its order (#1493): a pack that maps

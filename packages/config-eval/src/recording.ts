@@ -73,6 +73,37 @@ export function isOutside(tool: string, input: unknown): boolean {
   return tool === 'Bash' && isObj(input) && typeof input.command === 'string' && reachesNetwork(input.command);
 }
 
+/** Claude Code's tools that change a file, by its facts (`toolKinds`: edit and write). */
+const EDITS = new Set(['Edit', 'MultiEdit', 'NotebookEdit', 'Write']);
+/** Programs that write the file they name, programs that do so in place, git's subcommands that change or commit files, and a script's own writes. */
+const WRITERS = /^(?:tee|cp|mv|rm|touch|ln|patch|truncate|install)$/;
+const IN_PLACE = /^(?:sed|perl|ruby)$/;
+const GIT_WRITES = /^(?:apply|am|commit|mv|rm|merge|cherry-pick|revert|rebase)$/;
+const SCRIPTS = /^(?:python[0-9.]*|node|ruby|perl|deno|bun)$/;
+const SCRIPT_WRITES = /\bwriteFile(?:Sync)?\b|(?<!stdout|stderr)\.write(?:_text|_bytes)?\(|\bopen\([^)]*['"][wax]/;
+/** An output redirection to a file, never to a device or another descriptor. */
+const REDIRECTS = /(?:^|[^<>=-])(?:&|\d)?>{1,2}\|?\s*(?!&|>|\s|\/dev\/|\()/;
+
+/**
+ * Whether a session's tool call changed a file: an edit or write tool's that didn't fail, or a shell command that
+ * writes one, read from its words as `reachesNetwork` reads them. A command that failed may have written before it did.
+ */
+export function writesFile(call: RecordedCall): boolean {
+  if (EDITS.has(call.tool)) return !call.error;
+  if (call.tool !== 'Bash' || !isObj(call.input) || typeof call.input.command !== 'string') return false;
+  const command = call.input.command;
+  // A here-document's lines are data, unless a script program reads them.
+  const shell = command.replace(/<<-?\s*(['"]?)(\w+)\1([^\n]*)\n[\s\S]*?\n\s*\2(?=\n|$)/g, '$3\n').replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''");
+  if (REDIRECTS.test(shell)) return true;
+  return shell.split(/&&|\|\||[;|&\n()`]|\$\(/).some((piece) => {
+    const words = fromProgram(piece);
+    const program = (words[0] ?? '').replace(/^.*\//, '');
+    if (program === 'git') return GIT_WRITES.test(words.find((w, i) => i > 0 && !w.startsWith('-') && words[i - 1] !== '-C' && words[i - 1] !== '-c') ?? '');
+    if (IN_PLACE.test(program) && words.some((w) => /^-[a-zA-Z0-9]*i/.test(w) || w.startsWith('--in-place'))) return true;
+    return (WRITERS.test(program) && words.length > 1) || (SCRIPTS.test(program) && SCRIPT_WRITES.test(command));
+  });
+}
+
 /**
  * The part of a call's input that names the call, each string normalized as open items normalize error text
  * (temporary paths, process IDs and timestamps as placeholders), keys in order. A shell call is named by its command

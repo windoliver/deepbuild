@@ -130,12 +130,13 @@ async function telemetryItems() {
 // (#34's slice of #19's bundle).
 async function debugBundle(): Promise<number> {
   const { scrubText } = await import('@deepbuild/evidence');
+  const { activePlant, rootOf, rootToken } = await import('@deepbuild/hub');
   const root = join(homedir(), '.deepbuild');
-  const token = existsSync(join(root, 'control.token')) ? readFileSync(join(root, 'control.token'), 'utf8').trim() : '';
+  let token = '';
+  try { token = rootToken(rootOf(root)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   // The values the hub holds by handle, as a test names them (DEEP_HUB_TEST_HELD), are scrubbed here too.
   const held = [token, ...(process.env.DEEP_HUB_TEST_HELD && existsSync(process.env.DEEP_HUB_TEST_HELD) ? readFileSync(process.env.DEEP_HUB_TEST_HELD, 'utf8').split('\n').map((v) => v.trim()) : [])].filter(Boolean);
   // The planted wrong program copies the logs as they are.
-  const { activePlant } = await import('@deepbuild/hub');
   const scrubLogs = process.env.DEEP_CLI_PLANT === 'bundle-raw-logs' || activePlant() === 'bundle-raw-logs' ? (text: string) => text : (text: string) => scrubText(text, { held });
   const scrub = (text: string) => scrubText(text, { held });
   const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).flatMap((name) => {
@@ -398,8 +399,15 @@ if (help) {
   });
 } else if (args[0] === 'read' || args[0] === 'find') {
   // Read-only over the hub's root (#63), with or without the hub running.
-  const { findCommand, readCommand } = await import('@deepbuild/reading');
-  process.exitCode = await (args[0] === 'read' ? readCommand : findCommand)(args.slice(1));
+  const { findCommand, NotFound, readCommand } = await import('@deepbuild/reading');
+  // A started session's sandbox closes the evidence store (#3229), so its reads by handle go to the hub.
+  const { activePlant, handleRead } = await import('@deepbuild/hub');
+  const hub = async (root: string, params: Record<string, unknown>): Promise<unknown> => {
+    const answer = await handleRead(root, params);
+    if (answer && 'refused' in answer) throw new NotFound(String(answer.refused));
+    return answer;
+  };
+  process.exitCode = await (args[0] === 'read' ? readCommand(args.slice(1), hub, activePlant() === 'answers-variant-bytes') : findCommand(args.slice(1), hub));
 } else if (args.length === 2 && args[0] === 'update' && args[1] === '--check') {
   process.exitCode = await updateCheck();
 } else if (args.length === 2 && args[0] === 'debug' && args[1] === 'bundle') {

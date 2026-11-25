@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: each kit run plays four sessions, three at once, each on a hub of its own whose checks run vitest, and waits up to 180 s for each verdict; beside the parallel block a play under load misses it and ends INCONCLUSIVE" }

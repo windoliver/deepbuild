@@ -17,7 +17,7 @@
       "default": "./dist/slices.js"
     }
   },
-  "scripts": { "build": "tsc -p tsconfig.json" },
+  "scripts": { "build": "tsc -p tsconfig.json && node ../../scripts/built-escapes.mjs dist" },
   "dependencies": {
     "@deepbuild/contracts": "0.0.0",
     "@deepbuild/evidence": "0.0.0",
