@@ -127,18 +127,38 @@ function far() {
   if (head !== manifest.commit) blocked(`the commit shipped is ${manifest.commit}; ${hostname()} holds ${head}`);
   const tree = exactTree(cwd);
   if (!tree || tree !== manifest.tree) blocked(`the tree shipped is ${manifest.tree}; ${hostname()} holds ${tree ?? 'none'}`);
-  // Through the machine's throttle: a status but 0 is a missing grant (its line says so above) or the command's failure.
-  const build = (...command) => spawnSync(process.execPath, ['scripts/throttle.mjs', 'build', '--wait', '30', '--', ...command], { cwd, stdio: 'inherit' }).status === 0;
+  // Through the machine's throttle, in line for as long as its build grants change hands, and out of it once none has
+  // for 30 minutes (#3334). Null when the command ran and passed; else the throttle's no-grant line, or false when the
+  // command failed or the throttle couldn't be used, as the lines above say.
+  const stall = process.env.DEEP_LANE_REMOTE_STALL_MIN ?? '30';
+  const build = (...command) => {
+    const ran = spawnSync(process.execPath, ['scripts/throttle.mjs', 'build', '--stall', stall, '--', ...command], { cwd, encoding: 'utf8', maxBuffer: 1 << 30, stdio: ['ignore', 'pipe', 'inherit'] });
+    process.stdout.write(ran.stdout ?? '');
+    if (ran.status === 0) return null;
+    return (ran.status === 3 && ran.stdout.match(/^INCONCLUSIVE no grant: .*$/gm)?.at(-1)) || false;
+  };
+  // No grant is no verdict of the tree: the lane's record says so, naming the holders, and nothing more runs.
+  const ungranted = (line) => {
+    rmSync(record(tree), { force: true });
+    writeRecord(lane.name, 'INCONCLUSIVE', tree, [], { findings: [{ state: 'INCONCLUSIVE', note: line }], bundle: manifest.bundle, recipe: manifest });
+    console.log(`RECORD ${record(tree)}`);
+    return EXIT.INCONCLUSIVE;
+  };
   // npm ci only when the lock's bytes changed since the last install here, as in a bay.
   const marker = join(cwd, git(['rev-parse', '--git-dir']).trim(), 'lane-remote-installed'), want = sha(readFileSync(join(cwd, 'package-lock.json')));
   if (!existsSync(join(cwd, 'node_modules')) || !existsSync(marker) || readFileSync(marker, 'utf8') !== want) {
-    if (!build('npm', 'ci')) blocked('npm ci got no build grant or failed, as the line above says, so the lane was not run');
+    const installed = build('npm', 'ci');
+    if (installed) return ungranted(installed);
+    if (installed === false) blocked('npm ci failed or the throttle could not be used, as the line above says, so the lane was not run');
     writeFileSync(marker, want);
   }
-  if (!build('npm', 'run', 'build', '--workspaces')) blocked("the packages' build got no build grant or failed, as the line above says, so the lane was not run");
+  const built = build('npm', 'run', 'build', '--workspaces');
+  if (built) return ungranted(built);
+  if (built === false) blocked("the packages' build failed or the throttle could not be used, as the line above says, so the lane was not run");
   // A record an earlier run of this tree left is not this run's.
   rmSync(record(tree), { force: true });
-  runLanes([lane], { cwd });
+  // The lane's own commands wait on the same stall (#3350).
+  runLanes([lane], { cwd, stall });
   if (!existsSync(record(tree))) blocked(`${lane.name} wrote no record of tree ${tree}`);
   const { state } = amend(record(tree), { bundle: manifest.bundle, recipe: manifest });
   console.log(`RECORD ${record(tree)}`);

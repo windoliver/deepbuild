@@ -1,0 +1,10 @@
+# The release's 18 packs checked in one deep-show canvas process ({"call":"packs"}), Spark, 2026-11-22 23:1x PST
+# 4670fcd16's binary against the same tree with the per-thread compile cache; runs alternated; load 156 to 162 (INCONCLUSIVE as wall times)
+4670fcd16      21.38 s wall, 16.07 s user, 0.54 s sys
+compile cache  15.26 s wall, 13.12 s user, 0.38 s sys
+4670fcd16      20.17 s wall, 16.29 s user, 0.46 s sys
+compile cache  13.62 s wall, 12.10 s user, 0.41 s sys
+# pack rows: identical
+
+# Each pack checked alone with the cache (user CPU includes ~0.2 s of core startup), load 175
+foley 5.56 s; process 3.54; separation 0.99; lanes 0.88; sense 0.65; modslib 0.49; interfaces 0.46; godot 0.22; art 0.21

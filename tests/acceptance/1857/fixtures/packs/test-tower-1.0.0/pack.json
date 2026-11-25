@@ -1,0 +1,18 @@
+{
+  "name": "tower",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of four recipes that each repeat 1,024 times: a block of floors of rooms of shelves of books.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "tower.block@1": "tower.block@1.json",
+    "tower.floor@1": "tower.floor@1.json",
+    "tower.room@1": "tower.room@1.json",
+    "tower.shelf@1": "tower.shelf@1.json"
+  }
+}

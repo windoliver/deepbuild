@@ -1,0 +1,139 @@
+{
+  "about": "Issue #3032's fixture for its fourth criterion (README: The fixtures): each of the four light names among the twenty, with the library's own value, ours, and the conversion between them, as familiar.point_light@1 states candela against lumens. `library` is the library's number: the word that carries it, the unit it is in, its default and what it means in the picture, with the lines of the reference at the pin that say so. `ours` is the field of our kind that holds it and its unit, with the design lines that say so. `conversion` is the arithmetic between the two. Each case writes the library's words (`params`) and states the library's value (`library`) and what the expanded item must hold (`ours`); judges.ts derives every `ours` again from `params` (CONVERSIONS) and the suite fails if a number here is not that derivation. `planted` is the wrong program the criterion names for that light, a recipe that copies the number as written: the inputs it takes and the params its one step writes, in place of the tree's recipe. A light with `same_number` has no such program: `copied` says why. Colors are left at the library's default, white, which is 1 in every channel in both color spaces, so no case rests on a color conversion. Nothing here says whether the tree maps a light or refuses it: the suite reads that from the tree's census, and holds only the lights it maps.",
+  "pin": "65c4864bb3bd4309257d41c6e54f4403dc57f255",
+  "units": "The library names its units where it has them: a point light's intensity is candela and its power lumens (src/lights/PointLight.js:25, 80-84), an area light's intensity is nits, cd/m², and its power lumens (src/lights/RectAreaLight.js:77-82). Its renderer adds every light's color × intensity into one irradiance and reflects it from a diffuse surface as irradiance × color ÷ π (src/renderers/shaders/ShaderChunk/lights_physical_pars_fragment.glsl.js:557, 618-622, 651; src/renderers/shaders/ShaderChunk/common.glsl.js:103-107), so where a point light's number is candela an irradiance is lux and a radiance cd/m². Ours: \"Light is in lumens for point, spot and area lights, lux for the sun\" (docs/canvas-primitives.md, Units and axes).",
+  "tolerance": {"relative": 1e-9, "absolute": 1e-12, "about": "Each number of `ours` against the expanded item's: within `relative` of the expected value, or within `absolute` where the expected value is 0."},
+  "lights": [
+    {
+      "name": "DirectionalLight",
+      "kind": "light.sun@1",
+      "library": {
+        "word": "intensity", "unit": "lx", "default": 1,
+        "means": "the illuminance on a surface that faces the light, the same at every distance",
+        "rests_on": [
+          "src/lights/DirectionalLight.js:40: constructor( color, intensity )",
+          "src/lights/Light.js:30: constructor( color, intensity = 1 )",
+          "src/renderers/webgl/WebGLLights.js:332: the light's uniform color is color × intensity",
+          "src/renderers/shaders/ShaderChunk/lights_pars_begin.glsl.js:108-114: that color is the incident light as it is, with no falloff",
+          "src/renderers/shaders/ShaderChunk/lights_physical_pars_fragment.glsl.js:557: irradiance = dotNL × that color"
+        ]
+      },
+      "ours": {
+        "fields": {"illuminance": "lx"},
+        "rests_on": ["docs/canvas-primitives.md, Units and axes: lux for the sun", "docs/canvas-primitives.md, Light and the light policy: `illuminance: lx = 10,000` (sun)"]
+      },
+      "conversion": "illuminance (lx) = intensity (lx): the same number",
+      "same_number": true,
+      "copied": "A recipe that copies this light's number as written is the right recipe: lux in, lux out. The suite can't tell the two apart and doesn't try. It holds the light to the number written and, unwritten, to the library's own default of 1 lx, where our light.sun@1's own default is 10,000 lx, so a recipe that drops the number fails. The planted program runs on the lights whose numbers differ.",
+      "cases": [
+        {"id": "sun_written", "params": {"intensity": 3}, "library": 3, "ours": {"illuminance": 3}},
+        {"id": "sun_unwritten", "params": {}, "library": 1, "ours": {"illuminance": 1}}
+      ]
+    },
+    {
+      "name": "AmbientLight",
+      "kind": "sky@1",
+      "library": {
+        "word": "intensity", "unit": "lx", "default": 1,
+        "means": "the illuminance every surface receives, whichever way it faces",
+        "rests_on": [
+          "src/lights/AmbientLight.js:23: constructor( color, intensity )",
+          "src/lights/Light.js:30: constructor( color, intensity = 1 )",
+          "src/renderers/webgl/WebGLLights.js:273-277: the ambient color is the sum of color × intensity",
+          "src/renderers/shaders/ShaderChunk/lights_pars_begin.glsl.js:48-54: the ambient irradiance is that color",
+          "src/renderers/shaders/ShaderChunk/lights_fragment_begin.glsl.js:226: it starts the irradiance a surface reflects diffusely",
+          "src/renderers/shaders/ShaderChunk/lights_physical_pars_fragment.glsl.js:651: reflected = irradiance × BRDF_Lambert( color )",
+          "src/renderers/shaders/ShaderChunk/common.glsl.js:103-107: BRDF_Lambert( color ) = color ÷ π"
+        ]
+      },
+      "ours": {
+        "fields": {"ambient_top": "cd/m²", "ambient_low": "cd/m²"},
+        "means": "the ambient light from above and from below as a radiance: a diffuse surface whose normal is n reflects its color × mix(ambient_low, ambient_top, n.y ÷ 2 + ½), so each is the surface's illuminance ÷ π",
+        "rests_on": [
+          "docs/canvas-primitives.md, Sky `sky@1`: `ambient_top, ambient_low: linear RGB`",
+          "crates/deep-scene3d-render/src/ambient.wgsl at the base: sky_at (\"The sky's ambient light along `d`, from below to above\"), ambient_irradiance2 (\"The ambient irradiance ÷ π facing `n`\") and sky_light's diffuse term, diffuse × sky_at(n)",
+          "crates/deep-canvas-scene3d/src/probe.rs at the base: \"The environment's radiance along unit `d`: from below to above\""
+        ]
+      },
+      "conversion": "ambient_top = ambient_low = color (linear) × intensity (lx) ÷ π, in cd/m²",
+      "same_number": false,
+      "planted": {
+        "inputs": {"intensity": {"type": "number", "default": 1, "min": 0, "about": "the library's number, as written"}},
+        "params": {"ambient_top": ["intensity", "intensity", "intensity"], "ambient_low": ["intensity", "intensity", "intensity"]}
+      },
+      "cases": [
+        {"id": "ambient_written", "params": {"intensity": 2}, "library": 2, "ours": {"ambient_top": [0.6366197723675814, 0.6366197723675814, 0.6366197723675814], "ambient_low": [0.6366197723675814, 0.6366197723675814, 0.6366197723675814]}},
+        {"id": "ambient_unwritten", "params": {}, "library": 1, "ours": {"ambient_top": [0.3183098861837907, 0.3183098861837907, 0.3183098861837907], "ambient_low": [0.3183098861837907, 0.3183098861837907, 0.3183098861837907]}}
+      ]
+    },
+    {
+      "name": "HemisphereLight",
+      "kind": "sky@1",
+      "library": {
+        "word": "intensity", "unit": "lx", "default": 1,
+        "means": "the illuminance a surface facing straight up receives from the sky color, and one facing straight down from the ground color; between them the two mix by n.y ÷ 2 + ½",
+        "rests_on": [
+          "src/lights/HemisphereLight.js:27: constructor( skyColor, groundColor, intensity ), each color white unless written (lines 23-24)",
+          "src/lights/HemisphereLight.js:42: its direction is the library's up, +Y (src/core/Object3D.js:1694)",
+          "src/lights/Light.js:30: constructor( color, intensity = 1 )",
+          "src/renderers/webgl/WebGLLights.js:460-461: its sky and ground colors are each color × intensity",
+          "src/renderers/shaders/ShaderChunk/lights_pars_begin.glsl.js:222-231: irradiance = mix( groundColor, skyColor, 0.5 × dot( normal, direction ) + 0.5 )",
+          "src/renderers/shaders/ShaderChunk/lights_fragment_begin.glsl.js:239: added to the irradiance a surface reflects diffusely",
+          "src/renderers/shaders/ShaderChunk/lights_physical_pars_fragment.glsl.js:651 and src/renderers/shaders/ShaderChunk/common.glsl.js:103-107: reflected = irradiance × color ÷ π"
+        ]
+      },
+      "ours": {
+        "fields": {"ambient_top": "cd/m²", "ambient_low": "cd/m²"},
+        "means": "as AmbientLight's: the same mix by n.y ÷ 2 + ½, of radiances",
+        "rests_on": ["as AmbientLight's"]
+      },
+      "conversion": "ambient_top = skyColor (linear) × intensity (lx) ÷ π and ambient_low = groundColor (linear) × intensity (lx) ÷ π, in cd/m²",
+      "same_number": false,
+      "planted": {
+        "inputs": {"intensity": {"type": "number", "default": 1, "min": 0, "about": "the library's number, as written"}},
+        "params": {"ambient_top": ["intensity", "intensity", "intensity"], "ambient_low": ["intensity", "intensity", "intensity"]}
+      },
+      "cases": [
+        {"id": "hemisphere_written", "params": {"intensity": 2}, "library": 2, "ours": {"ambient_top": [0.6366197723675814, 0.6366197723675814, 0.6366197723675814], "ambient_low": [0.6366197723675814, 0.6366197723675814, 0.6366197723675814]}},
+        {"id": "hemisphere_unwritten", "params": {}, "library": 1, "ours": {"ambient_top": [0.3183098861837907, 0.3183098861837907, 0.3183098861837907], "ambient_low": [0.3183098861837907, 0.3183098861837907, 0.3183098861837907]}}
+      ]
+    },
+    {
+      "name": "RectAreaLight",
+      "kind": "light.area@1",
+      "library": {
+        "word": "intensity", "unit": "cd/m²", "default": 1,
+        "means": "the luminance of its face, in nits; its face is width × height metres, 10 × 10 unwritten",
+        "rests_on": [
+          "src/lights/RectAreaLight.js:38: constructor( color, intensity, width = 10, height = 10 )",
+          "src/lights/Light.js:30: constructor( color, intensity = 1 )",
+          "src/lights/RectAreaLight.js:77-82: \"compute the light's luminous power (in lumens) from its intensity (in nits)\": power = intensity × width × height × π",
+          "src/renderers/shaders/ShaderChunk/lights_physical_pars_fragment.glsl.js:525: a diffuse surface reflects the light's color × intensity × its own color × the form factor of the rectangle, so the number is the face's radiance"
+        ]
+      },
+      "ours": {
+        "fields": {"power": "lm", "size": "m"},
+        "means": "the face's lumens, with its size in metres: its luminance is power ÷ (π × size[0] × size[1])",
+        "rests_on": [
+          "docs/canvas-primitives.md, Units and axes: lumens for point, spot and area lights",
+          "docs/canvas-primitives.md, Light and the light policy: `power: lm = 800` (point, spot, area); area `shape: rect | disk, size: [m, m] = [0.5, 0.5]`",
+          "crates/deep-canvas-scene3d/src/light.rs at the base: \"A one-sided Lambertian rect or disk, shining along its own −Z\""
+        ]
+      },
+      "conversion": "power (lm) = intensity (cd/m²) × width (m) × height (m) × π, with size = [width, height] in m and shape rect",
+      "same_number": false,
+      "planted": {
+        "inputs": {
+          "intensity": {"type": "number", "default": 1, "min": 0, "about": "the library's number, as written"},
+          "width": {"type": "number", "default": 10, "unit": "m", "min": 0.0001, "about": ""},
+          "height": {"type": "number", "default": 10, "unit": "m", "min": 0.0001, "about": ""}
+        },
+        "params": {"power": "intensity", "shape": "rect", "size": ["width", "height"]}
+      },
+      "cases": [
+        {"id": "area_written", "params": {"intensity": 2, "width": 3, "height": 0.5}, "library": 2, "ours": {"power": 9.42477796076938, "size": [3, 0.5]}},
+        {"id": "area_unwritten", "params": {}, "library": 1, "ours": {"power": 314.1592653589793, "size": [10, 10]}}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+307:                        // MUTANT: no actor or scope check
+test record::tests::a_live_ask_folds_only_where_the_core_folds_it ... FAILED
+thread 'record::tests::a_live_ask_folds_only_where_the_core_folds_it' (3057418) panicked at crates/deep-app/src/record.rs:1331:9:
+  left: (String("folded"), String("ask:x1"))
+ right: (String("queued"), Null)
+test result: FAILED. 117 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+error: test failed, to rerun pass `-p deep-app --lib`
+[exit 101]
