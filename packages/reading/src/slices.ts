@@ -4,7 +4,7 @@
 // claim on the wiki's pages. Every reply holds at most the cap of text, and a cut one says where to continue.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { openEvidenceStore } from '@deepbuild/evidence';
+import { openEvidenceStore, type EvidenceStore } from '@deepbuild/evidence';
 import { foldText, openRecordReader, parseClaimLine, type Message, type RecordReader } from '@deepbuild/record';
 
 /** Output is capped per call, at 8,192 characters by default. */
@@ -101,9 +101,9 @@ const envelope = (handle: string): number => JSON.stringify({ handle, covers: 'x
 const entryOf = (at: string, m: Message, start: number, end: number): NonNullable<Slice['messages']>[number] =>
   ({ at, role: (m.role || 'unknown').slice(0, 200), outside: m.outside, ...(m.tool !== undefined ? { tool: m.tool.slice(0, 200) } : {}), start, end });
 
-/** The slicer over a hub's root: its record at `<root>/ledger.db`, its evidence store and its wiki, read only. */
-export async function openSlicer(root: string): Promise<Slicer> {
-  const evidence = await openEvidenceStore({ root: join(root, 'evidence'), readOnly: true });
+/** The slicer over a hub's root: its record at `<root>/ledger.db`, its evidence store and its wiki, read only; the hub hands the store it holds open. */
+export async function openSlicer(root: string, held?: EvidenceStore): Promise<Slicer> {
+  const evidence = held ?? await openEvidenceStore({ root: join(root, 'evidence'), readOnly: true });
   const record: RecordReader = openRecordReader({ path: join(root, 'ledger.db'), evidence });
 
   async function transcript(handle: string, session: string): Promise<Message[]> {

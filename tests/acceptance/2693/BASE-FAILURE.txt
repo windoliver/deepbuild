@@ -1,0 +1,244 @@
+#2693 acceptance suite at the base 4aa543da7 (origin/main), macOS, Node 24, probe in release.
+Criteria 1-4 run file by file with: npx vitest run --root tests/acceptance/2693 --no-file-parallelism <file>
+Criterion 5 (unchanged.test.ts) not run at the base (README: The base run).
+Result: 7 tests, 6 failed at their assertions, 1 passed (seek-hash's first: the base keeps every checkpoint, so seeks equal playing; the planted ring_drops_start is its wrong program).
+
+==================== ring-bytes.test.ts
+load: 22:36  up 9 days, 15:38, 3 users, load averages: 33.70 83.45 64.75
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2693
+
+ ❯ ring-bytes.test.ts (1 test | 1 failed) 48570ms
+   ❯ #2693.08c5bf8c one hour of play holds at most 16 MiB of checkpoints (1)
+     × #2693.08c5bf8c one hour of play of a stepping document whose arrays total 64 KB holds at most 16 MiB of checkpoints, counted on the live heap 44770ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ring-bytes.test.ts > #2693.08c5bf8c one hour of play holds at most 16 MiB of checkpoints > #2693.08c5bf8c one hour of play of a stepping document whose arrays total 64 KB holds at most 16 MiB of checkpoints, counted on the live heap
+AssertionError: one hour of play holds 477632012 bytes (455.51 MiB) on the live heap beyond its first frame, about 7288 checkpoints of 65536 bytes; at most 16777216 bytes (16 MiB) may be checkpoints: expected 477632012 to be less than or equal to 16777216
+ ❯ ring-bytes.test.ts:20:252
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:36:23
+   Duration  48.80s (tests 100%)
+
+exit 1
+
+
+==================== seek-hash.test.ts
+load: 22:37  up 9 days, 15:39, 3 users, load averages: 18.26 67.68 60.34
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2693
+
+ ❯ seek-hash.test.ts (2 tests | 1 failed) 80446ms
+   ❯ #2693.5e136ab2 after the hour, 100 seeded seeks equal playing by full-state hash (2)
+     × #2693.5e136ab2 a planted ring that lets go of the checkpoint at the start fails on a seek into the first spacing, naming the time 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  seek-hash.test.ts > #2693.5e136ab2 after the hour, 100 seeded seeks equal playing by full-state hash > #2693.5e136ab2 a planted ring that lets go of the checkpoint at the start fails on a seek into the first spacing, naming the time
+AssertionError: the probe builds with its feature `ring`: Session::checkpoint_ring and the planted rings ring_drops_start and ring_newest_only (README: What the change adds): expected 'cargo build --release --offline --tar…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --release --offline --target-dir <repo>/target/acceptance-2693-probe/target --features ring failed:
++ error[E0599]: no method named `checkpoint_ring` found for reference `&deep_canvas::schedule::Session` in the current scope
++     |
++ 168 |     session.checkpoint_ring(s)
++     |             ^^^^^^^^^^^^^^^ method not found in `&deep_canvas::schedule::Session`
++ error[E0609]: no field `ring_drops_start` on type `deep_canvas::schedule::Planted`
++     |
++ 179 |         "ring_drops_start" => options.planted.ring_drops_start = true,
++     |                                               ^^^^^^^^^^^^^^^^ unknown field
++     |
++     = note: available fields are: `key_without_locale`, `key_without_reduced_motion`, `key_hashes`, `steps_by_name`, `key_without_params` ... and 6 others
++ error[E0609]: no field `ring_newest_only` on type `deep_canvas::schedule::Planted`
++     |
++ 180 |         "ring_newest_only" => options.planted.ring_newest_only = true,
++     |                                               ^^^^^^^^^^^^^^^^ unknown field
++     |
++     = note: available fields are: `key_without_locale`, `key_without_reduced_motion`, `key_hashes`, `steps_by_name`, `key_without_params` ... and 6 others
++ error: could not compile `acceptance-2693-probe` (bin "acceptance-2693-probe") due to 3 previous errors
+
+ ❯ Object.bin helpers.ts:103:33
+    101|         ? 'the probe builds with its feature `ring`: Session::checkpoi…
+    102|         : 'the probe builds against this checkout\'s deep-canvas';
+    103|       expect(entry.error, what).toBe('');
+       |                                 ^
+    104|       return entry.bin;
+    105|     },
+ ❯ seek-hash.test.ts:26:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  22:37:39
+   Duration  80.66s (tests 100%)
+
+exit 1
+
+
+==================== seek-steps.test.ts
+load: 22:37  up 9 days, 15:39, 3 users, load averages: 19.34 69.56 60.91
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2693
+
+ ❯ seek-steps.test.ts (2 tests | 2 failed) 1310ms
+   ❯ #2693.769d2c70 a seek steps forward at most one spacing's steps, and the spacing after an hour is in the reading (2)
+     × #2693.769d2c70 after one hour of play the reading names the spacing, and each of 100 seeded seeks steps forward at most one spacing's steps 8ms
+     × #2693.769d2c70 a planted ring that keeps only the newest checkpoint steps from it for every earlier seek and fails, naming the steps 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  seek-steps.test.ts > #2693.769d2c70 a seek steps forward at most one spacing's steps, and the spacing after an hour is in the reading > #2693.769d2c70 after one hour of play the reading names the spacing, and each of 100 seeded seeks steps forward at most one spacing's steps
+AssertionError: the probe builds with its feature `ring`: Session::checkpoint_ring and the planted rings ring_drops_start and ring_newest_only (README: What the change adds): expected 'cargo build --release --offline --tar…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --release --offline --target-dir <repo>/target/acceptance-2693-probe/target --features ring failed:
++ error[E0599]: no method named `checkpoint_ring` found for reference `&deep_canvas::schedule::Session` in the current scope
++     |
++ 168 |     session.checkpoint_ring(s)
++     |             ^^^^^^^^^^^^^^^ method not found in `&deep_canvas::schedule::Session`
++ error[E0609]: no field `ring_drops_start` on type `deep_canvas::schedule::Planted`
++     |
++ 179 |         "ring_drops_start" => options.planted.ring_drops_start = true,
++     |                                               ^^^^^^^^^^^^^^^^ unknown field
++     |
++     = note: available fields are: `key_without_locale`, `key_without_reduced_motion`, `key_hashes`, `steps_by_name`, `key_without_params` ... and 6 others
++ error[E0609]: no field `ring_newest_only` on type `deep_canvas::schedule::Planted`
++     |
++ 180 |         "ring_newest_only" => options.planted.ring_newest_only = true,
++     |                                               ^^^^^^^^^^^^^^^^ unknown field
++     |
++     = note: available fields are: `key_without_locale`, `key_without_reduced_motion`, `key_hashes`, `steps_by_name`, `key_without_params` ... and 6 others
++ error: could not compile `acceptance-2693-probe` (bin "acceptance-2693-probe") due to 3 previous errors
+
+ ❯ Object.bin helpers.ts:103:33
+    101|         ? 'the probe builds with its feature `ring`: Session::checkpoi…
+    102|         : 'the probe builds against this checkout\'s deep-canvas';
+    103|       expect(entry.error, what).toBe('');
+       |                                 ^
+    104|       return entry.bin;
+    105|     },
+ ❯ seek-steps.test.ts:15:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  seek-steps.test.ts > #2693.769d2c70 a seek steps forward at most one spacing's steps, and the spacing after an hour is in the reading > #2693.769d2c70 a planted ring that keeps only the newest checkpoint steps from it for every earlier seek and fails, naming the steps
+AssertionError: the probe builds with its feature `ring`: Session::checkpoint_ring and the planted rings ring_drops_start and ring_newest_only (README: What the change adds): expected 'cargo build --release --offline --tar…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --release --offline --target-dir <repo>/target/acceptance-2693-probe/target --features ring failed:
++ error[E0599]: no method named `checkpoint_ring` found for reference `&deep_canvas::schedule::Session` in the current scope
++     |
++ 168 |     session.checkpoint_ring(s)
++     |             ^^^^^^^^^^^^^^^ method not found in `&deep_canvas::schedule::Session`
++ error[E0609]: no field `ring_drops_start` on type `deep_canvas::schedule::Planted`
++     |
++ 179 |         "ring_drops_start" => options.planted.ring_drops_start = true,
++     |                                               ^^^^^^^^^^^^^^^^ unknown field
++     |
++     = note: available fields are: `key_without_locale`, `key_without_reduced_motion`, `key_hashes`, `steps_by_name`, `key_without_params` ... and 6 others
++ error[E0609]: no field `ring_newest_only` on type `deep_canvas::schedule::Planted`
++     |
++ 180 |         "ring_newest_only" => options.planted.ring_newest_only = true,
++     |                                               ^^^^^^^^^^^^^^^^ unknown field
++     |
++     = note: available fields are: `key_without_locale`, `key_without_reduced_motion`, `key_hashes`, `steps_by_name`, `key_without_params` ... and 6 others
++ error: could not compile `acceptance-2693-probe` (bin "acceptance-2693-probe") due to 3 previous errors
+
+ ❯ Object.bin helpers.ts:103:33
+    101|         ? 'the probe builds with its feature `ring`: Session::checkpoi…
+    102|         : 'the probe builds against this checkout\'s deep-canvas';
+    103|       expect(entry.error, what).toBe('');
+       |                                 ^
+    104|       return entry.bin;
+    105|     },
+ ❯ seek-steps.test.ts:35:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:37:28
+   Duration  1.54s (tests 94%, transform 3%, import 2%, worker 1%)
+
+exit 1
+
+
+==================== over-budget.test.ts
+load: 22:35  up 9 days, 15:37, 3 users, load averages: 48.07 91.04 66.66
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2693
+
+ ❯ over-budget.test.ts (2 tests | 2 failed) 4553ms
+   ❯ #2693.302a0e55 one checkpoint larger than the budget keeps the start and the newest, says so, and is never refused or unbounded (2)
+     × #2693.302a0e55 a document whose one checkpoint is larger than its budget is played, never refused, and holds no more than its start and newest checkpoints on the live heap 826ms
+     × #2693.302a0e55 the reading says the one checkpoint is over the budget and the ring holds the start and the newest, and seeks still equal playing 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  over-budget.test.ts > #2693.302a0e55 one checkpoint larger than the budget keeps the start and the newest, says so, and is never refused or unbounded > #2693.302a0e55 a document whose one checkpoint is larger than its budget is played, never refused, and holds no more than its start and newest checkpoints on the live heap
+AssertionError: a minute of play holds 7989292 bytes (7.62 MiB) beyond its first frame, about 122 checkpoints of 65536 bytes, against a budget of 16384; at most 262144 bytes (the start's and the newest checkpoints, the stepping arrays and slack): expected 7989292 to be less than or equal to 262144
+ ❯ over-budget.test.ts:21:331
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  over-budget.test.ts > #2693.302a0e55 one checkpoint larger than the budget keeps the start and the newest, says so, and is never refused or unbounded > #2693.302a0e55 the reading says the one checkpoint is over the budget and the ring holds the start and the newest, and seeks still equal playing
+AssertionError: the probe builds with its feature `ring`: Session::checkpoint_ring and the planted rings ring_drops_start and ring_newest_only (README: What the change adds): expected 'cargo build --release --offline --tar…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --release --offline --target-dir <repo>/target/acceptance-2693-probe/target --features ring failed:
++ error[E0599]: no method named `checkpoint_ring` found for reference `&deep_canvas::schedule::Session` in the current scope
++     |
++ 168 |     session.checkpoint_ring(s)
++     |             ^^^^^^^^^^^^^^^ method not found in `&deep_canvas::schedule::Session`
++ error[E0609]: no field `ring_drops_start` on type `deep_canvas::schedule::Planted`
++     |
++ 179 |         "ring_drops_start" => options.planted.ring_drops_start = true,
++     |                                               ^^^^^^^^^^^^^^^^ unknown field
++     |
++     = note: available fields are: `key_without_locale`, `key_without_reduced_motion`, `key_hashes`, `steps_by_name`, `key_without_params` ... and 6 others
++ error[E0609]: no field `ring_newest_only` on type `deep_canvas::schedule::Planted`
++     |
++ 180 |         "ring_newest_only" => options.planted.ring_newest_only = true,
++     |                                               ^^^^^^^^^^^^^^^^ unknown field
++     |
++     = note: available fields are: `key_without_locale`, `key_without_reduced_motion`, `key_hashes`, `steps_by_name`, `key_without_params` ... and 6 others
++ error: could not compile `acceptance-2693-probe` (bin "acceptance-2693-probe") due to 3 previous errors
+
+ ❯ Object.bin helpers.ts:103:33
+    101|         ? 'the probe builds with its feature `ring`: Session::checkpoi…
+    102|         : 'the probe builds against this checkout\'s deep-canvas';
+    103|       expect(entry.error, what).toBe('');
+       |                                 ^
+    104|       return entry.bin;
+    105|     },
+ ❯ over-budget.test.ts:25:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:35:53
+   Duration  4.79s (tests 98%, transform 1%)
+
+exit 1
+

@@ -1,0 +1,29 @@
+== head adaa0e19d08810370d6ba5bca9fa3563b41d1d2f
+
+===== tests/acceptance/1172/panel.test.ts  start 00:40:19 load { 41.47 63.04 48.07 } thermal 0 screen-lock flag 0 front app [Claude]
+
+ RUN  v5.0.5 ~/private/dbc-22pb
+
+ ✓ tests/acceptance/1172/panel.test.ts (1 test) 21351ms
+   ✓ #1172 a plug-in panel draws in the app (1)
+     ✓ AC4 a bound value past its freshness draws in the look's muted role with its age, and a fresh one neither, on the window's pixels 21227ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  00:40:20
+   Duration  21.51s (tests 100%)
+
+===== tests/acceptance/1172/panel.test.ts exit=0
+
+===== tests/acceptance/1460/cli.test.ts  start 00:40:42 load { 28.71 58.30 46.79 } thermal 0 screen-lock flag 0 front app [Claude]
+
+ RUN  v5.0.5 ~/private/dbc-22pb
+
+ ✓ tests/acceptance/1460/cli.test.ts (3 tests) 23420ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  00:40:42
+   Duration  23.55s (tests 100%)
+
+===== tests/acceptance/1460/cli.test.ts exit=0

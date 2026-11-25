@@ -1,0 +1,29 @@
+#231 Oracle lane: the suite at the base 5fcfb690b (5fcfb690ba6592ad567c303ecf67054dbcbdfc3c). Phase 2, November 23, 2026.
+
+hold.test.ts was NOT run at the base as a vitest file: it was asked for the machine's test grant four times
+(`node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/231-oracle
+--no-file-parallelism --testTimeout=3600000 hold.test.ts`, three times, then once with `--wait 20`), with
+DEEP_231_BIN_DIR naming the base's `deep-show-full`, and each time the answer was "INCONCLUSIVE no grant: no test grant
+came within <n> min". The machine's one-minute load stayed between 20 and 400 on 18 cores. What follows is from a
+probe of the same helpers against the same binary, run under a test grant as a plain node script (not vitest), and
+from the #231 suite's own runs.
+
+What the probe showed of this suite's fixtures and calls at the base:
+
+- `holdFilm` for each of the three kinds (a rect, a circle, a path), held 2 s at 10 fps: the base's check shows each
+  document, and `export` as H.264 with AAC delivers it: 20 frames, one distinct frame hash, `fidelity.frames` 20. So
+  10 frames a second is a rate the base takes, and the three kinds draw.
+- The base's exported reply holds `outcome`, `receipt`, `core` and `set_digest`, and no `work`.
+
+Expected at the base, by that reading:
+
+- AC1 #231.ceba88e3 (hold.test.ts, 1 test): fails at its first export, a rect held for 1 s, in helpers.ts `exported`:
+  "a rect held for 1 s: the reply's work (the export's work counters) is an object, got undefined". No hold of 2 s to
+  30 s is exported before that. The same assertion is the one the #231 suite's tests fail on at the base once they
+  read past `reused_frames` (tests/acceptance/231/BASE-FAILURE.txt).
+
+No test of this suite passes at the base. The suite type-checks (`tsc -p tests/acceptance/231-oracle/tsconfig.json`
+exits 0), and its judge's own proof passes (judges.ts `proveJudges`: a 30 s hold that costs what a 1 s hold does
+passes; one drawn every frame fails as "held 30 s, 30.00x the draws of 1 s: 10 → 300").
+
+Changed in this suite in phase 2: nothing but this file. lane.json and README.md were written at the end of phase 1.

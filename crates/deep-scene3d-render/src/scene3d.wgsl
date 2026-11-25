@@ -128,7 +128,8 @@ struct Local {
     pos: vec4<f32>,
     // Its near plane, its first layer, tan of half a map's field, and 1 for a cube.
     info: vec4<f32>,
-    // The light's radius in m, and the share of its shadow the policy keeps.
+    // The light's radius in m, the share of its shadow the policy keeps, and a tile's side
+    // with its planted bit (tiles.wgsl; 0 for a map in layers).
     size: vec4<f32>,
 };
 
@@ -154,11 +155,12 @@ struct Lights {
     // x: tan of half the key sun's angle; y: 1 with a contact shadow; z: 1 when a sample index
     // turns the disk, w its angle in radians (under samples per frame).
     key: vec4<f32>,
-    // Each local map's side in texels in x.
+    // Each local map's side in texels in x; under tiles, the side that sizes their filter in x
+    // and the atlas's in y (#2034).
     local_size: vec4<f32>,
     // x: 1 with a light grid; y and z: its far and near planes.
     grid: vec4<f32>,
-    locals: array<Local, 12>,
+    locals: array<Local, 32>,
     items: array<Light, 32>,
     // Each shaded light's x: the policy's weight near the cut (in its color too); y: a hash of
     // its ID (u32 bits), for a light response (#485).
@@ -222,6 +224,12 @@ struct Env {
     sun_color: vec4<f32>,
     // The linear fog curve's near and far (m); z: what the background draws, as a scale (#1992).
     range: vec4<f32>,
+    // #3034: a frame under water. x: the water's surface at rest (m); y: 1 ÷ the absorption's
+    // depth (1/m); z: 0 in any other frame, 1 where a ray is in the water up to the surface, 2 in
+    // the view the water's mirror draws, where all of it is.
+    under: vec4<f32>,
+    // The color deep water takes; w: 1 for the planted tint by the depth below the surface.
+    under_color: vec4<f32>,
 };
 
 @group(1) @binding(3) var env_cube: texture_cube<f32>;
@@ -1713,6 +1721,9 @@ fn cascade_pcss(i: u32, p: vec3<f32>, n: vec3<f32>, t: Tap, size: f32, px: vec2<
 // its radius sizes, its taps read wherever each lands, so a disk crosses a cube's faces; the
 // tent without soft shadows.
 fn local_lit(l: Local, world: vec3<f32>, n: vec3<f32>, px: vec2<f32>) -> f32 {
+    if l.size.z > 0.5 {
+        return tile_lit(l, world, n, px);
+    }
     let to = world - l.pos.xyz;
     let dist = max(length(to), 1e-4);
     let ray = to / dist;
@@ -3036,67 +3047,5 @@ fn line_fs(in: LineOut) -> Targets {
         c = fogged(c, mix(in.wa.xyz, in.wb.xyz, s));
     }
     return targets(vec4<f32>(c * alpha, alpha), select(0u, in.pick, cov >= 0.5));
-}
-
-// ---- points: a disc, square or diamond in px or m about the point's projection
-
-struct PointOut {
-    @builtin(position) pos: vec4<f32>,
-    @location(0) @interpolate(flat) c: vec2<f32>,
-    @location(1) @interpolate(flat) r: f32,
-    @location(2) @interpolate(flat) color: u32,
-    @location(3) @interpolate(flat) pick: u32,
-    @location(4) @interpolate(flat) shape: u32,
-    // Where it is in the world; w 1 when the sky's fog applies to it (#1992).
-    @location(5) @interpolate(flat) world: vec4<f32>,
-};
-
-@vertex
-fn point_vs(
-    @builtin(vertex_index) vi: u32,
-    @location(0) p: vec4<f32>,
-    @location(1) color: u32,
-    @location(2) pick: u32,
-    @location(3) flags: u32,
-) -> PointOut {
-    var out: PointOut;
-    let c = frame.clip * vec4<f32>(p.xyz, 1.0);
-    out.color = color;
-    out.pick = pick;
-    out.shape = (flags >> 1u) & 3u;
-    out.world = vec4<f32>(p.xyz, f32((flags >> 3u) & 1u));
-    if c.w <= 0.0 {
-        out.pos = OFF;
-        return out;
-    }
-    var size = p.w * frame.px.x;
-    if (flags & 1u) != 0u {
-        size = p.w * px_per_m(c);
-    }
-    out.c = to_px(c);
-    out.r = size * 0.5;
-    let k = corner(vi) * 2.0 - 1.0;
-    out.pos = from_px(out.c + k * (out.r + 1.0), c);
-    return out;
-}
-
-@fragment
-fn point_fs(in: PointOut) -> Targets {
-    let q = in.pos.xy - in.c;
-    var dist = length(q);
-    if in.shape == 1u {
-        dist = max(abs(q.x), abs(q.y));
-    } else if in.shape == 2u {
-        dist = (abs(q.x) + abs(q.y)) * 0.70710678;
-    }
-    let cov = clamp(in.r + 0.5 - dist, 0.0, 1.0);
-    if cov <= 0.0 {
-        discard;
-    }
-    var c = paint(in.color);
-    if in.world.w > 0.5 {
-        c = fogged(c, in.world.xyz);
-    }
-    return targets(vec4<f32>(c * cov, cov), select(0u, in.pick, cov >= 0.5));
 }
 

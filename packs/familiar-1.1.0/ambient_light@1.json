@@ -1,0 +1,51 @@
+{
+  "id": "familiar.ambient_light",
+  "version": "1.0",
+  "title": "Ambient light",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's AmbientLight: an irradiance in lux on every surface, as sky@1's ambient light from above and below, the radiance a white surface reflects (color × intensity ÷ π). A document draws its first sky@1 alone, so one of these words a document.",
+  "inputs": {
+    "color": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "intensity": {
+      "type": "number",
+      "default": 1,
+      "unit": "lx",
+      "min": 0,
+      "about": "the irradiance every surface takes, whatever it faces"
+    }
+  },
+  "let": {
+    "e0": "(floor(color / 65536) % 256) / 255",
+    "l0": "e0 <= 0.04045 ? e0 / 12.92 : pow((e0 + 0.055) / 1.055, 2.4)",
+    "e1": "(floor(color / 256) % 256) / 255",
+    "l1": "e1 <= 0.04045 ? e1 / 12.92 : pow((e1 + 0.055) / 1.055, 2.4)",
+    "e2": "(color % 256) / 255",
+    "l2": "e2 <= 0.04045 ? e2 / 12.92 : pow((e2 + 0.055) / 1.055, 2.4)",
+    "k": "intensity / pi"
+  },
+  "steps": {
+    "sky": {
+      "op": "item",
+      "kind": "sky@1",
+      "params": {
+        "ambient_top": [
+          "l0 * k",
+          "l1 * k",
+          "l2 * k"
+        ],
+        "ambient_low": [
+          "l0 * k",
+          "l1 * k",
+          "l2 * k"
+        ]
+      }
+    }
+  }
+}
