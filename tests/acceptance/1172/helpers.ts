@@ -619,8 +619,8 @@ export async function shellFailuresCard(world: World, app: App, want: { rows: re
 // ---- An answered ask: its list row kept drawn answered, and its page saying what became of it (REDRAFT.md, Seventh
 // redraft). Added beside the judges above, which stay as they were.
 
-/** The state word "Answered" (#1807), not negated: "Not Answered", "not yet answered", "isn't answered", "unanswered" don't read. */
-const ANSWERED_WORD = /(?<!(?:\b(?:[Nn]ot|[Yy]et|[Bb]e|[Nn]ever)|n't)\s+)\bAnswered\b/;
+/** The word "answered" in any case (#1461 "drawn answered" gives none), not negated: "Not answered", "not yet answered", "isn't answered", "unanswered" don't read. */
+const ANSWERED_WORD = /(?<!(?:\b(?:not|yet|be|never)|n't)\s+)\banswered\b/i;
 const center = (n: Node): number => (n.frame[0] ?? 0) + (n.frame[2] ?? 0) / 2;
 
 /**

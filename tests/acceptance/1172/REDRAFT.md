@@ -7,6 +7,7 @@ Fourth redraft (2026-11-23), of the third at 0560a1718, for a dispute from a Mac
 Fifth redraft (2026-11-24), of the fourth at c6bdfac2f, for a review's dispute that AC5's after-reading could see nothing (below, Fifth redraft).
 Sixth redraft (2026-11-25), of the fifth at 766efa508, for a dispute from a Mac run on AC2's answered row (below, Sixth redraft).
 Seventh redraft (2026-11-25), of the sixth at 3e7cd3fea, for a review's dispute that a right page fails the sixth (below, Seventh redraft).
+Eighth redraft (2026-11-25), of the seventh at 78c912ece, for a review's dispute on the word's case (below, Eighth redraft).
 
 ## Why
 
@@ -434,3 +435,39 @@ session row (can't tell list from page).
 
 `npx vitest run --root tests/acceptance/1172 judges`: 1 file, 46 passed (28 from before the sixth, 18 new). `npx tsc -p
 tests/acceptance/1172/tsconfig.json --noEmit`: clean. `shell.test.ts` AC2 was not run (it needs the Mac).
+
+## Eighth redraft (2026-11-25)
+
+Redrafted blind on 78c912ece from the same sources; no implementation code and no PR was read.
+
+### The dispute
+
+A review of the seventh: `ANSWERED_WORD` matched only a capital `Answered`. The capital in the Mac capture is the page's
+receipt sentence (`Answered "Blue header" at 12:12 …`); the disputing party says the kept list row's state word is lower
+case, `answered`. A right row would read as still open, the timing loop would never stop, and AC2 would fail.
+
+### Ruling
+
+Upheld. #1461, the governing source, says only "drawn answered" and gives no case; #1807, which spells "Answered", is
+open and names the receipt, not a fixed spelling. So the case was the seventh's own addition, unsupported.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `ANSWERED_WORD` matches `answered` in any case; the negation guard stays (`not`, `n't`, `yet`, `be`, `never`, then any spaces, any case), and `unanswered` still has no word start | #1461 "drawn answered" |
+| `judges.test.ts`: a control, a list row whose state word is a lower-case `answered` beside the page's closed card, on the tree and on the pixels; the wrong-word cases add `unanswered`, `not yet answered`, `isn't answered`, `to be answered` in lower case; the pixel case also fails `unanswered` and `not yet answered` | AGENTS.md, Proof |
+
+Every other expectation and wrong program of the seventh stands.
+
+### Still not settled
+
+1. As the seventh, items 1 to 4.
+2. **A flat row.** If a row's question and its state word were sibling nodes directly under the list, the climb for the
+   word stops at the list (it holds other asks' questions) and the row reads as open. The probe's rows are `AXButton`s
+   holding both (fourth redraft), and no source lays a row out flat, so this was left.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 51 passed (46 before, 5 new). `npx tsc -p tests/acceptance/1172/tsconfig.json
+--noEmit`: clean. `shell.test.ts` AC2 was not run (it needs the Mac).

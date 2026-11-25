@@ -158,6 +158,11 @@ describe('#1172 (judges) an answered ask: its list row drawn answered and its pa
   it('control: the list row kept drawn answered and the page\'s closed card saying it was answered pass (the review\'s right program)', () => {
     expect(judge(win(list(row(first, 'Answered'), row(second), row(third)), receipt(first)))).toBe('');
   });
+  it('control: a list row whose state word is a lower-case "answered", beside the page\'s closed card, passes (eighth redraft)', () => {
+    expect(judge(win(list(row(first, 'answered'), row(second), row(third)), receipt(first)))).toBe('');
+    const read = lines(['• Which header co... answered', 10], ['Which header colour on the login page? Answered "Blue header" at 12:12 from deep inbox. Nothing is left to answe…', 700]);
+    expect(answeredListLineFailures(read, first, 520)).toEqual([]);
+  });
   it('control: the page alone saying it was answered, the row gone, passes; so does nothing at all', () => {
     expect(judge(win(list(row(second), row(third)), receipt(first)))).toBe('');
     expect(judge(win(list(row(second), row(third)), card(second)))).toBe('');
@@ -174,7 +179,7 @@ describe('#1172 (judges) an answered ask: its list row drawn answered and its pa
   it('wrong program: the page still showing the question with no word of the answer fails, naming the page', () => {
     expect(judge(win(list(row(second), row(third)), receipt(first, 'Pick one')))).toMatch(/still reads as open in the page/);
   });
-  it.each([['Unanswered'], ['Not answered'], ['Not  Answered'], ['not yet Answered'], ["isn't Answered"], ['to be Answered'], ['never Answered']])('wrong program: a list row reading "%s" still reads as open', (word) => {
+  it.each([['Unanswered'], ['unanswered'], ['Not answered'], ['Not  Answered'], ['not yet answered'], ['not yet Answered'], ["isn't answered"], ['to be answered'], ['never Answered']])('wrong program: a list row reading "%s" still reads as open', (word) => {
     expect(judge(win(list(row(first, word), row(second), row(third))))).toMatch(/still reads as open in the list/);
   });
   it('blocked, never a pass: with no session row the list can\'t be told from the page', () => {
@@ -188,8 +193,8 @@ describe('#1172 (judges) an answered ask: its list row drawn answered and its pa
     const read = lines(['• Which header co... How it looks', 10], ['Which header colour on the login page? Answered "Blue header"', 700]);
     expect(answeredListLineFailures(read, first, 520).join('\n')).toMatch(/still draw answered ask:01's row as open/);
   });
-  it('wrong program: on the pixels, a list line reading "Not answered" fails', () => {
-    expect(answeredListLineFailures(lines(['Which header co… Not answered', 10]), first, 520).join('\n')).toMatch(/still draw answered ask:01's row as open/);
+  it.each([['Not answered'], ['unanswered'], ['not yet answered']])('wrong program: on the pixels, a list line reading "%s" fails', (word) => {
+    expect(answeredListLineFailures(lines([`Which header co… ${word}`, 10]), first, 520).join('\n')).toMatch(/still draw answered ask:01's row as open/);
   });
   it('wrong program: on the pixels, two list lines drawing the answered row fail', () => {
     expect(answeredListLineFailures(lines(['Which header co… Answered', 10], ['Which header co… Answered', 10]), first, 520).join('\n')).toMatch(/on 2 lines/);
