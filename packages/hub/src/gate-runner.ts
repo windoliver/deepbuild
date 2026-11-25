@@ -174,6 +174,8 @@ interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: Held
 /** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
 interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
 export interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
+/** The least time a read of what a claim changed is given (#1869). */
+const READ_FLOOR_MS = 5_000;
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
 /** A base run that ended as a run: what a fix is proven by, on its key as on its claim. */
@@ -623,11 +625,14 @@ export class GateRunner {
       checks: [...c.entries.values()].map((e) => {
         const { base, why } = this.baseOf(e) ?? {};
         if (why) whys.push(`${e.check.check} ${why}`);
-        const mine = e.check.source === 'own' ? [] : this.ownChanged(c, e);
+        // What the claim changed unread (#1869): any approved check may be its own, so every one counts as the agent's.
+        const unread = e.check.source === 'own' || e.check.check === DEFINITION ? undefined : c.changes?.unread;
+        const mine = e.check.source === 'own' || unread ? [] : this.ownChanged(c, e);
         const { runs, needed } = this.unspent(c, e, this.runsOf(c, e, carried), spent);
+        if (unread) owns.push(`${e.check.check} counts as the agent's own: what the claim changed couldn't be read (${unread})`);
         if (mine.length) owns.push(`${e.check.check} counts as the agent's own: the claim changed ${mine.join(', ')}, which it loads`);
         return {
-          check: e.check.check, command: e.check.command, source: mine.length ? 'own' as const : e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
+          check: e.check.check, command: e.check.command, source: mine.length || unread ? 'own' as const : e.check.source ?? 'definition' as const, covers: [...e.check.covers], depth: e.check.depth,
           ...(needed !== undefined ? { needed } : {}), ...(e.check.min_tests !== undefined ? { min_tests: e.check.min_tests } : {}),
           runs,
           ...(base ? { base } : {}),
@@ -744,8 +749,10 @@ export class GateRunner {
     // readings of the programs its checks' commands name, each taken once when first asked for (#2060).
     const repo = this.repoOf(r.cwd);
     let installs: Promise<string> | undefined;
-    // Read beside the snapshot, from the same worktree: whose checks count turns on what the claim changed (#33).
-    const changes = changesOf(r.cwd, r.base);
+    // Read beside the snapshot, from the same worktree: whose checks count turns on what the claim changed (#33). It
+    // ends by half the hold that is left, so the claim still gets its verdict inside the hold (#1869), and a hold all
+    // but over still leaves git READ_FLOOR_MS to answer.
+    const changes = changesOf(r.cwd, r.base, Math.max(READ_FLOOR_MS, (r.stopAt + this.o.hold_ms - this.o.now()) / 2));
     let snapshot = r.base;
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
     let tree: string | undefined;
