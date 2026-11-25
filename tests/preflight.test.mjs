@@ -157,6 +157,8 @@ test('hung checks are stopped at the budget with its margin, their children too'
   t.after(() => { for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL'); });
   const result = spawnSync(process.execPath, [join(cwd, 'scripts/preflight.mjs')], { encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL' });
   if (existsSync(file)) pids = JSON.parse(readFileSync(file, 'utf8'));
+  // deadline: a stopped process stays a zombie until its new parent reaps it; 10 s bounds that, never a wait for it.
+  for (const by = Date.now() + 10_000; pids.some(alive) && Date.now() < by;) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
   assert.equal(result.error, undefined, `preflight never ended: ${result.stdout}`);
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /FAIL preflight budget: the checks ran past 6\.00 s, the budget with its margin, and were stopped\n\s+Fix: .+/);
@@ -201,7 +203,9 @@ test('a Ctrl-C to preflight stops the measured checks and their children', async
   assert.equal(await Promise.race([hung.then(() => 'hung'), exited.then(() => 'exited'), late.then(() => 'late')]), 'hung', stdout);
   pids = JSON.parse(readFileSync(join(cwd, 'pids'), 'utf8'));
   process.kill(-child.pid, 'SIGINT');
-  await exited;
+  // deadline: preflight's stop takes at most 25 s; a preflight that ignores the Ctrl-C fails here instead.
+  const stuck = new Promise((next) => setTimeout(next, 60_000).unref());
+  assert.equal(await Promise.race([exited.then(() => 'exited'), stuck.then(() => 'stuck')]), 'exited', `preflight outlived its Ctrl-C:\n${stdout}`);
   // deadline: a stopped process stays a zombie until its new parent reaps it; 10 s bounds that, never a wait for it.
   for (const by = Date.now() + 10_000; pids.some(alive) && Date.now() < by;) await new Promise((next) => setTimeout(next, 100));
   assert.deepEqual(pids.filter(alive), [], `the checks or their child outlived preflight's stop:\n${stdout}`);
