@@ -1,0 +1,567 @@
+{
+ "date": "2026-11-23T09:44:10.866Z",
+ "machine": {
+  "model": "Mac17,10",
+  "chip": "Apple M5 Max",
+  "cpus": 18,
+  "memory_gb": 64,
+  "os": "Darwin 27.2.0 (macOS 27.2)",
+  "node": "v24.22.0",
+  "canvas_core": "target/debug/deep-show",
+  "commit": "dfe3ebe3ac594e5ac7c32865cf9b0f8bf85865f1"
+ },
+ "load": {
+  "start": [
+   383.74,
+   210.62,
+   121.99
+  ],
+  "end": [
+   399.22,
+   219.66,
+   126.23
+  ]
+ },
+ "calls": [
+  {
+   "session": "f443d306-e26b-43d7-88e8-94829b952d15",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000009",
+   "arrivedMs": 1795427055900.7195,
+   "startedMs": 1795427056103.3667,
+   "repliedMs": 1795427056113.1843,
+   "outcome": "presented",
+   "code": null,
+   "held": 1,
+   "parts": {
+    "hub": 44.361572265625,
+    "behind": 5.030517578125,
+    "world": 151.9287109375
+   },
+   "sentMs": 1795427055771.6042,
+   "answeredMs": 1795427056114.622
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795427055954.4224,
+   "startedMs": 1795427056113.5793,
+   "repliedMs": 1795427056122.0095,
+   "outcome": "presented",
+   "code": null,
+   "held": 2,
+   "parts": {
+    "hub": 3.843505859375,
+    "behind": 155.3134765625,
+    "world": 0
+   },
+   "sentMs": 1795427055771.451,
+   "answeredMs": 1795427056126.368
+  },
+  {
+   "session": "1e37da0f-5918-47cb-894d-cfaf07f70d5f",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000015",
+   "arrivedMs": 1795427055962.4907,
+   "startedMs": 1795427056124.7039,
+   "repliedMs": 1795427056136.9465,
+   "outcome": "presented",
+   "code": null,
+   "held": 3,
+   "parts": {
+    "hub": 16.822509765625,
+    "behind": 145.390625,
+    "world": 0
+   },
+   "sentMs": 1795427055771.6472,
+   "answeredMs": 1795427056142.16
+  },
+  {
+   "session": "53403b46-1f5e-449e-8dca-0a963f52f044",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000003",
+   "arrivedMs": 1795427055963.681,
+   "startedMs": 1795427056140.586,
+   "repliedMs": 1795427056178.059,
+   "outcome": "presented",
+   "code": null,
+   "held": 4,
+   "parts": {
+    "hub": 20.50341796875,
+    "behind": 156.401611328125,
+    "world": 0
+   },
+   "sentMs": 1795427055771.553,
+   "answeredMs": 1795427056179.2947
+  },
+  {
+   "session": "1ff8f18a-e78d-4bec-8e52-c388bc2453a2",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000011",
+   "arrivedMs": 1795427055964.035,
+   "startedMs": 1795427056178.3655,
+   "repliedMs": 1795427056201.189,
+   "outcome": "presented",
+   "code": null,
+   "held": 5,
+   "parts": {
+    "hub": 23.696533203125,
+    "behind": 190.634033203125,
+    "world": 0
+   },
+   "sentMs": 1795427055771.6172,
+   "answeredMs": 1795427056204.6714
+  },
+  {
+   "session": "ab594d3f-d5b4-45d1-8615-fe4f261c9f84",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000013",
+   "arrivedMs": 1795427055964.1968,
+   "startedMs": 1795427056203.7485,
+   "repliedMs": 1795427056247.2935,
+   "outcome": "presented",
+   "code": null,
+   "held": 6,
+   "parts": {
+    "hub": 24.69580078125,
+    "behind": 214.85595703125,
+    "world": 0
+   },
+   "sentMs": 1795427055771.6294,
+   "answeredMs": 1795427056253.2197
+  },
+  {
+   "session": "3da37e12-5c1c-429f-8371-0b908b2ddd5f",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000005",
+   "arrivedMs": 1795427055967.691,
+   "startedMs": 1795427056250.4011,
+   "repliedMs": 1795427056275.133,
+   "outcome": "presented",
+   "code": null,
+   "held": 7,
+   "parts": {
+    "hub": 25.416259765625,
+    "behind": 257.2939453125,
+    "world": 0
+   },
+   "sentMs": 1795427055771.5737,
+   "answeredMs": 1795427056281.1392
+  },
+  {
+   "session": "d7263625-fd6e-43bb-84fd-acc928fc4eaa",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000023",
+   "arrivedMs": 1795427055968.1665,
+   "startedMs": 1795427056276.9868,
+   "repliedMs": 1795427056309.9814,
+   "outcome": "presented",
+   "code": null,
+   "held": 8,
+   "parts": {
+    "hub": 30.626220703125,
+    "behind": 278.194091796875,
+    "world": 0
+   },
+   "sentMs": 1795427055771.7234,
+   "answeredMs": 1795427056312.32
+  },
+  {
+   "session": "75b809c2-89ca-442b-87a9-7474926c6a03",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000007",
+   "arrivedMs": 1795427055968.2896,
+   "startedMs": 1795427056310.8982,
+   "repliedMs": 1795427056361.62,
+   "outcome": "presented",
+   "code": null,
+   "held": 9,
+   "parts": {
+    "hub": 30.679931640625,
+    "behind": 311.9287109375,
+    "world": 0
+   },
+   "sentMs": 1795427055771.5872,
+   "answeredMs": 1795427056362.8596
+  },
+  {
+   "session": "64572a71-8bc9-40ac-8d4f-8d7abe5406bd",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000017",
+   "arrivedMs": 1795427055968.3667,
+   "startedMs": 1795427056361.953,
+   "repliedMs": 1795427056417.8235,
+   "outcome": "presented",
+   "code": null,
+   "held": 10,
+   "parts": {
+    "hub": 30.690185546875,
+    "behind": 362.89599609375,
+    "world": 0
+   },
+   "sentMs": 1795427055771.6604,
+   "answeredMs": 1795427056422.4392
+  },
+  {
+   "session": "463ccfea-bb9c-4dce-8ce7-ffc7db059c52",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000029",
+   "arrivedMs": 1795427055968.4534,
+   "startedMs": 1795427056421.455,
+   "repliedMs": 1795427056490.1497,
+   "outcome": "presented",
+   "code": null,
+   "held": 11,
+   "parts": {
+    "hub": 30.655029296875,
+    "behind": 422.3466796875,
+    "world": 0
+   },
+   "sentMs": 1795427055771.7583,
+   "answeredMs": 1795427056491.2717
+  },
+  {
+   "session": "d4fadf44-3d5a-4f1c-8983-9b89ddd7983f",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000025",
+   "arrivedMs": 1795427056017.2124,
+   "startedMs": 1795427056490.5254,
+   "repliedMs": 1795427056556.3186,
+   "outcome": "presented",
+   "code": null,
+   "held": 12,
+   "parts": {
+    "hub": 2.656494140625,
+    "behind": 470.656494140625,
+    "world": 0
+   },
+   "sentMs": 1795427055771.7373,
+   "answeredMs": 1795427056557.4746
+  },
+  {
+   "session": "32101912-5538-4d84-8c98-54fc5ecf663e",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000021",
+   "arrivedMs": 1795427056019.935,
+   "startedMs": 1795427056556.5847,
+   "repliedMs": 1795427056608.8586,
+   "outcome": "presented",
+   "code": null,
+   "held": 13,
+   "parts": {
+    "hub": 0.861083984375,
+    "behind": 535.78857421875,
+    "world": 0
+   },
+   "sentMs": 1795427055771.712,
+   "answeredMs": 1795427056610.0637
+  },
+  {
+   "session": "f9e8a85f-2fc7-419a-8834-52b38983f179",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000027",
+   "arrivedMs": 1795427056020.8433,
+   "startedMs": 1795427056609.1038,
+   "repliedMs": 1795427056662.572,
+   "outcome": "presented",
+   "code": null,
+   "held": 14,
+   "parts": {
+    "hub": 0.877685546875,
+    "behind": 587.3828125,
+    "world": 0
+   },
+   "sentMs": 1795427055771.7478,
+   "answeredMs": 1795427056664.0457
+  },
+  {
+   "session": "258368d0-ae0b-40f6-825b-d75ea1449939",
+   "kind": "revision",
+   "doc": "01JC3200000000000000000019",
+   "arrivedMs": 1795427056022.527,
+   "startedMs": 1795427056663.2659,
+   "repliedMs": 1795427056745.682,
+   "outcome": "presented",
+   "code": null,
+   "held": 15,
+   "parts": {
+    "hub": 9.065185546875,
+    "behind": 631.673583984375,
+    "world": 0
+   },
+   "sentMs": 1795427055771.6824,
+   "answeredMs": 1795427056746.7905
+  },
+  {
+   "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000001",
+   "arrivedMs": 1795427056748.892,
+   "startedMs": 1795427056749.3823,
+   "repliedMs": 1795427056837.5823,
+   "outcome": "applied",
+   "code": null,
+   "held": 16,
+   "parts": {
+    "hub": 0.372802734375,
+    "behind": 0.117431640625,
+    "world": 0
+   },
+   "sentMs": 1795427056746.8335,
+   "answeredMs": 1795427056839.9531
+  },
+  {
+   "session": "53403b46-1f5e-449e-8dca-0a963f52f044",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000003",
+   "arrivedMs": 1795427056749.486,
+   "startedMs": 1795427056838.6863,
+   "repliedMs": 1795427056895.1763,
+   "outcome": "applied",
+   "code": null,
+   "held": 17,
+   "parts": {
+    "hub": 0.549072265625,
+    "behind": 88.651123046875,
+    "world": 0
+   },
+   "sentMs": 1795427056746.924,
+   "answeredMs": 1795427056898.0593
+  },
+  {
+   "session": "3da37e12-5c1c-429f-8371-0b908b2ddd5f",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000005",
+   "arrivedMs": 1795427056750.132,
+   "startedMs": 1795427056897.3254,
+   "repliedMs": 1795427056973.18,
+   "outcome": "applied",
+   "code": null,
+   "held": 18,
+   "parts": {
+    "hub": 0.182373046875,
+    "behind": 147.010986328125,
+    "world": 0
+   },
+   "sentMs": 1795427056746.943,
+   "answeredMs": 1795427056974.4111
+  },
+  {
+   "session": "f443d306-e26b-43d7-88e8-94829b952d15",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000009",
+   "arrivedMs": 1795427056750.3672,
+   "startedMs": 1795427056973.6257,
+   "repliedMs": 1795427057082.154,
+   "outcome": "applied",
+   "code": null,
+   "held": 19,
+   "parts": {
+    "hub": 3.039794921875,
+    "behind": 220.21875,
+    "world": 0
+   },
+   "sentMs": 1795427056746.9692,
+   "answeredMs": 1795427057084.8833
+  },
+  {
+   "session": "75b809c2-89ca-442b-87a9-7474926c6a03",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000007",
+   "arrivedMs": 1795427056753.5552,
+   "startedMs": 1795427057084.0063,
+   "repliedMs": 1795427057141.4204,
+   "outcome": "applied",
+   "code": null,
+   "held": 20,
+   "parts": {
+    "hub": 0.45947265625,
+    "behind": 329.99169921875,
+    "world": 0
+   },
+   "sentMs": 1795427056746.957,
+   "answeredMs": 1795427057143.7104
+  },
+  {
+   "session": "1ff8f18a-e78d-4bec-8e52-c388bc2453a2",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000011",
+   "arrivedMs": 1795427056754.2092,
+   "startedMs": 1795427057142.5396,
+   "repliedMs": 1795427057224.5237,
+   "outcome": "applied",
+   "code": null,
+   "held": 21,
+   "parts": {
+    "hub": 0.247314453125,
+    "behind": 388.0830078125,
+    "world": 0
+   },
+   "sentMs": 1795427056746.9812,
+   "answeredMs": 1795427057226.7263
+  },
+  {
+   "session": "ab594d3f-d5b4-45d1-8615-fe4f261c9f84",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000013",
+   "arrivedMs": 1795427056754.5603,
+   "startedMs": 1795427057225.6565,
+   "repliedMs": 1795427057310.6106,
+   "outcome": "applied",
+   "code": null,
+   "held": 22,
+   "parts": {
+    "hub": 0.581787109375,
+    "behind": 470.514404296875,
+    "world": 0
+   },
+   "sentMs": 1795427056746.9924,
+   "answeredMs": 1795427057311.931
+  },
+  {
+   "session": "1e37da0f-5918-47cb-894d-cfaf07f70d5f",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000015",
+   "arrivedMs": 1795427056755.245,
+   "startedMs": 1795427057311.057,
+   "repliedMs": 1795427057414.2688,
+   "outcome": "applied",
+   "code": null,
+   "held": 23,
+   "parts": {
+    "hub": 3.418212890625,
+    "behind": 552.3935546875,
+    "world": 0
+   },
+   "sentMs": 1795427056747.0042,
+   "answeredMs": 1795427057415.3877
+  },
+  {
+   "session": "64572a71-8bc9-40ac-8d4f-8d7abe5406bd",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000017",
+   "arrivedMs": 1795427056758.7417,
+   "startedMs": 1795427057414.5762,
+   "repliedMs": 1795427057508.1277,
+   "outcome": "applied",
+   "code": null,
+   "held": 24,
+   "parts": {
+    "hub": 0.361572265625,
+    "behind": 655.472900390625,
+    "world": 0
+   },
+   "sentMs": 1795427056747.022,
+   "answeredMs": 1795427057510.8372
+  },
+  {
+   "session": "258368d0-ae0b-40f6-825b-d75ea1449939",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000019",
+   "arrivedMs": 1795427056759.3337,
+   "startedMs": 1795427057509.6975,
+   "repliedMs": 1795427057579.3984,
+   "outcome": "applied",
+   "code": null,
+   "held": 25,
+   "parts": {
+    "hub": 0.26806640625,
+    "behind": 750.095703125,
+    "world": 0
+   },
+   "sentMs": 1795427056747.0425,
+   "answeredMs": 1795427057580.6252
+  },
+  {
+   "session": "32101912-5538-4d84-8c98-54fc5ecf663e",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000021",
+   "arrivedMs": 1795427056759.6675,
+   "startedMs": 1795427057579.6804,
+   "repliedMs": 1795427057720.3647,
+   "outcome": "applied",
+   "code": null,
+   "held": 26,
+   "parts": {
+    "hub": 0.16162109375,
+    "behind": 819.851318359375,
+    "world": 0
+   },
+   "sentMs": 1795427056747.0635,
+   "answeredMs": 1795427057727.741
+  },
+  {
+   "session": "d7263625-fd6e-43bb-84fd-acc928fc4eaa",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000023",
+   "arrivedMs": 1795427056759.9028,
+   "startedMs": 1795427057726.7402,
+   "repliedMs": 1795427057809.862,
+   "outcome": "applied",
+   "code": null,
+   "held": 27,
+   "parts": {
+    "hub": 0.1181640625,
+    "behind": 966.71923828125,
+    "world": 0
+   },
+   "sentMs": 1795427056747.0752,
+   "answeredMs": 1795427057812.4495
+  },
+  {
+   "session": "f9e8a85f-2fc7-419a-8834-52b38983f179",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000027",
+   "arrivedMs": 1795427056760.085,
+   "startedMs": 1795427057810.794,
+   "repliedMs": 1795427057963.369,
+   "outcome": "applied",
+   "code": null,
+   "held": 28,
+   "parts": {
+    "hub": 0.90673828125,
+    "behind": 1049.80224609375,
+    "world": 0
+   },
+   "sentMs": 1795427056747.094,
+   "answeredMs": 1795427057964.7534
+  },
+  {
+   "session": "d4fadf44-3d5a-4f1c-8983-9b89ddd7983f",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000025",
+   "arrivedMs": 1795427056761.173,
+   "startedMs": 1795427057963.7249,
+   "repliedMs": 1795427058083.75,
+   "outcome": "applied",
+   "code": null,
+   "held": 29,
+   "parts": {
+    "hub": 0.251708984375,
+    "behind": 1202.300048828125,
+    "world": 0
+   },
+   "sentMs": 1795427056747.0842,
+   "answeredMs": 1795427058089.1936
+  },
+  {
+   "session": "463ccfea-bb9c-4dce-8ce7-ffc7db059c52",
+   "kind": "patch",
+   "doc": "01JC3200000000000000000029",
+   "arrivedMs": 1795427056761.5574,
+   "startedMs": 1795427058084.8486,
+   "repliedMs": 1795427058177.7295,
+   "outcome": "applied",
+   "code": null,
+   "held": 30,
+   "parts": {
+    "hub": 0.313232421875,
+    "behind": 1322.97802734375,
+    "world": 0
+   },
+   "sentMs": 1795427056747.1025,
+   "answeredMs": 1795427058180.5
+  }
+ ]
+}

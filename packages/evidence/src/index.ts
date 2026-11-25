@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { createZstdDecompress, zstdCompress, zstdDecompress } from 'node:zlib';
 import { detect, missingEnd, type MediaType } from './intake.js';
+import { Records } from './records.js';
 import { scrub, scrubList, type Run } from './scrub.js';
 export { scrubText, patternMatches, scrubValues, scrubPrefix } from './scrubbing.js';
 // The digest and its worker load with the first joined copy that needs a resumable hash, not with every store.
@@ -24,11 +25,16 @@ export type Peer =
   | { role: 'you'; via: 'paste' | 'drop' | 'picker' }
   | { role: 'agent'; session: string };
 
+/** Turns bytes into ones that say nothing without a key, and back. The same bytes always seal to the same ones. */
+export interface Sealer { seal(bytes: Uint8Array): Promise<Uint8Array>; unseal(sealed: Uint8Array): Promise<Uint8Array> }
+
 export interface EvidenceStoreOptions {
   root?: string;
   now?: () => number;
   /** For a caller that only gets and reads, such as `deep read`: opening makes no folder and never compacts the journal. */
   readOnly?: boolean;
+  /** Seals what asks to be kept sealed (#3229); without one, such a put is refused and nothing sealed reads back. */
+  sealer?: Sealer;
   /** Test hook: awaited by every put after its existence check and before its write. */
   hooks?: { afterExistsCheck?(sha256: string): void | Promise<void> };
 }
@@ -41,6 +47,8 @@ interface Common {
   derivedFrom?: readonly string[];
   /** Required for kind `layer.rows`: the layer, parent and level the rows are for. */
   layer?: LayerKey;
+  /** Kept sealed (#3229): the store holds the sealed bytes, by their own hash, and only `unseal` gives the plain ones back. */
+  sealed?: true;
   /** What the call claims; the stored origin comes from the connection. */
   origin?: Origin;
 }
@@ -83,6 +91,8 @@ export interface Evidence {
   missing?: string;
   layer?: LayerKey;
   steps?: readonly Step[];
+  /** Kept sealed (#3229): no read returns its bytes. */
+  sealed?: true;
 }
 
 export interface RetainInput {
@@ -109,9 +119,11 @@ export interface Receipt { sent: { sha256: string; destination: string }[]; with
 export interface EvidenceStore {
   connect(peer: Peer): Writer;
   get(sha256: string): Promise<Evidence | undefined>;
-  /** The bytes, checked against their hash. */
+  /** The bytes, checked against their hash; a sealed file's are refused (#3229). */
   read(sha256: string): Promise<Uint8Array>;
-  /** Verified bytes in order, without materializing a whole transcript. */
+  /** A sealed file's plain bytes, for the hub alone; any other file's as `read` gives them. */
+  unseal(sha256: string): Promise<Uint8Array>;
+  /** Verified bytes in order, without materializing a whole transcript; a sealed file's are refused. */
   chunks(sha256: string): AsyncIterable<Uint8Array>;
   /** A cached binary's bytes still match its hash, streamed without loading a large asset into memory. */
   verify(sha256: string): Promise<boolean>;
@@ -147,7 +159,7 @@ const REDACTIONS: readonly unknown[] = ['complete', 'incomplete', 'unknown'];
 const HASH = /^[0-9a-f]{64}$/;
 const hashOf = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
-interface Stored extends Evidence { storedAt: number; continuation?: DigestState }
+export interface Stored extends Evidence { storedAt: number; continuation?: DigestState }
 interface Approval { approved: string; reasons: string[] }
 
 export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Promise<EvidenceStore> {
@@ -175,43 +187,62 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   // Files and folders synced in this process: a FULL commit naming one again syncs nothing (#1410). A file is here by
   // the inode synced and its last change, and only once its folders are synced too, so one replaced since, by anyone,
   // or whose folder's sync failed, is synced again.
+  // A file of a record keeps its stamp with the record, so nothing grows here with the files synced (#1866).
   const synced = new Map<string, string>();
-  const stampOf = (s: { ino: bigint; ctimeNs: bigint }) => `${s.ino}:${s.ctimeNs}`;
+  type Stamp = { ino: bigint; ctimeNs: bigint };
+  const stampOf = (s: Stamp) => `${s.ino}:${s.ctimeNs}`;
+  const syncedAt = (sha: string, path: string, s: Stamp): boolean => {
+    const kept = index.synced(sha);
+    return kept ? kept.ino === s.ino && kept.ctimeNs === s.ctimeNs : synced.get(path) === stampOf(s);
+  };
   if (!options.readOnly) await mkdir(root, { recursive: true });
-  const index = new Map<string, Stored>();
+  const index = new Records(journal);
   // Your yes per file and destination, by the reasons it answered.
   const approved = new Map<string, Set<string>>();
-  const lines = (await readFile(journal, 'utf8').catch(() => '')).split('\n');
-  for (const line of lines) {
-    let entry: Stored | { removed: string } | Approval;
-    try { entry = JSON.parse(line) as typeof entry; } catch { continue; } // a line a crash cut short
-    if ('removed' in entry) index.delete(entry.removed);
-    else if ('approved' in entry) for (const reason of entry.reasons) (approved.get(entry.approved) ?? approved.set(entry.approved, new Set()).get(entry.approved)!).add(reason);
-    else index.set(entry.sha256, entry);
-  }
-  for (const entry of index.values()) remember(entry);
-  if (!options.readOnly && lines.length > 2 * (index.size + approved.size) + 1000) {
-    const kept = [...index.values(), ...[...approved].map(([pair, reasons]): Approval => ({ approved: pair, reasons: [...reasons] }))];
+  let text: Buffer = await readFile(journal).catch(() => Buffer.alloc(0));
+  // The joined copies whose hash goes on from what their line keeps.
+  const continued = new Map<string, Stored>();
+  const lines = index.take(text, (line) => {
+    if ('removed' in line) continued.delete(line.removed);
+    else if ('approved' in line) for (const reason of line.reasons) (approved.get(line.approved) ?? approved.set(line.approved, new Set()).get(line.approved)!).add(reason);
+    else if (line.continuation) continued.set(line.sha256, line);
+    else continued.delete(line.sha256);
+  });
+  for (const entry of continued.values()) remember(entry);
+  continued.clear();
+  if (!options.readOnly && lines > 2 * (index.size + approved.size) + 1000) {
+    const newline = Buffer.from('\n');
+    const kept = [...index.lines(text), ...[...approved].map(([pair, reasons]) => Buffer.from(JSON.stringify({ approved: pair, reasons: [...reasons] } satisfies Approval)))];
+    text = Buffer.concat(kept.flatMap((line) => [line, newline]));
     // It replaces a journal whose lines a FULL commit may have synced, so it lasts before it does (#1410).
-    await writeAtomic(journal, kept.map((entry) => `${JSON.stringify(entry)}\n`).join(''), true);
+    await writeAtomic(journal, text, true);
     await syncOne(root);
+    index.clear();
+    index.take(text, () => undefined);
   }
+  /** Where the journal's next line begins. */
+  let end = text.length;
   // The journal stays open while lines come, and closes once they stop for a second: opening it for each line cost
   // more than writing it (8 to 22 ms on a Mac whose scanner reads a file each time it is closed after a write).
   let held: Promise<FileHandle> | undefined;
   let idle: NodeJS.Timeout | undefined;
   let journaled: Promise<void> = Promise.resolve();
-  const note = (entry: object): Promise<void> => (journaled = journaled.catch(() => undefined).then(async () => {
+  const note = (entry: Stored | { removed: string } | Approval): Promise<void> => (journaled = journaled.catch(() => undefined).then(async () => {
     clearTimeout(idle);
     let handle: FileHandle | undefined;
+    const line = Buffer.from(`${JSON.stringify(entry)}\n`);
     try {
       handle = await (held ??= open(journal, 'a'));
-      await handle.appendFile(`${JSON.stringify(entry)}\n`);
+      await handle.appendFile(line);
     } catch (error) {
       held = undefined;
       await handle?.close().catch(() => undefined);
+      // Part of the line may be there: where the next begins is read again.
+      end = await stat(journal).then((s) => s.size, () => 0);
       throw error;
     }
+    if ('sha256' in entry) index.placed(entry, end, line.length - 1);
+    end += line.length;
     idle = setTimeout(() => { void held?.then((h) => h.close()).catch(() => undefined); held = undefined; }, JOURNAL_IDLE_MS).unref();
   }));
 
@@ -233,22 +264,23 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     await rename(temp, path);
   }
   /** Syncs what is at the path now, and says which file that was; nothing when it is gone. */
-  async function syncOne(path: string): Promise<string | undefined> {
+  async function syncOne(path: string): Promise<Stamp | undefined> {
     const handle = await open(path, 'r').catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
     if (!handle) return undefined;
     try {
-      const stamp = stampOf(await handle.stat({ bigint: true }));
+      const { ino, ctimeNs } = await handle.stat({ bigint: true });
       await handle.sync();
-      return stamp;
+      return { ino, ctimeNs };
     } finally { await handle.close(); }
   }
   const exists = (path: string) => access(path).then(() => true, () => false);
   // A manifest is looked for only where one can be: for a joined copy, put now or held by the index.
-  const onDisk = async (sha: string, joined = false) => (await exists(fileOf(sha))) || (await exists(packedOf(sha))) || ((joined || index.get(sha)?.parts !== undefined) && exists(partsOf(sha)));
+  const onDisk = async (sha: string, joined = false) => (await exists(fileOf(sha))) || (await exists(packedOf(sha))) || ((joined || index.field(sha)?.parts === true) && exists(partsOf(sha)));
 
   const refuse = (reason: string): PutResult => ({ status: 'refused', reason, slot: { state: 'missing', reason } });
   const unlabelled = (request: Common) =>
-    !REDACTIONS.includes(request.redaction) ? 'evidence needs a redaction label: complete, incomplete or unknown'
+    request.sealed && !options.sealer ? 'this store has no sealer, so it keeps nothing sealed'
+      : !REDACTIONS.includes(request.redaction) ? 'evidence needs a redaction label: complete, incomplete or unknown'
       : !Array.isArray(request.license?.allows) || typeof request.license.name !== 'string' ? 'evidence needs a license'
       : request.kind === 'layer.rows' && !request.layer ? 'a layer.rows file needs its layer, parent and level' : undefined;
 
@@ -259,7 +291,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     const derivedFrom = [...(request.derivedFrom ?? [])];
     const steps = request.steps?.map(({ step, startMs, endMs }) => ({ step, startMs, endMs }));
     // An input that is gone or unknown might have been an agent's, so it counts as one.
-    const fromAgent = [...derivedFrom, ...(joined?.parts ?? [])].some((input) => (index.get(input)?.origin ?? 'agent') === 'agent');
+    const fromAgent = [...derivedFrom, ...(joined?.parts ?? [])].some((input) => (index.field(input)?.origin ?? 'agent') === 'agent');
     // A hash the index has never held is written without asking the disk: rewriting the same bytes is harmless.
     const existed = index.has(sha) && await onDisk(sha);
     await options.hooks?.afterExistsCheck?.(sha);
@@ -287,9 +319,9 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         origin: fromAgent || peer.role === 'agent' || earlier?.origin === 'agent' ? 'agent' : peer.role,
         redaction: earlier && earlier.redaction !== 'complete' ? earlier.redaction : redaction,
         license: request.license, derivedFrom, intake: missing ? 'truncated' : 'captured', ...(missing && { missing }),
-        ...(request.layer && { layer: request.layer }), ...(steps && { steps }), storedAt: now(),
+        ...(request.layer && { layer: request.layer }), ...(steps && { steps }), ...((request.sealed || earlier?.sealed) && { sealed: true as const }), storedAt: now(),
       };
-      index.set(sha, record);
+      index.set(record);
       await note(record);
       remember(record);
       const { storedAt: _, continuation: _continuation, ...evidence } = record;
@@ -297,12 +329,17 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     });
   }
 
+  /** Why a sealed file isn't read: by what it is, never its bytes (#3229). */
+  const unsealedOnly = (sha: string): void => {
+    if (index.field(sha)?.sealed) throw new EvidenceError('refused', `evidence ${sha} is ${index.get(sha)?.source ?? 'a sealed file'}, kept sealed: no read returns its bytes`, sha);
+  };
   async function* chunks(sha: string, parents: ReadonlySet<string> = new Set()): AsyncGenerator<Uint8Array> {
+    unsealedOnly(sha);
     if (!HASH.test(sha)) throw new EvidenceError('missing', `evidence ${sha} is missing`, sha);
     if (parents.has(sha)) throw new EvidenceError('corrupt', `evidence ${sha} has cyclic parts`, sha);
     const hash = createHash('sha256');
     const consume = async function* (): AsyncGenerator<Uint8Array> {
-      if (index.get(sha)?.parts) {
+      if (index.field(sha)?.parts) {
         const parts: unknown = JSON.parse(await readFile(partsOf(sha), 'utf8'));
         if (!Array.isArray(parts) || !parts.every((p) => typeof p === 'string' && HASH.test(p))) throw new EvidenceError('corrupt', `evidence ${sha} has corrupt parts`, sha);
         const chain = new Set([...parents, sha]);
@@ -322,7 +359,11 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     if (hash.digest('hex') !== sha) throw new EvidenceError('corrupt', `evidence ${sha} is corrupt: its bytes no longer match its hash`, sha);
   }
   const read = async (sha: string): Promise<Uint8Array> => {
-    if (index.get(sha)?.parts) {
+    unsealedOnly(sha);
+    return stored(sha);
+  };
+  const stored = async (sha: string): Promise<Uint8Array> => {
+    if (index.field(sha)?.parts) {
       const parts: Uint8Array[] = [];
       for await (const bytes of chunks(sha)) parts.push(bytes);
       return Buffer.concat(parts);
@@ -344,10 +385,10 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         if (invalid) return refuse(invalid);
         if ('parts' in request) {
           if (request.parts.some((p) => !HASH.test(p) || !index.has(p))) return refuse('every part must be stored evidence');
-          const size = request.parts.reduce((sum, p) => sum + index.get(p)!.size, 0);
+          const size = request.parts.reduce((sum, p) => sum + index.field(p)!.size, 0);
           // One leaf already has the desired bytes and ordinary SHA; do not invent a self-referencing manifest.
           if (request.parts.length === 1) {
-            const leafRedaction = index.get(request.parts[0]!)!.redaction;
+            const leafRedaction = index.field(request.parts[0]!)!.redaction;
             return save(peer, request, await read(request.parts[0]!), 'text', leafRedaction !== 'complete' ? leafRedaction : request.redaction);
           }
           let prefix: Stored | undefined;
@@ -370,11 +411,12 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
             hashes.set(sha256, hash);
           } else ({ sha256, state: continuation } = await (await import('./continuation.js')).continueDigest(prefix?.continuation, from(prefix?.continuation ? prefix.parts!.length : 0)));
           if (prefix && prefix.sha256 !== sha256) hashes.delete(prefix.sha256);
-          const redaction = request.parts.some((p) => index.get(p)!.redaction !== 'complete') ? 'incomplete' : request.redaction;
+          const redaction = request.parts.some((p) => index.field(p)!.redaction !== 'complete') ? 'incomplete' : request.redaction;
           return save(peer, request, { parts: request.parts, sha256, size, ...(continuation ? { continuation } : {}) }, 'text', redaction);
         }
         const backwards = request.steps?.find(({ startMs, endMs }) => !(startMs >= 0 && endMs >= startMs));
         if (backwards) return refuse(`step ${backwards.step} must start at 0 ms or later and end no earlier than it starts`);
+        if (request.sealed) return save(peer, request, await options.sealer!.seal(request.bytes), 'binary', request.redaction);
         if (request.declares === undefined) return save(peer, request, request.bytes, 'binary', request.redaction);
         const found = detect(request.bytes);
         if (found !== request.declares) return refuse(`the slot declares ${request.declares}, but the bytes are ${found ?? 'not png, jpeg, mp4 or webm'}`);
@@ -404,7 +446,8 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
             const raw = Buffer.concat(chunks);
             // The scrub can't find a value's forms in text that isn't UTF-8.
             const redaction = isUtf8(raw) || request.redaction !== 'complete' ? request.redaction : 'incomplete';
-            return save(peer, request, scrub(raw, scrubList(request.run)), 'text', redaction);
+            const text = scrub(raw, scrubList(request.run));
+            return request.sealed ? save(peer, request, await options.sealer!.seal(text), 'binary', redaction) : save(peer, request, text, 'text', redaction);
           },
         };
       },
@@ -426,6 +469,9 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     },
 
     read,
+    async unseal(sha) {
+      return index.field(sha)?.sealed ? options.sealer!.unseal(await stored(sha)) : read(sha);
+    },
     chunks,
 
     async verify(sha) {
@@ -448,25 +494,31 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     async retain({ cited, archived, installed = new Set(), kinds }) {
       const at = now();
       const kept = new Set([...cited, ...archived]);
-      const hold = (sha: string): void => { for (const part of index.get(sha)?.parts ?? []) if (!kept.has(part)) { kept.add(part); hold(part); } };
+      const partsOfRecord = (sha: string): readonly string[] => (index.field(sha)?.parts ? index.get(sha)?.parts ?? [] : []);
+      const hold = (sha: string): void => { for (const part of partsOfRecord(sha)) if (!kept.has(part)) { kept.add(part); hold(part); } };
       for (const sha of kept) hold(sha);
       // The newest rows file of each installed layer, parent and level stays while the layer is installed (#259).
       const newest = new Map<string, number>();
-      const slotOf = ({ layer, kind }: Stored) => (kind === 'layer.rows' && layer && installed.has(layer.id) ? JSON.stringify([layer.id, layer.parent, layer.level]) : undefined);
-      for (const record of index.values()) {
-        const key = slotOf(record);
+      const slotOf = (sha: string, kind: string) => {
+        const layer = kind === 'layer.rows' && installed.size ? index.get(sha)?.layer : undefined;
+        return layer && installed.has(layer.id) ? JSON.stringify([layer.id, layer.parent, layer.level]) : undefined;
+      };
+      for (const [sha, record] of index.each()) {
+        const key = slotOf(sha, record.kind);
         if (key !== undefined) newest.set(key, Math.max(newest.get(key) ?? -Infinity, record.storedAt));
       }
       const expired = (sha: string) => {
-        const record = index.get(sha);
+        const record = index.field(sha);
         if (!record || kept.has(sha) || (kinds && !kinds.has(record.kind))) return false;
-        const key = slotOf(record);
+        const key = slotOf(sha, record.kind);
         return (key === undefined || newest.get(key) !== record.storedAt) && at - record.storedAt > (KEPT_MS[record.kind] ?? RETENTION_MS);
       };
       const removed: string[] = [];
-      await Promise.all([...index.keys()].filter(expired).map((sha) => serial(sha, async () => {
+      const old: string[] = [];
+      for (const [sha] of index.each()) if (expired(sha)) old.push(sha);
+      await Promise.all(old.map((sha) => serial(sha, async () => {
         if (!expired(sha)) return; // stored again since the pass began
-        const parts = index.get(sha)?.parts;
+        const parts = index.field(sha)?.parts ? index.get(sha)?.parts : undefined;
         index.delete(sha);
         hashes.delete(sha);
         if (parts?.length) {
@@ -486,20 +538,20 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     // synced, and a folder made since the last cut once the root is.
     async sync(sha256s) {
       // A file that is gone has nothing to sync, and reads as missing; one that can't be looked at refuses the sync.
-      const unsynced = async (path: string) => stat(path, { bigint: true }).then((s) => (synced.get(path) === stampOf(s) ? [] : [path]), (error: NodeJS.ErrnoException) => {
+      const unsynced = async (sha: string, path: string) => stat(path, { bigint: true }).then((s) => (syncedAt(sha, path, s) ? [] : [{ sha, path }]), (error: NodeJS.ErrnoException) => {
         if (error.code !== 'ENOENT') throw error;
         return undefined;
       });
-      const where = async (sha: string) => (!HASH.test(sha) ? [] : await unsynced(fileOf(sha)) ?? await unsynced(packedOf(sha)) ?? await unsynced(partsOf(sha)) ?? []);
+      const where = async (sha: string) => (!HASH.test(sha) ? [] : await unsynced(sha, fileOf(sha)) ?? await unsynced(sha, packedOf(sha)) ?? await unsynced(sha, partsOf(sha)) ?? []);
       // A joined copy is its manifest and the files of the parts it lists, a part that is joined in turn too.
       const named = new Set(sha256s);
-      for (const sha of named) for (const part of index.get(sha)?.parts ?? []) named.add(part);
+      for (const sha of named) for (const part of index.field(sha)?.parts ? index.get(sha)?.parts ?? [] : []) named.add(part);
       // Again while any is unsynced: a file replaced during the pass is a new file its folder's sync made last.
       for (;;) {
         const files = (await Promise.all([...named].map(where))).flat();
         if (!files.length) return;
-        const stamps = await Promise.all(files.map(syncOne));
-        const folders = [...new Set(files.map((path) => dirname(path)))];
+        const stamps = await Promise.all(files.map(({ path }) => syncOne(path)));
+        const folders = [...new Set(files.map(({ path }) => dirname(path)))];
         // The root holds the name of each folder this process hasn't synced yet, and its own parent the root's, once.
         const above = folders.some((folder) => !synced.has(folder)) ? [root, ...(synced.has(dirname(root)) ? [] : [dirname(root)])] : [];
         await Promise.all([...folders, ...above].map(syncOne));
@@ -507,7 +559,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         // A file is found by its line in the journal, written before its put returned: it counts as synced once that is.
         await journaled.catch(() => undefined);
         await syncOne(journal);
-        for (const [i, path] of files.entries()) { const stamp = stamps[i]; if (stamp !== undefined) synced.set(path, stamp); }
+        for (const [i, { sha, path }] of files.entries()) { const stamp = stamps[i]; if (stamp !== undefined && !index.sync(sha, stamp)) synced.set(path, stampOf(stamp)); }
       }
     },
 

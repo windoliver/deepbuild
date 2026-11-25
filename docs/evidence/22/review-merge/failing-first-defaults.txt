@@ -1,0 +1,7 @@
+test record::tests::asks_an_answered_exception_held_get_their_own_rows ... FAILED
+thread 'record::tests::asks_an_answered_exception_held_get_their_own_rows' (542617) panicked at crates/deep-app/src/record.rs:1251:9:
+  left: ("folded", "folded")
+ right: ("folded", "queued")
+test result: FAILED. 118 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+error: test failed, to rerun pass `-p deep-app --lib`
+[exit 101]

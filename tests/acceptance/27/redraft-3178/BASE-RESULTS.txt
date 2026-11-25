@@ -1,0 +1,327 @@
+#27 redraft for #3178 (AC2 #27.6e863673, AC4 #27.e6116d56; AC3 #27.f8331d25 removed, see below, all four cases; review round below): runs on the base
+37dd3c0c (origin/main, "Merge pull request #3072"), Nov 22 2026, a fresh GitHub clone on this shared Mac (other
+sessions' load around it, recorded per run). Only this folder's files differ from the base. Plants were selected with
+DEEP_HUB_PLANT at the base: every plant here is read by the hub (TypeScript), the same program as the twin's plant.ts
+laid over a copy. Each file run alone, one at a time, from the clone root:
+  npx vitest run tests/acceptance/27/redraft-3178/<file> --reporter=verbose
+Type-check: npx tsc --noEmit -p tests/acceptance/27/redraft-3178 -> exit 0.
+
+Summary
+- repeat.test.ts (AC2): base PASS (1/1). repeat-reaches-you: FAIL at "B's deep_ask must come back with green" (it
+  waited ~40 s and replied status waiting, answer null).
+- waits.test.ts, first 3 cases (ask, hold unanswered, hold answered): base PASS (3/3).
+  skip-default-at-deadline: ask FAILS ("must reach its default by its deadline ... no ask.defaulted"), holds pass.
+  answer-skips-held-stop: answered hold FAILS ("must continue the held stop": the stop went through, the waiter
+  exited 2 with the answer), the others pass.
+  wake-assumed: 3/3 pass. waiter-outlives-session: 3/3 pass. Those two twins target ../outcomes-redraft/'s cases
+  (timed out, replaced, waiter outliving its session), not the ask or the hold; recorded as run.
+  The unanswered hold has no wrong program among the named twins that kills it (README, Criteria to tests).
+- desktop.test.ts (AC3): base PASS (1/1). wake-assumed: FAIL at step 1, "its delivery must read stalled within 60 s"
+  (outcomes: delivered via next_prompt).
+- Not run: the earlier ../repeat.test.ts, ../waits.test.ts and ../desktop-redraft-2/ at this base (their setup runs
+  cargo build --features env-plants, which this job doesn't run); the dispute rests on the base's code
+  (mcp-operations.ts askFor: a choice with a recommendation returns status provisional at once).
+
+Addition (AC4 check run and agent command, brought into waits.test.ts; the file now has five cases)
+- Run A, the first version, the earlier fixture's world (session the waiting one): the check run reads BLOCKED, "the
+  check run to start" within 60 s. deep_run replied `unconfirmed`, "<repo> isn't a project you trust, so forever
+  didn't run". The cause is project trust (#322), not the question. The agent command PASSES. (Run A's -t filter
+  didn't apply, so all five cases ran.)
+- Run B, the repo trusted in Claude Code (~/.claude.json hasTrustDialogAccepted in the temp home): the check run FAILS,
+  "a check run past its deadline reads overran, never passed": outcome uncounted, "uncounted: untraced program sh",
+  about 15 s in. The cause is the earlier fixture's `sh -c 'sleep 600'` command, again not the question.
+- Run C, the check a Node program that never ends (the file as delivered): whole file PASS 5/5 at the base.
+- skip-default-at-deadline on the 5-case file: the ask FAILS (no ask.defaulted); the holds, the check run and the
+  agent command pass. No named twin (skip-default-at-deadline, wake-assumed, waiter-outlives-session,
+  answer-skips-held-stop) reaches the check run or the agent command, and no merged plant for run deadlines or
+  overruns was found. The other three twins were run on the 3-case version only (below).
+
+Review round (Nov 22, 20:20-20:57 local, load 110-170 throughout from other sessions)
+- repeat.test.ts now holds two tests. The new one asks B's repeat with blue recommended; per the design's sequence the
+  saved decision answers it first. Base, run 1: test 1 BLOCKED, "The DeepBuild hub is unreachable" (load 133-170,
+  environmental). Base, run 2: test 1 PASS; test 2 FAILS at "must be answered from your saved decision": B's deep_ask
+  replied status provisional, answer blue, "Go on with Blue header ...". This is the base's behaviour, not a load
+  miss: it is the same in both runs and in the plant run. repeat-reaches-you: both tests FAIL at the same assertion
+  (test 1 waiting/null after about 40 s; test 2 provisional/blue).
+- mutants.sh (one-line mutants of the built hub dist on an APFS clone; diffs below), waits.test.ts in each clone:
+  hold-end-unrecorded: hold-nobody-answers FAILS at "the record must say how it ended". The ask in this run was
+    BLOCKED, "hub is unreachable" (load 141, environmental); the other three pass.
+  run-without-deadline, first attempt: the mutant went onto the `check.host` branch of deep_run, which this fixture
+    never takes, so all five passed apart from two BLOCKED "hub is unreachable" (load 160). It was retargeted to the
+    `runApproved(... deadline_ms ...)` line. Retargeted: the check run FAILS, "no run.finished for it" by its deadline
+    + 10 s; the other four pass.
+  overrun-dropped: the agent command FAILS, "the record must hold its overrun, naming the call", 300 s on; the other
+    four pass.
+  No check-run process (marker dh27run) was left running after these runs; the clones were removed.
+
+Mutant diffs
+- hold-end-unrecorded (packages/hub/dist/stop-judging.js):
+    804c804
+    <             if (asks.length)
+    ---
+    >             if (false)
+- run-without-deadline (packages/hub/dist/mcp-operations.js):
+    720c720
+    <             const started = this.options.judging().runApproved({ claim: `claim:${claim.id}`, check: String(args.check), approved: null, command: check.run, commit, cwd: tree.dir, deadline_ms: deadline ?? null });
+    ---
+    >             const started = this.options.judging().runApproved({ claim: `claim:${claim.id}`, check: String(args.check), approved: null, command: check.run, commit, cwd: tree.dir, deadline_ms: null });
+- overrun-dropped (packages/hub/dist/core-worker.js):
+    50c50
+    <             return void core.overrun(message).catch(() => undefined);
+    ---
+    >             return;
+
+Removed: desktop.test.ts (AC3 #27.f8331d25). ../desktop-redraft-2/ passes on the base and now stands in for AC3 in
+#3178's suite, so this folder's copy duplicated it (AGENTS.md: no duplicate test). Its runs below (base PASS 1/1;
+wake-assumed FAIL at step 1, "must read stalled within 60 s") are kept as history only. world.ts dropped the
+running-session option of beginAsk, which only that test used.
+
+---- repeat-base
+== 2026-11-23T02:49:46Z file=repeat.test.ts plant=none code=37dd3c0c
+uptime before: 18:49  up 2 days, 23:16, 4 users, load averages: 19.43 25.62 45.69
+✓ tests/acceptance/27/redraft-3178/repeat.test.ts > #27.6e863673 The repeated question is answered by the resolver and appears under decided for you > #27.6e863673 the same question asked again in a new session is answered from the decision your CLI answer saved, at once, never reaches you, and deep inbox lists it under decided for you 3683ms
+Test Files  1 passed (1)
+Tests  1 passed (1)
+exit 0
+uptime after: 18:49  up 2 days, 23:16, 4 users, load averages: 19.87 25.51 45.41
+
+---- repeat-plant
+== 2026-11-23T02:49:59Z file=repeat.test.ts plant=repeat-reaches-you code=37dd3c0c
+uptime before: 18:49  up 2 days, 23:16, 4 users, load averages: 20.52 25.55 45.31
+× tests/acceptance/27/redraft-3178/repeat.test.ts > #27.6e863673 The repeated question is answered by the resolver and appears under decided for you > #27.6e863673 the same question asked again in a new session is answered from the decision your CLI answer saved, at once, never reaches you, and deep inbox lists it under decided for you 42520ms
+→ #27.6e863673 the repeated question must be answered from your saved decision: B's deep_ask must come back with green (Green header 425decff); it replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M834YZDCQ17AEY4YY40Y96YS\",\"status\":\"waiting\",\"answer\":null,\"deadline\":1795575002540,\"default\":\"blue\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M834YZDCQ17AEY4YY40Y96YS","status":"waiting","answer":null,"deadline":1795575002540,"default":"blue"}}}: expected null to be 'green' // Object.is equality
+AssertionError: #27.6e863673 the repeated question must be answered from your saved decision: B's deep_ask must come back with green (Green header 425decff); it replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M834YZDCQ17AEY4YY40Y96YS\",\"status\":\"waiting\",\"answer\":null,\"deadline\":1795575002540,\"default\":\"blue\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M834YZDCQ17AEY4YY40Y96YS","status":"waiting","answer":null,"deadline":1795575002540,"default":"blue"}}}: expected null to be 'green' // Object.is equality
+❯ tests/acceptance/27/redraft-3178/repeat.test.ts:45:224
+Test Files  1 failed (1)
+Tests  1 failed (1)
+exit 1
+uptime after: 18:50  up 2 days, 23:17, 4 users, load averages: 48.40 31.41 46.40
+
+---- waits-base
+== 2026-11-23T02:51:01Z file=waits.test.ts plant=none code=37dd3c0c
+uptime before: 18:51  up 2 days, 23:17, 4 users, load averages: 60.29 34.89 47.38
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 62127ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 61071ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 7731ms
+Test Files  1 passed (1)
+Tests  3 passed (3)
+exit 0
+uptime after: 18:53  up 2 days, 23:19, 4 users, load averages: 40.85 38.65 47.22
+
+---- waits-skip-default
+== 2026-11-23T02:53:22Z file=waits.test.ts plant=skip-default-at-deadline code=37dd3c0c
+uptime before: 18:53  up 2 days, 23:19, 4 users, load averages: 36.81 37.86 46.84
+× tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 67186ms
+→ #27.e6116d56 ask:01M83554AC1D4FQ7QHR1AM3KVY, unanswered, must reach its default by its deadline 2026-11-23T02:54:24.172Z (+5000 ms): the record has no ask.defaulted for it: expected undefined to be defined
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 60575ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 7623ms
+AssertionError: #27.e6116d56 ask:01M83554AC1D4FQ7QHR1AM3KVY, unanswered, must reach its default by its deadline 2026-11-23T02:54:24.172Z (+5000 ms): the record has no ask.defaulted for it: expected undefined to be defined
+❯ tests/acceptance/27/redraft-3178/waits.test.ts:44:185
+Test Files  1 failed (1)
+Tests  1 failed | 2 passed (3)
+exit 1
+uptime after: 18:55  up 2 days, 23:22, 4 users, load averages: 15.30 29.01 41.97
+
+---- waits-answer-skips
+== 2026-11-23T02:55:48Z file=waits.test.ts plant=answer-skips-held-stop code=37dd3c0c
+uptime before: 18:55  up 2 days, 23:22, 4 users, load averages: 14.40 28.37 41.59
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 61604ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 60719ms
+× tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 5008ms
+→ #27.e6116d56 your answer to ask:01M835DAQ51K1908YRR1N37B20 (Green header 2cc08eae) must continue the held stop: {"runs":[{"command":"exec '<clone path>","code":0,"signal":null,"timedOut":false,"stdout":"{\"systemMessage\":\"says done · next: DeepBuild · session/22f2afbf/01M835DAVMBD6SV5WZN97645TG\"}","stderr":""},{"command":"exec '<clone path>","code":2,"signal":null,"timedOut":false,"stdout":"","stderr":"DeepBuild delivers your answers:\nYour answer to ask:01M835DAQ51K1908YRR1N37B20 (\"Which header colour for the checkout page (2cc08eae)?\"): Green header 2cc08eae (green).\n\nDeepBuild: says done · next: DeepBuild · session/22f2afbf/01M835DAVMBD6SV5WZN97645TG\n"}]}: expected false to be true // Object.is equality
+AssertionError: #27.e6116d56 your answer to ask:01M835DAQ51K1908YRR1N37B20 (Green header 2cc08eae) must continue the held stop: {"runs":[{"command":"exec '<clone path>","code":0,"signal":null,"timedOut":false,"stdout":"{\"systemMessage\":\"says done · next: DeepBuild · session/22f2afbf/01M835DAVMBD6SV5WZN97645TG\"}","stderr":""},{"command":"exec '<clone path>","code":2,"signal":null,"timedOut":false,"stdout":"","stderr":"DeepBuild delivers your answers:\nYour answer to ask:01M835DAQ51K1908YRR1N37B20 (\"Which header colour for the checkout page (2cc08eae)?\"): Green header 2cc08eae (green).\n\nDeepBuild: says done · next: DeepBuild · session/22f2afbf/01M835DAVMBD6SV5WZN97645TG\n"}]}: expected false to be true // Object.is equality
+❯ tests/acceptance/27/redraft-3178/waits.test.ts:89:161
+Test Files  1 failed (1)
+Tests  1 failed | 2 passed (3)
+exit 1
+uptime after: 18:57  up 2 days, 23:24, 4 users, load averages: 59.78 35.25 42.05
+
+---- waits-wake-assumed
+== 2026-11-23T02:58:03Z file=waits.test.ts plant=wake-assumed code=37dd3c0c
+uptime before: 18:58  up 2 days, 23:24, 4 users, load averages: 55.64 34.80 41.85
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 61862ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 60910ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 8886ms
+Test Files  1 passed (1)
+Tests  3 passed (3)
+exit 0
+uptime after: 19:00  up 2 days, 23:26, 4 users, load averages: 72.58 40.80 42.71
+
+---- waits-waiter-outlives
+== 2026-11-23T03:00:23Z file=waits.test.ts plant=waiter-outlives-session code=37dd3c0c
+uptime before: 19:00  up 2 days, 23:26, 4 users, load averages: 91.68 45.29 44.28
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 63166ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 61815ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 8605ms
+Test Files  1 passed (1)
+Tests  3 passed (3)
+exit 0
+uptime after: 19:02  up 2 days, 23:29, 4 users, load averages: 65.07 50.86 46.58
+
+---- desktop-base
+== 2026-11-23T03:02:46Z file=desktop.test.ts plant=none code=37dd3c0c
+uptime before: 19:02  up 2 days, 23:29, 4 users, load averages: 76.28 53.42 47.51
+✓ tests/acceptance/27/redraft-3178/desktop.test.ts > #27.f8331d25 The desktop app wakes too, or the fallback is recorded as a known limit > #27.f8331d25 in an app that doesn't wake, the answer reads stalled with a reading on the session; the next prompt carries it and, once the turn shows it, it reads delivered; the session's next answer goes straight to its next prompt 151628ms
+Test Files  1 passed (1)
+Tests  1 passed (1)
+exit 0
+uptime after: 19:05  up 2 days, 23:31, 4 users, load averages: 172.83 113.04 73.48
+
+---- desktop-wake-assumed
+== 2026-11-23T03:05:28Z file=desktop.test.ts plant=wake-assumed code=37dd3c0c
+uptime before: 19:05  up 2 days, 23:32, 4 users, load averages: 159.45 112.15 73.63
+× tests/acceptance/27/redraft-3178/desktop.test.ts > #27.f8331d25 The desktop app wakes too, or the fallback is recorded as a known limit > #27.f8331d25 in an app that doesn't wake, the answer reads stalled with a reading on the session; the next prompt carries it and, once the turn shows it, it reads delivered; the session's next answer goes straight to its next prompt 123641ms
+→ #27.f8331d25 step 1: no turn showed your answer to ask:01M835VCXJ7JTH84P81FQN6NBE, so its delivery must read stalled within 60 s of the waiter's exit; outcomes: delivered via next_prompt: expected undefined to be defined
+AssertionError: #27.f8331d25 step 1: no turn showed your answer to ask:01M835VCXJ7JTH84P81FQN6NBE, so its delivery must read stalled within 60 s of the waiter's exit; outcomes: delivered via next_prompt: expected undefined to be defined
+❯ tests/acceptance/27/redraft-3178/desktop.test.ts:70:209
+Test Files  1 failed (1)
+Tests  1 failed (1)
+exit 1
+uptime after: 19:07  up 2 days, 23:34, 4 users, load averages: 94.50 108.06 77.85
+
+---- waits5-runA-base (untrusted repo)
+== 2026-11-23T03:09:59Z file=waits.test.ts plant=none code=37dd3c0c
+uptime before: 19:09  up 2 days, 23:36, 4 users, load averages: 74.29 94.78 77.03
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 70397ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 66747ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 18770ms
+× tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (check run) a check run that never ends on its own reaches overran by its deadline (1m in the repo's spec), its processes stopped 68993ms
+→ #27.e6116d56 BLOCKED: timed out after 60000 ms waiting for the check run to start; deep_run replied {"jsonrpc":"2.0","id":"tools/call#4","result":{"content":[{"type":"text","text":"{\"code\":\"unconfirmed\",\"retryable\":false,\"remediation\":\"/tmp/dh27-<tmp>/<repo> isn't a project you trust, so forever didn't run: its spec checks run only once you trust it, by your answer in the app or by Claude Code's or Codex's own trust of it.\",\"path\":\"/params/arguments/check\",\"actual\":\"forever\",\"evidence\":[]}"}],"isError":true}}; recorded since the claim: [{"kind":"row.set","data":{"listed":true,"order":"0|1|repo9844|3|0001795403567967|session:276511d4-644e-46c5-81f1-ebbc5618d073","id":"session:276511d4-644e-46c5-81f1-ebbc5618d073","address":"session/276511d4-644e-46c5-81f1-ebbc5618d073","title":"Claude Code","project":"repo9844","session":"276511d4-644e-46c5-81f1-ebbc5618d073","agent":"claude-code","entry":"running","word":"working","why":"at work","waits_on":"agent","since":1795403567967,"actions":[],"unread":true}},{"kind":"agent.reach","data":{"agent":"claude-code","name":"Claude Code","state":"reached"}},{"kind":"session.rules_delivered","data":{"via":"start","pos":9,"rules":[]}},{"kind":"task.created","data":{"task_ref":"session:276511d4644e46c581f1ebbc5618d073#0","thread":"276511d4-644e-46c5-81f1-ebbc5618d073","owner":"you","title":"Pick a header colour for the checkout page, then stop."}},{"kind":"row.set","data":{"listed":true,"order":"0|1|repo9844|3|0001795403567967|session:276511d4-644e-46c5-81f1-ebbc5618d073","id":"session:276511d4-644e-46c5-81f1-ebbc5618d073","address":"session/276511d4-644e-46c5-81f1-ebbc5618d073","title":"Pick a header colour for the checkout page, then stop.","project":"repo9844","session":"276511d4-644e-46c5-81f1-ebbc5618d0
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline: the ask and the hold > #27.e6116d56 (agent command) an agent command still running far past its expected time is recorded as an overrun while it runs, never as finished 8422ms
+❯ tests/acceptance/27/redraft-3178/waits.test.ts:120:42
+❯ tests/acceptance/27/redraft-3178/waits.test.ts:119:21
+Test Files  1 failed (1)
+Tests  1 failed | 4 passed (5)
+exit 1
+uptime after: 19:14  up 2 days, 23:40, 4 users, load averages: 89.60 90.92 79.78
+
+---- waits5-runB-base (trusted, sh -c check)
+== 2026-11-23T03:14:48Z file=waits.test.ts plant=none code=37dd3c0c
+uptime before: 19:14  up 2 days, 23:41, 4 users, load averages: 75.29 87.17 78.98
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 66237ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 65186ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 12930ms
+× tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (check run) a check run that never ends on its own reaches overran by its deadline (1m in the repo's spec), its processes stopped 15596ms
+→ #27.e6116d56 a check run past its deadline reads overran, never passed: {"run":"run:01M836HB314W9YJCJ02TNNG9EG","outcome":"uncounted","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"forever","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":["uncounted: untraced program sh"],"environment":"darwin-arm64"}: expected 'uncounted' to be 'overran' // Object.is equality
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (agent command) an agent command still running far past its expected time is recorded as an overrun while it runs, never as finished 10824ms
+AssertionError: #27.e6116d56 a check run past its deadline reads overran, never passed: {"run":"run:01M836HB314W9YJCJ02TNNG9EG","outcome":"uncounted","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"forever","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":["uncounted: untraced program sh"],"environment":"darwin-arm64"}: expected 'uncounted' to be 'overran' // Object.is equality
+❯ tests/acceptance/27/redraft-3178/waits.test.ts:138:153
+Test Files  1 failed (1)
+Tests  1 failed | 4 passed (5)
+exit 1
+uptime after: 19:17  up 2 days, 23:44, 4 users, load averages: 118.91 91.23 81.73
+
+---- waits5-runC-base (as delivered)
+== 2026-11-23T03:18:39Z file=waits.test.ts plant=none code=37dd3c0c
+uptime before: 19:18  up 2 days, 23:45, 4 users, load averages: 112.71 93.46 83.00
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 69944ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 72907ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 23255ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (check run) a check run that never ends on its own reaches overran by its deadline (1m in the repo's spec), its processes stopped 72384ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (agent command) an agent command still running far past its expected time is recorded as an overrun while it runs, never as finished 10946ms
+Test Files  1 passed (1)
+Tests  5 passed (5)
+exit 0
+uptime after: 19:23  up 2 days, 23:49, 4 users, load averages: 95.32 95.51 86.79
+
+---- waits5-skip-default-at-deadline
+== 2026-11-23T03:23:22Z file=waits.test.ts plant=skip-default-at-deadline code=37dd3c0c
+uptime before: 19:23  up 2 days, 23:49, 4 users, load averages: 92.94 94.97 86.74
+× tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 71971ms
+→ #27.e6116d56 ask:01M836WBQ9F1NMGZM4NE3CA0AH, unanswered, must reach its default by its deadline 2026-11-23T03:24:33.993Z (+5000 ms): the record has no ask.defaulted for it: expected undefined to be defined
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 68424ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 14584ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (check run) a check run that never ends on its own reaches overran by its deadline (1m in the repo's spec), its processes stopped 69027ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (agent command) an agent command still running far past its expected time is recorded as an overrun while it runs, never as finished 7101ms
+AssertionError: #27.e6116d56 ask:01M836WBQ9F1NMGZM4NE3CA0AH, unanswered, must reach its default by its deadline 2026-11-23T03:24:33.993Z (+5000 ms): the record has no ask.defaulted for it: expected undefined to be defined
+❯ tests/acceptance/27/redraft-3178/waits.test.ts:62:185
+Test Files  1 failed (1)
+Tests  1 failed | 4 passed (5)
+exit 1
+uptime after: 19:27  up 2 days, 23:53, 4 users, load averages: 73.24 86.75 85.41
+
+---- repeat2-base (two tests, run 1)
+== 2026-11-23T04:21:34Z file=repeat.test.ts plant=none code=37dd3c0c
+uptime before: 20:21  up 3 days, 48 mins, 4 users, load averages: 132.87 137.13 125.78
+× tests/acceptance/27/redraft-3178/repeat.test.ts > #27.6e863673 The repeated question is answered by the resolver and appears under decided for you > #27.6e863673 the same question asked again in a new session is answered from the decision your CLI answer saved, at once, never reaches you, and deep inbox lists it under decided for you 74422ms
+→ BLOCKED: timed out after 60000 ms waiting for the deep_ask "Which header colour for the checkout page (bf62f119)?" filed under 67dfaa93-c4ea-42e7-9a11-036603541e52; deep_ask replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"The DeepBuild hub is unreachable (no answer on its socket); nothing was recorded. Call again once it is back.\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}"}],"isError":true}}
+× tests/acceptance/27/redraft-3178/repeat.test.ts > #27.6e863673 The repeated question is answered by the resolver and appears under decided for you > #27.6e863673 the same question asked again with a recommendation (blue) is still answered from your saved decision (green), at once, under decided for you, never left to go on with the recommendation 14547ms
+→ #27.6e863673 the repeated question (asked with blue recommended) must be answered from your saved decision: B's deep_ask must come back with green (Green header 33eb22c9); it replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M83A9N8A14BMC6WE0DDBHWEF\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with Blue header 33eb22c9: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M83A9N8A14BMC6WE0DDBHWEF","status":"provisional","answer":"blue","note":"Go on with Blue header 33eb22c9: it is provisional and can be undone, and only steps that leave the machine wait for the answer."}}}: expected 'blue' to be 'green' // Object.is equality
+❯ tests/acceptance/27/redraft-3178/world.ts:54:38
+AssertionError: #27.6e863673 the repeated question (asked with blue recommended) must be answered from your saved decision: B's deep_ask must come back with green (Green header 33eb22c9); it replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M83A9N8A14BMC6WE0DDBHWEF\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with Blue header 33eb22c9: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M83A9N8A14BMC6WE0DDBHWEF","status":"provisional","answer":"blue","note":"Go on with Blue header 33eb22c9: it is provisional and can be undone, and only steps that leave the machine wait for the answer."}}}: expected 'blue' to be 'green' // Object.is equality
+Test Files  1 failed (1)
+Tests  2 failed (2)
+exit 1
+uptime after: 20:23  up 3 days, 49 mins, 4 users, load averages: 169.84 147.43 131.02
+
+---- repeat3-base (two tests, run 2)
+== 2026-11-23T04:55:19Z file=repeat.test.ts plant=none code=37dd3c0c
+uptime before: 20:55  up 3 days,  1:21, 4 users, load averages: 127.47 131.64 138.58
+✓ tests/acceptance/27/redraft-3178/repeat.test.ts > #27.6e863673 The repeated question is answered by the resolver and appears under decided for you > #27.6e863673 the same question asked again in a new session is answered from the decision your CLI answer saved, at once, never reaches you, and deep inbox lists it under decided for you 9983ms
+× tests/acceptance/27/redraft-3178/repeat.test.ts > #27.6e863673 The repeated question is answered by the resolver and appears under decided for you > #27.6e863673 the same question asked again with a recommendation (blue) is still answered from your saved decision (green), at once, under decided for you, never left to go on with the recommendation 10548ms
+→ #27.6e863673 the repeated question (asked with blue recommended) must be answered from your saved decision: B's deep_ask must come back with green (Green header fce3a7a4); it replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M83C551N2TBRPHNACEPK2083\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with Blue header fce3a7a4: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M83C551N2TBRPHNACEPK2083","status":"provisional","answer":"blue","note":"Go on with Blue header fce3a7a4: it is provisional and can be undone, and only steps that leave the machine wait for the answer."}}}: expected 'blue' to be 'green' // Object.is equality
+AssertionError: #27.6e863673 the repeated question (asked with blue recommended) must be answered from your saved decision: B's deep_ask must come back with green (Green header fce3a7a4); it replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M83C551N2TBRPHNACEPK2083\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with Blue header fce3a7a4: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M83C551N2TBRPHNACEPK2083","status":"provisional","answer":"blue","note":"Go on with Blue header fce3a7a4: it is provisional and can be undone, and only steps that leave the machine wait for the answer."}}}: expected 'blue' to be 'green' // Object.is equality
+Test Files  1 failed (1)
+Tests  1 failed | 1 passed (2)
+exit 1
+uptime after: 20:55  up 3 days,  1:22, 4 users, load averages: 124.56 130.44 137.90
+
+---- repeat3-repeat-reaches-you
+== 2026-11-23T04:55:59Z file=repeat.test.ts plant=repeat-reaches-you code=37dd3c0c
+uptime before: 20:55  up 3 days,  1:22, 4 users, load averages: 120.63 129.40 137.45
+× tests/acceptance/27/redraft-3178/repeat.test.ts > #27.6e863673 The repeated question is answered by the resolver and appears under decided for you > #27.6e863673 the same question asked again in a new session is answered from the decision your CLI answer saved, at once, never reaches you, and deep inbox lists it under decided for you 50850ms
+→ #27.6e863673 the repeated question must be answered from your saved decision: B's deep_ask must come back with green (Green header 64a47a87); it replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M83C63SVD6E07CTM8NR72FBS\",\"status\":\"waiting\",\"answer\":null,\"deadline\":1795582576443,\"default\":\"blue\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M83C63SVD6E07CTM8NR72FBS","status":"waiting","answer":null,"deadline":1795582576443,"default":"blue"}}}: expected null to be 'green' // Object.is equality
+× tests/acceptance/27/redraft-3178/repeat.test.ts > #27.6e863673 The repeated question is answered by the resolver and appears under decided for you > #27.6e863673 the same question asked again with a recommendation (blue) is still answered from your saved decision (green), at once, under decided for you, never left to go on with the recommendation 11650ms
+→ #27.6e863673 the repeated question (asked with blue recommended) must be answered from your saved decision: B's deep_ask must come back with green (Green header d167523f); it replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M83C7P8721MWPW8D3PK5ED3G\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with Blue header d167523f: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M83C7P8721MWPW8D3PK5ED3G","status":"provisional","answer":"blue","note":"Go on with Blue header d167523f: it is provisional and can be undone, and only steps that leave the machine wait for the answer."}}}: expected 'blue' to be 'green' // Object.is equality
+AssertionError: #27.6e863673 the repeated question must be answered from your saved decision: B's deep_ask must come back with green (Green header 64a47a87); it replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M83C63SVD6E07CTM8NR72FBS\",\"status\":\"waiting\",\"answer\":null,\"deadline\":1795582576443,\"default\":\"blue\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M83C63SVD6E07CTM8NR72FBS","status":"waiting","answer":null,"deadline":1795582576443,"default":"blue"}}}: expected null to be 'green' // Object.is equality
+AssertionError: #27.6e863673 the repeated question (asked with blue recommended) must be answered from your saved decision: B's deep_ask must come back with green (Green header d167523f); it replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M83C7P8721MWPW8D3PK5ED3G\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with Blue header d167523f: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M83C7P8721MWPW8D3PK5ED3G","status":"provisional","answer":"blue","note":"Go on with Blue header d167523f: it is provisional and can be undone, and only steps that leave the machine wait for the answer."}}}: expected 'blue' to be 'green' // Object.is equality
+Test Files  1 failed (1)
+Tests  2 failed (2)
+exit 1
+uptime after: 20:57  up 3 days,  1:23, 4 users, load averages: 110.89 124.23 134.79
+
+---- mutant hold-end-unrecorded
+mutant hold-end-unrecorded at Sun Nov 22 20:24:42 PST 2026, load { 141.45 145.07 131.75 }
+× tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 69129ms
+→ BLOCKED: timed out after 60000 ms waiting for the deep_ask "Which header colour for the checkout page (32207296)?" filed under 8087824d-3af8-4492-a3b1-c470547eecc0; deep_ask replied {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"The DeepBuild hub is unreachable (no answer on its socket); nothing was recorded. Call again once it is back.\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}"}],"isError":true}}
+× tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 74023ms
+→ #27.e6116d56 by the end of c7d9c19c-92c1-4ead-9dc5-7e77e456513e's hold the record must say how it ended (held, nothing answered), naming ask:01M83AF15DMQ0XEBACXXYR2BDH; it recorded since the stop: [{"kind":"agent.stop","session":"c7d9c19c-92c1-4ead-9dc5-7e77e456513e","data":{"turn":1,"did_work":true,"claim":true,"outcome":"finished","cause":"unknown","usage":{"covers":"turn","model":"claude-haiku-5-5","input":null,"cached":null,"output":{"value":20,"exact":true},"context_fill":null,"cost":{"usd":null,"basis":"unpriced"}}}},{"kind":"turn.usage","session":"c7d9c19c-92c1-4ead-9dc5-7e77e456513e","data":{"turn":"01M83AF055D8ADEYSA5WVD79HE","model":"claude-haiku-5-5","covers":"session","tokens":{"input":4,"cached":0,"output":20,"exact":true},"cost":{"basis":"estimated","usd":0.0000104,"rate_card":"anthropic-list-2026-10"}}},{"kind":"session.attention","session":"c7d9c19c-92c1-4ead-9dc5-7e77e456513e","data":{"state":"waiting"}},{"kind":"claim.made","session":"c7d9c19c-92c1-4ead-9dc5-7e77e456513e","data":{"task_ref":"session:c7d9c19c92c14ead9dc57e77e456513e#0","attempt":1,"commit":"657ad1519a8772f2868330c957ae8835d23e4b8a","scope":"session","predictions":[]}},{"kind":"stop.held","data":{"session":"session:c7d9c19c92c14ead9dc57e77e456513e","stop":"01M83AF1EFG0995QFT9RGGX2YA","claim":"claim:01M83AF1K50RY9WT904QENXCWG","total":59562,"question":58829,"slow":0,"fast":62,"snapshot_start":671,"queue_wait":0,"code_changing":false,"budget_cost":[]}}]: expected undefined to be defined
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 20082ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (check run) a check run that never ends on its own reaches overran by its deadline (1m in the repo's spec), its processes stopped 76486ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (agent command) an agent command still running far past its expected time is recorded as an overrun while it runs, never as finished 17318ms
+❯ tests/acceptance/27/redraft-3178/world.ts:54:38
+❯ tests/acceptance/27/redraft-3178/waits.test.ts:56:22
+AssertionError: #27.e6116d56 by the end of c7d9c19c-92c1-4ead-9dc5-7e77e456513e's hold the record must say how it ended (held, nothing answered), naming ask:01M83AF15DMQ0XEBACXXYR2BDH; it recorded since the stop: [{"kind":"agent.stop","session":"c7d9c19c-92c1-4ead-9dc5-7e77e456513e","data":{"turn":1,"did_work":true,"claim":true,"outcome":"finished","cause":"unknown","usage":{"covers":"turn","model":"claude-haiku-5-5","input":null,"cached":null,"output":{"value":20,"exact":true},"context_fill":null,"cost":{"usd":null,"basis":"unpriced"}}}},{"kind":"turn.usage","session":"c7d9c19c-92c1-4ead-9dc5-7e77e456513e","data":{"turn":"01M83AF055D8ADEYSA5WVD79HE","model":"claude-haiku-5-5","covers":"session","tokens":{"input":4,"cached":0,"output":20,"exact":true},"cost":{"basis":"estimated","usd":0.0000104,"rate_card":"anthropic-list-2026-10"}}},{"kind":"session.attention","session":"c7d9c19c-92c1-4ead-9dc5-7e77e456513e","data":{"state":"waiting"}},{"kind":"claim.made","session":"c7d9c19c-92c1-4ead-9dc5-7e77e456513e","data":{"task_ref":"session:c7d9c19c92c14ead9dc57e77e456513e#0","attempt":1,"commit":"657ad1519a8772f2868330c957ae8835d23e4b8a","scope":"session","predictions":[]}},{"kind":"stop.held","data":{"session":"session:c7d9c19c92c14ead9dc57e77e456513e","stop":"01M83AF1EFG0995QFT9RGGX2YA","claim":"claim:01M83AF1K50RY9WT904QENXCWG","total":59562,"question":58829,"slow":0,"fast":62,"snapshot_start":671,"queue_wait":0,"code_changing":false,"budget_cost":[]}}]: expected undefined to be defined
+❯ tests/acceptance/27/redraft-3178/waits.test.ts:87:208
+Test Files  1 failed (1)
+Tests  2 failed | 3 passed (5)
+exit 1 at Sun Nov 22 20:29:25 PST 2026, load { 154.94 148.12 136.13 }
+
+---- mutant run-without-deadline (retargeted; the first attempt's log was overwritten by this run)
+mutant run-without-deadline at Sun Nov 22 20:38:04 PST 2026, load { 168.05 167.95 152.28 }
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 75658ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 72204ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 21418ms
+× tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (check run) a check run that never ends on its own reaches overran by its deadline (1m in the repo's spec), its processes stopped 87280ms
+→ #27.e6116d56 check run run:01M83BAWVY73BVMKXJZ4AQKKV5 never ends on its own; it must reach a recorded outcome by its deadline, 2026-11-23T04:42:24.622Z (+10000 ms): no run.finished for it: expected undefined to be defined
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (agent command) an agent command still running far past its expected time is recorded as an overrun while it runs, never as finished 14646ms
+AssertionError: #27.e6116d56 check run run:01M83BAWVY73BVMKXJZ4AQKKV5 never ends on its own; it must reach a recorded outcome by its deadline, 2026-11-23T04:42:24.622Z (+10000 ms): no run.finished for it: expected undefined to be defined
+❯ tests/acceptance/27/redraft-3178/waits.test.ts:138:201
+Test Files  1 failed (1)
+Tests  1 failed | 4 passed (5)
+exit 1 at Sun Nov 22 20:43:03 PST 2026, load { 130.06 151.66 149.55 }
+
+---- mutant overrun-dropped
+mutant overrun-dropped at Sun Nov 22 20:44:17 PST 2026, load { 118.46 142.76 146.30 }
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (ask) an ask nobody answers reaches its default, the first option, by its deadline (1m in your settings), recorded as defaulted, never as answered 73634ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, nobody answers) a stop held for an open ask goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 74767ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (hold, you answer during it) a stop held for an open ask is continued with your answer before the hold ends, and the record says delivered via stop_hold, once, and nothing else 24957ms
+✓ tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (check run) a check run that never ends on its own reaches overran by its deadline (1m in the repo's spec), its processes stopped 79290ms
+× tests/acceptance/27/redraft-3178/waits.test.ts > #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > #27.e6116d56 (agent command) an agent command still running far past its expected time is recorded as an overrun while it runs, never as finished 311122ms
+→ #27.e6116d56 call toolu_cb25210fcc56b56e9b6b2d85 (`node -e "setTimeout(() => {}, 1500)"`, which took 1.5 s last time) still runs 300 s on; the record must hold its overrun, naming the call, while it runs: expected undefined to be defined
+AssertionError: #27.e6116d56 call toolu_cb25210fcc56b56e9b6b2d85 (`node -e "setTimeout(() => {}, 1500)"`, which took 1.5 s last time) still runs 300 s on; the record must hold its overrun, naming the call, while it runs: expected undefined to be defined
+❯ tests/acceptance/27/redraft-3178/waits.test.ts:163:215
+Test Files  1 failed (1)
+Tests  1 failed | 4 passed (5)
+exit 1 at Sun Nov 22 20:54:10 PST 2026, load { 140.94 134.59 140.16 }
+

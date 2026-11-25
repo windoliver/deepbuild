@@ -1,0 +1,305 @@
+[
+ {
+  "task": "canvas-patch-settled",
+  "base": "b6b99ad8c",
+  "change": "6a007be07 + the follow-up's source edits",
+  "status": "PASS",
+  "medianChange": -0.0004600227178818139,
+  "pAbove2pct": 1,
+  "pBelow": 9.999000099990002e-05,
+  "seed": 1405,
+  "pairs": [
+   {
+    "current": 1010099336794,
+    "base": 1009848920153
+   },
+   {
+    "current": 1006949656810,
+    "base": 1009369705139
+   },
+   {
+    "current": 1009632107951,
+    "base": 1010844081382
+   },
+   {
+    "current": 1009314633002,
+    "base": 1010238511279
+   },
+   {
+    "current": 1010181281979,
+    "base": 1009009288169
+   },
+   {
+    "current": 1009857366282,
+    "base": 1010137333762
+   },
+   {
+    "current": 1009062152650,
+    "base": 1009711283511
+   },
+   {
+    "current": 1009994343058,
+    "base": 1009832403056
+   },
+   {
+    "current": 1008480877879,
+    "base": 1010010180201
+   },
+   {
+    "current": 1008575518465,
+    "base": 1009518358891
+   },
+   {
+    "current": 1010142165177,
+    "base": 1009373830112
+   },
+   {
+    "current": 1007195439647,
+    "base": 1009866974007
+   },
+   {
+    "current": 1007951763794,
+    "base": 1010190418789
+   },
+   {
+    "current": 1009292804749,
+    "base": 1006773765501
+   },
+   {
+    "current": 1011499156450,
+    "base": 1009473944822
+   },
+   {
+    "current": 1005749030050,
+    "base": 999632240063
+   },
+   {
+    "current": 1006278954190,
+    "base": 1000681680028
+   },
+   {
+    "current": 1008748377995,
+    "base": 1009026827093
+   },
+   {
+    "current": 1008092834388,
+    "base": 1009920219517
+   },
+   {
+    "current": 1008747724528,
+    "base": 1011272247463
+   }
+  ],
+  "fingerprint": {
+   "model": "Mac17,10",
+   "chip": "Apple M5 Max",
+   "memoryBytes": 68719476736,
+   "power": "ac",
+   "lowPowerMode": false,
+   "thermalState": "nominal",
+   "macosBuild": "26B8119"
+  }
+ },
+ {
+  "task": "terminal-60hz",
+  "base": "b6b99ad8c",
+  "change": "6a007be07 + the follow-up's source edits",
+  "status": "PASS",
+  "medianChange": 0.0005077904273957934,
+  "pAbove2pct": 1,
+  "pBelow": 9.999000099990002e-05,
+  "seed": 1405,
+  "pairs": [
+   {
+    "current": 3100680262,
+    "base": 3092498543
+   },
+   {
+    "current": 3101899020,
+    "base": 3100573904
+   },
+   {
+    "current": 3096140209,
+    "base": 3094320120
+   },
+   {
+    "current": 3100753837,
+    "base": 3096129416
+   },
+   {
+    "current": 3099098438,
+    "base": 3096076627
+   },
+   {
+    "current": 3097145923,
+    "base": 3093564477
+   },
+   {
+    "current": 3092044129,
+    "base": 3096483893
+   },
+   {
+    "current": 3094435003,
+    "base": 3096084366
+   },
+   {
+    "current": 3096257832,
+    "base": 3099624386
+   },
+   {
+    "current": 3094800366,
+    "base": 3099925981
+   },
+   {
+    "current": 3097800324,
+    "base": 3103235815
+   },
+   {
+    "current": 3101355479,
+    "base": 3091209994
+   },
+   {
+    "current": 3093559028,
+    "base": 3095265662
+   },
+   {
+    "current": 3095895081,
+    "base": 3097266090
+   },
+   {
+    "current": 3102772584,
+    "base": 3095077963
+   },
+   {
+    "current": 3102313523,
+    "base": 3095796682
+   },
+   {
+    "current": 3098449554,
+    "base": 3097386548
+   },
+   {
+    "current": 3099347590,
+    "base": 3093970135
+   },
+   {
+    "current": 3099730967,
+    "base": 3101082292
+   },
+   {
+    "current": 3094959813,
+    "base": 3091812423
+   }
+  ],
+  "fingerprint": {
+   "model": "Mac17,10",
+   "chip": "Apple M5 Max",
+   "memoryBytes": 68719476736,
+   "power": "ac",
+   "lowPowerMode": false,
+   "thermalState": "nominal",
+   "macosBuild": "26B8119"
+  }
+ },
+ {
+  "task": "canvas-patch-dirty",
+  "base": "b6b99ad8c",
+  "change": "6a007be07 + the follow-up's source edits",
+  "status": "PASS",
+  "medianChange": 0.00033322761335563555,
+  "pAbove2pct": 1,
+  "pBelow": 9.999000099990002e-05,
+  "seed": 1405,
+  "pairs": [
+   {
+    "current": 1110319026623,
+    "base": 1110155813541
+   },
+   {
+    "current": 1109557118052,
+    "base": 1109671733411
+   },
+   {
+    "current": 1110070666004,
+    "base": 1109777900149
+   },
+   {
+    "current": 1109948700545,
+    "base": 1109703233646
+   },
+   {
+    "current": 1110106571826,
+    "base": 1109675223059
+   },
+   {
+    "current": 1110667263258,
+    "base": 1109149741839
+   },
+   {
+    "current": 1110522715259,
+    "base": 1110021683871
+   },
+   {
+    "current": 1110040506211,
+    "base": 1109482079740
+   },
+   {
+    "current": 1110208188438,
+    "base": 1109436840347
+   },
+   {
+    "current": 1110269367447,
+    "base": 1110054305186
+   },
+   {
+    "current": 1110442921485,
+    "base": 1109683396901
+   },
+   {
+    "current": 1110115527988,
+    "base": 1109780992602
+   },
+   {
+    "current": 1110312923906,
+    "base": 1109907793665
+   },
+   {
+    "current": 1110102046312,
+    "base": 1109770030265
+   },
+   {
+    "current": 1110589970024,
+    "base": 1109621737089
+   },
+   {
+    "current": 1110361435004,
+    "base": 1110742752574
+   },
+   {
+    "current": 1110446208630,
+    "base": 1110213432408
+   },
+   {
+    "current": 1110987421296,
+    "base": 1109776537518
+   },
+   {
+    "current": 1110690797950,
+    "base": 1110648271466
+   },
+   {
+    "current": 1110574907968,
+    "base": 1109526577129
+   }
+  ],
+  "fingerprint": {
+   "model": "Mac17,10",
+   "chip": "Apple M5 Max",
+   "memoryBytes": 68719476736,
+   "power": "ac",
+   "lowPowerMode": false,
+   "thermalState": "nominal",
+   "macosBuild": "26B8119"
+  }
+ }
+]

@@ -22,6 +22,18 @@ pub fn provide_font(file: &str, bytes: Vec<u8>) {
     deep_text::provide(file, bytes);
 }
 
+/// #3257: a PNG's or a JPEG's map as [`Player::attach`] makes it where the device has no block
+/// format, every level end to end, largest first: the bytes a check holds to the decode worker's.
+#[cfg(feature = "full")]
+#[wasm_bindgen]
+pub fn map_chain(bytes: &[u8], role: &str, alpha_cutoff: Option<f64>) -> Result<Vec<u8>, JsValue> {
+    use deep_codecs::maps::{ready, Blocks, Role};
+    let role = Role::read(role).unwrap_or(Role::Data);
+    let cutoff = alpha_cutoff.map(|c| c as f32);
+    let made = ready(bytes, role, cutoff, Blocks::None, false).map_err(fail)?;
+    Ok(made.data)
+}
+
 #[wasm_bindgen]
 pub struct Player {
     sealed: &'static Sealed,
@@ -37,7 +49,7 @@ pub struct Player {
     draw: Option<crate::draw::Draw>,
     /// Each picture's level file by its source's SHA-256.
     levels: HashMap<String, String>,
-    /// Each texture map the document's materials name, ready for the device, by its SHA-256.
+    /// Each texture map the document's materials name, ready for the device, by its key.
     maps: crate::draw::Maps,
     /// #549: the piece's match, when its net item declares a relay; the full set's player alone
     /// holds the net module.
@@ -252,11 +264,12 @@ impl Player {
         let Some(p) = self.played.as_ref() else {
             return Ok(());
         };
-        for (sha, role) in material_maps(p.document()) {
-            let role = Role::read(role).unwrap_or(Role::Data);
-            let bytes = (self.files.get(&sha))
+        for (map, of) in material_maps(p.document()) {
+            let role = Role::read(of.role()).unwrap_or(Role::Data);
+            let sha = &of.sha;
+            let bytes = (self.files.get(sha))
                 .ok_or_else(|| fail(format!("the bundle holds no map {sha}")))?;
-            let r = deep_codecs::maps::ready(bytes, role, blocks, false)
+            let r = deep_codecs::maps::ready(bytes, role, of.cutoff, blocks, false)
                 .map_err(|e| fail(format!("the map {sha} doesn't load: {e}")))?;
             let texels = Texels {
                 format: r.format.into(),
@@ -264,7 +277,7 @@ impl Player {
                 mips: r.mips,
                 data: std::sync::Arc::new(r.data),
             };
-            self.maps.insert(sha, std::sync::Arc::new(texels));
+            self.maps.insert(map, std::sync::Arc::new(texels));
         }
         Ok(())
     }
@@ -443,6 +456,17 @@ impl Player {
     /// order: the one the app gives its accessibility seam, read through the core.
     pub fn tree(&self) -> String {
         Value::Array(self.played.as_ref().map(Played::tree).unwrap_or_default()).to_string()
+    }
+
+    /// A set's walk (#3236), as JSON `[{id, text}]` in the order its reading focus takes it.
+    pub fn walk(&self, set: &str) -> String {
+        Value::Array(
+            self.played
+                .as_ref()
+                .map(|p| p.walk(set))
+                .unwrap_or_default(),
+        )
+        .to_string()
     }
 
     /// Each readout heard and what it says in the frame shown (#1045), as JSON `{id: text}`.

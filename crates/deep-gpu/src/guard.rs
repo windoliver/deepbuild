@@ -19,6 +19,12 @@ pub enum By {
     Agent,
 }
 
+/// Whether an sRGB-encoded color counts as dark: its Rec. 709 luma at most [`DARK_LUMA`].
+pub fn is_dark([r, g, b]: [u8; 3]) -> bool {
+    let luma = (0.0722 * f64::from(b) + 0.7152 * f64::from(g) + 0.2126 * f64::from(r)) / 255.0;
+    luma <= DARK_LUMA
+}
+
 /// The share of a frame's pixels that are dark, for premultiplied BGRA bytes: each pixel's Rec.
 /// 709 luma as it shows over black.
 fn dark_share(bgra: &[u8]) -> f64 {
@@ -30,12 +36,7 @@ fn dark_share(bgra: &[u8]) -> f64 {
         .as_chunks::<4>()
         .0
         .iter()
-        .filter(|p| {
-            let luma =
-                (0.0722 * f64::from(p[0]) + 0.7152 * f64::from(p[1]) + 0.2126 * f64::from(p[2]))
-                    / 255.0;
-            luma <= DARK_LUMA
-        })
+        .filter(|p| is_dark([p[2], p[1], p[0]]))
         .count();
     dark as f64 / pixels as f64
 }

@@ -1,0 +1,372 @@
+== head b1a1ff86234e7e080e0e339774ac12ad05813e9b
+
+===== tests/acceptance/41/app/finder.test.ts  start 16:16:56 load { 18.14 25.66 80.13 } thermal 0 free KB 38287624 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22m
+
+ ❯ tests/acceptance/41/app/finder.test.ts (5 tests | 2 failed) 306722ms
+   ❯ AC17 #41.fb18eabe Set up from an app opened by Finder (5)
+     × AC17 #41.fb18eabe with /bin/zsh as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once 301140ms
+     × AC17 #41.fb18eabe with /bin/bash as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once 390ms
+     ✓ AC17 #41.fb18eabe with a login shell that is missing, Set up names it, within 60 s 15ms
+     ✓ AC17 #41.fb18eabe with a login shell that exits non-zero, Set up names it, within 60 s 113ms
+     ✓ AC17 #41.fb18eabe with a login shell that never answers, Set up names it, within 60 s 5016ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/app/finder.test.ts > AC17 #41.fb18eabe Set up from an app opened by Finder > AC17 #41.fb18eabe with /bin/zsh as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once
+ FAIL  tests/acceptance/41/app/finder.test.ts > AC17 #41.fb18eabe Set up from an app opened by Finder > AC17 #41.fb18eabe with /bin/bash as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once
+AssertionError: #41 AC17 Set up from an app opened by Finder must succeed when deep and its runtime are on the login shell's PATH: exit 1, stdout "", stderr "deep-app: Set up finished without a word. Press Set up to try again.\n"
+ ❯ tests/acceptance/41/app/finder.test.ts:86:34
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 3 passed (5)
+   Start at  16:16:57
+   Duration  306.83s (tests 100%)
+
+===== tests/acceptance/41/app/finder.test.ts exit=1
+
+===== tests/acceptance/1454/commands.test.ts  start 16:22:04 load { 75.92 63.85 81.40 } thermal 1 free KB 28237728 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22m
+
+ ❯ tests/acceptance/1454/commands.test.ts (3 tests | 3 failed) 638607ms
+   ❯ #1454 ⌘K in the real app (3)
+     × AC2 #1454.ecdbb26a ⌘K opens in the real app and lists a page and a command, and opening the page fills the page 420192ms
+     × AC2 #1454.ecdbb26a wrong program: a page opened without its parameter fails, naming the entry 10970ms
+     × AC2 #1454.ecdbb26a ⌘K with nothing installed still opens, and the same judge says what it lacks 207234ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/commands.test.ts > #1454 ⌘K in the real app > AC2 #1454.ecdbb26a ⌘K opens in the real app and lists a page and a command, and opening the page fills the page
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep install exited 1: Source: /private/tmp/dh806-lG7Ohg/board
++   test/board@1.0.0, digest d1:b3a65725ee01156991bd0d6ae6e0ec4471ab5ba9def6828f459406399b17dc81, unsigned
++ Permissions:
++   access: record
++   notices: none
++   actions: ext.board.refresh
++   check kinds: none
++   provides: none
++   uses: none
++   replaces: none
++   conflicts with: none
++   runs on: none
++   hosts: none
++ Installed test/board@1.0.0
++ It is not loaded: ext.board.view reads FAIL on panel@1: panel@1 refused this panel: main.js:4 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\"
++ ",
++ ]
+
+ ❯ tests/acceptance/1454/commands.test.ts:37:36
+     35|   it('AC2 #1454.ecdbb26a ⌘K opens in the real app and lists a page and…
+     36|     const { failures, page } = await openPage();
+     37|     expect([...failures, ...page]).toEqual([]);
+       |                                    ^
+     38|   }, 10 * MINUTES);
+     39|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/1454/commands.test.ts > #1454 ⌘K in the real app > AC2 #1454.ecdbb26a wrong program: a page opened without its parameter fails, naming the entry
+AssertionError: the planted build lists both entries: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep install exited 1: Source: /private/tmp/dh806-SAMcju/board
++   test/board@1.0.0, digest d1:b3a65725ee01156991bd0d6ae6e0ec4471ab5ba9def6828f459406399b17dc81, unsigned
++ Permissions:
++   access: record
++   notices: none
++   actions: ext.board.refresh
++   check kinds: none
++   provides: none
++   uses: none
++   replaces: none
++   conflicts with: none
++   runs on: none
++   hosts: none
++ Installed test/board@1.0.0
++ It is not loaded: ext.board.view reads FAIL on panel@1: panel@1 refused this panel: main.js:4 imports \"gpui-kit\", the toolkit under DeepBuild's module; a panel imports only \"@deepbuild/panel\"
++ ",
++ ]
+
+ ❯ tests/acceptance/1454/commands.test.ts:42:62
+     40|   it('AC2 #1454.ecdbb26a wrong program: a page opened without its para…
+     41|     const { failures, page } = await openPage('plant-page-drops-param'…
+     42|     expect(failures, 'the planted build lists both entries').toEqual([…
+       |                                                              ^
+     43|     expect(page.join('\n')).toContain(`opening "${PAGE_ENTRY}" didn't …
+     44|   }, 10 * MINUTES);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/1454/commands.test.ts > #1454 ⌘K in the real app > AC2 #1454.ecdbb26a ⌘K with nothing installed still opens, and the same judge says what it lacks
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ tests/acceptance/1454/commands.test.ts:48:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  16:22:05
+   Duration  639.16s (tests 100%)
+
+===== tests/acceptance/1454/commands.test.ts exit=1
+
+===== tests/acceptance/1454/panel.test.ts  start 16:32:44 load { 43.44 96.98 106.32 } thermal 1 free KB 104431252 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22m
+
+ ❯ tests/acceptance/1454/panel.test.ts (3 tests | 3 failed) 73033ms
+   ❯ #1454 panels you installed, in the real app (3)
+     × AC3 #1454.a94aca43 a panel installed by `deep install` draws in the real app with no flag, and a panel that fails its kit doesn't load, naming the kit 15627ms
+     × AC3 #1454.a94aca43 wrong program: an app that mounts every installed panel, kit or no kit, fails, naming the panel 56089ms
+     × AC3 #1454.a94aca43 wrong program: the panel at the base's `--panel` flag alone proves nothing: with no flag and no package the judge fails 1152ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/panel.test.ts > #1454 panels you installed, in the real app > AC3 #1454.a94aca43 a panel installed by `deep install` draws in the real app with no flag, and a panel that fails its kit doesn't load, naming the kit
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ bothPanels tests/acceptance/1454/panel.test.ts:20:15
+ ❯ tests/acceptance/1454/panel.test.ts:31:46
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/1454/panel.test.ts > #1454 panels you installed, in the real app > AC3 #1454.a94aca43 wrong program: an app that mounts every installed panel, kit or no kit, fails, naming the panel
+AssertionError: expected 'the panel `deep install` installed is…' to contain 'the panel that failed panel@1 was loa…'
+
+Expected: "the panel that failed panel@1 was loaded anyway: the window draws "Refused overlay panel""
+Received: "the panel `deep install` installed isn't in the window with no flag: its pixels lack "Installed board panel" and read ["•OOD","Needs you","work","• fix the login page working 54 s","New task","Nothing needs you","ext.board.view didn't load: main.js:4 imports \"gpui-kit\", the toolkit under","DeepBuild's module; a panel imports only \"@deepbuild/panel\"","ext.overlay.view didn't load: main.js:4 imports \"gpui-kit\", the toolkit under","DeepBuild's module; a panel imports only \"@deepbuild/panel\"","Send"]"
+
+ ❯ tests/acceptance/1454/panel.test.ts:41:33
+     39|   it('AC3 #1454.a94aca43 wrong program: an app that mounts every insta…
+     40|     const { failures } = await bothPanels('plant-panel-skips-kit');
+     41|     expect(failures.join('\n')).toContain(`the panel that failed panel…
+       |                                 ^
+     42|   }, 10 * MINUTES);
+     43|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/1454/panel.test.ts > #1454 panels you installed, in the real app > AC3 #1454.a94aca43 wrong program: the panel at the base's `--panel` flag alone proves nothing: with no flag and no package the judge fails
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ tests/acceptance/1454/panel.test.ts:46:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  16:32:45
+   Duration  73.26s (tests 100%)
+
+===== tests/acceptance/1454/panel.test.ts exit=1
+
+===== tests/acceptance/1454/panel-redraft/refused.test.ts  start 16:33:58 load { 27.95 80.20 99.14 } thermal 1 free KB 104062932 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22m
+
+ ❯ tests/acceptance/1454/panel-redraft/refused.test.ts (4 tests | 3 failed) 51648ms
+   ❯ #1454 a panel that fails its kit, redrafted (4)
+     ✓ AC3 #1454.a94aca43 `deep install` of a panel that fails panel@1 says it isn't loaded, naming the kit 12951ms
+     × AC3 #1454.a94aca43 a panel that fails its kit doesn't load: installed, it is in no window, alone or beside a panel that draws 12215ms
+     × AC3 #1454.a94aca43 the refused panel is real: mounted by `deep-app --panel`, past any kit, it loads and draws its words 897ms
+     × AC3 #1454.a94aca43 wrong program: an app that mounts every installed panel, kit or no kit, fails, naming the panel 25413ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/panel-redraft/refused.test.ts > #1454 a panel that fails its kit, redrafted > AC3 #1454.a94aca43 a panel that fails its kit doesn't load: installed, it is in no window, alone or beside a panel that draws
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ bothWindows tests/acceptance/1454/panel-redraft/refused.test.ts:60:17
+ ❯ tests/acceptance/1454/panel-redraft/refused.test.ts:79:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/1454/panel-redraft/refused.test.ts > #1454 a panel that fails its kit, redrafted > AC3 #1454.a94aca43 the refused panel is real: mounted by `deep-app --panel`, past any kit, it loads and draws its words
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ tests/acceptance/1454/panel-redraft/refused.test.ts:84:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/1454/panel-redraft/refused.test.ts > #1454 a panel that fails its kit, redrafted > AC3 #1454.a94aca43 wrong program: an app that mounts every installed panel, kit or no kit, fails, naming the panel
+Error: BLOCKED: deep-app has no window: first-frame-ms 234.2
+deep-app: ext.refused.view didn't load: main.js:8 imports "gpui-kit", the toolkit under DeepBuild's module; a panel imports only "@deepbuild/panel"
+
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.mainWindow tests/acceptance/1454/helpers.ts:185:19
+ ❯ App.capture tests/acceptance/1454/helpers.ts:178:28
+ ❯ neverDrawn tests/acceptance/1454/panel-redraft/refused.test.ts:44:29
+ ❯ bothWindows tests/acceptance/1454/panel-redraft/refused.test.ts:61:19
+ ❯ tests/acceptance/1454/panel-redraft/refused.test.ts:97:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  16:33:59
+   Duration  51.85s (tests 100%)
+
+===== tests/acceptance/1454/panel-redraft/refused.test.ts exit=1
+
+===== tests/acceptance/1454/canvas.test.ts  start 16:34:51 load { 23.07 70.75 94.56 } thermal 1 free KB 103982928 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22m
+
+ ❯ tests/acceptance/1454/canvas.test.ts (1 test | 1 failed) 3628ms
+   ❯ #1454 the canvas panel in the real app (1)
+     × AC4 #1454.913e347e a session's canvas drawn by `deep_show` appears in the real app's window 3478ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1454/canvas.test.ts > #1454 the canvas panel in the real app > AC4 #1454.913e347e a session's canvas drawn by `deep_show` appears in the real app's window
+Error: BLOCKED: deep-app exited (SIGKILL) before its window: 
+ ❯ blocked tests/acceptance/1454/helpers.ts:38:56
+     36| });
+     37|
+     38| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     39| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     40| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1454/helpers.ts:142:65
+ ❯ tests/acceptance/1454/canvas.test.ts:16:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:34:52
+   Duration  3.84s (tests 96%, transform 2%, import 2%)
+
+===== tests/acceptance/1454/canvas.test.ts exit=1
+
+===== tests/acceptance/1459/voiceover.test.ts  start 16:34:55 load { 22.34 69.81 94.09 } thermal 1 free KB 103979776 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22m
+
+ ❯ tests/acceptance/1459/voiceover.test.ts (3 tests | 1 failed) 159541ms
+   ❯ AC9 #1459.f979c200 VoiceOver reads a row as its title, its state word and what it waits on, the same as before (3)
+     ✓ AC9 in the replica's tree, each sidebar row still reads its title, then its state word and what it waits on, as before #1459 81663ms
+     ✓ AC9 wrong program: a row named by its title alone (plant-row-title-only) fails, naming the row 16100ms
+     × AC9 in the real app, what VoiceOver reads of each session's row is its title, then its state word, as before #1459 61641ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/voiceover.test.ts > AC9 #1459.f979c200 VoiceOver reads a row as its title, its state word and what it waits on, the same as before > AC9 in the real app, what VoiceOver reads of each session's row is its title, then its state word, as before #1459
+AssertionError: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the real window has 0 buttons labelled with \"Cart totals\", not one row",
++   "the real window has 0 buttons labelled with \"Release notes\", not one row",
++ ]
+
+ ❯ tests/acceptance/1459/voiceover.test.ts:51:24
+     49|         });
+     50|       });
+     51|       expect(failures).toEqual([]);
+       |                        ^
+     52|     } finally {
+     53|       await app.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  16:34:56
+   Duration  159.71s (tests 100%)
+
+===== tests/acceptance/1459/voiceover.test.ts exit=1
+
+===== tests/acceptance/41/app/screens.test.ts  start 16:37:36 load { 13.34 49.05 81.58 } thermal 1 free KB 102324932 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22m
+
+ ❯ tests/acceptance/41/app/screens.test.ts (2 tests | 1 failed) 4050ms
+   ❯ AC22 #41.bff357be the three screenshots, shown to you (2)
+     × AC22 #41.bff357be the check run from the app takes the Set up screen, the older-hub screen and the update check line at the reference window, and stays INCONCLUSIVE until a taste call on them is recorded 4009ms
+     ✓ AC22 #41.bff357be the verdict passes only with a person's recorded call on exactly these screenshots: none, one on other screenshots or one naming nobody is INCONCLUSIVE, and a call that they look wrong fails 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/app/screens.test.ts > AC22 #41.bff357be the three screenshots, shown to you > AC22 #41.bff357be the check run from the app takes the Set up screen, the older-hub screen and the update check line at the reference window, and stays INCONCLUSIVE until a taste call on them is recorded
+AssertionError: #41 AC22 deep-app --screenshot /private/tmp/da41-RZQn41/set-up.png must write the window as a PNG and print one JSON line: exit 101, stdout "", stderr "\nthread 'main' (3970623) panicked at crates/deep-app/src/main.rs:428:22:\nunknown argument --screenshot\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ screenshot tests/acceptance/41/app/screens.test.ts:44:37
+
+ ❯ tests/acceptance/41/app/screens.test.ts:62:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  16:37:37
+   Duration  4.17s (tests 99%)
+
+===== tests/acceptance/41/app/screens.test.ts exit=1

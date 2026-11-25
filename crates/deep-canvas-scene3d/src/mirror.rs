@@ -247,6 +247,13 @@ pub fn view_into(s: &mut Scene, scene: &Scene, m: &Mirror, size: [u32; 2]) {
     let clip = (n.map(|v| -v), -offset);
     crate::views::clip(s, clip, format!("{}#mirror", m.material));
     s.mirror = None;
+    // #3034: under water the mirrored eye stands for the path from the eye to the surface, so
+    // all of what this view sees lies in the water; and its points are measured from the
+    // target mirrored with it, which a camera aimed past the surface holds off the plane.
+    s.under = scene.under.map(|_| f64::INFINITY);
+    if scene.under.is_some() {
+        s.camera.target = point(s.camera.target);
+    }
     s.read_reflection = false;
     // A flare is the lens's, not the reflection's.
     s.flare = None;

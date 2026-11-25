@@ -787,7 +787,7 @@ mod tests {
             json!({"kind": "rect@1", "params": {"box": [0, 0, 1, 1], "rows": 3}});
         assert!(over(&crate::document::check_in(&after, &sealed).issues));
         let changed = std::collections::BTreeSet::from(["s0".to_string()]);
-        let rechecked = crate::document::recheck(&after, &prev, &changed, &sealed);
+        let rechecked = crate::document::recheck(&mut after, &prev, &changed, &sealed);
         assert!(rechecked.is_none_or(|issues| over(&issues)));
     }
 
@@ -863,7 +863,7 @@ mod tests {
         let mut after = before.clone();
         after["items"]["s0"]["params"]["box"] = json!([0, 0, 2, 2]);
         let changed = std::collections::BTreeSet::from(["s0".to_string()]);
-        assert!(crate::document::recheck(&after, &prev, &changed, &sealed).is_some());
+        assert!(crate::document::recheck(&mut after, &prev, &changed, &sealed).is_some());
     }
 
     #[test]
@@ -911,7 +911,7 @@ mod tests {
         let mut after = before.clone();
         after["items"]["m"]["params"]["rows"] = json!(20);
         let changed = std::collections::BTreeSet::from(["m".to_string()]);
-        let rechecked = crate::document::recheck(&after, &prev, &changed, &sealed);
+        let rechecked = crate::document::recheck(&mut after, &prev, &changed, &sealed);
         assert!(
             rechecked.is_none_or(|issues| issues.iter().any(|i| i.code == "over_budget")),
             "a recheck of the patched item alone misses the other's 10 ms"

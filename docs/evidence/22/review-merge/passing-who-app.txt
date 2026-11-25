@@ -1,0 +1,12 @@
+test result: ok. 118 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+[exit 0]
+      1 warning: `deep-app` (lib) generated 1 warning
+      1 warning: `deep-app` (lib test) generated 1 warning (1 duplicate)
+      1 warning: `deep-canvas-marks` (lib) generated 1 warning (run `cargo clippy --fix --lib -p deep-canvas-marks -- ` to apply 1 suggestion)
+      1 warning: field `machine_disassembly` is never read
+      1 warning: function `apply_stress_gc_after_validation` is never used
+      1 warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo clippy --fix --lib -p quickjs-jit-runtime -- ` to apply 1 suggestion)
+      1 warning: unused import: `gpui_kit`
+      1 warning: unused variable: `diagnostic_key`
+      1 warning: using `chunks_exact_mut` with a constant chunk size
+[clippy 0]

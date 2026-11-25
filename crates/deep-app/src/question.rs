@@ -25,6 +25,10 @@ use crate::{
     states,
 };
 
+mod faults;
+pub use faults::Faults;
+mod look;
+
 /// The card's least size, in window points, tall enough for a batch of four with its switches (it draws about 525
 /// tall): a slot smaller than this, or than the card as drawn, never arms.
 pub const CARD_SIZE: [i64; 2] = [480, 560];
@@ -39,38 +43,15 @@ pub const SHOWN_OPTIONS: usize = 9;
 pub const OPEN_THE_FOLD: &str = "question.open_the_fold";
 /// What a long card says on a press while its end was never shown (#1808).
 pub const READ_TO_THE_END: &str = "question.read_to_the_end";
+/// What a taste call's accepting option says while pictures it judges weren't shown yet (#3234).
+pub const PICTURES_LEFT: &str = "question.pictures_left";
+/// What a press on it is told then.
+pub const LOOK_FIRST: &str = "question.look_first";
 
 /// Presentations are numbered across the process, so a card presented again after a relaunch gets a new `seq`.
 static NEXT_SEQ: AtomicU64 = AtomicU64::new(0);
 /// Whether an OS confirmation ever passed in this process: only the planted reuse reads it.
 static PASSED_ONCE: AtomicBool = AtomicBool::new(false);
-
-/// The wrong programs the criteria name, each a switch (design: Dogfooding, planted twins). All off in the app.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Faults {
-    /// AC1: a card that shows no scope.
-    pub no_scope: bool,
-    /// AC1: a count that follows the record while the card shows.
-    pub count_follows_record: bool,
-    /// AC2: the click mapped to the record's option order, not the drawn one.
-    pub click_by_record_index: bool,
-    /// AC3: a notification action that writes the default as an answer.
-    pub notification_action_answers: bool,
-    /// AC6: a card that leaves out the default.
-    pub no_default: bool,
-    /// AC9: the diff since the pin shown only once answered.
-    pub diff_after_answer: bool,
-    /// AC10: a shell that answers with the default on exit.
-    pub answers_on_exit: bool,
-    /// AC11: the first passed confirmation reused for the next card.
-    pub reuses_confirmation: bool,
-    /// AC13: an app that records only answers.
-    pub records_only_answers: bool,
-    /// AC15: the words answer every open ask with the key.
-    pub answers_second_from_words: bool,
-    /// AC16: a typed "yes" read as the allow option.
-    pub typed_yes_allows: bool,
-}
 
 /// What a press lands on, by the card's draw order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,11 +122,13 @@ pub enum Row {
     },
     Send,
     Undo,
-    /// A row of the batched taste card (#1345): its ask, its lines, and the lines as one label.
+    /// A row of the batched taste card (#1345): its ask, its lines, and the lines as one label; armed once the card
+    /// is and each picture its own evidence lists was shown (#3234).
     Call {
         ask: String,
         label: String,
         lines: Vec<String>,
+        armed: bool,
     },
     /// A sign-in task's one button (#1349).
     SignIn,
@@ -192,10 +175,16 @@ impl Row {
                 label: visible(&label),
                 on,
             },
-            Row::Call { ask, label, lines } => Row::Call {
+            Row::Call {
+                ask,
+                label,
+                lines,
+                armed,
+            } => Row::Call {
                 ask,
                 label: visible(&label),
                 lines: lines.iter().map(|line| visible(line)).collect(),
+                armed,
             },
             row => row,
         }
@@ -294,6 +283,8 @@ pub struct Controller {
     usage: Vec<Value>,
     /// The clock as the shell last gave it: what a hold's countdown reads (#1101).
     now: u64,
+    /// What the window drew of the pictures the card's taste calls judge (#3234).
+    pictures: crate::pictures::Pictures,
 }
 
 impl Controller {
@@ -337,7 +328,9 @@ impl Controller {
             undos: Vec::new(),
             usage: Vec::new(),
             now,
+            pictures: Default::default(),
         };
+        controller.pictures = crate::pictures::Pictures::new(&controller.listed());
         controller.machine.hold(controller.held(), now);
         controller.record("presented", now);
         if let Some(until) = held {
@@ -384,13 +377,113 @@ impl Controller {
     /// Time passed to `now`: the card arms once its interval ran, and stops saying to hold still. Whether that
     /// changed what the card shows (#1482): a tick that arms nothing draws nothing.
     pub fn tick(&mut self, now: u64) -> bool {
-        let (state, holding, counted) = (self.machine.state(), self.holding, self.counted());
+        let (state, holding, counted, left) = (
+            self.machine.state(),
+            self.holding,
+            self.counted(),
+            self.lefts(),
+        );
         self.now = now;
         self.machine.tick(now);
+        self.pictures.tick(now);
         if matches!(self.machine.state(), State::Armed { .. }) {
             self.holding = None;
         }
-        (self.machine.state(), self.holding, self.counted()) != (state, holding, counted)
+        (
+            self.machine.state(),
+            self.holding,
+            self.counted(),
+            self.lefts(),
+        ) != (state, holding, counted, left)
+    }
+
+    /// The asks whose pictures the card judges (#3234): its own, then each batched row's.
+    pub fn judged_asks(&self) -> Vec<String> {
+        std::iter::once(self.model.ask.clone())
+            .chain(self.model.calls.iter().map(|call| call.ask.clone()))
+            .collect()
+    }
+
+    /// Every picture the card's taste calls judge (#3234): its own ask's, then each batched row's, each once.
+    pub fn listed(&self) -> Vec<crate::pictures::Listed> {
+        let mut listed = self.model.pictures.clone();
+        for call in &self.model.calls {
+            for picture in &call.pictures {
+                if !listed.contains(picture) {
+                    listed.push(picture.clone());
+                }
+            }
+        }
+        listed
+    }
+
+    /// How many of the ask's own pictures, and of each batched row's, aren't shown yet.
+    fn lefts(&self) -> Vec<usize> {
+        std::iter::once(&self.model.pictures)
+            .chain(self.model.calls.iter().map(|call| &call.pictures))
+            .map(|listed| self.pictures.left(listed))
+            .collect()
+    }
+
+    /// What a frame drew of the pictures, by hash (#3234). Whether what the card says changed.
+    pub fn drawn(
+        &mut self,
+        drawn: &std::collections::HashMap<String, crate::pictures::Drawn>,
+        now: u64,
+    ) -> bool {
+        let left = self.lefts();
+        // #3234's planted card counts a draw at any size.
+        let half = if crate::plain::planted("counts-small-draw") {
+            0.
+        } else {
+            crate::pictures::HALF
+        };
+        self.now = now;
+        // A frame drawn while nobody can see the window shows you nothing.
+        let none = Default::default();
+        let drawn = if self.machine.seen() { drawn } else { &none };
+        self.pictures.frame(drawn, half, now);
+        self.lefts() != left
+    }
+
+    /// The ask's own pictures not shown yet, of all it judges; `None` on a card that judges none (#3234).
+    pub fn left(&self) -> Option<(usize, usize)> {
+        let all = self.model.pictures.len();
+        (all > 0).then(|| (self.pictures.left(&self.model.pictures), all))
+    }
+
+    /// Why a press on option `index` can't answer though the card is armed (#3234): the taste call's accepting option,
+    /// its recommended one, while pictures it judges weren't shown, with how many are left of how many. Send back needs
+    /// none of that. #3234's planted cards arm it at presentation, or hold Send back too.
+    pub fn picture_held(&self, index: usize) -> Option<(usize, usize)> {
+        let (left, all) = self.left().filter(|(left, _)| *left > 0)?;
+        let option = self.model.options.get(index)?;
+        if crate::plain::planted("arms-at-presentation") {
+            return None;
+        }
+        (option.recommended || crate::plain::planted("refuses-send-back")).then_some((left, all))
+    }
+
+    /// The option's state as the surfaces name it: `armed` when a press on it would answer.
+    pub fn option_state(&self, index: usize) -> &'static str {
+        match self.state_name() {
+            "armed" if self.picture_held(index).is_some() => "presented",
+            state => state,
+        }
+    }
+
+    /// Whether a batched row is armed (#3234): the card is, and each picture its own evidence lists was shown. #3234's
+    /// planted card arms every row once one is.
+    pub fn row_armed(&self, ask: &str) -> bool {
+        let armed = |call: &crate::kinds::CallRow| {
+            matches!(self.machine.state(), State::Armed { .. })
+                && self.pictures.left(&call.pictures) == 0
+        };
+        let calls = &self.model.calls;
+        if crate::plain::planted("arms-every-row") && calls.iter().any(armed) {
+            return matches!(self.machine.state(), State::Armed { .. });
+        }
+        calls.iter().any(|call| call.ask == ask && armed(call))
     }
 
     /// The whole seconds before a held yes's steps start, as the receipt says them (#1101); `None` with no hold
@@ -492,6 +585,9 @@ impl Controller {
             )
         {
             self.model = fresh;
+            // A picture replaced by a new hash counts as not shown again (#3234).
+            let listed = self.listed();
+            self.pictures.relist(&listed);
             self.switch_first = false;
             self.machine.present(now, self.slot);
             // What it shows changed: its end and its fold are to be shown again (#1808).
@@ -634,7 +730,7 @@ impl Controller {
             if folded > 0 && index >= SHOWN_OPTIONS {
                 break;
             }
-            let label = match (option.recommended, &option.cost) {
+            let mut label = match (option.recommended, &option.cost) {
                 (true, Some(cost)) => {
                     copy::fill("question.recommended_cost", &[&option.label, cost])
                 }
@@ -642,6 +738,10 @@ impl Controller {
                 (false, Some(cost)) => format!("{} · {cost}", option.label),
                 (false, None) => option.label.clone(),
             };
+            // Until its pictures were shown it says how many are left, as a folded option does (#3234).
+            if let Some((left, all)) = self.picture_held(index) {
+                label = copy::fill("question.option_left", &[&label, &left, &all]);
+            }
             rows.push(Row::Option {
                 index,
                 label,
@@ -722,9 +822,14 @@ impl Controller {
                     &[&call.yes, &call.applies],
                 ));
             }
+            let left = self.pictures.left(&call.pictures);
+            if left > 0 {
+                lines.push(copy::fill(PICTURES_LEFT, &[&left, &call.pictures.len()]));
+            }
             rows.push(Row::Call {
                 ask: call.ask.clone(),
                 label: lines.join(" · "),
+                armed: self.row_armed(&call.ask),
                 lines,
             });
         }
@@ -922,6 +1027,14 @@ impl Controller {
                 }
                 Did::Nothing
             }
+            // A taste call's accepting option waits for its pictures (#3234): a press on it changes nothing.
+            Target::Option(index) if shown && self.picture_held(index).is_some() => {
+                if phase == Phase::Down {
+                    self.refuse(copy::text(LOOK_FIRST), now)
+                } else {
+                    Did::Nothing
+                }
+            }
             // An approval whose own steps are off runs nothing the core would take: the card holds it back.
             Target::Option(index) if self.is_allow(index) && !self.model.own_on() => {
                 self.switch_first = true;
@@ -1111,7 +1224,7 @@ impl Controller {
             return self.took(outcome, now, events, now);
         }
         if let Some(waiting) = self.send_waiting.take() {
-            if confirmed && waiting.seq == self.machine.seq() && self.machine.accepts(now) {
+            if confirmed && self.machine.confirms(waiting.seq) {
                 self.answer_words(now, events, now);
                 return Did::Answered;
             }
@@ -1229,6 +1342,7 @@ impl Controller {
             plan_hash: allow.then(|| self.model.plan_hash.clone()).flatten(),
             token: allow.then(|| token(&self.model.ask, self.machine.seq(), t)),
             steps: (allow && self.model.batch.len() > 1).then(|| self.model.runs()),
+            pictures: self.answered_pictures(now),
         };
         self.answers
             .push(Value::Object(answer.params(&self.model.ask)));
@@ -1301,6 +1415,7 @@ impl Controller {
             plan_hash: None,
             token: None,
             steps: None,
+            pictures: self.answered_pictures(now),
         };
         self.answers
             .push(Value::Object(answer.params(&self.model.ask)));
@@ -1342,6 +1457,18 @@ impl Controller {
             self.machine.answered();
             self.answer_option(index, now, events, now);
         }
+    }
+
+    /// What the answer records of the pictures the ask judges (#3234): for each, shown or not, the largest scale it was
+    /// drawn whole at and how long it was drawn whole. #3234's planted recorder marks every one shown.
+    fn answered_pictures(&self, now: u64) -> Option<Vec<Value>> {
+        (!self.model.pictures.is_empty()).then(|| {
+            self.pictures.record(
+                &self.model.pictures,
+                now,
+                crate::plain::planted("marks-all-shown"),
+            )
+        })
     }
 
     fn record(&mut self, row: &str, now: u64) {
