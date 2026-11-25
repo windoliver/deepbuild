@@ -1,0 +1,20 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 20:38:05 load { 4.53 4.05 4.13 } thermal 0 free KB 55822216
+head 97fffed505149c3d93599549b0a32d2e1e7494c0; origin/main a6e742ed0519eda4ddd3236fbae2eaa83fd7078d; merge-base b1fc9abb20d2fd9a5fd46c323e861726fcd62a28 20:38:46 load { 3.43 3.82 4.04 } thermal 0 free KB 54870852
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 20:38:51 load { 5.00 4.14 4.15 } thermal 0 free KB 54853744
+issues/22.md (22w copy same) sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261 20:38:51 load { 5.00 4.14 4.15 } thermal 0 free KB 54853924
+issues/318.md (22w copy same) sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720 20:38:51 load { 5.00 4.14 4.15 } thermal 0 free KB 54853924
+issues/319.md (22w copy same) sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733 20:38:51 load { 5.00 4.14 4.15 } thermal 0 free KB 54853924
+issues/320.md (22w copy same) sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711 20:38:51 load { 5.00 4.14 4.15 } thermal 0 free KB 54853924
+issues/321.md (22w copy same) sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305 20:38:51 load { 5.00 4.14 4.15 } thermal 0 free KB 54853924
+judge copy checks: sha256 9257a6f60b757e4c957f8898f4ad54791ff6e7a8b51e77f988b9e6c63ee9886a diff-lines=4 reopen-early-return=1 row22=1 other-gh-calls=0 20:38:52 load { 5.00 4.14 4.15 } thermal 0 free KB 54853880
+part 7-setup start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 20:38:52 load { 5.00 4.14 4.15 } thermal 0 free KB 54853836
+setup at C (npm ci, workspace build, deep-hook) exit=0 20:39:48 load { 15.75 7.27 5.31 } thermal 0 free KB 53726344
+part 7 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 20:39:48 load { 15.75 7.27 5.31 } thermal 0 free KB 53726340
+readIssue pre-check exit=0, lines 5, 'blocked' count 0 20:39:48 load { 15.75 7.27 5.31 } thermal 0 free KB 53725280
+status before the judge [] 20:39:50 load { 15.75 7.27 5.31 } thermal 0 free KB 53724080
+gh probe before the judge: {"number":22,"state":"OPEN"} exit=0 {"number":319,"state":"CLOSED"} exit=0  20:39:51 load { 16.89 7.65 5.46 } thermal 0 free KB 53724944
+judge exit=1 wall 384 s 20:46:15 load { 3.40 9.75 7.97 } thermal 0 free KB 53317920
+gh probe after the judge: {"number":22,"state":"OPEN"} exit=0 {"number":319,"state":"CLOSED"} exit=0  20:46:16 load { 3.21 9.61 7.93 } thermal 0 free KB 53317904
+git status --porcelain lines after: 0 20:46:17 load { 3.21 9.61 7.93 } thermal 0 free KB 53318136
+login-name hits after redaction: 0 20:46:17 load { 3.21 9.61 7.93 } thermal 0 free KB 53318072
+secret scan hits=0 20:46:17 load { 3.21 9.61 7.93 } thermal 0 free KB 53318056

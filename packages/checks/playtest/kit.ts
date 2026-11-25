@@ -112,7 +112,8 @@ export function playtestKit(replica: (plant: string | null) => Play): SlotKitImp
 // Its pieces are copies of the acceptance suites' own (tests/acceptance/556/README.md: Fixtures), so the kit needs no
 // assembler: #555's crawler, its twin whose key lies inside its own vault and its twin that publishes no turn; #1048's
 // 2-layer map and that map without the teleporter's row; a 6 × 6 pointy hex board whose one route needs the odd rows'
-// shift; and a 64 × 64 flow field with its twin that steps one cell up its field from step 300. Each program is
+// shift; and a 64 × 64 flow field with its twin that steps one cell up its field from step 300. #3265's two-floors is
+// this folder's own (two-floors.wat): one of two 4 × 4 floors, by the low bit of the seed init gets. Each program is
 // fixtures/<name>.wasm, and fixtures/reach.json holds each piece (its program set from the file), the play interfaces,
 // the bots and the flow form.
 
@@ -132,6 +133,7 @@ export function reachPieces(): Record<string, { piece: Record<string, unknown>; 
 const REACH_RULES = {
   keys: { id: 'locks-need-keys', rule: 'A locked cell opens only once the search has reached a cell holding its key, so a key inside its own vault leaves the vault unreached.', code: 'grid.unreached', message: 'opened a lock whose key it never reached' },
   links: { id: 'layers-by-links', rule: 'A cell on another layer is reached only through a link, never as the cell stacked above or below it.', code: 'grid.unreached', message: 'stepped between stacked cells on two layers' },
+  same: { id: 'floors-differ', rule: 'With differ, at least that share of the floors a depth\'s runs generated are distinct, each compared with every other, or grid.same names the depth, its runs and its distinct floors.', code: 'grid.same', message: 'passed a generator that repeats its floors from run to run' },
   hex: { id: 'hex-as-drawn', rule: 'A hex grid\'s neighbours are the six its board draws by its orient and offset.', code: 'grid.unreached', message: 'took a hex grid\'s neighbours by an offset the board doesn\'t draw' },
   flow: { id: 'flow-descends', rule: 'Past the lag after a grid change, every cell a target is reached from steps to an open neighbour of lower cost, and every spawn follows next to a target, or grid.flow names the run, step, cell and why.', code: 'grid.flow', message: 'passed a flow field that rises' },
   missing: { id: 'interface-published', rule: 'A name the play interface declares that the piece publishes no array for fails play.missing, naming it, before any run.', code: 'play.missing', message: 'passed a piece missing a declared name' },
@@ -140,13 +142,15 @@ type ReachRule = keyof typeof REACH_RULES;
 
 /** check.kind@1's spec of a grid.reach case: its own input in `reach`, the named playtest's input in `play`. */
 interface ReachSpec { kind: 'grid.reach'; runner: string; inputs: string[]; depth: string; oracle: 'code'; contract: null; reach: ReachInput; play: PlaytestInput }
-interface ReachExpected { outcome: 'passed' | 'failed'; rule: ReachRule | null; cell?: Cell }
+interface ReachExpected { outcome: 'passed' | 'failed' | 'uncounted'; rule: ReachRule | null; cell?: Cell }
 export interface ReachFill extends CheckRunnerFill { kind: 'grid.reach' }
 
 function reachFixtures(): Fixture[] {
   const d = reachData();
   const floors: ReachInput = { playtest: 'kit', goals: ['exit'], every: ['open'], depths: [1] };
   const flow: ReachInput = { playtest: 'kit', flow: d.flow };
+  const differ: ReachInput = { ...floors, differ: 0.9 };
+  const twoBots: Partial<PlaytestInput> = { bots: [d.bots['idle']!, d.bots['descender']!], piece_seed: 'run' };
   const spec = (piece: string, play: string, bot: string, steps: number, reach: ReachInput, o: Partial<PlaytestInput> = {}): ReachSpec => ({
     kind: 'grid.reach', runner: 'deep.canvas.play', inputs: [], depth: 'journey', oracle: 'code', contract: null, reach,
     play: { piece: `${piece}@1`, play: d.plays[play]!, bots: [d.bots[bot]!], runs: 1, seed: 556, span: { steps }, goals: [], ...o },
@@ -156,6 +160,11 @@ function reachFixtures(): Fixture[] {
     fixture('clean-crawler', spec('crawler', 'crawler', 'descender', 150, floors, { runs: 2, piece_seed: 'run' }), { outcome: 'passed', rule: null }),
     fixture('planted-vault', spec('crawler-vault', 'crawler', 'descender', 150, floors, { piece_seed: 'run' }), { outcome: 'failed', rule: 'keys' }),
     fixture('planted-noturn', spec('crawler-noturn', 'crawler', 'descender', 150, floors, { piece_seed: 'run' }), { outcome: 'failed', rule: 'missing' }),
+    // Two bots' run i are one seed's: one floor, not one that repeats; and one seed's floors alone say nothing.
+    fixture('clean-differ', spec('crawler', 'crawler', 'idle', 2, differ, { ...twoBots, runs: 20 }), { outcome: 'passed', rule: null }),
+    fixture('one-seed', spec('crawler', 'crawler', 'idle', 2, differ, twoBots), { outcome: 'uncounted', rule: null }),
+    // A check seed whose 20 runs take the generator's two floors in turn, so each run's floor differs from the one before.
+    fixture('planted-two-floors', spec('two-floors', 'two-floors', 'idle', 2, differ, { runs: 20, seed: 662355, piece_seed: 'run' }), { outcome: 'failed', rule: 'same' }),
     fixture('clean-map', spec('map', 'map', 'explorer', 60, floors), { outcome: 'passed', rule: null }),
     fixture('planted-map-gate', spec('map-gate', 'map', 'explorer', 60, floors), { outcome: 'failed', rule: 'links', cell: [14, 14] }),
     fixture('clean-hex', spec('hex', 'hex', 'idle', 2, floors), { outcome: 'passed', rule: null }),
@@ -169,12 +178,12 @@ function* reachJudge(fill: ReachFill, c: SlotCase): Generator<() => unknown, voi
   const { spec } = c.input as unknown as { spec: ReachSpec };
   const ex = c.expected as unknown as ReachExpected;
   const r = (yield () => fill.run(spec as never, CTX)) as CheckResult;
-  if (ex.outcome === 'passed') {
+  if (ex.rule === null) {
     const codes = [...new Set(r.failures.map((f) => f.message.split(':')[0]!))];
-    if (r.outcome !== 'passed') throw new Finding('FAIL', `the ${c.id} fixture reported ${r.outcome}: ${r.failures.map((f) => f.message).join('; ')}`, codes.length ? codes : ['clean_failed']);
+    if (r.outcome !== ex.outcome) throw new Finding('FAIL', `the ${c.id} fixture reported ${r.outcome}: ${r.failures.map((f) => f.message).join('; ')}`, codes.length ? codes : ['clean_failed']);
     return;
   }
-  const rule = REACH_RULES[ex.rule!];
+  const rule = REACH_RULES[ex.rule];
   const cell = ex.cell ? `cell [${ex.cell.join(', ')}]` : '';
   if (r.outcome === 'passed' || !r.failures.some((f) => f.message.startsWith(`${rule.code}:`) && f.message.includes(cell))) {
     throw fail(rule.message, [rule.code], `${c.id} reported ${r.outcome} without ${rule.code}${cell ? ` naming ${cell}` : ''}`);
@@ -195,7 +204,7 @@ export function reachKit(replica: (plant: string | null) => Play): SlotKitImpl<R
       return { ...r, failures, outcome: failures.length ? r.outcome : 'passed' };
     },
   });
-  const runners = { 'offset-even': 'hex', 'stacked-layers': 'links', 'opens-locks': 'keys' } as const;
+  const runners = { 'offset-even': 'hex', 'stacked-layers': 'links', 'opens-locks': 'keys', 'previous-run': 'same' } as const;
   const planted: PlantedFill<ReachFill>[] = [
     ...Object.entries(runners).map(([name, rule]) => ({ name, message: REACH_RULES[rule].message, codes: [REACH_RULES[rule].code], breaks: REACH_RULES[rule].id, fill: fill(PLANTED[name]!) })),
     { name: 'ignores-flow', message: REACH_RULES.flow.message, codes: [REACH_RULES.flow.code], breaks: REACH_RULES.flow.id, fill: fill(OWN, 'grid.flow') },

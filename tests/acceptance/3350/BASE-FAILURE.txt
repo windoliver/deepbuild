@@ -1,0 +1,191 @@
+# #3350's acceptance suite on the merge base 7794e5728 (PR 3341's branch), node --test 'tests/acceptance/3350/*.test.mjs'
+# 2026-11-23 on the 12-core Mac it was drafted on; 1-minute load at start and end on the first and last lines below.
+# Home folders are written ~, temporary folders $TMPDIR, this machine's name <host>, the checkout <checkout>.
+#
+# Expected on the base, and seen:
+#   #3350.46301a6a FAILS at its assertion: the base lane asks cargo test's grant with --wait 30, so the far table logs
+#     it "wait":30 and no stall (the command itself ran behind the moving queue: the base's 30 min outlasts it).
+#     The base is twin far-fixed-wait's behavior.
+#   #3350.cd64baa0 FAILS at its assertion: the base lane waits 30 min for cargo test's grant behind the held far build
+#     slots, so the near end is still running at the test's 6-minute bound.
+#   #3350.48bfd705 PASSES: a lane run outside a far end asks --wait 30 today. Its proof is twin stall-everywhere.
+#
+# Other runs, in a copy of the checkout in the job's scratch folder (not kept):
+#   A throwaway implementation (runLanes takes a stall the far end passes it, and asks --stall <stall> for each
+#   command and cargo listing when given one): 3 of 3 passed in 55 s, load about 95.
+#     ✔ #3350.46301a6a ... (55054 ms)   ✔ #3350.cd64baa0 ... (17720 ms)   ✔ #3350.48bfd705 ... (13110 ms)
+#   Planted stall-everywhere (every '--wait', '30' of the base lanes.mjs read '--stall', '30'), near-wait.test.mjs:
+#     ✖ #3350.48bfd705 ... AssertionError: cargo test's grant was asked with --wait 30, not --stall:
+#       {"event":"granted","class":"build","grant":"top-level",...,"stall":30}
+
+21:46  up 4 days,  2:13, 15 users, load averages: 94.67 82.68 94.19
+✖ #3350.46301a6a a remote lane whose cargo test build grant waits behind a far build queue that keeps moving past the stall bound runs the command and reads the lane's own state (70139.301625ms)
+✖ #3350.cd64baa0 a remote lane whose cargo test build grant stalls past the bound leaves the far end's record INCONCLUSIVE with a finding naming the holder, and the near end exits 2 (384543.664917ms)
+✔ #3350.48bfd705 a lane run outside a far end asks for each of its commands' grants with --wait 30, even with the far end's stall bound set (20223.452208ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 384641.778292
+
+✖ failing tests:
+
+test at tests/acceptance/3350/far-moving.test.mjs:14:1
+✖ #3350.46301a6a a remote lane whose cargo test build grant waits behind a far build queue that keeps moving past the stall bound runs the command and reads the lane's own state (70139.301625ms)
+  AssertionError [ERR_ASSERTION]: cargo test's build grant was asked with --stall 0.05, the far end's bound, not --wait: {"at":"2026-11-24T05:47:30.442Z","event":"granted","class":"build","grant":"top-level","id":"6f21b44e22a3b20f","pid":74599,"index":1,"load":98.12890625,"cores":12,"wait":30}
+  exit 0
+  stdout:
+  …t, so `~/.nvm/versions/node/v24.22.0/bin/node node_modules/vitest/vitest.mjs run --reporter=default --reporter=/private$TMPDIR/deep-1122-Is3ZfH/far-home/deepbuild/.claude/worktre…
+  
+  [1m[30m[46m RUN [49m[39m[22m [36mv5.0.5 [39m[90m/private$TMPDIR/deep-1122-Is3ZfH/far-home/deepbuild/.claude/worktrees/MacBook-Pro-session-3b9aadc6[39m
+  
+   [32m✓[39m tests/noted-3350.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 1[2mms[22m[39m
+   [32m✓[39m tests/fixture-1122/pass.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 1[2mms[22m[39m
+   [32m✓[39m tests/gate-3350.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 2760[2mms[22m[39m
+     [33m[2m✓[22m[39m the lane waits at its gate[33m 2759[2mms[22m[39m
+  
+  [2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+  [2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+  [2m   Start at [22m 21:46:58
+  [2m   Duration [22m 3.07s[2m (tests 98%, transform 1%, import 1%)[22m
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `~/.nvm/versions/node/v24.22.0/bin/node scripts/affected.mjs --alone --slow --timed --results=/private$TMPDIR/deep-1122-Is3ZfH/far-tmp/deep-preflight-output-p2lXqZ/report` …
+  alone vitest: tests/acceptance/149/fixture-1122-pass.test.ts
+  TIMED the timed list, from scripts/lanes.mjs (333): tests/acceptance/1018/budgets.test.ts tests/acceptance/1018/redraft-ac6/budgets.test.ts tests/acceptance/46/budgets.test.ts tests/acceptance/103/budgets.test.ts tests/acceptance/104/budgets.test.ts tests/acceptance/105/budgets.test.ts tests/accepta…
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 3 s at load 102; logs in /private$TMPDIR/deep-1122-Is3ZfH/far-tmp/deep-affected-tWLF5i
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo test --workspace --locked --no-fail-fast` runs under the throttle's grant with no lease
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `~/.nvm/versions/node/v24.22.0/bin/node --test --test-reporter=file:///private$TMPDIR/deep-1122-Is3ZfH/far-home/deepbuild/.claude/worktrees/MacBook-Pro-session-3b9aadc6/scr…
+  ✔ a node test passes (0.465042ms)
+  ✔ a node test of the lane notes its grant (1.130083ms)
+  ℹ tests 2
+  ℹ suites 0
+  ℹ pass 2
+  ℹ fail 0
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 61.056125
+  PASS unit (51.30 s)
+  RECORD /private$TMPDIR/deep-1122-Is3ZfH/far-home/.deepbuild/lanes/194171f8d631c8eb6c3bd6014993a0d1e38a5253-unit.json
+  PASS unit on <host>
+  RECORD /private$TMPDIR/deep-1122-Is3ZfH/home/.deepbuild/lanes/194171f8d631c8eb6c3bd6014993a0d1e38a5253-unit-<host>.json
+  
+  stderr:
+  
+  line:
+  stdout:
+  READY 2
+  
+  stderr:
+  
+  cargo: [{"grant":"build:6f21b44e22a3b20f","args":"test --workspace --locked --no-fail-fast","above":{"74599":12,"80830":1}},{"grant":"none","args":"metadata --no-deps --format-version 1 --offline","above":{}},{"grant":"none","args":"metadata --no-deps --format-version 1 --offline","above":{}},{"grant":"build:2887a765a21a26c3","args":"test --workspace --locked --no-fail-fast -- --list","above":{"81400":10,"85009":0}},{"grant":"none","args":"metadata --no-deps --format-version 1 --offline","above":{}}]
+  log (/private$TMPDIR/deep-1122-Is3ZfH/far-home/.deepbuild/throttle):
+  {"at":"2026-11-24T05:46:39.814Z","event":"granted","class":"build","grant":"top-level","id":"86bf2bd77a41c47a","pid":64632,"index":1,"load":94.45361328125,"cores":12,"stall":0.05}
+  {"at":"2026-11-24T05:46:52.597Z","event":"released","class":"build","id":"86bf2bd77a41c47a","pid":64632}
+  {"at":"2026-11-24T05:46:53.019Z","event":"granted","class":"build","grant":"top-level","id":"10a4d560458f994b","pid":68357,"index":1,"load":98.12451171875,"cores":12,"stall":0.05}
+  {"at":"2026-11-24T05:46:53.191Z","event":"released","class":"build","id":"10a4d560458f994b","pid":68357}
+  {"at":"2026-11-24T05:46:56.519Z","event":"granted","class":"test","grant":"top-level","id":"d65ce75be5137515","pid":68859,"index":1,"load":97.3935546875,"cores":12,"wait":30,"readings":null}
+  {"at":"2026-11-24T05:46:57.086Z","event":"passed","class":"build","pid":68958,"through":"test:d65ce75be5137515"}
+  {"at":"2026-11-24T05:46:59.496Z","event":"granted","class":"build","grant":"top-level","id":"1ea73c8e4224e2cb","pid":70191,"index":1,"load":108.49267578125,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:01.129Z","event":"released","class":"build","id":"1ea73c8e4224e2cb","pid":70191}
+  {"at":"2026-11-24T05:47:01.247Z","event":"granted","class":"build","grant":"top-level","id":"df8f12e6d570665d","pid":70188,"index":1,"load":108.49267578125,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:01.471Z","event":"released","class":"test","id":"d65ce75be5137515","pid":68859}
+  {"at":"2026-11-24T05:47:02.791Z","event":"released","class":"build","id":"df8f12e6d570665d","pid":70188}
+  {"at":"2026-11-24T05:47:02.882Z","event":"granted","class":"build","grant":"top-level","id":"3ece7bad66808446","pid":70187,"index":1,"load":108.49267578125,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:04.537Z","event":"released","class":"build","id":"3ece7bad66808446","pid":70187}
+  {"at":"2026-11-24T05:47:04.666Z","event":"granted","class":"build","grant":"top-level","id":"7653212c90c12d0a","pid":70190,"index":1,"load":105.490234375,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:06.321Z","event":"released","class":"build","id":"7653212c90c12d0a","pid":70190}
+  {"at":"2026-11-24T05:47:06.424Z","event":"granted","class":"build","grant":"top-level","id":"1b97771bb4fb2ebd","pid":70192,"index":1,"load":105.490234375,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:08.079Z","event":"released","class":"build","id":"1b97771bb4fb2ebd","pid":70192}
+  {"at":"2026-11-24T05:47:08.162Z","event":"granted","class":"build","grant":"top-level","id":"4da1e69b234d7320","pid":70189,"index":1,"load":105.490234375,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:09.706Z","event":"released","class":"build","id":"4da1e69b234d7320","pid":70189}
+  {"at":"2026-11-24T05:47:09.879Z","event":"granted","class":"build","grant":"top-level","id":"8b60dbe99475d8b4","pid":70591,"index":1,"load":103.52880859375,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:11.501Z","event":"released","class":"build","id":"8b60dbe99475d8b4","pid":70591}
+  {"at":"2026-11-24T05:47:11.509Z","event":"granted","class":"build","grant":"top-level","id":"c6b57d404c9af148","pid":70936,"index":1,"load":103.52880859375,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:13.141Z","event":"released","class":"build","id":"c6b57d404c9af148","pid":70936}
+  {"at":"2026-11-24T05:47:13.279Z","event":"granted","class":"build","grant":"top-level","id":"84e28d68c5ffe835","pid":71001,"index":1,"load":103.52880859375,"cores":12,"wait":30}
+  {"at":"2026-11-24T05:47:13.513Z","event":"passed","class":"build","pid":73186,"through":"build:84e28d68c5ffe835"}
+  {"at":"2026-11-24T05:47:15.633Z","event":"granted","class":"test","grant":"nested","id":"d9642ac1a9fae93f","pid":73540,"run":true}
+  {"at":"2026-11-24T05:47:17.737Z","event":"passed","class":"test","pid":74197,"through":"test:d9642ac1a9fae93f"}
+  {"at":"2026-11-24T05:47:17.740Z","event":"turn","id":"c4d0acdf6622f8ee","run":"d9642ac1a9fae93f","pid":74197}
+  {"at":"2026-11-24T05:47:18.064Z","event":"passed","class":"build","pid":74244,"through":"test:d9642ac1a9fae93f"}
+  {"at":"2026-11-24T05:47:19.214Z","event":"released","class":"turn","id":"c4d0acdf6622f8ee","pid":74197,"run":"d9642ac1a9fae93f"}
+  {"at":"2026-11-24T05:47:19.512Z","event":"released","class":"test","id":"d9642ac1a9fae93f","pid":73635,"run":true}
+  {"at":"2026-11-24T05:47:19.750Z","event":"released","class":"build","id":"84e28d68c5ffe835","pid":71001}
+  {"at":"2026-11-24T05:47:19.844Z","event":"granted","class":"build","grant":"top-level","id":"2043c2d214af8de4","pid":71124,"index":1,"load":101.64697265625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:21.460Z","event":"released","class":"build","id":"2043c2d214af8de4","pid":71124}
+  {"at":"2026-11-24T05:47:21.623Z","event":"granted","class":"build","grant":"top-level","id":"126f7cc05971c3e6","pid":71611,"index":1,"load":101.64697265625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:23.272Z","event":"released","class":"build","id":"126f7cc05971c3e6","pid":71611}
+  {"at":"2026-11-24T05:47:23.485Z","event":"granted","class":"build","grant":"top-level","id":"9a90a911fead4824","pid":71879,"index":1,"load":101.64697265625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:25.154Z","event":"released","class":"build","id":"9a90a911fead4824","pid":71879}
+  {"at":"2026-11-24T05:47:25.213Z","event":"granted","class":"build","grant":"top-level","id":"cba6410536699de4","pid":72188,"index":1,"load":101.2744140625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:26.845Z","event":"released","class":"build","id":"cba6410536699de4","pid":72188}
+  {"at":"2026-11-24T05:47:26.945Z","event":"granted","class":"build","grant":"top-level","id":"29b37a8bbc3a77f4","pid":72475,"index":1,"load":101.2744140625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:28.585Z","event":"released","class":"build","id":"29b37a8bbc3a77f4","pid":72475}
+  {"at":"2026-11-24T05:47:28.689Z","event":"granted","class":"build","grant":"top-level","id":"30c5598b37d0420f","pid":72773,"index":1,"load":101.2744140625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:30.307Z","event":"released","class":"build","id":"30c5598b37d0420f","pid":72773}
+  {"at":"2026-11-24T05:47:30.442Z","event":"granted","class":"build","grant":"top-level","id":"6f21b44e22a3b20f","pid":74599,"index":1,"load":98.12890625,"cores":12,"wait":30}
+  {"at":"2026-11-24T05:47:30.866Z","event":"passed","class":"build","pid":80830,"through":"build:6f21b44e22a3b20f"}
+  {"at":"2026-11-24T05:47:31.844Z","event":"released","class":"build","id":"6f21b44e22a3b20f","pid":74599}
+  {"at":"2026-11-24T05:47:31.987Z","event":"granted","class":"build","grant":"top-level","id":"d00d59ad1c790c34","pid":74694,"index":1,"load":98.12890625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:33.605Z","event":"released","class":"build","id":"d00d59ad1c790c34","pid":74694}
+  {"at":"2026-11-24T05:47:33.832Z","event":"granted","class":"build","grant":"top-level","id":"395bccc5d5fd640a","pid":75124,"index":1,"load":98.12890625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:35.445Z","event":"released","class":"build","id":"395bccc5d5fd640a","pid":75124}
+  {"at":"2026-11-24T05:47:35.589Z","event":"granted","class":"build","grant":"top-level","id":"3b39d79c23ca74a8","pid":76015,"index":1,"load":97.1572265625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:37.196Z","event":"released","class":"build","id":"3b39d79c23ca74a8","pid":76015}
+  {"at":"2026-11-24T05:47:37.260Z","event":"granted","class":"build","grant":"top-level","id":"c7c151008bf7f409","pid":78056,"index":1,"load":97.1572265625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:38.877Z","event":"released","class":"build","id":"c7c151008bf7f409","pid":78056}
+  {"at":"2026-11-24T05:47:39.014Z","event":"granted","class":"build","grant":"top-level","id":"e436bb5f818154dc","pid":79425,"index":1,"load":97.1572265625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:40.639Z","event":"released","class":"build","id":"e436bb5f818154dc","pid":79425}
+  {"at":"2026-11-24T05:47:40.750Z","event":"granted","class":"build","grant":"top-level","id":"886421d036b19bd6","pid":80263,"index":1,"load":94.822265625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:42.376Z","event":"released","class":"build","id":"886421d036b19bd6","pid":80263}
+  {"at":"2026-11-24T05:47:42.466Z","event":"granted","class":"build","grant":"top-level","id":"2887a765a21a26c3","pid":81400,"index":1,"load":94.822265625,"cores":12,"wait":30}
+  {"at":"2026-11-24T05:47:42.723Z","event":"passed","class":"build","pid":85009,"through":"build:2887a765a21a26c3"}
+  {"at":"2026-11-24T05:47:43.768Z","event":"released","class":"build","id":"2887a765a21a26c3","pid":81400}
+  {"at":"2026-11-24T05:47:43.793Z","event":"granted","class":"build","grant":"top-level","id":"2c7afa45aa387482","pid":81412,"index":1,"load":94.822265625,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:47:44.091Z","event":"granted","class":"test","grant":"top-level","id":"8bfcbefd042c6a7d","pid":85455,"index":1,"load":94.822265625,"cores":12,"wait":30,"readings":null}
+  {"at":"2026-11-24T05:47:44.373Z","event":"passed","class":"build","pid":85532,"through":"test:8bfcbefd042c6a7d"}
+  {"at":"2026-11-24T05:47:44.494Z","event":"released","class":"test","id":"8bfcbefd042c6a7d","pid":85455}
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3350/far-moving.test.mjs:41:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3350/far-stalled.test.mjs:14:1
+✖ #3350.cd64baa0 a remote lane whose cargo test build grant stalls past the bound leaves the far end's record INCONCLUSIVE with a finding naming the holder, and the near end exits 2 (384543.664917ms)
+  AssertionError [ERR_ASSERTION]: the near end ended within 6 minutes of a stall bound of 0.05 min
+  the near end was still running 6 min after the far build slots were held (360 s)
+  npm: [{"grant":"build:43ab7b63da8fb554","cwd":"/private$TMPDIR/deep-1122-LpzADk/far-home/deepbuild/.claude/worktrees/MacBook-Pro-session-9fd7b9f8","args":"ci"},{"grant":"build:19ed666436286c53","cwd":"/private$TMPDIR/deep-1122-LpzADk/far-home/deepbuild/.claude/worktrees/MacBook-Pro-session-9fd7b9f8","args":"run build --workspaces"}]
+  cargo: []
+  log (/private$TMPDIR/deep-1122-LpzADk/far-home/.deepbuild/throttle):
+  {"at":"2026-11-24T05:46:39.886Z","event":"granted","class":"build","grant":"top-level","id":"43ab7b63da8fb554","pid":64633,"index":1,"load":94.45361328125,"cores":12,"stall":0.05}
+  {"at":"2026-11-24T05:46:52.458Z","event":"released","class":"build","id":"43ab7b63da8fb554","pid":64633}
+  {"at":"2026-11-24T05:46:52.933Z","event":"granted","class":"build","grant":"top-level","id":"19ed666436286c53","pid":68331,"index":1,"load":98.12451171875,"cores":12,"stall":0.05}
+  {"at":"2026-11-24T05:46:53.098Z","event":"released","class":"build","id":"19ed666436286c53","pid":68331}
+  {"at":"2026-11-24T05:46:56.330Z","event":"granted","class":"test","grant":"top-level","id":"e6b7d78593df483d","pid":68845,"index":1,"load":97.3935546875,"cores":12,"wait":30,"readings":null}
+  {"at":"2026-11-24T05:46:56.932Z","event":"passed","class":"build","pid":68900,"through":"test:e6b7d78593df483d"}
+  {"at":"2026-11-24T05:46:58.893Z","event":"granted","class":"build","grant":"top-level","id":"7fd77e8061ce006a","pid":69950,"index":1,"load":97.3935546875,"cores":12,"wait":10}
+  {"at":"2026-11-24T05:46:59.173Z","event":"released","class":"test","id":"e6b7d78593df483d","pid":68845}
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3350/far-stalled.test.mjs:32:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+real	6m24.746s
+user	0m20.058s
+sys	0m19.943s
+21:52  up 4 days,  2:19, 19 users, load averages: 103.92 108.80 103.41

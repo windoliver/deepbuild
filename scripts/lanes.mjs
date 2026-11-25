@@ -230,6 +230,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/155-oracle/', 'tests/acceptance/162/', 'tests/acceptance/184/', 'tests/acceptance/184-redraft-ac7-2/', 'tests/acceptance/555/', 'tests/acceptance/1048/',
     'tests/acceptance/556/', 'tests/acceptance/2650/retries.test.ts', 'tests/acceptance/2650/jobs.test.ts', 'tests/acceptance/2650/replay.test.ts',
     'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/', 'tests/acceptance/3035/',
+    'tests/acceptance/139-redraft-2062/',
   ],
   'shared: memory': ['tests/acceptance/2645/'],
   'shared: the cores': ['tests/acceptance/2227/'],
@@ -260,6 +261,9 @@ export const aloneCommand = [process.execPath, 'node_modules/vitest/vitest.mjs',
 const sharded = [process.execPath, 'scripts/affected.mjs', '--alone', '--slow', '--timed'];
 /** The command runLanes runs for a lane command: the alone block's in shards, any other as it is. */
 const runOf = (command) => (command === aloneCommand ? sharded : command);
+
+// #231's folders (blind) run alone by their lane.json; these three files read a clock and the machine's load.
+timed.push('tests/acceptance/231/speed.test.ts', 'tests/acceptance/231/wall.test.ts', 'tests/acceptance/231/starts.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -738,8 +742,11 @@ function libtestTargets(args, cwd) {
 /** A cargo test command that runs its packages whole: it picks no target of its own and filters no test. */
 const wholeRun = (args) => !args.some((arg) => arg === '--' || /^--(?:lib|bins?|tests?|doc|examples?|bench(?:es)?|all-targets)$/.test(arg));
 
-/** What a whole cargo test command lists with `-- --list`, by cargoList, under the throttle; null when the listing fails. */
-function cargoListed(args, cwd, env) {
+/**
+ * What a whole cargo test command lists with `-- --list`, by cargoList, under the throttle, asked with `grantWait`;
+ * null when the listing fails.
+ */
+function cargoListed(args, cwd, env, grantWait) {
   const targets = libtestTargets(args, cwd);
   if (!targets) return null;
   const directory = mkdtempSync(join(tmpdir(), 'deep-cargo-list-')), log = join(directory, 'output');
@@ -747,7 +754,7 @@ function cargoListed(args, cwd, env) {
     const descriptor = openSync(log, 'w', 0o600);
     let result;
     try {
-      result = spawnSync(process.execPath, [throttle, 'build', '--wait', '30', '--', leaseScript, 'cargo', ...args, ...targets, '--', '--list'], { cwd, env, stdio: ['ignore', descriptor, descriptor] });
+      result = spawnSync(process.execPath, [throttle, 'build', ...grantWait, '--', leaseScript, 'cargo', ...args, ...targets, '--', '--list'], { cwd, env, stdio: ['ignore', descriptor, descriptor] });
     } finally {
       closeSync(descriptor);
     }
@@ -940,8 +947,11 @@ export function unrunOf(key, cwd = root) {
   return { unrun, of: files.flat().length };
 }
 
-export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: treeOf } = {}) {
+export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: treeOf, stall } = {}) {
   const failures = [];
+  // A remote lane's far end passes its stall bound: each grant then waits while its class's grants change hands (#3350).
+  // Every other run waits 30 minutes, as section 6's table says.
+  const grantWait = stall === undefined ? ['--wait', '30'] : ['--stall', String(stall)];
   // Loaded only for the preflight, as a copy of this script stands alone without it.
   const { openKept, wholeJob } = key ? require('./proof-kept.mjs') : {};
   // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
@@ -1029,7 +1039,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
             // of the calling session's through scripts/lease (#1015).
             // The fill holds no grant over the alone block's own run, whose admission and turns are its jobs' (#3297).
             const began = performance.now(), leased = [leaseScript, ...reported?.command ?? [command, ...args]];
-            result = spawnSync(...fill && shards ? [leased[0], leased.slice(1)] : [process.execPath, [throttle, cls, '--wait', '30', '--', ...leased]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
+            result = spawnSync(...fill && shards ? [leased[0], leased.slice(1)] : [process.execPath, [throttle, cls, ...grantWait, '--', ...leased]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
             output = readFileSync(log, 'utf8').trim();
             results = testsOf([command, ...args], cwd, { report, output, status: result.status });
             if (kept && shards) try { keptRead += JSON.parse(readFileSync(report, 'utf8')).kept?.read ?? 0; } catch {}
@@ -1077,7 +1087,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
         // A run the throttle refused ran nothing to list, and listing it would ask the throttle again (#3333).
         if (command === 'cargo' && args[0] === 'test' && !results?.noGrant) {
           cargoRan = true;
-          const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment) : undefined;
+          const listing = wholeRun(args) && listedCargo !== null ? cargoListed(args, cwd, environment, grantWait) : undefined;
           if (listing) {
             listedCargo ??= {};
             for (const [target, names] of Object.entries(listing)) listedCargo[target] = [...new Set([...listedCargo[target] ?? [], ...names])];
@@ -1085,6 +1095,15 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
             for (const [, target, name] of run.tests.map(({ id }) => id.match(/^cargo (.+?) › (.+)$/)).filter(Boolean)) if (!Object.hasOwn(listing, target)) (listedCargo[target] ??= []).push(name);
           } else if (listing === null) listedCargo = null;
         }
+      }
+      // The record names the tree the lane started on, so a run that changed it proved another tree (#3336).
+      const after = tree && exactTree(cwd);
+      if (tree && after !== tree) {
+        const paths = after ? spawnSync('git', ['diff-tree', '-r', '--name-only', tree, after], { cwd, encoding: 'utf8' }).stdout.trim().split('\n').filter(Boolean) : [];
+        const found = { state: 'FAIL', error: `the run changed the tree it started on: ${paths.length ? paths.join(', ') : "git can't write the tree after it"}; write to a temporary folder, never the checkout` };
+        findings.push({ state: found.state, note: found.error });
+        if (stands(found, failure)) failure = found;
+        else console.log(`FAIL ${lane.name}: ${found.error}`);
       }
       // The Mac's cargo tests are the reference list; a run elsewhere lists the tests it lacks and is never PASS (#1121).
       const more = {}, absentIds = new Set(), mac = process.platform === 'darwin';

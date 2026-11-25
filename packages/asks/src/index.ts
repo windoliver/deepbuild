@@ -57,6 +57,12 @@ import { ANSWER_ALONE, ANSWER_FIELDS, docOf, isAgent, picturesOf, PROVISIONAL_KI
 import { markStep, sameStep } from './steps.js';
 import { changedSince, type GitSaid } from './changes.js';
 
+/** Waits for every write to settle, then throws the first refusal: a write still under way never outlives the asks' lock. */
+async function allThrough(writes: readonly unknown[]): Promise<void> {
+  const refused = (await Promise.allSettled(writes)).find((w): w is PromiseRejectedResult => w.status === 'rejected');
+  if (refused) throw refused.reason;
+}
+
 /** Once a thread holds this many open asks, its further asks fold into one exception, unless settings say otherwise. */
 const FOLD_AT = 5;
 /** The fold's option that answers each of the session's open asks with its recommended option. */
@@ -349,6 +355,8 @@ class AsksCore implements Asks {
       if (image !== undefined && (typeof image !== 'string' || !SHA256.test(image))) throw new AskRefused('a screenshot is named by its SHA-256, in lower-case hex', { field: 'image' });
       if (option === undefined && words === undefined && image === undefined) throw new AskRefused('an answer chooses an option or says something', { field: 'option' });
       if (token !== undefined && (typeof token !== 'string' || !token)) throw new AskRefused('the click token is text', { field: 'token' });
+      // The record refuses longer text or half a surrogate pair, and a refused answer must save no decision (they share one commit).
+      for (const [field, text] of [['words', words], ['token', token]] as const) if (typeof text === 'string' && (text.length > 16384 || /\p{Surrogate}/u.test(text) || [...text].length > 8192)) throw new AskRefused(`${field} are well-formed text of at most 8192 characters`, { field });
       if (steps !== undefined && (!Array.isArray(steps) || !steps.every((i) => Number.isInteger(i) && (i as number) >= 0))) throw new AskRefused('steps are the indices of the batch to run', { field: 'steps' });
       const pictures = picturesOf(ask, via, input.pictures, this.pictured(ask));
       const now = this.options.now();
@@ -433,18 +441,21 @@ class AsksCore implements Asks {
       }
       // The same question from other threads, shown through this card, takes the same option.
       const riders = chosen ? this.open().filter((a) => this.rides(a) === ask) : [];
-      await this.options.record.append(asCore(connection), {
+      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
+      // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
+      // A card with a target only the agent read (#1098), or for a plug-in's send, saves your answer for this ask only.
+      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && this.keys.alone(ask) === null ? this.scopeOf(ask) : null;
+      await allThrough([this.options.record.append(asCore(connection), {
         v: pictures ? 7 : v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
           answer: option ?? (words as string | undefined) ?? (image as string), option: chosen?.id ?? null, plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
           via, verified: true, on: this.pinNow(ask)!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
           ...(pictures ? { pictures } : {}),
         },
-      });
+      }), scope === null || holds.has(ask) ? undefined : this.saveAt(connection, ask, scope, chosen!.id)]); // one turn, so one durable commit holds both (#22)
       await this.sync();
       const give = (): void => this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision, null, null, null, (image as string | undefined) ?? null);
       // A held yes saves its decision once its step starts.
-      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
       if (holds.has(ask)) await this.holdSteps(connection, ask, until, give, scope);
       else give();
       for (const rider of riders) {
@@ -470,10 +481,6 @@ class AsksCore implements Asks {
         else run();
         ask.receiptAlso.push(member.handle);
       }
-      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
-      // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
-      // A card with a target only the agent read saves your answer for this ask only (#1098).
-      if (scope !== null && !holds.has(ask)) await this.saveAt(connection, ask, scope, chosen!.id);
       await this.settle();
       return scope === null || holds.has(ask) ? null : String(ask.data.key);
     });
@@ -599,6 +606,8 @@ class AsksCore implements Asks {
     });
   }
 
+  batchDue(): Promise<boolean> { return this.exclusive(async () => this.showing.batchDue(this.options.now())); }
+
   card(handle: string): Promise<Card> {
     return this.exclusive(async () => {
       await this.sync();
@@ -712,7 +721,7 @@ class AsksCore implements Asks {
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', closed_at: a.closed?.at ?? null, owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null, words: [...a.words],
-        folded: !a.closed && this.inFold(a) ? a.folded! : null,
+        holder: a.fold, folded: !a.closed && this.inFold(a) ? a.folded! : null, actor: a.who.actor, scope: a.who.scope,
       }));
     });
   }
@@ -847,8 +856,8 @@ class AsksCore implements Asks {
       if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
       const answer = ask.closed?.outcome === 'answered' ? ask.closed.answer : undefined;
       if (answer === undefined || !ask.options.some((o) => o.id === answer)) throw new AskRefused(`${ask.handle} wasn't answered with an option, so there is no decision to save`, { ask: ask.handle });
-      const unplaced = this.unplaced(ask);
-      if (unplaced.length) throw new AskRefused(`${ask.handle} goes to ${unplaced.map((t) => t.ref).join(', ')}, which nothing you typed or approved names, so your answer holds for this ask only`, { field: 'scope', ask: ask.handle });
+      const alone = this.keys.alone(ask);
+      if (alone !== null) throw new AskRefused(`${ask.handle} ${alone}, so your answer holds for this ask only`, { field: 'scope', ask: ask.handle });
       let at: string;
       if (scope === 'all') at = 'all';
       else if (scope === 'session') {
@@ -913,7 +922,7 @@ class AsksCore implements Asks {
       if (held.state !== 'active') throw new AskRefused(`${decision} is ${held.state}, so it can't widen`, { field: 'decision', ask: ask.handle });
       if (held.key !== ask.data.key) throw new AskRefused(`${decision} answers another question than ${ask.handle}, so a wider scope wouldn't cover it`, { field: 'decision', ask: ask.handle });
       const lines = linesOf(ask.data.subject);
-      if (needsPerson(ask.data).length || this.unplaced(ask).length || (held.bound !== null && lines !== null && lines > held.bound)) throw new AskRefused(`${decision} can't cover ${ask.handle} at any scope`, { field: 'decision', ask: ask.handle });
+      if (needsPerson(ask.data).length || this.keys.alone(ask) !== null || (held.bound !== null && lines !== null && lines > held.bound)) throw new AskRefused(`${decision} can't cover ${ask.handle} at any scope`, { field: 'decision', ask: ask.handle });
       const option = ask.options.find((o) => o.id === held.answer);
       if (!option) throw new AskRefused(`${ask.handle} has no option ${held.answer}`, { option: held.answer });
       const widened = await this.saveAt(connection, ask, 'all', held.answer, false);
@@ -1019,10 +1028,7 @@ class AsksCore implements Asks {
     const now = this.options.now();
     const id = ulid(now);
     const as = asCore(connection);
-    await this.options.record.append(as, { v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } });
-    for (const d of contradicted) {
-      await this.options.record.append(as, { v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } });
-    }
+    await allThrough([{ v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } }, ...contradicted.map((d) => ({ v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } }))].map((event) => this.options.record.append(as, event))); // one turn, in this order: durable in one commit (#22)
     await this.sync();
     return `decision:${id}`;
   }
@@ -1094,7 +1100,6 @@ class AsksCore implements Asks {
   }
 
   private rides(ask: Ask): Ask | undefined { return this.showing.rides(ask); }
-  private unplaced(ask: Ask): CardTarget[] { return this.keys.unplaced(ask); }
   /**
    * Places each target of a plan from the record of the ask's session (#1098): the prompts a person typed in it, the
    * decisions covering the ask and the plans they were saved from, the remotes its worktree configures, and its
@@ -1166,7 +1171,7 @@ class AsksCore implements Asks {
   /** What an answer to the ask would be saved as, said as what answering will do (nothing is saved yet, #1455), and how many other open asks that decision would then answer. */
   private savesOf(ask: Ask): Card['saves'] {
     if (ask.fold || ask.theirs || !ask.options.length) return null;
-    if (this.unplaced(ask).length) return { scope: 'Answering saves it for this ask only', also: 0 };
+    if (this.keys.alone(ask) !== null) return { scope: 'Answering saves it for this ask only', also: 0 };
     const scope = this.scopeOf(ask);
     if (scope === null) return null;
     const project = this.sessions.get(ask.session)?.project;
@@ -1363,11 +1368,15 @@ class AsksCore implements Asks {
         const request = block?.theirs && !this.requested.has(block.handle) && d.key === requestKey(block) ? { to: String(block.data.owner), block: block.handle } : undefined;
         const inThread = this.openIn(thread);
         const open = inThread.filter((a) => !a.fold);
-        const holder = fold || theirs ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
+        // An agent's sign-in task (#1349) holds the work that needs the agent: it shows at once (showing.ts), so it never
+        // folds into an exception, and isn't held for your message, which the agent stopped on it won't take a step to read.
+        // Only the core files one, under an agent's sign-in signature, from a Send or a lapsed sign-in; an agent naming a probe files none.
+        const signIn = signature !== undefined && this.signInAgents.has(signature);
+        const holder = fold || theirs || signIn ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
-          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
-          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session), hubs: e.writer === 'core' && d.kind === 'exception',
+          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(signIn ? { signIn: true as const } : {}), ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
+          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: !signIn && e.session !== undefined && this.unread.has(e.session), hubs: e.writer === 'core' && d.kind === 'exception',
           ...(signature === undefined ? {} : { block: { signature, stops: this.coveringStops(d) } }),
         };
         if (request) this.requested.set(request.block, ask.handle);
@@ -2030,7 +2039,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
   await core.tick();
   // Plain functions, so a caller can wrap one method and keep the rest.
   return {
-    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), card: core.card.bind(core),
+    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), batchDue: core.batchDue.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
     later: core.later.bind(core), laterBefore: core.laterBefore.bind(core), undo: core.undo.bind(core), holding: core.holding.bind(core), stepHeld: core.stepHeld.bind(core), heldUntil: core.heldUntil.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core), signIn: core.signIn.bind(core),

@@ -58,17 +58,29 @@ pub fn evaluate_in(
     assets: Assets<'_>,
     fills: Fills<'_>,
 ) -> Result<(Scene, Look3), Refused> {
-    let mut doc = doc.clone();
-    if let Some(d) = doc.as_object_mut() {
-        d.insert("size".into(), json!(size));
-    }
+    // #231: a document that has the frame's size already, and whose worlds write nothing into
+    // it, is read as it stands: an export evaluates it at every frame.
+    let as_is = doc.get("size") == Some(&json!(size));
     #[cfg(feature = "physics")]
-    deep_canvas_physics::skin::write(&mut doc, t);
-    // #2248: and each readout a world's output writes shows that output's value at `t`.
-    #[cfg(feature = "physics")]
-    deep_canvas_physics::written::readouts(&mut doc, t);
-    let look = exposed(&doc, look);
-    let scene = evaluate_any(&doc, t, &look, labels, Some(assets), fills)?;
+    let as_is = as_is && !deep_canvas_physics::written::writes(doc);
+    let written;
+    let doc = if as_is {
+        doc
+    } else {
+        let mut doc = doc.clone();
+        if let Some(d) = doc.as_object_mut() {
+            d.insert("size".into(), json!(size));
+        }
+        #[cfg(feature = "physics")]
+        deep_canvas_physics::skin::write(&mut doc, t);
+        // #2248: and each readout a world's output writes shows that output's value at `t`.
+        #[cfg(feature = "physics")]
+        deep_canvas_physics::written::readouts(&mut doc, t);
+        written = doc;
+        &written
+    };
+    let look = exposed(doc, look);
+    let scene = evaluate_any(doc, t, &look, labels, Some(assets), fills)?;
     Ok((scene, look))
 }
 
