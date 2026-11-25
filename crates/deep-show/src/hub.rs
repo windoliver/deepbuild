@@ -1257,7 +1257,7 @@ impl<'a> Hub<'a> {
     }
 
     /// The record's readings as the scheduler reads them, from outside the document.
-    fn readings(&self) -> BTreeMap<String, Value> {
+    pub(crate) fn readings(&self) -> BTreeMap<String, Value> {
         self.scenario
             .record
             .iter()

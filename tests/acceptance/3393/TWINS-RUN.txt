@@ -1,0 +1,98 @@
+#3393: the wrong programs, and which run each rests on. Two runs, both 2026-11-24, Node v24.22.2, vitest 5.0.5:
+
+- the lane: the repo's `before` lane (`node scripts/proof.mjs before`, in its bay, 19:37 to 20:02 UTC) on the suite as it
+  stands, 17 tests, and each twin as it stands. This job was given its result, not its output.
+- run 1, this job's: 19:06 to 19:09 UTC, under one test grant, one-minute load 195, on the suite as it was then, 16 tests
+  (BASE-FAILURE.txt says what has changed since: AC5's first Vitest test was split in two; nothing else but a title). Each
+  program ran once, in one scratch tree (packages, node_modules, adapters, contracts and this folder, no .git), the base's
+  files put back before each, under a scratch config (root, include, setupFiles).
+
+Every failure below is an AssertionError in exit.test.ts. Trimmed to each failure's own words.
+
+Part 1. The planted twins of twins.json
+
+The lane: each of the five tests that hold on the merge base failed on its twin, at its assertion.
+  twins/hooks-unread     AC2 node:test's after at the top of a file
+  twins/exit-zero        AC4 Vitest, AC4 node:test
+  twins/exit-for-result  AC6 Vitest, AC6 node:test
+
+Run 1 had two twins, laid over the base (the base's own failures, BASE-FAILURE.txt, left out):
+
+twins/exit-for-result, as it stands: a runner that takes the run's exit for its result (AC6)
+  FAIL AC6 Vitest      cantRecord  node_modules/.bin/vitest run: "outcome":"passed","mask":null,"exit":{"code":0} ...
+                                   expected 'passed' to be 'uncounted'
+  FAIL AC6 node:test   cantRecord  node --test: the same
+  ok   AC2 node:test's after at the top of a file, AC4 Vitest, AC4 node:test
+
+twins/exit-zero as it was then, its edit of runtime/preload.mjs alone: a runner that gives the tool exit 0 whatever failed (AC4)
+  FAIL AC4 Vitest      stopsThere 183:138  "outcome":"failed","exit":{"code":0} ... -"stepRan": false +"stepRan": true
+  ok   AC4 node:test, AC2 node:test's after at the top of a file, AC6 both
+  That node:test held is why the twin now edits the node:test reporter too: the preload never loads into `node --test`'s own
+  process. Seen by starting one with a preload that writes a line in each process it loads into: only the file's own wrote
+  one. The twin as it stands was run by the lane alone.
+
+twins/hooks-unread was written after run 1, when AC2's test of node:test's after at the top of a file was seen to hold on
+the base. It was run by the lane alone.
+
+Part 2. A throwaway fix and fix-shaped wrong programs, by hand, in run 1
+
+The throwaway, this job's own, kept nowhere: each control passes in its tool and its failure reaches the report another way
+(Vitest's by the test's meta, node:test's as a todo test's failure), a suite's own error is read, and no exit is forgiven.
+  right: 15 of the 16 tests pass. Every AC1, AC2, AC4, AC5 and AC6 test, and three of AC3's, with the words each means:
+         "the database is still open" and "Coverage for lines (50%) does not meet global threshold (100%)" on the tool's stderr,
+         a failure at test/cart.test.*:5 carrying "the cart is still open" for each AC2 test.
+  FAIL AC3 a node:test file whose process ends with status 1  toolFailed 130:77  "outcome":"passed","exit":{"code":0} ...
+         expected { outcome: 'passed', exitsZero: true } to deeply equal { outcome: 'failed', exitsZero: false }
+  So the throwaway is a wrong program itself: node:test counts a todo test's failure as its file's failed subtest, and then
+  doesn't report that the file's process ended with a failing status.
+
+NOT RUN. The throwaway was changed after run 1 (node:test's control as `expectFailure`, Vitest's control in a CommonJS file
+by import()), and its run was stopped in the throttle's line before it began. So no program of this job's was seen to pass:
+  - AC3's node:test test of a status 1. Seen only outside the suite: one bare `node --test` of a file whose process ends with
+    status 1, holding a passing test and an `expectFailure` test that throws, exits 1 and reports the file failed.
+  - AC5's Vitest CommonJS file. Seen only outside the suite: a file with the same shape of globals and require, not naming
+    Vitest, reads passed on the base, exit 0 (BASE-FAILURE.txt, at its end).
+  - AC5's other Vitest test as it stands. Its earlier form, which held both its files and a third, passed on the throwaway.
+
+Wrong programs run, each the throwaway with one thing wrong unless it says the base, with the tests its -t filter chose.
+Since the throwaway fails AC3's node:test status test by itself, that failure is left out of what they show.
+
+zero-when-only-controls (AC1, AC3, AC5): the base's controls, each tool's exit set to 0 as it ends when the report's only
+failures are controls, a suite's own error read, and no exit forgiven
+  FAIL AC3 all four  toolFailed 130:77  "outcome":"passed","exit":{"code":0} ...
+                     expected { outcome: 'passed', exitsZero: true } to deeply equal { outcome: 'failed', exitsZero: false }
+  FAIL AC5 bail: 1   clean   "outcome":"failed", "b one never ran", "b two never ran", "c one never ran", "c two never ran"
+  ok   AC1 both, AC5's other two
+
+twins/exit-zero as it was then (preload alone), laid over the throwaway (AC3, AC4)
+  FAIL AC3 Vitest global teardown, Vitest coverage  toolFailed 130:77  "outcome":"passed","exit":{"code":0}
+  FAIL AC4 Vitest    stopsThere 183:138  "outcome":"failed","exit":{"code":0}
+  ok   AC3 node:test coverage, AC4 node:test
+
+twins/exit-for-result, laid over the throwaway (AC6)
+  FAIL AC6 Vitest, AC6 node:test  cantRecord  "outcome":"passed" ... expected 'passed' to be 'uncounted'
+
+step-never-runs (AC1): the command cut at its first `&&`
+  FAIL AC1 both      stepDecides 84:123  "outcome":"passed","exit":{"code":0} ...
+                     expected { outcome: 'passed', stepRan: false } to deeply equal { outcome: 'failed', stepRan: true }
+
+control-stops-a-bail-run (AC3, AC5): Vitest's control fails in its worker, and the reporter turns it to passed in Vitest's own
+process
+  FAIL AC5 bail: 1   clean   "outcome":"failed", "the command exited 1", attempts "a one" and "a two" alone
+  ok   AC5's other two, AC3 Vitest global teardown, Vitest coverage, node:test coverage
+
+suite-error-unplaced (AC2): a suite's own error read without its stack
+  FAIL AC2 all three hookFailed 105:124  expected [ [ 'test/cart.test.js', 1 ] ] to deep equally contain [ 'test/cart.test.js', 5 ]
+                     (node:test: the same of test/cart.test.mjs)
+
+suite-error-by-exit-alone (AC2): no suite's own error read, the run failed by its exit
+  FAIL AC2 all three hookFailed 105:124  failures [["(run)",".",1,"the command exited 1"]], which hold no failure at
+                     test/cart.test.js:5 or test/cart.test.mjs:5
+
+no-control-in-commonjs (AC5, AC6): no control in a node:test file with no import or export
+  FAIL AC6 node:test cantRecord  node --test: "outcome":"passed" ... expected 'passed' to be 'uncounted'
+  ok   AC5's three, AC6 Vitest
+
+Two more ran, whose node:test control resets the status its file's process ends with (as the process exits, and before the
+file's own exit listeners). Each failed AC3's node:test status test, as the throwaway they were made from does by itself, so
+they show nothing.
