@@ -1,8 +1,8 @@
-# cargo test -p deep-app --test hub_client with the fix (2026-11-25 UTC, Linux)
+# cargo test -p deep-app --test hub_client on the head d55928c04 (2026-11-25 UTC, Linux)
 running 5 tests
 test the_hub_check_fails_when_the_hub_drops_the_app_after_its_hello ... ok
 test the_hub_check_fails_when_the_hub_refuses_the_apps_hello ... ok
-test the_hub_takes_the_views_the_app_reports_shown_and_hidden ... ok
 test a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app ... ok
+test the_hub_takes_the_views_the_app_reports_shown_and_hidden ... ok
 test the_app_reads_the_hubs_health_and_log_as_the_app ... ok
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.61s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.85s

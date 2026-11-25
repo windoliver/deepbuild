@@ -1,6 +1,6 @@
-# the dropped-connection test on b3f2d892c's main.rs, the PR's first commit, which took any error after the hello for hub ok (2026-11-25 UTC, Linux)
+# the dropped-connection test at d55928c04, run with b3f2d892c's main.rs (the PR's first commit, which took any error after the hello for hub ok) (2026-11-25 UTC, Linux)
 running 1 test
 test the_hub_check_fails_when_the_hub_drops_the_app_after_its_hello ... FAILED
-thread 'the_hub_check_fails_when_the_hub_drops_the_app_after_its_hello' (466627) panicked at crates/deep-app/tests/hub_client.rs:223:5:
+thread 'the_hub_check_fails_when_the_hub_drops_the_app_after_its_hello' (761345) panicked at crates/deep-app/tests/hub_client.rs:231:5:
 a hub that drops the app after its hello must fail the check: exit Some(0), stdout "hub ok: contract 1.0\n", stderr "deep-app: the hub refused a call: Io(Os { code: 32, kind: BrokenPipe, message: \"Broken pipe\" })\n"
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.04s
