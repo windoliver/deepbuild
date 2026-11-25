@@ -157,7 +157,9 @@ fn canvas_panel_holds_only_the_shown_revisions_pictures(cx: &mut TestAppContext)
         let (held, decoding) = read(cx);
         peak_held = peak_held.max(held);
         if decoding {
-            note(&mut problems, &mut undecoded, || format!("revision {rev}: still decoding after the context parked"));
+            note(&mut problems, &mut undecoded, || {
+                format!("revision {rev}: still decoding after the context parked")
+            });
         }
         if held != shown {
             note(&mut problems, &mut miscounted, || {

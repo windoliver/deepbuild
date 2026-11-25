@@ -418,7 +418,6 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       const unrecorded = unheld(controls, reported.flatMap((r) => r.ran), reportedFailures, ranFiles, leftOutBy);
       const ran = reported.flatMap((r) => r.ran).filter((t) => !isControl(t.test));
       const failures = reportedFailures.filter((f) => !isControl(f.test));
-      const controlsFailed = reportedFailures.length > 0 && !failures.length;
       const read = new Set<string>();
       for (const path of new Set(reads?.lines ?? [])) { const rel = under(checkout, path); if (rel) read.add(rel); }
       for (const t of ran) if (t.file) read.add(t.file);
@@ -475,9 +474,8 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
         });
       };
       if (failures.length) return done('failed', { ...rest, failures: [...failures, ...(vitestRun?.by.length ? await dropped() : [])] }, ran);
-      // A crash of what the check runs, or any other failing exit: a failed run.
-      // The tool's failing exit for the controls alone is no failure of the check's.
-      if ((code !== 0 && !(controlsFailed && code === 1)) || exit!.signal !== null) {
+      // A crash of what the check runs, or any other failing exit: a failed run. Its controls alone never give one (controls.ts).
+      if (code !== 0 || exit!.signal !== null) {
         const message = exit!.signal !== null ? `the command was killed by ${exit!.signal}` : `the command exited ${code}`;
         return done('failed', { ...rest, failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: stderr.trim() || null, assertion: false, message }] }, ran);
       }

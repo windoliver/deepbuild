@@ -13020,6 +13020,49 @@ export interface TurnUsage {
   evidence?: Array<string>;
 }
 
+/** turn.usage@2 */
+export interface TurnUsageV2 {
+  v: 2;
+  id: string;
+  kind: "turn.usage";
+  subject: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    turn: string;
+    model: string;
+    covers: "turn" | "session";
+    tokens: {
+      input: number;
+      cached: number;
+      output: number;
+      exact: boolean;
+      cache_write_5m: number;
+      cache_write_1h: number;
+    };
+    cost: {
+      basis: "reported";
+      usd: number;
+    } | {
+      basis: "estimated";
+      usd: number;
+      rate_card: string;
+      at_least?: true;
+    } | {
+      basis: "unpriced";
+    };
+    context?: {
+      used: number;
+      window: number;
+    };
+  };
+  evidence?: Array<string>;
+}
+
 /** user.ask@1 */
 export interface UserAsk {
   v: 1;

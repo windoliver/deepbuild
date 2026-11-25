@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: its files build deep-show and deep-show's unit tests with cargo in the checkout's own target, then run them" }

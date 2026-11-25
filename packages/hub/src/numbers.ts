@@ -288,7 +288,8 @@ const ageOf = (ms: number): string => { for (const [unit, name] of AGE) if (ms >
 /** One line per row: what, its value, its source, how it was got and its age; STALE when its source is. */
 export function numbersLines(rows: Awaited<ReturnType<Numbers['read']>>['rows']): string[] {
   return rows.map((r) => {
-    const value = r.value === null ? 'unknown' : String(r.value);
+    // A lower bound says so before its amount (#3250).
+    const value = r.value === null ? 'unknown' : `${r.cost?.basis === 'estimated' && r.cost.at_least ? 'at least ' : ''}${r.value}`;
     const cost = r.cost ? ` ${r.cost.basis}${r.cost.basis === 'estimated' ? ` (${r.cost.rate_card})` : ''}` : '';
     const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n}, ${r.agreement.yes} yes, recall ${r.agreement.recall?.toFixed(2) ?? 'none'}, precision ${r.agreement.precision?.toFixed(2) ?? 'none'} ${r.agreement.status}` : r.id in CLASSIFIERS || r.id.endsWith(CLASSIFIED) ? ' not checked against your labels' : '';
     const by = r.by ? ` (${Object.entries(r.by).filter(([, ms]) => ms).map(([why, ms]) => `${why} ${ms}`).join(', ')})` : r.id === 'cache.low' ? ' cache hit rate low: most of the context was billed again' : '';

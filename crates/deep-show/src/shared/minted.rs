@@ -237,8 +237,13 @@ impl Hub<'_> {
         }
     }
 
-    /// Why no call on `doc` is answered, when the bytes of its newest recorded revision are gone.
+    /// Why no call on `doc` is answered: a restart stopped it, or the bytes of its newest recorded
+    /// revision are gone.
     pub(crate) fn unread_issue(&self, doc: &str) -> Option<Issue> {
+        // #1412: a document a restart stopped answers with why.
+        if let Some(issue) = self.shared.get(doc).and_then(|s| s.stopped.clone()) {
+            return Some(issue);
+        }
         let hash = self.unread.get(doc)?;
         let what = "the evidence store doesn't hold the document's newest recorded revision";
         let issue = Issue::envelope("asset_missing", "doc".into(), json!(hash), what);
