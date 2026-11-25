@@ -150,8 +150,9 @@ impl Blake3 {
 }
 
 impl Frames {
-    /// The buffer each pushed frame is written to, which the frame checks read (#157).
-    pub(crate) fn input(&self) -> &wgpu::Buffer {
+    /// The buffer each pushed frame is written to, which the frame checks read (#157) and a GPU
+    /// surface slot takes the frame from (#231).
+    pub fn input(&self) -> &wgpu::Buffer {
         &self.input
     }
 
@@ -164,7 +165,39 @@ impl Frames {
             "a frame is width*height*4 bytes"
         );
         self.queue.write_buffer(&self.input, 0, bgra);
+        let encoder = self.device.create_command_encoder(&Default::default());
+        self.hashed(encoder)
+    }
+
+    /// #231: hashes the frame `texture` holds (BGRA8, the frames' size, its rows a multiple of
+    /// wgpu's copy alignment wide) without its pixels leaving the GPU: they are copied into the
+    /// buffer a pushed frame is written to. Returns the digest of the frame pushed before it.
+    pub fn push_texture(&mut self, texture: &wgpu::Texture) -> Result<Option<[u8; 32]>, Lost> {
+        let size = texture.size();
+        assert_eq!(
+            u64::from(size.width) * u64::from(size.height) * 4,
+            self.input.size(),
+            "a frame is width*height*4 bytes"
+        );
         let mut encoder = self.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &self.input,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(size.width * 4),
+                    rows_per_image: Some(size.height),
+                },
+            },
+            size,
+        );
+        self.hashed(encoder)
+    }
+
+    /// The frame in the input buffer, hashed after what `encoder` holds; the digest of the frame
+    /// before it.
+    fn hashed(&mut self, mut encoder: wgpu::CommandEncoder) -> Result<Option<[u8; 32]>, Lost> {
         for p in &self.passes {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&p.pipeline);

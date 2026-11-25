@@ -1,0 +1,25 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 14:23:20 load { 8.23 6.78 8.06 } thermal 0 free KB 53152576
+head 07587e38b594f97a7c3098dc10df8104813f7525; crates/ and packages/ differ from 093c5bc8 in 0 files 14:23:24 load { 8.29 6.81 8.07 } thermal 0 free KB 52677192
+setup exit=0 14:24:20 load { 35.77 14.18 10.69 } thermal 0 free KB 51618504
+part 1 gate after 601 s: nominal 14:34:21 load { 3.30 8.21 10.21 } thermal 0 free KB 51469884
+budgets vitest exit=0 (nominal) 14:34:29 load { 3.76 8.23 10.21 } thermal 0 free KB 51465352
+suite-319 vitest exit=0 14:34:40 load { 4.24 8.12 10.13 } thermal 0 free KB 51355944
+tests/acceptance/1459/identifier.test.ts vitest exit=0 14:46:12 load { 33.78 69.91 51.71 } thermal 1 free KB 40777048
+tests/acceptance/1459/panel.test.ts vitest exit=0 14:46:40 load { 25.01 64.95 50.45 } thermal 1 free KB 40759680
+probe sha256 3c40d577259b633cb8fb5843bf5cb18ee88fdcf68db5bbd10d73988273f178d7 14:46:40 load { 25.01 64.95 50.45 } thermal 1 free KB 40758248
+probe vitest exit=0 14:48:32 load { 7.65 45.82 44.72 } thermal 0 free KB 39786808
+tests/acceptance/1459/identifier.test.ts vitest exit=0 14:48:56 load { 6.80 43.15 43.79 } thermal 0 free KB 39221228
+tests/acceptance/1459/panel.test.ts vitest exit=0 14:49:17 load { 5.65 39.96 42.62 } thermal 0 free KB 39085740
+part 2 done; kills file 203 lines 14:49:23 load { 5.44 39.35 42.38 } thermal 0 free KB 38823452
+worktree ~/private/dbc-22l removed 14:49:26 load { 5.49 38.79 42.17 } thermal 0 free KB 39146288
+part 3 main head b1a1ff86234e7e080e0e339774ac12ad05813e9b 14:49:29 load { 5.49 38.79 42.17 } thermal 0 free KB 38659112
+part 3 setup exit=0 14:50:30 load { 21.04 37.00 41.25 } thermal 0 free KB 36963276
+tests/acceptance/1002/first-screen-redraft/shown.test.ts exit=1 14:54:53 load { 74.13 71.73 56.46 } thermal 1 free KB 32051316
+tests/acceptance/994/first-screen-redraft/shown.test.ts exit=1 14:55:14 load { 58.72 68.39 55.62 } thermal 1 free KB 31934504
+tests/acceptance/1172/shown.test.ts exit=1 15:00:55 load { 57.54 61.52 55.99 } thermal 1 free KB 26510664
+tests/acceptance/1172/shell.test.ts exit=1 15:02:29 load { 41.79 56.27 54.62 } thermal 1 free KB 25294468
+tests/acceptance/1172/popout.test.ts exit=1 15:02:57 load { 33.99 53.07 53.52 } thermal 1 free KB 25041480
+tests/acceptance/1457/budgets.test.ts exit=1 15:02:58 load { 33.99 53.07 53.52 } thermal 1 free KB 25041408
+tests/acceptance/41/app/screens.test.ts exit=143 15:07:36 load { 168.27 106.86 75.94 } thermal 1 free KB 14428368
+STOPPED: free space dropped under 20 GB 15:07:37 load { 160.24 106.22 75.90 } thermal 1 free KB 14428160
+secret scan hits=0 15:07:37 load { 160.24 106.22 75.90 } thermal 1 free KB 14428184

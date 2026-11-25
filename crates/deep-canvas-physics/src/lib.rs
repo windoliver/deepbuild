@@ -21,6 +21,7 @@ pub mod ring;
 pub mod roles;
 pub mod skin;
 pub mod small;
+pub mod through;
 pub mod track;
 pub mod wind;
 pub mod written;

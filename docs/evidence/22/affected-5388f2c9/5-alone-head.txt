@@ -1,0 +1,53 @@
+tree <worktree> at 1ee92de022408099bb3a53b95c2c26d6893ee29d; Sun Nov 15 03:21:51 PM PST 2026; load 28.94 25.01 27.08
+=== tests/acceptance/63/install.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/63/install.test.ts > AC1 #63.f697c796 install reads 212 recorded sessions within 5% of one 5-hour window, and every wiki line cites a handle > AC1 install reads every one of the 212 sessions, through the runner only, spending under 5% o
+ FAIL  tests/acceptance/63/install.test.ts > AC1 #63.f697c796 install reads 212 recorded sessions within 5% of one 5-hour window, and every wiki line cites a handle > AC1 every wiki line the install wrote cites a handle it was delivered, the quote at that hand
+ FAIL  tests/acceptance/63/install.test.ts > AC4 #63.e6ad4b93 no reading job puts more than the capped slices of the record into any prompt > AC4 the install read and a trial replay: no prompt holds more of the record than a capped slice, and no reply is past 
+Error: ENOENT: no such file or directory, lstat '<worktree>/linux-vdso.so.1'
+      Tests  3 failed | 2 passed (5)
+=== packages/hub/test/claim-replay.test.ts
+exit 0
+      Tests  1 passed (1)
+=== packages/hub/test/codes.test.ts
+exit 0
+      Tests  2 passed (2)
+=== tests/acceptance/63/quotes-redraft.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/63/quotes-redraft.test.ts > AC10 #63.46c00344 a quote is at its handle only as a byte-exact substring of the redacted slice it names, after NFC and whitespace collapse, citing its message (redraft) > AC10 the reading job keeps each quot
+Error: ENOENT: no such file or directory, lstat '<worktree>/linux-vdso.so.1'
+      Tests  1 failed (1)
+=== packages/hub/test/onboarding.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/onboarding.test.ts > deep setup > says in one line what it added, with no line for a timing relation that holds
+AssertionError: Its hooks and status line forwarder are in /tmp/deep-onb-6KZfpn/h/.claude/settings.json, beside yours; its MCP server in /tmp/deep-onb-6KZfpn/h/.claude.json; its skill at /tmp/deep-onb-6KZfpn/h/.claude/skills/deepbuild; its safety rules at /tmp
+ FAIL  packages/hub/test/onboarding.test.ts > the hub's login service on Linux > starts through the real user manager from a home whose units it doesn't read
+AssertionError: deep hub start: systemctl --user link /tmp/deep-onb-ADuT1e/h/.config/systemd/user/deepbuild-hub.service: Failed to link unit: File ~/.config/systemd/user/deepbuild-hub.service already exists and is a symlink to /tmp/dh824-F3JdFY/h/.con
+      Tests  2 failed | 11 passed | 3 skipped (16)
+=== tests/acceptance/39/session.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/39/session.test.ts > AC2 #39.0215da31 A held stop continues with the answer > AC2 #39.0215da31 a Codex stop with an open ask is held; your answer comes back as decision: block carrying it, on a reply Codex's Stop schema allows, and setu
+AssertionError: AC2 #39.0215da31 the stop's reply continues the turn: exit 0, stdout "", stderr "": expected undefined to be 'block' // Object.is equality
+ FAIL  tests/acceptance/39/session.test.ts > AC8 #39.9d535982 A session on a Codex version past its facts is recorded with its holds watch-only and one health reading > AC8 #39.9d535982 a rollout naming 99.0.0: its events are recorded unverified, its stop isn'
+AssertionError: AC8 #39.9d535982 its events are unverified: expected false to be true // Object.is equality
+      Tests  2 failed | 5 passed (7)
+=== packages/hub/test/codex-hub.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/codex-hub.test.ts > a slow check's deadline > an answer waiting before the stop starts no slow check; one that comes during the hold ends the hold
+AssertionError: timed out after 30000 ms waiting for the ask
+      Tests  1 failed | 29 passed (30)
+=== tests/acceptance/340/flow/terminal.test.ts
+exit 0
+      Tests  4 passed (4)
+=== tests/acceptance/323/final-message.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/323/final-message.test.ts > AC3 #323.5966273a limits the change writes into its PR body or its docs become open items, as a "still open" list does > AC3 #323.5966273a the PR body's "Known limit", README's "doesn't check the token's audi
+Error: AC3 #323.5966273a the limit PR 22's body states, "Known limit: a token with no exp claim is still accepted", must become an open item of session:5e1577617a324ed984fc0003af71f4db#0, as the "Still open" one does: its open items are open_item.opened at log
+      Tests  1 failed | 3 passed (4)
+done Sun Nov 15 03:26:42 PM PST 2026; load 22.35 27.26 27.76

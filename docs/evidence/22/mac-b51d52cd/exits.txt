@@ -1,0 +1,38 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 20:13:18 load { 14.99 20.84 18.95 } thermal 1 free KB 98125784
+part 1 at 321a4d5b5e3d86ecb052bab23d5bdf85e306a7af 20:13:23 load { 14.91 20.72 18.92 } thermal 1 free KB 97634116
+0-failing-first.txt: cargo exit=101; test result: FAILED. 101 passed; 7 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s 20:20:45 load { 88.92 72.17 44.64 } thermal 1 free KB 87601536
+part 1 failed tests (7): notify::tests::an_ask_in_a_record_with_no_batches_notifies_when_it_is_raised record::tests::an_ask_folds_only_into_its_sessions_keeps_asking_exception record::tests::a_panel_is_given_the_folded_asks_with_those_in_sight record::tests::a_sessions_sixth_open_ask_folds_in_a_record_with_no_exception record::tests::an_ask_held_for_the_agents_step_is_shown_once_the_core_shows_it record::tests::asks_an_answered_exception_held_get_their_own_rows record::tests::needs_you_holds_the_asks_the_hubs_list_holds ; compile errors: 1 20:20:45 load { 88.92 72.17 44.64 } thermal 1 free KB 87601528
+part 2 at b51d52cd3e4b7fc226e8934e01a0fbbb6e391b21 20:20:46 load { 88.92 72.17 44.64 } thermal 1 free KB 87601384
+1-deep-app-lib.txt: cargo exit=0; test result: ok. 108 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s 20:20:59 load { 72.82 69.41 44.14 } thermal 1 free KB 87327840
+part 3 merge of #2474's head 07ef9b1869bfd402a589cf89c7810c212f7c1eac (not on main 51e4a2b34e2c9c4e0e465e45975657c3a71c2d1d yet) into b51d52cd3e4b7fc226e8934e01a0fbbb6e391b21: exit=0, scratch sha 534890e0918f392a2b81e4168be8d189fb63da17 (never pushed), conflicts:  20:21:02 load { 68.11 68.49 43.96 } thermal 1 free KB 86858572
+2-deep-app-full.txt: cargo exit=101; test result: ok. 108 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s 20:30:36 load { 31.08 72.09 59.99 } thermal 1 free KB 74667332
+part 3 failing integration targets: [acceptance_1141 acceptance_34 hub_client ] (run with --no-fail-fast so every target is reached) 20:30:36 load { 31.08 72.09 59.99 } thermal 1 free KB 74667328
+2b merge of #2474's head into main 51e4a2b34e2c9c4e0e465e45975657c3a71c2d1d: exit=0, scratch sha 7f0a9b83a02013c794091697ed4d307d2f4bb035 20:30:37 load { 31.08 72.09 59.99 } thermal 1 free KB 74626380
+2b-main-full.txt: cargo exit=101; test result: FAILED. 0 passed; 2 failed; 2 ignored; 0 measured; 0 filtered out; finished in 3.58s 20:36:21 load { 51.49 82.24 70.31 } thermal 1 free KB 69014900
+worktree ~/private/dbc-22nm removed 20:36:25 load { 49.53 81.32 70.06 } thermal 1 free KB 87052700
+part 4 setup exit=0 20:37:53 load { 18.92 63.43 64.26 } thermal 1 free KB 85919416
+4a app run start; screen-lock flag 0 20:37:53 load { 18.92 63.43 64.26 } thermal 1 free KB 85919520
+4a vitest exit=0; PNGs: 3 20:42:19 load { 24.88 50.98 59.19 } thermal 0 free KB 82739420
+tests/acceptance/1459/identifier.test.ts exit=0 20:54:30 load { 20.01 37.67 51.37 } thermal 1 free KB 75128356
+tests/acceptance/1459/panel.test.ts exit=0 20:54:52 load { 17.33 35.68 50.25 } thermal 1 free KB 75120720
+tests/acceptance/1172/rows.test.ts exit=0 20:56:24 load { 7.28 27.69 45.72 } thermal 1 free KB 74620636
+tests/acceptance/1172/panel.test.ts exit=0 20:56:45 load { 6.44 25.85 44.53 } thermal 1 free KB 74616492
+tests/acceptance/1460/cli.test.ts exit=0 20:57:10 load { 5.76 24.45 43.59 } thermal 1 free KB 74337436
+tests/acceptance/1460/redraft-ac3/ac3.test.ts exit=0 20:57:58 load { 5.36 21.51 41.42 } thermal 1 free KB 73858120
+4c 338 spike exit=1 20:58:03 load { 5.17 21.20 41.19 } thermal 1 free KB 73859172
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 20:58:06 load { 5.15 20.94 40.98 } thermal 1 free KB 73858836
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261; session's copy same 20:58:06 load { 5.15 20.94 40.98 } thermal 1 free KB 73858836
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720; session's copy same 20:58:06 load { 5.15 20.94 40.98 } thermal 1 free KB 73858836
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733; session's copy same 20:58:06 load { 5.15 20.94 40.98 } thermal 1 free KB 73858836
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711; session's copy same 20:58:06 load { 5.15 20.94 40.98 } thermal 1 free KB 73858832
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305; session's copy same 20:58:06 load { 5.15 20.94 40.98 } thermal 1 free KB 73858832
+readIssue pre-check exit=0, lines 5, 'blocked' count 0 20:58:07 load { 5.15 20.94 40.98 } thermal 1 free KB 73858764
+copy checks: sha256 f6c1d4d1a41beebb258dc649c33b2ddeaf059f16ccf1391c6062fdb2d699ee45 diff-lines=4 reopen-early-return=1 row22=1 other-gh-calls=0 20:58:07 load { 5.15 20.94 40.98 } thermal 1 free KB 73858736
+judge gate: NOT NOMINAL at the start (load 5.15, thermal 1); no load wait, by the user's choice at the Mac 2026-11-14 (Drop the waits); the budgets inside the judge count only as far as their own rule allows 20:58:07 load { 5.15 20.94 40.98 } thermal 1 free KB 73858736
+gh probe before the judge: exit=0 exit=0  20:58:08 load { 5.15 20.94 40.98 } thermal 1 free KB 73858728
+judge exit=0 wall 369 s (NOT NOMINAL at the start (load 5.15, thermal 1); no load wait, by the user's choice at the Mac 2026-11-14 (Drop the waits); the budgets inside the judge count only as far as their own rule allows at start) 21:04:17 load { 3.43 8.94 27.99 } thermal 0 free KB 73830620
+gh probe after the judge: exit=0 exit=0  21:04:18 load { 3.43 8.94 27.99 } thermal 0 free KB 73830560
+status after [] 21:04:19 load { 3.43 8.94 27.99 } thermal 0 free KB 73828896
+4c 338 spike at main 51e4a2b34e2c9c4e0e465e45975657c3a71c2d1d: exit=1 21:05:01 load { 15.49 11.37 28.00 } thermal 0 free KB 73471352
+login-name hits after redaction: 0 21:05:01 load { 15.49 11.37 28.00 } thermal 0 free KB 73471156
+secret scan hits=0 21:05:01 load { 16.33 11.61 27.99 } thermal 0 free KB 73471156

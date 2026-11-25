@@ -1,0 +1,46 @@
+== commit 3f2f86464539346c3bcd5dc844d5b0d51db3bd40
+== command: NO_COLOR=1 npx vitest run --root tests/acceptance/1345 batch.test.ts --no-file-parallelism
+== start 2026-11-18 20:20:25 load { 122.24 77.94 64.69 } thermal 1 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/d22ad/tests/acceptance/1345
+
+ ❯ batch.test.ts (3 tests | 1 failed) 1741236ms
+   ✓ AC3 #1345.9c5710a8 Five calls from five issues reach one person as one card, and that day raises one notification 1734798ms
+   ✓ AC7 #1345.aaa324a9 Five calls from five issues draw as #328's card with five rows, and the tree holds no second batch card. A row whose Send back would revert says so before it's pressed. A planted row that reverts unannounced fails, naming the issue 5705ms
+   × AC8 #1345.69fa185d On the five-row card each row shows when its recommended answer applies, and the five rows add up to the count. A planted card with no time on a row fails, naming the row 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  batch.test.ts > AC8 #1345.69fa185d On the five-row card each row shows when its recommended answer applies, and the five rows add up to the count. A planted card with no time on a row fails, naming the row
+AssertionError: each of the five rows shows when its recommended answer applies, and the rows add up to the count: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "#100's row card-row:01M7S24GVRYA5CPQ7A8V5VSHRG (ask:01M7S24GVRYA5CPQ7A8V5VSHRG): the list has no row for ask:01M7S24GVRYA5CPQ7A8V5VSHRG to say when its recommended answer applies",
++   "#101's row card-row:01M7S24DZZGN95V6ECB012DK8E (ask:01M7S24DZZGN95V6ECB012DK8E): the list has no row for ask:01M7S24DZZGN95V6ECB012DK8E to say when its recommended answer applies",
++   "#102's row card-row:01M7S24VET39G1XN0PQECGDX3T (ask:01M7S24VET39G1XN0PQECGDX3T): the list has no row for ask:01M7S24VET39G1XN0PQECGDX3T to say when its recommended answer applies",
++   "#103's row card-row:01M7S24XSW81086SSTJJ5GD1G6 (ask:01M7S24XSW81086SSTJJ5GD1G6): the list has no row for ask:01M7S24XSW81086SSTJJ5GD1G6 to say when its recommended answer applies",
++   "#104's row card-row:01M7S250CB9Z5NT0WTM2HZ159Y (ask:01M7S250CB9Z5NT0WTM2HZ159Y): the list has no row for ask:01M7S250CB9Z5NT0WTM2HZ159Y to say when its recommended answer applies",
++ ]
+
+ ❯ batch.test.ts:75:144
+     73| test(named(8), async () => {
+     74|   const { calls, plain, timeless } = await fiveCalls();
+     75|   expect(timeFailures(plain.seen, calls), 'each of the five rows shows…
+       |                                                                                                                                                ^
+     76|
+     77|   // The planted card draws no time on its first row: the same judgeme…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  20:20:27
+   Duration  1742.70s (tests 100%)
+
+== end 2026-11-18 20:49:30 load { 68.46 73.45 88.90 } thermal 1 front app [Windows App]
+vitest exit=1

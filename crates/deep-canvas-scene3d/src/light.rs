@@ -13,6 +13,9 @@ use deep_canvas::camera::Vec3;
 
 use crate::scene::{num, Camera, Depth, Refused};
 
+mod chains;
+use chains::map_use;
+pub use chains::{Chain, MapUse, MapUses};
 mod shadowing;
 pub use shadowing::{Contact, Shadowing, Soft, MOST_POINTS, MOST_SPOTS};
 
@@ -136,6 +139,16 @@ impl AlphaMode {
     pub fn see_through(self) -> bool {
         matches!(self, AlphaMode::Blend | AlphaMode::Add)
     }
+
+    fn read(word: &str) -> Option<AlphaMode> {
+        Some(match word {
+            "opaque" => AlphaMode::Opaque,
+            "mask" => AlphaMode::Mask,
+            "blend" => AlphaMode::Blend,
+            "add" => AlphaMode::Add,
+            _ => return None,
+        })
+    }
 }
 
 /// How a map's texture coordinates wrap on one axis (Material: texture maps, `wrap`).
@@ -167,7 +180,8 @@ impl Wrap {
 
 /// One texture map of a material (#423; Material: texture maps): its image by hash, the uv set
 /// it reads (0 or 1), its uv transform as two rows of an affine map (KHR_texture_transform's
-/// translation × rotation × scale), its wrap on s and t and its most taps (`None`: the look's).
+/// translation × rotation × scale), its wrap on s and t and its most taps (`None`: the look's);
+/// for a base color whose alpha is drawn, the chain it samples.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MapSlot {
     pub sha: String,
@@ -175,6 +189,7 @@ pub struct MapSlot {
     pub transform: [[f64; 3]; 2],
     pub wrap: [Wrap; 2],
     pub taps: Option<u8>,
+    pub chain: Option<Chain>,
 }
 
 /// A material's texture maps, keyed by everything they hold, so materials with equal maps share
@@ -243,60 +258,39 @@ impl std::fmt::Debug for Texels {
 /// against (Image `image@1`: at most 64 MB decoded per document; Material: texture maps).
 pub const DECODED_CAP: u64 = 64 << 20;
 
-/// Every map hash `scene`'s solids sample, with the fields that name it, which a host makes ready
-/// for the GPU in its decode worker (#423, #1729); a material operator's texture input by hash
-/// (#431) is `operator`, linear data.
-pub fn map_uses(
-    scene: &crate::scene::Scene,
-) -> std::collections::BTreeMap<String, std::collections::BTreeSet<&'static str>> {
-    let mut out: std::collections::BTreeMap<_, std::collections::BTreeSet<_>> = Default::default();
+/// Every map `scene`'s solids sample, with the fields that name it, which a host makes ready for
+/// the GPU in its decode worker (#423, #1729); a material operator's texture input by hash (#431)
+/// is `operator`, linear data.
+pub fn map_uses(scene: &crate::scene::Scene) -> MapUses {
+    let mut out = MapUses::new();
     for s in scene.layers.iter().flat_map(|l| &l.solids) {
         let inputs =
             s.op.as_ref()
                 .and_then(|o| o.item["params"]["inputs"].as_object());
         for (_, i) in inputs.into_iter().flatten() {
             if let Some(sha) = i["from"]["texture"].as_str() {
-                out.entry(sha.to_ascii_lowercase())
-                    .or_default()
-                    .insert("operator");
+                map_use(&mut out, &sha.to_ascii_lowercase(), "operator", None);
             }
         }
         let Some(m) = &s.maps else { continue };
         for (field, slot) in m.slots() {
             if let Some(slot) = slot {
                 let name = field.rsplit('/').next().unwrap_or(field);
-                out.entry(slot.sha.clone()).or_default().insert(name);
+                map_use(&mut out, &slot.sha, name, slot.chain.as_ref());
             }
         }
     }
     // An image mark's picture (#1992), color as a base color map is.
     for i in scene.layers.iter().flat_map(|l| &l.images) {
-        out.entry(i.asset.clone()).or_default().insert("base_color");
+        map_use(&mut out, &i.asset, "base_color", None);
     }
     out
 }
 
-/// The decode worker's job role for a map the fields `uses` name: the color fields' sRGB, a normal
-/// map's two channels, an occlusion map alone's one channel, else linear data (Material: texture
-/// maps: the format follows the map's role).
-pub fn map_role(uses: &std::collections::BTreeSet<&str>) -> &'static str {
-    if uses.contains("base_color") || uses.contains("emission") {
-        "base_color"
-    } else if uses.contains("normal_map") {
-        "normal"
-    } else if uses.len() == 1 && uses.contains("occlusion") {
-        "occlusion"
-    } else {
-        "data"
-    }
-}
-
-/// Every map the `material@1` items of `doc` name, by its hash, with the decode worker's role
-/// for the fields that name it ([`map_role`]): what a host makes ready before it draws, such as
-/// the web player at load (#1040).
-pub fn material_maps(doc: &Value) -> std::collections::BTreeMap<String, &'static str> {
-    let mut uses: std::collections::BTreeMap<String, std::collections::BTreeSet<&str>> =
-        Default::default();
+/// Every map the `material@1` items of `doc` name: what a host makes ready before it draws, such
+/// as the web player at load (#1040).
+pub fn material_maps(doc: &Value) -> MapUses {
+    let mut uses = MapUses::new();
     let items = doc.get("items").and_then(Value::as_object).into_iter();
     for (_, i) in items.flatten().filter(|(_, i)| i["kind"] == "material@1") {
         let p = &i["params"];
@@ -305,15 +299,16 @@ pub fn material_maps(doc: &Value) -> std::collections::BTreeMap<String, &'static
             .chain([("normal_map", &p["normal_map"])]);
         for (field, v) in fields {
             if let Some(sha) = v.as_str().or_else(|| v.get("sha256")?.as_str()) {
-                uses.entry(sha.to_ascii_lowercase())
-                    .or_default()
-                    .insert(field);
+                let sha = sha.to_ascii_lowercase();
+                let chain = match field {
+                    "base_color" => Chain::of(&sha, p, AlphaMode::Opaque),
+                    _ => None,
+                };
+                map_use(&mut uses, &sha, field, chain.as_ref());
             }
         }
     }
-    (uses.into_iter())
-        .map(|(sha, u)| (sha, map_role(&u)))
-        .collect()
+    uses
 }
 
 /// The first field of a `material@1` in `doc` that names map `sha`, as
@@ -371,6 +366,7 @@ fn map_slot(v: &Value, field: &str) -> Result<MapSlot, Refused> {
             transform: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
             wrap: [Wrap::Repeat; 2],
             taps: None,
+            chain: None,
         });
     }
     let o = v.as_object().ok_or_else(|| bad(""))?;
@@ -430,13 +426,18 @@ fn map_slot(v: &Value, field: &str) -> Result<MapSlot, Refused> {
         ],
         wrap,
         taps,
+        chain: None,
     })
 }
 
-/// The texture maps of the `material@1` that `item` names (#423), or `None` with none.
+/// The texture maps of the `material@1` that `item` names (#423), or `None` with none. `material`
+/// is what it draws as; its chain is made by the item among `own`, the document's, so a cutoff a
+/// channel moves makes no chain a frame (#3257).
 pub fn maps<'a>(
     item: &Value,
     named: impl Fn(&str) -> Option<&'a Value>,
+    own: &serde_json::Map<String, Value>,
+    material: &Option<Material>,
 ) -> Result<Option<std::sync::Arc<Maps>>, Refused> {
     let Some(name) = item.get("material").and_then(Value::as_str) else {
         return Ok(None);
@@ -475,6 +476,10 @@ pub fn maps<'a>(
     };
     if out.slots().iter().all(|(_, s)| s.is_none()) {
         return Ok(None);
+    }
+    if let (Some(s), Some(m)) = (&mut out.base_color, material) {
+        let p = own.get(name).and_then(|i| i.get("params")).unwrap_or(p);
+        s.chain = Chain::of(&s.sha, p, m.alpha_mode);
     }
     out.key = format!("{out:?}");
     Ok(Some(std::sync::Arc::new(out)))
@@ -662,12 +667,8 @@ pub fn material<'a>(
     };
     let at = |k: &str, d: f64| num(p.get(k)).unwrap_or(d);
     let word = |k: &str, d: &'static str| p.get(k).map_or(Some(d), Value::as_str);
-    let alpha_mode = match word("alpha_mode", "opaque") {
-        Some("opaque") => AlphaMode::Opaque,
-        Some("mask") => AlphaMode::Mask,
-        Some("blend") => AlphaMode::Blend,
-        Some("add") => AlphaMode::Add,
-        _ => return Err(bad("out_of_range", "alpha_mode")),
+    let Some(alpha_mode) = word("alpha_mode", "opaque").and_then(AlphaMode::read) else {
+        return Err(bad("out_of_range", "alpha_mode"));
     };
     let casts = match word("shadow", "auto") {
         // Glass lets light through: `auto` also writes nothing for a transmissive part, which
