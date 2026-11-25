@@ -37,6 +37,11 @@ mod live {
     use serde_json::Value;
 
     const FRAMES: usize = 8;
+    /// Frames to wait past `FRAMES` for the window to become key, asking to be activated again every
+    /// `REACTIVATE` of them: AppKit reports no focused element for a window that isn't key, so a capture
+    /// taken before then would record no focus, not the window's (#2690's retake under load).
+    const KEY_FRAMES: usize = 1200;
+    const REACTIVATE: usize = 60;
 
     pub fn run() -> i32 {
         let (view, out, ..) = match deep_replica::view_args("deep-live", "file", false) {
@@ -84,7 +89,17 @@ mod live {
             }
             activate_accessibility();
         }
-        if frame < FRAMES {
+        let waiting_for_key = frame >= FRAMES && !window.is_window_active();
+        if waiting_for_key && frame >= FRAMES + KEY_FRAMES {
+            eprintln!(
+                "deep-live: the window never became key in {KEY_FRAMES} frames, so AppKit reports no focus for it; bring it to the front and run again"
+            );
+            std::process::exit(1);
+        }
+        if frame < FRAMES || waiting_for_key {
+            if waiting_for_key && (frame - FRAMES) % REACTIVATE == 0 {
+                cx.activate(true);
+            }
             deep_app::canvas::clear_items();
             window.refresh();
             window.on_next_frame(move |window, cx| settle(window, cx, out, frame + 1));
