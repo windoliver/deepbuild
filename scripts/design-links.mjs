@@ -79,7 +79,7 @@ if (broken.length || unheld.length || stale.length || unprincipled.length || beh
   console.log(`FAIL ${broken.length} links into docs/*.md land on no heading, ${unheld.length} names are not in the design, ${stale.length} planned names are stale, ${unprincipled.length} principles findings, ${behind.length} places where the design is behind main${missing ? `; the open issues were not read: ${missing}` : ''}`);
   for (const line of [...broken, ...unheld, ...stale, ...unprincipled, ...behind]) console.log(`  ${line}`);
   if (unprincipled.length) console.log('  Fix: keep Principles to 8 to 12 one-sentence lines of at most 160 characters, each linking the design and naming a check that exists; edit its first four lines with AGENTS.md\'s invariants; open the canvas conventions with a link to it.');
-  if (behind.length) console.log('  Fix: state in docs/technical-design.md what main holds at each line named above, in the change that moves main.');
+  if (behind.length) console.log('  Fix: state in the design what main holds at each line named above, in the change that moves main.');
   process.exit(1);
 }
 if (missing) {
