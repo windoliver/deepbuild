@@ -8,8 +8,9 @@
 //!
 //! Issue #41, each with no window: `--hub-needs` prints the hub contract the app speaks and every method it calls as
 //! one JSON line; `--hub-check` connects to the running hub as the window does and says `hub ok`, or, when the hub's
-//! hello doesn't cover the app, prints the one screen naming the older side and its fix, having called nothing;
-//! `--check-for-updates` prints Check for updates' line.
+//! hello doesn't cover the app, prints the one screen naming the older side and its fix, having called nothing; a hub
+//! that refuses the app's hello or doesn't answer fails it (#3481); `--check-for-updates` prints Check for updates'
+//! line.
 //!
 //! Issue #883: the window's app posts each ask to Notification Center and withdraws it once the
 //! record says it closed (`notifications`, below); macOS shows them only from the app bundle `scripts/app-bundle`
@@ -164,19 +165,25 @@ fn main() {
         );
         match reader.check() {
             Err(deep_app::hub::HubError::Older(screen)) => println!("{screen}"),
-            Err(
-                error @ (deep_app::hub::HubError::Io(_) | deep_app::hub::HubError::Protocol(_)),
-            ) => {
+            // #3481: a hub that refused the app's hello took none of its calls, so the check fails.
+            Err(error @ deep_app::hub::HubError::Refused(_)) => {
+                eprintln!(
+                    "deep-app: the hub at {} refused the app's hello: {error:?}",
+                    deep_app::hub::address().display()
+                );
+                std::process::exit(1);
+            }
+            Err(error) => {
                 eprintln!(
                     "deep-app: the hub at {} didn't answer: {error:?}",
                     deep_app::hub::address().display()
                 );
                 std::process::exit(1);
             }
-            // A hello that covers the app: the window's calls are made, whatever each returns.
-            reached => {
+            // A hello that covers the app and took it: the window's calls are made, whatever each returns.
+            Ok(calls) => {
                 println!("hub ok: contract {}", deep_app::hub::CONTRACT);
-                if let Err(error) = reached {
+                if let Err(error) = calls {
                     eprintln!("deep-app: the hub refused a call: {error:?}");
                 }
             }

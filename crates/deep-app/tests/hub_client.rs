@@ -148,3 +148,54 @@ fn the_hub_takes_the_views_the_app_reports_shown_and_hidden() {
         assert_eq!(reply["reported"], true, "{method}: {reply}");
     }
 }
+
+/// Issue #3481: `deep-app --hub-check` against the hub, from an app home holding `token`: its exit and its output.
+fn hub_check(target: &Target, token: &str) -> (Option<i32>, String) {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let home = PathBuf::from(format!(
+        "/tmp/dac-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let root = home.join(".deepbuild");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("control.token"), token).unwrap();
+    let address = json!({ "hub": { "address": format!("unix:{}", target.socket.display()) } });
+    std::fs::write(root.join("config.json"), address.to_string()).unwrap();
+    let ran = Command::new(env!("CARGO_BIN_EXE_deep-app"))
+        .arg("--hub-check")
+        .env("HOME", &home)
+        .output()
+        .expect("deep-app runs");
+    let _ = std::fs::remove_dir_all(&home);
+    let output = format!(
+        "stdout {:?}, stderr {:?}",
+        String::from_utf8_lossy(&ran.stdout),
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    (ran.status.code(), output)
+}
+
+#[test]
+fn the_hub_check_fails_when_the_hub_refuses_the_apps_hello() {
+    let target = target();
+    let (code, output) = hub_check(&target, &format!("{}x", target.token));
+    assert!(
+        code.is_some_and(|code| code != 0),
+        "a refused hello must fail the check, not pass it: exit {code:?}, {output}"
+    );
+    assert!(
+        !output.contains("hub ok"),
+        "a refused hello is no hub ok: {output}"
+    );
+    assert!(
+        output.contains("credential"),
+        "the check names the refusal: {output}"
+    );
+    let (code, output) = hub_check(&target, &target.token);
+    assert_eq!(code, Some(0), "the hub's own token passes: {output}");
+    assert!(
+        output.contains("hub ok"),
+        "the hub's own token passes: {output}"
+    );
+}

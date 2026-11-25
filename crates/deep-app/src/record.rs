@@ -518,10 +518,11 @@ impl RecordReader {
         }
     }
 
-    /// `deep-app --hub-check` (#41): connects as the window does, once, making the calls it makes on connect.
-    pub fn check(&mut self) -> Result<(), HubError> {
-        self.connect()?;
-        self.fold()
+    /// `deep-app --hub-check` (#41): connects as the window does, once, making the calls it makes on connect. The
+    /// outer error is a hub that never took the app's hello (#3481); the inner one, a call it refused after the hello.
+    pub fn check(&mut self) -> Result<Result<(), HubError>, HubError> {
+        let client = self.greet()?;
+        Ok(self.join(client).and_then(|()| self.fold()))
     }
 
     /// Folds the record before the newest read into a table of its own, which the views then read in place of the
@@ -593,6 +594,12 @@ impl RecordReader {
     /// Connects, redoing the reads when the hub's start ID isn't the view's, and subscribes after the view's
     /// `log_pos`.
     fn connect(&mut self) -> Result<(), HubError> {
+        let client = self.greet()?;
+        self.join(client)
+    }
+
+    /// Connects and says hello as the app, once the hub's hello covers it.
+    fn greet(&self) -> Result<HubClient, HubError> {
         let token = std::fs::read_to_string(&self.token_file)?;
         let mut client = HubClient::connect(&self.socket)?;
         if self.checks {
@@ -606,6 +613,11 @@ impl RecordReader {
             covered?;
         }
         client.hello_app(token.trim())?;
+        Ok(client)
+    }
+
+    /// The reads and the subscription on a client the hub took as the app.
+    fn join(&mut self, mut client: HubClient) -> Result<(), HubError> {
         let start = client.hello["start"]
             .as_str()
             .unwrap_or_default()

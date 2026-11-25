@@ -1,0 +1,9 @@
+# cargo test -p deep-app --test hub_client on main 1b4929ae7 with only the new test added (2026-11-25, Linux)
+running 4 tests
+test a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app ... ok
+test the_hub_takes_the_views_the_app_reports_shown_and_hidden ... ok
+thread 'the_hub_check_fails_when_the_hub_refuses_the_apps_hello' (271382) panicked at crates/deep-app/tests/hub_client.rs:183:5:
+a refused hello must fail the check, not pass it: exit Some(0), stdout "hub ok: contract 1.0\n", stderr "deep-app: the hub refused a call: Refused(Object {\"code\": String(\"credential\"), \"retryable\": Bool(false), \"remediation\": String(\"Present the control token this hub wrote to control.token at its launch; an earlier launch's token no longer counts.\"), \"path\": String(\"/token\"), \"actual\": String(\"\"), \"evidence\": Array []})\n"
+test the_hub_check_fails_when_the_hub_refuses_the_apps_hello ... FAILED
+test the_app_reads_the_hubs_health_and_log_as_the_app ... ok
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.17s
