@@ -1,0 +1,56 @@
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-3477-pi-removed-rules
+
+ ❯ packages/pi/test/guards.test.ts (22 tests | 1 failed | 19 skipped) 19645ms
+   ❯ guards on a pi call (22)
+     ↓ a shell call a guard entry matches never runs, and the record names the entry
+     ↓ a write tool's relative path is read as the file it names
+     ↓ a path pi opens without its leading @ is read as pi opens it
+     ↓ an edit of a guarded file is held too
+     ↓ a read of the control token is held
+     ↓ a home path with a doubled slash stays in home
+     ↓ with the hub up and deep-hook gone, a call is held rather than read as matching nothing
+     ↓ with rules installed and no deep-hook recorded, a call is held
+     × with no deep-hook recorded, rules.json removed after setup holds a call with the hub away (#3477) 7671ms
+     ✓ with no deep-hook recorded and no rules.json, a home whose setup never finished lets a call run with the hub away 5217ms
+     ↓ a line deep-hook can't read is unread, never a call that matched nothing
+     ↓ a file:// URL is read as the file pi opens: the control token, and an encoded write
+     ↓ pi's own settings are guarded, so no agent can take the package out
+     ↓ an unread call's end is recorded, failed, so the hub doesn't keep it as running
+     ↓ a deep-hook that died between calls costs no block: the call is read on a fresh one
+     ↓ a deep-hook that prints what isn't JSON holds the call and leaves pi running
+     ↓ a rebuilt deep-hook replaces the running one
+     ↓ a call no entry matches runs, and names none
+     ✓ an entry added to rules.json mid-session holds the next call 6672ms
+     ↓ with the hub away a fail-closed entry still holds, in its own words
+     ↓ in a home with no setup, a hub that refuses a call is still obeyed
+     ↓ with the hub away a call no entry matches runs
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/pi/test/guards.test.ts > guards on a pi call > with no deep-hook recorded, rules.json removed after setup holds a call with the hub away (#3477)
+AssertionError: {"content":[{"type":"text","text":"(no output)"}],"structuredContent":{"output":"","truncated":false,"exit_code":0,"wall_time_seconds":0}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/pi/test/guards.test.ts:126:36
+    124|     const w = await lost([bash('touch ran.txt')]);
+    125|     const end = await run(w.pi);
+    126|     expect(end.isError, said(end)).toBe(true);
+       |                                    ^
+    127|     expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(false);
+    128|   }, 90_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed | 19 skipped (22)
+   Start at  21:07:15
+   Duration  19.95s (tests 99%, transform 1%)
+
+EXIT 1
