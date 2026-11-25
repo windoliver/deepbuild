@@ -1,0 +1,82 @@
+The #3445 suite at the base: aafef31316f7da8f741647a5934a717d9019ffff (origin/main when the suite was written; its
+last merge is #3394), a git worktree detached at it, with no docs/spikes/3445/. Node v24.22.0, 2026-11-24 (EST).
+
+Nothing was built and nothing needs to be: no file of this suite starts a binary of this repository. Each reads the
+files the spike keeps and this checkout's git.
+
+Each file was run once, alone, from the checkout's root, through the machine's throttle, as the lanes run a suite
+that is alone:
+
+  node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3445/<file>
+
+Each output below is trimmed to the test, its failing assertion and the runner's counts; the stack under the
+assertion and the runner's other lines are cut. The files as run (sha256), unchanged since:
+
+  5b03242c5d4cab41af42b2a30050f039a4296519afad46dcff7fd865d879b7a5  ac1-compile-table.test.mjs
+  8ad985daa7360ada2be12b5a2a56ac6a3efbbefeb54ef65a18c03922d9b9b0c1  ac2-first-reply.test.mjs
+  c8dcf9d626f6315cdf6c423652840ddfaf35456e83591aa9c6a5eb4bcd73f1f6  ac3-epochs-out.test.mjs
+  4ae7f56cdb1961a06d9a5f67a8634199ec08e0a530e20438a51f43d5b3c05096  ac4-answers.test.mjs
+  c918b17384b98694ef0306b7d546f5cedbd4098ae2707343aaaba23867ca0f7a  validate.mjs
+  acd6f2c3d06ea7f024be7bd289766318f254150d53b5f6471ea2a32a8821fc0b  validate.test.mjs
+
+The four criteria's tests fail, each at its own assertion (`holds`, the test's first), for the reason its criterion
+names on a base: the spike's record isn't there. None fails at load: each file is read, and the runner counts its
+one test.
+
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3445/ac1-compile-table.test.mjs   (exit 1 after 1.1 s)
+test at tests/acceptance/3445/ac1-compile-table.test.mjs:13:1
+✖ AC1 #3445.0424020d the report gives each shipped pack's programs with their compile times, the times sum to within 5% of the time the same run spends inside the calls the compile counter counts, and no program the run compiled is left out (4.222083ms)
+  AssertionError [ERR_ASSERTION]: AC1 #3445.0424020d:
+  BLOCKED: no spike record at docs/spikes/3445/record.json: the spike hasn't been recorded
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+  This file's first attempt ran nothing: the throttle answered `INCONCLUSIVE no grant: no test grant came within
+  60 min` and exited 3 after 3600.7 s. The run above is the second attempt, the same command, whose grant came at
+  once.
+
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3445/ac2-first-reply.test.mjs   (exit 1 after 1180.7 s, its wait for a grant included)
+test at tests/acceptance/3445/ac2-first-reply.test.mjs:13:1
+✖ AC2 #3445.13016257 the first reply's time is read five times, each from a fresh process of a release build, and no reading from a dev build or a warm process is taken as the result (1.767292ms)
+  AssertionError [ERR_ASSERTION]: AC2 #3445.13016257:
+  BLOCKED: no spike record at docs/spikes/3445/record.json: the spike hasn't been recorded
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3445/ac3-epochs-out.test.mjs   (exit 1 after 8.9 s)
+test at tests/acceptance/3445/ac3-epochs-out.test.mjs:13:1
+✖ AC3 #3445.6abdd2ef the ns per fuel unit with the epoch checks out is read by the metering benchmark as the record's was, 20 steps and 5 runs, and every golden of the logic kit keeps its step hashes with them out (1.815458ms)
+  AssertionError [ERR_ASSERTION]: AC3 #3445.6abdd2ef:
+  BLOCKED: no spike record at docs/spikes/3445/record.json: the spike hasn't been recorded
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3445/ac4-answers.test.mjs   (exit 1 after 0.5 s)
+test at tests/acceptance/3445/ac4-answers.test.mjs:13:1
+✖ AC4 #3445.4cbba77d the report states, with its readings, whether the first reply waits more than 1 s on compiling, whether the checks cost a live step more than 5%, and whether a step that mostly writes costs more than twice the record's ns per fuel unit, and a task is filed for each that does (17.7705ms)
+  AssertionError [ERR_ASSERTION]: AC4 #3445.4cbba77d:
+  BLOCKED: no spike record at docs/spikes/3445/record.json: the spike hasn't been recorded
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+The suite's own check of its validators passes on the base, and should: it carries no criterion and reads nothing
+of the spike's work. Its spike is a synthetic one, written to a temporary folder in the suite's formats with the
+base commit as its `main`, so the packs, the metering record and the goldens it is held against are the base's own,
+read from git. It passes the well-formed spike and fails each wrong one the criteria name, with the message each
+names.
+
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3445/validate.test.mjs   (exit 0 after 5.7 s)
+✔ validator: a well-formed spike passes every check (1299.794167ms)
+✔ validator: criterion 1's check fails a table that leaves a program out, naming it, and a table its run doesn't give (770.427959ms)
+✔ validator: criterion 2's check fails a reading from a dev build or a warm process taken as the result, naming it (659.302917ms)
+✔ validator: criterion 3's check fails a golden with one step's hash moved, naming the golden and the step, and a reading that isn't the record's way (930.781833ms)
+✔ validator: criterion 4's check fails a report that says a threshold wasn't passed when its own readings pass it, and one that files no task for it (903.199ms)
+✔ validator: a run off a reference Mac, loaded, or with another job's lease beside it is INCONCLUSIVE, naming the run, and never passes (534.554042ms)
+✔ validator: a record whose main this checkout doesn't have is BLOCKED (115.004791ms)
+ℹ tests 7
+ℹ pass 7
+ℹ fail 0
