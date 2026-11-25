@@ -1,0 +1,211 @@
+Acceptance tests for #1583 on the base 86376102 (origin/main, its last merge #3271; no #1583), run on 2026-11-24 on a
+shared arm64 Mac (1-minute load about 23 from other sessions), Node 24.22.0, cargo 1.99.1, with
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, after
+
+  npm run build --workspaces
+  cargo build --locked -p deep-hook
+  cargo test --locked -p deep-app --features env-plants --test acceptance_1583 --no-run
+
+<repo> is the checkout, ~ a home folder, <tmp> a temp folder. A raw invisible character is written as its code point
+between brackets, as the suite's own messages write it: no line of this file holds one. Trimmed to each failure's
+assertion; code frames dropped.
+
+What the base was built with, outside this folder
+  1. The [[test]] entry acceptance_1583 in crates/deep-app/Cargo.toml, the README's words. Without it app/card.rs is
+     no target and app.test.ts is BLOCKED, naming the entry.
+  2. For the second of two builds of that target, the planted card's door: the base's crates/deep-app/src/question.rs
+     with the one place the README shows changed (rows() gives the rows unmarked while
+     plain::planted("card-draws-raw")). With no plant selected that build draws every card as the first one does (see
+     "The pure base" below), so it stands for the base in every test but the planted card's.
+  Nothing else was laid. The first build, the base with the entry alone, is "the pure base" here; a copy of each built
+  target was kept.
+
+What was run, each once, one at a time, under the machine's build grant
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1583/tsconfig.json
+      exit 0, no output
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1583 channel.test.ts --testTimeout=600000 --no-file-parallelism --reporter=verbose
+      exit 1: 7 tests, 4 failed, 3 passed, 3.88 s
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1583 app.test.ts --testTimeout=600000 --no-file-parallelism --reporter=verbose
+      exit 1: 6 tests, 2 failed, 4 passed, with the door laid; the whole file took 1.68 s, so its own cargo step
+      found the target built and compiled nothing
+  The pure base's copy of the target, run as `<target> cards <file>` with and without DEEP_HUB_PLANT=card-draws-raw
+  on the cards app.test.ts draws, and judged by judge.ts as app.test.ts judges: no cargo, no hub, no test file. This
+  is how the planted card's test is read on the pure base; app.test.ts itself was not run there, since its own cargo
+  step builds whatever question.rs the checkout holds.
+  No run left a cache folder in tests/acceptance/1583.
+
+Summary: 13 tests. Every test of new behaviour fails at its own assertion, none at load or at setup: the hub started,
+the paseo channel installed, each of the five asks' cards reached the relay, deep inbox exited 0, the phone paired
+and its signed answer was read, the target built and all 15 cards presented. Every test of behaviour that must not
+change passes.
+
+  AC1 #1583.f0f56109
+    channel.test.ts  an option on a channel's card             FAIL  the three labels reach the relay raw
+    channel.test.ts  a link's target in a channel's summary    FAIL  the three characters reach the relay raw
+    channel.test.ts  deep inbox                                PASS  #1510 made deep inbox print through `visible`;
+                                                                     it must stay so
+    app.test.ts      an option on the app's card               PASS  #1510 made the card's rows go through `visible`;
+                                                                     it must stay so; the planted card is its wrong
+                                                                     program
+    app.test.ts      the planted card fails the same check     FAIL on the pure base: it has no plant of that name, so
+                                                                     the card it draws under DEEP_HUB_PLANT=
+                                                                     card-draws-raw passes the check
+                                                               PASS on the base with the door: that card draws the
+                                                                     three raw, and the check names each
+    app.test.ts      a link's target and a session's name      PASS  the question's row and states::Table::title go
+                                                                     through `visible` (#1510, #1738); it must stay so
+  AC2 #1583.3d92be0c
+    app.test.ts      an approval holding one shows the warning FAIL  none of the nine draws a line the ASCII approval
+                                                                     doesn't
+    app.test.ts      the warning is a safety row               FAIL  crates/deep-app/safety.json is missing, and no
+                                                                     approval draws a line to look up
+  AC3 #1583.89af5457
+    channel.test.ts  the stored ask                            PASS  the base keeps the bytes it was raised with; it
+                                                                     must stay so
+  AC4 #1583.e10b90b9
+    channel.test.ts  plain text on a channel and in deep inbox PASS  the base changes no plain text; it must stay so
+    app.test.ts      plain approvals                           PASS  the base draws each as it is and adds no line; it
+                                                                     must stay so
+  AC5 #1583.69ea36be
+    channel.test.ts  the summary                               FAIL  the three characters reach the relay raw
+    channel.test.ts  the card hash covers the text as shown    FAIL  the base counted a signature over the stored
+                                                                     text: on the base that is the text it shows
+
+
+== channel.test.ts
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1583
+
+ × AC5 #1583.69ea36be A channel's summary carries the same escapes > AC5 #1583.69ea36be the summary the paseo relay got for a question holding a zero-width space, a right-to-left override and a tag character shows each as its escape, and none raw 4ms
+ × AC5 #1583.69ea36be A channel's summary carries the same escapes > AC5 #1583.69ea36be the card hash covers the text as shown: a phone's signature over the card with the stored text in place of the shown is refused, naming card_hash, and one over the card as the relay shows it counts 734ms
+ × AC1 #1583.f0f56109 Each of a zero-width space, a right-to-left override and a tag character in an option draws as a visible escape. A planted card that draws them raw fails, naming the character > AC1 #1583.f0f56109 on a channel's card, an option holding each of the three characters shows it as its escape, under the ID it was raised with 0ms
+ × AC1 #1583.f0f56109 (the same describe) > AC1 #1583.f0f56109 a link's target holding each of the three characters shows it as its escape in a channel's summary 0ms
+ ✓ AC1 #1583.f0f56109 (the same describe) > AC1 #1583.f0f56109 deep inbox prints an option, a question and a link's target holding each of the three characters with its escape, and none raw (the base does: it must stay so) 0ms
+ ✓ AC4 #1583.e10b90b9 Plain text in Chinese, Arabic and with emoji draws unchanged and adds no warning > AC4 #1583.e10b90b9 a channel's card and deep inbox show a plain question and its options in Chinese, in Arabic and with emoji as they were raised (the base does: it must stay so) 0ms
+ ✓ AC3 #1583.89af5457 The stored ask is byte-equal to what was raised > AC3 #1583.89af5457 each ask's question and options, read back from the hub's record after its card went out, deep inbox printed it and the phone answered, are the bytes it was raised with (the base keeps them: it must stay so) 1ms
+
+ FAIL  AC5 #1583.69ea36be the summary the paseo relay got for a question holding a zero-width space, a right-to-left override and a tag character shows each as its escape, and none raw
+AssertionError: expected [ …(3) ] to deeply equal []
+- []
++ [
++   "U+200B ZERO WIDTH SPACE is drawn raw in the summary of ask:01M86EDHPQ2HN5W8SCWGV1M652's card on the paseo channel: “Ship alpha⟦U+200B⟧beta, gamma⟦U+202E⟧delta and epsilon⟦U+E0041⟧zeta now?”",
++   "U+202E RIGHT-TO-LEFT OVERRIDE is drawn raw in the summary of ask:01M86EDHPQ2HN5W8SCWGV1M652's card on the paseo channel: “Ship alpha⟦U+200B⟧beta, gamma⟦U+202E⟧delta and epsilon⟦U+E0041⟧zeta now?”",
++   "U+E0041 TAG LATIN CAPITAL LETTER A is drawn raw in the summary of ask:01M86EDHPQ2HN5W8SCWGV1M652's card on the paseo channel: “Ship alpha⟦U+200B⟧beta, gamma⟦U+202E⟧delta and epsilon⟦U+E0041⟧zeta now?”",
++ ]
+ ❯ channel.test.ts:37:131
+
+ FAIL  AC5 #1583.69ea36be the card hash covers the text as shown: a phone's signature over the card with the stored text in place of the shown is refused, naming card_hash, and one over the card as the relay shows it counts
+AssertionError: a signature over “Ship alpha⟦U+200B⟧beta, gamma⟦U+202E⟧delta and epsilon⟦U+E0041⟧zeta now?”, the text as stored, is refused, since the card shows “Ship alpha⟦U+200B⟧beta, gamma⟦U+202E⟧delta and epsilon⟦U+E0041⟧zeta now?”: ask.answered@32 {"answer":"zero-width","option":"zero-width","plan_hash":null,"decision":"none","via":"card","verified":true, …}: expected 'ask.answered' to be 'channel.refused' // Object.is equality
+Expected: "channel.refused"
+Received: "ask.answered"
+ ❯ channel.test.ts:49:163
+   The setup before it held: the relay showed the card, the phone was paired, and the hub read the signed answer.
+
+ FAIL  AC1 #1583.f0f56109 on a channel's card, an option holding each of the three characters shows it as its escape, under the ID it was raised with
+AssertionError: expected [ …(3) ] to deeply equal []
+- []
++ [
++   "U+200B ZERO WIDTH SPACE is drawn raw in the label of option zero-width on ask:01M86EDHPQ2HN5W8SCWGV1M652's card on the paseo channel: “north⟦U+200B⟧south”",
++   "U+202E RIGHT-TO-LEFT OVERRIDE is drawn raw in the label of option override on ask:01M86EDHPQ2HN5W8SCWGV1M652's card on the paseo channel: “east⟦U+202E⟧west”",
++   "U+E0041 TAG LATIN CAPITAL LETTER A is drawn raw in the label of option tag on ask:01M86EDHPQ2HN5W8SCWGV1M652's card on the paseo channel: “up⟦U+E0041⟧down”",
++ ]
+ ❯ channel.test.ts:66:44
+   The assertion before it passed: the card's options keep the IDs they were raised with.
+
+ FAIL  AC1 #1583.f0f56109 a link's target holding each of the three characters shows it as its escape in a channel's summary
+AssertionError: expected [ …(3) ] to deeply equal []
+- []
++ [
++   "U+200B ZERO WIDTH SPACE is drawn raw in the link's target in the summary of ask:01M86EDHQ2AD7KNFTTS32BY1SW's card on the paseo channel: “Open https://files.example/inv⟦U+200B⟧oice/rep⟦U+202E⟧ort/tot⟦U+E0041⟧als.html to check the totals?”",
++   "U+202E RIGHT-TO-LEFT OVERRIDE is drawn raw in the link's target in the summary of ask:01M86EDHQ2AD7KNFTTS32BY1SW's card on the paseo channel: “Open https://files.example/inv⟦U+200B⟧oice/rep⟦U+202E⟧ort/tot⟦U+E0041⟧als.html to check the totals?”",
++   "U+E0041 TAG LATIN CAPITAL LETTER A is drawn raw in the link's target in the summary of ask:01M86EDHQ2AD7KNFTTS32BY1SW's card on the paseo channel: “Open https://files.example/inv⟦U+200B⟧oice/rep⟦U+202E⟧ort/tot⟦U+E0041⟧als.html to check the totals?”",
++ ]
+ ❯ channel.test.ts:71:144
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 3 passed (7)
+
+
+== app.test.ts (the base with the door laid)
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1583
+
+ ✓ AC1 #1583.f0f56109 Each of a zero-width space, a right-to-left override and a tag character in an option draws as a visible escape. A planted card that draws them raw fails, naming the character > AC1 #1583.f0f56109 on the app's card, an option holding each of the three characters draws it as its escape, and none raw (the base does: it must stay so) 1ms
+ ✓ AC1 #1583.f0f56109 (the same describe) > AC1 #1583.f0f56109 the planted card, DEEP_HUB_PLANT=card-draws-raw, fails the same check, which names each of the three characters as drawn raw 0ms
+ ✓ AC1 #1583.f0f56109 (the same describe) > AC1 #1583.f0f56109 in the app, a link's target in a card's question and a session's name holding each of the three characters draw it as its escape, and none raw (the base does: it must stay so) 0ms
+ × AC2 #1583.3d92be0c An authority card with one shows the warning, and the warning is a safety row > AC2 #1583.3d92be0c an approval holding one of the three characters in its question, its allowing option or its command draws a line the same approval without it doesn't: the warning 3ms
+ × AC2 #1583.3d92be0c (the same describe) > AC2 #1583.3d92be0c the warning's words are a row of the safety list, crates/deep-app/safety.json, that names #1583, and an approval holding none draws no such row 1ms
+ ✓ AC4 #1583.e10b90b9 Plain text in Chinese, Arabic and with emoji draws unchanged and adds no warning > AC4 #1583.e10b90b9 an approval whose question, allowing option and command are plain Chinese, Arabic or emoji draws each as it is, and no line the same approval in ASCII doesn't (the base does: it must stay so) 0ms
+
+ FAIL  AC2 #1583.3d92be0c an approval holding one of the three characters in its question, its allowing option or its command draws a line the same approval without it doesn't: the warning
+AssertionError: expected [ …(9) ] to deeply equal []
+- []
++ [
++   "the approval holding U+200B ZERO WIDTH SPACE in its question draws no line the same approval without it doesn't: nothing on the card says it holds one",
++   "the approval holding U+202E RIGHT-TO-LEFT OVERRIDE in its question draws no line the same approval without it doesn't: nothing on the card says it holds one",
++   "the approval holding U+E0041 TAG LATIN CAPITAL LETTER A in its question draws no line the same approval without it doesn't: nothing on the card says it holds one",
++   "the approval holding U+200B ZERO WIDTH SPACE in its allowing option draws no line the same approval without it doesn't: nothing on the card says it holds one",
++   "the approval holding U+202E RIGHT-TO-LEFT OVERRIDE in its allowing option draws no line the same approval without it doesn't: nothing on the card says it holds one",
++   "the approval holding U+E0041 TAG LATIN CAPITAL LETTER A in its allowing option draws no line the same approval without it doesn't: nothing on the card says it holds one",
++   "the approval holding U+200B ZERO WIDTH SPACE in its command draws no line the same approval without it doesn't: nothing on the card says it holds one",
++   "the approval holding U+202E RIGHT-TO-LEFT OVERRIDE in its command draws no line the same approval without it doesn't: nothing on the card says it holds one",
++   "the approval holding U+E0041 TAG LATIN CAPITAL LETTER A in its command draws no line the same approval without it doesn't: nothing on the card says it holds one",
++ ]
+ ❯ app.test.ts:138:22
+   Each of the nine does draw every line of the ASCII approval, its escape aside: no "doesn't draw … line(s)" entry.
+
+ FAIL  AC2 #1583.3d92be0c the warning's words are a row of the safety list, crates/deep-app/safety.json, that names #1583, and an approval holding none draws no such row
+AssertionError: expected [ …(10) ] to deeply equal []
+- []
++ [
++   "crates/deep-app/safety.json is missing: this checkout has no safety list",
++   "the approval holding U+200B ZERO WIDTH SPACE in its question draws no line that is a #1583 row of the safety list: beyond the same approval without it, it draws nothing",
++   … the same of each of the other eight approvals, in the order above …
++ ]
+ ❯ app.test.ts:152:22
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+
+
+== The pure base: the built target read directly, the planted card's test
+
+No plant selected, the pure base and the base with the door draw the same lines of all 15 cards and the same
+session's name. So the five other tests of app.test.ts read on the pure base as above: judged on its lines by
+judge.ts, the two AC2 checks fail with the same entries and the three others pass.
+
+The options' card on the pure base, with DEEP_HUB_PLANT=card-draws-raw and without, is the same card:
+    “How it looks”
+    “Which name for the build folder?”
+    “north\u{200b}south”
+    “east\u{202e}west”
+    “up\u{e0041}down”
+    “Default: north\u{200b}south · at tomorrow 08:00”
+    “reference: the agent's”
+    “Answering saves it for this task”
+    “Send”
+The check gives no finding on it. So on the pure base the planted card's test fails at its own assertion,
+app.test.ts:112, `expect(findings.map((f) => `${f.code} ${f.how}`).sort()).toEqual(['U+200B raw', 'U+202E raw',
+'U+E0041 raw'])`, which gets []; its message would read "the planted card draws each character raw, and the check
+says so of each: it passes the check, drawing …". The base has no planted card of that name. This is read from the
+judge's result on the target's own output, the same call the test makes; vitest did not run the test there.
+
+The same card on the base with the door, DEEP_HUB_PLANT=card-draws-raw:
+    “How it looks”
+    “Which name for the build folder?”
+    “north⟦U+200B⟧south”
+    “east⟦U+202E⟧west”
+    “up⟦U+E0041⟧down”
+    “Default: north⟦U+200B⟧south · at tomorrow 08:00”
+    “reference: the agent's”
+    “Answering saves it for this task”
+    “Send”
+The check gives exactly `U+200B raw`, `U+202E raw`, `U+E0041 raw`, each finding naming its character, so the test
+passes there: the planted card on the merge base, failing the check its shipped side passes.
+
+
+Not run
+  No implementation of #1583 exists, so nothing was run against one: the passing side of each failing test, and
+  everything after its first failing assertion (the refusal's field, the signature over the card as shown), is
+  untried. The twin (twins/card-draws-raw/lines.json) was applied to the base's plain.rs as the before lane applies it
+  and read; it was never built or run.

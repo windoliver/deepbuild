@@ -664,11 +664,7 @@ export class Core {
       this.canvasSide.appended(input);
       this.log.stream();
       this.flags.appended(kind, connection.session);
-      if (kind !== 'session.state' && kind !== 'row.set') {
-        // The next state pass reads the sessions appended to since the last; an event of no session, every session.
-        if (this.state.touched !== 'all') { if (connection.session) this.state.touched.add(connection.session); else this.state.touched = 'all'; }
-        this.state.stateSoon();
-      }
+      this.state.appended(input, connection.session);
       if (kind.startsWith('ask.') || kind === 'card.taken_over' || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
       if (kind === 'verdict.made') this.github?.verdicts();
       // A deep_wait or deep_run waiting on what this event settles reads it again now, and answers before the
@@ -2104,10 +2100,9 @@ export class Core {
     if (meta.agent === 'claude-code') {
       const tail = this.state.tails.get(meta.session) ?? new UsageTail();
       this.state.tails.set(meta.session, tail);
-      const { tokens, cost: counted, model } = await tail.read(meta.transcript);
-      // turn.usage@1's cost has no place for the count's "at least", so the event carries the amount alone.
-      const cost = counted.basis === 'estimated' ? { basis: counted.basis, usd: counted.usd, rate_card: counted.rate_card } : counted;
-      if (model) usage = { turn: this.state.live.get(meta.session)?.turnAsk ?? meta.fields?.prompt_id ?? meta.id, model, covers: 'session', tokens: { input: tokens.input + tokens.cache_write, cached: tokens.cache_read, output: tokens.output, exact: true }, cost };
+      const { tokens, cost, model } = await tail.read(meta.transcript);
+      // turn.usage@2 (#3250): the cache writes' two lifetimes apart, inside input as before, and the count's "at least".
+      if (model) usage = { turn: this.state.live.get(meta.session)?.turnAsk ?? meta.fields?.prompt_id ?? meta.id, model, covers: 'session', tokens: { input: tokens.input + tokens.cache_write, cached: tokens.cache_read, output: tokens.output, exact: true, cache_write_5m: tokens.cache_write_5m, cache_write_1h: tokens.cache_write_1h }, cost };
     } else if (meta.agent === 'codex') {
       const text = await readFile(meta.transcript, 'utf8').catch(() => '');
       const lines = text.split('\n').flatMap((l) => { try { return [JSON.parse(l) as JsonValue]; } catch { return []; } });
@@ -2115,7 +2110,7 @@ export class Core {
       usage = registry().get('codex').readUsage?.(lines).at(-1) as unknown as Obj | undefined;
     }
     if (!usage) return;
-    await this.appendSession(meta.session, meta.agent, 'turn.usage', usage);
+    await this.appendCore('turn.usage', usage, { subject: `session:${letters(meta.session)}`, v: meta.agent === 'claude-code' ? 2 : 1 }, { session: meta.session, agent: meta.agent });
   }
 
   private askingQueued = false;

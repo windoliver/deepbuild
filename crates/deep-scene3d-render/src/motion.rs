@@ -18,6 +18,7 @@ const VELOCITY: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 const TILES: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 const RESOLVED: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
+deep_gpu::paired! { uniform: "motion.wgsl", U;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Uniform {
@@ -30,11 +31,15 @@ struct Uniform {
     size: [f32; 4],
     tile: [u32; 4],
 }
+}
 
+deep_gpu::paired! { instance:
+    INSTANCE => "motion.wgsl", vs { rows: [t0, t1, t2, o0, o1, o2, c0, c1, c2] };
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Instance {
     rows: [[f32; 4]; 9],
+}
 }
 
 const INSTANCE: [wgpu::VertexAttribute; 9] = wgpu::vertex_attr_array![

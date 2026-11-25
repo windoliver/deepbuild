@@ -1,0 +1,6 @@
+{
+  "#3256.7baa6339": ["frame-fields-swapped"],
+  "#3256.3bfcdd46": ["ao-opts-retyped", "ao-field-added"],
+  "#3256.6145ab27": ["solid-fields-swapped"],
+  "#3256.57afe6d0": ["host-struct-unlisted", "uniform-struct-unnamed"]
+}

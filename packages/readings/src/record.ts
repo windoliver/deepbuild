@@ -192,13 +192,17 @@ export function planWindowTokens(events: RecordEvent[]) {
   return { counted_tokens, sessions };
 }
 
-/** `card` is the rate card behind any estimated part: a sum with any estimate in it is an estimate. */
-interface Spend { usd: number; priced: boolean; card: string | null; complete: boolean; as_of: number }
+/**
+ * `card` is the rate card behind any estimated part: a sum with any estimate in it is an estimate, and one with any
+ * lower bound in it is "at least" (#3250).
+ */
+interface Spend { usd: number; priced: boolean; card: string | null; complete: boolean; as_of: number; at_least?: true }
+const atLeast = (cost: Cost): { at_least?: true } => (cost.basis === 'estimated' && cost.at_least === true ? { at_least: true } : {});
 const addSpend = (to: Map<string, Spend>, key: string, s: Spend): void => {
   const o = to.get(key) ?? { usd: 0, priced: false, card: null, complete: true, as_of: 0 };
-  to.set(key, { usd: o.usd + s.usd, priced: o.priced || s.priced, card: o.card ?? s.card, complete: o.complete && s.complete, as_of: Math.max(o.as_of, s.as_of) });
+  to.set(key, { usd: o.usd + s.usd, priced: o.priced || s.priced, card: o.card ?? s.card, complete: o.complete && s.complete, as_of: Math.max(o.as_of, s.as_of), ...(o.at_least || s.at_least ? { at_least: true } : {}) });
 };
-const spendCost = (s: Spend): Cost => (!s.priced ? { basis: 'unpriced' } : s.card ? { basis: 'estimated', usd: s.usd, rate_card: s.card } : { basis: 'reported', usd: s.usd });
+const spendCost = (s: Spend): Cost => (!s.priced ? { basis: 'unpriced' } : s.card ? { basis: 'estimated', usd: s.usd, rate_card: s.card, ...(s.at_least ? { at_least: true } : {}) } : { basis: 'reported', usd: s.usd });
 const spendReading = (subject: string, s: Spend): Reading => ({ id: 'spend.usd', subject, value: s.priced ? s.usd : null, unit: 'usd', source: RECORD, as_of: s.as_of, basis: s.priced && !s.card ? 'observed' : 'modeled', complete: s.complete, cost: spendCost(s) });
 
 /** What one session gives: its own readings, and what is summed across sessions. */
@@ -249,9 +253,9 @@ function foldSession(session: string, list: RecordEvent[]): Part {
     else {
       const sum = turn.usd + usd;
       const card = turn.cost.basis === 'estimated' ? turn.cost.rate_card : u.cost.basis === 'estimated' ? u.cost.rate_card : null;
-      byTurn.set(u.turn, { usd: sum, cost: card ? { basis: 'estimated', usd: sum, rate_card: card } : { basis: 'reported', usd: sum }, as_of: u.ts, ...context });
+      byTurn.set(u.turn, { usd: sum, cost: card ? { basis: 'estimated', usd: sum, rate_card: card, ...atLeast(turn.cost), ...atLeast(u.cost) } : { basis: 'reported', usd: sum }, as_of: u.ts, ...context });
     }
-    const s: Spend = { usd: usd ?? 0, priced: usd !== null, card: u.cost.basis === 'estimated' ? u.cost.rate_card : null, complete: usd !== null, as_of: u.ts };
+    const s: Spend = { usd: usd ?? 0, priced: usd !== null, card: u.cost.basis === 'estimated' ? u.cost.rate_card : null, complete: usd !== null, as_of: u.ts, ...atLeast(u.cost) };
     addSpend(own, subject, s);
     for (const task of u.tasks) addSpend(tasks, task, s);
   }
