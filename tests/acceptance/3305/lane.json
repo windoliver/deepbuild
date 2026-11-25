@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: each file runs `deep hub run` from packages/cli/dist and target/debug/deep-hook through deep setup's entries, with #906's planted late reply timed against deep-hook's 2 s prompt hold; under another suite's load deep-hook can let the prompt through before any hold and the run is BLOCKED" }

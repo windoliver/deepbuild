@@ -1,0 +1,54 @@
+# The suite run on the base, a8f65eefb (head of PR #3303, Routes.notices), macOS, Node 24.22.0, after npm ci,
+# npm run build --workspaces and cargo build --locked -p deep-hook in a fresh GitHub clone:
+#   node node_modules/vitest/vitest.mjs run --root tests/acceptance/3305 --no-file-parallelism
+# The clone's path is shown as <clone>. Both tests fail at their count assertion: the item that went into the lost
+# prompt's reply reached the agent 0 times over the run, so the session's next prompt did not carry it.
+# The first line is the machine's uptime and load when the run started.
+
+13:58  up 3 days, 18:24, 14 users, load averages: 25.86 45.42 59.81
+
+ RUN  v5.0.5 <clone>/tests/acceptance/3305
+
+ ❯ continue.test.ts (1 test | 1 failed) 5513ms
+   ❯ #3305.bc1fc765 A continue carried in a prompt reply deep-hook never read goes with the session's next prompt that reaches the model, once (1)
+     × #3305.bc1fc765 a transient stop's automatic continue, waiting for the next prompt, goes into "Go on with the cart total."'s reply, which misses deep-hook's hold (the planted late reply); it reaches the agent exactly once, with "Now add a test for total.ts." 5432ms
+ ❯ notice.test.ts (1 test | 1 failed) 5328ms
+   ❯ #3305.d2dd0332 A workspace notice carried in a prompt reply deep-hook never read goes with the session's next prompt that reaches the model, once (1)
+     × #3305.d2dd0332 a session outside any repo whose first task landed late: the workspace notice goes into "Now add a test for total.ts."'s reply, which misses deep-hook's hold (the planted late reply); it reaches the agent exactly once, with "Then run the tests for total.ts." 5260ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  continue.test.ts > #3305.bc1fc765 A continue carried in a prompt reply deep-hook never read goes with the session's next prompt that reaches the model, once > #3305.bc1fc765 a transient stop's automatic continue, waiting for the next prompt, goes into "Go on with the cart total."'s reply, which misses deep-hook's hold (the planted late reply); it reaches the agent exactly once, with "Now add a test for total.ts."
+AssertionError: the automatic continue ("this is its one automatic continue", session.continued 01M856NG60DD2E8S18X7VG9NVD), waiting for the next prompt (the waiter's wake took it at 1795471098133 and no turn started from it) and carried in "Go on with the cart total."'s reply that deep-hook never read, must reach the agent exactly once over the run (not zero, not twice); hook replies carrying it: []; prompts that reached the model: ["Fix the cart total, then stop.","Go on with the cart total.","Now add a test for total.ts."]; "Now add a test for total.ts."'s reply: {"model":true,"runs":[{"command":"exec '<clone>/…","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ continue.test.ts:57:433
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  notice.test.ts > #3305.d2dd0332 A workspace notice carried in a prompt reply deep-hook never read goes with the session's next prompt that reaches the model, once > #3305.d2dd0332 a session outside any repo whose first task landed late: the workspace notice goes into "Now add a test for total.ts."'s reply, which misses deep-hook's hold (the planted late reply); it reaches the agent exactly once, with "Then run the tests for total.ts."
+AssertionError: the workspace notice ("this session is outside any repo"), carried in "Now add a test for total.ts."'s reply that deep-hook never read, must reach the agent exactly once over the run (not zero, not twice); hook replies carrying it: []; prompts that reached the model: ["Fix the cart total, then stop.","Now add a test for total.ts.","Then run the tests for total.ts."]; "Then run the tests for total.ts."'s reply: {"model":true,"runs":[{"command":"exec '<clone>/…","code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ notice.test.ts:48:343
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  13:58:16
+   Duration  11.07s (tests 99%, import 1%)
+

@@ -179,6 +179,30 @@ export class AnswerDelivery {
     (r.notices ??= []).push(text);
   }
 
+  /** The continues and notices a prompt's reply carries, by its hook ID, kept 60 s as Siblings keeps its notices (#3305). */
+  private readonly inReply = new Map<string, { session: string; later: string[]; notices: string[]; at: number }>();
+
+  /**
+   * A prompt's reply carries these: kept while deep-hook could still report its hook gone before reading it, and given
+   * back at once when it already has, while the reply was being built.
+   */
+  inPromptReply(hook: string, session: string, later: string[], notices: string[], gone: boolean): void {
+    const now = this.options.services.now();
+    for (const [id, c] of this.inReply) if (c.at < now - 60_000) this.inReply.delete(id);
+    if (later.length || notices.length) this.inReply.set(hook, { session, later, notices, at: now });
+    if (gone) this.promptReplyGone(hook);
+  }
+
+  /** A prompt's reply deep-hook never read: what it carried reached no agent, so the session's next prompt carries it, first. */
+  promptReplyGone(hook: string): void {
+    const c = this.inReply.get(hook);
+    if (!c) return;
+    this.inReply.delete(hook);
+    const r = this.routesOf(c.session);
+    r.later.unshift(...c.later);
+    if (c.notices.length) r.notices = [...c.notices, ...(r.notices ?? [])];
+  }
+
   /**
    * The checks a stop's last message promises for later: the first sets the session's wake-up, or sets it again,
    * keeping its first end; a wake-up never sets itself again. A promise set a fourth time, or due past its end, is
