@@ -300,8 +300,8 @@ export class SessionState {
       }
     }
     for (const [call, c] of live.calls) if (c.ended !== undefined && now - c.ended > CALL_GRACE) live.calls.delete(call);
-    // A turn you interrupted (#39) has no stop to say so: it ends here, with no claim.
-    if (verified && meta.event === 'Interrupt') { state = 'finished'; void this.attention(meta.session, meta.agent, 'finished'); }
+    // A turn you interrupted (#39, #3430) has no stop to say so: it ends here, with no claim.
+    if (verified && meta.interrupted) { state = 'finished'; void this.attention(meta.session, meta.agent, 'finished'); }
     // A compaction is one event (#1022): a PreCompact of the turn whose compaction is still open is the same one again.
     const turn = meta.fields?.turn_id ?? '';
     const again = meta.event === 'PreCompact' && this.compacting.get(meta.session) === turn;
