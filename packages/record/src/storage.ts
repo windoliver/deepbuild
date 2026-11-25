@@ -54,9 +54,9 @@ const fullSync = (db: Db): boolean =>
   db.pragma('synchronous', { simple: true }) === 2 && (process.platform !== 'darwin' || db.pragma('fullfsync', { simple: true }) === 1);
 
 /**
- * The most the write-ahead file keeps once a checkpoint has reset it (#3440): 64 MiB, about sixteen times the 1,000
- * pages at which SQLite checkpoints by itself. One large commit or a held read still grows the file past it; the
- * commits after the next reset cut it back.
+ * The most the write-ahead file keeps after the first commit that follows a checkpoint's reset (#3440): 64 MiB, about
+ * sixteen times the 1,000 pages at which SQLite checkpoints by itself. One large commit or a held read still grows
+ * the file past it until then.
  */
 const WAL_LIMIT = 64 * 1024 * 1024;
 
