@@ -148,6 +148,12 @@ interface WarmOptions {
   plant?: string | undefined;
 }
 
+/**
+ * A bind's source as a path on this machine. Docker Desktop's VM shows each host folder it shares under /host_mnt, and
+ * `docker inspect` sometimes gives a container's bind as the VM's path; one that isn't a path here is that folder's.
+ */
+const hostSource = (source: string): string => (source.startsWith('/host_mnt/') && !existsSync(source) ? source.slice('/host_mnt'.length) : source);
+
 export class WarmStack {
   /** The stack's own run: the shell that holds its leases, and the token its services carry. */
   readonly id = newRun();
@@ -259,11 +265,17 @@ export class WarmStack {
     return ran.code === 0 ? undefined : `its volumes couldn't be made: ${ran.stderr.trim().slice(-300)}`;
   }
 
-  /** Starts the services anew from the file; `wait`, through their own health checks. */
+  /**
+   * Starts the services anew from the file; `wait`, through their own health checks. A service whose container holds no
+   * anonymous volume is removed first and made anew: on Docker Desktop a container recreated with a new bind source can
+   * show it as the VM's /host_mnt path. One that holds one is recreated, which carries its anonymous volumes over.
+   */
   private async up(file: string, services: string[], wait = true): Promise<string | undefined> {
     if (!services.length) return undefined;
-    const ran = await this.dock(this.compose(file, `up -d ${wait ? '--wait ' : ''}-t 3 --no-deps --no-build --pull never --force-recreate ${services.map(quote).join(' ')}`), [], BUILD_MS);
-    return ran.code === 0 ? undefined : `docker compose up ${services.join(' ')} exited ${String(ran.code)}: ${ran.stderr.trim().split('\n').slice(-1)[0] ?? ''}`;
+    const named = services.map(quote).join(' ');
+    const fresh = `f=; for s in ${named}; do id=$(${this.compose(file, 'ps -aq "$s"')}) || exit 1; v=; [ -z "$id" ] || v=$("$0" inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' $id) || exit 1; printf '%s\\n' "$v" | grep -Eq '(^| )[0-9a-f]{64} ' || f="$f $s"; done; [ -z "$f" ] || { ${this.compose(file, 'stop -t 3 $f')} && ${this.compose(file, 'rm -f $f')}; }`;
+    const ran = await this.dock(`${fresh} && ${this.compose(file, `up -d ${wait ? '--wait ' : ''}-t 3 --no-deps --no-build --pull never --force-recreate ${named}`)}`, [], BUILD_MS);
+    return ran.code === 0 ? undefined : `docker compose rm or up ${services.join(' ')} exited ${String(ran.code)}: ${ran.stderr.trim().split('\n').slice(-1)[0] ?? ''}`;
   }
   /** Waits for the database on its own TCP port: Postgres's first start answers on its socket before it is ready. */
   private async dbReady(file: string): Promise<string | undefined> {
@@ -433,7 +445,7 @@ export class WarmStack {
     const mounts: Serving['served']['mounts'] = [];
     const containers = rows.map((c): Container => {
       const service = c.Config.Labels['com.docker.compose.service'] ?? '(no service)';
-      const binds = c.Mounts.filter((m) => m.Type === 'bind');
+      const binds = c.Mounts.filter((m) => m.Type === 'bind').map((m) => ({ ...m, Source: hostSource(m.Source) }));
       for (const m of binds) mounts.push({ service, source: m.Source, target: m.Destination });
       const context = c.Config.Labels['deepbuild.context'];
       const digest = c.Config.Labels['deepbuild.digest'];
