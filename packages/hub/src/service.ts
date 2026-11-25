@@ -8,6 +8,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { controlToken, hubAddress, installedPrograms, installedRoot, lastingNode, onPath, type Root, rootOf, rootToken, underTemp } from './paths.js';
 import { notAnswered, Unanswered } from './client.js';
+import { COLLECTOR } from './settle.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
@@ -406,7 +407,8 @@ export async function startHub(options: { root?: string; cli: string; quiet?: bo
   // An installed version's login service runs the versions folder's current link, which every update keeps, never a
   // version's own folder (#41); a checkout's runs its own CLI through Node.
   const installed = options.root ? undefined : installedPrograms(root.dir);
-  const program = installed ? [installed.deep, 'hub', 'run'] : [options.root ? process.execPath : lastingNode(), realpathSync(options.cli), 'hub', 'run', ...(options.root ? ['--root', root.dir] : [])];
+  // Node takes the collector's flag only at launch (#3439): a checkout's hub gets it here, an installed one from its own `deep`.
+  const program = installed ? [installed.deep, 'hub', 'run'] : [options.root ? process.execPath : lastingNode(), COLLECTOR, realpathSync(options.cli), 'hub', 'run', ...(options.root ? ['--root', root.dir] : [])];
   if (options.root) {
     // A dev hub: in a session of its own, so its terminal's hangup never reaches it.
     const log = openSync(join(root.logs, 'hub.log'), 'a', 0o600);

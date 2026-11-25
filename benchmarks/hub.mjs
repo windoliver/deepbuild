@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { readSinceStart, startReading, unread } from './process-reader.mjs';
 
 const CLI = fileURLToPath(new URL('../packages/cli/dist/main.js', import.meta.url));
+// The hub as its login service launches it (#3439): Node takes the collector's flag only when the process starts.
+const LAUNCH = ['--expose-gc'];
 const DAY = 86_400_000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const READINGS = { instructions: 'instructions', cpuMs: 'CPU time', wakeups: 'wakeups', footprintBytes: 'footprint' };
@@ -119,7 +121,7 @@ async function logEnd(app) {
 async function start(home) {
   const socket = join(home, '.deepbuild', 'hub.sock');
   const t0 = performance.now();
-  const hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env: { ...process.env, HOME: home }, stdio: 'ignore' });
+  const hub = spawn(process.execPath, [...LAUNCH, CLI, 'hub', 'run'], { env: { ...process.env, HOME: home }, stdio: 'ignore' });
   for (;;) {
     try {
       await exchange(socket);
@@ -143,7 +145,7 @@ const modes = {
     mkdirSync(join(home, '.deepbuild'), { recursive: true });
     writeFileSync(join(home, '.deepbuild', 'rules.json'), readFileSync(new URL('../crates/deep-hook/default-rules.json', import.meta.url)));
     const t0 = performance.now();
-    const hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const hub = spawn(process.execPath, [...LAUNCH, CLI, 'hub', 'run'], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] });
     const ended = new Promise((resolve) => hub.once('exit', resolve));
     let output = '', error = '';
     hub.stderr.on('data', (chunk) => { error += chunk; });
