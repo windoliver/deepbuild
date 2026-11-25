@@ -1,0 +1,7 @@
+== conditions at start: Now drawing from 'AC Power'; lowpowermode 0; thermalState 0; 20:39  up 2 days, 13:41, 2 users, load averages: 16.89 7.65 5.46; no load wait
+== command: DEEP_PROOF_ISSUES=<issues folder> node scripts/spine-22-mac-97fffed5.mjs judge --issue 22 (copy: #22 pinned to 97fffed505149c3d93599549b0a32d2e1e7494c0, reopen() returns at once)
+== stdout:
+{"issue":22,"commit":"97fffed505149c3d93599549b0a32d2e1e7494c0","verdict":"FAIL","criteria":[{"id":"#22.48b6696b","outcome":"FAIL"},{"id":"#22.1f14a778","outcome":"PASS"},{"id":"#22.f57a814c","outcome":"PASS"},{"id":"#22.3d85284a","outcome":"PASS"}],"reopen":{"criterion":"#22.48b6696b"}}
+== stderr (first 200 lines):
+== exit=1 wall 384 s
+== conditions at end: Now drawing from 'AC Power'; thermalState 0; 20:46  up 2 days, 13:48, 2 users, load averages: 3.40 9.75 7.97

@@ -1,5 +1,5 @@
 {
-  "packages/hub/src/gate-runner.ts": [
+  "packages/hub/src/claim-changes.ts": [
     {
       "find": [
         "  return { changed: [...new Set([...diff, ...others])].sort(), configs, scripts };"

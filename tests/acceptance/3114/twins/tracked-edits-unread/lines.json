@@ -1,5 +1,5 @@
 {
-  "packages/hub/src/gate-runner.ts": [
+  "packages/hub/src/claim-changes.ts": [
     {
       "find": [
         "  const [diff, others, tracked] = await Promise.all([paths(['diff', '-z', '--name-only', '--no-renames', base]), paths(['ls-files', '-z', '--others', '--exclude-standard']), paths(['ls-files', '-z'])]);"

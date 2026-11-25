@@ -1,0 +1,64 @@
+tree <main-2252dfd6> at 2252dfd6fd144f279f3944795602b1c7b3fc81c7; Sun Nov 15 03:21:51 PM PST 2026; load 28.94 25.01 27.08
+=== tests/acceptance/63/install.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/63/install.test.ts > AC1 #63.f697c796 install reads 212 recorded sessions within 5% of one 5-hour window, and every wiki line cites a handle > AC1 install reads every one of the 212 sessions, through the runner only, spending under 5% o
+ FAIL  tests/acceptance/63/install.test.ts > AC1 #63.f697c796 install reads 212 recorded sessions within 5% of one 5-hour window, and every wiki line cites a handle > AC1 every wiki line the install wrote cites a handle it was delivered, the quote at that hand
+ FAIL  tests/acceptance/63/install.test.ts > AC4 #63.e6ad4b93 no reading job puts more than the capped slices of the record into any prompt > AC4 the install read and a trial replay: no prompt holds more of the record than a capped slice, and no reply is past 
+Error: ENOENT: no such file or directory, lstat '<main-2252dfd6>/linux-vdso.so.1'
+      Tests  3 failed | 2 passed (5)
+=== packages/hub/test/claim-replay.test.ts
+exit 0
+      Tests  1 passed (1)
+=== packages/hub/test/codes.test.ts
+exit 0
+      Tests  2 passed (2)
+=== tests/acceptance/63/quotes-redraft.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/63/quotes-redraft.test.ts > AC10 #63.46c00344 a quote is at its handle only as a byte-exact substring of the redacted slice it names, after NFC and whitespace collapse, citing its message (redraft) > AC10 the reading job keeps each quot
+Error: ENOENT: no such file or directory, lstat '<main-2252dfd6>/linux-vdso.so.1'
+      Tests  1 failed (1)
+=== packages/hub/test/onboarding.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/onboarding.test.ts > deep doctor in a home nobody set up > names deep setup as the fix for the hub, not deep hub start, which starts a hub no hook reaches
+Error: Test timed out in 5000ms.
+ FAIL  packages/hub/test/onboarding.test.ts > deep setup > says in one line what it added, with no line for a timing relation that holds
+AssertionError: Its hooks and status line forwarder are in /tmp/deep-onb-Ve1izn/h/.claude/settings.json, beside yours; its MCP server in /tmp/deep-onb-Ve1izn/h/.claude.json; its skill at /tmp/deep-onb-Ve1izn/h/.claude/skills/deepbuild; its safety rules at /tmp
+ FAIL  packages/hub/test/onboarding.test.ts > the hub's login service on Linux > starts through the real user manager from a home whose units it doesn't read
+AssertionError: deep hub start: systemctl --user link /tmp/deep-onb-BCnV1p/h/.config/systemd/user/deepbuild-hub.service: Failed to link unit: File ~/.config/systemd/user/deepbuild-hub.service already exists and is a symlink to /tmp/dh824-F3JdFY/h/.con
+      Tests  3 failed | 10 passed | 3 skipped (16)
+=== tests/acceptance/39/session.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/39/session.test.ts > AC2 #39.0215da31 A held stop continues with the answer > AC2 #39.0215da31 a Codex stop with an open ask is held; your answer comes back as decision: block carrying it, on a reply Codex's Stop schema allows, and setu
+AssertionError: AC2 #39.0215da31 the stop's reply continues the turn: exit 0, stdout "", stderr "": expected undefined to be 'block' // Object.is equality
+ FAIL  tests/acceptance/39/session.test.ts > AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session > AC5 #39.de9f23ce two threads whose hooks and one deep mcp share a parent process: each deep_ask bind
+AssertionError: AC5 #39.de9f23ce thread A's ask under A (abc49d3d-32b8-4382-965a-792ea133b448): agent.reach, agent.reach, agent.reach, agent.reach, setup.step, setup.step, setup.step, setup.step, session.start, session.rules_delivered, task.created, user.ask, 
+ FAIL  tests/acceptance/39/session.test.ts > AC8 #39.9d535982 A session on a Codex version past its facts is recorded with its holds watch-only and one health reading > AC8 #39.9d535982 a rollout naming 99.0.0: its events are recorded unverified, its stop isn'
+AssertionError: AC8 #39.9d535982 its events are unverified: expected false to be true // Object.is equality
+      Tests  3 failed | 4 passed (7)
+=== packages/hub/test/codex-hub.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/codex-hub.test.ts > a subagent's stop > is no boundary of the root's turn across a hub restart
+AssertionError: expected false to be true // Object.is equality
+ FAIL  packages/hub/test/codex-hub.test.ts > a subagent's stop > a child's rollout never binds the root across a restart, and only SubagentStart may name one
+TypeError: Cannot read properties of undefined (reading 'verified')
+      Tests  2 failed | 28 passed (30)
+=== tests/acceptance/340/flow/terminal.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/340/flow/terminal.test.ts > AC2 #340.2dc7b69b in the terminal, where a message typed mid-turn fires UserPromptSubmit at once: each gets a visible acknowledgement within one tool call, and the chat line shows the queue > AC2 #340.2dc7b69
+Error: AC2 #340.2dc7b69b [terminal] the message "also return 401 with a JSON error body when the token is malformed", typed while a Read ran, which fired UserPromptSubmit at once, must get a visible acknowledgement within one tool call: a line of the chat's me
+ FAIL  tests/acceptance/340/flow/terminal.test.ts > AC4 #340.0abe1257 in the terminal, a message typed mid-turn is counted once, from its enqueue and its UserPromptSubmit together > AC4 #340.0abe1257 each of two messages typed while Reads run in the terminal i
+Error: AC4 #340.0abe1257 [terminal] the message "also add a test for expired tokens", typed while a Read ran (its enqueue and its UserPromptSubmit), must be counted once, as one user.ask from person; the session holds 1 with its text: user.ask at log_pos 18 {"
+      Tests  2 failed | 2 passed (4)
+=== tests/acceptance/323/final-message.test.ts
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/323/final-message.test.ts > AC3 #323.5966273a limits the change writes into its PR body or its docs become open items, as a "still open" list does > AC3 #323.5966273a the PR body's "Known limit", README's "doesn't check the token's audi
+Error: AC3 #323.5966273a the limit PR 22's body states, "Known limit: a token with no exp claim is still accepted", must become an open item of session:5a6af1dc6d624655a8df84bd34a86465#0, as the "Still open" one does: its open items are open_item.opened at log
+      Tests  1 failed | 3 passed (4)
+done Sun Nov 15 03:28:00 PM PST 2026; load 29.92 28.52 28.16

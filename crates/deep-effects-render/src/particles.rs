@@ -357,7 +357,9 @@ pub fn frame(
     let (plants, flags) = (host.plants(), host.flags());
     let mut kept = Vec::new();
     for mut sp in std::mem::take(&mut settings.sparks) {
-        let Some(o) = scene.others.iter().find(|o| o.id == sp.item) else {
+        // #853: a stepped item's draw reads its own operator's rows, never a closed form.
+        let closed_form = |o: &&Other| o.id == sp.item && sp.rows.is_none();
+        let Some(o) = scene.others.iter().find(closed_form) else {
             kept.push(sp);
             continue;
         };

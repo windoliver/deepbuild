@@ -1,0 +1,27 @@
+
+ RUN  v5.0.5 ~/private/d22v/target/e2e-22
+
+ ❯ app.test.ts (1 test | 1 failed) 90120ms
+   × app 90120ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  app.test.ts > app
+Error: BLOCKED: no on-screen window for deep-app pid 36351, so 1-needs-you.png wasn't taken (0 windows 129 onscreen 7 app's ["0/-1", "0/-1", "0/-1", "0/-1", "0/-1", "0/-1"])
+ ❯ shot app.test.ts:33:25
+     31|   const seen = windowOf(appPid);
+     32|   const id = seen.split(' ')[0];
+     33|   if (id === '0') throw Error(`BLOCKED: no on-screen window for deep-a…
+       |                         ^
+     34|   execFileSync('screencapture', ['-x', '-o', '-l', id, join(OUT, name)…
+     35|   log(`   screenshot ${name} (window ${id})`);
+ ❯ app.test.ts:79:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:52:38
+   Duration  90.25s (tests 100%)
+

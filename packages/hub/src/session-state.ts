@@ -21,7 +21,8 @@ import { alive as running } from '@deepbuild/supervisor';
 import { sessionHomes } from './codex-settings.js';
 
 import { sessionStates, statusRows, WAITING_QUIET_MS, type StatusRow } from './status.js';
-import { buildRows, distinctTitles, jobRow, listRows, orderOf, rowVersion, settle, whyOf, type Placed, type Row, type RunningJob } from './rows.js';
+import { plantedKeeps } from './plant.js';
+import { buildRows, distinctTitles, jobRow, listRows, nameIn, orderOf, rowVersion, settle, SHORT, whyOf, type Placed, type Row, type RunningJob } from './rows.js';
 
 import { commitsBetween, headOf } from './session-facts.js';
 
@@ -71,17 +72,22 @@ export interface SessionStateOptions {
     readonly sessionStarts: Starts;
     readonly people: People;
   };
-  judging: () => Pick<StopJudgingPort, "completions" | "counters" | "idleSent" | "lastMessage" | "nudgeable" | "watchEnded">;
+  judging: () => Pick<StopJudgingPort, "forget" | "letGo" | "watchEnded">;
   transcripts: () => Pick<TranscriptsPort, "cursors" | "saveCursors" | "writeCursors">;
-  delivery: () => Pick<AnswerDeliveryPort, "answerWaiting" | "answers" | "binds" | "typedAt" | "unread">;
-  mcp: () => Pick<McpOperationsPort, "stamps">;
-  memory: () => Pick<SessionMemoryPort, "firstPrompted" | "tasted">;
+  delivery: () => Pick<AnswerDeliveryPort, "answerWaiting" | "answers" | "binds" | "forget">;
+  mcp: () => Pick<McpOperationsPort, "forget" | "stamps">;
+  memory: () => Pick<SessionMemoryPort, "forget">;
   flags: () => Pick<SessionFlagsPort, "unpushed" | "modelCalled">;
   events: Pick<HubEvents, "appendReading" | "append" | "connection" | "appendSession">;
 kernel: Pick<HubRuntime, "stopping">;
 schedule: Pick<HookSchedule, "askingSoon" | "queue">;
+  /** A session forgotten (#1866): what the core itself keeps of it goes. */
+  forgot: (session: string) => void;
 
 }
+
+/** A state a hub's restart waits on (hub-control.ts): a turn under way, or one waiting on you. */
+const inTurn = (state: string): boolean => state.startsWith('working/') || state === 'needs you/waiting';
 
 /** SessionState: owns its domain state; services are resolved only when used. */
 export class SessionState {
@@ -156,11 +162,11 @@ export class SessionState {
   /** When the clock alone ends each session's state, for those whose last reading gave a time (#2646). */
   private readonly until = new Map<string, number>();
 
-  /** The list's rows as last appended (#1463), by ID; empty until the record's are read at start, which makes the first pass a backfill. */
+  /**
+   * The list's rows as last appended (#1463), by ID; empty until the record's are read at start, which makes the first
+   * pass a backfill. A session's leaves memory with the session (#1866), and a pass that needs it reads the record's.
+   */
   rows = new Map<string, Placed>();
-
-  /** Each session row's name before any short ID tells it from a twin (#2018), by row ID. */
-  private readonly names = new Map<string, string>();
 
   rowsFirst = true;
 
@@ -170,8 +176,8 @@ export class SessionState {
   /** The job rows' appends in turn, so a row never leaves the list before its last count is recorded. */
   private jobRowsAppended: Promise<void> = Promise.resolve();
 
-  /** The commits recorded, so one made across two hooks is recorded once. */
-  private readonly committed = new Set<string>();
+  /** The commits recorded, each by the session that made it, so one made across two hooks is recorded once. */
+  private readonly committed = new Map<string, string>();
 
   /** The sessions that got their reading for a version past their facts. */
   readonly versioned = new Set<string>();
@@ -299,7 +305,7 @@ export class SessionState {
     if (meta.event === 'SessionEnd') {
       // A watch ends with its session, whose last stop is then judged (#997), before the session is let go.
       const ends = [...live.background].filter(([, b]) => b.watch).map(([id]) => this.options.judging().watchEnded(meta.session, id, 'its session ended'));
-      const end = () => { this.live.delete(meta.session); this.options.services.gate.ended(meta.session); this.options.schedule.askingSoon(); };
+      const end = () => { this.live.delete(meta.session); this.options.services.gate.ended(meta.session); this.options.judging().letGo(meta.session); this.options.schedule.askingSoon(); };
       if (ends.length) void Promise.all(ends).finally(end);
       else end();
     }
@@ -406,6 +412,7 @@ export class SessionState {
       session.interrupted = true;
       if (this.options.settings.plant === 'reap-on-kill') this.options.services.stacks.endFor(session.id);
       this.letGoLive(session.id);
+      this.options.services.siblings.died(session.id);
       await this.options.events.appendSession(session.id, session.agent, 'session.gone', { pid: session.pid, start: session.start }).catch(() => undefined);
       if (session.agent === 'codex' && this.options.settings.plant !== 'leaves-codex-session-open') await this.closedAtExit(session).catch(() => undefined);
       this.endedOrder.delete(session.id);
@@ -439,7 +446,7 @@ export class SessionState {
 
   private letGoLive(id: string): void {
     const live = this.live.get(id);
-    if (live) { clearTimeout(live.quiet); this.live.delete(id); this.options.services.gate.ended(id); this.options.schedule.askingSoon(); }
+    if (live) { clearTimeout(live.quiet); this.live.delete(id); this.options.services.gate.ended(id); this.options.judging().letGo(id); this.options.schedule.askingSoon(); }
   }
 
   /**
@@ -499,14 +506,14 @@ export class SessionState {
 
   /** Marks the row `id` read, as row.set with `unread: false`, if it's unread; whether it was (#1461). */
   async seeRow(id: string): Promise<Obj> {
-    const placed = this.rows.get(id);
+    const placed = this.rows.get(id) ?? (await this.recordedRows([id]))[0];
     if (!placed?.row.unread) return { seen: false };
     const row = { ...placed.row, unread: false };
     const ts = this.options.services.now();
     const session = row.session;
     const connection = this.options.events.connection('core', { ...(this.projects.get(session) ? { project: this.projects.get(session)! } : {}), ...(this.sessionPeople.get(session) ? { actor: this.sessionPeople.get(session)! } : {}) });
     await this.options.events.append(connection, { v: rowVersion(row), id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
-    this.rows.set(id, { order: placed.order, row });
+    if (this.rows.has(id)) this.rows.set(id, { order: placed.order, row });
     return { seen: true };
   }
 
@@ -530,18 +537,13 @@ export class SessionState {
       else for (const id of only) this.until.delete(id);
       for (const r of readings) if (r.until !== undefined) this.until.set(r.id, r.until);
       // The list's rows (#1463): each that changed, and each ask's that left the list, in the same batch.
-      // The open asks are the asks core's inbox projection, by its one close rule (#2026).
-      const inbox = (await this.options.services.asks.inbox()).filter((a) => a.status !== 'closed').map((a) => a.ask);
+      // The open asks are the asks core's inbox projection, by its one close rule (#2026), and of those the ones in
+      // sight: shown at their batch or at once, or put off with Later. One waiting for its batch, held for the agent's
+      // next step, or folded into an exception, which shows it, has no row of its own (#22).
+      const inbox = (await this.options.services.asks.inbox()).filter((a) => a.status === 'shown' || a.status === 'later').map((a) => a.ask);
       const named = await buildRows(this.options.services.raw, readings, inbox);
-      // Each session's one name (#2018), with its short ID only where another session's row would read the same: a
-      // row whose twin came or went is set again with it, though nothing else of it changed.
-      for (const r of named) if (r.id.startsWith('session:')) this.names.set(r.id, r.title);
-      const titles = distinctTitles(this.names);
-      const fresh = new Set(named.map((r) => r.id));
-      const built = [
-        ...named.map((r) => (titles.has(r.id) ? { ...r, title: titles.get(r.id)! } : r)),
-        ...[...titles].flatMap(([id, title]) => { const was = this.rows.get(id)?.row; return was && !fresh.has(id) && was.title !== title ? [{ ...was, title }] : []; }),
-      ];
+      await this.recall(readings.map((r) => r.id), only === 'all');
+      const built = await this.titled(named, only === 'all');
       const changed = settle(this.rows, built, this.rowsFirst);
       const open = new Set(built.filter((r) => r.id.startsWith('ask:')).map((r) => r.id));
       const left = [...this.rows.keys()].filter((id) => id.startsWith('ask:') && !open.has(id));
@@ -567,10 +569,71 @@ export class SessionState {
           this.rows.delete(id);
         }),
       ]);
+      // A session the core doesn't keep is the record's again (#1866), but one whose turn the hub's restart waits for.
+      for (const id of [...this.rows.keys()]) if (id.startsWith('session:') && !this.keeps(id.slice('session:'.length))) this.rows.delete(id);
+      for (const [id, state] of this.states) if (!this.keeps(id) && !inTurn(state)) this.states.delete(id);
     } catch (error) {
       this.touched = 'all';
       throw error;
     }
+  }
+
+  /** Whether the core keeps a session in memory: one its hooks reach, or that just ended. */
+  private keeps(session: string): boolean {
+    return this.sessions.has(session) || this.live.has(session);
+  }
+
+  /** Rows as the record holds them, by ID. */
+  private async recordedRows(ids: readonly string[]): Promise<Placed[]> {
+    if (!ids.length) return [];
+    return ((await this.options.services.raw('SELECT ord, row FROM rows WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify(ids)])) as { ord: string; row: string }[]).map((r) => ({ order: r.ord, row: JSON.parse(r.row) as Row }));
+  }
+
+  /** The rows and states a pass over `sessions`, or over every one, compares with, of those memory doesn't hold (#1866). */
+  private async recall(sessions: readonly string[], all: boolean): Promise<void> {
+    const states = sessions.filter((id) => !this.states.has(id));
+    for (const r of (states.length ? await this.options.services.raw(`SELECT value AS id, (SELECT json_extract(data, '$.state') || '/' || json_extract(data, '$.cause') FROM events INDEXED BY events_session WHERE session_id = value AND kind = 'session.state' ORDER BY log_pos DESC LIMIT 1) AS state FROM json_each(?)`, [JSON.stringify(states)]) : []) as { id: string; state: string | null }[]) {
+      if (r.state !== null) this.states.set(r.id, r.state);
+    }
+    const rows = all ? await listRows(this.options.services.raw) : await this.recordedRows(sessions.map((id) => `session:${id}`).filter((id) => !this.rows.has(id)));
+    for (const p of rows) if (!this.rows.has(p.row.id)) this.rows.set(p.row.id, p);
+  }
+
+  /**
+   * Each session's one name (#2018), with its short ID only where another session's row would read the same: a row whose
+   * twin came or went is set again with it, though nothing else of it changed. A pass over every session has its row in
+   * memory; any other asks the record for the other rows of each name it touches (#1866), as few as tell a twin.
+   */
+  private async titled(named: readonly Row[], all: boolean): Promise<Row[]> {
+    const fresh = new Map(named.filter((r) => r.id.startsWith('session:')).map((r) => [r.id, r.title]));
+    const of = new Map<string, Map<string, string>>();
+    const add = (id: string, name: string): void => void (of.get(name) ?? of.set(name, new Map()).get(name)!).set(id, name);
+    for (const [id, name] of fresh) add(id, name);
+    if (all) { for (const p of this.rows.values()) if (p.row.id.startsWith('session:') && !fresh.has(p.row.id)) add(p.row.id, nameIn(p.row)); }
+    else {
+      // The name a session had before, too: its going may leave that name to one row alone.
+      const names = new Set([...fresh.values(), ...[...fresh.keys()].flatMap((id) => { const was = this.rows.get(id); return was ? [nameIn(was.row)] : []; })]);
+      for (const name of names) for (const p of await this.sameName(name, fresh.size + 2)) {
+        if (fresh.has(p.row.id)) continue;
+        if (!this.rows.has(p.row.id)) this.rows.set(p.row.id, p);
+        add(p.row.id, name);
+      }
+    }
+    const titles = new Map([...of.values()].flatMap((names) => [...distinctTitles(names)]));
+    return [
+      ...named.map((r) => (titles.has(r.id) ? { ...r, title: titles.get(r.id)! } : r)),
+      ...[...titles].flatMap(([id, title]) => { const was = this.rows.get(id)?.row; return was && !fresh.has(id) && was.title !== title ? [{ ...was, title }] : []; }),
+    ];
+  }
+
+  /** The session rows of one name: every one that reads as the name alone, and up to `most` with their short IDs. */
+  private async sameName(name: string, most: number): Promise<Placed[]> {
+    const title = "json_extract(row, '$.title')";
+    const rows = [
+      ...await this.options.services.raw(`SELECT ord, row FROM rows WHERE ${title} = ? AND id LIKE 'session:%'`, [name]),
+      ...await this.options.services.raw(`SELECT ord, row FROM rows WHERE ${title} >= ? AND ${title} < ? AND id LIKE 'session:%' AND ${title} = ? || substr(id, ${'session:'.length + 1}, 8) LIMIT ${most}`, [`${name}${SHORT}`, `${name}${SHORT}\u{10FFFF}`, `${name}${SHORT}`]),
+    ] as { ord: string; row: string }[];
+    return rows.map((r) => ({ order: r.ord, row: JSON.parse(r.row) as Row }));
   }
 
   /**
@@ -643,14 +706,14 @@ export class SessionState {
    * row read and, for each row above it, the fact it lacked, from the same call that picks every session's state.
    */
   async whySeen(role: string, params: Obj): Promise<Obj> {
-    const rows = () => [...this.rows.values()].map((p) => p.row);
-    let found = await whyOf(this.options.services.raw, this.options.services.now(), String(params.session ?? ''), rows());
+    const rows = async () => (await listRows(this.options.services.raw)).map((p) => p.row);
+    let found = await whyOf(this.options.services.raw, this.options.services.now(), String(params.session ?? ''), await rows());
     // A row the clock alone moved since its last pass, as one gone quiet, is set first: the row and its why agree.
-    const listed = (id: string) => this.rows.get(id)?.row;
-    if (!('refused' in found) && (found.word !== listed(found.id)?.word || found.why !== listed(found.id)?.why)) {
+    const listed = 'refused' in found ? undefined : (await this.recordedRows([found.id]))[0]?.row;
+    if (!('refused' in found) && (found.word !== listed?.word || found.why !== listed?.why)) {
       if (this.touched !== 'all') this.touched.add(found.id.slice('session:'.length));
       await this.recordStates().catch(() => undefined);
-      found = await whyOf(this.options.services.raw, this.options.services.now(), found.id, rows());
+      found = await whyOf(this.options.services.raw, this.options.services.now(), found.id, await rows());
     }
     if ('refused' in found) throw refuse('not_found', '/params/session', found.refused, params.session);
     const seen = role.startsWith('person:') ? this.seenBy(role) : '';
@@ -729,7 +792,7 @@ export class SessionState {
     if ((before === undefined && !first) || before === head.sha || !made) return;
     for (const sha of first ? [head.sha] : await commitsBetween(meta.cwd, before!, head.sha)) {
       if (this.committed.has(sha)) continue;
-      this.committed.add(sha);
+      this.committed.set(sha, meta.session);
       await this.options.events.appendSession(meta.session, live.agent, 'commit.made', { sha, worktree: meta.cwd, branch: head.branch }).catch(() => undefined);
     }
   }
@@ -870,15 +933,16 @@ export class SessionState {
       const pid = this.sessions.get(id)!.pid;
       if (pid && ![...this.sessions.values()].some((s) => s.id !== id && s.pid === pid)) this.starts.delete(pid);
       this.sessions.delete(id);
-      for (const kept of [this.options.judging().lastMessage, this.options.judging().counters, this.options.delivery().typedAt, this.projects, this.options.memory().tasted, this.options.judging().idleSent, this.options.judging().completions, this.tails]) kept.delete(id);
-      this.options.judging().nudgeable.delete(id);
-      this.versioned.delete(id);
-      this.miscalled.delete(id);
-      this.options.memory().firstPrompted.delete(id);
+      if (this.tails.has(id)) plantedKeeps(this.options.settings.plant, 'churn-keeps-usage-tail', id, this.tails.get(id));
+      for (const kept of [this.projects, this.sessionPeople, this.entered, this.tails, this.compacting, this.states, this.until, this.windowOf, this.agentTitles]) kept.delete(id);
+      this.rows.delete(`session:${id}`);
+      for (const kept of [this.versioned, this.miscalled]) kept.delete(id);
       this.startChecked.delete(id);
       for (const reading of this.readings) if (reading.startsWith(`${id}\0`)) this.readings.delete(reading);
-      // Its answers whose delivery timed out: only its next prompt reads for them, and the record keeps them undelivered.
-      for (const [ask, session] of this.options.delivery().unread) if (session === id) this.options.delivery().unread.delete(ask);
+      for (const [sha, by] of this.committed) if (by === id) this.committed.delete(sha);
+      // Its answers whose delivery timed out go too: only its next prompt reads for them, and the record keeps them undelivered.
+      for (const domain of [this.options.judging(), this.options.delivery(), this.options.mcp(), this.options.memory(), this.options.services.siblings]) domain.forget(id);
+      this.options.forgot(id);
     }
   }
 

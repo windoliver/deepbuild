@@ -1,0 +1,26 @@
+Base commit: 7cb1e5c4a62cd797b00839bb2c27d730937303f6 (origin/main), with this folder and its sibling redraft (commit c59311123) on top, nothing else
+Node: v24.22.2
+Date: 2026-11-24
+One run of both redraft folders, under one test grant, never retried. A wrong-program test passes when its plant fails
+the criterion's assertion, naming what the criterion names.
+
+$ node scripts/throttle.mjs test --wait 720 -- node node_modules/vitest/vitest.mjs run --testTimeout=600000 --no-file-parallelism --reporter=verbose tests/acceptance/139-redraft-2062 tests/acceptance/350-redraft-2062
+
+RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-2062-34dc1b/agent-a4791005c65d06827
+
+ ✓ tests/acceptance/139-redraft-2062/prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 the update with its adapter installs; the stocks view, which uses prices@1, passes its contract tests against the adapter's output 2325ms
+ ✓ tests/acceptance/139-redraft-2062/prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 (wrong program) an installer that rewires the view to prices@2 fails, naming the edge 1486ms
+ ✓ tests/acceptance/139-redraft-2062/prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 the same update without the adapter asks you once, naming the stocks view, and installs nothing until you answer; your yes installs it 2891ms
+ ✓ tests/acceptance/139-redraft-2062/prices.test.ts > #139.06ef013d a plug-in update that provides prices@2 and keeps prices@1 through its adapter installs; without the adapter it asks once, naming the stocks view > AC10 your no leaves prices 1.0.0 installed and the stocks view's edge as it was 1391ms
+ ✓ tests/acceptance/350-redraft-2062/ac9.test.ts > AC9 #350.bff15b51 with A using B's output, removing B detaches A's use before B's handlers stop; a host that stops B first fails, naming the edge > AC9 A reads B's value until its use is detached and reads missing after, never through a stopped B; B's process is gone after 1920ms
+ ✓ tests/acceptance/350-redraft-2062/ac9.test.ts > AC9 #350.bff15b51 with A using B's output, removing B detaches A's use before B's handlers stop; a host that stops B first fails, naming the edge > AC9 (wrong program) a host that stops B first fails, naming the edge 1841ms
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  01:35:20
+   Duration  13.01s (tests 95%, transform 3%, import 1%)
+
+exit 0
+
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/350-redraft-2062/tsconfig.json --noEmit
+exit 0

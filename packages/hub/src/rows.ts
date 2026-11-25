@@ -139,6 +139,11 @@ async function sessionNames(query: Query, ids: readonly string[]): Promise<Map<s
   return names;
 }
 
+/** What comes before a session's short ID in its row's title. */
+export const SHORT = ' · ';
+const shortId = (id: string): string => id.slice('session:'.length, 'session:'.length + 8);
+/** A session row's name, less the short ID its title may end in. */
+export const nameIn = (row: Row): string => (row.title.endsWith(`${SHORT}${shortId(row.id)}`) ? row.title.slice(0, -(SHORT.length + shortId(row.id).length)) : row.title);
 /**
  * Each session row's title as it's shown, by row ID, from every session row's name: the name, with the session's
  * short ID after it only where another session's row would otherwise read the same (#2018).
@@ -146,7 +151,7 @@ async function sessionNames(query: Query, ids: readonly string[]): Promise<Map<s
 export function distinctTitles(names: ReadonlyMap<string, string>): Map<string, string> {
   const count = new Map<string, number>();
   for (const name of names.values()) count.set(name, (count.get(name) ?? 0) + 1);
-  return new Map([...names].map(([id, name]) => [id, count.get(name)! > 1 ? `${name} · ${id.slice('session:'.length, 'session:'.length + 8)}` : name]));
+  return new Map([...names].map(([id, name]) => [id, count.get(name)! > 1 ? `${name}${SHORT}${shortId(id)}` : name]));
 }
 
 const quote = (v: string): string => `'${v.replace(/'/g, "''")}'`;

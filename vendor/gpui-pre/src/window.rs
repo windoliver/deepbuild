@@ -2284,6 +2284,7 @@ impl Window {
         let visibility = self.platform_window.visibility();
         if self.visibility != visibility {
             self.visibility = visibility;
+            self.draw_seen(); // DeepBuild patch (windoliver/deepbuild#3232)
             #[cfg(feature = "profiler")]
             profiler::journal::record_window_visibility(self.handle.window_id(), visibility);
             self.visibility_observers

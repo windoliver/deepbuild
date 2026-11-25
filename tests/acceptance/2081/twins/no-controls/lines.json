@@ -1,0 +1,8 @@
+{
+  "packages/checks-command/src/controls.ts": [
+    {
+      "find": ["const TEST_FILE = /\\.(test|spec)\\.[cm]?[jt]s$/;"],
+      "wrong": ["const TEST_FILE = /(?!)/;"]
+    }
+  ]
+}
