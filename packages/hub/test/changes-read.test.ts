@@ -22,6 +22,12 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 const temp = (): string => { const d = mkdtempSync(join(tmpdir(), 'changes-read-')); dirs.push(d); return d; };
+/** Whether this machine's git answers in German (a de_DE locale and git's German messages): without them git answers in English anyway. */
+const german = ((): boolean => {
+  const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), LC_ALL: 'de_DE.UTF-8', LANGUAGE: 'de', GIT_CEILING_DIRECTORIES: tmpdir() };
+  try { execFileSync('git', ['rev-parse'], { cwd: tmpdir(), env, stdio: 'pipe' }); return false; }
+  catch (e) { return /Kein Git-Repository/.test(String((e as { stderr?: Buffer }).stderr)); }
+})();
 
 /**
  * A claim on a repo whose base holds `base` and whose worktree then holds `head`, staged, stopped with a git first on PATH
@@ -81,8 +87,7 @@ describe('the read of what a claim changed (#1869)', () => {
   it('takes an untracked listing past 512 MB, more than one string holds, as the snapshot\'s own untracked read does (1 GB): a claim no check reads passes', async () => {
     // `ls-files --others` lists 600 MB of untracked paths after the real ones; the snapshot lists them with -o, unstubbed.
     const name = `other/${'u'.repeat(244)}.txt`;
-    // Under -z, as git does, each path ends in NUL.
-    const stub = `case " $* " in *" ls-files "*"--others "*) "$GIT" "$@"; case " $* " in *" -z "*) yes '${name}' | head -n 2400000 | tr '\\n' '\\0' ;; *) yes '${name}' | head -n 2400000 ;; esac; exit 0 ;; esac`;
+    const stub = `case " $* " in *" ls-files "*"--others "*) "$GIT" "$@"; yes '${name}' | head -n 2400000; exit 0 ;; esac`;
     const { v } = await claimed({ base: TEST, head: { 'src/a.js': 'x\n' }, read: ['test/price.test.js'], stub });
     expect(v?.outcome, `the claim changed no file a check reads, yet reads ${JSON.stringify(v?.reasons)}`).toBe('PASS');
   }, 120_000);
@@ -116,7 +121,8 @@ describe('the read of what a claim changed (#1869)', () => {
     expect(v?.outcome, JSON.stringify(v?.reasons)).toBe('PASS');
   }, 60_000);
 
-  it('a base with no package.json is no failed read under a German locale either, where git words the missing file in German', async () => {
+  // Skipped, so shown unrun, where git can't answer in German.
+  it.skipIf(!german)('a base with no package.json is no failed read under a German locale either, where git words the missing file in German', async () => {
     const { LC_ALL, LANGUAGE } = process.env;
     Object.assign(process.env, { LC_ALL: 'de_DE.UTF-8', LANGUAGE: 'de' });
     try {
