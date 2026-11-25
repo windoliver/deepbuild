@@ -22,6 +22,11 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 const temp = (): string => { const d = mkdtempSync(join(tmpdir(), 'changes-read-')); dirs.push(d); return d; };
+/** Whether this machine's git answers in German (a de_DE locale and git's German messages): without them git answers in English anyway. */
+const german = ((): boolean => {
+  try { execFileSync('git', ['rev-parse'], { cwd: tmpdir(), env: { ...process.env, LC_ALL: 'de_DE.UTF-8', LANGUAGE: 'de', GIT_CEILING_DIRECTORIES: tmpdir() }, stdio: 'pipe' }); return false; }
+  catch (e) { return !/not a git repository/.test(String((e as { stderr?: Buffer }).stderr)); }
+})();
 
 /**
  * A claim on a repo whose base holds `base` and whose worktree then holds `head`, staged, stopped with a git first on PATH
@@ -116,7 +121,8 @@ describe('the read of what a claim changed (#1869)', () => {
     expect(v?.outcome, JSON.stringify(v?.reasons)).toBe('PASS');
   }, 60_000);
 
-  it('a base with no package.json is no failed read under a German locale either, where git words the missing file in German', async () => {
+  // Skipped, so shown unrun, where git can't answer in German.
+  it.skipIf(!german)('a base with no package.json is no failed read under a German locale either, where git words the missing file in German', async () => {
     const { LC_ALL, LANGUAGE } = process.env;
     Object.assign(process.env, { LC_ALL: 'de_DE.UTF-8', LANGUAGE: 'de' });
     try {
