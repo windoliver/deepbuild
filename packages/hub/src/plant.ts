@@ -179,6 +179,9 @@ export type Plant =
   // its usage tail, a permission prompt's ask, a gone session's routes), and a hub that reads a claim from memory alone.
   | 'churn-keeps-claim-lane' | 'churn-keeps-ended-claims' | 'churn-keeps-usage-tail' | 'churn-keeps-prompt-ask' | 'churn-keeps-gone-routes'
   | 'claim-reads-only-memory'
+  // #3389's: a state pass that reads only the session an append was made in, and a hub that forgets when the clock ends a
+  // session's state with the session.
+  | 'state-pass-own-session-only' | 'let-go-forgets-time'
   // #2650's: the four stores the churn benchmark must catch, each kept with nothing let go.
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
   // #2402's: a host that counts a hook handler's failures and never clears them.
@@ -414,6 +417,7 @@ const PLANTS: readonly string[] = [
   'churn-no-full-collection', 'churn-no-resident-read',
   'churn-keeps-claim-lane', 'churn-keeps-ended-claims', 'churn-keeps-usage-tail', 'churn-keeps-prompt-ask', 'churn-keeps-gone-routes',
   'claim-reads-only-memory',
+  'state-pass-own-session-only', 'let-go-forgets-time',
   'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
   'failures-never-cleared',
   'whose-running-sessions-only',

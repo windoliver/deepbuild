@@ -377,9 +377,13 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   // An answer of yours whose delivery stalled or timed out (#2018), as the newest outcome its delivery recorded. A
   // database older than the deliveries table has none.
   const words = new Map<string, { outcome: string; at?: Fact }>();
-  for (const d of (await query(`SELECT a.session_id, a.id, d.outcome FROM deliveries d JOIN asks a ON a.id = d.delivery WHERE d.outcome IN ('stalled', 'timed_out') AND a.session_id IS NOT NULL${of('a.session_id')}`).catch(() => [])) as { session_id: string; id: string; outcome: string }[]) {
-    const [at] = (await query(`SELECT ts, log_pos FROM events WHERE kind = 'delivery.outcome' AND json_extract(data, '$.delivery') = ${quoted(`ask:${d.id}`)} ORDER BY log_pos DESC LIMIT 1`)) as { ts: number; log_pos: number }[];
-    words.set(d.session_id, { outcome: d.outcome, ...(at ? { at: { kind: 'delivery.outcome', ts: at.ts, log_pos: at.log_pos } } : {}) });
+  // Each with its delivery's newest outcome, read in one statement through the index on the delivery (#3389): a statement
+  // an answer, each stepping every outcome in the record, was half of a pass over a month's sessions.
+  for (const d of (await query(`SELECT a.session_id, d.outcome, e.ts, MAX(e.log_pos) AS log_pos FROM deliveries d JOIN asks a ON a.id = d.delivery
+    LEFT JOIN events e ON e.kind = 'delivery.outcome' AND json_extract(e.data, '$.delivery') = 'ask:' || d.delivery
+    WHERE d.outcome IN ('stalled', 'timed_out') AND a.session_id IS NOT NULL${of('a.session_id')} GROUP BY d.rowid`).catch(() => [])) as { session_id: string; outcome: string; ts: number | null; log_pos: number | null }[]) {
+    const at = fact('delivery.outcome', d.ts, d.log_pos);
+    words.set(d.session_id, { outcome: d.outcome, ...(at ? { at } : {}) });
   }
   // A task of the session's thread that no turn has started: read only for a session no hook has moved yet.
   const waiting = sessions.filter((s) => s.status === 'running').map((s) => s.id);

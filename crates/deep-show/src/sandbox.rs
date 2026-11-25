@@ -214,7 +214,12 @@ impl Host {
         sealed: &Sealed,
     ) -> (Vec<Value>, Vec<Issue>) {
         // The other packs this host holds are in the key: a provider's output may name one's layout.
-        let others: Vec<String> = self.packs.keys().filter(|k| **k != pack.id.text()).cloned().collect();
+        let others: Vec<String> = self
+            .packs
+            .keys()
+            .filter(|k| **k != pack.id.text())
+            .cloned()
+            .collect();
         let key = (
             pack.id.text(),
             hash(manifest.to_string().as_bytes()),
@@ -226,7 +231,10 @@ impl Host {
         // and its partial check is not kept; so is one whose evidence lost bytes the check kept.
         let again = self.vetted.contains(&key.1);
         let cached = VETTED.with(|c| c.borrow().get(&key).cloned()).filter(|v| {
-            !again && v.kept.iter().all(|sha| crate::evidence::has(&self.evidence, sha))
+            !again
+                && v.kept
+                    .iter()
+                    .all(|sha| crate::evidence::has(&self.evidence, sha))
         });
         if let Some(v) = cached {
             self.packs.insert(pack.id.text(), manifest.clone());
@@ -247,7 +255,12 @@ impl Host {
             let v = Vetted {
                 rows: rows.clone(),
                 // A program entry's key names no version, so another version's is overwritten.
-                programs: self.programs.iter().filter(|(k, v)| programs.get(*k) != Some(*v)).map(|(k, v)| (k.clone(), v.clone())).collect(),
+                programs: self
+                    .programs
+                    .iter()
+                    .filter(|(k, v)| programs.get(*k) != Some(*v))
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
                 rewritten: added(&self.rewritten, &rewritten),
                 validated: added(&self.validated, &validated),
                 entries: self.layout_entries[entries..].to_vec(),

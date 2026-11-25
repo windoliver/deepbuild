@@ -340,6 +340,8 @@ alone.push('tests/acceptance/1731/');
 // #534's files build deep-logic, write 64 MiB saves and freeze and kill their writer by PID; its budgets are timed.
 alone.push('tests/acceptance/534/');
 timed.push('tests/acceptance/534/ac04-budgets.test.ts');
+// #3256's folder (blind) runs alone by its lane.json; ac7-budget.test.mjs holds the shader_layout tests' time with judgeLimit.
+timed.push('tests/acceptance/3256/ac7-budget.test.mjs');
 // #1820 starts the same real hub and sandboxed library fixture, plus the pack's HTTPS source.
 alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
@@ -1580,3 +1582,7 @@ byHand.push('tests/acceptance/3295/late-close.test.mjs');
 // #3257's folder (blind) runs alone by its lane.json: its files build deep-gpu, the merge base's too, and draw on Metal.
 // ac7-budget.test.ts times the mask map's chain against the merge base's on the reference Mac.
 timed.push('tests/acceptance/3257/ac7-budget.test.ts');
+
+// #1857's folder (blind) runs alone by its lane.json. cap.test.ts and budgets.test.ts each judge a check's time and a
+// child's peak on the reference Mac.
+timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');

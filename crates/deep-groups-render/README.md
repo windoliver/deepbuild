@@ -11,7 +11,7 @@ A 2D writer layer's frame on the GPU layer (#1561), as a render crate both `deep
 - `src/frame2.rs`: a 2D frame as `film2d` draws it: its items through the 2D camera, its page, the layer the compositor takes, and `Frames2`, a host's frames drawn off any window.
 - `src/read.rs`: a texture read back from the device.
 - `src/lib.rs`: the `Planted` wrong programs these modules hold, each reachable only through a binary's `--planted`.
-- Tests: the acceptance suites drive it through `deep-gpu` and `deep-show` (tests/acceptance/430, 149, 467, 2031, 2032, 1561); the one unit test, in `src/drawn.rs`, validates the passes' shader.
+- Tests: the acceptance suites drive it through `deep-gpu` and `deep-show` (tests/acceptance/430, 149, 467, 2031, 2032, 1561); the one unit test, in `src/drawn.rs`, validates the passes' shader, and the layout lane (#3256) holds each `#[repr(C)]` struct to the shader struct it names with `deep_gpu::paired!` (`src/shader_layout.rs`: the modules, the structs with one side only, and the lane's two small pairs).
 - A film's shots, print finishes, indexed looks and look regions stay in deep-gpu-layer's `film.rs`; a look's fields as read and checked belong in deep-canvas-drawn, which touches no GPU.
 
 ## What it may import
@@ -22,3 +22,4 @@ A render crate on the GPU layer: deep-canvas, deep-canvas-marks, deep-canvas-dra
 
 - `src/lightfx.rs`: `--planted light_stale_list` keeps each lit group's last light list in a thread-local, as it did in deep-gpu-layer.
 - `src/drawn.rs` holds a drawing look's 3D post pass beside the 2D passes, since both draw through one set of pipelines.
+- `src/shader_layout.rs`: the feature `plant-3256-host-sizes` (never in a shipped build; a release build refuses it) makes the layout lane sum the host's field sizes for the shader's offsets, a wrong program a test must catch.
