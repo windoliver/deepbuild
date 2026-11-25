@@ -1,0 +1,48 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 12:24:47 load { 6.90 5.90 4.83 } thermal 1 free KB 58813064
+head 4d7224ce5501dfaefc0086344312b63924064c78; origin/main f17fa347ca56e065241978e3c2bc70f0bbd6e190; merge-base d4cef00fbd02632188a161c94c19a9660a3ee6ba 12:25:24 load { 6.97 6.00 4.91 } thermal 1 free KB 57615268
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 12:25:27 load { 8.58 6.35 5.04 } thermal 1 free KB 57614936
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261 12:25:27 load { 8.58 6.35 5.04 } thermal 1 free KB 57614936
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720 12:25:27 load { 8.58 6.35 5.04 } thermal 1 free KB 57614936
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733 12:25:27 load { 8.58 6.35 5.04 } thermal 1 free KB 57614936
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711 12:25:27 load { 8.58 6.35 5.04 } thermal 1 free KB 57614932
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305 12:25:27 load { 8.58 6.35 5.04 } thermal 1 free KB 57614924
+judge copy checks: sha256 70a683b004564a26bda8c3a80adfc94547b0b37474fb7086a4877d2b6e270df6 diff-lines=4 reopen-early-return=1 row22=1 other-gh-calls=0 12:25:27 load { 8.58 6.35 5.04 } thermal 1 free KB 57614920
+part 1 start: Now drawing from 'AC Power'; front app [Finder]; screen-lock flag 0 12:25:27 load { 8.58 6.35 5.04 } thermal 1 free KB 57614892
+1a-deep-app-lib.txt: cargo exit=0; test result: ok. 119 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s 12:33:44 load { 79.15 79.70 45.37 } thermal 1 free KB 43995588
+1b-deep-app-full.txt: cargo exit=101; test result: ok. 119 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.88s 12:36:06 load { 29.87 61.16 43.21 } thermal 1 free KB 41833652
+part 1 failing targets: [acceptance_1141 acceptance_34 hub_client ]; failed tests 6; same as main's six (22n list): yes 12:36:06 load { 29.87 61.16 43.21 } thermal 1 free KB 41833592
+part setup start: Now drawing from 'AC Power'; front app [another app]; screen-lock flag 0 12:36:06 load { 29.87 61.16 43.21 } thermal 1 free KB 41833428
+setup at C (npm ci, workspace build, deep-hook) exit=0 12:38:00 load { 17.20 46.38 39.63 } thermal 1 free KB 40732516
+part 2 start: Now drawing from 'AC Power'; front app [Claude]; screen-lock flag 0 12:38:01 load { 17.20 46.38 39.63 } thermal 1 free KB 40736556
+part 2 app run: vitest exit=0; PNGs 3; front app [Windows App] 12:43:19 load { 30.47 45.32 41.88 } thermal 1 free KB 36716188
+part 3 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 12:43:20 load { 30.47 45.32 41.88 } thermal 1 free KB 36716184
+part 3 signin at head: vitest exit=0 (expected PASS); PNGs 1; front app [Windows App] 12:43:38 load { 29.02 44.02 41.49 } thermal 1 free KB 36665772
+part 4 1459/identifier start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 12:43:38 load { 29.02 44.02 41.49 } thermal 1 free KB 36665744
+tests/acceptance/1459/identifier.test.ts exit=1; front app [Windows App] 12:54:06 load { 72.85 102.66 81.98 } thermal 1 free KB 32309148
+part 4 1459/panel start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 12:54:06 load { 72.85 102.66 81.98 } thermal 1 free KB 32308836
+tests/acceptance/1459/panel.test.ts exit=1; front app [Windows App] 12:54:20 load { 61.15 98.60 80.89 } thermal 1 free KB 32219360
+part 4 1172/rows start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 12:54:20 load { 61.15 98.60 80.89 } thermal 1 free KB 32219316
+tests/acceptance/1172/rows.test.ts exit=1; front app [Windows App] 13:00:28 load { 102.62 119.52 97.73 } thermal 1 free KB 29504824
+part 4 1172/panel start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 13:00:28 load { 102.62 119.52 97.73 } thermal 1 free KB 29504808
+tests/acceptance/1172/panel.test.ts exit=1; front app [Windows App] 13:00:42 load { 91.28 116.54 96.93 } thermal 1 free KB 29492012
+part 4 1460/cli start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 13:00:42 load { 91.28 116.54 96.93 } thermal 1 free KB 29491676
+tests/acceptance/1460/cli.test.ts exit=0; front app [Windows App] 13:01:11 load { 63.02 107.30 94.26 } thermal 1 free KB 29183048
+part 5 318 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 13:01:11 load { 63.02 107.30 94.26 } thermal 1 free KB 29179708
+318 exit=0;  Tests 27 passed (27); front app [Windows App] 13:01:17 load { 59.81 105.90 93.84 } thermal 1 free KB 29148320
+part 5 1345 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 13:01:17 load { 59.81 105.90 93.84 } thermal 1 free KB 29148308
+1345 exit=1;  Tests 1 failed | 7 passed (8); front app [Windows App] 13:17:31 load { 6.93 23.66 58.90 } thermal 1 free KB 26807156
+part 5 319-budgets start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 13:17:31 load { 6.93 23.66 58.90 } thermal 1 free KB 26807052
+319-budgets exit=0;  Tests 1 passed | 1 skipped (2); front app [Windows App] 13:17:43 load { 7.08 23.14 58.30 } thermal 1 free KB 26805060
+part 5 83-redraft-319 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 13:17:43 load { 7.08 23.14 58.30 } thermal 1 free KB 26805024
+83-redraft-319 exit=0;  Tests 5 passed (5); front app [Windows App] 13:18:02 load { 7.36 22.17 57.14 } thermal 1 free KB 26800772
+part 5 1349 start: Now drawing from 'AC Power'; front app [Windows App]; screen-lock flag 0 13:18:02 load { 7.36 22.17 57.14 } thermal 1 free KB 26800712
+1349 exit=1;  Tests 12 failed | 3 passed (15); front app [Claude] 13:27:49 load { 12.47 15.29 35.66 } thermal 1 free KB 39233632
+part 6 start: Now drawing from 'AC Power'; front app [Claude]; screen-lock flag 0 13:27:49 load { 12.47 15.29 35.66 } thermal 1 free KB 39233568
+readIssue pre-check exit=0, lines 5, 'blocked' count 0 13:27:51 load { 12.47 15.29 35.66 } thermal 1 free KB 39231652
+status before the judge [] 13:27:52 load { 12.47 15.29 35.66 } thermal 1 free KB 39231624
+gh probe before the judge: {"comments":2,"number":22,"state":"OPEN"} exit=0 {"comments":1,"number":319,"state":"CLOSED"} exit=0  13:27:54 load { 12.43 15.24 35.52 } thermal 1 free KB 39231424
+judge exit=0 wall 636 s 13:38:30 load { 7.64 10.73 22.71 } thermal 1 free KB 41307416
+gh probe after the judge: {"comments":2,"number":22,"state":"OPEN"} exit=0 {"comments":1,"number":319,"state":"CLOSED"} exit=0  13:38:32 load { 7.64 10.73 22.71 } thermal 1 free KB 41306548
+git status --porcelain lines after: 0 13:38:32 load { 7.64 10.73 22.71 } thermal 1 free KB 41306344
+login-name hits after redaction: 0 13:38:33 load { 7.64 10.73 22.71 } thermal 1 free KB 41306352
+secret scan hits=0 13:38:33 load { 7.64 10.73 22.71 } thermal 1 free KB 41306336

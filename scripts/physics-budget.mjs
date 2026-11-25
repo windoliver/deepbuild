@@ -8,6 +8,9 @@
 //
 // Usage: node scripts/physics-budget.mjs [--planted times_only_app] < {"world", "steps", "reference_mac": {"app", "web"}}
 // (#1921: or `"scene"` with `"world"` the ID of a world it lists, which every deep-physics call takes as given).
+// #2317: with `"before"`, the path of another release deep-physics, as the merge base's, the app host times the same
+// world on it too, run for run beside its own, and lists each run's step p50 and p95 on both as `before` and `after`,
+// so what a change costs is read from one report; the verdict is still judged on this checkout's runs alone.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -27,10 +30,11 @@ const planted = args.length === 2 && args[0] === '--planted' && args[1] === 'tim
 if (args.length && !planted) badInput();
 let request;
 try { request = JSON.parse(readFileSync(0, 'utf8')); } catch { badInput(); }
-const { world, scene, steps, reference_mac: reference } = request ?? {};
+const { world, scene, steps, reference_mac: reference, before } = request ?? {};
 const doc = scene === undefined ? world : scene?.worlds?.[world];
 if (typeof doc !== 'object' || doc === null || !Number.isSafeInteger(steps) || steps < 1
-  || typeof reference?.app !== 'boolean' || typeof reference?.web !== 'boolean') badInput();
+  || typeof reference?.app !== 'boolean' || typeof reference?.web !== 'boolean'
+  || (before !== undefined && (typeof before !== 'string' || !existsSync(before)))) badInput();
 
 const target = process.env.CARGO_TARGET_DIR ? resolve(root, process.env.CARGO_TARGET_DIR) : join(root, 'target');
 const env = { ...process.env, CARGO_INCREMENTAL: process.env.CARGO_INCREMENTAL ?? '0' };
@@ -47,8 +51,8 @@ const cargo = (cargoArgs) => {
 // The app's release build answers deep-physics calls, one process a call.
 cargo(['build', '--release', '--locked', '--bin', 'deep-physics']);
 const physics = join(target, 'release', 'deep-physics');
-const call = (c) => {
-  const r = spawnSync(physics, [], { input: `${JSON.stringify(c)}\n`, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+const call = (c, bin = physics) => {
+  const r = spawnSync(bin, [], { input: `${JSON.stringify(c)}\n`, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   if (r.status !== 0) { process.stderr.write(`deep-physics failed: ${r.stderr}\n`); process.exit(1); }
   return JSON.parse(r.stdout);
 };
@@ -60,8 +64,11 @@ if (checked.issues?.length) {
 }
 const limit = doc.budget?.step_p95 ?? 2;
 
-/** The nearest-rank 95th percentile of `ms`. */
-const p95 = (ms) => [...ms].sort((a, b) => a - b)[Math.ceil(0.95 * ms.length) - 1];
+/** The nearest-rank percentile of `ms` at `share`, and its 95th. */
+const rank = (ms, share) => [...ms].sort((a, b) => a - b)[Math.ceil(share * ms.length) - 1];
+const p95 = (ms) => rank(ms, 0.95);
+/** Each run's step p50 and p95, ms. */
+const spread = (timed) => ({ p50: timed.map((r) => rank(r.ms, 0.5)), p95: timed.map((r) => p95(r.ms)) });
 
 /** A timed host from its five runs, each `{ms, top}` with its `load`: its verdict, slowest step and what a FAIL names. */
 function judged(host, targetTriple, engine, timed) {
@@ -81,18 +88,22 @@ function judged(host, targetTriple, engine, timed) {
 const blocked = (what) => ({ verdict: 'BLOCKED', target: null, engine: null, profile: 'release', runs: [], loads: [], slowest: null, reason: what, what: null });
 
 function timeApp() {
-  call({ call: 'time', ...subject, steps }); // the untimed warm-up
-  const timed = [];
+  const builds = before === undefined ? [physics] : [before, physics];
+  for (const bin of builds) call({ call: 'time', ...subject, steps }, bin); // the untimed warm-ups
+  const [timed, earlier] = [[], []];
   let triple;
   for (let i = 0; i < RUNS; i++) {
-    const start = loadavg()[0];
-    const r = call({ call: 'time', ...subject, steps });
-    const end = loadavg()[0];
-    if (!r.ok) { process.stderr.write(`deep-physics time: ${JSON.stringify(r)}\n`); process.exit(1); }
-    triple = r.target;
-    timed.push({ ms: r.ms, top: r.top, load: { start, end } });
+    for (const bin of builds) {
+      const start = loadavg()[0];
+      const r = call({ call: 'time', ...subject, steps }, bin);
+      const end = loadavg()[0];
+      if (!r.ok) { process.stderr.write(`deep-physics time: ${JSON.stringify(r)}\n`); process.exit(1); }
+      if (bin === physics) triple = r.target;
+      (bin === physics ? timed : earlier).push({ ms: r.ms, top: r.top, load: { start, end } });
+    }
   }
-  return judged('app', triple, 'native', timed);
+  const host = judged('app', triple, 'native', timed);
+  return before === undefined ? host : { ...host, before: spread(earlier), after: spread(timed) };
 }
 
 // The page: the release wasm32 build, stepped one exported call at a time and timed on the page's clock; the server

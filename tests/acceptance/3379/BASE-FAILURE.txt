@@ -1,0 +1,119 @@
+start Tue Nov 24 02:14:36 PST 2026 load { 36.39 78.10 86.55 }
+tsc exit 0
+
+ RUN  v5.0.5 ~/private/clones/control-refs
+
+stdout | tests/acceptance/3379/control-refs.test.ts > #3379 a logic item's control reads are references: refs_to lists them and a whole revision that drops a read control is refused > #3379.d3f05542 refs_to press returns exactly items/counter/params/reads/0 of kind control, and refs_to aim exactly items/counter/params/preview/reads/0; neither returns the reading or the array read
+AC1 refs_to press: []
+AC1 refs_to aim: []
+
+ × tests/acceptance/3379/control-refs.test.ts > #3379 a logic item's control reads are references: refs_to lists them and a whole revision that drops a read control is refused > #3379.d3f05542 refs_to press returns exactly items/counter/params/reads/0 of kind control, and refs_to aim exactly items/counter/params/preview/reads/0; neither returns the reading or the array read 3174ms
+   → refs_to press gives the one row that reads press:
+  refs_to press gives 0 rows; the document's own count is 1
+  refs_to press is missing the control row at items/counter/params/reads/0: expected [ …(2) ] to deeply equal []
+ × tests/acceptance/3379/control-refs.test.ts > #3379 a logic item's control reads are references: refs_to lists them and a whole revision that drops a read control is refused > #3379.1fe9c8e9 a whole revision removing press while counter still reads it is refused with ref_unresolved at items/counter/params/reads/0, its actual the rows refs_to press gave before, and the board stays at its revision 356ms
+   → the revision removing press is refused: {"rev":2,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":["aim","counter","other"],"created":[],"removed":["press"],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.1.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"6fbc9ba15b00aefb2a926aecf6ea8e580cbd38570afdaf9fb3b6a64bdac9d3ba"}: expected 'presented' to be 'refused' // Object.is equality
+stdout | tests/acceptance/3379/control-refs.test.ts > #3379 a logic item's control reads are references: refs_to lists them and a whole revision that drops a read control is refused > #3379.dce5a74c the same rename with counter reading tap is presented with no ref_unresolved, and refs_to tap then returns items/counter/params/reads/0
+AC3 refs_to tap: []
+
+ × tests/acceptance/3379/control-refs.test.ts > #3379 a logic item's control reads are references: refs_to lists them and a whole revision that drops a read control is refused > #3379.dce5a74c a rename that adds tap and removes press while counter still reads press is refused the same way 303ms
+   → the rename that leaves reads at press is refused: {"rev":2,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":["aim","counter","other"],"created":["tap"],"removed":["press"],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.1.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"6fbc9ba15b00aefb2a926aecf6ea8e580cbd38570afdaf9fb3b6a64bdac9d3ba"}: expected 'presented' to be 'refused' // Object.is equality
+ × tests/acceptance/3379/control-refs.test.ts > #3379 a logic item's control reads are references: refs_to lists them and a whole revision that drops a read control is refused > #3379.dce5a74c the same rename with counter reading tap is presented with no ref_unresolved, and refs_to tap then returns items/counter/params/reads/0 300ms
+   → refs_to tap gives the one row that reads tap:
+  refs_to tap gives 0 rows; the document's own count is 1
+  refs_to tap is missing the control row at items/counter/params/reads/0: expected [ …(2) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3379/control-refs.test.ts > #3379 a logic item's control reads are references: refs_to lists them and a whole revision that drops a read control is refused > #3379.d3f05542 refs_to press returns exactly items/counter/params/reads/0 of kind control, and refs_to aim exactly items/counter/params/preview/reads/0; neither returns the reading or the array read
+AssertionError: refs_to press gives the one row that reads press:
+  refs_to press gives 0 rows; the document's own count is 1
+  refs_to press is missing the control row at items/counter/params/reads/0: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "refs_to press gives 0 rows; the document's own count is 1",
++   "refs_to press is missing the control row at items/counter/params/reads/0",
++ ]
+
+ ❯ none tests/acceptance/1801/helpers.ts:67:60
+     65| /** No failures; the message lists them. */
+     66| export function none(failures: readonly string[], what: string): void {
+     67|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     68| }
+     69| /** At least one failure, and one naming each of `names`: what a plant…
+ ❯ tests/acceptance/3379/control-refs.test.ts:95:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/3379/control-refs.test.ts > #3379 a logic item's control reads are references: refs_to lists them and a whole revision that drops a read control is refused > #3379.1fe9c8e9 a whole revision removing press while counter still reads it is refused with ref_unresolved at items/counter/params/reads/0, its actual the rows refs_to press gave before, and the board stays at its revision
+AssertionError: the revision removing press is refused: {"rev":2,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":["aim","counter","other"],"created":[],"removed":["press"],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.1.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"6fbc9ba15b00aefb2a926aecf6ea8e580cbd38570afdaf9fb3b6a64bdac9d3ba"}: expected 'presented' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "presented"
+
+ ❯ refusedAtTheRead tests/acceptance/3379/control-refs.test.ts:80:73
+     78|  */
+     79| function refusedAtTheRead(reply: JsonObject, before: readonly JsonObje…
+     80|   expect(reply['outcome'], `${what} is refused: ${brief(reply, 2000)}`…
+       |                                                                         ^
+     81|   const issues = (Array.isArray(reply['issues']) ? reply['issues'] : […
+     82|   const at = issues.find((i) => i['code'] === 'ref_unresolved' && i['p…
+ ❯ tests/acceptance/3379/control-refs.test.ts:107:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/3379/control-refs.test.ts > #3379 a logic item's control reads are references: refs_to lists them and a whole revision that drops a read control is refused > #3379.dce5a74c a rename that adds tap and removes press while counter still reads press is refused the same way
+AssertionError: the rename that leaves reads at press is refused: {"rev":2,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":["aim","counter","other"],"created":["tap"],"removed":["press"],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.1.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"6fbc9ba15b00aefb2a926aecf6ea8e580cbd38570afdaf9fb3b6a64bdac9d3ba"}: expected 'presented' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "presented"
+
+ ❯ refusedAtTheRead tests/acceptance/3379/control-refs.test.ts:80:73
+     78|  */
+     79| function refusedAtTheRead(reply: JsonObject, before: readonly JsonObje…
+     80|   expect(reply['outcome'], `${what} is refused: ${brief(reply, 2000)}`…
+       |                                                                         ^
+     81|   const issues = (Array.isArray(reply['issues']) ? reply['issues'] : […
+     82|   const at = issues.find((i) => i['code'] === 'ref_unresolved' && i['p…
+ ❯ tests/acceptance/3379/control-refs.test.ts:119:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/3379/control-refs.test.ts > #3379 a logic item's control reads are references: refs_to lists them and a whole revision that drops a read control is refused > #3379.dce5a74c the same rename with counter reading tap is presented with no ref_unresolved, and refs_to tap then returns items/counter/params/reads/0
+AssertionError: refs_to tap gives the one row that reads tap:
+  refs_to tap gives 0 rows; the document's own count is 1
+  refs_to tap is missing the control row at items/counter/params/reads/0: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "refs_to tap gives 0 rows; the document's own count is 1",
++   "refs_to tap is missing the control row at items/counter/params/reads/0",
++ ]
+
+ ❯ none tests/acceptance/1801/helpers.ts:67:60
+     65| /** No failures; the message lists them. */
+     66| export function none(failures: readonly string[], what: string): void {
+     67|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     68| }
+     69| /** At least one failure, and one naming each of `names`: what a plant…
+ ❯ tests/acceptance/3379/control-refs.test.ts:135:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  02:14:40
+   Duration  9.05s (tests 99%)
+
+vitest exit 1
+done Tue Nov 24 02:14:50 PST 2026

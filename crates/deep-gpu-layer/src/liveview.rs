@@ -989,9 +989,22 @@ impl View {
         let frames = match &mut self.frames {
             Content::Scene(frames) => frames,
             Content::Flat(flat) => {
-                self.drew = (1.0, "none");
-                flat.draw(device, t, self.size, &slot_view, encoder, timer, session)
-                    .map_err(|(code, path)| Refused { code, path })?;
+                // #161: below scale 1 a 2D frame draws at its internal size, a px of a pass's
+                // params still a px at design size, and returns through the upscale.
+                let surface = Surface {
+                    scale,
+                    ..self.surface
+                };
+                let below = kit.upscale.as_deref().filter(|_| scale < 1.0);
+                self.drew = match below {
+                    Some(_) => (scale, surface.upscale.name()),
+                    None => (1.0, "none"),
+                };
+                let below = below.map(|up| (up, surface));
+                flat.draw(
+                    device, t, self.size, &slot_view, encoder, timer, session, below,
+                )
+                .map_err(|(code, path)| Refused { code, path })?;
                 self.after(encoder, slot);
                 return Ok(true);
             }
@@ -1271,7 +1284,8 @@ impl View {
             }
         }
         let i = timer.start(GEOMETRY_PASS, session);
-        self.renderer.record_geometry(encoder, timer.writes(i));
+        self.renderer
+            .record_geometry(device, encoder, timer.writes(i));
         timer.end(i);
         #[cfg(feature = "test-meter")]
         self.test.record(

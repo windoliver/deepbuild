@@ -396,6 +396,10 @@ def phonemes(text):
             import nltk
 
             def refuse(*args, **_):
+                # g2p_en 2.1.0 asks at import for the tagger by its pre-3.9 name; NLTK 3.9 tags with
+                # averaged_perceptron_tagger_eng, pinned above, so that one ask needs nothing fetched.
+                if args == ('averaged_perceptron_tagger',):
+                    return True
                 raise RuntimeError(f'nltk.download{args} is refused: the host reads only its pinned NLTK data')
             nltk.download = refuse
             from g2p_en import G2p

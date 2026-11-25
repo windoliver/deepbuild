@@ -1,0 +1,9 @@
+World: home /private/tmp/dh27-AnMajy/h; machine darwin; 2026-11-16T01:46:30.393Z; batches as setup drafts them
+deep-app pid 30023
+
+$ deep inbox    # 2026-11-16T01:46:38.856Z
+Nothing needs you
+
+sign-in task ask:01M7H0HPY61GV1MHQ57T6K1NZK "Sign in to Claude Code again? Your sign-in lapsed. The work waits, and nothing is lost.": inbox held, hub list not listed
+taste call ask:01M7H0HPQJMJJ3ZHGCFH523RQP: inbox queued, hub list not listed
+   screenshot 0-signin.png (window 25280)

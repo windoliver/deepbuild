@@ -1,0 +1,92 @@
+$ node --test 'tests/acceptance/3293/*.test.mjs'   # base c1a98fec9, 2026-11-23T20:25:01Z, node v24.22.0, load { 140.91 139.25 117.94 }
+✖ #3293.0c0bfd7c a 3178-shaped meta-test whose ROWS name a hub-reaching test file, run through vitest.mjs run, gets deep-hook and deep-show and is in hub (229.637125ms)
+✖ #3293.0c0bfd7c a node:test file that names a hub-reaching test file in its own vitest.mjs run arguments gets deep-hook and deep-show and is in hub (4.971334ms)
+✔ #3293.da71fe1c a 3178-shaped meta-test whose ROWS name only test files reaching neither package gets no hub binaries, though a hub-reaching test sits beside them (233.50375ms)
+✖ #3293.5e7eda0a this checkout's tests/acceptance/3178/suites.test.ts gets deep-hook and deep-show and is in hub, as the before lane selects it (12.96475ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1095.15325
+
+✖ failing tests:
+
+test at tests/acceptance/3293/select.test.mjs:75:1
+✖ #3293.0c0bfd7c a 3178-shaped meta-test whose ROWS name a hub-reaching test file, run through vitest.mjs run, gets deep-hook and deep-show and is in hub (229.637125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   'deep-hook',
+  -   'deep-show'
+  - ]
+  
+      at TestContext.<anonymous> (file:///private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-issue-3172-harness-inconclusive-9f1214/9c7404e4-4ca2-4643-ba09-190bca15bb54/scratchpad/blind/tests/acceptance/3293/select.test.mjs:80:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'deep-hook', 'deep-show' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3293/select.test.mjs:84:1
+✖ #3293.0c0bfd7c a node:test file that names a hub-reaching test file in its own vitest.mjs run arguments gets deep-hook and deep-show and is in hub (4.971334ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   'deep-hook',
+  -   'deep-show'
+  - ]
+  
+      at TestContext.<anonymous> (file:///private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-issue-3172-harness-inconclusive-9f1214/9c7404e4-4ca2-4643-ba09-190bca15bb54/scratchpad/blind/tests/acceptance/3293/select.test.mjs:91:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'deep-hook', 'deep-show' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3293/select.test.mjs:111:1
+✖ #3293.5e7eda0a this checkout's tests/acceptance/3178/suites.test.ts gets deep-hook and deep-show and is in hub, as the before lane selects it (12.96475ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   'deep-hook',
+  -   'deep-show'
+  - ]
+  
+      at TestContext.<anonymous> (file:///private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-issue-3172-harness-inconclusive-9f1214/9c7404e4-4ca2-4643-ba09-190bca15bb54/scratchpad/blind/tests/acceptance/3293/select.test.mjs:114:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'deep-hook', 'deep-show' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+(exit 1)

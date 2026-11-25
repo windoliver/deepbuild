@@ -5,7 +5,7 @@ type Obj = Record<string, unknown>;
  * What a connection brings to a call: its role, the session it is bound to, for deep mcp the process it serves, and
  * for the app or the CLI the process its hello named as its own.
  */
-export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string }; waiter?: number; /** A deep mcp call's `<connection>:<call ID>`, which a cancel names (#1923). */ call?: string }
+export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string }; waiter?: number; /** A deep mcp call's `<connection>:<call ID>`, which a cancel names (#1923). */ call?: string; /** The app connection it came on, for what that app has drawn (#1866). */ conn?: number }
 
 /**
  * A session as its own hooks established it: the agent process, its working folder and its transcript; and how

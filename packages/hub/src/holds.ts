@@ -14,7 +14,7 @@
 // proceeds are recorded here, and DEEP_HUB_TEST_SORTER, which only tests set, can still plant one.
 import { readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
+import { AskRefused, subjectKey, type Asks, type PlanInput, type Target } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { execFile } from 'node:child_process';
@@ -42,8 +42,11 @@ interface HoldOptions {
   pin(cwd: string, question: string): Promise<Obj>;
   /** A session.reading on the session's row. */
   reading(session: string, agent: string, reading: string): Promise<void>;
-  /** Copies the session's transcript into the record, so a target it read is placed as read. */
-  archived(session: string): Promise<void>;
+  /**
+   * Copies the session's transcript into the record, so a target it read is placed as read: from `transcript`, the
+   * hook's transcript_path ('' when it named none), which the archive reads only where its facts put that session.
+   */
+  archived(session: string, transcript: string): Promise<void>;
 }
 
 /**
@@ -275,7 +278,7 @@ export class Holds {
       const asked = await this.askOf(k);
       if (asked?.decision !== 'allow') {
         const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
-          `Run \`${call.label}\`? It ${does}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${does}`, [call.label], open.some((o) => o.effect === 'push') ? pushTargets(call.label) : []));
+          `Run \`${call.label}\`? It ${does}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${does}`, [call.label], await this.placed(meta, open.some((o) => o.effect === 'push') ? pushTargets(call.label) : [])));
         return `DeepBuild denied this (guard ${rule}): no request you typed in this thread names it. ${await this.waiting(handle, call.label)}`;
       }
     }
@@ -325,6 +328,15 @@ export class Holds {
       return `DeepBuild held this: \`${call.label}\` needs your authority, and no ask could be raised for it (${error.message}).`;
     }
   }
+  /**
+   * `targets`, once the session's transcript is copied so the ask can place each where the session read it (#1098),
+   * waiting at most ARCHIVE_WAIT_MS. A failed or late copy leaves a target the session read as unknown, which asks
+   * you all the same.
+   */
+  private async placed(meta: HookMeta, targets: ReturnType<typeof pushTargets>): Promise<ReturnType<typeof pushTargets>> {
+    if (targets.length) await Promise.race([this.o.archived(meta.session, meta.transcript).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
+    return targets;
+  }
   /** The ask holding a call whose effect needs authority in the turn a proceed started, or undefined. */
   private async heldEffect(meta: HookMeta, call: Gated): Promise<string | undefined> {
     const classes = call.classes.filter((c) => AUTHORITY.has(c));
@@ -340,9 +352,7 @@ export class Holds {
     const question = turn
       ? `Run \`${call.label}\`? It ${classes.map((c) => DOES[c]).join(' and ')}, in the turn a "proceed" started for "${turn.question}" (rule ${turn.rule}); no proceed covers a call that needs your authority.`
       : `Run \`${call.label}\`? It replies in your name to a reviewer's thread on the pull request, a send that needs your authority.`;
-    const targets = classes.includes('push') ? pushTargets(call.label) : [];
-    // A failed or late copy leaves a target the session read as unknown, which asks you all the same.
-    if (targets.length) await Promise.race([this.o.archived(meta.session).catch(() => undefined), sleep(ARCHIVE_WAIT_MS)]);
+    const targets = await this.placed(meta, classes.includes('push') ? pushTargets(call.label) : []);
     return this.raise(meta.session, meta.agent, meta.cwd, source, k, question, ANSWERS[classes[0]!]!, planFor(source, `Run \`${call.label}\`, which ${classes.map((c) => DOES[c]).join(' and ')}`, [call.label], targets));
   }
 
@@ -365,6 +375,28 @@ export class Holds {
     if (!applied) return {};
     const [saved] = (await this.o.raw(`SELECT json_extract(data, '$.answer') AS answer, json_extract(data, '$.ask') AS ask FROM events WHERE kind = 'decision.created' AND id = ?`, [applied.decision.slice('decision:'.length)])) as { answer: string; ask: string }[];
     return saved ? { decision: applied.decision, option: saved.answer, answered: saved.ask } : {};
+  }
+
+  /** The ask a plug-in's send already raised (#363): one per call, read back after a restart, so it is never asked twice. */
+  async raisedAbout(about: About): Promise<string | undefined> {
+    const asked = await this.askOf(subjectKey({ kind: 'authority', subject: about.subject }, ''));
+    return asked && `ask:${asked.id}`;
+  }
+  /**
+   * Where a plug-in call's ask stands: allow or deny, by your answer or by the decision that answered it for you while
+   * that decision stands; the ask it waits for, itself or the open one of its thread that superseded it; undefined when
+   * it closed with neither.
+   */
+  async stands(ask: string): Promise<string | undefined> {
+    const [row] = (await this.o.raw(`SELECT a.status, a.decision, d.answer, d.state = 'revoked' OR EXISTS (SELECT 1 FROM events o WHERE o.kind = 'decision.overruled' AND o.subject = 'decision:' || d.id AND o.log_pos > e.log_pos) AS lapsed
+      FROM asks a LEFT JOIN events e ON e.kind = 'decision.applied' AND e.subject = 'ask:' || a.id LEFT JOIN decisions d ON 'decision:' || d.id = json_extract(e.data, '$.decision')
+      WHERE a.id = ? ORDER BY e.log_pos LIMIT 1`, [ask.slice(4)])) as { status: string; decision: string | null; answer: string | null; lapsed: number | null }[];
+    if (row?.decision === 'allow' || row?.decision === 'deny') return row.decision;
+    if (row?.status === 'decided') return row.answer === null || row.lapsed ? undefined : JSON.parse(row.answer) === 'approve' ? 'allow' : 'deny';
+    if (row?.status !== 'superseded') return ask;
+    const [next] = (await this.o.raw(`WITH RECURSIVE newer(id) AS (VALUES (?) UNION SELECT substr(json_extract(e.data, '$.by'), 5) FROM newer JOIN events e ON e.kind = 'ask.superseded' AND e.subject = 'ask:' || newer.id)
+      SELECT a.id FROM newer JOIN asks a ON a.id = newer.id WHERE a.status IN ('open', 'later')`, [ask.slice(4)])) as { id: string }[];
+    return next && `ask:${next.id}`;
   }
 
   /** A call a standing rule decides: allowed or denied by your rule, naming it; held by an ask when none covers it. */

@@ -1,0 +1,62 @@
+#3256: runs on the PR head 39b789e5a and on the merge base 303bb6d73, Nov 24 2026, on one Mac that is not a reference
+Mac at rest (on battery, thermal state fair, load 35 to 150). CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0.
+P stands for: -p deep-scene3d-render -p deep-gpu-layer -p deep-groups-render
+
+HEAD 39b789e5a
+  cargo test --locked -j 8 --no-run P
+      exit 0
+  cargo test --locked P --lib --bins --tests --no-fail-fast -- shader_layout --show-output
+      exit 0: 50 passed (4 + 5 + 41), 0 failed; 0.14 s in libtest over the three targets
+  cargo test --locked P --test acceptance_3256_twin_shaders --no-fail-fast -- --show-output
+      exit 0: 1 passed
+  cargo test --locked P --features deep-groups-render/plant-3256-host-sizes --lib --no-fail-fast -- shader_layout --show-output
+      exit 101: 45 passed, 1 failed, shader_layout::offsets_differ::shader_layout (the planted comparison: it must fail)
+  node --test tests/acceptance/3256/layout.test.mjs
+      exit 0: 6 pass, 0 fail (AC1 to AC6); "49 #[repr(C)] structs in the three crates' src/: 47 compared, 2 host-only;
+      the lane printed 46 pairs and 8 records"; "39 var<uniform> structs ...; 10 on the gpu-only list"
+  node --test tests/acceptance/3256/ac7-budget.test.mjs
+      exit 1: INCONCLUSIVE, "the lane's tests took 130 ms in the warm-up run, a reading: a time counts only on a
+      reference Mac at rest (... power (mains) is "battery", not "ac"; thermal state is "fair", not "nominal"; load 131 ...)"
+  cargo clippy --locked -j 8 -p deep-gpu P --all-targets --no-deps -- -D warnings
+      exit 0
+  cargo clippy --locked -j 8 -p deep-gpu P --all-targets -- -D warnings   (the workspace crates they depend on too)
+      exit 101: three result_large_err errors in crates/deep-canvas-scene3d/src/tracks.rs, which this change
+      doesn't touch (the file is main's, byte for byte)
+  cargo test --locked P --no-fail-fast   (every test of the three crates)
+      exit 101: 141 passed, 2 failed, 1 ignored
+      1. deep-gpu-layer live::tests::the_check_refuses_the_full_screen_every_pass_scene_naming_what_the_device_held:
+         "the check names 661835592 bytes, the device held 557318144". The base fails it with the same numbers.
+      2. deep-scene3d-render acceptance_3016_metal ac3_the_third_scene_holds_the_scene_once_and_each_views_own_targets:
+         "the third scene holds 531103744 B (506.5 MiB) on the device ... allows 505.9 MiB". Its target run alone twice
+         more on the head: 3 passed, 3 passed. On the base, below, it fails one run in three with the same bytes.
+
+BASE 303bb6d73
+  cargo test --locked -j 8 --no-run P
+      exit 0
+  node --test tests/acceptance/3256/layout.test.mjs
+      exit 1: 0 pass, 6 fail, each at "no test in the unit lanes of deep-scene3d-render, deep-gpu-layer,
+      deep-groups-render has shader_layout in its name: the lane isn't there (... ran 0 tests)"
+  node --test tests/acceptance/3256/ac7-budget.test.mjs
+      exit 1: 0 pass, 1 fail, at the same assertion
+  cargo test --locked P --no-fail-fast
+      exit 101: 92 passed, 1 failed, 1 ignored: the same live::tests:: test, "the check names 661835592 bytes, the
+      device held 557318144"
+  cargo test --locked P --test acceptance_3016_metal --no-fail-fast, twice more
+      run 2: ac3 failed, "the third scene holds 531103744 B (506.5 MiB) ... allows 505.9 MiB"; run 3: 3 passed
+
+MAIN as this branch merged it first (8f64ca337, with the two-line module.rs fix it needs to compile)
+  cargo test --locked -j 8 P --test acceptance_3016_metal --no-fail-fast
+      exit 0: 3 passed
+
+FRAMES (frames-base-vs-head.png)
+  deep-gpu built on each side with `cargo build --locked -j 8 --bin deep-gpu`. One call a scene: view3d of
+  tests/acceptance/378/fixtures/<scene>.json under fixtures/look.json, 640x360, target `final`, frame 0.
+  Every frame's pixel_hash is the same on the base and on the head, and the two PNG files are byte for byte the same.
+    city-depth      4967dc112a15b9243902d66fa9a34e9ba49d1edca682f504927aac0743ae53aa
+    thin-lines      966fcbd7ff8067e0600967262c3ef4a043a9ab2d72fe7dbd110f0fb53fe7b0f9
+    machine-figure  89c40599497438ad40f6ccab7234eb6b9f04aa1bb0299d871c79bf030d4932b4
+    grey-bands      f8dc8838a11ab07cb27e44fcc1f94fe95f23e9745feb2a31f7b1c9c3f3017b83
+    wires           ac7c8446bed7573b7b5c574e3e9b86de67529debf7e397d96c8944faed9158a7
+  The picture: a row a scene; left the base's frame, middle the head's, right their difference times 8 (black).
+  These scenes draw solids, lines of 1 px or thinner, labels and the tone map; they don't reach the fill lights, the
+  HDR surface, look regions, culling on the GPU, the mask dump, per-pixel lists or unlit insets.

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "hold.test.ts builds deep-show and exports 32 films through the GPU, an encode tool and a fresh decode worker, as the #231 suite does" }

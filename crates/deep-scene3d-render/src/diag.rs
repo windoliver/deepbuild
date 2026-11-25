@@ -83,13 +83,16 @@ pub struct DiagCounts {
     pub levels: BTreeMap<String, u32>,
 }
 
+deep_gpu::paired! { light_u: "diag.wgsl", Light;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct LightU {
     pos: [f32; 4],
     dir: [f32; 4],
 }
+}
 
+deep_gpu::paired! { uniform: "diag.wgsl", U;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Uniform {
@@ -104,6 +107,7 @@ struct Uniform {
     ground: [f32; 4],
     ink: [f32; 4],
     lights: [LightU; MAX_LIGHTS],
+}
 }
 
 /// The views' pipelines, made on first use and kept with the renderer.

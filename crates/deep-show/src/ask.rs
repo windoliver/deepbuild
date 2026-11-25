@@ -428,13 +428,18 @@ impl Hub<'_> {
         if !self.scenario.sessions.contains_key(session) {
             return refused("no_session");
         }
-        let Some(document) = self.revision(doc, rev) else {
+        let Some(mut document) = self.revision(doc, rev) else {
             return refused("unknown_revision");
         };
-        // A 3D revision is evaluated whole: its materials, cameras and meshes are items too. The
-        // current revision draws each item where its world's outputs put it at `t`, as deep_show
-        // draws it (#2293); an earlier one's worlds were baked into a form no longer held.
-        if crate::probe::draws_3d(&document) {
+        let three = crate::probe::draws_3d(&document);
+        if three && self.planted(Planted::RenderBack2dOnly) {
+            // Planted (#1722): a 3D revision's 3D writer layers dropped, its 2D marks drawn alone.
+            document = crate::over3d::only(&document, |_| true);
+        } else if three {
+            // A 3D revision is evaluated whole: its materials, cameras and meshes are items too.
+            // The current revision draws each item where its world's outputs put it at `t`, as
+            // deep_show draws it (#2293); an earlier one's worlds were baked into a form no longer
+            // held.
             let current = self.rev_at(doc, i64::MAX) == Some(rev);
             let document = if current && document.get("worlds").is_some() {
                 self.with_outputs(doc, &document)

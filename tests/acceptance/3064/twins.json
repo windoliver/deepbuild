@@ -1,0 +1,22 @@
+{
+  "#3064.25bec8c3": [
+    "no-line",
+    "reads-pass"
+  ],
+  "#3064.1c658f8a": [
+    "skips-named",
+    "skips-edited",
+    "skips-own-package"
+  ],
+  "#3064.a5a02f7e": [
+    "nine-runs",
+    "any-issue",
+    "ignores-files"
+  ],
+  "#3064.3deceb81": [
+    "keeps-failed"
+  ],
+  "#3064.c0da1789": [
+    "missing-is-settled"
+  ]
+}

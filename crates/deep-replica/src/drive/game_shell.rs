@@ -48,16 +48,29 @@ impl Canvas {
     /// The document evaluated at its start, its scale into `size` and the letterbox's offset in pixels. A screen or
     /// a level is a payload: it's stamped as the shell's own writer layer first, as the hub stamps a revision, unless
     /// it already names its layers.
-    fn drawn(&mut self, doc: &Value, size: [f64; 2]) -> Result<(deep_marks_raster::Drawn, f64, [f64; 2]), Value> {
+    fn drawn(
+        &mut self,
+        doc: &Value,
+        size: [f64; 2],
+    ) -> Result<(deep_marks_raster::Drawn, f64, [f64; 2]), Value> {
         let stamped = if doc.get("layers").is_some() {
             doc.clone()
         } else {
-            let writer = Writer { kind: WriterKind::Agent, id: "shell".into() };
-            let title = doc.get("title").and_then(Value::as_str).unwrap_or("shell screen").to_string();
+            let writer = Writer {
+                kind: WriterKind::Agent,
+                id: "shell".into(),
+            };
+            let title = doc
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or("shell screen")
+                .to_string();
             stamp(doc.clone(), "doc-shell", &writer, &title)
                 .map_err(|issues| json!({"ok": false, "code": "bad_doc", "what": format!("a screen's document can't be stamped: {issues:?}")}))?
         };
-        let map = stamped.as_object().ok_or_else(|| refused("a screen's document is an object".into()))?;
+        let map = stamped
+            .as_object()
+            .ok_or_else(|| refused("a screen's document is an object".into()))?;
         let drawn = self
             .renderer
             .prepare(map, 0, &self.look.light, self.look.status.as_ref(), &Record::default(), &self.evidence)
@@ -90,7 +103,10 @@ impl Screens for Canvas {
                     Some(t) => {
                         let r = t.rect;
                         let (x0, y0) = (b[0].min(r[0]), b[1].min(r[1]));
-                        let (x1, y1) = ((b[0] + b[2]).max(r[0] + r[2]), (b[1] + b[3]).max(r[1] + r[3]));
+                        let (x1, y1) = (
+                            (b[0] + b[2]).max(r[0] + r[2]),
+                            (b[1] + b[3]).max(r[1] + r[3]),
+                        );
                         [x0, y0, x1 - x0, y1 - y0]
                     }
                     None => b,
@@ -102,11 +118,16 @@ impl Screens for Canvas {
 
     fn frame(&mut self, doc: &Value, size: [f64; 2], veil: f64) -> Option<String> {
         let (drawn, s, o) = self.drawn(doc, size).ok()?;
-        let px = [size[0].round().max(1.0) as u16, size[1].round().max(1.0) as u16];
+        let px = [
+            size[0].round().max(1.0) as u16,
+            size[1].round().max(1.0) as u16,
+        ];
         let k = s / drawn.scale(px);
         let view = Affine::translate((o[0] / s * k, o[1] / s * k)) * Affine::scale(k);
         let ground = drawn.frame.ground;
-        let mut rgba = self.renderer.raster(&drawn.part(Some(view), true, false), px, Some(ground));
+        let mut rgba = self
+            .renderer
+            .raster(&drawn.part(Some(view), true, false), px, Some(ground));
         if veil > 0.0 {
             let a = veil.clamp(0.0, 1.0);
             for p in rgba.as_chunks_mut::<4>().0 {
@@ -117,7 +138,9 @@ impl Screens for Canvas {
         }
         let image = image::RgbaImage::from_raw(u32::from(px[0]), u32::from(px[1]), rgba)?;
         let mut png = Vec::new();
-        image.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).ok()?;
+        image
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .ok()?;
         self.keep(&png)
     }
 
@@ -125,7 +148,10 @@ impl Screens for Canvas {
         if frames.is_empty() {
             return None;
         }
-        let paths: Vec<PathBuf> = frames.iter().map(|f| self.frames.join(format!("{f}.png"))).collect();
+        let paths: Vec<PathBuf> = frames
+            .iter()
+            .map(|f| self.frames.join(format!("{f}.png")))
+            .collect();
         let apng = super::animated_png::animated_png(&paths, 60).ok()?;
         self.keep(&apng)
     }
@@ -133,17 +159,27 @@ impl Screens for Canvas {
 
 /// The play: the shell document, its documents and programs, the journey, and the planted shell when one is chosen.
 pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Value> {
-    let document = call.get("document").ok_or_else(|| json!({"ok": false, "code": "bad_input", "what": "a shell's play takes its document"}))?;
+    let document = call.get("document").ok_or_else(
+        || json!({"ok": false, "code": "bad_input", "what": "a shell's play takes its document"}),
+    )?;
     let inline = call.get("assets").cloned().unwrap_or(json!({}));
-    let evidence = call.get("evidence").and_then(Value::as_str).map(PathBuf::from);
+    let evidence = call
+        .get("evidence")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
     let stored = |sha: &str| -> Option<Vec<u8>> {
         if let Some(b) = inline.get(sha).and_then(Value::as_str) {
             return B64.decode(b).ok();
         }
-        let root = evidence.as_ref().filter(|_| sha.len() == 64 && sha.is_ascii())?;
+        let root = evidence
+            .as_ref()
+            .filter(|_| sha.len() == 64 && sha.is_ascii())?;
         std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()
     };
-    let mut canvas = Canvas::new(out, evidence.clone().unwrap_or_else(|| out.join("evidence")));
+    let mut canvas = Canvas::new(
+        out,
+        evidence.clone().unwrap_or_else(|| out.join("evidence")),
+    );
     let name = match plant {
         Some(Plant::ShellPauseRunsClock) => Some("pause-runs-level-clock"),
         Some(Plant::ShellFocusStaysDisabled) => Some("focus-stays-on-disabled"),
@@ -151,6 +187,7 @@ pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Valu
         _ => None,
     };
     // A screen's or a level's document by hash: the call's own, or one the evidence store holds.
-    let docs = |sha: &str| -> Option<Value> { stored(sha).and_then(|b| serde_json::from_slice(&b).ok()) };
+    let docs =
+        |sha: &str| -> Option<Value> { stored(sha).and_then(|b| serde_json::from_slice(&b).ok()) };
     deep_logic::shell::run::play(document, &stored, &docs, call, &mut canvas, plants_of(name))
 }

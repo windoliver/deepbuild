@@ -32,7 +32,7 @@
       "default": "./dist/mcp-exec.js"
     }
   },
-  "scripts": { "build": "tsc -p tsconfig.json && node native/build.mjs" },
+  "scripts": { "build": "tsc -p tsconfig.json && node native/build.mjs && node ../../scripts/built-escapes.mjs dist" },
   "dependencies": {
     "@deepbuild/adapters": "0.0.0",
     "@deepbuild/archive": "0.0.0",

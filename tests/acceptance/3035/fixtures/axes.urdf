@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!-- Issue #3035, criterion 2: a link 1 m up the file's Z, and a link of 2 kg with a stated inertia, turned 30 degrees about the file's Z. -->
+<robot name="axes_rig">
+  <link name="base">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="5"/>
+      <inertia ixx="0.05" ixy="0" ixz="0" iyy="0.05" iyz="0" izz="0.05"/>
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.2 0.2 0.2"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="mast">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.002"/>
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.1 0.1 0.3"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="slab">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="2"/>
+      <inertia ixx="0.02" ixy="0" ixz="0" iyy="0.06" iyz="0" izz="0.07"/>
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.6 0.3 0.1"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="post" type="fixed">
+    <parent link="base"/>
+    <child link="mast"/>
+    <origin xyz="0 0 1" rpy="0 0 0"/>
+  </joint>
+  <joint name="bracket" type="fixed">
+    <parent link="base"/>
+    <child link="slab"/>
+    <origin xyz="0.4 0.3 0.5" rpy="0 0 0.5235987755982988"/>
+  </joint>
+</robot>

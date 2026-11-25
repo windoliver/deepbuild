@@ -149,15 +149,23 @@ interface CanvasSession { id: string; thread: string; name: string }
 /** What the hub knows that the canvas core reads: the world file a test gives (DEEP_HUB_TEST_SHOW) and the record. */
 export interface CanvasWorld {
   sessions: CanvasSession[];
-  /** The record's objects a binding can read, each with the session it belongs to. */
-  record: Obj;
-  /** Given by a caller that keeps `record` across calls (#1868): it changes whenever `record` does, so the record is told apart by it and never by its text. */
-  recordRev?: number;
+  /**
+   * The record's objects a binding can read, each with the session it belongs to; or what reads those `named` (#1866),
+   * with a number that changes whenever they do, by which they are told apart and never by their text (#1868).
+   */
+  record: Obj | ((named: ReadonlySet<string>) => Promise<{ objects: Obj; rev: number }>);
   /** The panels, documents, claims, window, card and fault of the world file; empty without one. */
   file: Obj;
   /** The documents shown so far, each on the app's one canvas panel unless the world file places it. */
   docs: string[];
+  /** A document's revisions in the record, oldest first, each `{rev, writer, patch, hash}` (#1721). */
+  recorded?: (doc: string) => Promise<Obj[]>;
+  /** A revision's canonical document, by its hash, as the canvas core reads it to open it; '' for one whose bytes are gone. */
+  text?: (hash: string) => Promise<string>;
 }
+
+/** The handles of the record's objects, where a document's bindings name them. */
+const HANDLE = /\b(?:ask|reading):[0-9A-Za-z]+/g;
 
 /** One call to the canvas core: who it writes as, and #393's call fields. */
 type CanvasCall = Obj;
@@ -170,8 +178,19 @@ export class Canvas {
   private waiting: ((line: Obj) => void)[] = [];
   private chain: Promise<unknown> = Promise.resolve();
   private world = '';
+  /**
+   * Each document's revisions as the record held them when this core first heard of it (#1721): a core started again, as
+   * after a hub restart, opens the document from them. What the core plays itself it already holds.
+   */
+  private readonly opened = new Map<string, Obj[]>();
+  /** The record's objects that the documents and the calls this core was given name, by handle: it reads no other (#1866). */
+  private readonly named = new Set<string>();
 
   constructor(private readonly evidence: string) {}
+
+  private name(text: string): void {
+    for (const [handle] of text.matchAll(HANDLE)) this.named.add(handle);
+  }
 
   private start(): ChildProcessWithoutNullStreams {
     if (this.child) return this.child;
@@ -211,13 +230,22 @@ export class Canvas {
   /** Plays one call against the world as it stands, after every call before it: its reply, and the revision it presented. */
   call(world: CanvasWorld, call: CanvasCall): Promise<{ reply: Obj; presented?: Obj }> {
     const run = this.chain.then(async () => {
-      const shaped = shape(world, this.evidence);
-      // A record kept across calls is compared by its revision: its text grows with history (#1868).
-      const text = JSON.stringify(world.recordRev === undefined ? shaped : { ...shaped, record: world.recordRev });
-      if (text !== this.world) {
-        const set = await this.send({ world: shaped });
+      if (!this.child) { this.opened.clear(); this.named.clear(); }
+      for (const doc of world.docs) {
+        if (this.opened.has(doc)) continue;
+        const held = (await world.recorded?.(doc)) ?? [];
+        for (const { hash } of held) this.name((await world.text?.(String(hash))) ?? '');
+        this.opened.set(doc, held);
+      }
+      const shaped = shape(world, this.evidence, this.opened);
+      const text = ` ${JSON.stringify(shaped)}`;
+      if (!this.world.endsWith(text)) this.name(text);
+      this.name(JSON.stringify(call));
+      const { objects, rev } = typeof world.record === 'function' ? await world.record(this.named) : { objects: world.record, rev: JSON.stringify(world.record) };
+      if (rev + text !== this.world) {
+        const set = await this.send({ world: { ...shaped, record: objects } });
         if (set.ok !== true) throw refuse('unavailable', '', `The canvas core refused the hub's world: ${why(set)}`, 'canvas', true);
-        this.world = text;
+        this.world = rev + text;
       }
       const answer = await this.send({ call });
       if (answer.ok !== true || !isObj(answer.reply)) throw refuse('unavailable', '', `The canvas core gave no reply to ${String(call.call)}: ${why(answer)}`, String(call.call), true);
@@ -237,11 +265,16 @@ const PANEL = 'main';
 const PANELS = { [PANEL]: { rect: [0, 0, 800, 600] } };
 
 /** The world as `deep-show canvas` reads it: #393's scenario fields, sessions keyed by session ID. */
-function shape(world: CanvasWorld, evidence: string): Obj {
+function shape(world: CanvasWorld, evidence: string, opened: ReadonlyMap<string, Obj[]>): Obj {
   const sessions: Obj = {};
   for (const s of world.sessions) sessions[s.id] = { thread: s.thread, name: s.name, process: { pid: 0, start: 0 } };
-  const out: Obj = { evidence, sessions, record: world.record, panels: PANELS, docs: Object.fromEntries(world.docs.map((doc) => [doc, { panel: PANEL }])) };
+  const out: Obj = { evidence, sessions, panels: PANELS, docs: Object.fromEntries(world.docs.map((doc) => [doc, { panel: PANEL }])) };
   for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault', 'packs', 'job_tools', 'installed']) if (world.file[key] !== undefined) out[key] = world.file[key];
+  // A document stored whole opens from that, as a release stored it; every other one from the record.
+  for (const [doc, recorded] of opened) {
+    const placed = (out.docs as Obj)[doc];
+    if (recorded.length && isObj(placed) && placed.document === undefined) out.docs = { ...(out.docs as Obj), [doc]: { ...placed, recorded } };
+  }
   return out;
 }
 

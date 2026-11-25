@@ -1,0 +1,11 @@
+--- a/scripts/census.mjs	2026-11-21 22:36:46
++++ b/scripts/census.mjs	2026-11-21 22:36:46
+@@ -202,7 +202,7 @@
+   }
+   for (const [word, alias] of Object.entries(aliases)) {
+     const r = byName.get(word);
+-    if (!r) found.push(`the alias ${word} has no row`);
++    if (!r) continue;
+     else if (r.state !== 'mapped') found.push(`the alias ${word} has a row that is ${r.state}, not mapped`);
+     else if (r.target !== alias.target) found.push(`${word}'s row maps to ${r.target}, and its alias to ${alias.target}`);
+   }

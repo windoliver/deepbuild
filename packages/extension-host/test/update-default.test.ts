@@ -8,7 +8,7 @@ it('an update with no answer defaults to keeping the installed provider and its 
   try {
     const shape = { type: 'object', properties: { value: { type: 'number' } }, required: ['value'], additionalProperties: false };
     const name = 'ext.prices.quote@1';
-    const v1 = await makePackage({ id: 'acme/prices', version: '1.0.0', manifest: { requires: { preview: ['deep.provide'] }, provides: [{ interface: name, kind: 'reading', minor: 0 }] }, index: `export default (deep) => { deep.provide('${name}', 'reading', ${JSON.stringify(shape)}, async () => ({ value: 1 })); };` });
+    const v1 = await makePackage({ id: 'acme/prices', version: '1.0.0', manifest: { requires: { preview: ['deep.provide'] }, provides: [{ interface: name, kind: 'reading', minor: 0, digests: { 0: d1Digest(shape) } }] }, index: `export default (deep) => { deep.provide('${name}', 'reading', ${JSON.stringify(shape)}, async () => ({ value: 1 })); };` });
     const v2 = await makePackage({ id: 'acme/prices', version: '2.0.0', index: 'export default () => {};' });
     const consumer = await makePackage({ id: 'acme/stocks', manifest: { requires: { preview: ['deep.use'] }, uses: [{ interface: name, minor: 0, digest: d1Digest(shape) }] }, index: `export default (deep) => { deep.use('${name}'); };` });
     const world = await openWorld();

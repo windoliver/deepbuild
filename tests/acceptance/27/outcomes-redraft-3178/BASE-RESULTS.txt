@@ -1,0 +1,198 @@
+#27 AC4 (#27.e6116d56) Oct 9 cases, blind redraft #3178: runs at the base 37dd3c0c (origin/main) on Nov 22 2026,
+on a shared Mac under heavy load from other sessions (1-minute load 60-280; uptime lines below). Only this folder
+differs from the base. <clone> stands for the fresh clone's path. Each run: npx vitest run <this file> --reporter=verbose
+from the clone root, one file at a time; a wrong program by DEEP_HUB_PLANT=<name> (the same code as ../twins/<name>,
+which lays plantOf returning that name over plant.ts); deep-hook here is the env-plants debug build.
+
+Summary
+- Base (run base2): 6 passed of 6.
+- wake-assumed: delivered, stalled, timed out, replaced FAIL (each at its outcome assertion); waiter, subagent pass.
+- waiter-never-wakes: the four outcome cases FAIL (the waiter never takes the answer); waiter, subagent pass.
+- waiter-outlives-session: the waiter case FAILS (its waiter still running 10 s after Claude Code was killed); 5 pass.
+- answer-skips-held-stop: the subagent case FAILS (the held stop ends without your answer); 5 pass.
+- So each of the six tests fails on at least one wrong program its case names; none fails at the base.
+- An earlier base run (base1) failed the delivered case at a precondition of the test's own (it looked for the wake
+  prompt's ID in the prompt event, which the record doesn't keep); the test now finds the prompt by its text, and
+  base-delivered and base2 are runs of the fixed file. Kept below for the record.
+- Not run: a child session's own deep_ask under a held lead stop (README, Readings 6).
+
+---- base2
+== 2026-11-23T07:28:23Z label=base2 plant=none filter=all code=37dd3c0c
+uptime before: 23:28  up 3 days,  3:54, 4 users, load averages: 148.61 102.51 84.22
+ RUN  v5.0.5 <clone>
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: delivered) an answer the waiter takes to an idle headless session reads delivered once, and only once the wake's turn shows it, never stalled, timed out or replaced 10815ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: stalled) an answer the waiter took that no turn showed, the session readable, reads stalled, never delivered and never finished; your next prompt carries it, and once that turn shows it, it reads delivered once 22440ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered, never finished; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once 21089ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled or delivered for the old ID, never finished; the cleared thread's new session gets it at its start, and once its turn shows it, it reads delivered once 11431ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a waiter that outlives its session) a headless session's Claude Code killed while its waiter waits: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished 38877ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) the lead's stop is held while its background subagent works and your choice is open; the subagent's hooks neither end the hold nor take your answer; the session never reads finished; your answer continues the held stop, once, and reads delivered by the stop hold, once 9423ms
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  23:28:25
+   Duration  120.73s (tests 100%)
+exit 0
+uptime after: 23:30  up 3 days,  3:56, 4 users, load averages: 277.49 167.11 112.44
+
+---- plant-wake-assumed
+== 2026-11-23T07:30:26Z label=plant-wake-assumed plant=wake-assumed filter=all code=37dd3c0c
+uptime before: 23:30  up 3 days,  3:56, 4 users, load averages: 277.49 167.11 112.44
+ RUN  v5.0.5 <clone>
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: delivered) an answer the waiter takes to an idle headless session reads delivered once, and only once the wake's turn shows it, never stalled, timed out or replaced 11024ms
+   → #27.e6116d56 delivered is acknowledged by the turn that showed it: it must come after that turn's prompt in the record (prompt at log_pos 28, delivered at 27): expected false to be true // Object.is equality
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: stalled) an answer the waiter took that no turn showed, the session readable, reads stalled, never delivered and never finished; your next prompt carries it, and once that turn shows it, it reads delivered once 68184ms
+   → #27.e6116d56 the waiter took ask:01M83N0WDXX5CAN9GXC89R4NW5, Claude Code started no turn, and the transcript shows none: its delivery must read stalled within 60 s; outcomes: delivered via next_prompt: expected undefined to be defined
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered, never finished; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once 67374ms
+   → #27.e6116d56 the waiter took ask:01M83N2Y93C3ZY598WTSRQ4CKP and 125a018a-048e-45de-a471-b72fbf7de541's transcript couldn't be read, so nothing proves whether a turn carried it: its delivery must read timed_out within 60 s; outcomes: delivered via next_prompt: expected undefined to be defined
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled or delivered for the old ID, never finished; the cleared thread's new session gets it at its start, and once its turn shows it, it reads delivered once 37133ms
+   → #27.e6116d56 0e107198-dfe6-4110-b746-8914b1af8f9c was cleared before any turn showed ask:01M83N4ZVEC9HHBQ4BAFSNDHXQ: its delivery must read replaced within 30 s; outcomes: delivered via next_prompt: expected undefined to be defined
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a waiter that outlives its session) a headless session's Claude Code killed while its waiter waits: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished 37802ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) the lead's stop is held while its background subagent works and your choice is open; the subagent's hooks neither end the hold nor take your answer; the session never reads finished; your answer continues the held stop, once, and reads delivered by the stop hold, once 9937ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: delivered) an answer the waiter takes to an idle headless session reads delivered once, and only once the wake's turn shows it, never stalled, timed out or replaced
+AssertionError: #27.e6116d56 delivered is acknowledged by the turn that showed it: it must come after that turn's prompt in the record (prompt at log_pos 28, delivered at 27): expected false to be true // Object.is equality
+- Expected
++ Received
+- true
++ false
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: stalled) an answer the waiter took that no turn showed, the session readable, reads stalled, never delivered and never finished; your next prompt carries it, and once that turn shows it, it reads delivered once
+AssertionError: #27.e6116d56 the waiter took ask:01M83N0WDXX5CAN9GXC89R4NW5, Claude Code started no turn, and the transcript shows none: its delivery must read stalled within 60 s; outcomes: delivered via next_prompt: expected undefined to be defined
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered, never finished; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once
+AssertionError: #27.e6116d56 the waiter took ask:01M83N2Y93C3ZY598WTSRQ4CKP and 125a018a-048e-45de-a471-b72fbf7de541's transcript couldn't be read, so nothing proves whether a turn carried it: its delivery must read timed_out within 60 s; outcomes: delivered via next_prompt: expected undefined to be defined
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled or delivered for the old ID, never finished; the cleared thread's new session gets it at its start, and once its turn shows it, it reads delivered once
+AssertionError: #27.e6116d56 0e107198-dfe6-4110-b746-8914b1af8f9c was cleared before any turn showed ask:01M83N4ZVEC9HHBQ4BAFSNDHXQ: its delivery must read replaced within 30 s; outcomes: delivered via next_prompt: expected undefined to be defined
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+ Test Files  1 failed (1)
+      Tests  4 failed | 2 passed (6)
+   Start at  23:30:28
+   Duration  237.02s (tests 100%)
+exit 1
+uptime after: 23:34  up 3 days, 4 hrs, 4 users, load averages: 62.39 110.26 101.47
+
+---- plant-waiter-never-wakes
+== 2026-11-23T07:34:25Z label=plant-waiter-never-wakes plant=waiter-never-wakes filter=all code=37dd3c0c
+uptime before: 23:34  up 3 days, 4 hrs, 4 users, load averages: 62.39 110.26 101.47
+ RUN  v5.0.5 <clone>
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: delivered) an answer the waiter takes to an idle headless session reads delivered once, and only once the wake's turn shows it, never stalled, timed out or replaced 37771ms
+   → #27.e6116d56 precondition: the waiter takes your answer to ask:01M83N7THZ4J87T0RC6B81V48Q to the idle session, exits 2, and Claude Code starts a turn with it: expected undefined to be defined
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: stalled) an answer the waiter took that no turn showed, the session readable, reads stalled, never delivered and never finished; your next prompt carries it, and once that turn shows it, it reads delivered once 37211ms
+   → #27.e6116d56 precondition: the waiter takes your answer to ask:01M83N8YTYE6FEBY9HVZZDME3J to the idle session and exits 2 with it: expected undefined to be defined
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered, never finished; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once 37279ms
+   → #27.e6116d56 precondition: the waiter takes your answer to ask:01M83NA39F2DM6KRA78XST93PH to the idle session and exits 2 with it: expected undefined to be defined
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled or delivered for the old ID, never finished; the cleared thread's new session gets it at its start, and once its turn shows it, it reads delivered once 36382ms
+   → #27.e6116d56 precondition: the waiter takes your answer to ask:01M83NB6ZM26ZHVFZV14AAFZQ6 to the idle session and exits 2 with it: expected undefined to be defined
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a waiter that outlives its session) a headless session's Claude Code killed while its waiter waits: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished 38231ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) the lead's stop is held while its background subagent works and your choice is open; the subagent's hooks neither end the hold nor take your answer; the session never reads finished; your answer continues the held stop, once, and reads delivered by the stop hold, once 8705ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: delivered) an answer the waiter takes to an idle headless session reads delivered once, and only once the wake's turn shows it, never stalled, timed out or replaced
+AssertionError: #27.e6116d56 precondition: the waiter takes your answer to ask:01M83N7THZ4J87T0RC6B81V48Q to the idle session, exits 2, and Claude Code starts a turn with it: expected undefined to be defined
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: stalled) an answer the waiter took that no turn showed, the session readable, reads stalled, never delivered and never finished; your next prompt carries it, and once that turn shows it, it reads delivered once
+AssertionError: #27.e6116d56 precondition: the waiter takes your answer to ask:01M83N8YTYE6FEBY9HVZZDME3J to the idle session and exits 2 with it: expected undefined to be defined
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered, never finished; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once
+AssertionError: #27.e6116d56 precondition: the waiter takes your answer to ask:01M83NA39F2DM6KRA78XST93PH to the idle session and exits 2 with it: expected undefined to be defined
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled or delivered for the old ID, never finished; the cleared thread's new session gets it at its start, and once its turn shows it, it reads delivered once
+AssertionError: #27.e6116d56 precondition: the waiter takes your answer to ask:01M83NB6ZM26ZHVFZV14AAFZQ6 to the idle session and exits 2 with it: expected undefined to be defined
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+ Test Files  1 failed (1)
+      Tests  4 failed | 2 passed (6)
+   Start at  23:34:27
+   Duration  200.55s (tests 100%)
+exit 1
+uptime after: 23:37  up 3 days,  4:04, 4 users, load averages: 79.84 100.73 99.80
+
+---- plant-waiter-outlives-session
+== 2026-11-23T07:37:47Z label=plant-waiter-outlives-session plant=waiter-outlives-session filter=all code=37dd3c0c
+uptime before: 23:37  up 3 days,  4:04, 4 users, load averages: 79.84 100.73 99.80
+ RUN  v5.0.5 <clone>
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: delivered) an answer the waiter takes to an idle headless session reads delivered once, and only once the wake's turn shows it, never stalled, timed out or replaced 10419ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: stalled) an answer the waiter took that no turn showed, the session readable, reads stalled, never delivered and never finished; your next prompt carries it, and once that turn shows it, it reads delivered once 19564ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered, never finished; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once 20322ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled or delivered for the old ID, never finished; the cleared thread's new session gets it at its start, and once its turn shows it, it reads delivered once 10861ms
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a waiter that outlives its session) a headless session's Claude Code killed while its waiter waits: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished 17862ms
+   → #27.e6116d56 473ba272-a75c-49eb-89cc-812c89119369's Claude Code was killed; its waiter (pid 55058) must not outlive it: still running 10 s on: [{"pid":55058,"ppid":1,"pgid":55058,"rssKb":2768,"stat":"Ss","command":"<clone>/target/debug/deep-hook claude-code waiter"}]: expected undefined to be true // Object.is equality
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) the lead's stop is held while its background subagent works and your choice is open; the subagent's hooks neither end the hold nor take your answer; the session never reads finished; your answer continues the held stop, once, and reads delivered by the stop hold, once 9309ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a waiter that outlives its session) a headless session's Claude Code killed while its waiter waits: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished
+AssertionError: #27.e6116d56 473ba272-a75c-49eb-89cc-812c89119369's Claude Code was killed; its waiter (pid 55058) must not outlive it: still running 10 s on: [{"pid":55058,"ppid":1,"pgid":55058,"rssKb":2768,"stat":"Ss","command":"<clone>/target/debug/deep-hook claude-code waiter"}]: expected undefined to be true // Object.is equality
+- Expected:
+true
++ Received:
+undefined
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  23:37:49
+   Duration  94.73s (tests 100%)
+exit 1
+uptime after: 23:39  up 3 days,  4:05, 4 users, load averages: 153.37 114.95 105.02
+
+---- plant-answer-skips-held-stop
+== 2026-11-23T07:39:23Z label=plant-answer-skips-held-stop plant=answer-skips-held-stop filter=all code=37dd3c0c
+uptime before: 23:39  up 3 days,  4:05, 4 users, load averages: 153.37 114.95 105.02
+ RUN  v5.0.5 <clone>
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: delivered) an answer the waiter takes to an idle headless session reads delivered once, and only once the wake's turn shows it, never stalled, timed out or replaced 10153ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: stalled) an answer the waiter took that no turn showed, the session readable, reads stalled, never delivered and never finished; your next prompt carries it, and once that turn shows it, it reads delivered once 21374ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered, never finished; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once 20152ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled or delivered for the old ID, never finished; the cleared thread's new session gets it at its start, and once its turn shows it, it reads delivered once 11009ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a waiter that outlives its session) a headless session's Claude Code killed while its waiter waits: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished 38686ms
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) the lead's stop is held while its background subagent works and your choice is open; the subagent's hooks neither end the hold nor take your answer; the session never reads finished; your answer continues the held stop, once, and reads delivered by the stop hold, once 7200ms
+   → #27.e6116d56 your answer to ask:01M83NM1XHXGN63D9V3TB899W0 (Green header 2be7c133) must continue the lead's held stop: {"runs":[{"command":"exec '<clone…>","code":0,"signal":null,"timedOut":false,"stdout":"{\"systemMessage\":\"says done · next: DeepBuild · session/19870bd4/01M83NM22EYK07BAAXY382536B\"}","stderr":""},{"command":"exec '<clone…>","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected false to be true // Object.is equality
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) the lead's stop is held while its background subagent works and your choice is open; the subagent's hooks neither end the hold nor take your answer; the session never reads finished; your answer continues the held stop, once, and reads delivered by the stop hold, once
+AssertionError: #27.e6116d56 your answer to ask:01M83NM1XHXGN63D9V3TB899W0 (Green header 2be7c133) must continue the lead's held stop: {"runs":[{"command":"exec '<clone…>","code":0,"signal":null,"timedOut":false,"stdout":"{\"systemMessage\":\"says done · next: DeepBuild · session/19870bd4/01M83NM22EYK07BAAXY382536B\"}","stderr":""},{"command":"exec '<clone…>","code":null,"signal":null,"timedOut":false,"stdout":"","stderr":""}]}: expected false to be true // Object.is equality
+- Expected
++ Received
+- true
++ false
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  23:39:25
+   Duration  116.09s (tests 100%)
+exit 1
+uptime after: 23:41  up 3 days,  4:07, 4 users, load averages: 176.29 130.83 112.19
+
+---- base-delivered
+== 2026-11-23T07:28:03Z label=base-delivered plant=none filter=outcome: delivered code=37dd3c0c
+uptime before: 23:28  up 3 days,  3:54, 4 users, load averages: 128.98 95.91 81.52
+ RUN  v5.0.5 <clone>
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: delivered) an answer the waiter takes to an idle headless session reads delivered once, and only once the wake's turn shows it, never stalled, timed out or replaced 12042ms
+ ↓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: stalled) an answer the waiter took that no turn showed, the session readable, reads stalled, never delivered and never finished; your next prompt carries it, and once that turn shows it, it reads delivered once
+ ↓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered, never finished; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once
+ ↓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled or delivered for the old ID, never finished; the cleared thread's new session gets it at its start, and once its turn shows it, it reads delivered once
+ ↓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a waiter that outlives its session) a headless session's Claude Code killed while its waiter waits: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished
+ ↓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) the lead's stop is held while its background subagent works and your choice is open; the subagent's hooks neither end the hold nor take your answer; the session never reads finished; your answer continues the held stop, once, and reads delivered by the stop hold, once
+ Test Files  1 passed (1)
+      Tests  1 passed | 5 skipped (6)
+   Start at  23:28:04
+   Duration  13.28s (tests 99%)
+exit 0
+uptime after: 23:28  up 3 days,  3:54, 4 users, load averages: 150.67 102.13 83.98
+
+---- base1
+== 2026-11-23T07:25:59Z label=base1 plant=none filter=all code=37dd3c0c
+uptime before: 23:25  up 3 days,  3:52, 4 users, load averages: 139.73 80.43 74.77
+ RUN  v5.0.5 <clone>
+ × tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: delivered) an answer the waiter takes to an idle headless session reads delivered once, and only once the wake's turn shows it, never stalled, timed out or replaced 9811ms
+   → #27.e6116d56 precondition: the hub recorded the wake turn's prompt 3c377089-fd06-411d-b85c-6fcb9d42d97a: expected undefined to be defined
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: stalled) an answer the waiter took that no turn showed, the session readable, reads stalled, never delivered and never finished; your next prompt carries it, and once that turn shows it, it reads delivered once 20384ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: timed out) an answer the waiter took, in a session that couldn't be read, reads timed_out, never stalled or delivered, never finished; once the session can be read, the next prompt carries it and, once the turn shows it, it reads delivered once 20044ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: replaced) an answer the waiter took, its session cleared before any turn showed it, reads replaced, never stalled or delivered for the old ID, never finished; the cleared thread's new session gets it at its start, and once its turn shows it, it reads delivered once 10789ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a waiter that outlives its session) a headless session's Claude Code killed while its waiter waits: the waiter is gone within 10 s, a later answer isn't counted delivered, and the session never reads as finished 40116ms
+ ✓ tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (a stop held while a Claude subagent still runs) the lead's stop is held while its background subagent works and your choice is open; the subagent's hooks neither end the hold nor take your answer; the session never reads finished; your answer continues the held stop, once, and reads delivered by the stop hold, once 8818ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/27/outcomes-redraft-3178/outcomes.test.ts > #27.e6116d56 the issue's Oct 9 cases: the four delivery outcomes, a waiter that outlives its session, a stop held while a subagent runs > #27.e6116d56 (delivery outcome: delivered) an answer the waiter takes to an idle headless session reads delivered once, and only once the wake's turn shows it, never stalled, timed out or replaced
+AssertionError: #27.e6116d56 precondition: the hub recorded the wake turn's prompt 3c377089-fd06-411d-b85c-6fcb9d42d97a: expected undefined to be defined
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  23:26:00
+   Duration  115.79s (tests 100%)
+exit 1
+uptime after: 23:27  up 3 days,  3:54, 4 users, load averages: 134.02 96.33 81.58
+

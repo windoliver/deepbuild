@@ -4,7 +4,7 @@
 // to sub-agents on a smaller model, and answers only with findings that cite a handle and the exact quote. Before
 // anything is written, each quote is checked at its handle and each handle against what that job was delivered; a
 // finding that fails either is dropped and logged. The install writes what is kept to the wiki.
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { accessSync, constants, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -394,16 +394,22 @@ const usage = (command: string): string => command === 'read'
   ? 'Usage: deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]'
   : 'Usage: deep find [<query>] [--file <path>] [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]';
 
-/** `deep read <handle> --slice [<cursor>]`: one slice; a cut one ends with the command that continues it. */
-export async function readCommand(args: readonly string[]): Promise<number> {
-  return command('read', args, async (slicer, p) => {
+/**
+ * Asks the hub at a root for one slice or one find, for a process that can't read the evidence store itself: a started
+ * session's sandbox closes it (#3229). Undefined when no hub answers there.
+ */
+export type AskHub = (root: string, params: { read: string; cursor?: string } | { find: string; cursor?: string; file?: { path: string; cwd: string } }) => Promise<unknown>;
+const readable = (root: string): boolean => { try { accessSync(join(root, 'evidence', 'records.jsonl'), constants.R_OK); return true; } catch { return false; } };
+/** `deep read <handle> --slice [<cursor>]`: one slice; a cut one ends with the command that continues it. `first` asks the hub whatever this process can read: the planted CLI's alone. */
+export async function readCommand(args: readonly string[], hub?: AskHub, first = false): Promise<number> {
+  return command('read', args, hub, first, async (slicer, p) => {
     const slice = await slicer.read(p.what, p.cursor);
     return p.json ? JSON.stringify(slice) : `${slice.text}${slice.next !== undefined ? `\ndeep read ${again(p, `--slice ${slice.next}`)}` : ''}`;
   });
 }
 /** `deep find <query>`: matching handles, a line of context each, capped as a slice is. */
-export async function findCommand(args: readonly string[]): Promise<number> {
-  return command('find', args, async (slicer, p) => {
+export async function findCommand(args: readonly string[], hub?: AskHub): Promise<number> {
+  return command('find', args, hub, false, async (slicer, p) => {
     const found = await slicer.find(p.what, p.cursor, undefined, p.file !== undefined ? { path: p.file, cwd: process.cwd() } : undefined);
     if (p.json) return JSON.stringify(found);
     // No hit says so in words, not as an empty line (#1812).
@@ -411,11 +417,16 @@ export async function findCommand(args: readonly string[]): Promise<number> {
     return [...found.hits.map((h) => `${h.handle}  ${h.context}`), ...(found.next !== undefined ? [`deep find ${again(p, `--slice ${found.next}`)}`] : [])].join('\n');
   });
 }
-async function command(name: string, args: readonly string[], body: (slicer: Slicer, p: Parsed) => Promise<string>): Promise<number> {
+async function command(name: 'read' | 'find', args: readonly string[], hub: AskHub | undefined, first: boolean, body: (slicer: Pick<Slicer, 'read' | 'find' | 'close'>, p: Parsed) => Promise<string>): Promise<number> {
   const p = parse(name, args);
   if (typeof p === 'string') { console.error(p); return 2; }
-  let slicer: Slicer;
-  try { slicer = await openSlicer(p.root); } catch (error) {
+  let slicer: Pick<Slicer, 'read' | 'find' | 'close'>;
+  try {
+    const cursor = p.cursor !== undefined ? { cursor: p.cursor } : {};
+    const answer = hub && (first || !readable(p.root)) ? await hub(p.root, name === 'read' ? { read: p.what, ...cursor } : { find: p.what, ...cursor, ...(p.file !== undefined ? { file: { path: p.file, cwd: process.cwd() } } : {}) }) : undefined;
+    slicer = answer !== undefined ? { read: async () => answer as Slice, find: async () => answer as Found, close: () => undefined } : await openSlicer(p.root);
+  } catch (error) {
+    if (error instanceof NotFound) { console.error(`deep ${name}: ${error.message}`); return 1; }
     console.error(`deep ${name} ${p.what}: no record to read at ${p.root}: ${error instanceof Error ? error.message : String(error)}`);
     return 1;
   }
