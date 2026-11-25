@@ -115,6 +115,21 @@ export function cloneTree(src: string, dst: string): Promise<{ cloned: true } | 
   });
 }
 
+/**
+ * Clones `src` to `dst` as cloneTree does, or copies it where the file system can't clone, such as ext4 (#3377): a
+ * check's stack takes and keeps its install and caches either way, as the design's checkout does, never linked. Why
+ * neither worked, or nothing. A session's worktree is handed clones only.
+ */
+function cloneOrCopy(src: string, dst: string): Promise<string | undefined> {
+  return cloneTree(src, dst).then((r) => (r.cloned ? undefined : new Promise((done) => {
+    execFile('cp', ['-a', src, dst], { timeout: 600_000 }, (error, _out, err) => {
+      if (!error) return done(undefined);
+      try { rmSync(dst, { recursive: true, force: true }); } catch { /* best effort */ }
+      done(`${r.why}; copy: ${String(err).trim() || error.message}`);
+    });
+  })));
+}
+
 /** The bytes a folder's files hold, and their count. */
 async function sizeOf(dir: string): Promise<number> {
   let bytes = 0;
@@ -353,19 +368,19 @@ export class Products {
     const e = repo && this.found(repo, name, key);
     return !!e && existsSync(this.productDir(e));
   }
-  /** Clones the entry to `dst`, never linked; why it couldn't. */
+  /** Clones the entry to `dst`, or copies it where the file system can't clone, never linked; why it couldn't. */
   async placeIn(worktree: string, name: string, key: string, dst: string): Promise<string | undefined> {
     const repo = await this.repoId(worktree);
     const e = repo && this.found(repo, name, key);
     if (!e) return `no entry of ${name} holds key ${key}`;
-    const r = await cloneTree(this.productDir(e), dst);
-    if (!r.cloned) return r.why;
+    const why = await cloneOrCopy(this.productDir(e), dst);
+    if (why) return why;
     e.used = this.o.now();
     e.served += 1;
     this.save();
     return undefined;
   }
-  /** Keeps a folder a check's install left, cloned, under its key: a product like any built from the default branch. */
+  /** Keeps a folder a check's install left, cloned or copied, under its key: a product like any built from the default branch. */
   async keep(worktree: string, name: string, path: string, key: string, src: string): Promise<void> {
     await this.ready;
     const repo = await this.repoId(worktree);
@@ -374,8 +389,7 @@ export class Products {
     const dst = join(stage, 'src', path);
     mkdirSync(dirname(dst), { recursive: true });
     try {
-      const r = await cloneTree(src, dst);
-      if (!r.cloned) return;
+      if (await cloneOrCopy(src, dst)) return;
       const now = this.o.now();
       const entry: Entry = { repo, name, path, key, commit: '', built: now, finished: now, used: now, served: 0, bytes: await sizeOf(dst) };
       mkdirSync(join(this.store, repo), { recursive: true });
@@ -397,7 +411,7 @@ export class Products {
     if (!src || !existsSync(src)) return false;
     rmSync(dst, { recursive: true, force: true });
     mkdirSync(dirname(dst), { recursive: true });
-    return (await cloneTree(src, dst)).cloned;
+    return (await cloneOrCopy(src, dst)) === undefined;
   }
   async keepCache(worktree: string, key: string, path: string, src: string): Promise<void> {
     const repo = await this.repoId(worktree);
@@ -405,7 +419,7 @@ export class Products {
     const dst = this.cacheDir(repo, key, path);
     rmSync(dst, { recursive: true, force: true });
     mkdirSync(dirname(dst), { recursive: true });
-    await cloneTree(src, dst);
+    await cloneOrCopy(src, dst);
     // At most the two most recent install keys' caches stay, as their installs do.
     const kept = this.index.entries.filter((e) => e.repo === repo).map((e) => e.key);
     for (const d of await readdir(join(this.store, repo))) {
