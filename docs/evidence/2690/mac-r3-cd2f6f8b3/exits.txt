@@ -22,3 +22,7 @@ Q2 fix-1459-ac6-after.txt: test result: ok. 1 passed; 0 failed exit=0; snapshots
 Q3 fix-1459-ac6-again.txt: test result: ok. 1 passed; 0 failed exit=0; snapshots from $TMPDIR/deep-338-3287 01:40:51 load { 43.09 56.15 83.27 } thermal 0 free KB 108929468 front [WeChat]
 Q4 fix-1459-parity.txt: Tests 1 failed | 2 passed (3) exit=1 01:44:53 load { 61.11 75.45 86.40 } thermal 1 free KB 103645816 front [Google Chrome]
 Q5 git status --porcelain lines: 4 01:44:54 load { 61.11 75.45 86.40 } thermal 1 free KB 103715456 front [Google Chrome]
+R start: load did not stay under 6 for 60 s within 2 h; ran anyway (waited 7204 s) 03:44:58 load { 8.91 9.79 16.17 } thermal 0 free KB 167711600 front [loginwindow]
+R fix-1172-rows.txt: Tests 2 failed (2) exit=1 03:55:23 load { 8.77 25.42 28.62 } thermal 0 free KB 160278184 front [loginwindow]
+clone ~/mac-runs/d2880r3 removed 03:55:30 load { 8.87 25.17 28.51 } thermal 0 free KB 165246592 front [loginwindow]
+ALL DONE 03:55:30 load { 8.87 25.17 28.51 } thermal 0 free KB 165246592 front [loginwindow]

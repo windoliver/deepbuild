@@ -1,0 +1,9 @@
+Mac18,1
+Apple M6
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B7131
+Now drawing from 'AC Power'
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+node v24.22.0
+start 2026-11-25 11:17:32 11:17  up 5 days, 15:44, 3 users, load averages: 18.28 32.46 22.71

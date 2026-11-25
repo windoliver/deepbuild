@@ -1,0 +1,48 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2880r3
+
+ ❯ tests/acceptance/1172/rows.test.ts (2 tests | 2 failed) 624101ms
+   ❯ #1172 Needs you shows questions and presents their cards (2)
+     × AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 430560ms
+     × AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 190479ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window
+Error: BLOCKED: deep-app showed no window in 180000 ms: first-frame-ms 232.8
+
+ ❯ blocked tests/acceptance/1172/helpers.ts:34:56
+     32| });
+     33|
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     35| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     36| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1172/helpers.ts:129:34
+ ❯ rowFailures tests/acceptance/1172/rows.test.ts:15:15
+ ❯ tests/acceptance/1172/rows.test.ts:50:52
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask
+Error: BLOCKED: deep-app showed no window in 180000 ms: first-frame-ms 178.2
+
+ ❯ blocked tests/acceptance/1172/helpers.ts:34:56
+     32| });
+     33|
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     35| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     36| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.launch tests/acceptance/1172/helpers.ts:129:34
+ ❯ rowFailures tests/acceptance/1172/rows.test.ts:15:15
+ ❯ tests/acceptance/1172/rows.test.ts:57:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  03:44:59
+   Duration  624.35s (tests 100%)
+

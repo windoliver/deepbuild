@@ -33,3 +33,6 @@
   - `parity.test.ts`: 2 of 3 pass. Its third test fails on 22 lines for asks 24 and 33–42: folded and held asks that the Needs you list doesn't show, which #1459's test still expects as rows. The same 22 lines appear at 53ef834e8 and f41786d98, so they predate this change.
   - The proof guard doesn't guard `docs/spikes/338/out/live/` (it isn't under the test paths), so the guard asks for no tag. The issue still asks for the fixture change to be approved, and #1459 AC6 compares against these files, so a8af93238 waits on the owner's explicit approval.
 - Review of a8af93238: `cargo fmt --check` failed on the mark slot's builder chain in `rows.rs`. Reformatted (whitespace, and one assert wrapped), with no change in behaviour. `mark-test-after-fmt.txt`: the unit test still passes (1 passed).
+- `mac-r3-cd2f6f8b3/fix-1172-rows.txt`: BLOCKED, not a result. Both tests say "deep-app showed no window in 180000 ms": the Mac's screen was locked with the owner away.
+- `mac-r4-1172/` (MacBook Pro, 2026-11-25, fresh clone at the head 4c3d87aaa, screen unlocked, load 12–30): **#1172 AC3 (`rows.test.ts`) passes 2 of 2**, the real program and its wrong-program plant.
+- `guard-4c3d87aaa.txt`: the proof guard at 4c3d87aaa: PASS (14 commits).
