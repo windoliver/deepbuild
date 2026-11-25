@@ -79,9 +79,11 @@ libc = "0.2"
 name = "acceptance_2660_layout_marks"
 path = "../../tests/acceptance/2660/layout_marks.rs"
 
+# `fast_path` runs its blind redraft for #3447 (tests/acceptance/2660-redraft-3447, README there): `revise_items`
+# takes a fourth argument since #2700. The first draft is left as it is.
 [[test]]
 name = "acceptance_2660_fast_path"
-path = "../../tests/acceptance/2660/fast_path.rs"
+path = "../../tests/acceptance/2660-redraft-3447/fast_path.rs"
 
 [[test]]
 name = "acceptance_2660_check_templates"

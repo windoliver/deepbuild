@@ -78,6 +78,8 @@ export interface CheckKinds {
 }
 export interface ChecksProvider {
   command(options: CommandCheck): Promise<CommandRun>;
+  /** Each program a check's command names and the reading its key holds of it (#2060), from `read`, a claim's readings, or the disk once. */
+  programs(command: string, checkout: string, read: Map<string, string>): Promise<[string, string][]>;
   kinds(options: KindsOptions): () => Promise<CheckKinds>;
   reviewOutcomes(checkout: string, sent: { commit: string; items: ReviewItem[] }[], settled: string): Promise<(ReviewItem & { ended: 'fixed' | 'left'; commit: string })[]>;
 }

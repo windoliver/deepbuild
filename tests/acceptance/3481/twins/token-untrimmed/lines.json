@@ -1,0 +1,12 @@
+{
+  "crates/deep-app/src/record.rs": [
+    {
+      "find": [
+        "        client.hello_app(token.trim())?;"
+      ],
+      "wrong": [
+        "        client.hello_app(&token)?;"
+      ]
+    }
+  ]
+}

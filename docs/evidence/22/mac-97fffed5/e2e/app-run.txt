@@ -1,0 +1,36 @@
+World: home /private/tmp/dh27-OxgptX/h; deep-app pid 58107; machine Mac15,12
+
+$ deep inbox    # before the batch, 2026-11-16T02:27:12.776Z
+Nothing needs you
+   screenshot 0-before-batch.png (window 25512)
+
+$ deep inbox    # after the 2026-11-16T02:28:00.000Z batch
+A1: which header colour for this checkout screen?  taste  repo3478  6e7db0b6-21eb-49b1-ae19-5416cd077406  57s  If you don't answer: Green header, on Wed 18 Nov at 18:27  ask:01M7H2W00T1DFPTYQPACES2W37
+    answer with blue (Blue header), green (Green header)
+B1: which header colour for this checkout screen?  taste  repo3478  401e4795-f797-4468-8638-056e8798de1a  56s  If you don't answer: Green header, on Wed 18 Nov at 18:27  ask:01M7H2W0BAJ669NB3MBZF82C3D
+    answer with blue (Blue header), green (Green header)
+D1: which header colour for this checkout screen?  taste  repo3478  966e2061-29a2-4208-a954-45105cae8147  56s  If you don't answer: Green header, on Wed 18 Nov at 18:27  ask:01M7H2W0P98B1G6JT90PJZV14V
+    answer with blue (Blue header), green (Green header)
+D2: which header colour for this checkout screen?  taste  repo3478  966e2061-29a2-4208-a954-45105cae8147  56s  If you don't answer: Green header, on Wed 18 Nov at 18:27  ask:01M7H2W0T3YJ6C60PQRZVDM5W9
+    answer with blue (Blue header), green (Green header)
+D3: which header colour for this checkout screen?  taste  repo3478  966e2061-29a2-4208-a954-45105cae8147  56s  If you don't answer: Green header, on Wed 18 Nov at 18:27  ask:01M7H2W10C6AXZ868VB1JKMBFM
+    answer with blue (Blue header), green (Green header)
+D4: which header colour for this checkout screen?  taste  repo3478  966e2061-29a2-4208-a954-45105cae8147  56s  If you don't answer: Green header, on Wed 18 Nov at 18:27  ask:01M7H2W16THD1EBFZGV2H7J1AR
+    answer with blue (Blue header), green (Green header)
+D5: which header colour for this checkout screen?  taste  repo3478  966e2061-29a2-4208-a954-45105cae8147  55s  If you don't answer: Green header, on Wed 18 Nov at 18:27  ask:01M7H2W1DAS4SGTFWX9WVT92XB
+    answer with blue (Blue header), green (Green header)
+This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  exception  repo3478  966e2061-29a2-4208-a954-45105cae8147  55s  If you don't answer: Leave them to their defaults, on Wed 18 Nov at 18:27  ask:01M7H2W1KCGK4YGTNWDJXWXCHN
+    answer with together (Answer them together), pause (Pause the session), defaults (Leave them to their defaults)
+8 asks need you
+   screenshot 1-needs-you.png (window 25512)
+
+$ deep inbox answer ask:01M7H2W1KCGK4YGTNWDJXWXCHN together
+ask:01M7H2W1KCGK4YGTNWDJXWXCHN answered together; no decision saved (exit 0)
+
+$ deep inbox
+A1: which header colour for this checkout screen?  taste  repo3478  6e7db0b6-21eb-49b1-ae19-5416cd077406  1m  If you don't answer: Green header, on Wed 18 Nov at 18:27  ask:01M7H2W00T1DFPTYQPACES2W37
+    answer with blue (Blue header), green (Green header)
+B1: which header colour for this checkout screen?  taste  repo3478  401e4795-f797-4468-8638-056e8798de1a  1m  If you don't answer: Green header, on Wed 18 Nov at 18:27  ask:01M7H2W0BAJ669NB3MBZF82C3D
+    answer with blue (Blue header), green (Green header)
+2 asks need you
+   screenshot 2-after-bulk-answer.png (window 25512)

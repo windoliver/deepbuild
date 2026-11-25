@@ -629,7 +629,9 @@ pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks 
         ties_decreasing: p == Some(Planted::SortTiesDecreasing),
         compact_by_atomic: p == Some(Planted::CompactByAtomic),
         dispatch_without_guard: p == Some(Planted::DispatchWithoutGuard),
-        steps_per_frame: p == Some(Planted::StepsPerFrame),
+        steps_per_frame: p == Some(Planted::StepsPerFrame)
+            || crate::particles::stepped::planted(p).by_frame_time,
+        frame_time: crate::particles::stepped::planted(p).by_frame_time,
         keeps_every_checkpoint: p == Some(Planted::RingKeepsEveryCheckpoint),
         live_inputs: p == Some(Planted::StepReadsLivePointer),
         alternate_checkpoints: p == Some(Planted::RingCheckpointsTexturesOnAlternateSteps),

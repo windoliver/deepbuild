@@ -1,0 +1,144 @@
+#3336 blind suite (tests/acceptance/3336-redraft-taste/) at base 3c564bbdd, on 2026-11-23, on an arm64 MacBook Pro
+with Metal, one-minute load about 70 (65 to 130 across the day's runs). The checkout was a fresh GitHub clone of main
+with node_modules, built workspaces and a warm target/ (deep-show built). Paths redacted: home `~`, temp `<tmp>`,
+checkout `<checkout>`.
+
+Command (from <checkout>, PATH holding Node 24, cargo and /usr/sbin; CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0):
+
+  npx vitest run tests/acceptance/3336-redraft-taste --reporter=verbose
+
+Result: "Tests 2 failed (2)" in 328 s, each at its own first assertion, for the expected reason: the base's
+tests/acceptance/1941/taste.test.ts, run from a clean copy, writes its screenshots into the checkout's
+docs/evidence/1941/. f7adc8c8: git status lists contrast-muted-after.png and contrast-muted-before.png modified (this
+Mac's text drawing differs from the committed bytes). 7d4ab4ab: 27 PNGs written inside the checkout (texture-missing's
+before isn't drawn at the base, the asset_missing the issue names). The run named no folder outside the checkout and
+wrote no PNG under its own TMPDIR. Afterwards `git -C <checkout> status --porcelain` listed only
+`?? tests/acceptance/3336-redraft-taste/`, and the temp copy was gone.
+
+An earlier run of the same file (21:41, 441 s, load 66 to 128) failed the same two assertions the same way; it showed
+that a folder holding the copy (the run's own work folder) was counted as "named"; the file now leaves such folders out,
+and the run below is of the file as written here.
+
+Observed output:
+
+
+ RUN  v5.0.5 <checkout>
+
+stdout | tests/acceptance/3336-redraft-taste/tree.test.ts
+#3336: ran tests/acceptance/1941/taste.test.ts in a clean copy; 1 taste test(s) ran
+  git status after: 
+     M docs/evidence/1941/contrast-muted-after.png
+     M docs/evidence/1941/contrast-muted-before.png
+  written inside the copy: 
+    docs/evidence/1941/budget-over-class-after.png
+    docs/evidence/1941/budget-over-class-before.png
+    docs/evidence/1941/budget-showpiece-after.png
+    docs/evidence/1941/budget-showpiece-before.png
+    docs/evidence/1941/coincident-walls-after.png
+    docs/evidence/1941/coincident-walls-before.png
+    docs/evidence/1941/contrast-muted-after.png
+    docs/evidence/1941/contrast-muted-before.png
+    docs/evidence/1941/exposure-clipped-after.png
+    docs/evidence/1941/exposure-clipped-before.png
+    docs/evidence/1941/floating-vase-after.png
+    docs/evidence/1941/floating-vase-before.png
+    docs/evidence/1941/framing-cut-after.png
+    docs/evidence/1941/framing-cut-before.png
+    docs/evidence/1941/grid-off-after.png
+    docs/evidence/1941/grid-off-before.png
+    docs/evidence/1941/noise-reseeds-after-next-frame.png
+    docs/evidence/1941/noise-reseeds-after.png
+    docs/evidence/1941/noise-reseeds-before-next-frame.png
+    docs/evidence/1941/noise-reseeds-before.png
+    docs/evidence/1941/overlap-crates-after.png
+    docs/evidence/1941/overlap-crates-before.png
+    docs/evidence/1941/scale-door-after.png
+    docs/evidence/1941/scale-door-before.png
+    docs/evidence/1941/seam-moved-after.png
+    docs/evidence/1941/seam-moved-before.png
+    docs/evidence/1941/texture-missing-after.png
+  folders the run names outside the copy, with PNGs: none; PNGs under the run's TMPDIR: 0
+
+ × tests/acceptance/3336-redraft-taste/tree.test.ts > #3336 a unit lane run of #1941's taste test, from a clean copy > #3336.f7adc8c8 after the unit lane runs #1941's taste test in a clean copy, git status there is clean: the tree is the tree it started on 5ms
+   → git status in the copy after the unit lane ran tests/acceptance/1941/taste.test.ts: these paths changed: expected [ …(2) ] to deeply equal []
+ × tests/acceptance/3336-redraft-taste/tree.test.ts > #3336 a unit lane run of #1941's taste test, from a clean copy > #3336.7d4ab4ab #1941's screenshots are written outside the checkout, to a temp or run folder the run names, and nothing is written inside it 1ms
+   → files the unit lane's run of tests/acceptance/1941/taste.test.ts wrote inside the checkout (outside .git, target/ and node_modules): expected [ …(27) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3336-redraft-taste/tree.test.ts > #3336 a unit lane run of #1941's taste test, from a clean copy > #3336.f7adc8c8 after the unit lane runs #1941's taste test in a clean copy, git status there is clean: the tree is the tree it started on
+AssertionError: git status in the copy after the unit lane ran tests/acceptance/1941/taste.test.ts: these paths changed: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   " M docs/evidence/1941/contrast-muted-after.png",
++   " M docs/evidence/1941/contrast-muted-before.png",
++ ]
+
+ ❯ tests/acceptance/3336-redraft-taste/tree.test.ts:244:115
+    242|   it(`${TREE_ID} after the unit lane runs #1941's taste test in a clea…
+    243|     const r = judged();
+    244|     expect(r.status, `git status in the copy after the unit lane ran $…
+       |                                                                                                                   ^
+    245|     if (r.cutShort) inconclusive(`the tree is unchanged so far, but ${…
+    246|     if (!r.ran) inconclusive(`no taste test ran: ${tail(r.log)}`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/3336-redraft-taste/tree.test.ts > #3336 a unit lane run of #1941's taste test, from a clean copy > #3336.7d4ab4ab #1941's screenshots are written outside the checkout, to a temp or run folder the run names, and nothing is written inside it
+AssertionError: files the unit lane's run of tests/acceptance/1941/taste.test.ts wrote inside the checkout (outside .git, target/ and node_modules): expected [ …(27) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "docs/evidence/1941/budget-over-class-after.png",
++   "docs/evidence/1941/budget-over-class-before.png",
++   "docs/evidence/1941/budget-showpiece-after.png",
++   "docs/evidence/1941/budget-showpiece-before.png",
++   "docs/evidence/1941/coincident-walls-after.png",
++   "docs/evidence/1941/coincident-walls-before.png",
++   "docs/evidence/1941/contrast-muted-after.png",
++   "docs/evidence/1941/contrast-muted-before.png",
++   "docs/evidence/1941/exposure-clipped-after.png",
++   "docs/evidence/1941/exposure-clipped-before.png",
++   "docs/evidence/1941/floating-vase-after.png",
++   "docs/evidence/1941/floating-vase-before.png",
++   "docs/evidence/1941/framing-cut-after.png",
++   "docs/evidence/1941/framing-cut-before.png",
++   "docs/evidence/1941/grid-off-after.png",
++   "docs/evidence/1941/grid-off-before.png",
++   "docs/evidence/1941/noise-reseeds-after-next-frame.png",
++   "docs/evidence/1941/noise-reseeds-after.png",
++   "docs/evidence/1941/noise-reseeds-before-next-frame.png",
++   "docs/evidence/1941/noise-reseeds-before.png",
++   "docs/evidence/1941/overlap-crates-after.png",
++   "docs/evidence/1941/overlap-crates-before.png",
++   "docs/evidence/1941/scale-door-after.png",
++   "docs/evidence/1941/scale-door-before.png",
++   "docs/evidence/1941/seam-moved-after.png",
++   "docs/evidence/1941/seam-moved-before.png",
++   "docs/evidence/1941/texture-missing-after.png",
++ ]
+
+ ❯ tests/acceptance/3336-redraft-taste/tree.test.ts:252:150
+    250|   it(`${WHERE_ID} #1941's screenshots are written outside the checkout…
+    251|     const r = judged();
+    252|     expect(r.writtenInCopy, `files the unit lane's run of ${r.files.jo…
+       |                                                                                                                                                      ^
+    253|     if (r.cutShort) inconclusive(`nothing was written inside the check…
+    254|     if (!r.ran) inconclusive(`no taste test ran: ${tail(r.log)}`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:11:59
+   Duration  327.88s (tests 100%)
+
+exit 1

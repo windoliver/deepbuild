@@ -35,6 +35,7 @@ pub struct Planted {
     pub fixed_levels: bool,
 }
 
+deep_gpu::paired! { params: "local_tone.wgsl", Local;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Params {
@@ -46,6 +47,7 @@ struct Params {
     cell: f32,
     apart: f32,
     _pad: u32,
+}
 }
 
 /// The work for one frame size, level count and source image.

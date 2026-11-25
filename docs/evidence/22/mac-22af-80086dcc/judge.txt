@@ -1,0 +1,7 @@
+== conditions at start: Now drawing from 'AC Power'; front app [loginwindow]; 13:21  up 17:48, 4 users, load averages: 16.38 33.12 51.39; no load wait
+== command: DEEP_PROOF_ISSUES=<issues folder> node scripts/spine-22-mac-80086dcc.mjs judge --issue 22 (copy: #22 pinned to 80086dcc65d0221c46af3b1066c0625abf2fd2e6, reopen() returns at once)
+== stdout:
+{"issue":22,"commit":"80086dcc65d0221c46af3b1066c0625abf2fd2e6","verdict":"INVALID","criteria":[{"id":"#22.48b6696b","outcome":"PASS"},{"id":"#22.1f14a778","outcome":"INCONCLUSIVE"},{"id":"#22.f57a814c","outcome":"PASS"},{"id":"#22.3d85284a","outcome":"INVALID"}],"reopen":{"criterion":"#22.3d85284a"}}
+== stderr (first 200 lines):
+== exit=1 wall 535 s
+== conditions at end: Now drawing from 'AC Power'; front app [loginwindow]; 13:30  up 17:57, 4 users, load averages: 33.40 50.20 52.01

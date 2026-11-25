@@ -47,6 +47,7 @@ pub struct Guard {
     pub mode: Mode,
 }
 
+deep_gpu::paired! { guard_uniform: "status.wgsl", Guard;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct GuardUniform {
@@ -55,6 +56,7 @@ struct GuardUniform {
     min_distance: f32,
     mode: u32,
     quantize: u32,
+}
 }
 
 impl Guard {
