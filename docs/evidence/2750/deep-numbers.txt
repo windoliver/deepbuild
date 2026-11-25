@@ -2,13 +2,13 @@ $ deep numbers refresh
 Read 1 of 1 repos from the forge: acme/shop.
 $ deep numbers   # the landed.none line of its output, on the suite fixture with the revert and the three refused days
 landed.none acme/shop: 0.2727272727272727 share OVER BUDGET · github · observed · 1s [{"commits":11,"PASS":7,"FAIL":1,
-"none":3,"off":1,"no_session":1,"tree":1,"never_judged":1},{"commit":"13afc9049e0df6109d5e8af54fc5b44cab6fe1b0","judge
-d":"PASS"},{"commit":"95b28ce4cd7b447a7740f771b876f9f3993e3804","judged":"PASS"},{"commit":"2abc28bf4aab5071c53830f10a
-ca564419fd1b13","judged":"FAIL"},{"commit":"c40f988532911915c4e14135a5a8bb3696a99468","judged":"PASS"},{"commit":"258a
-fbb5322f87f3b231353c049116f08fe028f8","judged":"none","cause":"off"},{"commit":"81f67622a4d7f1704f972143bcf72238842213
-bb","judged":"PASS"},{"commit":"fcd29c911c741b8075d0f9d0aaea29d1da69ef0f","judged":"none","cause":"no_session","pusher
-":"sam"},{"commit":"02b35f649a83bbb3c6a79855bcdd5c5b21baaea4","judged":"PASS"},{"commit":"a4041743413435dac8fe44fad14a
-89478f77eada","judged":"none","cause":"tree","verdict":"PASS","verdict_commit":"e76cebc13f055726fc35e8ab71b650b70095c0
-3f"},{"commit":"a73e3f34d08660aa123526734c1d0da607c461ed","judged":"PASS"},{"commit":"e1e25924a30eac4eddaaa656cc9d4277
-8f6dac2a","judged":"PASS","reverts":"258afbb5322f87f3b231353c049116f08fe028f8","counted":"never_judged"},{"missing":tr
+"none":3,"off":1,"no_session":1,"tree":1,"never_judged":1},{"commit":"1cb05638f7229067accb55755f8b08e29b337e14","judge
+d":"PASS"},{"commit":"9f9469887dce2231bc4d22defaaffd5247d738c5","judged":"PASS"},{"commit":"bc29fe1c4ce0ae8d8def795b8d
+d27109312b4807","judged":"FAIL"},{"commit":"563c369e0df838e23355d5a6963b1ce8c0cd8fe8","judged":"PASS"},{"commit":"23b0
+26d4a9a22052563550c3000e8e57738b548e","judged":"none","cause":"off"},{"commit":"9ff4de666f0156f2b0b976fe1398be3ff4373e
+5c","judged":"PASS"},{"commit":"547a787dbbe99f5955a01a9b24397a9a2860c2e0","judged":"none","cause":"no_session","pusher
+":"sam"},{"commit":"7dc74b02749e9bdcf4077f7e100bf6ba37a55990","judged":"PASS"},{"commit":"04062e0ab41563939febcc761103
+3b8ee8170a45","judged":"none","cause":"tree","verdict":"PASS","verdict_commit":"ae8566b65336cbb1c563f808ac631ad573a23a
+b2"},{"commit":"36bbd4fdcc2fdeaeb3c2f5c49ce948997fca89b7","judged":"PASS"},{"commit":"cbd5e5d147c2970e5443f1ac5a7ee9ba
+da99c2bb","judged":"PASS","reverts":"23b026d4a9a22052563550c3000e8e57738b548e","counted":"never_judged"},{"missing":tr
 ue,"from":"2026-11-19","to":"2026-11-21"}]
