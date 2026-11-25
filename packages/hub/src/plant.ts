@@ -74,6 +74,8 @@ export type Plant =
   | 'dispatches-before-help'
   // #1334's: a build that judges every claim the opposite of its gate, and a hub that speaks a contract a major ahead.
   | 'judges-claims-wrongly' | 'contract-major-ahead'
+  // #999's: a hub that speaks a contract a minor ahead, so a host's deep-hook is the older side, within the contract.
+  | 'contract-minor-ahead'
   | 'evidence-checks-path-first' | 'binds-first-stamp' | 'unbound-reads-all' | 'errors-without-actual' | 'errors-unscrubbed' | 'trusts-index'
   | 'adapter-decides' | 'unknown-tool-read' | 'unplaced-is-person' | 'loop-from-origins' | 'holds-stop-anyway' | 'restores-at-session-start-only'
   | 'acts-on-peer-check' | 'off-guards-watch-only' | 'undo-reserializes' | 'gates-before-approval' | 'setup-writes-project-settings'
@@ -376,7 +378,7 @@ const PLANTS: readonly string[] = [
   'reap-session-volumes', 'teardown-closes-on-word', 'pool-asks-which-stack', 'reap-on-kill',
   'leaves-codex-session-open',
   'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
-  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline', 'kept-in-service-cgroup', 'dispatches-before-help', 'judges-claims-wrongly', 'contract-major-ahead',
+  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline', 'kept-in-service-cgroup', 'dispatches-before-help', 'judges-claims-wrongly', 'contract-major-ahead', 'contract-minor-ahead',
   'evidence-checks-path-first', 'binds-first-stamp', 'unbound-reads-all', 'errors-without-actual', 'errors-unscrubbed', 'trusts-index',
   'adapter-decides', 'unknown-tool-read', 'unplaced-is-person', 'loop-from-origins', 'holds-stop-anyway', 'restores-at-session-start-only',
   'acts-on-peer-check', 'off-guards-watch-only', 'undo-reserializes', 'gates-before-approval', 'setup-writes-project-settings',

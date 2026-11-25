@@ -153,6 +153,18 @@ function recordable(run: Run, held: string[]): { spec: Obj; withheld: string[] }
 }
 
 
+/** What the gate reads of a check's run on a host (#999): passed on a clean exit, failed on any other, missing when it never started there. */
+function hostRecord(run: Run, end: { code: number | null; failed?: string | undefined }, cut: 'stopped' | 'overran' | undefined): CommandRun {
+  const empty = sha256Hex(new Uint8Array());
+  const outcome = cut ?? (end.code === 0 ? 'passed' : end.code === null ? 'missing' : 'failed');
+  const message = outcome === 'missing' ? end.failed ?? `it never started on ${run.host!}` : `the command exited ${String(end.code)} on ${run.host!}`;
+  return {
+    run: run.run, outcome, testsRun: outcome === 'passed' ? 1 : 0, tested: false, failures: outcome === 'failed' || outcome === 'missing' ? [{ test: '(run)', file: run.check, line: 1, stack: null, assertion: false, message }] : [],
+    evidence: [], read: [], mask: null, exit: end.code === null ? null : { code: end.code, signal: null, cause: 'exit' }, output: { stdout: '', stderr: '', sha256: { stdout: empty, stderr: empty } },
+    env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0,
+  } as CommandRun;
+}
+
 export class Runs {
   /** The journal read at start, updated and durably written as a whole. */
   private journal: Record<string, Run> = {};
@@ -468,9 +480,11 @@ export class Runs {
     // A run still going at its spec's deadline is stopped and ends overran (#27), never passed or failed; the command
     // check kind holds its own runs to theirs.
     let overran = false;
-    const disarm = run.deadline && run.command === undefined ? after(run.deadline, () => { overran = true; stop(); setTimeout(() => void this.o.host().signal(run.run, 'SIGKILL').catch(() => undefined), RUN_KILL_GRACE_MS).unref(); }) : undefined;
+    const disarm = run.deadline && (run.command === undefined || run.host) ? after(run.deadline, () => { overran = true; stop(); setTimeout(() => void this.o.host().signal(run.run, 'SIGKILL').catch(() => undefined), RUN_KILL_GRACE_MS).unref(); }) : undefined;
     const done = ended.then(async ({ code, failed, missing, record }) => {
       disarm?.();
+      // A claim's check on a host (#999) has one result, its exit status there, as a command that starts no test tool has here.
+      if (run.host && run.command !== undefined) record = hostRecord(run, { code, failed }, this.o.stopping() ? 'stopped' : overran ? 'overran' : undefined);
       // What the run left behind is stopped and its leases released before its finish is recorded.
       if (this.o.plant !== 'run-spawns-itself' && !run.host) await this.o.supervisor().cleanup(run.run).catch(() => undefined);
       if (held) this.lift(run, held);
