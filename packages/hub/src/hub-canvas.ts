@@ -39,6 +39,9 @@ export interface HubCanvasOptions {
   events: { append(connection: Connection, input: EventInput): Promise<void>; connection(writer: string, extra?: Partial<Connection>): Connection; agentConnection(session: string): Connection };
   agentAbove(peer: CallContext['peer']): Promise<string | undefined>;
 }
+/** How many app connections' places are kept: one let go takes each document's newest revision again. */
+const APPS_KEPT = 16;
+
 export class HubCanvas {
   constructor(private readonly options: HubCanvasOptions) {}
   private readonly docRevisions = new Map<string, Set<string>>();
@@ -50,13 +53,22 @@ export class HubCanvas {
 
   private readonly worldFile = new WorldFile(process.env.DEEP_HUB_TEST_SHOW);
 
-  /** Each presented revision for the app, in order; an app's `canvas.drawn` takes those after the last it took. */
-  private readonly presented: Obj[] = [];
+  /**
+   * Each shown document's newest revision for the app, the last presented last, each with its place in what was presented
+   * (#1866): what an app takes as it connects, and what one that fell behind has missed.
+   */
+  private readonly presented = new Map<string, { n: number; revision: Obj }>();
+  private presentations = 0;
+  /** Every revision presented since an open app last asked: what its next `canvas.drawn` takes. Nothing while none is open. */
+  private untaken: Obj[] = [];
+  private untakenFrom = 0;
 
   /** The documents deep_show has named, each on the app's canvas panel. */
   private readonly shownDocs = new Set<string>();
+  private readonly unshown = new Set<string>();
 
-  private readonly drawnUpTo = new Map<string, number>();
+  /** How far each app connection has taken, the newest to ask last. */
+  private readonly drawnUpTo = new Map<number, number>();
 
   /** When an app last took what was presented: an app that took it within the last 250 ms is open (it asks every 100 ms), and draws it. */
   private appSeen = 0;
@@ -64,67 +76,61 @@ export class HubCanvas {
   private readonly appOpen = (): boolean => Date.now() - this.appSeen < 250;
 
   /**
-   * The record's part of the world (#1868): each ask's state and each reading's latest value by name. It is built from
-   * the record at the first canvas call and kept up from the event stream after: an appended event marks what it
-   * changed, and the next canvas call reads only that, so a call with nothing new reads no event and no ask.
+   * The record's part of the world (#1868): each ask's state and each reading's latest value, of those the canvas core's
+   * documents and calls name (#1866), by handle. Each is read from the record when first named; an appended event marks
+   * the one it changed, and the next canvas call reads only that, so a call with nothing new reads no event and no ask.
    */
   private readonly worldRecord: Obj = {};
   /** Counts each change to `worldRecord`, so the canvas core is sent the world again only when it changed. */
   private worldRev = 0;
-  /** The log position of the newest reading in `worldRecord`; undefined until the first build. */
-  private readingsAt: number | undefined;
-  private readingsBehind = false;
-  private readonly asksBehind = new Set<string>();
-  private catching: Promise<void> = Promise.resolve();
+  /** The handles read, whether or not the record held them. */
+  private readonly worldRead = new Set<string>();
+  private recording: Promise<void> = Promise.resolve();
 
   /** An event the record took: what it changes in the world is read at the next canvas call. */
   appended(input: EventInput): void {
+    // The planted world is built once: what the record gained since is never read (#1868's wrong program).
+    if (this.options.plant === 'canvas-world-built-once') return;
     const { kind, data } = input;
-    if (kind === 'reading.recorded') this.readingsBehind = true;
-    else if (kind === 'ask.created') this.asksBehind.add(input.id);
-    else if (kind === 'ask.batched') { for (const a of isObj(data) && Array.isArray(data.asks) ? data.asks : []) if (isObj(a) && typeof a.ask === 'string') this.asksBehind.add(bare(a.ask)); }
-    else if (kind === 'decision.applied') { if (isObj(data) && typeof data.ask === 'string') this.asksBehind.add(bare(data.ask)); }
-    else if ((kind.startsWith('ask.') || kind === 'default.undone' || kind === 'approval.withdrawn') && typeof input.subject === 'string') this.asksBehind.add(bare(input.subject));
+    const of = isObj(data) ? data : {};
+    if (kind === 'reading.recorded') this.worldRead.delete(String(of.reading));
+    else if (kind === 'ask.created') this.worldRead.delete(`ask:${input.id}`);
+    else if (kind === 'ask.batched') { for (const a of Array.isArray(of.asks) ? of.asks : []) if (isObj(a)) this.worldRead.delete(`ask:${bare(String(a.ask))}`); }
+    else if (kind === 'decision.applied') this.worldRead.delete(`ask:${bare(String(of.ask))}`);
+    else if ((kind.startsWith('ask.') || kind === 'card.taken_over' || kind === 'default.undone' || kind === 'approval.withdrawn') && typeof input.subject === 'string') this.worldRead.delete(`ask:${bare(input.subject)}`);
   }
 
-  /** One at a time, so two calls never read the same change twice out of order. */
-  private caughtUp(): Promise<void> {
-    this.catching = this.catching.then(() => this.catchUp(), () => this.catchUp());
-    return this.catching;
-  }
-  private async catchUp(): Promise<void> {
-    const state = (a: { session_id: string | null; status: string }) => ({ session: a.session_id, state: a.status === 'open' || a.status === 'later' ? 'needs_you' : 'done' });
-    const first = this.readingsAt === undefined;
-    // The planted world is built once: what the record gained since is never read (#1868's wrong program).
-    if (!first && this.options.plant === 'canvas-world-built-once') return;
+  /** The objects named, each read again where it changed. The canvas makes one call at a time, so no two read here at once. */
+  private async worldOf(named: ReadonlySet<string>): Promise<{ objects: Obj; rev: number }> {
+    const raw = (sql: string, ...params: string[]): Promise<unknown[]> => this.options.record().raw(sql, params);
+    const once = this.options.plant === 'canvas-world-built-once';
+    if (once) named = this.worldRev ? this.worldRead : new Set((await raw(`SELECT 'ask:' || id AS handle FROM asks UNION SELECT json_extract(data, '$.reading') FROM events WHERE kind = 'reading.recorded'`) as { handle: string }[]).map((r) => r.handle));
+    // A canvas core started again was given only what its documents name.
+    for (const h of [...this.worldRead, ...Object.keys(this.worldRecord)]) if (!named.has(h)) { this.worldRead.delete(h); delete this.worldRecord[h]; }
+    const handles = [...named].filter((h) => !this.worldRead.has(h));
     // What is marked from here on is read by the next call: an event that lands during these reads is read twice at worst.
-    const asks = first ? undefined : [...this.asksBehind];
-    this.asksBehind.clear();
-    if (first || asks!.length) {
-      const rows = (first ? await this.options.record().raw('SELECT id, session_id, status FROM asks')
-        : await this.options.record().raw('SELECT id, session_id, status FROM asks WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify(asks)])
-          // A read that fails leaves its asks marked, for the next call.
-          .catch((error: unknown) => { for (const id of asks!) this.asksBehind.add(id); throw error; })) as { id: string; session_id: string | null; status: string }[];
-      for (const a of rows) {
-        // An event that leaves an ask as it read (shown again, put off) changes nothing the canvas core is sent.
-        const was = this.worldRecord[`ask:${a.id}`] as ReturnType<typeof state> | undefined;
-        const is = state(a);
-        if (was?.state === is.state && was.session === is.session) continue;
-        this.worldRecord[`ask:${a.id}`] = is;
-        this.worldRev++;
+    for (const h of handles) this.worldRead.add(h);
+    const put = (handle: string, is: Obj): void => {
+      // An event that leaves an ask as it read (shown again, put off) changes nothing the canvas core is sent.
+      if (JSON.stringify(this.worldRecord[handle]) === JSON.stringify(is)) return;
+      this.worldRecord[handle] = is;
+      this.worldRev++;
+    };
+    try {
+      const asks = handles.filter((h) => h.startsWith('ask:')).map(bare), readings = handles.filter((h) => h.startsWith('reading:'));
+      for (const a of (asks.length ? await raw('SELECT id, session_id, status FROM asks WHERE id IN (SELECT value FROM json_each(?))', JSON.stringify(asks)) : []) as { id: string; session_id: string | null; status: string }[]) {
+        put(`ask:${a.id}`, { session: a.session_id, state: a.status === 'open' || a.status === 'later' ? 'needs_you' : 'done' });
       }
-    }
-    if (first || this.readingsBehind) {
-      this.readingsBehind = false;
-      const rows = (await this.options.record().raw("SELECT e.log_pos AS log_pos, e.session_id AS session, e.data AS data FROM events e WHERE e.kind = 'reading.recorded' AND e.log_pos > ? ORDER BY e.log_pos", [this.readingsAt ?? 0])
-        .catch((error: unknown) => { this.readingsBehind = true; throw error; })) as { log_pos: number | bigint; session: string | null; data: string }[];
-      for (const r of rows) {
+      for (const r of (readings.length ? await raw("SELECT session_id AS session, data FROM (SELECT value AS handle FROM json_each(?)) JOIN events e INDEXED BY events_reading ON e.kind = 'reading.recorded' AND json_extract(e.data, '$.reading') = handle ORDER BY e.log_pos", JSON.stringify(readings)) : []) as { session: string | null; data: string }[]) {
         const d = JSON.parse(r.data) as Obj;
-        if (typeof d.reading === 'string' && typeof d.value === 'number') this.worldRecord[d.reading] = { session: r.session, value: d.value, as_of: Number(d.as_of ?? 0) };
+        if (typeof d.value === 'number') put(String(d.reading), { session: r.session, value: d.value, as_of: Number(d.as_of ?? 0) });
       }
-      this.readingsAt = Number(rows.at(-1)?.log_pos ?? this.readingsAt ?? 0);
-      if (rows.length) this.worldRev++;
+    } catch (error) {
+      // A read that fails leaves its objects marked, for the next call.
+      for (const h of handles) this.worldRead.delete(h);
+      throw error;
     }
+    return { objects: this.worldRecord, rev: this.worldRev };
   }
 
   /**
@@ -145,8 +151,35 @@ export class HubCanvas {
     const fills = (await host?.checks() ?? []).map((c) => ({ slot: 'check.kind@1', fill: c.kind, kit: { verdict: kits.find((k) => k.fill === c.kind)?.verdict ?? null } }));
     if (fills.length) file.installed = [...(Array.isArray(file.installed) ? file.installed : []), ...fills];
     const sessions = [...this.options.sessions().values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
-    await this.caughtUp();
-    return { sessions, record: this.worldRecord, recordRev: this.worldRev, file, docs: [...this.shownDocs] };
+    return {
+      sessions, record: (named) => this.worldOf(named), file, docs: [...this.shownDocs], recorded: (doc) => this.recordedRevisions(doc),
+      text: (hash) => this.options.store().read(hash).then((bytes) => Buffer.from(bytes).toString('utf8'), () => ''),
+    };
+  }
+
+  /**
+   * A document's revisions in the record as the canvas core opens it from them after a restart (#1721). A call that drew
+   * the current revision again recorded it again; and a hub before #1721 counted from 1 after each restart, so only the
+   * last count is the document's.
+   */
+  private async recordedRevisions(doc: string): Promise<Obj[]> {
+    const rows = (await this.options.record().raw(`SELECT data FROM events WHERE kind = 'doc.patched' AND v >= 2 AND subject = ? ORDER BY log_pos`, [`doc:${doc}`])) as { data: string }[];
+    let out: (Obj & { rev: number; hash: string })[] = [];
+    for (const row of rows) {
+      const d = JSON.parse(row.data) as { rev: number; patch: string | null; writer: string; hash: string; thread: string | null };
+      const last = out.at(-1);
+      if (last?.rev === d.rev && last.hash === d.hash) continue;
+      if (last && d.rev <= last.rev) out = [];
+      out.push({ rev: d.rev, writer: `${d.writer}:${d.thread ?? d.writer}`, patch: d.patch, hash: d.hash });
+    }
+    return out;
+  }
+
+  /** A document the record holds is one the canvas core holds too, whichever call names it first (#1721); looked up once. */
+  private async named(doc: unknown): Promise<void> {
+    if (typeof doc !== 'string' || this.shownDocs.has(doc) || this.unshown.has(doc)) return;
+    if (await this.docRevision(doc)) this.shownDocs.add(doc);
+    else this.unshown.add(doc);
   }
 
   private canvas(): Canvas {
@@ -206,6 +239,7 @@ export class HubCanvas {
   }
 
   async canvasCall(call: Obj): Promise<Obj> {
+    await this.named(call.doc);
     return (await this.canvas().call(await this.canvasWorld(), call)).reply;
   }
 
@@ -263,7 +297,8 @@ export class HubCanvas {
     if (ofHub) { const { claim: _claim, ...rest } = call; call = rest; }
     const { reply: drawn, presented } = await this.canvas().call(world, { call: name, ...via, ...call });
     const reply = game.assets.length ? { ...drawn, assets: game.assets } : drawn;
-    if (presented) await this.recordRevision(as, presented, reply);
+    // In the canvas core's order: the record's order is the one a restart opens the document in (#1721).
+    if (presented) await (this.recording = this.recording.catch(() => undefined).then(() => this.recordRevision(as, presented, reply)));
     // A claim the world file defines keeps the canvas core's verdict on its deliverables (#393 AC3, which #806's
     // replay holds the hub to): that verdict is the check the core just ran, and no spec gives the claim a run (#3044).
     const fixture = typeof call.claim === 'string';
@@ -394,12 +429,12 @@ export class HubCanvas {
     await this.options.events.append({ ...connection, ...(agent ? { agent } : {}) }, {
       v: 2, id: ulid(ts), kind: 'doc.patched', ts, subject: `doc:${String(p.doc)}`, evidence: [hash],
       data: {
-        doc: `doc:${String(p.doc)}`, rev: Number(p.rev), patch: null, writer: writer.kind,
-        achieved: { created: {}, updated: count('changed'), deleted: {}, unchanged: count('changed') + count('created') + count('removed') === 0 },
+        doc: `doc:${String(p.doc)}`, rev: Number(p.rev), patch: typeof p.patch === 'string' ? p.patch : null, writer: writer.kind,
+        achieved: isObj(reply.achieved) ? reply.achieved : { created: {}, updated: count('changed'), deleted: {}, unchanged: count('changed') + count('created') + count('removed') === 0 },
         hash, layer: String(p.layer), thread: writer.kind === 'agent' ? writer.id : null,
       } as JsonValue,
     });
-    this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
+    this.present({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
     if (writer.kind === 'agent') await this.plantedFigure(String(p.doc), Number(p.rev), hash);
     await this.staleOnRevision(String(p.doc), { rev: Number(p.rev), hash });
   }
@@ -416,6 +451,7 @@ export class HubCanvas {
   /** The canvas verdict for a claim holding just this document check, with the revision in its key. */
   async documentCheck(run: { run: string; check: string; claim: string }, spec: DocSpec): Promise<CheckResult & { stdout: string }> {
     const [owner] = (await this.options.record().raw(`SELECT session_id FROM claims WHERE id = ?`, [run.claim.slice(6)])) as { session_id: string | null }[];
+    await this.named(spec.doc);
     const world = await this.canvasWorld();
     const handle = `${run.claim}#${run.check}`;
     world.file = { ...world.file, claims: { ...(isObj(world.file.claims) ? world.file.claims : {}), [handle]: canvasClaim(owner?.session_id ?? '', run.check, spec) } };
@@ -432,6 +468,8 @@ export class HubCanvas {
   }
   /** The revisions this claim's document checks read, retained for its verdict's key. */
   revisionsOf(claim: string): ReadonlySet<string> | undefined { return this.docRevisions.get(claim); }
+  /** A claim let go (#1866): the revisions its checks read are its verdict's, in the record. */
+  letGo(claim: string): void { this.docRevisions.delete(claim); }
   /** A new revision makes verdicts keyed by another revision stale. */
   private async staleOnRevision(doc: string, at: Revision): Promise<void> {
     const rows = (await this.options.record().raw(`SELECT v.handle AS verdict, f.value AS line FROM verdicts v JOIN json_each(v.key, '$.doc_revisions') f WHERE v.stale = 0 AND f.value LIKE ?`, [`doc:${doc}@%`])) as { verdict: string; line: string }[];
@@ -490,13 +528,35 @@ export class HubCanvas {
     return this.canvasCall(call);
   }
 
-  /** What the app has yet to draw: every revision presented after the last it took. */
+  /** A revision for the app to draw: its document's newest, and one more an open app takes. */
+  private present(revision: Obj): void {
+    if (!this.appOpen()) {
+      this.untaken = [];
+      this.untakenFrom = this.presentations;
+    }
+    const doc = String(revision.doc);
+    this.presented.delete(doc);
+    this.presented.set(doc, { n: ++this.presentations, revision });
+    if (this.appOpen()) this.untaken.push(revision);
+    else this.untakenFrom = this.presentations;
+  }
+
+  /**
+   * What the app has yet to draw: every revision presented since it last asked; or, as it connects or once it fell
+   * behind, the newest of each document it hasn't taken, never the history (#1866).
+   */
   drawnBy(context: CallContext): Obj {
     this.appSeen = Date.now();
-    const key = context.role;
-    const from = this.drawnUpTo.get(key) ?? 0;
-    this.drawnUpTo.set(key, this.presented.length);
-    return { presented: this.presented.slice(from) };
+    const app = context.conn ?? 0;
+    const from = this.drawnUpTo.get(app) ?? -1;
+    this.drawnUpTo.delete(app);
+    this.drawnUpTo.set(app, this.presentations);
+    for (const oldest of this.drawnUpTo.keys()) { if (this.drawnUpTo.size <= APPS_KEPT) break; this.drawnUpTo.delete(oldest); }
+    if (from === this.presentations) return { presented: [] };
+    const presented = from === this.untakenFrom ? this.untaken : [...this.presented.values()].filter((p) => p.n > from).map((p) => p.revision);
+    this.untaken = [];
+    this.untakenFrom = this.presentations;
+    return { presented };
   }
   close(): void { this.canvasCore?.close(); }
 }

@@ -1,0 +1,24 @@
+== #3088 e2e on Darwin arm64, 2026-11-23 16:35 PST
+== HEAD bf98d0a8a Part of #3088: twins for the macOS tests and the shipped-manifest check
+== node v24.22.0
+== deep-conformance gate check
+PASS gate@1 corpus: 52 cases
+== platform packages each world gets (makeWorld, as gate run builds it)
+reporting-vitest-setup: manifest lists 36 installs, 0 of them os/cpu-marked
+  world has node_modules/@rolldown/binding-darwin-arm64  (lockfile os=["darwin"] cpu=["arm64"])
+  world has node_modules/fsevents  (lockfile os=["darwin"] cpu=null)
+  world has node_modules/lightningcss-darwin-arm64  (lockfile os=["darwin"] cpu=["arm64"])
+reporting-rewrite-on-import: manifest lists 36 installs, 0 of them os/cpu-marked
+  world has node_modules/@rolldown/binding-darwin-arm64  (lockfile os=["darwin"] cpu=["arm64"])
+  world has node_modules/fsevents  (lockfile os=["darwin"] cpu=null)
+  world has node_modules/lightningcss-darwin-arm64  (lockfile os=["darwin"] cpu=["arm64"])
+== verdicts each case expects (manifest.json); the kit prints PASS when a play gets its expected verdict
+  reporting-vitest-setup: claim INCONCLUSIVE|INVALID, twin PASS
+  reporting-rewrite-on-import: claim INVALID, twin PASS
+== deep-conformance gate run reporting-vitest-setup reporting-rewrite-on-import
+PASS reporting-rewrite-on-import claim: INVALID — .deepbuild/checks/discount.sh: can't fail: the report can't record a failure: its control deepbuild 
+PASS reporting-vitest-setup twin: PASS — .deepbuild/checks/discount.sh: PASS on 1 clean run
+PASS reporting-vitest-setup claim: INCONCLUSIVE — req:session6ed8aa0a473440f1bc1ec45b22dfc8460#R1 is covered at depth unit only by the agent's own che
+PASS reporting-rewrite-on-import twin: PASS — .deepbuild/checks/discount.sh: PASS on 1 clean run
+PASS gate@1: 2 cases
+== exit 0

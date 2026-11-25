@@ -1,0 +1,210 @@
+{
+ "format": 1,
+ "profile": "scene",
+ "title": "Exponential squared fog over a row of posts under a sun",
+ "description": "Exponential squared fog over a row of posts under a sun: a #3032 evidence scene.",
+ "size": [
+  1280,
+  720
+ ],
+ "camera": "camera.camera",
+ "requires": {
+  "modules": {
+   "scene3d": "^1"
+  }
+ },
+ "packs": [
+  "deepbuild/familiar@1.1.0"
+ ],
+ "items": {
+  "camera": {
+   "id": "camera",
+   "name": "camera",
+   "order": "a000",
+   "kind": "familiar.perspective_camera@1",
+   "params": {
+    "fov": 45,
+    "aspect": 1.7777777777777777,
+    "near": 0.1,
+    "far": 200,
+    "position": [
+     0,
+     2.2,
+     7
+    ],
+    "rotation": [
+     -6,
+     0,
+     0
+    ]
+   }
+  },
+  "sun": {
+   "id": "sun",
+   "name": "sun",
+   "order": "a001",
+   "kind": "familiar.directional_light@1",
+   "params": {
+    "color": 16777215,
+    "intensity": 3,
+    "position": [
+     3,
+     6,
+     6
+    ],
+    "target": [
+     0,
+     0,
+     -6
+    ]
+   }
+  },
+  "fog": {
+   "id": "fog",
+   "name": "fog",
+   "order": "a002",
+   "kind": "familiar.fog_exp2@1",
+   "params": {
+    "color": 13161180,
+    "density": 0.07
+   }
+  },
+  "ground": {
+   "id": "ground",
+   "name": "ground",
+   "order": "a003",
+   "kind": "familiar.box@1",
+   "params": {
+    "width": 14,
+    "height": 0.2,
+    "depth": 60,
+    "position": [
+     0,
+     -0.1,
+     -20
+    ]
+   },
+   "material": "floor.material"
+  },
+  "floor": {
+   "id": "floor",
+   "name": "floor",
+   "order": "a004",
+   "kind": "familiar.lambert_material@1",
+   "params": {
+    "color": 9211798
+   }
+  },
+  "lambert": {
+   "id": "lambert",
+   "name": "lambert",
+   "order": "a005",
+   "kind": "familiar.lambert_material@1",
+   "params": {
+    "color": 14700604
+   }
+  },
+  "post_0": {
+   "id": "post_0",
+   "name": "post_0",
+   "order": "a006",
+   "kind": "familiar.box@1",
+   "params": {
+    "width": 1,
+    "height": 2.4,
+    "depth": 1,
+    "position": [
+     -1.6,
+     1.2,
+     0
+    ]
+   },
+   "material": "lambert.material"
+  },
+  "post_1": {
+   "id": "post_1",
+   "name": "post_1",
+   "order": "a007",
+   "kind": "familiar.box@1",
+   "params": {
+    "width": 1,
+    "height": 2.4,
+    "depth": 1,
+    "position": [
+     1.6,
+     1.2,
+     -4
+    ]
+   },
+   "material": "lambert.material"
+  },
+  "post_2": {
+   "id": "post_2",
+   "name": "post_2",
+   "order": "a008",
+   "kind": "familiar.box@1",
+   "params": {
+    "width": 1,
+    "height": 2.4,
+    "depth": 1,
+    "position": [
+     -1.6,
+     1.2,
+     -8
+    ]
+   },
+   "material": "lambert.material"
+  },
+  "post_3": {
+   "id": "post_3",
+   "name": "post_3",
+   "order": "a009",
+   "kind": "familiar.box@1",
+   "params": {
+    "width": 1,
+    "height": 2.4,
+    "depth": 1,
+    "position": [
+     1.6,
+     1.2,
+     -12
+    ]
+   },
+   "material": "lambert.material"
+  },
+  "post_4": {
+   "id": "post_4",
+   "name": "post_4",
+   "order": "a010",
+   "kind": "familiar.box@1",
+   "params": {
+    "width": 1,
+    "height": 2.4,
+    "depth": 1,
+    "position": [
+     -1.6,
+     1.2,
+     -16
+    ]
+   },
+   "material": "lambert.material"
+  },
+  "post_5": {
+   "id": "post_5",
+   "name": "post_5",
+   "order": "a011",
+   "kind": "familiar.box@1",
+   "params": {
+    "width": 1,
+    "height": 2.4,
+    "depth": 1,
+    "position": [
+     1.6,
+     1.2,
+     -20
+    ]
+   },
+   "material": "lambert.material"
+  }
+ }
+}

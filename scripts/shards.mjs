@@ -28,6 +28,8 @@ const freeBytes = () => {
 };
 /** Whether a shard may take its next group: the disk still holds a shard's growth above the floor. */
 export const roomy = () => freeBytes() - SHARD_BYTES >= FLOOR;
+/** The free disk a run holding `count` shards is admitted on (#3221): each one's growth above the floor, or none. */
+export const shardsRoom = (count) => (count ? FLOOR + count * SHARD_BYTES : 0);
 const startOf = (pid) => spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } }).stdout.trim();
 const MAC = process.platform === 'darwin';
 // Copy-on-write: macOS's cp -c clones on APFS, one clone per file; GNU cp's --reflink=auto clones where the file system

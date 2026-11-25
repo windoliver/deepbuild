@@ -102,6 +102,7 @@ use crate::*;
 
 pub(crate) mod debug;
 mod kept; // DeepBuild patch (windoliver/deepbuild#1482)
+mod unseen; // DeepBuild patch (windoliver/deepbuild#3232)
 pub(crate) use kept::Kept;
 #[cfg(feature = "test-support")]
 pub use kept::reuse_plainly;
@@ -155,6 +156,7 @@ pub(crate) struct A11y {
     pub(crate) action_listeners: FxHashMap<NodeId, Vec<(Action, A11yActionListener)>>,
     /// DeepBuild patch (windoliver/deepbuild#1482): the frame before's listeners, which a reused cached view takes back.
     pub(crate) kept_listeners: FxHashMap<NodeId, Vec<(Action, A11yActionListener)>>,
+    unseen: unseen::Unseen, // DeepBuild patch (windoliver/deepbuild#3232)
     /// The window's title, used to label the root node so assistive
     /// technology can tell windows apart.
     window_title: Option<SharedString>,
@@ -184,6 +186,7 @@ impl A11y {
             node_bounds: FxHashMap::default(),
             action_listeners: FxHashMap::default(),
             kept_listeners: FxHashMap::default(), // DeepBuild patch (windoliver/deepbuild#1482)
+            unseen: Default::default(), // DeepBuild patch (windoliver/deepbuild#3232)
             window_title,
             last_focus_without_node: None,
             debug: debug::A11yDebug::default(),

@@ -419,6 +419,7 @@ fn window_maps(sha: String, inset: InsetMap) -> Arc<Maps> {
             transform: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
             wrap: [Wrap::Clamp; 2],
             taps: Some(1),
+            chain: None,
         }),
         metallic_roughness: None,
         normal: None,

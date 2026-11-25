@@ -222,6 +222,14 @@ impl Hub<'_> {
         (quantize.is_some() || blur.is_some()).then_some(Exposure { quantize, blur })
     }
 
+    /// #231: whether an export frame of `doc` is its look's exposure of several drawn frames
+    /// ([`Hub::exposed_frame`]), which is drawn whole and never held.
+    pub(crate) fn exposes(&self, sched: &Scheduler<'_>, session: &DocSession, doc: &Value) -> bool {
+        let rate = crate::film::program_of(sched, session).map(|p| p.motion.frame_rate);
+        !deep_canvas_scene3d::scene::has_3d(doc)
+            && rate.and_then(|r| self.exposure_of(doc, r)).is_some()
+    }
+
     /// The export frame at `t` under the look's exposure (Motion blur): its samples at the frame's
     /// time after the look's quantize, each with its shutter offset after that quantize, averaged
     /// in linear light; one frame drawn at `t` when the look has neither.

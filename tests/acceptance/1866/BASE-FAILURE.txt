@@ -1,0 +1,73 @@
+# #1866 acceptance tests on the base commit 7cb1e5c4a62cd797b00839bb2c27d730937303f6, 2026-11-24, Node v24.22.2, on the
+# shared Mac this job ran on (Mac17,10, Apple M5 Max, one-minute load about 130 during the first runs and 44 at AC3's).
+# Paths under the worktree read <repo>. Every run went through a test grant of the machine's throttle.
+#
+# The builds were put in the worktree for this job, not made by it: packages/*/dist (from the base's sources, dated
+# 00:06; its canvas.drawn hands over the history and it knows none of the plants) and target/debug/deep-hook. The first
+# target/debug/deep-show was older than the base's #1721 (4ec14e4f2). AC3's recorded run used one built after it, copied in
+# from the change's checkout: the hub is the base's, the canvas core is not the base's own build.
+#
+# presented.test.ts ran twice: first on the stale core, stopped at its own setup check at revision 41 ("BLOCKED: revision 41
+# ... is presented": the core that started again counted from 1, as one before #1721 does), then as below. Between them its
+# waits, and released.test.ts's, were reworked (scripts/wait-ratchet.mjs), no assertion changed; released.test.ts and the
+# others ran once, before.
+#
+# Run: released.test.ts and presented.test.ts whole, the planted tests of sessions.test.ts and killed.test.ts. Not run, as
+# the base plainly has none of their surface (below) and each takes 10 minutes or more: the unplanted runs of
+# sessions.test.ts and killed.test.ts, claims.test.ts, and budgets.long.test.ts (by hand, on a reference Mac in a fit state).
+
+## node node_modules/typescript/bin/tsc -p tests/acceptance/1866/tsconfig.json    (exit 0)
+
+## What the base lacks, read statically
+# grep -c "deep_show\|PermissionRequest\|commit.made\|killed'" benchmarks/hub-churn.mjs   -> 0
+# grep -c "<the six plant names>" packages/hub/src/plant.ts                              -> 0
+# So the base's benchmark makes no claim, revision, permission prompt, held plug-in action, commit or killed session, and
+# the record part of claims.test.ts, sessions.test.ts and killed.test.ts fails at its first part ("every cycle has an edit
+# ..., 200 of 200 don't"; "... a stop that carried usage"; "the reading says its sessions were killed").
+
+## AC4: npx vitest run released.test.ts --root tests/acceptance/1866 --no-file-parallelism --testTimeout=1800000    (exit 1, 11 s)
+ ✓ AC4 #1866.6741c6f2 a claim judged to PASS reads the same once its session is forgotten as it did while it lived 9771ms
+ × AC4 #1866.6741c6f2 claim-reads-only-memory, a hub that reads a claim's verdicts and runs only from memory, reads nothing once its state is let go, and the judge names the claim 419ms
+AssertionError: the hub starts with the planted program DEEP_HUB_PLANT=claim-reads-only-memory: expected 'BLOCKED: the hub with the plant DEEP_…' to be 'started' // Object.is equality
+- Expected
++ Received
+- started
++ BLOCKED: the hub with the plant DEEP_HUB_PLANT=claim-reads-only-memory did not start: file://<repo>/packages/hub/dist/plant.js:145
++         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+# The first test holds today's behavior (the base reads a claim from its record) and passes; the plant is the wrong
+# program it names.
+
+## AC3: npx vitest run presented.test.ts --root tests/acceptance/1866 --no-file-parallelism --testTimeout=1800000 --disable-console-intercept    (exit 1, 77 s)
+#1866 AC3: 1000 revisions presented in 75 s
+     × AC3 #1866.41fcb862 the app's first canvas.drawn returns one entry of the document, its newest revision, beside the one of a document shown after it; then only what is presented later 76406ms
+AssertionError: the app's first canvas.drawn returns 01M86C3MEQ00000000A1E3SY3J's newest revision only; it returned 1000 entries of it, revisions 1, 2, 3 … 1000: expected 1000 to be 1 // Object.is equality
+- Expected
++ Received
+- 1
++ 1000
+ ❯ presented.test.ts:76:208
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  76.62s
+# The base is the criterion's wrong program: it hands over the history, 1,000 entries. The record's 1,000 doc.patched, read
+# before the app connects, passed, so the world really presented them.
+
+## AC5's plants: npx vitest run sessions.test.ts -t 'fails it' --root tests/acceptance/1866 --no-file-parallelism    (exit 1, 3 s)
+ × AC5 #1866.02eae137 churn-keeps-usage-tail fails it
+AssertionError: a planted run is measured, never BLOCKED: a hub that doesn't know DEEP_HUB_PLANT=churn-keeps-usage-tail stops at its start: expected [ Array(1) ] to deeply equal []
+- []
++ [
++   "BLOCKED hub churn: the hub exited 1: Debugger listening on ws://127.0.0.1:54250/...",
++ ]
+ × AC5 #1866.02eae137 churn-keeps-prompt-ask fails it
+AssertionError: a planted run is measured, never BLOCKED: a hub that doesn't know DEEP_HUB_PLANT=churn-keeps-prompt-ask stops at its start: expected [ Array(1) ] to deeply equal []
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 skipped (3)
+
+## AC6's plant: npx vitest run killed.test.ts -t 'fails it' --root tests/acceptance/1866 --no-file-parallelism    (exit 1, 2 s)
+ × AC6 #1866.96583dcb churn-keeps-gone-routes, a hub that keeps a gone session's routes, fails it 704ms
+AssertionError: a planted run is measured, never BLOCKED: a hub that doesn't know DEEP_HUB_PLANT=churn-keeps-gone-routes stops at its start: expected [ Array(1) ] to deeply equal []
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)

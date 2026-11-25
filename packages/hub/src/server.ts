@@ -61,6 +61,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.health', ['app', 'cli', 'person']], ['health', ['app', 'cli', 'person']], ['events.read', ['app', 'cli', 'person']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['ask.confirm', ['app']], ['views.installed', ['app']], ['command.run', ['app']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli', 'person']], ['session.page', ['app', 'cli', 'person']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
+  // One slice of what a handle names, or one find, for a session whose sandbox closes the evidence store (#3229).
+  ['handle.read', ['cli']],
   ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['race.start', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['ask.take_over', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
@@ -84,7 +86,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
-  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['extension.restart', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
+  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['lease.gpu', ['cli']], ['lease.release', ['cli']], ['extension.install', ['cli']], ['extension.restart', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['mcp.tools', ['mcp']], ['evidence.paste', ['app']], ['eval.report', ['cli']],
   // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
   ['wiki.build', ['cli']], ['setup.report', ['cli']],
@@ -183,7 +185,7 @@ interface CoreLink {
 /** A frame from the core: its event's JSON text, or, `caught` set, the head its subscriber's replay reached (#1575). */
 type OnFrame = (sub: string, event: string, caught?: boolean) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void, onForgot: (session: string) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options }, resourceLimits: YOUNG });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
@@ -194,6 +196,7 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
     if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? [], m.resend ?? [], m.cantRun ?? []);
     if (m.op === 'acking') return onAcking(m.session!);
     if (m.op === 'scrub') return onScrub(m.values ?? []);
+    if (m.op === 'forgot') return onForgot(m.session!);
     if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
     if (m.op === 'fatal') return onFatal(m.message!);
     const waiting = pending.get(m.n!);
@@ -213,10 +216,10 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void, onForgot: (session: string) => void): Promise<CoreLink> {
   const { createCore } = await import('./hub-runtime.js');
   const { answer, asRefusal } = await import('./core-worker.js');
-  const core = createCore(options, onFrame, onAsking, onAcking, onScrub);
+  const core = createCore(options, onFrame, onAsking, onAcking, onScrub, onForgot);
   const started = core.started().then(() => ({ hooks: core.hooks() }));
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {
@@ -366,13 +369,18 @@ class Hub {
     const asking = (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => { this.asking = new Set(sessions); this.worked = new Set(judged); this.resend = new Set(resend); this.cantRun = new Set(cantRun); };
     const acking = (session: string) => { this.acking.add(session); };
     const scrub = (values: string[]) => { this.parsers.scrub(values); };
+    // A session that sends no more hooks, or whose next one is a resume's (#1866): nothing of it stays here.
+    const forgot = (session: string) => {
+      for (const of of [this.lastFailed, this.rulesHeard, this.acking, this.resend, this.worked, this.sawWork, this.asking, this.inPaseo]) of.delete(session);
+      this.waits.forget(session);
+    };
     // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
     // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
     this.identity = identityAt(join(this.root.dir, 'hub.key'), 'deep-hub');
     // The planted hub of #1334 speaks a contract one major ahead, so this checkout's deep-hook is the older side.
     const contract = this.plant === 'contract-major-ahead' ? `${Number(CONTRACT.split('.')[0]) + 1}.0` : CONTRACT;
     this.helloLine = line({ hello: 'deep-hub', start: this.start, contract, features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
-    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub) : coreWorker(options, frame, fatal, asking, acking, scrub);
+    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub, forgot) : coreWorker(options, frame, fatal, asking, acking, scrub, forgot);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant, this.root.dir) : parserPool(held, this.plant, this.root.dir);
     // Read once before any hook, so a rules.json spoiled later can be written again as it was.
     this.rules();
@@ -1328,7 +1336,7 @@ class Hub {
         {
           const call = method === 'mcp.call' ? `${conn.id}:${String(id)}` : undefined;
           if (call) conn.calls.add(call);
-          const work = this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}), ...(call ? { call } : {}) } });
+          const work = this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}), ...(call ? { call } : {}), ...(method === 'canvas.drawn' ? { conn: conn.id } : {}) } });
           return void reply(call ? work.finally(() => conn.calls.delete(call)) : work);
         }
     }

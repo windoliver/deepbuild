@@ -1,0 +1,132 @@
+The #3035 suite run at base commit c7dc0edc3690706adb84d678806301c3d14456ca (no implementation of #3035), on
+November 22, 2026, on macOS 27.2 arm64 (shared; 1-minute load between 42 and 130 while it ran), Node 24.22.2,
+vitest 5.0.5, TypeScript 5.9.3, cargo and rustc 1.99.1. The base's build was made first, through the one build slot,
+by the caller's queued job (its log ends `exit 0`): `npm run build --workspaces`, `cargo build --locked -j 6 -p
+deep-hook` and `cargo build --locked -j 6 -p deep-physics-rapier --bin deep-physics` (debug). This job ran no cargo
+build and no `npm run build` of its own; the suite's own cargo call (#191's `shipped` build) found deep-physics made
+and copied it.
+
+The type-check first:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/3035/tsconfig.json          (exit 0, no error)
+
+then the whole suite, once, in one test grant:
+
+  PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH" NO_COLOR=1 CARGO_INCREMENTAL=0 \
+    CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs test --wait 180 -- sh scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/3035 --no-file-parallelism --testTimeout=600000
+
+(`scripts/lease` said the command runs with no lease: no hub of the caller's answers here. That is expected.)
+
+Result: Test Files 6 failed (6); Tests 11 failed (11); 31.5 s. Every test fails at an assertion in its own test
+file because the base lacks what its criterion asks: the kind `import` lists no tool that converts a robot
+description. None fails in a helper, at an import or at a timeout, none is BLOCKED or INCONCLUSIVE, and no test
+passes at the base. No file was run a second time. No test, helper, model or fixture was changed after the run;
+the README's one sentence on why the dynamic solver isn't used to sweep was reworded, and this file was written.
+
+The base's answer, the same in every test (helpers.ts `openHub`, after `deep install packages/jobs/import` exits 0
+and deep_job lists the kind):
+  the kind import lists 0 tools whose name starts urdf, not one (README: The surface under test); its tools:
+  lottie-import@1.0.0
+
+ac1-arm.test.ts (#3035.e8200294)
+ × a two-link arm, each link 0.5 m, with revolute joints limited to ±1.5708 rad converts to two hinges limited to
+   ±90.000° within 0.001°, and with both joints at 30° the tip is at (0.683, 0.683) m from the base in the arm's
+   plane within 1e-6 m, read from evaluated data
+   ac1-arm.test.ts:62  AssertionError: deep_job converts arm.urdf (import {from: urdf}): expected 'the kind import
+   lists 0 tools whose n…' to be ''
+   Before that line the test's own part passed, as it should at the base, and none of it is the work's: the model's
+   numbers by hand and its wrong twin; arm.urdf holds what the model works from; and on the base's deep-physics
+   the measure reads the arm written by hand in our units with no failure, and fails it with the elbow's or the
+   shoulder's axis flipped, naming that joint and not the other.
+ × (planted: flips_one_joint_axis) a planted conversion that flips one joint's axis puts the tip elsewhere and
+   fails, naming the joint
+   ac1-arm.test.ts:74  AssertionError: deep_job converts arm.urdf (import {from: urdf}), which the planted tool runs
+   first: expected 'the kind import lists 0 tools whose n…' to be ''
+
+ac2-axes.test.ts (#3035.b3b50392)
+ × a link 1 m up the file's Z stands at y = 1 m, and a link with mass 2 kg and a stated inertia keeps both within
+   1e-9 after the change of axes
+   ac2-axes.test.ts:56  AssertionError: deep_job converts axes.urdf (import {from: urdf}): expected 'the kind import
+   lists 0 tools whose n…' to be ''
+   Before that line the test's own part passed: the model's numbers by hand, the rotation's wrong twin, and the
+   base's check accepting the rig written by hand in our units.
+ × (planted: copies_poses_as_written) a planted conversion that copies poses as written fails, naming the link
+   ac2-axes.test.ts:70  AssertionError: deep_job converts axes.urdf (import {from: urdf}), which the planted tool
+   runs first: expected 'the kind import lists 0 tools whose n…' to be ''
+
+ac3-sweep.test.ts (#3035.2a1744e4)
+ × each joint swept from its lower to its upper limit keeps every anchor pair within 1 mm, as
+   physics.articulation_gap requires, and a prismatic joint limited to 0.2 m travels 0.2 m
+   ac3-sweep.test.ts:55  AssertionError: deep_job converts lift.urdf (import {from: urdf}): expected 'the kind
+   import lists 0 tools whose n…' to be ''
+   Before that line the test's own part passed: on the base's deep-physics the lift written by hand is accepted at
+   check and its sweep of 42 positions reads no failure, and the same lift with its rail limited to 0.1 m fails,
+   naming the rail and its travel.
+
+ac4-dropped.test.ts (#3035.0abd59c7)
+ × a fixture with a mimic joint, a transmission and a sensor converts, and dropped holds exactly those three rows
+   ac4-dropped.test.ts:49  AssertionError: deep_job converts gripper.urdf (import {from: urdf}): expected 'the kind
+   import lists 0 tools whose n…' to be ''
+   Before that line the test's own part passed: gripper.urdf holds its seven tags, and the comparison passes the
+   three rows in any order and fails one fewer, one more and one twice.
+ × (planted: drops_one_silently) a planted job that drops one silently fails, naming the element
+   ac4-dropped.test.ts:59  AssertionError: deep_job converts gripper.urdf (import {from: urdf}), which the planted
+   tool runs first: expected 'the kind import lists 0 tools whose n…' to be ''
+
+ac5-refusals.test.ts (#3035.a4b3d8f2)
+ × a file that includes a macro is refused before anything is written, naming the element
+   ac5-refusals.test.ts:38  AssertionError: a hub with the import plug-in, whose kind lists the tool that converts:
+   expected 'the kind import lists 0 tools whose n…' to be ''
+ × a mesh path outside the job's inputs is refused, naming the path
+   ac5-refusals.test.ts:54  AssertionError: a hub with the import plug-in, whose kind lists the tool that converts:
+   expected 'the kind import lists 0 tools whose n…' to be ''
+
+ac6-same-bytes.test.ts (#3035.36c146dd)
+ × the same file converts to the same bytes twice
+   ac6-same-bytes.test.ts:33  AssertionError: deep_job converts arm.urdf in the first hub (import {from: urdf}):
+   expected 'the kind import lists 0 tools whose n…' to be ''
+ × a rerun with the same inputs is a cache hit that starts no process
+   ac6-same-bytes.test.ts:48  AssertionError: deep_job converts arm.urdf (import {from: urdf}): expected 'the kind
+   import lists 0 tools whose n…' to be ''
+
+What was checked on the base's binaries before the suite's run, so that a test fails there only for what its
+criterion asks. Each was a scratch probe outside this folder, run once, the two that start a hub or the runner each
+in a test grant; none is part of the suite and none of it is credited to the work.
+
+- The model in Node: with both joints at 30° the tip is 0.6830127018922193 m on each axis of the plane, 1.27e-5 m
+  from the printed 0.683; each joint alone gives (0.8660254, 0.5) and (0.9330127, 0.25) m; a flipped elbow
+  (0.9330127, 0.25) m and a flipped shoulder (0.9330127, −0.25) m; 1.5708 rad is 90.00021045914971°; the moments
+  (0.02, 0.06, 0.07) are (0.02, 0.07, 0.06) under −90° about X; and each of arm.urdf, axes.urdf and lift.urdf holds
+  every tag and number the model works from.
+- deep-physics, on the worlds model.ts writes by hand: `check` accepts the arm, the rig and the lift (no error; one
+  `physics.small_body` warning each for the arm's `tip` and the lift's `hand`). The arm's three placements read
+  the tip 1.04e-7, 9.6e-8 and 1.02e-7 m from the closed form, inside 1e-6 m, and each joint's `joint_coordinate`
+  within 4e-6° of the 30° it was set to. With the elbow's axis flipped the tip with both joints at 30° reads
+  (0.9330126, 0.25) m and the failures start `tip: ` and `elbow: `; with the shoulder's, `tip: ` and `shoulder: `.
+  The lift's sweep reads no failure: the rail's coordinate runs 0 to 0.19999997 m and `sled` from y = 0.1 to
+  y = 0.29999998 m; the wrist's runs −90.0002125° to 90.0002125°. The rig with `mast` written 2 mm off its anchor
+  is refused with `physics.articulation_gap` at `joints/post/frame_b/anchor`, 2.000 mm, and with `mast` copied as
+  the file writes it, at (0, 0, 1), with the same code, 1414.214 mm: the rule criterion 3 names reads the written
+  poses against the frames.
+- A hub: `deep install packages/jobs/import` exits 0 and deep_job lists the kind `import` with
+  `lottie-import@1.0.0` alone. A run with params `{"from":"urdf"}` answers `{"status": "refused", "reason":
+  "import's params: the params don't hold to the kind's params schema: /from enum"}` and starts no process, which
+  this suite's refusal judge fails for naming no element. The Lottie tool still runs: its fixture file is `done`
+  with a document, a report and a look, and the store's listing goes from no file to those three.
+- The planted plug-in, made by helpers.ts `plantedPlugin` around the Lottie tool's own registration (read by
+  `registeredTools` from the plug-in's default export): `runs-as-is@1.0.0` installs (exit 0) and deep_job lists it
+  beside `lottie-import@1.0.0`, so a tool that runs the right tool's entry from the planted entry, in the tool's
+  sandbox, qualifies on the kind's fixtures byte for byte. `flips-one-joint-axis@1.0.0` around the Lottie tool
+  installs too, as it should: a Lottie document holds no joint `elbow`, and a planted program hands on every
+  output it isn't wrong about as it was.
+- The judges that read a converted document, on documents written by hand from the model: the axes judge passes
+  the rig under a rotation stated as a quaternion and as `[-90, 0, 0]` degrees, and fails it with `mast` first
+  once `copies_poses_as_written` has run on it, with an item missing, a mass of 2.000001 kg, and moments left as
+  (0.02, 0.06, 0.07); a rotation that takes +Z to −Y, a report with none and degrees about two axes
+  (`INCONCLUSIVE:`) are each refused; a hinge left in radians, a joint not articulated, `dropped` one row short
+  after `drops_one_silently`, and a continuous joint given limits each fail naming their joint or row.
+
+What can't be run at the base: everything after each test's conversion (the converted documents, the planted
+tools' installs against a kind that holds the three fixtures, the two refusals, the two hubs' bytes), since no tool
+converts. Those lines are covered above only by the hand-written stand-ins.

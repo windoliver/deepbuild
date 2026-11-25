@@ -274,11 +274,19 @@ fn closed(events: &[serde_json::Value], handle: &str) -> Option<String> {
         })
         .map(|at| copy::fill("open.at", &[&at.format("%H:%M")]))
         .unwrap_or_default();
-    let through = match end["data"]["via"].as_str() {
-        Some("card") => copy::text("open.in_the_app").to_owned(),
-        Some("inbox") => copy::text("open.from_inbox").to_owned(),
-        Some(via) => copy::fill("open.through", &[&via]),
-        None => String::new(),
+    // A taste call answered where none of the pictures it judges was drawn says so (#3234); #3234's planted page reads it
+    // as an answer from the card.
+    let unseen = end["data"]["pictures"].as_array().is_some_and(|pictures| {
+        !pictures.is_empty() && pictures.iter().all(|picture| picture["shown"] != true)
+    }) && !crate::plain::planted("unseen-reads-as-card");
+    let through = match (end["data"]["via"].as_str(), unseen) {
+        (Some("card"), false) => copy::text("open.in_the_app").to_owned(),
+        (Some("card"), true) => copy::text("open.in_the_app_unseen").to_owned(),
+        (Some("inbox"), false) => copy::text("open.from_inbox").to_owned(),
+        (Some("inbox"), true) => copy::text("open.from_inbox_unseen").to_owned(),
+        (Some(via), false) => copy::fill("open.through", &[&via]),
+        (Some(via), true) => copy::fill("open.through_unseen", &[&via]),
+        (None, _) => String::new(),
     };
     // What the approved step did once it ran, from its call's own records (#2029).
     let receipt = crate::codes::receipt(events, handle)
@@ -501,6 +509,7 @@ fn show(address: &Address, window: &mut Window, cx: &mut App) -> Result<Address,
         notice,
     };
     if changed {
+        crate::find::close(window, cx);
         selection(cx).opened_at = views::now();
     }
     window.refresh();
@@ -787,9 +796,11 @@ pub fn tick(now: u64, cx: &mut App) {
                     !crate::plain::planted("read-needs-reopen") || since < opened_at
                 })
             });
+        let seen = crate::shown::seen(window);
+        crate::card::look(window, seen, cx);
         let present = crate::unread::present(
             window.is_window_active() || crate::shown::forced().is_some(),
-            crate::shown::seen(window),
+            seen,
             views::last_input(),
             now,
         );

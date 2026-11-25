@@ -140,6 +140,19 @@ export class Siblings {
   private readonly loops = new Map<string, { ask: string; pair: string[]; at: number }>();
   constructor(private readonly o: SiblingOptions) {}
 
+  /** The session's process went with no SessionEnd (#992): it works beside no other until a hook of its own says so. */
+  died(session: string): void {
+    const m = this.map.get(session);
+    if (m) m.ended = true;
+    this.pending.delete(session);
+  }
+  /** The core forgot the session (#1866): its place on the map, what it was handed and what waits for it go. */
+  forget(session: string): void {
+    for (const of of [this.map, this.pending, this.turns, this.loops]) of.delete(session);
+    for (const of of [this.delivered, this.exempt]) for (const key of of) if (key.split('\0').includes(session)) of.delete(key);
+    for (const [hook, r] of this.inReply) if (r.session === session) this.inReply.delete(hook);
+    for (const key of this.dry.keys()) if (![...this.map.values()].some((m) => m.head !== null && key.split('\0').includes(m.head))) this.dry.delete(key);
+  }
   /** The map and what was delivered, read back from the record at the hub's start; nothing is queued from them. */
   async restore(): Promise<void> {
     await this.restoreLoops();

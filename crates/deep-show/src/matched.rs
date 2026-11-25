@@ -53,8 +53,15 @@ pub fn views_of(v: &Value) -> Option<Vec<ViewAsk>> {
 }
 
 /// The wrong programs a copy's drawn form hands its readers: scene3d's `seen` column and fog
-/// overlay that read player 1's bits on every copy, and the burst that ignores the fog gate.
-const DRAWN_PLANTS: [&str; 3] = [slots::SEEN_PLAYER_ONE, tints::PLAYER_ONE, IGNORES_FOG];
+/// overlay that read player 1's bits on every copy, the burst that ignores the fog gate, and
+/// #290's hidden views that ignore `seen` and `match.me`.
+const DRAWN_PLANTS: [&str; 5] = [
+    slots::SEEN_PLAYER_ONE,
+    tints::PLAYER_ONE,
+    IGNORES_FOG,
+    deep_canvas_scene3d::hidden::IGNORES_SEEN,
+    deep_canvas_scene3d::hidden::IGNORES_ME,
+];
 
 impl Hub<'_> {
     /// `doc`'s drawn form as the copy of player `me` (1 to 8, or "none" for every side) shows it:
