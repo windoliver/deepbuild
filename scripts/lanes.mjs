@@ -1090,6 +1090,15 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
           } else if (listing === null) listedCargo = null;
         }
       }
+      // The record names the tree the lane started on, so a run that changed it proved another tree (#3336).
+      const after = tree && exactTree(cwd);
+      if (tree && after !== tree) {
+        const paths = after ? spawnSync('git', ['diff-tree', '-r', '--name-only', tree, after], { cwd, encoding: 'utf8' }).stdout.trim().split('\n').filter(Boolean) : [];
+        const found = { state: 'FAIL', error: `the run changed the tree it started on: ${paths.length ? paths.join(', ') : "git can't write the tree after it"}; write to a temporary folder, never the checkout` };
+        findings.push({ state: found.state, note: found.error });
+        if (stands(found, failure)) failure = found;
+        else console.log(`FAIL ${lane.name}: ${found.error}`);
+      }
       // The Mac's cargo tests are the reference list; a run elsewhere lists the tests it lacks and is never PASS (#1121).
       const more = {}, absentIds = new Set(), mac = process.platform === 'darwin';
       let platformRead = [];

@@ -145,6 +145,9 @@ pub struct Shared {
     /// A minted document's newest revision number, a refused whole revision's too (#1721); `None`
     /// for a document a release stored.
     pub numbers: Option<u64>,
+    /// Why a restart stopped the document short of its record (#1412): it shows the last revision
+    /// the state folder proves, and every patch to it is refused with this issue.
+    pub stopped: Option<Issue>,
 }
 
 impl Rev {
@@ -183,6 +186,7 @@ impl Shared {
             older: BTreeSet::new(),
             referrers: None,
             numbers: None,
+            stopped: None,
         }
     }
 
@@ -242,6 +246,18 @@ impl Shared {
             })
             .filter_map(|(_, item)| item["layer"].as_str().map(str::to_string))
             .collect();
+    }
+
+    /// Stops the document at its current revision, which carries `issue` as well.
+    fn stop(&mut self, issue: Issue) {
+        let current = self
+            .revs
+            .last_mut()
+            .expect("a shared document has revision 0");
+        let mut issues = current.issues.as_ref().clone();
+        issues.push(issue.clone());
+        current.issues = Rc::new(issues);
+        self.stopped = Some(issue);
     }
 
     /// The document's fields besides its items, and the owners, as they are now.
@@ -521,6 +537,73 @@ pub fn changed_between(a: &Value, b: &Value) -> BTreeSet<String> {
     out
 }
 
+/// What no layer file holds: a document's own fields, all but its items, its `layers` and its
+/// maps keyed by ID, and in each of those maps the entries no layer owns.
+fn own_fields(fields: &Map<String, Value>, owners: &Owners) -> Map<String, Value> {
+    let mut own = Map::new();
+    for (k, v) in fields {
+        if !ID_MAPS.contains(&k.as_str()) {
+            if k != "items" && k != "layers" {
+                own.insert(k.clone(), v.clone());
+            }
+            continue;
+        }
+        let unowned: Map<String, Value> = v
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(id, _)| !owners.contains_key(&(k.clone(), id.to_string())))
+            .map(|(id, e)| (id.clone(), e.clone()))
+            .collect();
+        own.insert(k.clone(), json!({"unowned": unowned, "map": v.is_object()}));
+    }
+    own
+}
+
+/// The file that keeps what no layer file holds as a revision left it (#1412).
+fn envelope_file(doc_id: &str, own: Map<String, Value>) -> Vec<u8> {
+    serde_json::to_vec(&json!({"doc": doc_id, "envelope": own})).expect("JSON writes")
+}
+
+/// `doc` with what no layer file holds as an envelope file keeps it.
+fn take_envelope(doc: &mut Value, owners: &Owners, own: &Map<String, Value>) {
+    let Some(fields) = doc.as_object_mut() else {
+        return;
+    };
+    for (k, v) in own_fields(fields, owners) {
+        if !ID_MAPS.contains(&k.as_str()) {
+            fields.shift_remove(&k);
+            continue;
+        }
+        if let Some(Value::Object(map)) = fields.get_mut(&k) {
+            for id in v["unowned"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .map(|(id, _)| id)
+            {
+                map.shift_remove(id);
+            }
+        }
+    }
+    for (k, v) in own {
+        if !ID_MAPS.contains(&k.as_str()) {
+            fields.insert(k.clone(), v.clone());
+            continue;
+        }
+        let unowned = v["unowned"].as_object().cloned().unwrap_or_default();
+        if !fields.get(k).is_some_and(Value::is_object) {
+            if !v["map"].as_bool().unwrap_or(false) && unowned.is_empty() {
+                continue;
+            }
+            fields.insert(k.clone(), json!({}));
+        }
+        if let Some(Value::Object(map)) = fields.get_mut(k) {
+            map.extend(unowned);
+        }
+    }
+}
+
 /// The writer a layer file names.
 fn file_writer(file: &Value) -> Option<Writer> {
     let w = &file["writer"];
@@ -534,6 +617,9 @@ fn take_layer(doc: &mut Value, owners: &mut Owners, file: &Value) {
     };
     if !file["meta"].is_null() {
         doc["layers"][layer] = file["meta"].clone();
+    }
+    if !doc["items"].is_object() && file["items"].as_object().is_some_and(|i| !i.is_empty()) {
+        doc["items"] = json!({});
     }
     if let Some(Value::Object(items)) = doc.get_mut("items") {
         items.retain(|_, i| i["layer"].as_str() != Some(layer));
@@ -901,7 +987,10 @@ fn drop_owned(doc: &mut Value, owners: &mut Owners, layer: &str) {
 }
 
 /// Rebuilds `shared` from the record in `state`: each event, in order, takes each layer from the
-/// layer file it names, at its revision. The planted twin takes each layer's newest file instead.
+/// layer file it names, at its revision. An event whose layer file is gone, or whose bytes or
+/// rebuilt document don't hash as recorded, stops the document at the revision before it, with an
+/// issue naming the file or the hash (#1412). The planted twin takes each layer's newest file
+/// instead.
 fn restore(
     shared: &mut Shared,
     state: &Path,
@@ -913,6 +1002,7 @@ fn restore(
         return;
     };
     let subject = format!("doc:{}", shared.id);
+    let layers = state.join("layers");
     for line in text.lines() {
         let Ok(entry) = serde_json::from_str::<Value>(line) else {
             continue;
@@ -921,20 +1011,41 @@ fn restore(
         if event["data"]["doc"].as_str() != Some(subject.as_str()) {
             continue;
         }
-        let files: Vec<Value> = event["evidence"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|sha| sha.as_str())
-            .filter_map(|sha| evidence::read(&state.join("layers"), sha))
-            .filter_map(|bytes| serde_json::from_slice(&bytes).ok())
-            .collect();
-        let prev = shared.doc.clone();
+        let rev = shared.current().rev;
+        let next_rev = event["data"]["rev"].as_u64().unwrap_or(rev + 1);
+        let mut files: Vec<Value> = Vec::new();
+        for sha in event["evidence"].as_array().into_iter().flatten() {
+            let sha = sha.as_str().unwrap_or_default();
+            match evidence::read(&layers, sha).and_then(|b| serde_json::from_slice(&b).ok()) {
+                Some(file) => files.push(file),
+                None => return shared.stop(damaged_file(&shared.id, &layers, sha, next_rev)),
+            }
+        }
+        let (prev, prev_owners) = (shared.doc.clone(), shared.owners.clone());
         let envelope_before = Some(shared.envelope());
         let mut writer = None;
         for file in &files {
-            writer = writer.or_else(|| file_writer(file));
-            take_layer(&mut shared.doc, &mut shared.owners, file);
+            match file["envelope"].as_object() {
+                Some(own) => take_envelope(&mut shared.doc, &shared.owners, own),
+                None => {
+                    writer = writer.or_else(|| file_writer(file));
+                    take_layer(&mut shared.doc, &mut shared.owners, file);
+                }
+            }
+        }
+        let hash = canonical_in(&shared.doc, &sealed.kinds()).map_or(String::new(), |c| c.sha256);
+        if let Some(want) = event["data"]["hash"].as_str().filter(|want| *want != hash) {
+            (shared.doc, shared.owners) = (prev, prev_owners);
+            let what = format!("revision {next_rev} rebuilt from its layer files hashes {hash}");
+            let actual = json!({"rev": next_rev, "recorded": want, "rebuilt": hash});
+            let issue = Issue::error(
+                "revision_hash_mismatch",
+                &shared.id,
+                "doc".into(),
+                actual,
+                &what,
+            );
+            return shared.stop(issue);
         }
         let changed = changed_between(&prev, &shared.doc);
         let before: BTreeMap<String, Option<Value>> = changed
@@ -943,10 +1054,9 @@ fn restore(
             .map(|id| (id.clone(), prev["items"].get(id).cloned()))
             .collect();
         let paths = paths_of(&before, &shared.doc);
-        let rev = shared.current().rev;
         let checked = check_packed(&shared.doc, sealed, packs);
         shared.revs.push(Rev {
-            rev: event["data"]["rev"].as_u64().unwrap_or(rev + 1),
+            rev: next_rev,
             base_rev: rev,
             writer,
             patch: event["data"]["patch"].as_str().map(str::to_string),
@@ -957,7 +1067,7 @@ fn restore(
             envelope_before,
             issues: Rc::new(checked.issues),
             notices: OnceCell::from(checked.notices),
-            hash: OnceCell::new(),
+            hash: OnceCell::from(hash),
             current_at: None,
         });
     }
@@ -976,7 +1086,25 @@ fn restore(
         for (_, file) in newest.values() {
             take_layer(&mut shared.doc, &mut shared.owners, file);
         }
+        // Its hash is the document it shows, not the record's.
+        if let Some(current) = shared.revs.last_mut() {
+            current.hash = OnceCell::new();
+        }
     }
+}
+
+/// The issue of `doc`'s layer or envelope file `sha`, which revision `rev`'s event names, when the state folder
+/// doesn't hold it, or holds bytes that don't hash to its name or don't read as a layer file.
+fn damaged_file(doc: &str, layers: &Path, sha: &str, rev: u64) -> Issue {
+    let (code, what) = if evidence::has(layers, sha) {
+        let what = format!("the file revision {rev} names doesn't hash to its name or read as one");
+        ("layer_file_mismatch", what)
+    } else {
+        let what = format!("the state folder doesn't hold the layer file revision {rev} names");
+        ("layer_file_missing", what)
+    };
+    let actual = json!({"rev": rev, "file": sha});
+    Issue::error(code, doc, format!("layers/{sha}"), actual, &what)
 }
 
 /// #1801: each refusal that a removed item's dangling name raised (`ref_unresolved` at one of the
