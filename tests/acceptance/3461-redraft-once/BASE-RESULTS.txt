@@ -1,0 +1,58 @@
+# #3461 redraft on the base 1b4929ae7, macOS darwin-arm64, Node v24.22.0, 2026-11-25T09:50:33Z
+# command (fresh: no target/ in the checkout, so the merge base's workspaces are built first):
+#   NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3461-redraft-once --no-file-parallelism --testTimeout=3600000 --reporter=verbose
+# load: load averages: 18.92 23.72 23.98
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a0cb5dc40d070c93e/tests/acceptance/3461-redraft-once
+
+ ✓ once.test.ts > #3461.a80d1545 every command given each of its flags once prints and exits as on the merge base, and any leftover delta is listed 316634ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  01:50:33
+   Duration  317.52s (tests 100%)
+
+vitest exit 0
+
+# Check A (earlier, same day): a stub target/debug/deep-show placed in this checkout, seen by both programs
+# (the base's target link resolves to it); the same command: vitest exit 0 (1 passed). The stub was removed after.
+
+# Check B (earlier, same day): plant once-refused in this checkout's built packages/hub/dist/land-command.js
+# (flag(): i >= 0 && args.indexOf(name, i) < 0 ? args[i + 1] : undefined), the same command without --reporter=verbose;
+# the file was restored and cmp'd byte for byte afterwards. Output:
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a0cb5dc40d070c93e/tests/acceptance/3461-redraft-once
+
+ ❯ once.test.ts (1 test | 1 failed) 26704ms
+   × #3461.a80d1545 every command given each of its flags once prints and exits as on the merge base, and any leftover delta is listed 26236ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  once.test.ts > #3461.a80d1545 every command given each of its flags once prints and exits as on the merge base, and any leftover delta is listed
+AssertionError: 3 of 42 commands given each flag once print or exit otherwise than on the merge base:
+deep land --repo <tmp>/repo --json (deep land): code 3 on the merge base, 2 in this checkout; stderr "The hub isn't answering; start it with deep hub start.\n" on the merge base, "Usage: deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes in turn\n" in this checkout
+deep land judge --repo <tmp>/repo --json (deep land): code 3 on the merge base, 2 in this checkout; stderr "The hub isn't answering; start it with deep hub start.\n" on the merge base, "Usage: deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes in turn\n" in this checkout
+deep work --repo <tmp>/repo --issues 1,2 --once --json (deep work --repo): code 3 on the merge base, 2 in this checkout; stderr "The hub isn't answering; start it with deep hub start.\n" on the merge base, "Usage: deep work \"<scope>\" [--repo <checkout>] [--json]   one approval for a run over the issues your words name, or a standing run over a rule\n       deep work show | pause [--repo <checkout>] [--json]\n       deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues\n" in this checkout: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep land --repo <tmp>/repo --json (deep land): code 3 on the merge base, 2 in this checkout; stderr \"The hub isn't answering; start it with deep hub start.\\n\" on the merge base, \"Usage: deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes in turn\\n\" in this checkout",
++   "deep land judge --repo <tmp>/repo --json (deep land): code 3 on the merge base, 2 in this checkout; stderr \"The hub isn't answering; start it with deep hub start.\\n\" on the merge base, \"Usage: deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes in turn\\n\" in this checkout",
++   "deep work --repo <tmp>/repo --issues 1,2 --once --json (deep work --repo): code 3 on the merge base, 2 in this checkout; stderr \"The hub isn't answering; start it with deep hub start.\\n\" on the merge base, \"Usage: deep work \\\"<scope>\\\" [--repo <checkout>] [--json]   one approval for a run over the issues your words name, or a standing run over a rule\\n       deep work show | pause [--repo <checkout>] [--json]\\n       deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues\\n\" in this checkout",
++ ]
+
+ ❯ once.test.ts:47:155
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  01:48:44
+   Duration  26.86s (tests 100%)
+

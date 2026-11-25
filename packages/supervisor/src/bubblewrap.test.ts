@@ -2,7 +2,7 @@
 // (tests/acceptance/236/suite.test.ts): every case holds on bubblewrap, each planted twin fails its own case and no
 // other, and a run through the supervisor is scanned, refused and recorded as the seam promises.
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, existsSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
 import { openAsks } from '@deepbuild/asks';
@@ -123,6 +123,39 @@ describe.skipIf(!linux)('a run through the supervisor on Linux', () => {
       await sup.wait('run:OWN');
       expect(existsSync(join(mine, 'a')), 'its own folder').toBe(true);
       expect(existsSync(join(theirs, 'b')), 'the folder beside it stays guarded').toBe(false);
+    } finally {
+      await sup.close();
+      await record.close();
+    }
+  }, 60_000);
+
+  test('a socket granted by a link that itself lies under /run is reached through that link, and a granted folder there is not bound in (#3371)', async () => {
+    // As podman's /run/docker.sock → /run/podman/podman.sock: the link lives in the folder the sandbox has its own of.
+    const runDir = realpathSync(mkdtempSync(join(`/run/user/${process.getuid!()}`, 'deep-bwrap-')));
+    dirs.push(runDir);
+    mkdirSync(join(runDir, 'inner'));
+    const target = await unixListener(join(runDir, 'inner', 'real.sock'));
+    const beside = await unixListener(join(runDir, 'beside.sock'));
+    symlinkSync('inner/real.sock', join(runDir, 'docker.sock'));
+    const dir = tempDir();
+    const out = join(dir, 'out');
+    mkdirSync(out);
+    const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+    try {
+      const tries = join(out, 'tries.json');
+      await sup.start({
+        run: 'run:RUNLINK', argv: [HELPER, 'probe', tries, 'unix', join(runDir, 'docker.sock'), 'unix', join(runDir, 'beside.sock')], cwd: dir,
+        grant: { read: [HELPER.slice(0, HELPER.lastIndexOf('/'))], write: [out], sockets: [join(runDir, 'docker.sock'), runDir] },
+      });
+      await sup.wait('run:RUNLINK');
+      const got = readFileSync(tries, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as { target: string; ok: boolean; errno?: string });
+      expect(got.find((t) => t.target === join(runDir, 'docker.sock'))?.ok, `the link under /run leads to its socket: ${JSON.stringify(got)}`).toBe(true);
+      expect(target.connections()).toBeGreaterThan(0);
+      // The folder is granted to the filter, but only sockets are bound in: the one beside stays on the sandbox's own /run.
+      expect(got.find((t) => t.target === join(runDir, 'beside.sock'))?.errno, 'a granted folder is not bound in').toBe('No such file or directory');
+      expect(beside.connections()).toBe(0);
     } finally {
       await sup.close();
       await record.close();

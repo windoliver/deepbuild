@@ -1,0 +1,27 @@
+{
+  "v": 5,
+  "id": "01K9QZ6V2T8M4R1N5P7W3X9Y0C",
+  "kind": "row.set",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013452123,
+  "data": {
+    "id": "session:8d3c2f1e-0b4a-4c6e-9f2d-1a2b3c4d5e6f",
+    "listed": true,
+    "order": "0|3|~~build-01|shop|5|0001760013452000|session:8d3c2f1e-0b4a-4c6e-9f2d-1a2b3c4d5e6f",
+    "address": "session/8d3c2f1e-0b4a-4c6e-9f2d-1a2b3c4d5e6f",
+    "title": "Fix the flaky checkout test",
+    "project": "shop",
+    "session": "8d3c2f1e-0b4a-4c6e-9f2d-1a2b3c4d5e6f",
+    "agent": "claude-code",
+    "entry": "idle",
+    "word": "quiet",
+    "why": "the link to build-01 is down",
+    "waits_on": "agent",
+    "since": 1760013452000,
+    "actions": [],
+    "unread": false,
+    "host": "build-01"
+  }
+}

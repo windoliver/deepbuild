@@ -80,6 +80,7 @@ export class ReadOnlyCore {
   subscribe(): Promise<{ head?: number; snapshot?: true }> { return Promise.resolve({}); }
   waitsState(): Promise<{ history: [string, number][]; sessions: never[] }> { return Promise.resolve({ history: [], sessions: [] }); }
   lockLost(): void {}
+  hostLink(): Promise<void> { return Promise.resolve(); }
   stop(): Promise<void> { return Promise.resolve(); }
   hook(): Promise<void> { return Promise.resolve(); }
   replayed(): Promise<void> { return Promise.resolve(); }

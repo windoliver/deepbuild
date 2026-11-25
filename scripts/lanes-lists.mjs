@@ -1581,3 +1581,13 @@ timed.push('tests/acceptance/3257/ac7-budget.test.ts');
 // #1857's folder (blind) runs alone by its lane.json. cap.test.ts and budgets.test.ts each judge a check's time and a
 // child's peak on the reference Mac.
 timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
+
+// #2750's folder (blind) runs alone by its lane.json: each test starts real hubs, a forge on 127.0.0.1 and git
+// repositories. budgets.test.ts times a rebuild from the event log on the reference Mac.
+timed.push('tests/acceptance/2750/budgets.test.ts');
+
+// #3461's once.test.ts compares with a recording made where no canvas core was built, so it fails on the merge base's
+// own program wherever deep-show is built (tests/acceptance/3461-redraft-once/DISPUTE.md). Kept as written, by hand
+// only; its blind redraft, which runs the merge base's program beside the checkout's, runs in its place.
+Object.assign(redrafted, { 'tests/acceptance/3461/once.test.ts': 'tests/acceptance/3461-redraft-once/' });
+byHand.push('tests/acceptance/3461/once.test.ts');

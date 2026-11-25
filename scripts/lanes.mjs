@@ -40,6 +40,12 @@ alone.push('tests/acceptance/27/redraft-3178/', 'tests/acceptance/27/outcomes-re
 slow.push('tests/acceptance/3178/suites.test.ts');
 slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
 
+// #1876: the design links lane compares the design with files on main, which #2339's first draft doesn't copy into its
+// scratch tree, so its planted tests stop at their control (tests/acceptance/2339/redraft-1876/DISPUTE.md). On the
+// owner's ruling ("Dispute and redraft", Nov 25) its four files, kept as written, run by hand, and their blind redraft,
+// which copies the whole tree, runs in their place.
+byHand.push(...['ac1-planted', 'ac2-invariants', 'ac3-checks', 'ac4-canvas'].map((file) => `tests/acceptance/2339/${file}.test.mjs`));
+
 /**
  * Why each `alone` entry is alone (#3066; docs/parallel-proof.md, section 7), one reason an entry: `binary`, a sibling's
  * cargo build rewrites a binary under it (its files start cargo, read target/, or start a hub, which runs deep-hook
@@ -925,12 +931,15 @@ export function mergeRecords(tree) {
 /** A lane's evidence record, which T7 and T8 read: its state, where it ran, on what tree, and each test's state. */
 export function writeRecord(lane, state, tree, tests, more = {}) {
   if (!tree) throw new Error("git can't write this checkout's tree");
-  const folder = lanesFolder();
-  mkdirSync(folder, { recursive: true, mode: 0o700 });
-  const file = join(folder, `${tree}-${lane.replace(/\W+/g, '-')}.json`);
-  writeFileSync(file, `${JSON.stringify({ lane, state, host: hostname(), platform: `${process.platform}-${process.arch}`, tree, tests, ...more }, null, 2)}\n`);
+  const { file, record } = recordOf(lane, state, tree, tests, more);
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+  writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
   return file;
 }
+const recordOf = (lane, state, tree, tests, more = {}) => ({
+  file: join(lanesFolder(), `${tree}-${lane.replace(/\W+/g, '-')}.json`),
+  record: { lane, state, host: hostname(), platform: `${process.platform}-${process.arch}`, tree, tests, ...more },
+});
 
 /**
  * What of the unit lane has no kept result to stand on for `key`'s tree: the test files, and `cargo test` when its job has
@@ -961,6 +970,11 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
   const environment = { ...process.env };
   delete environment.DEEP_BIN_DIR;
   let changed, binaries, built = [], binaryError;
+  // Each command runs in spawnSync, so this process can't answer a signal while it runs: a watcher outside its group
+  // stops the whole tree if this process dies, and writes the lane's record INCONCLUSIVE naming what it stopped, when
+  // no record of the lane's tree is there yet (#3433).
+  const { watchTree } = require('./proof-stop.mjs'), stop = watchTree();
+  if (stop.error) console.log(`NOTE lanes: ${stop.error}, so a stop of this run may leave its commands running`);
   try {
     const selected = [];
     for (const lane of lanes) {
@@ -989,6 +1003,12 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
       const tree = treeOf ?? exactTree(cwd), tests = [], unproven = [], listedTests = [], findings = [];
       // The tests the lane's whole cargo test commands list, or null once a listing failed; whether any cargo test ran.
       let listedCargo, cargoRan = false, keptRead = 0;
+      // What the watcher writes should this process die while the lane's commands run: its rows so far, INCONCLUSIVE.
+      const armLane = () => {
+        if (!tree) return stop.arm();
+        const { file, record } = recordOf(lane.name, 'INCONCLUSIVE', tree, tests, findings.length ? { findings } : {});
+        stop.arm(file, record);
+      };
       // The preflight's kept results of this very tree (#3296): a job already done is read, never run again.
       let kept = key && lane.name === 'unit' && key.tree === tree ? openKept(key, (row) => readSkips([row], knownFailures(cwd).skips, timed).covered.length > 0) : null, testFiles = [];
       if (kept) try { testFiles = lane.commands.map((command) => testFilesOf(cwd, command)); } catch (error) {
@@ -1010,6 +1030,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
         const args = kept && shards ? [...rest, `--kept=${JSON.stringify(key)}`] : rest;
         let directory, descriptor, result, results, output = '';
         try {
+          armLane();
           const prior = kept && !shards && kept.jobDone(job, names) ? kept.results(names, job) : null;
           if (prior) keptRead += names.length;
           if (prior) [results, result, output] = [prior, { status: prior.failures.length ? 1 : 0 }, `KEPT ${job}: ${prior.passed.length + prior.failures.length + prior.skips.length} results read from an earlier run of this tree`];
@@ -1081,6 +1102,8 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
         // names it, so a merge with another machine's rows (parallel-proof §8) can't lose it.
         if (found && (found.lone || (results?.noGrant && found.error === results.noGrant) || !run.tests.some(({ state }) => state === found.state))) findings.push({ state: found.state, note: found.error });
         if (stands(found, failure)) failure = found;
+        // Armed again with this job's rows, for what runs after it (cargo's listing, the next job's builds).
+        armLane();
         // A run the throttle refused ran nothing to list, and listing it would ask the throttle again (#3333).
         if (command === 'cargo' && args[0] === 'test' && !results?.noGrant) {
           cargoRan = true;
@@ -1139,6 +1162,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
       else console.log(`PASS ${lane.name} (${elapsed} s)`);
       try {
+        stop.disarm();
         if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests, { ...more, ...findings.length && { findings }, ...kept && { kept: { read: keptRead, of: testFiles.flat().length } } });
       } catch (error) {
         // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
@@ -1147,6 +1171,7 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
       }
     }
   } finally {
+    stop.disarm();
     if (binaries) rmSync(binaries, { recursive: true, force: true });
     if (issues) {
       delete process.env.DEEP_OPEN_ISSUES;
