@@ -5,6 +5,7 @@ Second redraft (2026-11-22), of the first one at 7c8d9a28d, for two disputes a r
 Third redraft (2026-11-23), of the second at a6bcb6351, for a dispute from a Mac run (below, Third redraft).
 Fourth redraft (2026-11-23), of the third at 0560a1718, for a dispute from a Mac run on AC1's and AC2's row count (below, Fourth redraft).
 Fifth redraft (2026-11-24), of the fourth at c6bdfac2f, for a review's dispute that AC5's after-reading could see nothing (below, Fifth redraft).
+Sixth redraft (2026-11-25), of the fifth at 766efa508, for a dispute from a Mac run on AC2's answered row (below, Sixth redraft).
 
 ## Why
 
@@ -279,3 +280,79 @@ rows stay in the list.
 `npx vitest run tests/acceptance/1172/judges.test.ts`: 1 file, 28 passed (unchanged). `npx tsc -p
 tests/acceptance/1172/tsconfig.json --noEmit`: clean. `node scripts/repo-rules.mjs`: exit 0. `popout.test.ts` was not run
 (it needs the Mac).
+
+## Sixth redraft (2026-11-25)
+
+Redrafted blind at 766efa508 from #1172 and its comments, `docs/technical-design.md`, #1461's and #1807's issue text and
+this folder only; no implementation code and no PR was read.
+
+### The dispute
+
+A Mac run (main 1b4929ae7 with this folder at 766efa508, 2026-11-25) passed AC1 and failed AC2 after the answer, with the
+menu bar already reading 2: `Needs you should show 0 rows for ask:… ("Which header colour on the login page?"); it has 1`,
+and the pixels still drew a line holding the question followed by `Answered "Blue header" at 12:12 from deep inbox. Nothing
+is left to answe…`. The disputing party says the program keeps a row that left the list in its slot, drawn answered, until
+2 s after the person has also left the list, and attributes the rule to #1461. AC2's reading (fourth redraft) wanted the
+answered ask to hold no node and no line at all, and its timing loop stopped the clock only then.
+
+### Ruling: A, the expectation was wrong for this state
+
+The design's "One list and one page" (Keymap, placement, window) names the window #1461 built, and #1461's scope says
+"Suites that pin the old shape go through their blind redraft". #1461 settles exactly this state:
+
+- "A row that left its state keeps its slot while the pointer is over the list or focus is in it, and for 2 s after both
+  have left." (When rows move, one rule)
+- Its AC: "With focus in the list, an ask answered from `deep` keeps its row in place, drawn answered, until focus and
+  pointer have been out of the list for 2 s." AC2 answers through `deep inbox answer`.
+- "A new state shows in place at once: its mark, its word and the count never wait." So the window reads 2 at once
+  through the count and the row's word, while the row keeps its slot.
+
+#1807 (open) agrees: "An answered ask's row keeps its place, drawn answered … Its state word is the receipt
+("Answered", …) … The one count drops at the answer." The design's "a row per open ask", "An item leaves Needs you only on
+your answer" and "an answer clears it everywhere" say the ask stops counting and stops needing you; #1461 is the later,
+more specific word on how its row leaves. So AC2 (#1172's "the window … read 2") is read as: two open rows and the count
+2, and the answered ask at most kept as one row drawn answered, offering nothing.
+
+The test can't hold the list unattended to wait out the hold: no source names a surface that moves focus and the pointer
+out of the list without also selecting something, so that branch was not taken.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `answeredRowFailures` (tree, one answered ask): at most one row outside a card; that row reads answered (a node at or under it whose name matches `answered`, not `not answered`); no card, and its two options nowhere on the tree as `AXButton`s | #1461 "keeps its slot", "drawn answered"; #1807's state word "Answered"; invariant 4 (the question never put to you again); the card told by its options, as before |
+| `askRowFailuresAnswered`: `askRowFailures`' wanted branch, unchanged, for the open asks; `answeredRowFailures` for the rest | As above |
+| `answeredLineFailures` (pixels): at most one line draws the answered ask's row (`drawsRow`), and that line reads answered | As above; one row is one line (design) |
+| `shellFailuresAnswered`: `shellFailuresCard` with those two in place of wanting the answered ask gone; everything else, the count and the menu bar included, is its own | The dispute is the answered row only |
+| `shell.test.ts` AC2: the timing loop stops the clock when the menu bar reads 2 and `answeredRowFailures` is empty; the after-reading calls `shellFailuresAnswered`. AC2's reading before the answer, and AC1, still call `shellFailuresCard` | #1461 "its mark, its word and the count never wait", so the 1 s still holds for the row's word |
+| `judges.test.ts`: 10 cases (5 controls, 7 wrong inputs across them) | AGENTS.md, Proof |
+
+`helpers.ts` changes by added lines only, as before; `shellFailuresAnswered` copies `shellFailuresCard` for the same reason
+`shellFailuresCard` copied `shellFailuresCut`.
+
+### Which wrong programs fail (pinned in `judges.test.ts`)
+
+Controls that pass: the answered row kept, drawn answered, beside the two open rows and the next card; the answered row
+gone; the disputed Mac run's pixel line; a cut row with `Answered` on its line.
+
+Wrong programs that fail: the answered ask kept as a still-open row (its kind word, no `Answered`), on the tree and on the
+pixels; a row that reads "Not answered"; two kept rows for the answered ask; its card still offering its options with its
+row drawn answered; the answered question on two lines; a wanted ask's row gone beside a kept answered row.
+
+### Still not settled
+
+1. **The row must go eventually.** The test doesn't hold the list unattended, so a program that keeps the answered row
+   forever, drawn answered, passes AC2. #1461's own AC ("until focus and pointer have been out of the list for 2 s") is
+   where that is judged.
+2. **A kept row plus a page receipt.** At most one node and one line may hold the answered question. #1807 (open) keeps a
+   receipt on the page only after the last ask, which AC2's state isn't, so a right program has one; a program drawing
+   both would fail, naming the count.
+3. **What "drawn answered" reads.** The word `answered` anywhere in the row's nodes or line. #1461 gives no word; #1807
+   gives "Answered" among others ("Starts in 8 s", "Allowed · ran"), which apply to holds and approvals, not to AC2's
+   pick-one ask. A right row worded otherwise fails, naming what it holds.
+4. **The menu bar's reading.** Not revisited.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 38 passed (28 before, 10 new). `npx tsc -p
+tests/acceptance/1172/tsconfig.json --noEmit`: clean. `shell.test.ts` AC2 was not run (it needs the Mac).

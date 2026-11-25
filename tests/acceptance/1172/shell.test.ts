@@ -7,7 +7,7 @@
 // window's pixels (README: The surface). The replica is only compared with, never judged in its place.
 import { describe, expect, it } from 'vitest';
 import {
-  answer, App, appBinary, loaded, inconclusive, makeWorld, menuCount, nodes, replicaBinary, settled, shellFailuresCard, tempDir, useCleanup, readJson, childProcess, type World,
+  answer, answeredRowFailures, App, appBinary, loaded, inconclusive, makeWorld, menuCount, nodes, replicaBinary, settled, shellFailuresAnswered, shellFailuresCard, tempDir, useCleanup, readJson, childProcess, type World,
 } from './helpers.ts';
 
 useCleanup();
@@ -54,12 +54,13 @@ describe('#1172 the app a person runs', () => {
     const answered = Date.now();
     let elapsed = Infinity;
     for (let reading = await app.tree(); Date.now() - answered < 10_000; reading = await app.tree()) {
-      const names = reading.windows.flatMap((w) => nodes(w.tree)).map((n) => n.name);
-      if (menuCount(reading) === 2 && !names.some((n) => n.includes(asked!.question))) { elapsed = reading.t1 - answered; break; }
+      // The answered ask's row may keep its slot, drawn answered (#1461; REDRAFT.md, Sixth redraft): the window reads 2 when
+      // no node offers it as open, and the menu bar reads 2.
+      if (menuCount(reading) === 2 && !answeredRowFailures(reading.windows.map((w) => w.tree), asked!, world.asks).length) { elapsed = reading.t1 - answered; break; }
     }
-    const after = await settled(() => shellFailuresCard(world, app, { rows: rest, count: 2 }), 3000);
+    const after = await settled(() => shellFailuresAnswered(world, app, { rows: rest, count: 2 }), 3000);
     await app.stop();
-    expect(after, 'once answered, the window draws 2 rows and the menu bar reads 2').toEqual([]);
+    expect(after, 'once answered, the window draws 2 open rows (the answered one kept at most as one row drawn answered) and the menu bar reads 2').toEqual([]);
     if (elapsed > 1000 && loaded()) inconclusive(`the window and the menu bar read 2 ${Math.round(elapsed)} ms after the answer, past 1 s, with the machine's load above half its cores`);
     expect(elapsed, 'ms from the answer to the window and the menu bar reading 2').toBeLessThanOrEqual(1000);
   }, 8 * MINUTES);

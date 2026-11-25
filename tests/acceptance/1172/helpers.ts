@@ -615,3 +615,77 @@ export async function shellFailuresCard(world: World, app: App, want: { rows: re
   if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
   return out;
 }
+
+// ---- An answered ask's row kept in its slot, drawn answered (REDRAFT.md, Sixth redraft). Added beside the judges above,
+// which stay as they were: other issues' tests read this file, so a changed reading lands only as a new one.
+
+/** Reads as answered: #1461's "drawn answered" and #1807's state word "Answered"; "not answered" doesn't. */
+const ANSWERED = /(?<!\bnot\s)\banswered\b/i;
+const readsAnswered = (node: Node): boolean => nodes(node).some((n) => ANSWERED.test(n.name));
+
+/**
+ * Each failure of an answered ask on the tree, over every window's root. #1461: "A row that left its state keeps its slot
+ * while the pointer is over the list or focus is in it, and for 2 s after both have left", and "an ask answered from `deep`
+ * keeps its row in place, drawn answered". So the ask may keep at most one row, and that row reads answered; it has no
+ * card, and its options are nowhere on the tree as `AXButton`s, so the question is never put to you again (invariant 4).
+ */
+export function answeredRowFailures(windows: readonly Node[], ask: Ask, asks: readonly Ask[]): string[] {
+  const out: string[] = [];
+  const split = windows.map((w) => askNodes(w, ask, asks));
+  const rows = split.flatMap((s) => s.rows);
+  if (rows.length > 1) out.push(`Needs you should keep at most 1 row, drawn answered, for answered ${ask.handle} ("${ask.question}"); it has ${rows.length}`);
+  for (const r of rows) if (!readsAnswered(r)) out.push(`answered ${ask.handle}'s row ("${ask.question}") still reads as open: nothing in it reads "Answered"; it holds ${JSON.stringify(nodes(r).map((n) => n.name).filter(Boolean))}`);
+  if (split.some((s) => s.card.length) || windows.some((w) => holdsOptions(w, ask))) out.push(`the window still offers answered ${ask.handle}'s options ("${ask.question}")`);
+  return out;
+}
+
+/** `askRowFailures` for the wanted asks; every other ask (AC2's answered one) is judged by `answeredRowFailures`. */
+export function askRowFailuresAnswered(windows: readonly Node[], asks: readonly Ask[], wanted: readonly Ask[]): string[] {
+  const out: string[] = [];
+  for (const ask of asks) {
+    if (!wanted.includes(ask)) { out.push(...answeredRowFailures(windows, ask, asks)); continue; }
+    const split = windows.map((w) => askNodes(w, ask, asks));
+    const rows = split.flatMap((s) => s.rows).length;
+    const card = split.flatMap((s) => s.card).length;
+    if (rows !== 1) out.push(`Needs you should show 1 row for ${ask.handle} ("${ask.question}") outside its card; it has ${rows}`);
+    else if (!card && windows.some((w) => holdsOptions(w, ask))) out.push(`${ask.handle}'s options are on the tree, but no node holding its question sits in a card apart from the list, so its row can't be told from its card`);
+  }
+  return out;
+}
+
+/** The pixel half of `answeredRowFailures`: at most one line draws the answered ask's row (`drawsRow`), and it reads answered. */
+export function answeredLineFailures(lines: readonly Line[], ask: Ask): string[] {
+  const drawn = lines.filter((l) => drawsRow([l], ask.question));
+  if (drawn.length > 1) return [`the window's pixels draw answered ${ask.handle}'s question on ${drawn.length} lines, more than its one kept row: they read ${sees(drawn)}`];
+  return drawn.filter((l) => !ANSWERED.test(l.text)).map((l) => `the window's pixels still draw answered ${ask.handle}'s row as open, with no "Answered" on its line: "${l.text}"`);
+}
+
+/**
+ * `shellFailuresCard`, with an answered ask judged by `askRowFailuresAnswered` and `answeredLineFailures` instead of
+ * wanting it gone: its row may keep its slot, drawn answered. Everything else is `shellFailuresCard`'s own.
+ */
+export async function shellFailuresAnswered(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
+  const out: string[] = [];
+  const tree = await app.tree();
+  const main = tree.windows.flatMap((w) => nodes(w.tree));
+  const named = main.filter((n) => n.name);
+  const lines = await ocr(await app.capture(`shell-${want.count}`));
+  const spike = [...named.map((n) => n.name), ...lines.map((l) => l.text)].find((text) => /\bSession \d{4}\b|waiting on you/.test(text));
+  if (spike) out.push(`the window is the spike window: it draws "${spike}"`);
+  if (!named.some((n) => n.name === 'Tasks')) out.push(`the window has no registered sidebar: no node is named "Tasks"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
+  for (const s of world.sessions) {
+    const rows = named.filter((n) => n.role === 'AXButton' && n.name.includes(s.task));
+    if (rows.length !== 1) out.push(`the sidebar should show session "${s.task}" once, as a row; it has ${rows.length}`);
+  }
+  if (!named.some((n) => n.name === 'Needs you')) out.push('the window has no Needs you view: no node is named "Needs you"');
+  out.push(...askRowFailuresAnswered(tree.windows.map((w) => w.tree), world.asks, want.rows));
+  for (const ask of world.asks) {
+    if (!want.rows.includes(ask)) { out.push(...answeredLineFailures(lines, ask)); continue; }
+    if (!drawsRow(lines, ask.question)) out.push(`the window's pixels lack ${ask.handle}'s row with its question, whole or cut by an ellipsis after its first ${ROW_START} letters and digits: they read ${sees(lines)}`);
+  }
+  const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
+  for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
+  const menu = menuCount(tree);
+  if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
+  return out;
+}
