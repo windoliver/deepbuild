@@ -361,6 +361,8 @@ pub enum Refusal {
     Font(String),
     /// A field that isn't a look@1 field's value, at its path.
     Bad(String),
+    /// A drawn field's value outside its range, at its path (#1857).
+    Range(String),
 }
 
 impl Refusal {
@@ -411,6 +413,7 @@ impl Refusal {
             }),
             Refusal::Font(font) => json!({"ok": false, "code": "font_unshippable", "font": font}),
             Refusal::Bad(path) => json!({"ok": false, "code": "bad_look", "path": path}),
+            Refusal::Range(path) => json!({"ok": false, "code": "out_of_range", "path": path}),
         }
     }
 }
@@ -1092,7 +1095,10 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
     let mut drawn = Value::Object(def.clone());
     deep_canvas::grammar::lower_frame_literals(&mut drawn, (1920, 1080));
     if let Value::Object(drawn) = &drawn {
-        deep_canvas_drawn::spec::check(drawn).map_err(|r| Refusal::Bad(r.path))?;
+        deep_canvas_drawn::spec::check(drawn).map_err(|r| match r.code {
+            "out_of_range" => Refusal::Range(r.path),
+            _ => Refusal::Bad(r.path),
+        })?;
     }
     let status = status_map(def)?;
     let fonts = fonts(def, bundled)?;

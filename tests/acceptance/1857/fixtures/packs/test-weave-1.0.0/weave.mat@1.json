@@ -1,0 +1,51 @@
+{
+  "id": "weave.mat",
+  "version": "1.0",
+  "title": "Mat",
+  "license": "MIT",
+  "author": "the #1857 acceptance suite",
+  "description": "One rect whose param threads is a list of 1,024 lists of 1,024 lists of 1,024 ones.",
+  "steps": {
+    "mat": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          8,
+          8
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        },
+        "threads": {
+          "repeat": {
+            "count": 1024,
+            "as": "a",
+            "of": {
+              "repeat": {
+                "count": 1024,
+                "as": "b",
+                "of": {
+                  "repeat": {
+                    "count": 1024,
+                    "as": "c",
+                    "of": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "mat"
+    ]
+  }
+}

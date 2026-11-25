@@ -1,0 +1,178 @@
+# The suite on the base, 7cb1e5c4a62cd797b00839bb2c27d730937303f6, with nothing but these files added, under one test
+# grant of scripts/throttle.mjs: vitest run --testTimeout=600000 --no-file-parallelism --reporter=verbose
+# tests/acceptance/2062/. macOS 27.2, Apple M5 Max, 18 cores, node v24.22.2. <repo> is the checkout, <tmp> a temp
+# folder of a test, <scratch> this job's scratch folder.
+#
+# AC1, AC3, AC4 and AC5 fail at their named assertions, six tests of eight; AC2, what the fix must keep, passes:
+#   AC1 (2)  the host wires the edge from test/u to test/p over x@1, in both install orders
+#   AC2 (2)  pass; twin refuses-undigested fails the first (TWINS-RUN.txt)
+#   AC3 (2)  the tie goes to test/czar under the cs locale, and to test/a_b under this machine's own
+#   AC4 (1)  the second land rejects with the first's error
+#   AC5 (1)  the reopen's second try rejects with the first's error
+
+FAILED  reopen.test.ts  AC4 #2062.1800089a the first land after a failed read of the record rejects, naming the read; the second succeeds, and its minute's rollup holds its batch AC4 the record's first read fails once: the first land rejects, naming it, the second succeeds, and the closed minute's rollup holds that batch
+      AssertionError: the second land succeeds, the record read again: expected 'the fixture record store failed recor…' to be null
+FAILED  reopen.test.ts  AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series
+      AssertionError: the reopen's second try succeeds: expected 'rejected: the fixture evidence store …' to be 'done' // Object.is equality
+FAILED  wiring.test.ts  AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge AC1 u, whose use states a digest, is refused at its install beside p, whose row keeps none, and nothing is wired
+      AssertionError: the edge from test/u to test/p over x@1 isn't wired: test/u's use states a digest and test/p's row keeps none: expected [ { user: 'test/u', …(3) } ] to deeply equal []
+FAILED  wiring.test.ts  AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge AC1 p, whose row keeps none, is refused at its install beside u, installed first, and nothing is wired
+      AssertionError: the edge from test/u to test/p over x@1 isn't wired: test/u's use states a digest and test/p's row keeps none: expected [ { user: 'test/u', …(3) } ] to deeply equal []
+PASS  wiring.test.ts  AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 AC2 the same pair with no digest on u's use is wired: the install isn't refused, and p's next version reaches u along the edge
+PASS  wiring.test.ts  AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 AC2 a provider whose row keeps the use's digest for minor 0 is wired
+FAILED  wiring.test.ts  AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart
+      AssertionError: test/u's use of x@1, which test/chart and test/czar both match, resolves to test/chart: expected 'test/czar' to be 'test/chart' // Object.is equality
+FAILED  wiring.test.ts  AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit
+      AssertionError: test/u's use of x@1, which test/a-b and test/a_b both match, resolves to test/a-b: expected 'test/a_b' to be 'test/a-b' // Object.is equality
+
+## The run
+
+exit 1  after 27 s
+--- stdout
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/2062/wiring.test.ts > AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge > AC1 u, whose use states a digest, is refused at its install beside p, whose row keeps none, and nothing is wired 4300ms
+   → the edge from test/u to test/p over x@1 isn't wired: test/u's use states a digest and test/p's row keeps none: expected [ { user: 'test/u', …(3) } ] to deeply equal []
+ × tests/acceptance/2062/wiring.test.ts > AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge > AC1 p, whose row keeps none, is refused at its install beside u, installed first, and nothing is wired 1730ms
+   → the edge from test/u to test/p over x@1 isn't wired: test/u's use states a digest and test/p's row keeps none: expected [ { user: 'test/u', …(3) } ] to deeply equal []
+ ✓ tests/acceptance/2062/wiring.test.ts > AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 > AC2 the same pair with no digest on u's use is wired: the install isn't refused, and p's next version reaches u along the edge 1597ms
+ ✓ tests/acceptance/2062/wiring.test.ts > AC2 #2062.9bf72360 a use that states no digest is wired to a row that keeps none, and a use that states one to a row that keeps it for minor 0 > AC2 a provider whose row keeps the use's digest for minor 0 is wired 2434ms
+ × tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart 5956ms
+   → test/u's use of x@1, which test/chart and test/czar both match, resolves to test/chart: expected 'test/czar' to be 'test/chart' // Object.is equality
+ × tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit 3138ms
+   → test/u's use of x@1, which test/a-b and test/a_b both match, resolves to test/a-b: expected 'test/a_b' to be 'test/a-b' // Object.is equality
+ × tests/acceptance/2062/reopen.test.ts > AC4 #2062.1800089a the first land after a failed read of the record rejects, naming the read; the second succeeds, and its minute's rollup holds its batch > AC4 the record's first read fails once: the first land rejects, naming it, the second succeeds, and the closed minute's rollup holds that batch 1322ms
+   → the second land succeeds, the record read again: expected 'the fixture record store failed recor…' to be null
+ × tests/acceptance/2062/reopen.test.ts > AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series > AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series 2812ms
+   → the reopen's second try succeeds: expected 'rejected: the fixture evidence store …' to be 'done' // Object.is equality
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 2 passed (8)
+   Start at  01:33:39
+   Duration  26.18s (tests 96%, transform 2%, import 1%)
+
+JSON report written to <scratch>
+
+--- stderr
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2062/reopen.test.ts > AC4 #2062.1800089a the first land after a failed read of the record rejects, naming the read; the second succeeds, and its minute's rollup holds its batch > AC4 the record's first read fails once: the first land rejects, naming it, the second succeeds, and the closed minute's rollup holds that batch
+AssertionError: the second land succeeds, the record read again: expected 'the fixture record store failed recor…' to be null
+
+- Expected:
+null
+
++ Received:
+"the fixture record store failed record.raw(\"SELECT source, span, MAX(start) AS start FROM rollups GROUP BY source, span\")"
+
+ ❯ tests/acceptance/2062/reopen.test.ts:30:79
+     28|     c.set(t('10:00:20'));
+     29|     const second = await land(h);
+     30|     expect(second.refused, 'the second land succeeds, the record read …
+       |                                                                               ^
+     31|     expect((await w.events('reading.batch')).map((e) => e.data), 'the …
+     32|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/acceptance/2062/reopen.test.ts > AC5 #2062.926f3013 a reopen that fails once after rebuilding 2 of a minute's 3 batches starts again from empty windows: the minute's rollup counts 3 values for each series > AC5 three batches land before a restart; the reopen fails once after 2 of them, its second try succeeds, and the minute counts 3 values of each series
+AssertionError: the reopen's second try succeeds: expected 'rejected: the fixture evidence store …' to be 'done' // Object.is equality
+
+Expected: "done"
+Received: "rejected: the fixture evidence store failed evidence.get("5f55ecac2eba2fdac93266a10b2642becbfc2198129126dc4ad52d138a81232e")"
+
+ ❯ tests/acceptance/2062/reopen.test.ts:70:74
+     68|     expect(flaky.before.length, 'the reopen\'s first try read 2 of the…
+     69|     expect(flaky.failed, `the reopen\'s first try failed at the third …
+     70|     expect(await settled(h.tick()), 'the reopen\'s second try succeeds…
+       |                                                                          ^
+     71|
+     72|     c.set(CLOSED);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/acceptance/2062/wiring.test.ts > AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge > AC1 u, whose use states a digest, is refused at its install beside p, whose row keeps none, and nothing is wired
+AssertionError: the edge from test/u to test/p over x@1 isn't wired: test/u's use states a digest and test/p's row keeps none: expected [ { user: 'test/u', …(3) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "interface": "x@1",
++     "provider": "test/p",
++     "user": "test/u",
++     "uses": "x@1",
++   },
++ ]
+
+ ❯ tests/acceptance/2062/wiring.test.ts:26:108
+     24|     await setUp(h, provider(P, 'no digests'), `${P}, which provides ${…
+     25|     const got = await admit(h, user('its digest'));
+     26|     expect(await edgesOfU(h), `${EDGE} isn't wired: ${U}'s use states …
+       |                                                                                                            ^
+     27|     if (got.ok) expect.unreachable(`${U} is refused: ${EDGE} doesn't m…
+     28|     expect(got.step, `${U} is refused at its install, not later: ${got…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/2062/wiring.test.ts > AC1 #2062.dd448700 a use that states a digest isn't wired to a provider whose row keeps no digests: the install is refused, naming the edge > AC1 p, whose row keeps none, is refused at its install beside u, installed first, and nothing is wired
+AssertionError: the edge from test/u to test/p over x@1 isn't wired: test/u's use states a digest and test/p's row keeps none: expected [ { user: 'test/u', …(3) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "interface": "x@1",
++     "provider": "test/p",
++     "user": "test/u",
++     "uses": "x@1",
++   },
++ ]
+
+ ❯ tests/acceptance/2062/wiring.test.ts:37:108
+     35|     await setUp(h, user('its digest'), `${U}, whose use of ${X} has no…
+     36|     const got = await admit(h, provider(P, 'no digests'));
+     37|     expect(await edgesOfU(h), `${EDGE} isn't wired: ${U}'s use states …
+       |                                                                                                            ^
+     38|     if (got.ok) expect.unreachable(`${P} is refused: ${EDGE} doesn't m…
+     39|     expect(got.step, `${P} is refused at its install, not later: ${got…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 under the cs locale, whose ch sorts after cz, the use that chart and czar both match resolves to chart
+AssertionError: test/u's use of x@1, which test/chart and test/czar both match, resolves to test/chart: expected 'test/czar' to be 'test/chart' // Object.is equality
+
+Expected: "test/chart"
+Received: "test/czar"
+
+ ❯ tests/acceptance/2062/wiring.test.ts:78:119
+     76|     expect(got.order, `the cs locale sorts ${czar} before ${chart}, so…
+     77|     expect(got.edges.map((e) => [e.user, e.uses]), `${U}'s use of ${X}…
+     78|     expect(got.edges[0]!.provider, `${U}'s use of ${X}, which ${chart}…
+       |                                                                                                                       ^
+     79|   }, 300_000);
+     80|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/acceptance/2062/wiring.test.ts > AC3 #2062.1c13446a of two providers that both match a use that names none, the one whose ID is first by UTF-16 code units is wired, under every locale > AC3 in this process's own locale, the use that a-b and a_b both match resolves to a-b, whose hyphen is the smaller code unit
+AssertionError: test/u's use of x@1, which test/a-b and test/a_b both match, resolves to test/a-b: expected 'test/a_b' to be 'test/a-b' // Object.is equality
+
+Expected: "test/a-b"
+Received: "test/a_b"
+
+ ❯ tests/acceptance/2062/wiring.test.ts:85:123
+     83|     const edges = await tie([underscore, hyphen]);
+     84|     expect(edges.map((e) => [e.user, e.uses]), `${U}'s use of ${X} is …
+     85|     expect(edges[0]!.provider, `${U}'s use of ${X}, which ${hyphen} an…
+       |                                                                                                                           ^
+     86|   }, 300_000);
+     87| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯

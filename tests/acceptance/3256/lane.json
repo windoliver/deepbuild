@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: ac7-budget.test.mjs holds the time of the three crates' shader_layout tests to 5 s with judgeLimit, and every file starts cargo test in this checkout's target/, which a sibling's build would hold or rewrite" }

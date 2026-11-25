@@ -23,6 +23,9 @@ use crate::hub::HubError;
 use crate::question::{self, Controller, Did, Input, Phase, Row, Target};
 use crate::trusted_input::{delivered, PressEdge};
 
+mod look;
+pub(crate) use look::look;
+
 thread_local! {
     /// Where the next card is presented, in window points.
     static AT: RefCell<Option<Bounds<Pixels>>> = const { RefCell::new(None) };
@@ -132,11 +135,8 @@ pub fn undo(window: &mut Window, cx: &mut App) {
 /// the page, where it was last laid out; until then, the window right of the list.
 pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
     leave(cx);
-    let viewport = window.viewport_size();
-    let (width, height) = (
-        f32::from(viewport.width) as i64,
-        f32::from(viewport.height) as i64,
-    );
+    let visible = look::content_area(window);
+    let [_, _, width, height] = visible;
     let list = crate::views::drawn_views()
         .into_iter()
         .find(|(name, _)| *name == crate::views::SIDEBAR)
@@ -144,10 +144,7 @@ pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
     let rect = PAGE
         .with(std::cell::Cell::get)
         .unwrap_or([list, 0, width - list, height]);
-    let slot = crate::arming::Slot {
-        rect,
-        visible: [0, 0, width, height],
-    };
+    let slot = crate::arming::Slot { rect, visible };
     let events = crate::record::history();
     let now = crate::views::now();
     let Some(controller) = Controller::present(&events, ask, now, slot, Default::default()) else {
@@ -163,6 +160,7 @@ pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
             cx,
         );
         card.page = true;
+        card.watch(window, cx);
         card
     });
     // An ask opened takes the keyboard to its card, until you move it elsewhere (#1462).
@@ -232,13 +230,7 @@ impl Render for AskPage {
         let placed = card.as_ref().map(Entity::downgrade);
         let page = canvas(
             move |bounds, window, cx| {
-                let viewport = window.viewport_size();
-                let visible = [
-                    0,
-                    0,
-                    f32::from(viewport.width) as i64,
-                    f32::from(viewport.height) as i64,
-                ];
+                let visible = look::content_area(window);
                 let rect = [
                     f32::from(bounds.origin.x) as i64,
                     f32::from(bounds.origin.y) as i64,
@@ -248,7 +240,9 @@ impl Render for AskPage {
                 PAGE.with(|page| page.set(Some(rect)));
                 if let Some(card) = placed.as_ref() {
                     card.update(cx, |card, cx| {
-                        if let Some(controller) = card.controller.as_mut() {
+                        let controller = card.controller.as_mut();
+                        let heard = |c: &&mut Controller| !look::resize_unheard(c, window);
+                        if let Some(controller) = controller.filter(heard) {
                             // The window as it is now: a window made larger keeps the card armable.
                             let slot = crate::arming::Slot { rect, visible };
                             let was = controller.state_name();
@@ -647,14 +641,9 @@ impl Card {
         )
     }
 
-    /// The down of a press on `target`.
-    pub(crate) fn pressing(&mut self, target: Target) {
-        let (t, hardware) = edge(PressEdge::Down);
-        self.down = Some((target, t, hardware));
-    }
-
-    /// The up of a press on `target`, with its down: the controller decides what the whole press does.
-    pub(crate) fn pressed(&mut self, target: Target, cx: &mut Context<Self>) {
+    /// The up of a press on `target`, with its down: the controller decides what the whole press does. Whether it was
+    /// refused.
+    pub(crate) fn pressed(&mut self, target: Target, cx: &mut Context<Self>) -> bool {
         let (up, hardware) = edge(PressEdge::Up);
         let (down, hardware) = match self.down.take() {
             Some((on, t, was)) if on == target => (t, was && hardware),
@@ -668,10 +657,11 @@ impl Card {
                 client: Client::Unknown,
             }
         };
-        self.press_with(target, down, up, source, cx);
+        self.press_with(target, down, up, source, cx)
     }
 
-    /// One whole press on `target`, its down at `down` and its up at `up`: the controller decides what it does.
+    /// One whole press on `target`, its down at `down` and its up at `up`: the controller decides what it does. Whether it
+    /// was refused.
     fn press_with(
         &mut self,
         target: Target,
@@ -679,9 +669,9 @@ impl Card {
         up: u64,
         source: Source,
         cx: &mut Context<Self>,
-    ) {
+    ) -> bool {
         let Some(controller) = self.controller.as_mut() else {
-            return;
+            return false;
         };
         // The card reads the record's history from the hub, as it stands at the press.
         let events = crate::record::history();
@@ -696,6 +686,7 @@ impl Card {
             Did::Nothing => controller.press(press(Phase::Up, up), &events, now),
             other => other,
         };
+        let refused = did == Did::Refused;
         match did {
             Did::NeedsConfirmation(reason) => self.confirm(reason, cx),
             Did::SignIn(ask) => self.sign_in(ask, cx),
@@ -705,6 +696,7 @@ impl Card {
         }
         self.send(cx);
         cx.notify();
+        refused
     }
 
     /// Has the OS confirm you off the main thread, then tells the controller what it said.
@@ -901,9 +893,13 @@ impl Card {
                 }))
                 .on_mouse_down(
                     MouseButton::Left,
-                    cx.listener(move |card, _, _, _| card.pressing(target)),
+                    cx.listener(move |card, down, window, cx| {
+                        card.pressing(target, down, window, cx)
+                    }),
                 )
-                .on_click(cx.listener(move |card, _, _, cx| card.pressed(target, cx)))
+                .on_click(cx.listener(move |card, _, _, cx| {
+                    card.pressed(target, cx);
+                }))
                 .into_any_element();
         }
         control(id, kind, label, chrome)
@@ -913,9 +909,11 @@ impl Card {
             .when(focused, |control| control.aria_active_descendant())
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |card, _, _, _| card.pressing(target)),
+                cx.listener(move |card, down, window, cx| card.pressing(target, down, window, cx)),
             )
-            .on_click(cx.listener(move |card, _, _, cx| card.pressed(target, cx)))
+            .on_click(cx.listener(move |card, _, _, cx| {
+                card.pressed(target, cx);
+            }))
             .into_any_element()
     }
 }
@@ -1145,7 +1143,7 @@ impl Card {
         let card = cx.entity().downgrade();
         let (rows, held) = (self.rows.clone(), self.last.clone());
         let measure = canvas(
-            move |bounds, _, cx| {
+            move |bounds, window, cx| {
                 // The card and the box share the page (#1461); a last block cut off at the card's foot isn't all in
                 // view, so the card doesn't fit (#1808).
                 let below = BOX_TALL.with(std::cell::Cell::get);
@@ -1166,7 +1164,8 @@ impl Card {
                 let now = crate::views::now();
                 let changed = card
                     .update(cx, |card, _| {
-                        let Some(controller) = card.controller.as_mut() else {
+                        let heard = |c: &&mut Controller| !look::resize_unheard(c, window);
+                        let Some(controller) = card.controller.as_mut().filter(heard) else {
                             return false;
                         };
                         let was = (controller.state_name(), controller.lines());
