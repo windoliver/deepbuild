@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2690fd0/tests/acceptance/1810
+
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  23:48:46
+   Duration  65.08s (tests 99%, transform 1%)
+

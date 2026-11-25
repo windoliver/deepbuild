@@ -1,0 +1,5 @@
+A  tests/acceptance/2690/BASE-FAILURE.txt
+A  tests/acceptance/2690/README.md
+A  tests/acceptance/2690/criteria.json
+A  tests/acceptance/2690/row-word.test.ts
+A  tests/acceptance/2690/tsconfig.json

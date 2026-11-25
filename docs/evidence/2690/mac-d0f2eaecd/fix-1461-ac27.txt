@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 ~/mac-runs/d2690fd0
+
+
+ Test Files  1 passed | 1 skipped (2)
+      Tests  2 passed | 6 skipped (8)
+   Start at  23:48:33
+   Duration  12.57s (tests 88%, transform 11%, import 1%)
+

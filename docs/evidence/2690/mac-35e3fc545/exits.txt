@@ -1,0 +1,28 @@
+start; cc --version exit 0; screen-lock flag 0; 'AC Power'; front app [Claude] 20:58:51 load { 46.50 73.55 81.70 } thermal 0 free KB 180450624
+BASE clone at a1ef97760cbcc9935b8fdadd4a7bef586969ef4d exit=0; origin/claude/fix-2690-ask-row-word 35e3fc545de62971d16de4a300f96dd22a952a37; origin/main 1b4929ae7977aa4bfe62b03e0ef39674be9e8a27; merge-base a1ef97760cbcc9935b8fdadd4a7bef586969ef4d 21:00:36 load { 44.89 66.58 78.11 } thermal 1 free KB 166431712
+base copied tests: 5 changed paths (base-copied-tests.txt) 21:00:36 load { 44.89 66.58 78.11 } thermal 1 free KB 166421212
+setup base (npm ci, workspace build, deep-hook, deep-show) exit=0 21:19:43 load { 59.76 88.25 84.04 } thermal 1 free KB 125499552
+base-2690.txt: Tests 1 failed | 2 passed (3) exit=1 21:33:22 load { 85.85 79.79 80.61 } thermal 0 free KB 101445392
+base-1459-ac6.txt: test result: FAILED. 0 passed; 1 failed exit=1; no snapshots found 21:51:17 load { 101.03 80.19 76.40 } thermal 0 free KB 127387688
+base-1172-rows.txt: Tests 1 failed | 1 passed (2) exit=1 22:04:37 load { 64.13 82.05 78.63 } thermal 0 free KB 116071540
+clone ~/mac-runs/d2690b35 removed 22:04:59 load { 52.45 77.86 77.21 } thermal 0 free KB 159122064
+FIX clone at 35e3fc545de62971d16de4a300f96dd22a952a37 exit=0; origin/claude/fix-2690-ask-row-word d0f2eaecd05a2a556f52c58eeb5bffe667ea0447; origin/main 1b4929ae7977aa4bfe62b03e0ef39674be9e8a27 22:05:54 load { 48.83 72.93 75.43 } thermal 0 free KB 157167372
+setup fix (npm ci, workspace build, deep-hook, deep-show) exit=0 22:21:49 load { 211.88 181.14 128.36 } thermal 0 free KB 162181012
+NOTE: branch head moved from 35e3fc545de62971d16de4a300f96dd22a952a37 22:21:50 load { 198.92 178.96 127.90 } thermal 0 free KB 162181004
+fix-2690.txt: Tests 3 passed (3) exit=0 22:27:39 load { 70.40 112.51 113.26 } thermal 0 free KB 151718280
+fix-1461-ac27.txt: Tests 2 passed | 6 skipped (8) exit=0 22:27:49 load { 60.97 109.10 112.04 } thermal 0 free KB 151108556
+fix-1172-rows.txt: Tests 1 failed | 1 passed (2) exit=1 22:41:44 load { 42.88 60.26 83.90 } thermal 0 free KB 122168988
+fix-1810-redraft.txt: Tests 6 passed (6) exit=0 22:42:47 load { 26.35 52.01 79.06 } thermal 0 free KB 120687956
+fix-1546-ac1.txt: Tests 5 failed | 1 passed (6) exit=1 22:49:29 load { 62.77 55.97 70.32 } thermal 0 free KB 99027548
+fix-1427-ac7.txt: Tests 4 failed (4) exit=1 22:49:49 load { 55.76 54.83 69.58 } thermal 0 free KB 98937588
+fix-1459-ac6-before.txt: test result: FAILED. 0 passed; 1 failed exit=1; no snapshots found 22:50:39 load { 51.70 53.68 68.30 } thermal 0 free KB 95983768
+retake: view:exit needs-you:0 sidebar:0 session:0; files copied: needs-you.json session.json sidebar.json 22:51:14 load { 43.12 51.42 66.89 } thermal 0 free KB 96484940
+live-diff:  3 files changed, 390 insertions(+), 403 deletions(-) 22:51:15 load { 43.12 51.42 66.89 } thermal 0 free KB 96671276
+fix-1459-ac6-after.txt: test result: FAILED. 0 passed; 1 failed exit=1 22:51:18 load { 42.15 51.08 66.68 } thermal 0 free KB 96849752
+base-replica copied from $TMPDIR/deep-338-9148 (A2 ended 21:51:17)
+fix-replica copied by hand from $TMPDIR/deep-338-56633 (B6 ended 22:50:39); script's snaps() searched the clone only
+NOTE: B7 retake here ran deep-live without TZ=UTC (brief's command); headless.rs LIVE_ZONE=UTC; after-diff 13:00 vs 05:00 is that 8 h offset. d0f round adds TZ=UTC.
+fix-1459-parity.txt: Tests 2 failed | 1 passed (3) exit=1 22:52:03 load { 36.44 48.52 64.94 } thermal 0 free KB 92229260
+fix git status --porcelain lines after (retaken captures included): 3 22:52:03 load { 36.44 48.52 64.94 } thermal 0 free KB 92223280
+clone ~/mac-runs/d2690f35 removed 22:52:10 load { 33.92 47.80 64.59 } thermal 0 free KB 114081068
+ALL DONE front app [Claude] 22:52:10 load { 33.92 47.80 64.59 } thermal 0 free KB 114080384
