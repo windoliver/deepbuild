@@ -19,27 +19,39 @@ afterAll(() => {
   rmSync(out, { recursive: true, force: true });
 });
 
-/** One deep-drive process per plant, its plays one at a time. */
+/** deep-drive renders the replica on macOS only (crates/deep-replica/src/deep_drive.rs): elsewhere a play is unrun. */
+function needsMac(): void {
+  if (process.platform !== 'darwin') expect.fail(`BLOCKED: deep-drive renders the replica on macOS only; this is ${process.platform}; this is not a pass`);
+}
+
+/** One deep-drive process per plant, its plays one at a time; a play still waiting when the process exits fails. */
 function drive(plant: string | null): (line: Record<string, unknown>) => Promise<Record<string, unknown>> {
   const env = { ...process.env, ...(plant ? { DEEP_DRIVE_PLANT: plant } : {}) };
   const child = spawn(join(REPO, 'target', 'debug', 'deep-drive'), ['--out', join(out, plant ?? 'clean')], { env, stdio: ['pipe', 'pipe', 'inherit'] });
   started.push(child);
   let buffer = '';
-  const waiting: ((v: Record<string, unknown>) => void)[] = [];
+  let exited: Error | null = null;
+  const waiting: { done(v: Record<string, unknown>): void; fail(e: Error): void }[] = [];
   child.stdout.setEncoding('utf8').on('data', (d: string) => {
     buffer += d;
     for (let at = buffer.indexOf('\n'); at >= 0; at = buffer.indexOf('\n')) {
       const line = buffer.slice(0, at);
       buffer = buffer.slice(at + 1);
-      waiting.shift()?.(JSON.parse(line) as Record<string, unknown>);
+      waiting.shift()?.done(JSON.parse(line) as Record<string, unknown>);
     }
   });
-  let chain: Promise<unknown> = new Promise((done) => waiting.push(done));
+  child.on('exit', (code, signal) => {
+    exited = Error(`deep-drive${plant ? ` (${plant})` : ''} exited ${signal ?? code} before replying`);
+    for (const w of waiting.splice(0)) w.fail(exited);
+  });
+  const reply = (send?: string) => new Promise<Record<string, unknown>>((done, fail) => {
+    if (exited) return fail(exited);
+    waiting.push({ done, fail });
+    if (send) child.stdin.write(send);
+  });
+  let chain: Promise<unknown> = reply();
   return (line) => {
-    const next = chain.then(() => new Promise<Record<string, unknown>>((done) => {
-      waiting.push(done);
-      child.stdin.write(`${JSON.stringify(line)}\n`);
-    }));
+    const next = chain.then(() => reply(`${JSON.stringify(line)}\n`));
     chain = next;
     return next;
   };
@@ -57,6 +69,7 @@ describe('the playtest kit', () => {
   });
 
   it('passes the clean maze, fails each twin with its code, and catches each planted runner', async () => {
+    needsMac();
     const built = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive', '--features', 'env-plants'], { cwd: REPO, stdio: 'inherit' });
     expect(built.status, 'deep-drive builds').toBe(0);
     const mazes = pieces();
@@ -86,6 +99,7 @@ describe('the playtest kit', () => {
 
   // #556: grid.reach's kit, each planted runner caught by its fixture: opens-locks by the key inside its own vault.
   it('passes grid.reach\'s clean fixtures and catches each planted runner', async () => {
+    needsMac();
     const built = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive', '--features', 'env-plants'], { cwd: REPO, stdio: 'inherit' });
     expect(built.status, 'deep-drive builds').toBe(0);
     const kitPieces = reachPieces();
