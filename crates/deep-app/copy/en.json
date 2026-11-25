@@ -348,6 +348,10 @@
     "other": "{0} changes"
   },
   "said.hub_back": "The hub is answering again",
+  "said.new": {
+    "one": "{0} new",
+    "other": "{0} new"
+  },
   "said.question_changed": "the question changed",
   "said.withdrawn": "Withdrawn before it started",
   "setup.adds": "Adds hooks to {0}. A hook is {1}.",

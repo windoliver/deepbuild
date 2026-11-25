@@ -1215,6 +1215,12 @@
     "text": "中枢恢复响应",
     "source": "d0fcf655bab8d3991d3f357aa4479f87acd7984d2f3abc1d373372267c43b6dd"
   },
+  "said.new": {
+    "text": {
+      "other": "{0} 个新请求"
+    },
+    "source": "242acb695afc913a8ec69438834308d68a54b79da545c807b8b2f4b9378f3f51"
+  },
   "said.question_changed": {
     "text": "问题已更改",
     "source": "ededa39cea494a1893a10b7436cd0cd0234041894f8c7f5536bab86ac234dff3"

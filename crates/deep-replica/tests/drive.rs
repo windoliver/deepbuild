@@ -364,6 +364,62 @@ fn an_ask_that_comes_due_with_notifications_off_is_said_in_the_window() {
     }
 }
 
+/// The node whose id is `id`; null when the tree holds none.
+fn node_of(node: &Value, id: &str) -> Value {
+    if node["id"] == id {
+        return node.clone();
+    }
+    let children = node["children"].as_array().into_iter().flatten();
+    children
+        .map(|child| node_of(child, id))
+        .find(|found| !found.is_null())
+        .unwrap_or(Value::Null)
+}
+
+/// #3232: asks that come in sight beside a presented card wait as new. Their count is drawn on the row of the list's
+/// count and said once for each change, the card stays where it is, and showing one of them ends the count.
+#[test]
+fn asks_that_arrive_beside_a_presented_card_are_said_as_new_with_their_count() {
+    let mut drive = on_the_asks_page("said-new");
+    // What the window draws of them, and where the card is.
+    let look = |drive: &mut Drive| {
+        let tree = drive.call(json!({"call": "see"}))["snapshot"]["tree"].clone();
+        let card = node_of(&tree, "question-card")["bounds"].clone();
+        (node_of(&tree, "asks-new")["name"].clone(), card)
+    };
+    let (none, card) = look(&mut drive);
+    assert_eq!(none, Value::Null, "no ask is new yet");
+    let mut lines = Vec::new();
+    for (nth, new) in [(1, "1 new"), (2, "2 new")] {
+        let data = json!({"kind": "choice", "question": format!("Is {nth} right?"), "owner": "you",
+            "options": [{"id": "yes", "label": "Yes", "decision": "none"}, {"id": "no", "label": "No", "decision": "none"}],
+            "recommended": "yes", "deadline": 1_800_134_000_000_u64, "fallback": "no", "default": "no",
+            "provisional": false, "key": format!("k-new-{nth}")});
+        let event = json!({"v": 1, "id": format!("01PWNEW{nth:019}"), "kind": "ask.created", "writer": "core",
+            "actor": "you", "scope": "you", "data": data});
+        let fed = drive.call(json!({"call": "feed", "feed": {"session": CART, "event": event}}));
+        assert_eq!(fed["ok"], true, "{fed}");
+        assert_eq!(
+            look(&mut drive),
+            (json!(new), card.clone()),
+            "the card stays"
+        );
+        pass(&mut drive, 3_000);
+        lines.push(format!(
+            "needs you · {} asks need you · {new} · ⌘J",
+            nth + 1
+        ));
+        assert_eq!(said(&mut drive), lines);
+    }
+    // One of them shown: its page opens, and none waits as new beside its card.
+    let address = "ask/01PWNEW0000000000000000001";
+    let opened = drive.call(json!({"call": "open", "open": {"address": address}}));
+    assert_eq!(opened["address"], json!(address), "{opened}");
+    pass(&mut drive, 3_000);
+    assert_eq!(look(&mut drive).0, Value::Null, "shown, so none is new");
+    assert_eq!(said(&mut drive), lines);
+}
+
 /// The press that brings the window back from another app is refused (#1843), so Send is often the first thing pressed
 /// there. A resize re-arms the card too, and Send is pressed at once.
 #[test]

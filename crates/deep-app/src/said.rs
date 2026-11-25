@@ -2,9 +2,10 @@
 //! value is the last line said, and its rows the last five, newest first, each with its time, so a person who missed a
 //! line can walk back to it. A line is said only for a change on a closed list, read from the record's events and the
 //! card's own state table: an ask that opened while its session's page is open in the key window, which the notifier
-//! posts nothing for; the state word of the session on the open page; a presented card whose content changed; a hold
-//! before a step that can't be undone, when it starts and when it ran or was withdrawn; a default applied to the ask
-//! on the open page; the hub not answering, and answering again. Never what a working session is doing, a time that
+//! posts nothing for; the state word of the session on the open page; a presented card whose content changed; the
+//! count of asks waiting as new beside a presented card; a hold before a step that can't be undone, when it starts
+//! and when it ran or was withdrawn; a default applied to the ask on the open page; the hub not answering, and
+//! answering again. Never what a working session is doing, a time that
 //! ticks, hover, an unread mark or a row that moved. Changes within [`TOGETHER`] of each other are one line with their
 //! count. Every word is the copy table's, and a line about an ask starts with needs you and ends with the key that
 //! opens its card.
@@ -71,6 +72,10 @@ struct Read {
     /// #3232's planted line: the session on the open page, with what its row was last doing.
     did: Option<(String, String)>,
     sight: Vec<String>,
+    /// The card on the open ask's page with the asks in sight when it was presented, and how many came in sight
+    /// since: those wait as new beside it, until you show them.
+    beside: Option<(String, Vec<String>)>,
+    new: usize,
     /// The ask answered on the open page, whose hold the record says next, and the asks whose hold was said.
     answered: Option<String>,
     held: Vec<String>,
@@ -90,6 +95,22 @@ struct Said {
 }
 
 impl Global for Said {}
+
+thread_local! {
+    /// How many asks wait as new beside the presented card: what the row of Needs you's count draws.
+    static NEW: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The asks waiting as new beside the presented card, as the row of Needs you's count draws them: "2 new". None
+/// while none waits, so nothing moves when one does.
+pub(crate) fn new_beside() -> Option<AnyElement> {
+    let new = NEW.with(std::cell::Cell::get) as u64;
+    (new > 0).then(|| {
+        crate::views::label("asks-new", copy::count("said.new", new, &[]))
+            .flex_none()
+            .into_any_element()
+    })
+}
 
 /// The lines the region keeps, newest first.
 pub fn lines(cx: &App) -> Vec<Line> {
@@ -292,6 +313,12 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
         .map(|said| said.read.clone())
         .unwrap_or_default();
     let session = here.as_ref().filter(|a| a.place == Place::Session);
+    // The card on the open ask's page (#1461), and whether it is another than the last tick's.
+    let card = here
+        .as_ref()
+        .filter(|a| a.place == Place::Ask && crate::card::showing(cx).is_some())
+        .map(|a| format!("ask:{}", a.id));
+    let presented = card.as_ref() != was.beside.as_ref().map(|(ask, _)| ask);
     let mut changes: Vec<(Change, bool)> = Vec::new();
     let (mut opened, mut asked, mut defaults) = (Vec::new(), Vec::new(), Vec::new());
     let mut next = was.clone();
@@ -304,7 +331,7 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
             .take_while(|event| event["log_pos"].as_u64() > Some(from))
             .collect();
         new.reverse();
-        let mut opens = was.to.is_none();
+        let mut opens = was.to.is_none() || presented;
         let on_page = |ask: &str| {
             let page = was.page.as_ref().map(|page| page.0.as_str());
             page == Some(Address::ask(ask).to_string().as_str())
@@ -318,8 +345,10 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
         for event in new {
             let core = event["writer"] == "core";
             let subject = event["subject"].as_str().unwrap_or_default();
-            opens |= crate::notify::reads(event);
-            match event["kind"].as_str().unwrap_or_default() {
+            let kind = event["kind"].as_str().unwrap_or_default();
+            // What the notifier reads may bring an ask in sight, and a close takes one out of it.
+            opens |= crate::notify::reads(event) || states::closing().iter().any(|k| k == kind);
+            match kind {
                 "ask.answered" if core && on_page(subject) => {
                     next.answered = Some(subject.to_owned())
                 }
@@ -361,6 +390,17 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
                     asked.push(handle.clone());
                 }
             }
+            // Those that came in sight since the card on the open ask's page was presented wait as new beside it.
+            if presented {
+                next.beside = card.clone().map(|ask| (ask, next.sight.clone()));
+            }
+            next.new = match &next.beside {
+                Some((ask, seen)) => {
+                    let new = next.sight.iter();
+                    new.filter(|new| !seen.contains(new) && *new != ask).count()
+                }
+                None => 0,
+            };
         }
         // The session on the open page: its state word, never what it is doing.
         let row = session.and_then(|s| table.row_of(&format!("session:{}", s.id)));
@@ -402,6 +442,16 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
             "said.hub_back"
         };
         changes.push((change("hub", copy::text(words).to_owned()), false));
+    }
+    // The count of asks waiting as new beside the presented card: drawn where it stands, and said while any waits.
+    if next.new != was.new {
+        NEW.with(|new| new.set(next.new));
+        cx.refresh_windows();
+        if next.new > 0 {
+            let mut new = change("new", copy::count("said.new", next.new as u64, &[]));
+            new.ask = true;
+            changes.push((new, false));
+        }
     }
     // #3232's planted receipt says each value its countdown shows, a second apart.
     if let Some((until, told)) = next
