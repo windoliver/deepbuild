@@ -65,6 +65,9 @@ pub fn tone(
     };
     // #464: the grade inside the pass, as the output runs it: the white balance before the curve
     // and the CDL after it.
+    let [wb0, wb1, wb2] = grade
+        .white_balance()
+        .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]);
     let uniform = ToneUniform {
         exposure: 1.0,
         map: code,
@@ -75,10 +78,11 @@ pub fn tone(
         saturation: grade.saturation as f32,
         graded: u32::from(!grade.is_identity()),
         top: 1.0,
-        _pad: [0; 3],
-        wb: grade
-            .white_balance()
-            .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
+        late: 0,
+        _pad: [0; 2],
+        wb0,
+        wb1,
+        wb2,
         slope: rgb4(grade.slope),
         offset: rgb4(grade.offset),
         power: rgb4(grade.power),

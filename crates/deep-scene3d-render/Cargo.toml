@@ -88,3 +88,8 @@ path = "../../tests/acceptance/3016-redraft-3169/metal.rs"
 [[test]]
 name = "acceptance_3016_views"
 path = "../../tests/acceptance/3016-redraft-3169/views.rs"
+
+# Issue #3256: the acceptance suite's own target, written blind in tests/acceptance/3256 (README there).
+[[test]]
+name = "acceptance_3256_twin_shaders"
+path = "../../tests/acceptance/3256/twin_shaders.rs"

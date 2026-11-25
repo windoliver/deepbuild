@@ -664,11 +664,7 @@ export class Core {
       this.canvasSide.appended(input);
       this.log.stream();
       this.flags.appended(kind, connection.session);
-      if (kind !== 'session.state' && kind !== 'row.set') {
-        // The next state pass reads the sessions appended to since the last; an event of no session, every session.
-        if (this.state.touched !== 'all') { if (connection.session) this.state.touched.add(connection.session); else this.state.touched = 'all'; }
-        this.state.stateSoon();
-      }
+      this.state.appended(input, connection.session);
       if (kind.startsWith('ask.') || kind === 'card.taken_over' || kind.startsWith('delivery.') || kind === 'session.start' || kind === 'session.end') this.askingSoon();
       if (kind === 'verdict.made') this.github?.verdicts();
       // A deep_wait or deep_run waiting on what this event settles reads it again now, and answers before the
