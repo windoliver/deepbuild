@@ -62,7 +62,7 @@ slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
 export const aloneReasons = {};
 for (const [reason, entries] of Object.entries({
   binary: [
-    'tests/acceptance/2386/', 'tests/acceptance/2086-redraft-2047/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
+    'tests/acceptance/2386/', 'tests/acceptance/2086-redraft-2047/', 'tests/acceptance/172-redraft-ac4/', 'tests/acceptance/1490-redraft-2892/', 'tests/acceptance/192/packs-redraft-2892/', 'tests/acceptance/2386-redraft-ac6-hashes/', 'tests/acceptance/1456-redraft-ac2-ac4/', 'tests/acceptance/323-redraft-2171/', 'tests/acceptance/2896/',
     'tests/acceptance/2700/heap.test.mjs', 'tests/acceptance/2700/equal.test.mjs', 'tests/acceptance/2700/data-row.test.mjs', 'tests/acceptance/2700/as-given.test.mjs', 'tests/acceptance/2700/reached.test.mjs',
     'tests/acceptance/1523/', 'tests/acceptance/84/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/',
     'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/',
