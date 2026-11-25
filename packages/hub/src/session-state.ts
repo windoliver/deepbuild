@@ -13,7 +13,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { type JsonValue } from '@deepbuild/contracts';
 import type { Asks } from '@deepbuild/asks';
 
-import { type RecordStore } from '@deepbuild/record';
+import { type EventInput, type RecordStore } from '@deepbuild/record';
 
 import { type JobRecord, type Runner } from '@deepbuild/runner';
 import { alive as running } from '@deepbuild/supervisor';
@@ -86,6 +86,18 @@ schedule: Pick<HookSchedule, "askingSoon" | "queue">;
 
 }
 
+/**
+ * What an event names that leads to a session (#3389), by the fields the record's projections read: an ask's, a claim's,
+ * a verdict's or a session's handle, each ask of a batch, and the task it is about.
+ */
+function namesOf({ id, kind, subject, data }: EventInput): string[] {
+  const d: Obj = isObj(data) ? data : {};
+  const asks = Array.isArray(d.asks) ? d.asks.map((a) => (isObj(a) ? a.ask : undefined)) : [];
+  const handles = [subject, d.ask, d.claim, d.verdict, d.delivery, d.owner, d.session, ...asks, kind === 'ask.created' ? `ask:${id}` : undefined];
+  const tasks = [d.task_ref, kind.startsWith('task.') ? subject : undefined];
+  return [...handles.filter((h) => typeof h === 'string' && /^(ask|claim|verdict|session):/.test(h)), ...tasks].filter((n): n is string => typeof n === 'string');
+}
+
 /** A state a hub's restart waits on (hub-control.ts): a turn under way, or one waiting on you. */
 const inTurn = (state: string): boolean => state.startsWith('working/') || state === 'needs you/waiting';
 
@@ -156,8 +168,11 @@ export class SessionState {
   private stateWake: (() => void) | undefined;
   private stateTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** The sessions appended to since the last state pass, or all of them: at the start and after a failed pass. */
+  /** The sessions appended to since the last state pass, or all of them: at the start, after a failed pass and at `deep off` or `deep on`. */
   touched: Set<string> | 'all' = 'all';
+
+  /** What the appends since the last state pass name: the pass reads the sessions these lead to as well (#3389). */
+  private names = new Set<string>();
 
   /** When the clock alone ends each session's state, for those whose last reading gave a time (#2646). */
   private readonly until = new Map<string, number>();
@@ -470,6 +485,37 @@ export class SessionState {
     }
   }
 
+  /**
+   * An append, made in `session` if in one (#3389): the next state pass reads that session and those the event's names
+   * lead to. One that concerns none starts no pass.
+   */
+  appended(input: EventInput, session: string | undefined): void {
+    if (input.kind === 'session.state' || input.kind === 'row.set') return;
+    // The planted wrong program touches the session the append was made in, and nothing else.
+    const own = this.options.settings.plant === 'state-pass-own-session-only';
+    // `deep off` and `deep on` hold for every session.
+    if (input.kind === 'holds.watch' && !session && !own) this.touched = 'all';
+    if (this.touched !== 'all') {
+      const names = own ? [] : namesOf(input);
+      if (!session && !names.length) return;
+      if (session) this.touched.add(session);
+      for (const name of names) this.names.add(name);
+    }
+    this.stateSoon();
+  }
+
+  /** The sessions the names of events lead to: an ask's, a claim's, a verdict's claim's, those at a task, and a session's own (#3389). */
+  private async sessionsOf(names: ReadonlySet<string>): Promise<string[]> {
+    if (!names.size) return [];
+    const ids = [...names].flatMap((name) => [name, name.replace(/^[a-z]+:/, '')]);
+    const rows = await this.options.services.raw(`WITH named(id) AS (SELECT value FROM json_each(?))
+      SELECT session_id AS id FROM asks WHERE id IN (SELECT id FROM named)
+      UNION SELECT session_id FROM claims WHERE id IN (SELECT id FROM named) UNION SELECT session_id FROM claims WHERE subject_ref IN (SELECT id FROM named)
+      UNION SELECT c.session_id FROM verdicts v JOIN claims c ON c.id = v.claim_id WHERE v.id IN (SELECT id FROM named)
+      UNION SELECT thread FROM tasks WHERE task_ref IN (SELECT id FROM named) UNION SELECT id FROM sessions WHERE id IN (SELECT id FROM named)`, [JSON.stringify(ids)]);
+    return (rows as { id: string | null }[]).flatMap((r) => r.id ?? []);
+  }
+
   /** Reads the sessions' states again soon after an append; appends that land meanwhile are read in the next pass. */
   stateSoon(): void {
     if (!this.statesRead || this.options.kernel.stopping) return;
@@ -524,12 +570,15 @@ export class SessionState {
 
   /** Appends session.state for each session whose state or cause the one reading now gives differently. */
   async recordStates(): Promise<void> {
-    const only = this.touched;
+    const { touched, names } = this;
     this.touched = new Set();
-    if (only !== 'all' && !only.size) return;
+    this.names = new Set();
+    if (touched !== 'all' && !touched.size && !names.size) return;
     try {
+      const only = touched === 'all' ? touched : new Set([...touched, ...await this.sessionsOf(names)]);
       // Appended together, so the record commits them in one batch, as it does a first start's state for every session.
-      const read = await sessionStates(this.options.services.raw, this.options.services.now(), only === 'all' ? undefined : only);
+      // An ask of no session has no state to read, only its row below.
+      const read = only !== 'all' && !only.size ? [] : await sessionStates(this.options.services.raw, this.options.services.now(), only === 'all' ? undefined : only);
       // The planted wrong program leaves out each session whose newest promise event says its promise fell due.
       const due = !['pass-skips-due-promise', 'state-pass-skips-due-promise'].includes(this.options.settings.plant ?? '') ? [] : (await this.options.services.raw("SELECT session_id FROM events e WHERE kind = 'promise.due' AND NOT EXISTS (SELECT 1 FROM events l WHERE l.session_id = e.session_id AND l.log_pos > e.log_pos AND l.kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked'))")) as { session_id: string }[];
       const readings = read.filter((r) => !due.some((d) => d.session_id === r.id));
@@ -934,7 +983,10 @@ export class SessionState {
       if (pid && ![...this.sessions.values()].some((s) => s.id !== id && s.pid === pid)) this.starts.delete(pid);
       this.sessions.delete(id);
       if (this.tails.has(id)) plantedKeeps(this.options.settings.plant, 'churn-keeps-usage-tail', id, this.tails.get(id));
-      for (const kept of [this.projects, this.sessionPeople, this.entered, this.tails, this.compacting, this.states, this.until, this.windowOf, this.agentTitles]) kept.delete(id);
+      for (const kept of [this.projects, this.sessionPeople, this.entered, this.tails, this.compacting, this.states, this.windowOf, this.agentTitles]) kept.delete(id);
+      // When the clock ends its state stays until then (#3389): the minute pass reads it, and no append will. The planted
+      // wrong program lets it go with the session.
+      if (this.options.settings.plant === 'let-go-forgets-time') this.until.delete(id);
       this.rows.delete(`session:${id}`);
       for (const kept of [this.versioned, this.miscalled]) kept.delete(id);
       this.startChecked.delete(id);
