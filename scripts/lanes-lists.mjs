@@ -1556,3 +1556,7 @@ byHand.push('tests/acceptance/3295/late-close.test.mjs');
 // #3257's folder (blind) runs alone by its lane.json: its files build deep-gpu, the merge base's too, and draw on Metal.
 // ac7-budget.test.ts times the mask map's chain against the merge base's on the reference Mac.
 timed.push('tests/acceptance/3257/ac7-budget.test.ts');
+
+// #1857's folder (blind) runs alone by its lane.json. cap.test.ts and budgets.test.ts each judge a check's time and a
+// child's peak on the reference Mac.
+timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');

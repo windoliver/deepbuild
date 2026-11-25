@@ -295,7 +295,7 @@ pub(super) fn expand_one(
                     .and_then(|(_, item)| super::super::kind_text(item))
                     .and_then(|k| k.rsplit_once('@'))
                     .and_then(|(full, _)| resolved.elements.get(full));
-                let (Some((b, item)), Some(hook)) = (builder, hook) else {
+                let (Some((b, _)), Some(hook)) = (builder, hook) else {
                     issues.push(Issue::error(
                         "ref_unresolved",
                         id,
@@ -308,11 +308,19 @@ pub(super) fn expand_one(
                     ));
                     return None;
                 };
-                let doc = json!({ "items": Value::Object(items.clone()) });
+                // The document's items are lent whole to the elements function and taken back,
+                // never copied.
+                let mut doc = Map::new();
+                doc.insert("items".into(), Value::Object(std::mem::take(items)));
+                let mut doc = Value::Object(doc);
                 let plant = planted
                     .each_per_triangle
                     .then_some("each_face_per_triangle");
-                match hook(&doc, b, item, &each.part, &each.domain, plant) {
+                let listed = hook(&doc, b, &doc["items"][b], &each.part, &each.domain, plant);
+                if let Value::Object(lent) = doc["items"].take() {
+                    *items = lent;
+                }
+                match listed {
                     Ok(list) if list.len() as u64 <= MAX_REPEAT => Some(list),
                     Ok(list) => {
                         issues.push(Issue::error(

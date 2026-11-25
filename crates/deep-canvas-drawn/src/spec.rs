@@ -518,6 +518,9 @@ pub struct Profile {
     pub double: Option<(f64, f64)>,
     pub dry_tail: f64,
     pub seed: u64,
+    /// Planted (#1857): read by the parser that admits a break's `every` or `gap` of 0, and drawn
+    /// with no guard on its breaks, as the base draws it.
+    pub unguarded: bool,
 }
 
 /// A look's named line, as far as a drawn look reads it.
@@ -546,15 +549,14 @@ fn above_zero(m: &Map<String, Value>, name: &str, or: f64, path: &str) -> Result
     }
 }
 
-fn profile(m: &Map<String, Value>, path: &str) -> Result<Profile, Refused> {
+fn profile(m: &Map<String, Value>, path: &str, unguarded: bool) -> Result<Profile, Refused> {
+    // Planted (#1857): a break's `every` and `gap` take any finite number, 0 among them.
+    let read = if unguarded { number } else { above_zero };
     let breaks = match object(m.get("breaks"), &format!("{path}/breaks"))? {
         None => None,
         Some(b) => {
             let at = format!("{path}/breaks");
-            Some((
-                above_zero(b, "every", 40.0, &at)?,
-                above_zero(b, "gap", 4.0, &at)?,
-            ))
+            Some((read(b, "every", 40.0, &at)?, read(b, "gap", 4.0, &at)?))
         }
     };
     let double = match object(m.get("double"), &format!("{path}/double"))? {
@@ -577,11 +579,20 @@ fn profile(m: &Map<String, Value>, path: &str) -> Result<Profile, Refused> {
         double,
         dry_tail: unit(m, "dry_tail", 0.0, path)?,
         seed: seed(m, path)?,
+        unguarded,
     })
 }
 
 /// A look's line `name` in `look`.
 pub fn line(look: &Map<String, Value>, name: &str) -> Result<Option<Line>, Refused> {
+    line_in(look, name, false)
+}
+
+fn line_in(
+    look: &Map<String, Value>,
+    name: &str,
+    unguarded: bool,
+) -> Result<Option<Line>, Refused> {
     let path = format!("lines/{name}");
     let Some(l) = look.get("lines").and_then(|m| m.get(name)) else {
         return Ok(None);
@@ -599,7 +610,7 @@ pub fn line(look: &Map<String, Value>, name: &str) -> Result<Option<Line>, Refus
     }
     let profile = match object(l.get("profile"), &format!("{path}/profile"))? {
         None => None,
-        Some(p) => Some(profile(p, &format!("{path}/profile"))?),
+        Some(p) => Some(profile(p, &format!("{path}/profile"), unguarded)?),
     };
     Ok(Some(Line {
         width: l.get("width").and_then(Value::as_f64),
@@ -615,6 +626,10 @@ pub fn line(look: &Map<String, Value>, name: &str) -> Result<Option<Line>, Refus
 
 /// Every drawn field of a look, read once: a look that fails here is refused.
 pub fn check(look: &Map<String, Value>) -> Result<(), Refused> {
+    check_in(look, false)
+}
+
+fn check_in(look: &Map<String, Value>, unguarded: bool) -> Result<(), Refused> {
     light(look)?;
     paper(look)?;
     for name in look
@@ -623,7 +638,7 @@ pub fn check(look: &Map<String, Value>) -> Result<(), Refused> {
         .into_iter()
         .flat_map(|m| m.keys())
     {
-        line(look, name)?;
+        line_in(look, name, unguarded)?;
     }
     for (name, f) in look
         .get("fills")
@@ -1087,22 +1102,30 @@ pub struct Look {
     pub light: Option<Light>,
     pub paper: Option<Paper>,
     pub strokes: Option<Strokes>,
+    /// Planted (#1857): its line profiles are read by the parser that admits a break of 0.
+    pub unguarded: bool,
 }
 
 impl Look {
     /// `def`, with its `fw` and `fh` literals already lowered.
     pub fn read(def: &Map<String, Value>) -> Result<Look, Refused> {
-        check(def)?;
+        Look::read_in(def, false)
+    }
+
+    /// [`Look::read`], or with `unguarded` by #1857's planted parser.
+    pub fn read_in(def: &Map<String, Value>, unguarded: bool) -> Result<Look, Refused> {
+        check_in(def, unguarded)?;
         Ok(Look {
             def: def.clone(),
             light: light(def)?,
             paper: paper(def)?,
             strokes: strokes(def)?,
+            unguarded,
         })
     }
 
     pub fn line(&self, name: &str) -> Result<Option<Line>, Refused> {
-        line(&self.def, name)
+        line_in(&self.def, name, self.unguarded)
     }
 
     pub fn fill(&self, name: &str) -> Result<Option<Fill>, Refused> {

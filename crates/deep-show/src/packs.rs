@@ -450,10 +450,7 @@ pub fn notes(list: Option<&Value>) -> Option<Vec<Value>> {
 /// #1857's wrong programs of the expansion, by the names its acceptance suite gives them: a
 /// count that refuses nothing until everything is expanded, and a nested recipe step that copies
 /// the document's items for each nested instance.
-pub const PLANTED: [&str; 2] = [
-    "expansion_counts_after_expanding",
-    "nested_step_copies_items",
-];
+pub const PLANTED: [&str; 2] = ["expansion_counts_after", "expansion_copies_items"];
 
 /// The expansion's and the pack check's wrong programs the scenario plants.
 pub(crate) fn planted(scenario: &crate::hub::Scenario) -> PackPlanted {
