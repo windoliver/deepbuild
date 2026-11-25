@@ -1,0 +1,199 @@
+# #3439 acceptance suite on the merge base 4d8baa1189968d95871417134c711e08918532c3 (origin/main), macOS darwin-arm64, Node 24.22.0, 2026-11-25
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/3439 --no-file-parallelism   (then tsc -p tests/acceptance/3439/tsconfig.json, which exits 0; home paths written as ~, temp homes as <tmp>)
+# built first: npm ci && npm run build --workspaces; target/debug/deep-hook was already built
+#
+# Four tests fail, each at its assertion, for the reason the issue gives; one passes:
+#   #3439.fead997e  no file under packages/ calls it      FAILS: packages/hub/src/settle.ts:7 calls it
+#   #3439.fead997e  a planted call fails the repo rule     FAILS: the base has no such rule, so no FAIL names either planted file
+#   #3439.0f3a1117  a hub launched without the flag        FAILS at the reading: the base's hub starts and answers the hook (the V8 call works here), and records no reading
+#   #3439.9382967d  a hub started as the login service     FAILS: the definition's program arguments give no collector; typeof gc is "undefined" in the main thread, core-worker.js and parser.js
+#   #3439.420f3cfc  deep mcp serves with or without        PASSES: on the base the V8 call works, so deep mcp serves all three runs (as written, given a collector, with none at launch). Its wrong program is run by hand below.
+#   #3439.40137b0c  (budget) and the hub-idle half of #3439.9382967d: no test here; the budget window's (README: Not covered here)
+load: { 16.51 13.86 13.76 }
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-3430-paseo-canceled-77eba2/tests/acceptance/3439
+
+ ❯ rule.test.ts (2 tests | 2 failed) 3778ms
+   × #3439.fead997e no file under packages/ calls setFlagsFromString, and the repo rule fails nothing of this checkout for it 1620ms
+   × #3439.fead997e a planted call of setFlagsFromString under packages/ fails the repo rule, naming the file and the line 2154ms
+ ❯ service.test.ts (1 test | 1 failed) 2486ms
+   × #3439.9382967d a hub started as the login service starts it has a collector in its main thread, its core worker and a parser 2484ms
+ ❯ start.test.ts (1 test | 1 failed) 65663ms
+   × #3439.0f3a1117 a hub launched without the flag reaches started, answers a hook inside the hook budget and records one reading a process that says its start-up garbage was not shed 65661ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  rule.test.ts > #3439.fead997e no file under packages/ calls setFlagsFromString, and the repo rule fails nothing of this checkout for it
+AssertionError: #3439.fead997e no file under packages/ calls setFlagsFromString; these lines do: packages/hub/src/settle.ts:7: expected [ 'packages/hub/src/settle.ts:7' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "packages/hub/src/settle.ts:7",
++ ]
+
+ ❯ rule.test.ts:42:106
+     40|     text.split('\n').forEach((line, index) => { if (CALL.test(line) &&…
+     41|   }
+     42|   expect(calls, `${AC.rule} no file under packages/ calls ${NAME}; the…
+       |                                                                                                          ^
+     43|
+     44|   const run = repoRules(REPO);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  rule.test.ts > #3439.fead997e a planted call of setFlagsFromString under packages/ fails the repo rule, naming the file and the line
+AssertionError: #3439.fead997e the planted call at packages/hub/src/planted-settle.ts:41 fails the repo rule, in a FAIL that names the file and the line 41; node scripts/repo-rules.mjs printed (exit 1):
+FAIL cards: packages/cli has no README.md card
+  Fix: Give the folder a README.md with the headings What it is for, Where new code goes, What it may import and Deviations.
+FAIL cards: packages/hub has no README.md card
+  Fix: Give the folder a README.md with the headings What it is for, Where new code goes, What it may import and Deviations.
+FAIL security: SECURITY.md is missing
+  Fix: Keep SECURITY.md linking this repository's private report form, keep that link in .github/ISSUE_TEMPLATE/config.yml's contact_links with a name and an about, each key on one line, and keep the one line ending <!-- security rule --> the same in CONTRIBUTING.md and SECURITY.md, editing both together.
+FAIL security: CONTRIBUTING.md is missing
+  Fix: Keep SECURITY.md linking this repository's private report form, keep that link in .github/ISSUE_TEMPLATE/config.yml's contact_links with a name and an about, each key on one line, and keep the one line ending <!-- security rule --> the same in CONTRIBUTING.md and SECURITY.md, editing both together.
+FAIL security: .github/ISSUE_TEMPLATE/config.yml is missing
+  Fix: Keep SECURITY.md linking this repository's private report form, keep that link in .github/ISSUE_TEMPLATE/config.yml's contact_links with a name and an about, each key on one line, and keep the one line ending <!-- security rule --> the same in CONTRIBUTING.md and SECURITY.md, editing both together.
+FAIL physics-build: cargo: cargo tree can't resolve the physics build: error: could not find `Cargo.toml` in `<tmp>` or any parent directory
+  Fix: Remove the feature or flag the line names from the physics build: rapier3d stays at 0.36.1 with enhanced-determinism, without simd8 or parallel, built for the target's baseline features.
+PASS workflows: .github/workflows/ has no entries
+PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+PASS secrets: 4 files scanned, 0 lockfiles and 0 binary files skipped, 0 allowed
+PASS deps: 1 package.json file and 0 crates match scripts/repo-rules.json
+PASS body-fixtures: no fixture for hands@1
+NOTE size: +0 -0 handwritten lines against merge base d1f4e0a, lockfiles and binary files excluded (guideline: about 400)
+
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ rule.test.ts:61:217
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  service.test.ts > #3439.9382967d a hub started as the login service starts it has a collector in its main thread, its core worker and a parser
+AssertionError: #3439.9382967d the main thread of a hub started as the login service starts it has a collector, given when the process launched; the main thread: typeof gc is "undefined"; the worker core-worker.js: typeof gc is "undefined"; the worker parser.js: typeof gc is "undefined"; the login service's program arguments: ["~/.nvm/versions/node/v24.22.0/bin/node","<checkout>/packages/cli/dist/main.js","hub","run"]; its environment sets PATH, HOME: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ service.test.ts:30:166
+     28|   const seen = `${shownThreads(read.threads)}${read.why ? `; the readi…
+     29|   const [main, ...workers] = read.threads;
+     30|   expect(main?.collector, `${AC.service} the main thread of a hub star…
+       |                                                                                                                                                                      ^
+     31|   const core = workers.filter((t) => /core/i.test(t.name));
+     32|   const parsers = workers.filter((t) => /pars/i.test(t.name));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  start.test.ts > #3439.0f3a1117 a hub launched without the flag reaches started, answers a hook inside the hook budget and records one reading a process that says its start-up garbage was not shed
+AssertionError: #3439.0f3a1117 the hub launched without the flag records a reading that says its start-up garbage was not shed: within 60 s of answering a hook, no event of the record has a reading's kind and says "shed". The record's kinds: agent.reach, setup.step, session.start, session.rules_delivered, tool.before, session.state, row.set. The hub's output:
+{"v":1,"ready":true,"pid":14108,"socket":"<tmp>/h/.deepbuild/hub.sock","start":"01M8A5A2670RCVJKNRXJMHY838"}
+
+: expected 0 to be greater than 0
+ ❯ start.test.ts:51:314
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed | 1 passed (4)
+      Tests  4 failed | 1 passed (5)
+   Start at  12:10:34
+   Duration  78.27s (tests 100%)
+
+ ✓ mcp.test.ts > #3439.420f3cfc deep mcp started as an agent's settings start it serves initialize and one tool call whether or not it has a collector   (from a second run of that file with --reporter=verbose; the default reporter names only failures)
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The merge base with the V8 call planted to do nothing, by hand (README: Twins needed). No file changed:
+# T3439_NODE_OPTIONS="--import=$PWD/tests/acceptance/3439/fixtures/v8-call-does-nothing.mjs" node node_modules/vitest/vitest.mjs run --root tests/acceptance/3439 --no-file-parallelism start mcp
+# #3439.0f3a1117 fails at its first assertion: the hub never prints its ready line, and its output names the parser and the core worker.
+# #3439.420f3cfc fails at initialize: the entry throws where the collector is missing, and the failure names the call.
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-3430-paseo-canceled-77eba2/tests/acceptance/3439
+
+ ❯ start.test.ts (1 test | 1 failed) 1330ms
+   × #3439.0f3a1117 a hub launched without the flag reaches started, answers a hook inside the hook budget and records one reading a process that says its start-up garbage was not shed 1329ms
+ ❯ mcp.test.ts (1 test | 1 failed) 3100ms
+   × #3439.420f3cfc deep mcp started as an agent's settings start it serves initialize and one tool call whether or not it has a collector 3099ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  mcp.test.ts > #3439.420f3cfc deep mcp started as an agent's settings start it serves initialize and one tool call whether or not it has a collector
+AssertionError: #3439.420f3cfc deep mcp as the agent's settings start it (~/.nvm/versions/node/v24.22.0/bin/node <checkout>/packages/cli/dist/main.js mcp with NODE_OPTIONS=--import=<checkout>/tests/acceptance/3439/fixtures/v8-call-does-nothing.mjs) serves the call initialize: deep mcp exited 1 with no reply; its stderr: evalmachine.<anonymous>:1
+gc
+^
+
+ReferenceError: gc is not defined
+    at evalmachine.<anonymous>:1:1
+    at Script.runInContext (node:vm:149:12)
+    at Script.runInNewContext (node:vm:154:17)
+    at runInNewContext (node:vm:310:38)
+    at shedStartup (file://<checkout>/packages/hub/dist/settle.js:7:5)
+    at runMcp (file://<checkout>/packages/hub/dist/mcp.js:250:5)
+    at file://<checkout>/packages/cli/dist/main.js:400:30
+Node.js v24.22.0: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ../../../evalmachine.<anonymous>:1:1
+ ❯ mcp.test.ts:36:166
+     34|
+     35|     const initialize = await mcp.request('initialize', { protocolVersi…
+     36|     expect('result' in initialize && typeof initialize.result?.serverI…
+       |                                                                                                                                                                      ^
+     37|     mcp.notify('notifications/initialized');
+     38|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  start.test.ts > #3439.0f3a1117 a hub launched without the flag reaches started, answers a hook inside the hook budget and records one reading a process that says its start-up garbage was not shed
+AssertionError: #3439.0f3a1117 a hub launched without the flag (node <checkout>/packages/cli/dist/main.js hub run with NODE_OPTIONS=--import=<checkout>/tests/acceptance/3439/fixtures/v8-call-does-nothing.mjs planted by hand) reaches started: it printed no ready line. Its output, which names the worker that failed:
+deep hub: a parser failed: evalmachine.<anonymous>:1
+gc
+^
+
+ReferenceError: gc is not defined
+    at evalmachine.<anonymous>:1:1
+    at Script.runInContext (node:vm:149:12)
+    at Script.runInNewContext (node:vm:154:17)
+    at runInNewContext (node:vm:310:38)
+    at shedStartup (file://<checkout>/packages/hub/dist/settle.js:7:5)
+    at file://<checkout>/packages/hub/dist/parser.js:11:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+deep hub: the core stopped: evalmachine.<anonymous>:1
+    at core.started.then.port.postMessage.op (file://<checkout>/packages/hub/dist/core-worker.js:36:33)
+[the hub exited 1]
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ../../../evalmachine.<anonymous>:1:1
+ ❯ start.test.ts:21:216
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  12:09:57
+   Duration  4.87s (tests 98%, import 1%)
