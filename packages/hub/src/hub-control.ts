@@ -124,7 +124,7 @@ export interface HubControlOptions {
     readonly intakeOf: WorkspacesProvider['intake'];
   };
   delivery: () => Pick<AnswerDeliveryPort, "note" | "openOffers" | "placed" | "saveOffered" | "sendBack" | "stopWaiting" | "switches" | "waitAnswer">;
-  judging: () => Pick<StopJudgingPort, "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
+  judging: () => Pick<StopJudgingPort, "keeps" | "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
   state: () => Pick<SessionStatePort, "agentAbove" | "entered" | "liveOf" | "notAnAgent" | "renameSession" | "whySeen" | "rowsSeen" | "seeRow" | "seenBy" | "sessionRows" | "sessionWindow" | "sessions" | "startOf" | "states" | "statesSettled" | "statusSeen">;
   memory: () => Pick<SessionMemoryPort, "lessons" | "memoryAct" | "sessionRules" | "syncRules" | "syncStanding">;
   transcripts: () => Pick<TranscriptsPort, "backfill">;
