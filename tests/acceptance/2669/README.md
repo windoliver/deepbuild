@@ -7,7 +7,6 @@ hub, `deep setup` and #83's Claude Code stand-in with its hook log (`../83/helpe
 |---|---|---|
 | `#2669.3a6c6d5b` | `late.test.ts` | A session outside any repo whose first task lands after the first prompt's reply: `still going?` typed next is blocked with the answer from the record, and the hook log has no model line for it. |
 | `#2669.8fb05bc5` | `late.test.ts` | The workspace notice reaches the agent exactly once: in the late run across the first prompt, the status question and a work prompt (at the next prompt that goes to the model), and in a usual run across the first prompt and a work prompt. |
-| `#2669.6995f057` | `status83.test.ts` | `tests/acceptance/83/status.test.ts` run once through the repo's vitest exits 0. |
 
 ## What holds the landing
 
