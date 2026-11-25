@@ -1,0 +1,15 @@
+{
+  "crates/deep-scene3d-render/src/lib.rs": [
+    {
+      "find": [
+        "    base: [f32; 4],",
+        "    surface: [f32; 4],"
+      ],
+      "wrong": [
+        "    // #3256's planted wrong program: base and surface swapped; SOLID and the shader's inputs are as they were.",
+        "    surface: [f32; 4],",
+        "    base: [f32; 4],"
+      ]
+    }
+  ]
+}

@@ -17,10 +17,25 @@ struct Params {
     row_as_element: u32,
 }
 
-// The rows of a solid's record (the renderer's `SolidRecord`), whose first 48 B are its model.
+// A solid's record (the renderer's `SolidRecord`), whose first 48 B are its model's rows.
 struct Element {
-    rows: array<vec4<f32>, 3>,
-    rest: array<vec4<f32>, 6>,
+    r0: vec4<f32>,
+    r1: vec4<f32>,
+    r2: vec4<f32>,
+    color: u32,
+    pick: u32,
+    flags: u32,
+    tie: u32,
+    emission: vec4<f32>,
+    base: vec4<f32>,
+    surface: vec4<f32>,
+    specular: vec4<f32>,
+    op: vec4<u32>,
+}
+
+// The record's model, a row to an entry.
+fn rows(i: u32) -> array<vec4<f32>, 3> {
+    return array<vec4<f32>, 3>(elements[i].r0, elements[i].r1, elements[i].r2);
 }
 
 @group(0) @binding(0) var<uniform> p: Params;
@@ -41,7 +56,7 @@ const SLACK: f32 = 1.9073486e-6;
 const NONE: u32 = 0xffffffffu;
 
 fn in_view(i: u32) -> u32 {
-    let r = elements[i].rows;
+    let r = rows(i);
     let c = (p.lo.xyz + p.hi.xyz) * 0.5;
     let h = (p.hi.xyz - p.lo.xyz) * 0.5;
     let at = vec3<f32>(dot(r[0].xyz, c) + r[0].w, dot(r[1].xyz, c) + r[1].w, dot(r[2].xyz, c) + r[2].w);
@@ -115,7 +130,7 @@ struct Occlusion {
 const DEPTH_SLACK: f32 = 2.4414062e-4;
 
 fn shown(i: u32) -> u32 {
-    let r = elements[i].rows;
+    let r = rows(i);
     let place = mat4x4<f32>(
         vec4<f32>(r[0].x, r[1].x, r[2].x, 0.0),
         vec4<f32>(r[0].y, r[1].y, r[2].y, 0.0),

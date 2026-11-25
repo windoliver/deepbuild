@@ -44,6 +44,7 @@ pub struct Planted {
     pub tint_by_depth: bool,
 }
 
+deep_gpu::paired! { params: "water.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Params {
@@ -79,6 +80,7 @@ struct Params {
     // what a ray shows above the water where nothing stands and no sky's pass draws, w 1 when so.
     under: [f32; 4],
     above: [f32; 4],
+}
 }
 
 /// The light the water's foam and its fill read.

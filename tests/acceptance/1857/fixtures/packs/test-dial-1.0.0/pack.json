@@ -1,0 +1,17 @@
+{
+  "name": "dial",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack whose repeat counts are an input: a grid of rows of cells of dots, per_side of each.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "dial.grid@1": "dial.grid@1.json",
+    "dial.row@1": "dial.row@1.json",
+    "dial.cell@1": "dial.cell@1.json"
+  }
+}
