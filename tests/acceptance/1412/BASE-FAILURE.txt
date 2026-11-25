@@ -1,0 +1,121 @@
+# #1412 acceptance suite on the base 118ec119f (origin/main), before any change. Run by the implementing session after the blind job stopped at a reboot; the job's own first run timed out building deep-show (load ~865), so this is the second run, with the binary built. Load at start:
+21:37  up  1:03, 2 users, load averages: 314.09 391.05 460.66
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-1412-canvas-restart-63270b/tests/acceptance/1412
+
+ ❯ restart.test.ts (5 tests | 5 failed) 28039ms
+   ❯ #1412.d0145601 with one layer file deleted before restart, that document reports a named issue and no revision past the last one it can prove (1)
+     × #1412.d0145601 with A's revision-2 layer file deleted, the restarted A reports layer_file_missing and shows and lists no revision past 1 10835ms
+   ❯ #1412.83dd035b with one layer file's bytes changed, the same (1)
+     × #1412.83dd035b with A's revision-2 layer file's bytes changed in place, the restarted A reports layer_file_mismatch and shows and lists no revision past 1 3056ms
+   ❯ #1412.8d00dba2 a second document in the same state folder restores whole in both cases (2)
+     × #1412.8d00dba2 with A's layer file deleted, B restores whole: revision 3 at its hash, revisions 0 to 3 at the hashes before and in its events, and no damage issue 3172ms
+     × #1412.8d00dba2 with A's layer file changed, B restores whole: revision 3 at its hash, revisions 0 to 3 at the hashes before and in its events, and no damage issue 3060ms
+   ❯ #1412.09a35255 a clean restart gives the same revisions and hashes as before it (1)
+     × #1412.09a35255 restarted on an untouched state folder, A and B each show revision 3 at the hash before, list revisions 0 to 3 at the hashes before, and each hash is the one its doc.patched event carries 3209ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  restart.test.ts > #1412.d0145601 with one layer file deleted before restart, that document reports a named issue and no revision past the last one it can prove > #1412.d0145601 with A's revision-2 layer file deleted, the restarted A reports layer_file_missing and shows and lists no revision past 1
+AssertionError: A after its layer file 0e0606d0fb9de41fc3cd337142339995b154b7f4afad1545b7c7322b1a0c04e6 was deleted: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the document reports no layer_file_missing issue (codes: [])",
++   "the document shows revision 3, past revision 1, the last one whose layer files are intact",
++   "the document lists revisions [2,3], past revision 1",
++ ]
+
+ ❯ restart.test.ts:28:114
+     26|   it(`${AC.deleted} with A's revision-2 layer file deleted, the restar…
+     27|     const { before, after, file } = damaged('delete');
+     28|     expect(damagedFailures(after.a, before.a, MISSING, LAST_GOOD), `A …
+       |                                                                                                                  ^
+     29|   });
+     30| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  restart.test.ts > #1412.83dd035b with one layer file's bytes changed, the same > #1412.83dd035b with A's revision-2 layer file's bytes changed in place, the restarted A reports layer_file_mismatch and shows and lists no revision past 1
+AssertionError: A after its layer file 0e0606d0fb9de41fc3cd337142339995b154b7f4afad1545b7c7322b1a0c04e6's bytes changed: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the document reports no layer_file_mismatch issue (codes: [])",
++   "the document shows revision 3, past revision 1, the last one whose layer files are intact",
++   "the document lists revisions [2,3], past revision 1",
++ ]
+
+ ❯ restart.test.ts:35:119
+     33|   it(`${AC.changed} with A's revision-2 layer file's bytes changed in …
+     34|     const { before, after, file } = damaged('change');
+     35|     expect(damagedFailures(after.a, before.a, MISMATCH, LAST_GOOD), `A…
+       |                                                                                                                       ^
+     36|   });
+     37| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  restart.test.ts > #1412.8d00dba2 a second document in the same state folder restores whole in both cases > #1412.8d00dba2 with A's layer file deleted, B restores whole: revision 3 at its hash, revisions 0 to 3 at the hashes before and in its events, and no damage issue
+ FAIL  restart.test.ts > #1412.8d00dba2 a second document in the same state folder restores whole in both cases > #1412.8d00dba2 with A's layer file changed, B restores whole: revision 3 at its hash, revisions 0 to 3 at the hashes before and in its events, and no damage issue
+AssertionError: B after the restart: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "revision 1's doc.patched event carries no data.hash, so its hash 05cfaea4712147e8e752eb1856d9d5e12fc30a6876ad4bced67ff7f4a0bb92c3 is proven by nothing",
++   "revision 2's doc.patched event carries no data.hash, so its hash edd8ef945a4145b9733bb9bfc8eef547cc0ab36e85b6a8438c2c71ab8a70ebc6 is proven by nothing",
++   "revision 3's doc.patched event carries no data.hash, so its hash 0314ffd933f6b6a85d2db064f67f27e6bf5d1d527e3d4ab14151fe13b9442a46 is proven by nothing",
++ ]
+
+ ❯ restart.test.ts:43:109
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  restart.test.ts > #1412.09a35255 a clean restart gives the same revisions and hashes as before it > #1412.09a35255 restarted on an untouched state folder, A and B each show revision 3 at the hash before, list revisions 0 to 3 at the hashes before, and each hash is the one its doc.patched event carries
+AssertionError: A and B after a clean restart: expected { a: [ …(3) ], b: [ …(3) ] } to deeply equal { a: [], b: [] }
+
+- Expected
++ Received
+
+  {
+-   "a": [],
+-   "b": [],
++   "a": [
++     "revision 1's doc.patched event carries no data.hash, so its hash d9c8a6ecc521a2e806afe98267b8dfa2861d789f35240ad08dc92e232dfe8735 is proven by nothing",
++     "revision 2's doc.patched event carries no data.hash, so its hash 24284cad78302bcfdcc96179e50e4fc88b07dc34082dd0335fedb777723f5f40 is proven by nothing",
++     "revision 3's doc.patched event carries no data.hash, so its hash 1902460d461fa8a679cce314ac17daeae70faa9cc330bc5e7bbeb47ec378d8fb is proven by nothing",
++   ],
++   "b": [
++     "revision 1's doc.patched event carries no data.hash, so its hash 05cfaea4712147e8e752eb1856d9d5e12fc30a6876ad4bced67ff7f4a0bb92c3 is proven by nothing",
++     "revision 2's doc.patched event carries no data.hash, so its hash edd8ef945a4145b9733bb9bfc8eef547cc0ab36e85b6a8438c2c71ab8a70ebc6 is proven by nothing",
++     "revision 3's doc.patched event carries no data.hash, so its hash 0314ffd933f6b6a85d2db064f67f27e6bf5d1d527e3d4ab14151fe13b9442a46 is proven by nothing",
++   ],
+  }
+
+ ❯ restart.test.ts:55:41
+     53|       a: wholeFailures(after.a, before.a, recordedHashes(before.logged…
+     54|       b: wholeFailures(after.b, before.b, recordedHashes(before.logged…
+     55|     }, 'A and B after a clean restart').toEqual({ a: [], b: [] });
+       |                                         ^
+     56|   });
+     57| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  21:37:07
+   Duration  28.58s (tests 99%, transform 1%)
+
+EXIT 1

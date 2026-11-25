@@ -1,0 +1,75 @@
+{
+  "id": "familiar.hemisphere_light",
+  "version": "1.0",
+  "title": "Hemisphere light",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's HemisphereLight: skyColor on a surface that faces up and groundColor on one that faces down, mixed by the normal's height, as sky@1's ambient light from above and below (color × intensity ÷ π). A document draws its first sky@1 alone, so one of these words a document.",
+  "inputs": {
+    "skyColor": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "groundColor": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "intensity": {
+      "type": "number",
+      "default": 1,
+      "unit": "lx",
+      "min": 0,
+      "about": "the irradiance a surface takes from the color it faces"
+    },
+    "position": {
+      "type": "vec3",
+      "default": [
+        0,
+        1,
+        0
+      ],
+      "unit": "m",
+      "about": "the library's default, straight up, only: ours mixes about +Y"
+    }
+  },
+  "let": {
+    "position": "position[0] == 0 && position[2] == 0 && position[1] > 0 ? position : unmapped()",
+    "se0": "(floor(skyColor / 65536) % 256) / 255",
+    "sl0": "se0 <= 0.04045 ? se0 / 12.92 : pow((se0 + 0.055) / 1.055, 2.4)",
+    "se1": "(floor(skyColor / 256) % 256) / 255",
+    "sl1": "se1 <= 0.04045 ? se1 / 12.92 : pow((se1 + 0.055) / 1.055, 2.4)",
+    "se2": "(skyColor % 256) / 255",
+    "sl2": "se2 <= 0.04045 ? se2 / 12.92 : pow((se2 + 0.055) / 1.055, 2.4)",
+    "ge0": "(floor(groundColor / 65536) % 256) / 255",
+    "gl0": "ge0 <= 0.04045 ? ge0 / 12.92 : pow((ge0 + 0.055) / 1.055, 2.4)",
+    "ge1": "(floor(groundColor / 256) % 256) / 255",
+    "gl1": "ge1 <= 0.04045 ? ge1 / 12.92 : pow((ge1 + 0.055) / 1.055, 2.4)",
+    "ge2": "(groundColor % 256) / 255",
+    "gl2": "ge2 <= 0.04045 ? ge2 / 12.92 : pow((ge2 + 0.055) / 1.055, 2.4)",
+    "k": "intensity / pi"
+  },
+  "steps": {
+    "sky": {
+      "op": "item",
+      "kind": "sky@1",
+      "params": {
+        "ambient_top": [
+          "sl0 * k",
+          "sl1 * k",
+          "sl2 * k"
+        ],
+        "ambient_low": [
+          "gl0 * k",
+          "gl1 * k",
+          "gl2 * k"
+        ]
+      }
+    }
+  }
+}

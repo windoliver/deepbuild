@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RecordedRun } from '@deepbuild/gate';
 import { GateRunner, type DefinitionState, type GateOptions, type RunKey, type StatePin } from '../src/gate-runner.js';
-import type { KeyFacts } from '../src/shared-runs.js';
+import { SharedRuns, type KeptRow, type KeyFacts } from '../src/shared-runs.js';
 
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
@@ -384,5 +384,42 @@ describe('#1018 review findings on carrying', () => {
     const v = w.gate.verdictOf('claim:1')!;
     expect(JSON.stringify(v)).not.toContain('secret case');
     expect(v.outcome).toBe('INCONCLUSIVE');
+  });
+});
+
+describe('keys let go (#1866)', () => {
+  const facts = (n: number, paths = ['src/a.ts']): KeyFacts => ({ id: `key-${n}`, stem: `stem-${n}`, paths, claim: `claim-${n}`, session: 's', base: false, withheld: false, plain: true });
+  const row = (n: number, run: string): KeptRow => ({ run, check: 'done/a', outcome: 'passed', tests_run: 1, findings: [], evidence: [SHA, SHA], key: facts(n) });
+  it("a key past the newest is the record's to read, one a claim reads stays, and what was let go reads the same", async () => {
+    const rows = new Map<string, KeptRow[]>();
+    const gone: string[] = [];
+    const reads: string[] = [];
+    const runs = new SharedRuns({ used: (id) => id === 'done/a\0key-3', gone: (id) => gone.push(id), read: {
+      key: async (id) => { reads.push(id); return rows.get(id) ?? []; },
+      paths: async (stem) => [...rows.values()].flat().filter((r) => r.key.stem === stem).map((r) => r.key.paths),
+    } });
+    for (let n = 0; n < 500; n++) {
+      rows.set(`key-${n}`, [row(n, `run-${n}a`), row(n, `run-${n}b`)]);
+      for (const of of ['a', 'b']) runs.add('done/a', facts(n), `run-${n}${of}`);
+    }
+    const held = Array.from({ length: 500 }, (_, n) => n).filter((n) => runs.group(`done/a\0key-${n}`));
+    expect(held).toContain(3);
+    expect(held).toContain(499);
+    expect(held.length).toBeLessThan(100);
+    expect(gone).toHaveLength(500 - held.length);
+    const take = (read: KeptRow[]): void => { for (const r of read) runs.add(r.check, r.key, r.run); };
+    expect((await runs.fetch('done/a', 'key-0', take))?.runs.map((r) => r.run)).toEqual(['run-0a', 'run-0b']);
+    expect(reads).toEqual(['key-0']);
+    // A run that joins a key whose runs left memory joins them all.
+    await runs.ready('done/a', facts(1), take);
+    expect(runs.add('done/a', facts(1), 'run-1c').runs.map((r) => r.run)).toEqual(['run-1a', 'run-1b', 'run-1c']);
+    // Another check's key of the same id is its own.
+    expect(await runs.fetch('done/b', 'key-2', take)).toBeUndefined();
+  });
+  it("a key whose runs the record can't give carries none of them", async () => {
+    const lost: string[] = [];
+    const runs = new SharedRuns({ unreadable: (id) => lost.push(id), read: { key: async () => { throw Error('the record is locked'); }, paths: async () => [] } });
+    expect(await runs.fetch('done/a', 'key-0', () => { throw Error('no row was read'); })).toBeUndefined();
+    expect(lost).toEqual(['done/a\0key-0']);
   });
 });

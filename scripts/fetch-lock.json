@@ -29,6 +29,13 @@
       "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
     },
     {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/cameras/OrthographicCamera.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/cameras/OrthographicCamera.js",
+      "sha256": "5525c2365774222ee96c4e4303d0257a4b16739e1e69769977c0a739b4f3fd54",
+      "size": 5806,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
       "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/cameras/PerspectiveCamera.js",
       "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/cameras/PerspectiveCamera.js",
       "sha256": "1cc44938885f785649a978ecb6f57c444561381ddab24de19fc59b400009b111",
@@ -211,10 +218,38 @@
       "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
     },
     {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/AmbientLight.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/AmbientLight.js",
+      "sha256": "38bf70b78fecb527e9bb63073d6123f5748810d0b0f06eb84e5c8f8b0f3e9633",
+      "size": 828,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/DirectionalLight.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/DirectionalLight.js",
+      "sha256": "142b2d35911bb8c52d6465b4841729cc4616166e4486c61b4959281454af2644",
+      "size": 2837,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/HemisphereLight.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/HemisphereLight.js",
+      "sha256": "801fc56baaee3a0c60993cf601ae94298e23aacfb058384e3c1daea48330467c",
+      "size": 1515,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
       "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/PointLight.js",
       "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/PointLight.js",
       "sha256": "1ad93ac773bd881f30d923624e663b237c1209d29aa14e9bc7ae5ea81ab4365f",
       "size": 3047,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/RectAreaLight.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/RectAreaLight.js",
+      "sha256": "3d602afb9af5a0d62cc94d2c6df050de1778711efa9312566006e14fa0029d11",
+      "size": 2612,
       "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
     },
     {
@@ -232,10 +267,38 @@
       "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
     },
     {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshBasicMaterial.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshBasicMaterial.js",
+      "sha256": "79e238375aa086b602e322a71dced8a6b0cbac37074a465da3c4b57d26c85286",
+      "size": 7031,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshLambertMaterial.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshLambertMaterial.js",
+      "sha256": "b0ba38326ec69282e9ebb949c180ffe7f6c4c00d8f1e2be427fbc22202850c22",
+      "size": 12445,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshPhysicalMaterial.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshPhysicalMaterial.js",
+      "sha256": "911c1715eddfef5d6d9f153a41489eb3c2eb316be6efab7145f456d2c49bbb59",
+      "size": 16962,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
       "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshStandardMaterial.js",
       "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshStandardMaterial.js",
       "sha256": "60d854c4c7f4506e8e0fd5951a2e631aa3d1dfce5c2d632084cb7cf8b27cbb68",
       "size": 13835,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/scenes/FogExp2.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/scenes/FogExp2.js",
+      "sha256": "c1fbafffb04670fc17fc64ec313c5209a0bdc7191a064fd50d8a3e8ac30ff43c",
+      "size": 1607,
       "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
     },
     {

@@ -1,0 +1,212 @@
+{
+ "format": 1,
+ "profile": "scene",
+ "title": "A rect area light and an ambient light, seen by an orthographic camera",
+ "description": "A rect area light and an ambient light, seen by an orthographic camera: a #3032 evidence scene.",
+ "size": [
+  1280,
+  720
+ ],
+ "camera": "camera.camera",
+ "requires": {
+  "modules": {
+   "scene3d": "^1"
+  }
+ },
+ "packs": [
+  "deepbuild/familiar@1.1.0"
+ ],
+ "items": {
+  "camera": {
+   "id": "camera",
+   "name": "camera",
+   "order": "a000",
+   "kind": "familiar.orthographic_camera@1",
+   "params": {
+    "left": -6,
+    "right": 6,
+    "top": 3.375,
+    "bottom": -3.375,
+    "near": 0.1,
+    "far": 200,
+    "position": [
+     0,
+     6,
+     12
+    ],
+    "rotation": [
+     -24,
+     0,
+     0
+    ]
+   }
+  },
+  "panel": {
+   "id": "panel",
+   "name": "panel",
+   "order": "a001",
+   "kind": "familiar.rect_area_light@1",
+   "params": {
+    "color": 16773590,
+    "intensity": 12,
+    "width": 6,
+    "height": 1.5,
+    "position": [
+     0,
+     3.2,
+     0.5
+    ],
+    "rotation": [
+     -90,
+     0,
+     0
+    ]
+   }
+  },
+  "ambient": {
+   "id": "ambient",
+   "name": "ambient",
+   "order": "a002",
+   "kind": "familiar.ambient_light@1",
+   "params": {
+    "color": 16777215,
+    "intensity": 0.35
+   }
+  },
+  "ground": {
+   "id": "ground",
+   "name": "ground",
+   "order": "a003",
+   "kind": "familiar.box@1",
+   "params": {
+    "width": 14,
+    "height": 0.2,
+    "depth": 14,
+    "position": [
+     0,
+     -0.1,
+     0
+    ]
+   },
+   "material": "floor.material"
+  },
+  "floor": {
+   "id": "floor",
+   "name": "floor",
+   "order": "a004",
+   "kind": "familiar.lambert_material@1",
+   "params": {
+    "color": 9211798
+   }
+  },
+  "basic": {
+   "id": "basic",
+   "name": "basic",
+   "order": "a005",
+   "kind": "familiar.basic_material@1",
+   "params": {
+    "color": 14700604
+   }
+  },
+  "lambert": {
+   "id": "lambert",
+   "name": "lambert",
+   "order": "a006",
+   "kind": "familiar.lambert_material@1",
+   "params": {
+    "color": 14700604
+   }
+  },
+  "standard": {
+   "id": "standard",
+   "name": "standard",
+   "order": "a007",
+   "kind": "familiar.standard_material@1",
+   "params": {
+    "color": 14700604,
+    "roughness": 0.35,
+    "metalness": 0
+   }
+  },
+  "physical": {
+   "id": "physical",
+   "name": "physical",
+   "order": "a008",
+   "kind": "familiar.physical_material@1",
+   "params": {
+    "color": 14700604,
+    "roughness": 0.6,
+    "clearcoat": 1,
+    "clearcoatRoughness": 0.05
+   }
+  },
+  "ball_basic": {
+   "id": "ball_basic",
+   "name": "ball_basic",
+   "order": "a009",
+   "kind": "familiar.sphere@1",
+   "params": {
+    "radius": 0.8,
+    "widthSegments": 48,
+    "heightSegments": 32,
+    "position": [
+     -3,
+     0.8,
+     0
+    ]
+   },
+   "material": "basic.material"
+  },
+  "ball_lambert": {
+   "id": "ball_lambert",
+   "name": "ball_lambert",
+   "order": "a010",
+   "kind": "familiar.sphere@1",
+   "params": {
+    "radius": 0.8,
+    "widthSegments": 48,
+    "heightSegments": 32,
+    "position": [
+     -1,
+     0.8,
+     0
+    ]
+   },
+   "material": "lambert.material"
+  },
+  "ball_standard": {
+   "id": "ball_standard",
+   "name": "ball_standard",
+   "order": "a011",
+   "kind": "familiar.sphere@1",
+   "params": {
+    "radius": 0.8,
+    "widthSegments": 48,
+    "heightSegments": 32,
+    "position": [
+     1,
+     0.8,
+     0
+    ]
+   },
+   "material": "standard.material"
+  },
+  "ball_physical": {
+   "id": "ball_physical",
+   "name": "ball_physical",
+   "order": "a012",
+   "kind": "familiar.sphere@1",
+   "params": {
+    "radius": 0.8,
+    "widthSegments": 48,
+    "heightSegments": 32,
+    "position": [
+     3,
+     0.8,
+     0
+    ]
+   },
+   "material": "physical.material"
+  }
+ }
+}

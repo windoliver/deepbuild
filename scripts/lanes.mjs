@@ -227,6 +227,7 @@ for (const [reason, entries] of Object.entries({
     'tests/acceptance/155-oracle/', 'tests/acceptance/162/', 'tests/acceptance/184/', 'tests/acceptance/184-redraft-ac7-2/', 'tests/acceptance/555/', 'tests/acceptance/1048/',
     'tests/acceptance/556/', 'tests/acceptance/2650/retries.test.ts', 'tests/acceptance/2650/jobs.test.ts', 'tests/acceptance/2650/replay.test.ts',
     'tests/acceptance/66-redraft-1812/', 'tests/acceptance/2402/', 'tests/acceptance/2898/', 'tests/acceptance/851/', 'tests/acceptance/3035/',
+    'tests/acceptance/139-redraft-2062/',
   ],
   'shared: memory': ['tests/acceptance/2645/'],
   'shared: the cores': ['tests/acceptance/2227/'],
@@ -257,6 +258,9 @@ export const aloneCommand = [process.execPath, 'node_modules/vitest/vitest.mjs',
 const sharded = [process.execPath, 'scripts/affected.mjs', '--alone', '--slow', '--timed'];
 /** The command runLanes runs for a lane command: the alone block's in shards, any other as it is. */
 const runOf = (command) => (command === aloneCommand ? sharded : command);
+
+// #231's folders (blind) run alone by their lane.json; these three files read a clock and the machine's load.
+timed.push('tests/acceptance/231/speed.test.ts', 'tests/acceptance/231/wall.test.ts', 'tests/acceptance/231/starts.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -1088,6 +1092,15 @@ export function runLanes(lanes, { cwd = root, kept: key, fill = false, tree: tre
             for (const [, target, name] of run.tests.map(({ id }) => id.match(/^cargo (.+?) › (.+)$/)).filter(Boolean)) if (!Object.hasOwn(listing, target)) (listedCargo[target] ??= []).push(name);
           } else if (listing === null) listedCargo = null;
         }
+      }
+      // The record names the tree the lane started on, so a run that changed it proved another tree (#3336).
+      const after = tree && exactTree(cwd);
+      if (tree && after !== tree) {
+        const paths = after ? spawnSync('git', ['diff-tree', '-r', '--name-only', tree, after], { cwd, encoding: 'utf8' }).stdout.trim().split('\n').filter(Boolean) : [];
+        const found = { state: 'FAIL', error: `the run changed the tree it started on: ${paths.length ? paths.join(', ') : "git can't write the tree after it"}; write to a temporary folder, never the checkout` };
+        findings.push({ state: found.state, note: found.error });
+        if (stands(found, failure)) failure = found;
+        else console.log(`FAIL ${lane.name}: ${found.error}`);
       }
       // The Mac's cargo tests are the reference list; a run elsewhere lists the tests it lacks and is never PASS (#1121).
       const more = {}, absentIds = new Set(), mac = process.platform === 'darwin';
