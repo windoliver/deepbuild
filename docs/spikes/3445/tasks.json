@@ -1,0 +1,22 @@
+{
+ "compiling": {
+  "issue": 3529,
+  "title": "A logic item's program is compiled once a process: a fresh canvas core makes 109 compiles for 48 programs before its first reply",
+  "criteria": [
+   "A fresh canvas core with the shipped packs answers its first call having counted as many compiles as it compiled different programs. The merge base counts 109 for 48 and fails, naming a program compiled twice",
+   "Every fixture of #531 and every kept logic golden reaches the step hashes it reached on the merge base. A hash that moves fails, naming the golden and the step",
+   "Two items of the same bytes in one piece keep their own memory, globals, fuel and trap: a write in one never shows in the other. A planted runner that shares one instance fails, naming the item",
+   "Budget, on the reference Mac in the local preflight, compared with the merge base: the canvas core's first reply with the shipped packs takes at least 500 ms less (drafted), and its memory after that reply reads within its margin"
+  ]
+ },
+ "writes": {
+  "issue": 3530,
+  "title": "The page tracker marks a store's page without a call: a step that mostly writes costs 2.5 times the record's ns per fuel unit",
+  "criteria": [
+   "For 1,000 seeded programs of stores, fills and copies, the pages the bitmap holds after a step equal the pages whose bytes changed, in wasmtime and in headless Chrome. A planted rewrite that skips the mark of a store whose page was marked last fails, naming the page",
+   "Every fixture of #531 reaches the full-state hash it reached on the merge base, and a program is charged the fuel it was charged there. A hash or a fuel count that moves fails, naming the fixture and the step",
+   "#3445's twin that mostly writes, as a logic item's program, costs at most twice the record's ns per fuel unit in the app (drafted). The merge base costs 2.5 times and fails",
+   "Budget, on the reference Mac in the local preflight, compared with the merge base: the metering benchmark's ns per fuel unit reads within its margin, in the app and in headless Chrome"
+  ]
+ }
+}

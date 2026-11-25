@@ -22,9 +22,9 @@ run outputs in `out/`.
 ## The three answers
 
 <!-- answers -->
-- The first reply waits more than 1 s on compiling: yes, 1568.0 ms inside the calls the compile counter counts (109 compiles, pid 96797). No task is filed yet.
+- The first reply waits more than 1 s on compiling: yes, 1568.0 ms inside the calls the compile counter counts (109 compiles, pid 96797). Task #3529.
 - The checks cost a live step more than 5%: no, 0.2517 ns per fuel unit with them in and 0.2503 with them out, 0.57% more.
-- A step that mostly writes costs more than twice the record's ns per fuel unit: yes, 0.6224 against the record's 0.25, 2.49 times. No task is filed yet.
+- A step that mostly writes costs more than twice the record's ns per fuel unit: yes, 0.6224 against the record's 0.25, 2.49 times. Task #3530.
 <!-- /answers -->
 
 ## Files
@@ -374,14 +374,24 @@ rewrite charges the tracker no fuel, so both forms of a program are charged the 
   frame can't hold. That is #3442's to weigh, with this reading.
 - **Recommendation: file it.**
 
+## Filed
+
+- #3529: a logic item's program is compiled once a process (the first answer).
+- #3530: the page tracker marks a store's page without a call (the third answer).
+- #3531: a spike on what a pack's check costs that isn't compiling, the larger share of the first reply.
+- #3532: a release canvas core can refuse its own seal and no lane sees it (How a reading was taken).
+- #3533: the public text lane fails any change that names three packs main ships, as this report must.
+- No task for the epoch checks: the readings give no cost a live step would get back, and taking them out would
+  leave a call with a deadline nothing to stop it.
+
 ## What this spike doesn't hold
 
 - Whether a run counts is in the table at the top, written from each run's own record. A run that doesn't is a
   reading, and the criteria it bears on aren't settled.
 - The base's canvas core doesn't seal in release (How a reading was taken). The spike read around it with a ledger
   of its own; the base itself needs its ledger written again, which main already has.
-- A task is filed only for an answer that is yes on runs that count. The three answers at the top say which are
-  filed; until then the tasks the readings point to are drafts.
+- The tasks below were filed on the owner's decision, from readings: two sets taken a day apart gave the same three
+  answers, and each task restates its numbers as readings and carries criteria of its own.
 - The web player's engine, the engine's version, step blocks and the ceiling's formula are other tasks' (#2324,
   #212, #3442).
 
