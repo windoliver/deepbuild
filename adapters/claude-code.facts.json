@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@7",
+  "schema": "adapter.facts@9",
   "versions": ["2.1.299", "2.1.304", "2.1.308"],
   "agent": "claude",
   "hookTimeouts": {
@@ -94,7 +94,7 @@
     "conformance": "claude/usage/counting",
     "cost": "reported",
     "costFrom": "the status line's cost.total_cost_usd in a session, the result event's total_cost_usd in a job",
-    "tokens": "assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens"
+    "tokens": "assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens; the cache writes' split by lifetime is message.usage.cache_creation's ephemeral_5m_input_tokens and ephemeral_1h_input_tokens, and a record without it gives the total alone"
   },
   "questionTools": {
     "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",
@@ -967,6 +967,19 @@
       "data": { "state": "=working" }
     }
   },
+  "toolResult": {
+    "readBy": "a deep_* reply's cap (#2896): deep mcp names its client, and a reply in the text that client receives stays a fifth under each figure here, the rest by next; a refusal a fifth under the error figures' characters and tokens, and within their bytes as Codex receives an error. DeepBuild never raises the figure with a tool's _meta anthropic/maxResultSizeChars or MAX_MCP_OUTPUT_TOKENS, and doesn't read a MAX_MCP_OUTPUT_TOKENS a person set lower",
+    "conformance": "claude-code/toolResult/per-version",
+    "tokenizer": { "name": "o200k_base", "package": "gpt-tokenizer", "version": "4.0.0", "readBy": "what a reply's tokens are counted in: Claude Code counts its own tokens with a tokenizer it doesn't publish, so DeepBuild counts in Codex's pinned one and keeps the fifth spare; the counter is the one packages/hub/src/reply-fit.ts imports, pinned in packages/hub/package.json, so a change here changes that import and pin with it" },
+    "entries": [
+      {
+        "versions": ["2.1.299", "2.1.304", "2.1.308"],
+        "result": { "chars": 50000, "tokens": 25000, "past": "saved to a file in the session's tool-results folder; the agent gets a line naming the file's path in its place" },
+        "error": { "chars": 11000, "past": "cut: its first 5,000 and last 5,000 characters kept, with a marker between giving the count removed" },
+        "source": "Claude Code's MCP page, code.claude.com/docs/en/mcp (MCP output limits: a text result over 50,000 characters is saved to a file whatever its token count; MAX_MCP_OUTPUT_TOKENS defaults to 25,000; an error past about 11,000 characters keeps its first and last 5,000), read Nov 19 2026; it names no version where the figures changed"
+      }
+    ]
+  },
   "ruleLoad": {
     "readBy": "which rule lines reach a Claude Code session by Claude Code's own loading (#1514): the rules page marks a line it says won't, naming Claude Code and the cause, deep doctor reports the same as rules.not_loaded with the file and the first line lost, the start slice sends such a rule by DeepBuild's own route, and the session facts digest the files it says a session loads; a load the agent reports itself outranks it",
     "conformance": "rules/load-entry",
@@ -1180,5 +1193,32 @@
       "write": "~/.claude/skills",
       "readFrom": ["~/.claude/skills"]
     }
+  },
+  "mcpHandshake": {
+    "readBy": "DeepBuild's MCP servers (deep mcp, deep mcp actions, deep-hook's mcp actions, the reading tools) hold the handshake revisions mcp.handshake@1 lists and answer any other with the newest (#2854); each version's client opens with the revision here, read from its recorded initialize request. Recorded by claude -p under a scratch HOME with an invalid OAuth token (no model call), --strict-mcp-config naming one stdio server that kept each line it was sent; the client's npm build (@anthropic-ai/claude-code), Nov 22, 2026",
+    "conformance": "claude/mcpHandshake/held",
+    "entries": [
+      {
+        "versions": [
+          "2.1.299"
+        ],
+        "revision": "2025-11-25",
+        "request": "adapters/corpus/claude-code/2.1.299/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "2.1.304"
+        ],
+        "revision": "2025-11-25",
+        "request": "adapters/corpus/claude-code/2.1.304/mcp-initialize.json"
+      },
+      {
+        "versions": [
+          "2.1.308"
+        ],
+        "revision": "2025-11-25",
+        "request": "adapters/corpus/claude-code/2.1.308/mcp-initialize.json"
+      }
+    ]
   }
 }

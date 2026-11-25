@@ -554,6 +554,16 @@
       "initialReason": "Issue #237 first measurement: the merge base has no lease table. One process opens a record and the lease table, grants 1,000 port leases one after another, refuses a second holder on each, then ends every holder and releases every lease, so p50 includes Node's start; the issue's 50 ms per grant stays in tests/acceptance/237/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "lease-ask",
+      "command": [
+        "node",
+        "benchmarks/lease-ask.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #3218 first measurement: the merge base has no ask for several resources. One process opens a record and the lease table, holds 1,000 leases from 250 asks of four (a cpu.slot, units of two pools and a port), then makes 1,000 asks of four refused on their fourth, so p50 includes Node's start; the issue's 1 ms per ask and 50 ms per grant with units stay in tests/acceptance/3218/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "deep-mcp-30d",
       "command": [
         "node",
@@ -1180,6 +1190,23 @@
       ]
     },
     {
+      "id": "canvas-atlas-draw",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "atlas-draw"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "draw_rows_frame_ms": 0.1
+      },
+      "initialReason": "Issue #2386 first measurement: the merge base draws every atlas row as its grid's cell and has no such task. A release deep-show's frames of 10,000 atlas rows on a 100 x 100 square grid of 4 u cells, each a 4 x 8 px tile with draw [4, 8] and anchor [0.5, 0.75], against the same set without the two fields, each sliding 15 u a second along x by a keyed channel so each of the 300 frames a side places every row again, five runs after a warm-up one, each a fresh process, the side that goes first alternating; the difference of the sides' median frame time is what draw adds. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2386.b3f6fe16"
+      ]
+    },
+    {
       "id": "canvas-local-tone-map",
       "command": [
         "node",
@@ -1600,7 +1627,8 @@
       "initialReason": "Issue #157 first measurement (#157.d2250c69): the merge base reads no delivery back. One `deep-show run` exports a 10 s 1920 × 1080 film at 60 fps (600 frames, a bar moving a pixel a frame) as H.264 with AAC, which now checks the delivery from its own bytes in a fresh decode worker and encodes the colour probe; it prints the receipt's fidelity.decode_seconds (at most 1.25 s, 8x real time) and color_probe.seconds (under 1 s), which tests/acceptance/157/budgets.test.ts judges on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#157.d2250c69",
-        "#518.b0585e2f"
+        "#518.b0585e2f",
+        "#231.f202d6a5"
       ]
     },
     {
@@ -1708,7 +1736,8 @@
       "limits": {},
       "initialReason": "Issue #172 first measurement (#172.1e1f958d): the merge base has no web player. One `deep-show run` exports a 2D figure to the web and reads its bundle's player (the WebAssembly and JavaScript it is made of, fonts and assets aside), each compressed with Brotli at quality 11; it prints those bytes and the bundle's. The criterion's limits (the player under 12 MB compressed without fonts and assets, the lab's first frame under 3 s in Chrome, 60 fps at 1080p) are judged by tests/acceptance/172/budgets.test.ts on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
-        "#172.1e1f958d"
+        "#172.1e1f958d",
+        "#2892.d7212061"
       ]
     },
     {
@@ -2215,6 +2244,25 @@
       ]
     },
     {
+      "id": "canvas-fx-pack",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "fx-pack"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "pack_check_ms": 2000,
+        "operator_compile_ms": 20,
+        "still_dispatches": 0
+      },
+      "initialReason": "Issue #161 first measurement (#161.729a03cd): the merge base's fx@1 holds 17 operators, its install_pack answers no check_ms and a 2D session's passes name no operator. A run starts two fresh processes: a release deep-show installs packs/fx-1.0.0 as deepbuild/fx and answers the pack's own check's wall time (pack_check_ms, under 2 s); a release deep-gpu puts each of the pack's 70 graphs through check_operator, whose timing.compile_ms is its compile off the UI thread (operator_compile_ms, the slowest of the 70, under 20 ms), and shows a figure whose group's passes name fx.levels@1, fx.radial_blur@1 and fx.turbulent_displace@1 as a live session for 60 frames, counting the passes from frame 4 on that name one of them (still_dispatches, 0: a count judged on any machine). One warm-up and five runs. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#161.729a03cd"
+      ]
+    },
+    {
       "id": "canvas-logic-trails",
       "command": [
         "node",
@@ -2230,6 +2278,53 @@
       "criteria": [
         "#265.e3eb2a00"
       ]
+    },
+    {
+      "id": "canvas-grid-image",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 2
+      },
+      "initialReason": "Issue #269 first measurement (#269.6ad7e180): the merge base draws no grid image and has no such task. A 256 x 256 logic grid whose every step changes 2% of its cells, drawn smooth at 2 px a cell (512 x 512 px), a data view; the vitest file runs the blind acceptance test itself (AC6's blind redraft, whose program keeps within the logic item's default fuel), which builds a release deep-gpu, plays the film's 120 frames on the GPU layer with timings, five runs after a warm-up one, each a fresh process, and judges each run's p95 of gpu_ms over frames 10 to 119 against 2 ms by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac at rest), printing the grid image's median draw_ms as the reading; the benchmark prints that verdict and exits 0, and its judge gives it as the target. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": [
+        "#269.6ad7e180"
+      ]
+    },
+    {
+      "id": "net-rooms",
+      "command": ["node", "benchmarks/net-rooms.mjs"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #278 first measurement (#278.fe1a5277): the merge base has no rooms. node benchmarks/net-rooms.mjs runs the criterion's blind acceptance test (tests/acceptance/278/ac5-budgets.test.ts), which plays the eight-seat piece over the test relay twice: once with one player count and no open or finish array, four copies, counting the frames, bytes, messages, rollbacks and steps run against the merge base's counts for the same match, and once as a room of three that a fourth copy joins at step 600, recording that copy's replay from step 0 in steps a second (a reading, counted only on a reference Mac). The window times the run against its merge base; once main has this task, p50 and peak memory get a 50% merge-base margin.",
+      "criteria": [
+        "#278.fe1a5277"
+      ]
+    },
+    {
+      "id": "memory-admission",
+      "command": ["node", "benchmarks/memory-admission.mjs"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #3220 first measurement (#3220.c2610cec): the merge base keeps no run's peak and admits no run on one. One process opens a record and the supervisor, runs one sandboxed program that holds 64 MiB for 2 s so every scan of it keeps its peak and CPU, and reads what it used; then keeps 10,000 keys' clean peaks and decides 1,000 admissions of a key with three clean runs, printing the median time of one against the criterion's 1 ms. The process starts a scan makes stay in tests/acceptance/3220/ac9-budgets.test.ts, counted against the merge base's 2. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
+      "criteria": ["#3220.c2610cec"]
+    },
+    {
+      "id": "canvas-nested-check",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "nested-check"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1857 first measurement (#1857.df51c34e): the merge base copies the document's items for each nested instance. One process checks a board of 4,999 rects and one instance whose step repeats a nested recipe 1,024 times through `deep-show run`, so p50 includes Node's and the binary's start; the criterion's own 1 s, read on the check's clock, stays in tests/acceptance/1857/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": ["#1857.df51c34e"]
     }
   ]
 }

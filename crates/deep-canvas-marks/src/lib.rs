@@ -33,6 +33,8 @@ pub mod follow;
 pub mod function;
 pub mod functions;
 pub mod fx;
+// Issue #269: a 2D image drawn from a logic grid.
+pub mod grid_image;
 mod grid_rules;
 pub mod implicit;
 pub mod key;

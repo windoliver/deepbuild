@@ -189,6 +189,14 @@ export const parents = async (): Promise<Map<number, number>> => {
   if (!r.error) for (const row of r.stdout.split('\n')) { const [pid, ppid] = row.trim().split(/\s+/).map(Number); if (pid && ppid) map.set(pid, ppid); }
   return map;
 };
+/** A process and every process above it, nearest first, from one read of the table: who a `deep lease` covers (#3219). */
+export const ancestorsOf = async (peer: { pid: number } | undefined): Promise<number[]> => {
+  if (!peer) return [];
+  const up = await parents();
+  const out: number[] = [];
+  for (let pid: number | undefined = peer.pid; pid !== undefined && pid > 1 && !out.includes(pid); pid = up.get(pid)) out.push(pid);
+  return out;
+};
 /**
  * The process group of the newest process under `ancestor` whose arguments hold `text`, apart from the ancestor's own
  * group, or undefined: where a background command an agent started runs (#907).

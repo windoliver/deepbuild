@@ -10,11 +10,13 @@
 //! length scale the backend's speed cap; one that lets it scale each body's sleep speed; a lint
 //! `physics.small_body` that reads only the first shape of each body; and a check that reads
 //! only the range of `solver.length_unit`, never whether the backend scales by it.
+//! #2317's (tests/acceptance/2317): a wrapper that leaves the backend's reuse of a pair's contact
+//! points as the backend has it, on for every pair; and one that turns it off for every world.
 
 use super::*;
 
 /// The planted programs this file runs.
-pub const PLANTED: [&str; 12] = [
+pub const PLANTED: [&str; 14] = [
     "contact_hz_quarter",
     "static_contact_same_hz",
     "contact_default_30",
@@ -27,9 +29,11 @@ pub const PLANTED: [&str; 12] = [
     "wrapper_scales_sleep_speed",
     "lint_reads_first_shape",
     "check_reads_range_only",
+    "wrapper_leaves_contact_reuse_on",
+    "wrapper_turns_contact_reuse_off",
 ];
 
-/// #2308's planted programs, as `Twin::Small` holds them.
+/// #2308's planted programs, and #2317's two, as `Twin::Small` holds them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Small {
     LengthIgnored,
@@ -38,12 +42,15 @@ pub enum Small {
     SleepSpeedScaled,
     FirstShape,
     RangeOnly,
+    ReuseKept,
+    ReuseOff,
 }
 
 /// #2308: what the wrapper hands Rapier of `w` under `twin`: its contact frequency, Hz; its
-/// length, m; and the lengths its speed cap and each body's sleep speed are divided by, so that
-/// `solver.max_speed` and `solver.sleep.speed` stay in m/s whatever the length is.
-pub(crate) fn lengths(twin: Twin, w: &World) -> (f32, f64, f64, f64) {
+/// length, m; the lengths its speed cap and each body's sleep speed are divided by, so that
+/// `solver.max_speed` and `solver.sleep.speed` stay in m/s whatever the length is; and (#2317)
+/// the share of its length within which a pair keeps its contact points (belt.rs).
+pub(crate) fn lengths(twin: Twin, w: &World) -> (f32, f64, f64, f64, f32) {
     let own = rapier3d::prelude::SpringCoefficients::<f32>::contact_defaults().natural_frequency;
     let hz = match twin {
         Twin::Small(Small::ContactOwn) => own,
@@ -53,10 +60,11 @@ pub(crate) fn lengths(twin: Twin, w: &World) -> (f32, f64, f64, f64) {
         Twin::Small(Small::LengthIgnored) => 1.0,
         _ => w.solver.length_unit,
     };
+    let reuse = crate::belt::reused(twin);
     match twin {
-        Twin::Small(Small::SpeedCapScaled) => (hz, unit, 1.0, unit),
-        Twin::Small(Small::SleepSpeedScaled) => (hz, unit, unit, 1.0),
-        _ => (hz, unit, unit, unit),
+        Twin::Small(Small::SpeedCapScaled) => (hz, unit, 1.0, unit, reuse),
+        Twin::Small(Small::SleepSpeedScaled) => (hz, unit, unit, 1.0, reuse),
+        _ => (hz, unit, unit, unit, reuse),
     }
 }
 
@@ -86,6 +94,8 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
         "wrapper_scales_sleep_speed" => Twin::Small(Small::SleepSpeedScaled),
         "lint_reads_first_shape" => Twin::Small(Small::FirstShape),
         "check_reads_range_only" => Twin::Small(Small::RangeOnly),
+        "wrapper_leaves_contact_reuse_on" => Twin::Small(Small::ReuseKept),
+        "wrapper_turns_contact_reuse_off" => Twin::Small(Small::ReuseOff),
         _ => return false,
     };
     true

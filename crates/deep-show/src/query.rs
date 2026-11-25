@@ -24,10 +24,32 @@ pub const DEFAULT_CAP: usize = 200;
 /// No reply passes this many bytes of JSON without a cursor (#412).
 const REPLY_CAP: usize = 65_536;
 
+/// The room the call being answered names, in bytes; 0 while it names none.
+static ROOM: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Takes the room a hub call names (#2896): the hub gives each call a fifth under what its
+/// client keeps of one tool result, so every page of its reply fits that client. None, the cap.
+pub fn set_room(room: Option<usize>) {
+    ROOM.store(room.unwrap_or(0), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The bytes the reply being built may take: the call's room, never past the cap.
+pub fn reply_cap() -> usize {
+    match ROOM.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => REPLY_CAP,
+        n => n.min(REPLY_CAP),
+    }
+}
+
+/// Room for the fields every reply carries: 8 KB of the 64 KB cap, an eighth of a smaller room.
+pub fn margin() -> usize {
+    (reply_cap() / 8).min(8_192)
+}
+
 /// The bytes a reply's list may take: the cap less the rest of the reply and room for the fields
 /// every reply carries.
 pub fn reply_room(reply: &Value) -> usize {
-    REPLY_CAP.saturating_sub(reply.to_string().len() + 8_192)
+    reply_cap().saturating_sub(reply.to_string().len() + margin())
 }
 
 /// The elements of `all` from `from` that fit in `room` bytes of JSON (at least one), and where
@@ -227,7 +249,14 @@ impl Hub<'_> {
         let Some(name) = &q.named else {
             return refused("bad_input");
         };
-        let mut all = deep_canvas::refs::refs_to(doc, &self.startup.sealed, name);
+        // #3379: a bare ID names an item or a control; the two may share it.
+        let mut all = match name {
+            deep_canvas::refs::Name::Item(id) => {
+                let control = deep_canvas::refs::Name::Control(id.clone());
+                deep_canvas::refs::refs_to_any(doc, &self.startup.sealed, &[name, &control])
+            }
+            _ => deep_canvas::refs::refs_to(doc, &self.startup.sealed, name),
+        };
         let items = doc.get("items").and_then(Value::as_object);
         let total_items = items.map_or(0, Map::len);
         let mut read = total_items;

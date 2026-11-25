@@ -1,0 +1,33 @@
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-22-asks-4dae39
+
+ ❯ packages/hub/test/asleep.test.ts (3 tests | 1 failed | 2 skipped) 3599ms
+   × the hub's list holds an ask from the batch that shows it, not while it waits for that batch 3564ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/asleep.test.ts > the hub's list holds an ask from the batch that shows it, not while it waits for that batch
+AssertionError: before its batch the ask has no row in the list: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/hub/test/asleep.test.ts:142:77
+    140|   // The hub's start runs a list pass; the 60 s pass is far off.
+    141|   await pause(3000);
+    142|   expect(await listed(), 'before its batch the ask has no row in the l…
+       |                                                                             ^
+    143|   while (Date.now() < batch + 5000) await pause(250);
+    144|   expect(await listed(), `once the ${new Date(batch).toISOString()} ba…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  06:33:03
+   Duration  3.86s (tests 96%, transform 3%, import 1%)
+

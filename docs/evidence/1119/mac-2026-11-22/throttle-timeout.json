@@ -1,0 +1,24 @@
+{
+ "at": "2026-11-22T12:32:54.746Z",
+ "event": "timeout",
+ "class": "timed",
+ "id": "97aa4dc08f20f34e",
+ "pid": 51906,
+ "wait": 60,
+ "blockers": [
+  {
+   "class": "test",
+   "id": "7584662124f7bdcc",
+   "pid": 38194,
+   "at": "2026-11-22T11:06:13.832Z",
+   "command": "~/.nvm/versions/node/v24.22.0/bin/node <scratchpad>/1851a3/head/scripts/throttle.mjs test --wait 30 -- ~/.nvm/versions/node/v24.22.0/bin/node <scratchpad>/1851a3/head/scripts/affected.mjs crates/deep-hook/README.md crates/deep-hook/src/main.rs crates/deep-hook/src/waiter.rs crates/deep-hook/tests/waiter.rs docs/technical-design.md packages/hub/src/answer-delivery.ts packages/hub/src/connection.ts "
+  },
+  {
+   "class": "build",
+   "id": "f57f5645b1e3a770",
+   "pid": 12594,
+   "at": "2026-11-22T11:11:15.807Z",
+   "command": "node scripts/affected.mjs packages/hub/src/mcp.ts crates/deep-hook/src/actions.rs packages/reading/src/tools.mts scripts/corpus.mjs packages/contracts/src/codegen-rust.ts packages/contracts/schemas/mcp.handshake@1.json packages/contracts/schemas/adapter.facts@9.json packages/adapters/src/index.ts packages/conformance/src/runner.ts adapters/claude-code.facts.json adapters/codex.facts.json crates/de"
+  }
+ ]
+}

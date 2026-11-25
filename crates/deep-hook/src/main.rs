@@ -24,10 +24,15 @@ use deep_contracts::{parse, parse_lossy, Value};
 use deep_hook::matcher;
 
 mod actions;
+mod cow;
 mod heavy;
+mod heavy_entry;
 mod remote;
 mod spool_file;
 mod tool_paths;
+
+use cow::clone;
+use heavy_entry::heavy_entry;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -141,6 +146,22 @@ fn address() -> PathBuf {
     }
 }
 
+/// The address one forwarded hook reads, once its payload's folder is known: config.json is read for it at most once
+/// (#2651). Unset in the modes that outlive one hook, which read the setting again at each use.
+static HOOK_ADDRESS: OnceLock<PathBuf> = OnceLock::new();
+
+/// Whether this process forwards one hook, its folder read: its address is then read once and kept.
+static ONE_HOOK: AtomicBool = AtomicBool::new(false);
+
+/// The hub's address for this process: one forwarded hook's kept one, or the setting as it reads now.
+fn hub_address() -> PathBuf {
+    if ONE_HOOK.load(Ordering::SeqCst) {
+        HOOK_ADDRESS.get_or_init(address).clone()
+    } else {
+        address()
+    }
+}
+
 /// The dev hub `deep hub use --root` sent this worktree to in `uses`, the `hub.use` setting, the longest such
 /// worktree winning.
 fn worktree_hub(uses: Option<&Value>) -> Option<PathBuf> {
@@ -231,7 +252,8 @@ const REMOVED: &str = "was removed after setup (`deep setup` writes it again)";
 
 /// ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}, "classes": {<tool>: <class>}}`; nothing when it
 /// is missing before setup has finished, and why not when it was removed since, can't be read or isn't that shape.
-/// Other members, such as each entry's planted call and twin, are the hub's.
+/// Other members are the hub's. Each entry's planted call and twin are in proofs.json beside it, which deep-hook never
+/// opens (#2695); a rules.json an older hub wrote still holds them, and they are parsed with it until the next install.
 fn rules() -> Result<Rules, String> {
     // The planted wrong program for #304's AC1 reads no entry: its one rule is compiled in.
     if cfg!(feature = "plant-compiled-rule") {
@@ -281,39 +303,16 @@ fn standing(value: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
-/// The cloud owner a command creates its resource under, as the hub names it: an AWS command's account, by its
-/// `--profile`'s `sso_account_id` in ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
-fn cloud_owner(command: &str) -> Option<String> {
-    let words: Vec<&str> = command.split_whitespace().collect();
-    if words.first().map(|w| w.trim_matches(['"', '\''])) != Some("aws") {
-        return None;
+/// The cloud owner an AWS profile creates its resource under, as the hub names it: the profile's `sso_account_id` in
+/// ~/.aws/config (`aws:<account>`), else the profile (`aws-profile:<name>`).
+fn cloud_owner(profile: &str) -> String {
+    let aws = PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws");
+    let config = fs::read_to_string(aws.join("config")).unwrap_or_default();
+    let credentials = fs::read_to_string(aws.join("credentials")).unwrap_or_default();
+    match matcher::aws_account(&config, &credentials, profile) {
+        Some(account) => format!("aws:{account}"),
+        None => format!("aws-profile:{profile}"),
     }
-    let profile = words
-        .iter()
-        .position(|w| *w == "--profile" || w.starts_with("--profile="))
-        .and_then(|i| match words[i].strip_prefix("--profile=") {
-            Some(p) => Some(p),
-            None => words.get(i + 1).copied(),
-        })
-        .unwrap_or("default")
-        .trim_matches(['"', '\'']);
-    let config = fs::read_to_string(
-        PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".aws/config"),
-    )
-    .unwrap_or_default();
-    let mut section = String::new();
-    for line in config.lines().map(str::trim) {
-        if let Some(head) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
-            section = head.trim_start_matches("profile ").trim().to_string();
-        } else if section == profile {
-            if let Some((key, value)) = line.split_once('=') {
-                if key.trim() == "sso_account_id" {
-                    return Some(format!("aws:{}", value.trim()));
-                }
-            }
-        }
-    }
-    Some(format!("aws-profile:{profile}"))
 }
 
 /// A `classes` member, `{<tool>: read | change | send | destructive}`; none when it is absent.
@@ -481,7 +480,7 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
         (&paths, &args, names),
         cwd.as_deref(),
         &home,
-        &address(),
+        &hub_address(),
     );
     call.counts = counts;
     Some(call)
@@ -530,25 +529,6 @@ fn peer() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
-/// `{"name", "jobs", "jobs_flag"}`, or `null`; `deep lease` reads it to know how the command takes jobs.
-fn heavy_entry() -> ExitCode {
-    let mut command = String::new();
-    let _ = io::stdin().read_to_string(&mut command);
-    let cwd = env::current_dir().ok();
-    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
-    match heavy::matched(&command, cwd.as_deref(), &home, None) {
-        Some(hit) => println!(
-            "{{\"name\":{},\"jobs\":{},\"jobs_flag\":{}}}",
-            quoted(&hit.name),
-            quoted(&hit.jobs),
-            hit.jobs_flag.as_deref().map_or("null".to_string(), quoted)
-        ),
-        None => println!("null"),
-    }
-    ExitCode::SUCCESS
-}
-
 /// `deep-hook check`: whether a guard@1 entry matches a call, read on stdin as `{"entry": guard@1, "call":
 /// {"tool_name", "tool_input", "cwd"?}, "classes"?: {<tool>: <class>}}`; prints `{"matched":true}` or
 /// `{"matched":false}`. The hub runs it over each entry's planted call and twin at install, so an entry is matched
@@ -581,17 +561,13 @@ fn check() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Whether a standing rule the hub copied covers the cloud resource this call creates (#23).
-fn covered(parsed: Option<&Value>, rules: &Rules) -> bool {
-    match parsed
-        .and_then(|p| member(p, "tool_input"))
-        .and_then(|i| member(i, "command"))
-    {
-        Some(Value::String(c)) => {
-            cloud_owner(c).is_some_and(|owner| rules.standing.contains(&owner))
-        }
-        _ => false,
-    }
+/// Whether a standing rule the hub copied covers the cloud resource this call creates (#23): the owner is read from
+/// the one run that creates it, when the reader can know its profile; a call with more than one such run is covered by
+/// none (#2134).
+fn covered(called: Option<&matcher::Call>, rules: &Rules) -> bool {
+    called
+        .and_then(matcher::Call::aws_profile)
+        .is_some_and(|profile| rules.standing.contains(&cloud_owner(&profile)))
 }
 
 /// What each fail_closed entry a call matched says, denying it with the hub away.
@@ -690,7 +666,7 @@ fn matching() -> ExitCode {
                     .map(|(g, _)| quoted(&g.name))
                     .collect::<Vec<_>>()
                     .join(",");
-                let denied = denials(&matched, covered(parsed.as_ref(), &rules))
+                let denied = denials(&matched, covered(called.as_ref(), &rules))
                     .iter()
                     .map(|d| quoted(d))
                     .collect::<Vec<_>>()
@@ -809,7 +785,7 @@ fn exchange(
             Some(stream) => stream,
             None => return (None, late, String::new()),
         },
-        None => match UnixStream::connect(address()) {
+        None => match UnixStream::connect(hub_address()) {
             Ok(stream) => {
                 REACHED.store(true, Ordering::SeqCst);
                 remote::Stream::Unix(stream)
@@ -829,7 +805,7 @@ fn exchange(
     // A hub older than one this machine has seen of it is a copy left behind: nothing goes to it (#1338).
     let hub = match member(&hello_value, "hub") {
         Some(Value::String(id)) => id.clone(),
-        _ => format!("unix:{}", address().display()),
+        _ => format!("unix:{}", hub_address().display()),
     };
     if let Some(why) =
         remote::refused_generation(&home(), &hub, integer(member(&hello_value, "generation")))
@@ -1229,6 +1205,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
         set_cwd(PathBuf::from(cwd));
     }
+    ONE_HOOK.store(true, Ordering::SeqCst);
     // A clone of a project this machine joined reaches that project's hub, and the watchdog waits the route's time.
     let joined = REMOTE.get_or_init(|| {
         current_cwd()
@@ -1269,7 +1246,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let matched = met(&rules.guards, called.as_ref());
     // A cloud resource a standing rule the hub copied covers is let through, and spooled like any call (#23).
     // With the hub away, each fail_closed entry the call matched still denies it, each in its own words.
-    let denied = denials(&matched, covered(parsed.as_ref(), &rules));
+    let denied = denials(&matched, covered(called.as_ref(), &rules));
     if !denied.is_empty() {
         let _ = DENIAL.set(denied.join("\n"));
     }
@@ -1905,132 +1882,6 @@ fn waiter() -> ExitCode {
             }
             Waited::Done => return ExitCode::SUCCESS,
             Waited::Away => std::thread::sleep(WAITER_LOOK),
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-extern "C" {
-    fn clonefile(src: *const std::ffi::c_char, dst: *const std::ffi::c_char, flags: u32) -> i32;
-}
-
-#[cfg(target_os = "linux")]
-extern "C" {
-    fn ioctl(fd: std::ffi::c_int, request: std::ffi::c_ulong, ...) -> std::ffi::c_int;
-}
-
-/// One copy-on-write clone of `from` at `to`, which must not exist: a folder whole, a link as a link (APFS's
-/// clonefile(2); on Linux each file a reflink, FICLONE, as btrfs and XFS make; elsewhere staging isn't built yet).
-/// Unsupported, leaving nothing at `to`, where the file system can't make one.
-fn clone_one(from: &Path, to: &Path) -> io::Result<()> {
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::io::AsRawFd;
-        const FICLONE: std::ffi::c_ulong = 0x4004_9409;
-        let meta = fs::symlink_metadata(from)?;
-        let kind = meta.file_type();
-        if kind.is_symlink() {
-            return std::os::unix::fs::symlink(fs::read_link(from)?, to);
-        }
-        if kind.is_dir() {
-            fs::create_dir(to)?;
-            let made = (|| {
-                for entry in fs::read_dir(from)? {
-                    let entry = entry?;
-                    clone_one(&entry.path(), &to.join(entry.file_name()))?;
-                }
-                fs::set_permissions(to, meta.permissions())
-            })();
-            if made.is_err() {
-                let _ = fs::remove_dir_all(to);
-            }
-            return made;
-        }
-        if !kind.is_file() {
-            // A FIFO, socket or device has no copy-on-write copy.
-            return Err(io::Error::from(ErrorKind::Unsupported));
-        }
-        let source = fs::File::open(from)?;
-        let copy = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(to)?;
-        // SAFETY: two open descriptors that live through the call.
-        if unsafe { ioctl(copy.as_raw_fd(), FICLONE, source.as_raw_fd()) } != 0 {
-            let e = io::Error::last_os_error();
-            drop(copy);
-            let _ = fs::remove_file(to);
-            // EOPNOTSUPP, EINVAL or EXDEV: no reflink on this file system, or not between these two.
-            return Err(if matches!(e.raw_os_error(), Some(95 | 22 | 18)) {
-                io::Error::from(ErrorKind::Unsupported)
-            } else {
-                e
-            });
-        }
-        copy.set_permissions(meta.permissions())?;
-        copy.set_modified(meta.modified()?)?;
-        Ok(())
-    }
-    #[cfg(target_os = "macos")]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        let c = |p: &Path| {
-            std::ffi::CString::new(p.as_os_str().as_bytes())
-                .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))
-        };
-        const CLONE_NOFOLLOW: u32 = 1;
-        // SAFETY: both are NUL-terminated paths that live through the call.
-        if unsafe { clonefile(c(from)?.as_ptr(), c(to)?.as_ptr(), CLONE_NOFOLLOW) } == 0 {
-            return Ok(());
-        }
-        Err(io::Error::last_os_error())
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        let _ = (from, to);
-        Err(io::Error::from(ErrorKind::Unsupported))
-    }
-}
-
-/// `deep-hook clone <from> <to>`: `from` cloned copy-on-write at `to` (#347). Into a folder that is there, each entry
-/// is cloned over the one of its name and nothing else there is touched, so a staged folder puts back what a run
-/// deleted. Exit 0 cloned, 3 when this file system can't make a copy-on-write copy there, 1 another failure.
-fn clone(from: &Path, to: &Path) -> ExitCode {
-    fn over(from: &Path, to: &Path) -> io::Result<()> {
-        let there = match fs::symlink_metadata(to) {
-            Err(e) if e.kind() == ErrorKind::NotFound => return clone_one(from, to),
-            other => other?,
-        };
-        if there.is_dir() && fs::symlink_metadata(from)?.is_dir() {
-            for entry in fs::read_dir(from)? {
-                let entry = entry?;
-                over(&entry.path(), &to.join(entry.file_name()))?;
-            }
-            return Ok(());
-        }
-        if there.is_dir() {
-            fs::remove_dir_all(to)?;
-        } else {
-            fs::remove_file(to)?;
-        }
-        clone_one(from, to)
-    }
-    match over(from, to) {
-        Ok(()) => ExitCode::SUCCESS,
-        // ENOTSUP and EXDEV: no copy-on-write on this volume, or not between these two.
-        Err(e)
-            if e.kind() == ErrorKind::Unsupported || matches!(e.raw_os_error(), Some(18 | 45)) =>
-        {
-            eprintln!("deep-hook clone: this file system can't make a copy-on-write copy of {} at {}: {e}", from.display(), to.display());
-            ExitCode::from(3)
-        }
-        Err(e) => {
-            eprintln!(
-                "deep-hook clone: {} at {}: {e}",
-                from.display(),
-                to.display()
-            );
-            ExitCode::from(1)
         }
     }
 }

@@ -14,17 +14,30 @@
 
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use crate::hub::{HubClient, HubError};
 use crate::states::{closes, handle, Table};
 
 /// Once a session holds this many open asks, its further asks fold into one exception.
 pub const FOLD_AFTER: usize = 5;
+
+/// Whether the row is a "keeps asking" exception, the one the core folds its thread's further asks into: the hub's
+/// inbox read says so of each row, and this app of each ask created since.
+fn holds(row: &Value) -> bool {
+    row["holder"] == true
+}
+
+/// The session's thread, as its start named it; the session itself when the view has no start for it.
+fn thread_of<'a>(threads: &'a HashMap<String, String>, session: &'a Value) -> &'a str {
+    let session = session.as_str().unwrap_or_default();
+    threads.get(session).map_or(session, String::as_str)
+}
 
 /// The hub methods this reader calls, which the app's hello check lists (`hub::NEEDS`); no other module names them.
 pub const CALLS: [&str; 3] = ["inbox.read", "stream.subscribe", "events.read"];
@@ -113,6 +126,10 @@ pub struct View {
     pub inbox: Vec<Value>,
     /// The events applied since the reads, folded: what the views and the notifier read, through [`View::table`].
     table: Table,
+    /// Whether the core has shown asks in this record: an `ask.batched` of its was applied.
+    batched: bool,
+    /// Each session's thread, from the `session.start` events applied: the core keys a fold on it.
+    threads: HashMap<String, String>,
     /// The planted walker's every event.
     #[cfg(feature = "plant-walks-events")]
     all: Vec<Value>,
@@ -158,6 +175,23 @@ impl View {
         table.deadline(created)
     }
 
+    /// Takes one event the reads already reflect: into the table, and a session's start for the thread it names.
+    fn before(&mut self, event: &Value) {
+        self.table.apply(event);
+        self.thread_started(event);
+    }
+
+    /// A session's start names its thread, which the core folds by (#22).
+    fn thread_started(&mut self, event: &Value) {
+        if event["kind"] == "session.start" {
+            if let (Some(session), Some(thread)) =
+                (event["session"].as_str(), event["data"]["thread"].as_str())
+            {
+                self.threads.insert(session.to_owned(), thread.to_owned());
+            }
+        }
+    }
+
     /// Folds the record up to the view's `log_pos` into its table, read from the hub a page at a time. The reads
     /// already reflect those events, so nothing else of the view takes them, and the notifier never sees them as new.
     fn fold_before(&mut self, client: &mut HubClient) -> Result<(), HubError> {
@@ -171,13 +205,78 @@ impl View {
                 if after > self.log_pos {
                     return Ok(());
                 }
-                self.table.apply(event);
+                self.before(event);
             }
             if !more(&page, events.len()) {
                 break;
             }
         }
         Ok(())
+    }
+
+    /// The rows Needs you draws, oldest first. With the hub's list (#1463) they are the asks it holds, read no second
+    /// way: each the core has shown, or put off with Later. One waiting for its batch, or held for the agent's next
+    /// step, isn't one, and one folded into an exception shows through that exception (#22).
+    ///
+    /// A record with no list reads them from its own events; with no showing of the core's either, a fixture's or an
+    /// older hub's, it has no batch to wait for, and its open asks draw at once, as its count counts them.
+    pub fn needs_you(&self) -> Vec<&Value> {
+        let table = self.table();
+        if table.listed() {
+            let listed: Vec<String> = table
+                .list()
+                .iter()
+                .filter_map(|row| row["id"].as_str())
+                .filter(|id| id.starts_with("ask:"))
+                .map(str::to_owned)
+                .collect();
+            return self
+                .inbox
+                .iter()
+                .filter(|row| {
+                    row["status"] != "closed"
+                        && row["ask"]
+                            .as_str()
+                            .is_some_and(|ask| listed.iter().any(|id| id == ask))
+                })
+                .collect();
+        }
+        // With no batch of the core's there is nothing to wait for: every open ask draws, as before batches (#22).
+        self.inbox
+            .iter()
+            .filter(|row| {
+                row["status"] == "shown"
+                    || row["status"] == "later"
+                    || (!self.batched && row["status"] != "closed")
+            })
+            .collect()
+    }
+
+    /// The asks a panel's `needs_you()` names (#338): those in sight and, with them, those folded into an exception,
+    /// which it names as folded.
+    pub fn panel_asks(&self) -> Vec<&Value> {
+        let shown = self.needs_you();
+        let in_sight = |row: &Value| shown.iter().any(|ask| ask["ask"] == row["ask"]);
+        // A folded ask comes with its exception, so not before that is in sight, at its batch (#22): the exception its
+        // row names, which may be another session's of its thread. A fixture's record folds by count with no exception
+        // (#338), and those show as they did.
+        let held_out = |row: &Value| {
+            self.inbox.iter().any(|other| {
+                let holding = match row["folded"].as_str() {
+                    Some(exception) => other["ask"] == exception,
+                    None => {
+                        holds(other)
+                            && thread_of(&self.threads, &other["session"])
+                                == thread_of(&self.threads, &row["session"])
+                    }
+                };
+                holding && other["status"] != "closed" && !in_sight(other)
+            })
+        };
+        self.inbox
+            .iter()
+            .filter(|row| in_sight(row) || (row["status"] == "folded" && !held_out(row)))
+            .collect()
     }
 
     /// Applies one event the view doesn't have yet.
@@ -188,24 +287,90 @@ impl View {
             self.rev += 1;
             touched(&event);
         }
+        self.thread_started(&event);
         if kind == "ask.created" {
             let ask = format!("ask:{}", event["id"].as_str().unwrap_or_default());
             if !self.inbox.iter().any(|row| row["ask"] == ask.as_str()) {
-                // Past a session's fifth open ask, it folds, as in the core.
-                let mine = self
-                    .inbox
-                    .iter()
-                    .filter(|row| row["session"] == event["session"] && row["status"] != "closed");
-                let status = if mine.count() < FOLD_AFTER {
-                    "shown"
-                } else {
-                    "folded"
+                // As in the core: it folds while its session's "keeps asking" is open, the exception the core keys
+                // on the session's thread, which never folds itself; otherwise it waits for the core to show it, at
+                // its batch or at once (#22).
+                let session = event["session"].as_str().unwrap_or_default();
+                let thread = self.threads.get(session).map_or(session, String::as_str);
+                let key = format!(
+                    "{:x}",
+                    Sha256::digest(format!("asks.fold:{thread}").as_bytes())
+                );
+                let exception = event["writer"] == "core" && event["data"]["kind"] == "exception";
+                let holder = exception && event["data"]["key"] == key.as_str();
+                // A record with no such exception, a fixture's (#338), folds by the count the core raises it at, never
+                // an exception of the core's, which shows on its own card; into an open one, only the "keeps asking"
+                // exception itself never folds, as in the core. As in the core, a fold is one
+                // person's: the thread's asks raised under this actor and scope count (a row from an older hub names
+                // neither); a block someone else owns neither counts nor folds, and an agent's sign-in task, which shows
+                // at once, never folds. The core folds a live ask only into an exception it already raised, so the count
+                // is a fixture's alone: a record with no list and no showing of the core's.
+                let theirs = |row: &Value, owner: &Value, actor: &Value| {
+                    row["kind"] == "unblock" && owner != actor
                 };
+                let same =
+                    |row: &Value, key: &str| row.get(key).is_none() || row[key] == event[key];
+                let mine = self.inbox.iter().filter(|row| {
+                    thread_of(&self.threads, &row["session"]) == thread
+                        && row["status"] != "closed"
+                        && same(row, "actor")
+                        && same(row, "scope")
+                        && !theirs(row, &row["owner"], &row["actor"])
+                });
+                let sign_in = event["writer"] == "core"
+                    && event["data"]["kind"] == "unblock"
+                    && event["data"]["proves"]
+                        .as_str()
+                        .is_some_and(|proves| proves.ends_with(" sign-in probe"));
+                let into = mine
+                    .clone()
+                    .find(|row| holds(row))
+                    .map(|row| row["ask"].clone());
+                let counts = !self.batched && !self.table.listed();
+                let held = !holder
+                    && !sign_in
+                    && !theirs(&event["data"], &event["data"]["owner"], &event["actor"])
+                    && ((counts && !exception && mine.count() >= FOLD_AFTER) || into.is_some());
+                let status = if held { "folded" } else { "queued" };
+                let folded = if held { into } else { None };
                 self.inbox.push(json!({
                     "ask": ask, "kind": event["data"]["kind"], "session": event["session"],
                     "status": status, "outcome": "unanswered", "owner": event["data"]["owner"],
-                    "question": event["data"]["question"],
+                    "question": event["data"]["question"], "holder": holder, "folded": folded,
+                    "actor": event["actor"], "scope": event["scope"],
                 }));
+            }
+        } else if kind == "ask.batched" && event["writer"] == "core" {
+            // Shown, at a batch or at once, or again when its Later ends or the agent's step came; a folded ask shows
+            // inside its exception, and is marked seen for when that closes.
+            self.batched = true;
+            let asks = event["data"]["asks"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            for row in self.inbox.iter_mut().filter(|row| {
+                row["status"] != "closed" && asks.iter().any(|item| item["ask"] == row["ask"])
+            }) {
+                row["seen"] = json!(true);
+                if row["status"] != "folded" {
+                    row["status"] = json!("shown");
+                }
+            }
+        } else if kind == "row.set" && event["data"]["listed"] == true {
+            // The hub lists an ask only once it is in sight (#1463): what this app took it for by its own reading,
+            // folded by its count, or held, ends there. One put off with Later is listed too, and stays so.
+            for row in self.inbox.iter_mut().filter(|row| {
+                row["ask"] == event["data"]["id"]
+                    && ["queued", "held", "folded"]
+                        .iter()
+                        .any(|status| row["status"] == *status)
+            }) {
+                row["seen"] = json!(true);
+                row["status"] = json!("shown");
             }
         } else if kind == "ask.later" && event["writer"] == "core" {
             // Only the core's Later hides an ask, as in the core: an app's or the CLI's own event changes nothing.
@@ -222,11 +387,37 @@ impl View {
             // The contract's close rule, and the first close to append decides, as in the core; the outcome is the
             // inbox's word for the kind, as the asks core names it.
             let outcome = kind.strip_prefix("ask.").unwrap_or("decided_for_you");
+            let mut released: Vec<(Value, String, bool)> = Vec::new();
             for row in self.inbox.iter_mut().filter(|row| {
                 row["status"] != "closed" && closes(&event, row["ask"].as_str().unwrap_or_default())
             }) {
                 row["status"] = json!("closed");
                 row["outcome"] = json!(outcome);
+                // Its exception closed: each ask it held gets its own row, as in the core; left to their defaults, only
+                // those it hadn't shown, which weren't in what you closed.
+                if holds(row) {
+                    let thread = thread_of(&self.threads, &row["session"]).to_owned();
+                    let defaults = event["data"]["answer"] == "defaults";
+                    released.push((row["ask"].clone(), thread, defaults));
+                }
+            }
+            let threads = &self.threads;
+            for row in self.inbox.iter_mut().filter(|row| {
+                row["status"] == "folded"
+                    && released.iter().any(|(exception, thread, defaults)| {
+                        let held = match row["folded"].as_str() {
+                            Some(holder) => *exception == holder,
+                            None => thread_of(threads, &row["session"]) == thread,
+                        };
+                        held && !(*defaults && row["seen"] == true)
+                    })
+            }) {
+                let status = if row["seen"] == true {
+                    "shown"
+                } else {
+                    "queued"
+                };
+                row["status"] = json!(status);
             }
         } else if kind == "default.undone"
             && event["writer"] == "core"
@@ -653,7 +844,8 @@ pub fn sync(cx: &mut gpui_kit::App) {
         let moved = shown.at != at;
         if moved {
             // Events alone moved it, if the start, the bound values and the fold stand as they stood.
-            let events = (shown.at.0.as_str(), shown.at.2, shown.at.3) == (at.0.as_str(), at.2, at.3);
+            let events =
+                (shown.at.0.as_str(), shown.at.2, shown.at.3) == (at.0.as_str(), at.2, at.3);
             shown.touched = touched.filter(|_| events);
             shown.at = at;
             cx.notify();
@@ -671,7 +863,9 @@ pub fn sync(cx: &mut gpui_kit::App) {
 pub fn moved_for(session: &str, cx: &gpui_kit::App) -> bool {
     cx.try_global::<Live>().is_none_or(|live| {
         let touched = &live.0.read(cx).touched;
-        touched.as_ref().is_none_or(|sessions| sessions.contains(session))
+        touched
+            .as_ref()
+            .is_none_or(|sessions| sessions.contains(session))
     })
 }
 
@@ -711,8 +905,10 @@ pub fn install_local(events: impl IntoIterator<Item = Value>) {
     for event in &record {
         view.apply(event.clone());
     }
-    // What the views draw first is all of it, so the events that built it are no move to compare (#1482).
+    // What the views draw first is all of it, so the events that built it are no move to compare (#1482), and the list
+    // reads it afresh, never an earlier record's reading at the same `log_pos` (#3100).
     let _ = take_touched();
+    crate::list::forget_reading();
     READER.with(|cell| {
         *cell.borrow_mut() = Some(Source::Local(Box::new(view), record, LocalHub::Answers))
     });
@@ -925,6 +1121,8 @@ mod tests {
         for id in ["a1", "a2", "a3"] {
             view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "data": {"kind": "choice"}}));
         }
+        // The core's batch shows them (#22): until it does an ask is queued.
+        view.apply(json!({"kind": "ask.batched", "writer": "core", "data": {"asks": [{"ask": "ask:a1"}, {"ask": "ask:a2"}, {"ask": "ask:a3"}]}}));
         view.apply(
             json!({"kind": "decision.applied", "writer": "core", "subject": "ask:a3",
                           "data": {"decision": "d1", "ask": "ask:a1"}}),
@@ -958,10 +1156,349 @@ mod tests {
         for id in ["a1", "a2"] {
             view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "data": {"kind": "choice"}}));
         }
+        // The core's batch shows them (#22): until it does an ask is queued.
+        view.apply(json!({"kind": "ask.batched", "writer": "core", "data": {"asks": [{"ask": "ask:a1"}, {"ask": "ask:a2"}]}}));
         let later = |id: &str, writer: &str| json!({"kind": "ask.later", "writer": writer, "subject": format!("ask:{id}"), "data": {"until": 9}});
         view.apply(later("a1", "cli"));
         view.apply(later("a2", "core"));
         assert_eq!(row(&view, "ask:a1").0, "shown");
         assert_eq!(row(&view, "ask:a2").0, "later");
+    }
+
+    fn handles(rows: Vec<&Value>) -> Vec<&str> {
+        rows.into_iter()
+            .map(|row| row["ask"].as_str().unwrap())
+            .collect()
+    }
+
+    /// The exception the core raises when a session's asks fold, keyed on its thread as the core keys it.
+    fn fold(id: &str, session: &str) -> Value {
+        use sha2::{Digest, Sha256};
+        let key = format!(
+            "{:x}",
+            Sha256::digest(format!("asks.fold:{session}").as_bytes())
+        );
+        json!({"kind": "ask.created", "id": id, "session": session, "writer": "core",
+               "data": {"kind": "exception", "key": key}})
+    }
+
+    #[test]
+    fn needs_you_holds_the_asks_the_hubs_list_holds() {
+        // An ask the hub's inbox read gave as held for the agent's next step, and one this app took for folded: the
+        // core shows both, the hub lists them, and the app has them in sight as the hub does (#1463).
+        let mut view = View::default();
+        view.inbox.push(json!({"ask": "ask:h1", "kind": "authority", "session": "s1", "status": "held", "outcome": "unanswered"}));
+        view.inbox.push(json!({"ask": "ask:f1", "kind": "taste", "session": "s1", "status": "folded", "outcome": "unanswered"}));
+        view.inbox.push(json!({"ask": "ask:q1", "kind": "taste", "session": "s2", "status": "shown", "outcome": "unanswered"}));
+        let listed = |id: &str| json!({"kind": "row.set", "writer": "core", "data": {"id": id, "listed": true, "order": id}});
+        view.apply(listed("session:s1"));
+        view.apply(listed("ask:h1"));
+        view.apply(listed("ask:f1"));
+        assert_eq!(handles(view.needs_you()), ["ask:h1", "ask:f1"]);
+    }
+
+    #[test]
+    fn an_ask_the_hub_lists_is_shown_whatever_this_app_took_it_for() {
+        // The hub lists an ask only once it is in sight: a row this app had folded by its own count, or held, is shown,
+        // and one put off with Later stays so.
+        let mut view = View::default();
+        for (ask, status) in [
+            ("ask:f1", "folded"),
+            ("ask:h1", "held"),
+            ("ask:l1", "later"),
+        ] {
+            view.inbox.push(json!({"ask": ask, "kind": "taste", "session": "s1", "status": status, "outcome": "unanswered"}));
+            view.apply(json!({"kind": "row.set", "writer": "core", "data": {"id": ask, "listed": true, "order": ask}}));
+        }
+        assert_eq!(row(&view, "ask:f1").0, "shown");
+        assert_eq!(row(&view, "ask:h1").0, "shown");
+        assert_eq!(row(&view, "ask:l1").0, "later");
+    }
+
+    #[test]
+    fn an_ask_held_for_the_agents_step_is_shown_once_the_core_shows_it() {
+        let mut view = View::default();
+        view.inbox.push(json!({"ask": "ask:h1", "kind": "authority", "session": "s1", "status": "held", "outcome": "unanswered"}));
+        view.apply(
+            json!({"kind": "ask.batched", "writer": "core", "data": {"asks": [{"ask": "ask:h1"}]}}),
+        );
+        assert_eq!(row(&view, "ask:h1").0, "shown");
+    }
+
+    #[test]
+    fn an_ask_folds_only_into_its_sessions_keeps_asking_exception() {
+        // Another exception of the core's, a guard's override say, holds no asks: the next ask waits for its batch.
+        let mut view = View::default();
+        view.apply(
+            json!({"kind": "ask.created", "id": "g1", "session": "s1", "writer": "core",
+                          "data": {"kind": "exception", "key": "guard.overridden:s1"}}),
+        );
+        view.apply(json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(row(&view, "ask:a1").0, "queued");
+
+        view.apply(fold("x1", "s1"));
+        view.apply(json!({"kind": "ask.created", "id": "a2", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(row(&view, "ask:a2").0, "folded");
+    }
+
+    #[test]
+    fn another_exception_of_the_cores_folds_into_an_open_keeps_asking_as_in_the_core() {
+        // The core folds any ask but the "keeps asking" exception itself, a guard's exception among them, into that
+        // exception while it is open: a panel gets it as folded with its exception, never as a row of its own.
+        let mut view = View::default();
+        view.apply(fold("x1", "s1"));
+        view.apply(
+            json!({"kind": "ask.created", "id": "g1", "session": "s1", "writer": "core",
+                          "data": {"kind": "exception", "key": "guard.overridden:s1"}}),
+        );
+        let g1 = view.inbox.iter().find(|r| r["ask"] == "ask:g1").unwrap();
+        assert_eq!(
+            (&g1["status"], &g1["folded"]),
+            (&json!("folded"), &json!("ask:x1"))
+        );
+    }
+
+    #[test]
+    fn an_exception_of_the_cores_never_folds_by_count() {
+        // With no "keeps asking" open, the core shows its own exception on a card of its own, however many asks its
+        // session holds: only a fixture's asks fold by count.
+        let mut view = View::default();
+        for id in ["a1", "a2", "a3", "a4", "a5"] {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        }
+        view.apply(
+            json!({"kind": "ask.created", "id": "g1", "session": "s1", "writer": "core",
+                          "data": {"kind": "exception", "key": "guard.overridden:s1"}}),
+        );
+        assert_eq!(row(&view, "ask:g1").0, "queued");
+    }
+
+    #[test]
+    fn a_sessions_sixth_open_ask_folds_in_a_record_with_no_exception() {
+        // A fixture's record (#338) holds the asks and no exception of the core's: once a session holds five open
+        // asks its further ones are folded, as the core folds them.
+        let mut view = View::default();
+        for id in ["a1", "a2", "a3", "a4", "a5", "a6"] {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        }
+        assert_eq!(row(&view, "ask:a5").0, "queued");
+        assert_eq!(row(&view, "ask:a6").0, "folded");
+        assert_eq!(
+            handles(view.panel_asks()),
+            ["ask:a1", "ask:a2", "ask:a3", "ask:a4", "ask:a5", "ask:a6"]
+        );
+    }
+
+    #[test]
+    fn asks_an_answered_exception_held_get_their_own_rows() {
+        // "Answer them together" closes the exception: an ask it held that the core had shown is in sight again, and
+        // one it hadn't waits for its batch. Left to their defaults, the shown ones stay inside it; one it hadn't shown
+        // wasn't in what you closed, so it waits for its batch on its own, as in the core (#22).
+        let closed_by = |answer: &str| {
+            let mut view = View::default();
+            view.apply(fold("x1", "s1"));
+            view.apply(json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+            view.apply(json!({"kind": "ask.created", "id": "a2", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+            view.apply(json!({"kind": "ask.batched", "writer": "core", "data": {"asks": [{"ask": "ask:x1"}, {"ask": "ask:a1"}]}}));
+            assert_eq!(row(&view, "ask:a1").0, "folded");
+            view.apply(json!({"kind": "ask.answered", "writer": "core", "subject": "ask:x1", "data": {"answer": answer}}));
+            (row(&view, "ask:a1").0, row(&view, "ask:a2").0)
+        };
+        assert_eq!(
+            closed_by("together"),
+            ("shown".to_owned(), "queued".to_owned())
+        );
+        assert_eq!(
+            closed_by("defaults"),
+            ("folded".to_owned(), "queued".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_panel_is_given_the_folded_asks_with_those_in_sight() {
+        // #338: `needs_you()` names an ask folded into an exception among its rows, and as folded.
+        let mut view = View::default();
+        view.apply(json!({"kind": "ask.created", "id": "a0", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        view.apply(fold("x1", "s1"));
+        view.apply(json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(handles(view.panel_asks()), ["ask:a0", "ask:x1", "ask:a1"]);
+    }
+
+    #[test]
+    fn only_the_keeps_asking_exception_the_hub_reads_holds_folded_asks() {
+        // #22: rows read from the hub name the exception holding a session's folded asks. Another exception of that
+        // session, waiting for its batch, holds nothing: it neither keeps the folded ask from a panel nor folds the
+        // next ask, and its close releases nothing.
+        let mut view = View::default();
+        let read = |id: &str, kind: &str, session: &str, status: &str, holder: bool| json!({"ask": id, "kind": kind, "session": session, "status": status, "outcome": "unanswered", "holder": holder});
+        view.inbox
+            .push(read("ask:x1", "exception", "s1", "shown", true));
+        view.inbox
+            .push(read("ask:f1", "taste", "s1", "folded", false));
+        view.inbox
+            .push(read("ask:g1", "exception", "s1", "queued", false));
+        view.inbox
+            .push(read("ask:g2", "exception", "s2", "queued", false));
+        view.apply(json!({"kind": "row.set", "writer": "core", "data": {"id": "ask:x1", "listed": true, "order": "1"}}));
+        assert_eq!(handles(view.panel_asks()), ["ask:x1", "ask:f1"]);
+        view.apply(json!({"kind": "ask.created", "id": "a2", "session": "s2", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(row(&view, "ask:a2").0, "queued");
+        view.apply(json!({"kind": "ask.answered", "writer": "core", "subject": "ask:g1", "data": {"answer": "checked"}}));
+        assert_eq!(row(&view, "ask:f1").0, "folded");
+    }
+
+    #[test]
+    fn a_panel_waits_for_the_exception_of_another_session_on_the_thread() {
+        // #22: the core folds by thread, so a session started in another's place folds into that one's "keeps
+        // asking". Each row the hub reads names the exception holding it; one this app takes for folded names it too.
+        let mut view = View::default();
+        let listed = |id: &str| json!({"kind": "row.set", "writer": "core", "data": {"id": id, "listed": true, "order": id}});
+        view.inbox.push(json!({"ask": "ask:x1", "kind": "exception", "session": "s1", "status": "queued", "outcome": "unanswered", "holder": true, "folded": null}));
+        view.inbox.push(json!({"ask": "ask:f1", "kind": "taste", "session": "s2", "status": "folded", "outcome": "unanswered", "holder": false, "folded": "ask:x1"}));
+        view.inbox.push(json!({"ask": "ask:b1", "kind": "taste", "session": "s3", "status": "queued", "outcome": "unanswered", "holder": false, "folded": null}));
+        view.apply(listed("ask:b1"));
+        view.apply(json!({"kind": "session.start", "session": "s4", "writer": "hook", "data": {"thread": "s1"}}));
+        view.apply(json!({"kind": "ask.created", "id": "f2", "session": "s4", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(row(&view, "ask:f2").0, "folded");
+        assert_eq!(
+            handles(view.panel_asks()),
+            ["ask:b1"],
+            "nothing held by x1 before x1 is in sight"
+        );
+        view.apply(listed("ask:x1"));
+        assert_eq!(
+            handles(view.panel_asks()),
+            ["ask:x1", "ask:f1", "ask:b1", "ask:f2"],
+            "the folded asks with their exception"
+        );
+        // "Answer them together" releases what x1 held, in every session of its thread; none had shown on its own.
+        view.apply(json!({"kind": "ask.answered", "writer": "core", "subject": "ask:x1", "data": {"answer": "together"}}));
+        assert_eq!(
+            (row(&view, "ask:f1").0, row(&view, "ask:f2").0),
+            ("queued".to_owned(), "queued".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_live_ask_folds_only_where_the_core_folds_it() {
+        // #22: the core folds a live ask into its thread's "keeps asking" only when the same actor and scope raised it,
+        // never one someone else owns or the core's sign-in task, and knows each session's thread from its start, one
+        // before the reads included.
+        let mut view = View::default();
+        view.inbox.push(json!({"ask": "ask:x1", "kind": "exception", "session": "s1", "status": "queued", "outcome": "unanswered", "holder": true, "folded": null, "actor": "you", "scope": "local"}));
+        view.before(&json!({"kind": "session.start", "session": "s4", "writer": "hook", "data": {"thread": "s1"}}));
+        let probe = "codex sign-in probe";
+        let cases = [
+            (
+                "f2",
+                "mcp:agent",
+                "you",
+                "local",
+                json!({"kind": "taste"}),
+                true,
+                "yours",
+            ),
+            (
+                "t1",
+                "mcp:agent",
+                "pat",
+                "local",
+                json!({"kind": "taste"}),
+                false,
+                "another actor's",
+            ),
+            (
+                "s2",
+                "mcp:agent",
+                "you",
+                "team",
+                json!({"kind": "taste"}),
+                false,
+                "another scope's",
+            ),
+            (
+                "o1",
+                "mcp:agent",
+                "you",
+                "local",
+                json!({"kind": "unblock", "owner": "pat"}),
+                false,
+                "someone else's block",
+            ),
+            (
+                "g1",
+                "core",
+                "you",
+                "local",
+                json!({"kind": "unblock", "owner": "you", "proves": probe}),
+                false,
+                "the core's sign-in task",
+            ),
+            (
+                "p1",
+                "mcp:agent",
+                "you",
+                "local",
+                json!({"kind": "unblock", "owner": "you", "proves": probe}),
+                true,
+                "an agent's ask naming a probe",
+            ),
+        ];
+        for (id, writer, actor, scope, data, _, _) in &cases {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s4", "writer": writer, "actor": actor, "scope": scope, "data": data}));
+        }
+        for (id, _, _, _, _, folds, what) in cases {
+            let row = view
+                .inbox
+                .iter()
+                .find(|row| row["ask"] == format!("ask:{id}").as_str())
+                .unwrap();
+            let want = if folds {
+                (json!("folded"), json!("ask:x1"))
+            } else {
+                (json!("queued"), Value::Null)
+            };
+            assert_eq!(
+                (row["status"].clone(), row["folded"].clone()),
+                want,
+                "{what}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_hub_that_lists_its_asks_folds_none_by_count() {
+        // #22: the core folds a live ask only into an exception it already raised, at the count the settings set; the
+        // count here is only for a record with no list and no showing of the core's, a fixture's (#338).
+        let mut view = View::default();
+        view.apply(json!({"kind": "row.set", "writer": "core", "data": {"id": "session:s1", "listed": true, "order": "1"}}));
+        for id in ["a1", "a2", "a3", "a4", "a5", "a6"] {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        }
+        assert_eq!(row(&view, "ask:a6").0, "queued");
+    }
+
+    #[test]
+    fn a_panel_isnt_given_an_ask_folded_into_an_exception_not_yet_in_sight() {
+        // #22: under batches the core folds a session's sixth ask into its "keeps asking", which waits for its batch
+        // like the rest: neither is in sight until the hub lists the exception.
+        let mut view = View::default();
+        let listed = |id: &str| json!({"kind": "row.set", "writer": "core", "data": {"id": id, "listed": true, "order": id}});
+        view.apply(json!({"kind": "ask.created", "id": "b1", "session": "s2", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        view.apply(listed("ask:b1"));
+        view.apply(fold("x1", "s1"));
+        view.apply(json!({"kind": "ask.created", "id": "a6", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(row(&view, "ask:a6").0, "folded");
+        assert_eq!(
+            handles(view.panel_asks()),
+            ["ask:b1"],
+            "nothing of s1 before its exception is in sight"
+        );
+        view.apply(listed("ask:x1"));
+        assert_eq!(
+            handles(view.panel_asks()),
+            ["ask:b1", "ask:x1", "ask:a6"],
+            "the folded ask with its exception"
+        );
     }
 }

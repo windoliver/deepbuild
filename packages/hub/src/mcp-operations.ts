@@ -41,7 +41,8 @@ import { Runs } from './runs.js';
 
 import { Stacks } from './stacks.js';
 import { Starts } from './starts.js';
-import { checkArguments, nearest } from './tools.js';
+import { checkArguments, nearest, toolList } from './tools.js';
+import { fitted, limitOf, refusalFits, UNKNOWN, type Limit } from './reply-fit.js';
 import { showCall } from './canvas.js';
 
 import { Replicas } from './drive.js';
@@ -50,6 +51,9 @@ import { refuse, Refused, refusal, ulid, type CoreOptions, type Refusal } from '
 import type { CallContext, Stamp } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 import { docCommand, docSpec } from './doc-checks.js';
+import { checksIn } from './spec-entries.js';
+import { approvedSpec } from './approved-spec.js';
+import { headOf } from './session-facts.js';
 
 import { sql, letters, noWake, unseenTools, type Obj, isObj, isUnder, asRefused } from "./hub-shared.js";
 
@@ -63,9 +67,12 @@ class Answered extends Refused {}
  * code of its own but no_match, which answers a search that found nothing.
  */
 function asAnswered(value: Obj): Obj {
-  const coded = typeof value.code === 'string' && value.code !== 'no_match';
-  if (value.outcome === 'refused' || value.outcome === 'conflict' || value.status === 'refused' || coded) throw new Answered(value as unknown as Refusal);
+  if (answersAsRefusal(value)) throw new Answered(value as unknown as Refusal);
   return value;
+}
+function answersAsRefusal(value: Obj): boolean {
+  const coded = typeof value.code === 'string' && value.code !== 'no_match';
+  return value.outcome === 'refused' || value.outcome === 'conflict' || value.status === 'refused' || coded;
 }
 
 export interface McpOperationsOptions {
@@ -105,8 +112,15 @@ export class McpOperations {
   /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
   stamps: Stamp[] = [];
 
-  /** A held request's exact call and ask; reserve both before raising the ask yields (#2072). */
-  private readonly actionAsks = new Map<string, { digest: string; ask: Promise<string> }>();
+  /** A held request's exact call and ask, none for a call that ran before; reserve both before raising the ask yields (#2072). */
+  private readonly actionAsks = new Map<string, { digest: string; ask: Promise<string | null> }>();
+
+  /** The core forgot the session (#1866): its unspent stamps, its held requests' asks and its clients' limits go. */
+  forget(session: string): void {
+    this.stamps = this.stamps.filter((s) => s.session !== session);
+    for (const key of this.actionAsks.keys()) if (key.startsWith(`${session}|`)) this.actionAsks.delete(key);
+    for (const key of this.listed) if (key.startsWith(`${session}\n`)) this.listed.delete(key);
+  }
 
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   index!: Promise<IndexFill | undefined>;
@@ -125,7 +139,10 @@ export class McpOperations {
     const tool = String(params.tool);
     // No MCP call starts a session, whatever it claims (#1330): refused before its arguments are read.
     if (tool === 'deep_start') return this.options.services.sessionStarts.refuseMcp(context.session);
+    // What the client deep mcp names keeps of one tool result, which every paging reply stays a fifth under, and every refusal under its error figures as reply-fit counts them (#2896).
+    let limit: Limit | undefined;
     try {
+      limit = this.limitFor(params.client);
       const args = checkArguments(tool, params.arguments);
       const sent = isObj(params.arguments) ? params.arguments : {};
       // A listing asked while plug-ins load answers not_ready with what loaded, never part of the list (#1415); the
@@ -142,12 +159,19 @@ export class McpOperations {
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
       const session = await this.options.schedule.queue(async () => this.bind(tool, sent, await this.rebound(context), !['deep_status', 'deep_search', 'deep_show', 'deep_query', 'deep_kinds', 'deep_job', 'find_actions'].includes(tool)));
+      if (session) await this.listedLimit(session, limit);
+      const canvas = this.options.services.canvasSide;
       switch (tool) {
         case 'find_actions': return await this.findActions(args.query as string | null);
         case 'call_action': return await this.callPluginAction(session!, args);
-        case 'deep_show': return asAnswered(await this.options.services.canvasSide.show(session ? { session } : { session: null }, showCall(args)));
-        case 'deep_query': return asAnswered(await this.options.services.canvasSide.query(session ?? null, args));
-        case 'deep_kinds': return asAnswered(await this.options.services.canvasSide.kinds(args));
+        case 'deep_show': {
+          const call = showCall(args);
+          // Asked once: a draw or patch asked again would make a second revision, and even a read records the one it shows.
+          return asAnswered(await this.fit(limit, false, (room) => canvas.show(session ? { session } : { session: null }, room === undefined ? call : { ...call, room })));
+        }
+        case 'deep_query': return asAnswered(await this.fit(limit, true, (room) => canvas.query(session ?? null, room === undefined ? args : { ...args, room })));
+        // Asset search and fetch read the hub's libraries, which no room reaches, and a fetch is not asked twice.
+        case 'deep_kinds': return asAnswered(args.op === 'assets' || args.op === 'fetch' ? await canvas.kinds(args) : await this.fit(limit, true, (room) => canvas.kinds(room === undefined ? args : { ...args, room })));
         case 'deep_job': return asAnswered(await this.options.control().job(args, context.call));
         case 'deep_root_plan': return await this.options.services.hosts.proposeRoot(args);
         case 'deep_status': return await this.status(session);
@@ -163,11 +187,58 @@ export class McpOperations {
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
-      const refused = this.forAgent(error, tool);
+      const refused = limit ? await this.underCap(this.forAgent(error, tool), limit) : this.forAgent(error, tool);
       // The planted hub returns deep_kinds's refusals as ordinary results, the error flag unset (#1415).
       if (tool === 'deep_kinds' && this.options.settings.plant === 'kinds-refusal-as-text') return refused.refusal;
       throw refused;
     }
+  }
+
+  /** Each client's limit by its name and version, worked out once. */
+  private readonly limits = new Map<string, Limit>();
+  private limitFor(client: unknown): Limit {
+    const key = JSON.stringify(client ?? null);
+    let limit = this.limits.get(key);
+    if (!limit) this.limits.set(key, limit = limitOf(client));
+    return limit;
+  }
+  /** The sessions whose limit is on the record, by session and client. */
+  private readonly listed = new Set<string>();
+  /**
+   * DeepBuild's own server, as its client named it in this session, on the record once with the limit it was held to
+   * (mcp.tools_listed@2's `limit`): its tools as tools/list gives them, so what is listed is what was capped.
+   */
+  private async listedLimit(session: string, limit: Limit): Promise<void> {
+    const key = `${session}\n${limit.client ?? ''}\n${limit.client_version ?? ''}`;
+    if (this.listed.has(key)) return;
+    this.listed.add(key);
+    const agent = this.options.state().sessions.get(session)?.agent ?? 'claude-code';
+    const tools = toolList().map((t) => ({ name: t.name, digest: sha256Hex(canonicalize(t.inputSchema as unknown as JsonValue)), hints: {} }));
+    const ts = this.options.services.now();
+    await this.options.events.append(this.options.events.connection('core', { session, agent }), { v: 2, id: ulid(ts), kind: 'mcp.tools_listed', ts, data: { server: 'deep', scope: 'user', version: null, tools, limit } as unknown as JsonValue })
+      .catch(() => this.listed.delete(key));
+  }
+  /**
+   * A canvas reply held to the client's cap (#2896), asked again for a smaller page while it is over. The planted hubs
+   * leave every client, or an unknown one, at the canvas core's 64 KB, or drop the row at each page's edge.
+   */
+  private async fit(limit: Limit, reads: boolean, ask: (room: number | undefined) => Promise<Obj>): Promise<Obj> {
+    const plant = this.options.settings.plant;
+    if (plant === 'reply-cap-64kb' || (plant === 'unknown-client-64kb' && limit.from === UNKNOWN)) return ask(undefined);
+    // A reply sent as the tool's refusal reaches the client as an error, so it is held to the error cap.
+    const reply = await fitted(limit, answersAsRefusal, reads, ask);
+    if (plant === 'pager-drops-edge-row' && typeof reply.next === 'string' && /^\d+$/.test(reply.next)) reply.next = String(Number(reply.next) + 1);
+    return reply;
+  }
+  /** A refusal under the client's error cap (#2896); the planted hub sends missing_field with a 12,000-character schema, uncut. */
+  private async underCap(refused: Refused, limit: Limit): Promise<Refused> {
+    const r = refused.refusal as unknown as Obj;
+    if (this.options.settings.plant === 'refusal-schema-12000') {
+      return r.code === 'missing_field' ? new Refused({ ...r, schema: { type: 'object', description: 'x'.repeat(12_000) } } as unknown as Refusal) : refused;
+    }
+    const fits = await refusalFits(r, limit.error_cap);
+    // A canvas tool's own refusal stays one (Answered), cut or not.
+    return fits === r ? refused : new (refused.constructor as typeof Refused)(fits as unknown as Refusal);
   }
 
   /** The plug-ins the hub has yet to load, as deep_kinds counts them while it can't list them all (#1415). */
@@ -258,9 +329,9 @@ export class McpOperations {
   /**
    * call_action (deep-actions, #363): a plug-in action for the session, its input held to the action's schema before
    * anything else. A read runs. A change runs on your standing rule or your yes to its ask, and a send on your yes
-   * alone: until you answer, the call returns held with the ask, and the same request ID called again runs it once you
-   * said yes. The target is the plug-in that registered the action, at its loaded version, and the authority the
-   * session's own connection, never a window, a folder or another session.
+   * alone, which is saved as no decision: until you answer, the call returns held with the ask, and the same request ID
+   * called again runs it once you said yes. The target is the plug-in that registered the action, at its loaded
+   * version, and the authority the session's own connection, never a window, a folder or another session.
    */
   private async callPluginAction(session: string, args: Obj): Promise<Obj> {
     const name = String(args.action);
@@ -287,22 +358,38 @@ export class McpOperations {
       if (!approval) {
         const text = JSON.stringify(input);
         const preview = text.length > 500 ? `${text.slice(0, 500)}… (cut; ${text.length} characters)` : text;
-        // A send's ask names its request, so no saved decision ever answers it; a change's is answered by a standing rule.
+        const send = listed.declares === 'send';
+        // A change's ask is about its action, which a standing rule of yours covers; a send's about this one call.
         const about: About = {
           source: `action.${listed.declares}`,
-          subject: { effect: `action.${listed.declares}`, target: { kind: 'action', ref: listed.declares === 'send' ? `${name}#${request}` : name, owner: listed.extension }, change: null },
-          question: `Let this session ${listed.declares === 'send' ? 'send with' : 'change your data with'} ${listed.extension}@${listed.version}'s ${name}, given ${preview}?`,
-          options: [listed.declares === 'send' ? 'Send it' : 'Change it', 'Don\'t'],
+          subject: {
+            effect: `action.${listed.declares}`,
+            target: send ? { kind: 'action', ref: `${name}#${request}`, owner: `call:${sha256Hex(canonicalize({ session, request, digest }))}` } : { kind: `action:${name}`, ref: name, owner: listed.extension },
+            change: null,
+          },
+          question: `Let this session ${send ? 'send with' : 'change your data with'} ${listed.extension}@${listed.version}'s ${name}, given ${preview}?`,
+          options: [send ? 'Send it' : 'Change it', 'Don\'t'],
         };
-        const ask = this.options.services.holds.asked({ session, agent: s.agent, cwd: s.cwd }, about)
-          .then(({ ask }) => ask).catch((error: unknown) => { this.actionAsks.delete(key); throw error; });
+        const { holds } = this.options.services;
+        const raised = async (): Promise<string | null> => {
+          // Entered before under this request ID, as before a restart: the host answers its retry and runs nothing again.
+          const { actor } = this.agentConnection(session);
+          const [ran] = await this.options.services.record.raw(`SELECT 1 FROM events WHERE kind = 'action.entered' AND writer = 'core' AND actor = ? AND session_id = ? AND json_extract(data, '$.request') = ? LIMIT 1`, [actor, session, request]);
+          return ran ? null : (send ? await holds.raisedAbout(about) : undefined) ?? (await holds.asked({ session, agent: s.agent, cwd: s.cwd }, about)).ask;
+        };
+        const ask = raised().catch((error: unknown) => { this.actionAsks.delete(key); throw error; });
         approval = { digest, ask };
         this.actionAsks.set(key, approval);
       }
       const ask = await approval.ask;
-      const [row] = (await this.options.services.record.raw('SELECT decision FROM asks WHERE id = ?', [ask.slice(4)])) as { decision: string | null }[];
-      if (row?.decision === 'deny') return { status: 'declined', ask };
-      if (row?.decision !== 'allow') return { status: 'held', ask, reason: `DeepBuild is holding ${name}: it waits for your answer to ${ask}; once you say yes, call it again with the same request ID.` };
+      const stands = ask === null ? 'allow' : await this.options.services.holds.stands(ask);
+      if (!stands) {
+        // Its ask closed with no answer that stands: the call asks again, and a decision that covers it answers at once.
+        if (this.actionAsks.get(key) === approval) this.actionAsks.delete(key);
+        return this.callPluginAction(session, args);
+      }
+      if (stands === 'deny') return { status: 'declined', ask };
+      if (stands !== 'allow') return { status: 'held', ask: stands, reason: `DeepBuild is holding ${name}: it waits for your answer to ${stands}; once you say yes, call it again with the same request ID.` };
     }
     const result = await this.options.services.extensions!.callAction({
       action: name, target, input, caller: this.agentConnection(session), request,
@@ -322,8 +409,8 @@ export class McpOperations {
   /**
    * deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its
    * contradictions, and where it starts (#2197): the checks its repo's spec names, its own open asks, each with its
-   * state, its default and its deadline as deep_wait names them, and the open items it recorded. The planted wrong
-   * program lists every session's asks.
+   * state, its default and its deadline as deep_wait names them, and the open items it recorded, with how many held-out
+   * variants each check of its tasks has (#3229). The planted wrong program lists every session's asks.
    */
   private async status(session: string | undefined): Promise<Obj> {
     const gates = { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null };
@@ -350,7 +437,11 @@ export class McpOperations {
       .map((a) => ({ ask: `ask:${a.id}`, state: a.status, default: a.default_option === null ? null : JSON.parse(a.default_option) as unknown, deadline: a.deadline }));
     const open_items = (await this.options.services.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND (task_ref, text) IN
       (SELECT json_extract(data, '$.task_ref'), json_extract(data, '$.text') FROM events WHERE session_id = ? AND kind = 'open_item.opened') ORDER BY opened, text`, [session])) as { text: string }[];
-    const reply = { session, gates, claims, checks: this.checkNames(this.options.state().sessions.get(session)!.cwd), asks, open_items };
+    // Its tasks' checks with held-out variants (#3229): that each has some, and how many, never what they are kept by.
+    const held_out = ((await this.options.services.record.raw(`SELECT d.task_ref, d.requirements FROM definitions d JOIN tasks t ON t.task_ref = d.task_ref
+      WHERE d.state IN ('locked', 'revised') AND instr(d.requirements, '"held_out"') > 0 AND t.thread = (SELECT thread_id FROM sessions WHERE id = ?) ORDER BY t.created`, [session])) as { task_ref: string; requirements: string }[])
+      .flatMap((d) => (JSON.parse(d.requirements) as { check: string | null; held_out?: unknown[] }[]).flatMap((r) => (r.check && r.held_out?.length ? [{ task_ref: d.task_ref, check: r.check, variants: r.held_out.length }] : [])));
+    const reply = { session, gates, claims, checks: this.checkNames(this.options.state().sessions.get(session)!.cwd), ...(held_out.length ? { held_out } : {}), asks, open_items };
     // An agent's deep_status is its own session's (#1463): the planted wrong program leaks every session's asks into it.
     if (this.options.settings.plant === 'status-row-leak') return { ...reply, rows: [...this.options.state().rows.values()].filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[] };
     return reply;
@@ -414,22 +505,15 @@ export class McpOperations {
   }
 
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline, run count and test count as the spec writes them, where it gives one. */
-  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown }> {
-    const spec = this.options.doneSpec(worktree);
-    const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
-    return new Map(Object.entries(checks).flatMap(([name, c]) => {
-      if (!isObj(c) || typeof c.run !== 'string') return [];
-      const written = Object.fromEntries((['deadline', 'runs', 'accept', 'min_tests'] as const).flatMap((key) => (c[key] !== undefined ? [[key, c[key]]] : [])));
-      return [[name, { run: c.run, ...written, ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
-    }));
+  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown; memory_mb?: unknown }> {
+    return checksIn(this.options.doneSpec(worktree));
   }
 
   private checkNames(worktree: string): string[] {
     return [...this.checksOf(worktree).keys(), ...this.options.services.canvasSide.docChecksOf(worktree).keys()];
   }
 
-  private unknownCheck(worktree: string, check: unknown): Refused {
-    const names = this.checkNames(worktree);
+  private unknownCheck(names: string[], check: unknown): Refused {
     const near = typeof check === 'string' ? nearest(check, names) : undefined;
     return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
@@ -448,7 +532,8 @@ export class McpOperations {
         if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your Slack user ID in the hub\'s slack.json as {"you": "U…"}, mode 0600, and enter your bot token with deep secret add slack token, to read this thread.', null);
       } else {
         need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
-        if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
+        const approved = checksIn((await approvedSpec(s.cwd, (await headOf(s.cwd).catch(() => undefined))?.sha ?? '')).spec);
+        if (!approved.has(String(args.check))) throw this.unknownCheck([...approved.keys()], args.check);
       }
       need('steps', 'List the task\'s steps, in order.');
       need('where', 'Say where the person does the task.');
@@ -490,6 +575,9 @@ export class McpOperations {
     const ask = { ...raised, fallback: 'you', provisional, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned, ...(subject ? { subject } : {}) };
     const handle = await this.options.services.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
     if (provisional) {
+      // A saved decision that answered it as it was raised is the answer the agent hears, not the recommendation (#3178).
+      const [row] = (await this.options.services.record.raw(`SELECT status FROM asks WHERE id = ?`, [handle.slice(4)])) as { status: string }[];
+      if (row?.status === 'decided') return this.waitFor(session, handle);
       const label = (raised.options as { id: string; label: string }[]).find((o) => o.id === raised.recommended)?.label;
       await this.options.schedule.askingNow().catch(() => undefined);
       return { ask: handle, status: 'provisional', answer: raised.recommended, note: `Go on with ${label ?? String(raised.recommended)}: it is provisional and can be undone, and only steps that leave the machine wait for the answer.` };
@@ -652,7 +740,7 @@ export class McpOperations {
     const cwd = this.options.state().sessions.get(session)!.cwd;
     const check = this.checksOf(cwd).get(String(args.check));
     const doc = check ? undefined : this.options.services.canvasSide.docChecksOf(cwd).get(String(args.check));
-    if (check === undefined && doc === undefined) throw this.unknownCheck(cwd, args.check);
+    if (check === undefined && doc === undefined) throw this.unknownCheck(this.checkNames(cwd), args.check);
     // A deadline the hub can't read is refused before the run starts, never taken as none (#822).
     const deadline = check?.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
     if (check?.deadline !== undefined && !deadline) {

@@ -1,0 +1,7 @@
+test record::tests::a_live_ask_folds_only_where_the_core_folds_it ... FAILED
+thread 'record::tests::a_live_ask_folds_only_where_the_core_folds_it' (3014655) panicked at crates/deep-app/src/record.rs:1307:9:
+  left: (String("queued"), Null)
+ right: (String("folded"), String("ask:x1"))
+test result: FAILED. 117 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+error: test failed, to rerun pass `-p deep-app --lib`
+[exit ]

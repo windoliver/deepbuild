@@ -162,6 +162,55 @@ function ruleLoadFactsCase(file, name, facts) {
   return missing.length ? [[`the ${name} facts' rule-load entry (${file}) lacks ${missing.join(', ')}`, fix]] : [];
 }
 
+/**
+ * The adapter-facts case for what an agent keeps of one tool result (#2896): per version, a result and an error limit
+ * with a figure each, what the agent does past them, and the source each was read from. The hub holds every deep_*
+ * reply a fifth under it; a version with no entry fails, naming the version.
+ */
+function toolResultFactsCase(file, name, facts) {
+  if (!facts) return [];
+  const fix = `Give adapters/${file} a toolResult entry for each version it lists: what ${name} keeps of a result and of an error (characters, tokens or bytes), what it does past them, and where each figure was read.`;
+  const entries = Array.isArray(facts.toolResult?.entries) ? facts.toolResult.entries : [];
+  const figured = (l) => ['chars', 'tokens', 'bytes'].some((k) => Number.isInteger(l?.[k])) && typeof l?.past === 'string';
+  const missing = [];
+  for (const version of facts.versions ?? []) {
+    const e = entries.find((x) => Array.isArray(x?.versions) && x.versions.includes(version));
+    if (!e) missing.push(`a toolResult entry for ${version}`);
+    else if (!figured(e.result) || !figured(e.error) || typeof e.source !== 'string') missing.push(`toolResult for ${version}: a result and an error figure, what ${name} does past each, and their source`);
+  }
+  return missing.length ? [[`the ${name} facts (${file}) lack ${missing.join('; ')}, so no deep_* reply knows what ${name} keeps of it`, fix]] : [];
+}
+
+/**
+ * The adapter-facts case for the MCP handshake (#2854): per version, the revision the agent's MCP client opens
+ * initialize with must be one DeepBuild's servers hold (mcp.handshake@1), and its recorded request must name it.
+ * A version with no entry or with two, an unheld revision, a request that isn't the recording of a version its entry
+ * covers, or one that names another revision fails, naming the agent and the version (and the revision when there is one).
+ */
+function handshakeFactsCase(file, facts) {
+  if (!facts) return [];
+  const held = JSON.parse(readFileSync(join(root, 'packages/contracts/schemas/mcp.handshake@1.json'), 'utf8')).properties.protocolVersion.enum;
+  const fix = `Give adapters/${file} an mcpHandshake entry per version: the revision its MCP client's initialize names and the recorded request it was read from; a revision DeepBuild's servers don't hold goes into packages/contracts/schemas/mcp.handshake@1.json once the four servers are checked against it.`;
+  const entries = Array.isArray(facts.mcpHandshake?.entries) ? facts.mcpHandshake.entries : [];
+  const failures = [];
+  const dir = file.replace(/\.facts\.json$/, '');
+  for (const version of facts.versions ?? []) {
+    const covering = entries.filter((x) => Array.isArray(x?.versions) && x.versions.includes(version));
+    const e = covering[0];
+    if (!e) { failures.push([`the ${facts.agent} facts (${file}) name no MCP handshake revision for ${facts.agent} ${version}`, fix]); continue; }
+    if (covering.length > 1) { failures.push([`the ${facts.agent} facts (${file}) give ${facts.agent} ${version} more than one MCP handshake entry`, fix]); continue; }
+    if (!held.includes(e.revision)) failures.push([`${facts.agent} ${version}'s MCP client opens with revision ${e.revision}, which DeepBuild's MCP servers don't hold (mcp.handshake@1 lists ${held.join(', ')})`, fix]);
+    // The request must be one of this entry's versions' own recording, made by that version's client.
+    const own = e.versions.find((v) => e.request === `adapters/corpus/${dir}/${v}/mcp-initialize.json`);
+    let request;
+    try { request = JSON.parse(readFileSync(join(root, e.request), 'utf8')); } catch { request = undefined; }
+    if (own === undefined || request?.params?.clientInfo?.version !== own) { failures.push([`${facts.agent} ${version}'s MCP handshake entry cites ${e.request}, which is not the recorded initialize request of a version that entry covers (adapters/corpus/${dir}/<version>/mcp-initialize.json, from that version's client)`, fix]); continue; }
+    const asked = request.params?.protocolVersion;
+    if (asked !== e.revision) failures.push([`${facts.agent} ${version}'s recorded initialize request (${e.request}) names ${asked ?? 'no revision'}, not the facts' revision ${e.revision}`, fix]);
+  }
+  return failures;
+}
+
 async function replayCommand(options) {
   const started = performance.now();
   let failed = false;
@@ -175,6 +224,9 @@ async function checkCommand(options) {
   const failures = [];
   const { clean, facts } = await replayAll(options.corpus, options.facts, say);
   for (const [agent, { path, facts: file }] of Object.entries(facts)) {
+    // A facts file that lists no hook events, such as #148's sync entries for Cursor and OpenCode, maps no payload, so
+    // it has no set to hold (#3136).
+    if (!file.events?.versions) continue;
     for (const version of file.versions ?? []) {
       const where = relative(root, path) || path;
       const sessions = existsSync(join(options.corpus, agent, version)) ? readSet(options.corpus, agent, version) : [];
@@ -191,6 +243,8 @@ async function checkCommand(options) {
   failures.push(...contextOutputFactsCase(facts['claude-code']?.facts));
   failures.push(...retriesFactsCase(facts['claude-code']?.facts));
   failures.push(...ruleLoadFactsCase('claude-code.facts.json', 'Claude Code', facts['claude-code']?.facts), ...ruleLoadFactsCase('codex.facts.json', 'Codex', facts.codex?.facts));
+  failures.push(...toolResultFactsCase('claude-code.facts.json', 'Claude Code', facts['claude-code']?.facts), ...toolResultFactsCase('codex.facts.json', 'Codex', facts.codex?.facts));
+  failures.push(...handshakeFactsCase('claude-code.facts.json', facts['claude-code']?.facts), ...handshakeFactsCase('codex.facts.json', facts.codex?.facts));
   const bytes = size(options.corpus);
   say({ type: 'size', bytes, limit: LIMIT });
   if (bytes >= LIMIT) failures.push([`the corpus is ${bytes} bytes, over the 200 MB limit (${LIMIT} bytes)`, 'Trim transcripts or drop sessions that add no event, version or tag.']);
@@ -241,9 +295,9 @@ function inTerminal(argv) {
  * One scripted session. Steps type text and wait for the turn to end, wait for more stops, press keys in a dialog and
  * wait for the hook they lead to, or kill the agent mid-call or where it stands.
  */
-async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
+async function session({ argv, cwd, dir, terminal, steps, startAfter, env = {} }) {
   const [shell, args] = terminal ? inTerminal(argv) : [argv[0], argv.slice(1)];
-  const child = spawn(shell, args, { cwd, env: { ...cleanEnv(), TERM: 'xterm-256color' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(shell, args, { cwd, env: { ...cleanEnv(), TERM: 'xterm-256color', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
   let screen = '';
   child.stdout.setEncoding('utf8').on('data', (chunk) => { screen += chunk; });
   child.stderr.setEncoding('utf8').on('data', (chunk) => { screen += chunk; });
@@ -297,7 +351,9 @@ async function session({ argv, cwd, dir, terminal, steps, startAfter }) {
         if (step.prompt) await type(step.prompt);
         if (step.killOn && !(await until(() => recorded().some(step.killOn), 180_000))) { blocked = 'the call to crash on never started'; break; }
         await sleep(1000);
-        for (const { pid, command } of await descendants(child.pid)) if (command.includes(step.binary)) try { process.kill(pid, 'SIGKILL'); } catch {}
+        // A signal step (SIGINT, as Ctrl-C) reaches the outermost process alone, which hands it on.
+        const targets = (await descendants(child.pid)).filter(({ command }) => command.includes(step.binary));
+        for (const { pid } of step.signal ? targets.slice(0, 1) : targets) try { process.kill(pid, step.signal ?? 'SIGKILL'); } catch {}
         await sleep(2000);
       }
       if (step.wait) await sleep(step.wait);
@@ -386,17 +442,26 @@ const CLAUDE_SCENARIOS = [
     return { deepbuild: { type: 'stdio', command: process.execPath, args: [join(root, 'packages/cli/dist/main.js'), 'mcp'], env }, 'deep-actions': { type: 'stdio', command: join(root, 'target/debug/deep-hook'), args: ['mcp', 'actions'], env } };
   }, args: ['--allowedTools', 'mcp__deepbuild__deep_status', 'mcp__deepbuild__deep_search'], steps: [
     { type: 'Call the deep_status tool of the deepbuild MCP server once. Then call its deep_search tool once with the query corpus. Then reply with only the word done.' }] },
+  // A file the session watches changes on disk (#3136): FileChanged's matcher names a file in the session's folder, as
+  // #120's ticker is named, and a shell call appends to it.
+  { name: 'file-changed', watch: 'ticker.txt', steps: [{ type: 'Use the Bash tool to run: echo tick >> ticker.txt' }, { wait: 5000 }] },
 ];
 
-async function recordClaude(out, bin, facts, only) {
-  const hooks = [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
+async function recordClaude(out, bin, facts, only, version) {
+  // A version the facts list is recorded on its own hooks, so a hook its list doesn't name never lands in its set.
+  const listed = Object.keys(facts.events?.versions?.[version] ?? {});
+  const hooks = listed.length ? listed : [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
   const results = [];
   for (const scenario of CLAUDE_SCENARIOS.filter(({ name }) => !only || only.includes(name))) {
     const dir = join(out, scenario.name), work = join(dir, 'work');
     mkdirSync(work, { recursive: true });
     if (scenario.dialog) writeFileSync(join(dir, 'dialog'), '');
+    if (scenario.watch) writeFileSync(join(work, scenario.watch), '');
     const command = [process.execPath, join(root, 'scripts/corpus.mjs'), 'hook', dir].map(quote).join(' ');
-    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ hooks: Object.fromEntries(hooks.map((hook) => [hook, [{ hooks: [{ type: 'command', command }] }]])) }));
+    // Claude Code watches files for FileChanged only where a matcher names them. An older version recorded here never
+    // updates your own install.
+    const entry = (hook) => ({ ...(hook === 'FileChanged' && scenario.watch ? { matcher: scenario.watch } : {}), hooks: [{ type: 'command', command }] });
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ env: { DISABLE_AUTOUPDATER: '1' }, hooks: Object.fromEntries(hooks.map((hook) => [hook, [entry(hook)]])) }));
     if (scenario.mcp) writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: scenario.mcp === true ? { corpus: { type: 'stdio', command: process.execPath, args: [join(root, 'scripts/corpus-elicit.mjs')] } } : scenario.mcp(dir) }));
     const args = ['--model', scenario.model ?? 'haiku', '--setting-sources', 'project', '--strict-mcp-config', ...(scenario.mcp ? ['--mcp-config', join(dir, 'mcp.json')] : []), '--settings', join(dir, 'settings.json'), ...(scenario.args ?? [])];
     const steps = scenario.steps.map((step) => ({ ...step, binary: bin }));
@@ -426,16 +491,41 @@ async function recordClaude(out, bin, facts, only) {
 // Codex trusts a folder by writing it into your config the first time it runs there, exec included,
 // so every Codex session runs in a folder your config already trusts, DEEP_CORPUS_CODEX_TRUSTED,
 // with its files in a folder of its own inside it, and recording writes nothing into your config.
-async function recordCodex(out, bin, facts) {
-  const trusted = process.env.DEEP_CORPUS_CODEX_TRUSTED;
-  if (!trusted) return [{ scenario: 'all', dir: out, blocked: 'set DEEP_CORPUS_CODEX_TRUSTED to a folder your Codex config already trusts', payloads: [] }];
-  const hooks = [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
+async function recordCodex(out, bin, facts, only, version) {
+  const listed = Object.keys(facts.events?.versions?.[version] ?? {});
+  const hooks = listed.length ? listed : [...new Set(Object.values(facts.events?.versions ?? {}).flatMap((events) => Object.keys(events)))];
   const job = facts.launch.readOnlyJob.args;
   const model = ['-m', job[job.indexOf('-m') + 1], '-c', 'model_reasoning_effort="low"'];
   const hookArgs = (dir) => {
     const command = [process.execPath, join(root, 'scripts/corpus.mjs'), 'hook', dir].map(quote).join(' ');
     return [...hooks.flatMap((hook) => ['-c', `hooks.${hook}=[{hooks=[{type="command",command=${JSON.stringify(command)}}]}]`]), '--dangerously-bypass-hook-trust'];
   };
+  const picked = (name) => !only || only.includes(name);
+  const results = [];
+  // Three sessions run the real Codex binary on a scripted model (scripts/corpus-codex-model.mjs), each in a Codex home
+  // of its own, as pi's sets script pi's model (#3136): a spawned child, a compaction mid-turn and an interrupt. They
+  // need no sign-in, no trusted folder and no plan usage. Their model is one every covered version's catalog holds.
+  const scripted = [
+    { name: 'subagent', prompt: 'Spawn one subagent, wait for it, then reply with what it said.' },
+    { name: 'compact', prompt: 'Run the shell command: echo before-compact', extra: ['-c', 'model_auto_compact_token_limit=1000'] },
+    { name: 'interrupt', prompt: 'Run the shell command: sleep 30 && echo slept', interrupt: true },
+  ].filter(({ name }) => picked(name) && (name !== 'interrupt' || hooks.includes('Interrupt')));
+  for (const scenario of scripted) {
+    const dir = join(out, scenario.name), home = join(dir, 'codex-home'), work = join(dir, 'work');
+    for (const path of [home, work]) mkdirSync(path, { recursive: true });
+    const scriptedModel = await (await import('./corpus-codex-model.mjs')).scriptedModel(scenario.name);
+    try {
+      const provider = ['-m', 'gpt-5.4', '-c', 'model_provider="corpus"', '-c', `model_providers.corpus={name="corpus",base_url="${scriptedModel.url}",wire_api="responses"}`];
+      const argv = [bin, 'exec', '--json', '--skip-git-repo-check', '--ignore-user-config', ...provider, ...hookArgs(dir), '-c', 'sandbox_mode="workspace-write"', ...(scenario.extra ?? []), scenario.prompt];
+      const steps = scenario.interrupt ? [{ killOn: hook('PreToolUse'), binary: 'codex', signal: 'SIGINT' }] : [];
+      results.push({ scenario: scenario.name, dir, ...(await session({ argv, cwd: realpathSync(work), dir, terminal: false, steps, env: { CODEX_HOME: home } })) });
+    } finally {
+      scriptedModel.close();
+    }
+  }
+  if (!['tools', 'patches', 'crash', 'permission', 'goal'].some(picked)) return results;
+  const trusted = process.env.DEEP_CORPUS_CODEX_TRUSTED;
+  if (!trusted) return [...results, { scenario: 'all', dir: out, blocked: 'set DEEP_CORPUS_CODEX_TRUSTED to a folder your Codex config already trusts', payloads: [] }];
   const exec = (dir, extra) => [bin, 'exec', '--json', '--skip-git-repo-check', '--ignore-user-config', ...model, ...hookArgs(dir), ...(extra.length ? extra : ['-c', 'sandbox_mode="workspace-write"'])];
   const patch = (folder, indent) => ['*** Begin Patch', `*** Update File: ${folder}/notes.txt`, '@@', `-line ${indent ? 'two' : 'one'}`, `+line ${indent ? '2' : '1'}`, '*** End Patch'].map((line) => `${indent}${line}`).join('\n');
   const shell = (text) => `Run this exact command with your shell tool, not apply_patch, and nothing else:\napply_patch <<'EOF'\n${text}\nEOF`;
@@ -444,8 +534,7 @@ async function recordCodex(out, bin, facts) {
     { name: 'patches', prompts: (f) => [shell(patch(f, '')), shell(patch(f, '  '))] },
     { name: 'crash', prompts: () => ['Run the shell command: sleep 30 && echo slept'], crash: true },
   ];
-  const results = [];
-  for (const scenario of scenarios) {
+  for (const scenario of scenarios.filter(({ name }) => picked(name))) {
     const dir = join(out, scenario.name), folder = `deep-corpus-${scenario.name}-${Date.now()}`, files = join(trusted, folder);
     mkdirSync(dir, { recursive: true });
     mkdirSync(files);
@@ -469,6 +558,7 @@ async function recordCodex(out, bin, facts) {
   try { models = JSON.parse(readFileSync(join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'models_cache.json'), 'utf8')).models.map(({ slug }) => slug); } catch {}
   const quiet = models.length ? ['-c', `tui.model_availability_nux={ ${models.map((slug) => `${JSON.stringify(slug)} = 100`).join(', ')} }`] : [];
   const tui = async (name, args, prompt, stops) => {
+    if (!picked(name)) return;
     const dir = join(out, name);
     mkdirSync(dir, { recursive: true });
     const argv = [bin, ...model, ...hookArgs(dir), ...(args.includes('-s') ? [] : ['-s', 'workspace-write']), ...args, '-c', 'check_for_update_on_startup=false', ...quiet];
@@ -483,14 +573,15 @@ async function recordCodex(out, bin, facts) {
 
 async function recordCommand(options) {
   const agent = options.agent, out = resolve(options.out);
-  if (agent === 'pi') {
-    await (await import('./corpus-pi.mjs')).recordPi(out, redactor());
-    const scan = spawnSync('gitleaks', ['detect', '--no-git', '--source', join(out, 'pi'), '--config', join(root, 'packages/evidence/gitleaks/gitleaks.toml'), '--redact', '--no-banner', '--exit-code', '3'], { encoding: 'utf8' });
+  if (agent === 'pi' || agent === 'paseo') {
+    if (agent === 'pi') await (await import('./corpus-pi.mjs')).recordPi(out, redactor());
+    else await (await import('./corpus-paseo.mjs')).recordPaseo(out, redactor());
+    const scan = spawnSync('gitleaks', ['detect', '--no-git', '--source', join(out, agent), '--config', join(root, 'packages/evidence/gitleaks/gitleaks.toml'), '--redact', '--no-banner', '--exit-code', '3'], { encoding: 'utf8' });
     const verdict = scan.error ? 'BLOCKED' : scan.status === 0 ? 'PASS' : 'FAIL';
-    say({ type: 'summary', verdict, set: join(out, 'pi'), secretScan: scan.error ? `gitleaks did not run: ${scan.error.message}` : scan.status === 0 ? 'clean' : 'findings; the set must not join the corpus' });
+    say({ type: 'summary', verdict, set: join(out, agent), secretScan: scan.error ? `gitleaks did not run: ${scan.error.message}` : scan.status === 0 ? 'clean' : 'findings; the set must not join the corpus' });
     return verdict === 'PASS' ? 0 : 1;
   }
-  if (!['claude-code', 'codex'].includes(agent)) throw Error('--agent is claude-code, codex or pi');
+  if (!['claude-code', 'codex'].includes(agent)) throw Error('--agent is claude-code, codex, pi or paseo');
   const bin = binaryPath(agent === 'codex' ? 'codex' : 'claude');
   const factsFile = join(root, 'adapters', `${agent}.facts.json`);
   const facts = JSON.parse(readFileSync(factsFile, 'utf8'));
@@ -498,7 +589,7 @@ async function recordCommand(options) {
   const version = spawnSync(bin, ['--version'], { encoding: 'utf8' }).stdout.match(/\d+\.\d+\.\d+(?:[-+][\w.]+)?/)?.[0];
   const scratch = mkdtempSync(process.platform === 'darwin' ? '/private/tmp/deep-corpus-' : '/tmp/deep-corpus-');
   const only = options.scenarios?.split(',');
-  const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts, only);
+  const results = agent === 'codex' ? await recordCodex(scratch, bin, facts, only, version) : await recordClaude(scratch, bin, facts, only, version);
   const redact = redactor();
   for (const { scenario, blocked, payloads } of results) {
     if (!payloads.length) { say({ type: 'session', scenario, blocked: blocked ?? 'no payload was recorded' }); continue; }
@@ -532,7 +623,7 @@ for (let index = 0; index < rest.length; index += 2) {
 }
 const commands = { replay: replayCommand, check: checkCommand, record: recordCommand, hook: () => hookCommand(options.dir) };
 if (!commands[command] || (command === 'record' && !(options.agent && options.out))) {
-  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex|pi --out <dir> [--scenarios <name>,…]');
+  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex|pi|paseo --out <dir> [--scenarios <name>,…]');
   process.exit(2);
 }
 process.exitCode = await commands[command](options);

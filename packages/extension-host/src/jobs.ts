@@ -1,7 +1,7 @@
 // A plug-in's model jobs (#366): `deep.runner.run` goes to the runner R1 built, on your own agent, headless on your
 // plan. Here are the job's shape as the plug-in gives it, the prompt the agent reads and what its run answered. The
 // host checks each handle against the plug-in's grant before any of this, and filters what the answer cites after.
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
@@ -11,7 +11,7 @@ import type { Supervisor } from '@deepbuild/supervisor';
 import type { Entry, Ext, Manifest } from './host-types.js';
 import { CORE, HostFiles, message, within } from './host-shared.js';
 import { NODE_HOME, NODE_LIBS } from './node-runtime.js';
-import { buildOf, counterOf, encodedInputs, fixtureInputs, kindOf, paramsOf, toolOf, urlOf, type HeldJobs, type JobBytes, type JobCall, type JobCounter, type JobKind, type JobTool, type Weight } from './job-kinds.js';
+import { buildOf, counterOf, encodedInputs, fixtureInputs, kindOf, paramsOf, takes, toolOf, urlOf, type HeldJobs, type JobBytes, type JobCall, type JobCounter, type JobKind, type JobTool, type Weight } from './job-kinds.js';
 const PAGE = 1000;
 interface JobsOptions {
   record: RecordStore; now(): number; runner: Runner | undefined;
@@ -124,11 +124,41 @@ const JOB_MS = 120_000;
 const JOB_OUT = 64 * 1024 * 1024; // #154: a 60 s stereo 24-bit stem, as base64, passes 16 MiB
 /** The longest stderr line read for a counter (#1925); a counter's line is far shorter. */
 const COUNTER_LINE = 4096;
-/** A tool's answer, `{outputs}` with each output's bytes in base64, as bytes by name. */
+/**
+ * A tool's answer, `{outputs}` with each output's bytes in base64, as bytes by name. A tool refuses an input by
+ * answering `{refused}` instead (#3035), naming what in it, as a tool's host does with a 422.
+ */
 function outputsOf(tool: string, answer: unknown): Record<string, Uint8Array> {
-  const outputs = (typeof answer === 'object' && answer !== null ? answer as { outputs?: unknown } : {}).outputs;
+  const { outputs, refused } = (typeof answer === 'object' && answer !== null ? answer : {}) as { outputs?: unknown; refused?: unknown };
+  if (typeof refused === 'string') throw Object.assign(Error(refused), { name: 'JobRefused' });
   if (typeof outputs !== 'object' || outputs === null || !Object.values(outputs).every((v) => typeof v === 'string')) throw Error(`${tool} wrote no {outputs}, each output's bytes in base64`);
   return Object.fromEntries(Object.entries(outputs as Record<string, string>).map(([n, b]) => [n, new Uint8Array(Buffer.from(b, 'base64'))]));
+}
+/**
+ * Where a tool's output and a fixture's expected one first differ, when both are a JSON object or list (#3035): the
+ * path, and what each holds there, so a refusal names the thing the tool got wrong. Undefined for any other bytes.
+ */
+function firstDifference(wrote: string, expected: string): string | undefined {
+  const nested = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+  let a: unknown;
+  let b: unknown;
+  try { [a, b] = [JSON.parse(wrote), JSON.parse(expected)]; } catch { return undefined; }
+  if (!nested(a) || !nested(b)) return undefined;
+  const show = (v: unknown): string => (JSON.stringify(v) ?? 'nothing').slice(0, 200);
+  const walk = (x: unknown, y: unknown, path: string): string | undefined => {
+    const lists = Array.isArray(x) && Array.isArray(y);
+    // Lists of two lengths differ at the first place their entries do, each entry whole.
+    if (nested(x) && nested(y) && Array.isArray(x) === Array.isArray(y) && !(lists && x.length !== y.length)) {
+      for (const k of new Set([...Object.keys(y), ...Object.keys(x)])) {
+        const found = walk(x[k], y[k], `${path}/${k}`);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    if (lists) return (y as unknown[]).concat(x).map((_, i) => i).filter((i) => show(x[i]) !== show(y[i])).map((i) => `${path}/${i}: it wrote ${show(x[i])}, where the fixture expects ${show(y[i])}`)[0];
+    return show(x) === show(y) ? undefined : `${path}: it wrote ${show(x)}, where the fixture expects ${show(y)}`;
+  };
+  return walk(a, b, '');
 }
 /** A run its tool's host holds BLOCKED (#509), such as a word an engine has no pronunciation for: the host's cause. */
 class JobBlocked extends Error {
@@ -233,7 +263,9 @@ export class JobTools {
     // A tool of the canvas core (#518) takes its input while an export draws: only an export runs it.
     if ('core' in tool.run) throw Error(`${tool.tool} runs in the canvas core while an export draws, so no job runs it on its own`);
     const { supervisor } = this.options;
-    const dir = join(folder, tool.run.dir);
+    // By its real path (#3005): node gives a tool its own real path as import.meta.url but argv[1] as spelled, so a
+    // tool under a symlinked hub home that checks it is the main module would see two paths and never run.
+    const dir = realpathSync(join(folder, tool.run.dir));
     const run = `run:${ulid(this.options.now())}`;
     const out: Buffer[] = [];
     let size = 0;
@@ -281,7 +313,8 @@ export class JobTools {
   private async coreQualifies(call: string, kind: string, tool: string, descriptor: JobTool, folder: string): Promise<string | undefined> {
     if (!this.options.canvas) return 'this hub has no canvas core to qualify it on';
     const d = descriptor as JobTool & { codecs?: unknown; containers?: unknown; hardware?: unknown; input?: unknown; frame_delay?: unknown };
-    const program = 'dir' in d.run ? [{ kind, tool, codecs: d.codecs, containers: d.containers, hardware: d.hardware, input: d.input, frame_delay: d.frame_delay, argv: [process.execPath, join(folder, d.run.dir, d.run.entry)], cwd: join(folder, d.run.dir) }] : [];
+    const dir = 'dir' in d.run ? realpathSync(join(folder, d.run.dir)) : ''; // as runTool spawns it (#3005)
+    const program = 'dir' in d.run ? [{ kind, tool, codecs: d.codecs, containers: d.containers, hardware: d.hardware, input: d.input, frame_delay: d.frame_delay, argv: [process.execPath, join(dir, d.run.entry)], cwd: dir }] : [];
     let reply: Record<string, unknown>;
     try { reply = await this.options.canvas({ call, tool, job_tools: program }); } catch (e) { return message(e); }
     if (reply.outcome === 'qualified') return undefined;
@@ -311,7 +344,11 @@ export class JobTools {
         const why = await this.coreQualifies(held.qualification.core, kind, tool, descriptor, entry.folder);
         if (why) return refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification: ${why}, and it doesn't join ${kind}`);
       }
-      for (const f of held.qualification.fixtures) {
+      // A fixture runs on the tools whose own params take it (#3035), so a kind of several formats qualifies each
+      // tool on its format's fixtures; a tool that takes none of them has nothing to qualify on.
+      const fixtures = held.qualification.fixtures.filter((f) => takes(descriptor.params, paramsOf(held.schema.params, f.params)));
+      if (held.qualification.fixtures.length && !fixtures.length) refuse(`${entry.id}'s tool ${tool} takes the params of none of ${kind}'s qualification fixtures, so nothing qualifies it, and it doesn't join ${kind}`);
+      for (const f of fixtures) {
         let wrote: Record<string, Uint8Array>;
         // A tool that calls a provider calls it here too (#1923), with a journal of its own that outlives nothing.
         const scratch = provider ? join(this.options.home, 'jobs', 'qualify', ulid(this.options.now())) : undefined;
@@ -325,7 +362,10 @@ export class JobTools {
         }
         for (const [name, text] of Object.entries(f.expect)) {
           const got = wrote[name];
-          if (!got || !Buffer.from(got).equals(Buffer.from(text, 'utf8'))) refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification at the fixture ${f.name}: it wrote ${got ? JSON.stringify(Buffer.from(got).toString('utf8')) : 'nothing'} for ${name}, where the fixture expects ${JSON.stringify(text)}, and it doesn't join ${kind}`);
+          if (got && Buffer.from(got).equals(Buffer.from(text, 'utf8'))) continue;
+          const where = got && firstDifference(Buffer.from(got).toString('utf8'), text);
+          if (where) refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification at the fixture ${f.name}: its ${name} differs from the fixture's at ${where}, and it doesn't join ${kind}`);
+          refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification at the fixture ${f.name}: it wrote ${got ? JSON.stringify(Buffer.from(got).toString('utf8')) : 'nothing'} for ${name}, where the fixture expects ${JSON.stringify(text)}, and it doesn't join ${kind}`);
         }
       }
       tools.push({ kind, tool, build, ...(host && { host }), descriptor, ...(provider ? { provider } : {}) });

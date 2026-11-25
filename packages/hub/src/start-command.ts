@@ -1,10 +1,9 @@
 // `deep start approve` and `deep start` (#1330): a run you approve, and a session started under it, through the hub's
 // socket as the cli role, naming this process for the peer check: run inside an agent's process tree, a start acts as
 // that session and is refused.
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { call, notAnswered, UNDECIDED_CODES, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl } from './paths.js';
 import { startOf } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -69,8 +68,8 @@ export async function startCommand(args: readonly string[]): Promise<number> {
   }
   let reply: Reply;
   try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    reply = await call(hubAddress().path, token, approving ? 'start.approve' : 'start.session', params, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+    const { path: socket, token } = hubControl();
+    reply = await call(socket, token, approving ? 'start.approve' : 'start.session', params, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
   } catch (error) {
     return notAnswered(error);
   }

@@ -14,6 +14,11 @@ pub mod indexed;
 pub mod lightfx;
 pub mod paintfx;
 pub mod read;
+mod shader_layout;
+
+// A release build refuses #3256's planted comparison (tests/acceptance/3256).
+#[cfg(all(feature = "plant-3256-host-sizes", not(debug_assertions)))]
+compile_error!("the plant-3256-host-sizes feature is for test builds only, never a release build");
 
 /// The wrong programs the compositor and its passes plant, each reachable only through a
 /// binary's `--planted` (the acceptance READMEs of #430, #149, #467, #2031 and #2032: Planted
@@ -41,6 +46,18 @@ pub enum Planted {
     ShadowInsideOutline,
     ShadowRemovesAmbient,
     ShadowEdgeAliased,
+    NormalFlippedGreen,
+    NormalDotAlone,
+    NormalUnturned,
+    LightStaleHeight,
+    /// #161's wrong programs (tests/acceptance/161/README.md: Planted programs), each on one
+    /// operator a group's pass names.
+    InvertOnPremultiplied,
+    InvertWithoutAlphaGuard,
+    KeyKeepsColorAtAlpha0,
+    TwirlCenterFromFrameOrigin,
+    BlurRadiusInDevicePx,
+    SliceShiftSeededByFrame,
 }
 
 /// A refusal as a call answers it.

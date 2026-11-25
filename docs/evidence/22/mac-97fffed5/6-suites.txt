@@ -1,0 +1,183 @@
+== head 97fffed505149c3d93599549b0a32d2e1e7494c0
+
+===== 1345 start 18:44:39 load { 11.83 54.27 53.01 } thermal 0 Now drawing from 'Battery Power' free KB 35374260 front app [Windows App]
+== command: NO_COLOR=1 npx vitest run --root tests/acceptance/1345 --no-file-parallelism
+
+ RUN  v5.0.5 ~/private/d22w/tests/acceptance/1345
+
+ ✓ batch.test.ts (3 tests) 73572ms
+   ✓ AC3 #1345.9c5710a8 Five calls from five issues reach one person as one card, and that day raises one notification 67488ms
+   ✓ AC7 #1345.aaa324a9 Five calls from five issues draw as #328's card with five rows, and the tree holds no second batch card. A row whose Send back would revert says so before it's pressed. A planted row that reverts unannounced fails, naming the issue 5552ms
+ ✓ deadline.test.ts (1 test) 32546ms
+   ✓ AC4 #1345.464309b0 A call unanswered at its deadline takes its recommended answer, the issue closes, and the record reads default, never your answer 32416ms
+ ✓ held.test.ts (1 test) 149009ms
+   ✓ AC2 #1345.ba6681c8 A change that reaches a release, or a published page, stays held. A planted lander that lets it through fails, naming the change 148852ms
+ ✓ blocked.test.ts (1 test) 120742ms
+   ✓ AC6 #1345.45221c69 Issues blocked by a landed change with an open call start. Issues blocked by a held one don't 120438ms
+ ✓ no.test.ts (1 test) 121185ms
+   ✓ AC5 #1345.cdb5061b A "no" starts an attempt on that issue and raises no second ask 120895ms
+ ✓ lands.test.ts (1 test) 118158ms
+   ✓ AC1 #1345.21f21363 A reversible change with one open taste call lands, its issue stays open naming the call, and no view reads PASS. A planted lander that records a PASS fails, naming the claim 118019ms
+
+ Test Files  6 passed (6)
+      Tests  8 passed (8)
+   Start at  18:44:39
+   Duration  616.08s (tests 100%)
+
+===== 1345 exit=0 end 18:54:55 load { 1.51 9.49 27.61 } thermal 0 front app [Windows App]
+
+===== 1349 start 18:54:55 load { 1.51 9.49 27.61 } thermal 0 Now drawing from 'Battery Power' free KB 34520216 front app [Windows App]
+== command: NO_COLOR=1 npx vitest run --root tests/acceptance/1349 --no-file-parallelism
+
+ RUN  v5.0.5 ~/private/d22w/tests/acceptance/1349
+
+ ❯ journey.test.ts (7 tests | 7 failed) 91555ms
+   ❯ the journey on the fixture machine (7)
+     × AC1 #1349.ba1a9b5f On a clean macOS test account with no agent, Node, git or developer tools, the download reaches the box with no terminal and no developer tools prompt. The sign-in step is the harness's, in the agent's own window (the fixture machine's part: from the Set up press to the box with no developer tool run) 91553ms
+     × AC2 #1349.30081c64 A topic then makes a workspace with working history and going back. A build that needs a system git fails, naming the call (a topic makes a workspace with working history and going back) 0ms
+     × AC3 #1349.d6911e12 DeepBuild's record and logs hold no credential, and a scan of them finds none 0ms
+     × AC4 #1349.e08d3218 A planted lapsed sign-in pauses the work with one plain line, and the work resumes after signing in, with nothing lost 0ms
+     × AC5 #1349.7e8a2760 Budgets, on the reference Mac in the local preflight: the app's part of this, leaving out the agent's own installer and sign-in, takes under 2 minutes (timed on the fixture machine, the stand-in installer's own time left out) 0ms
+     × AC6 #1349.aa369523 On the clean account, a person, not the harness, signs in once from the row's button in a recorded run, and the words typed before sign-in reach the agent once. A planted hub that closes the row when the page returns, with the probe still reading not signed in, fails, naming the check (the fixture machine's part: the words typed before sign-in reach the agent once, and only the probe closes the row) 0ms
+     × AC8 #1349.8524225c The record's setup events name the agent the first screen's row named before the click. A planted setup that installs a different agent fails, naming both (the record's half) 0ms
+ ❯ clean-account.test.ts (2 tests | 2 failed) 4ms
+   ❯ the clean account (2)
+     × AC1 #1349.ba1a9b5f On a clean macOS test account with no agent, Node, git or developer tools, the download reaches the box with no terminal and no developer tools prompt. The sign-in step is the harness's, in the agent's own window (the recorded run) 3ms
+     × AC6 #1349.aa369523 On the clean account, a person, not the harness, signs in once from the row's button in a recorded run, and the words typed before sign-in reach the agent once. A planted hub that closes the row when the page returns, with the probe still reading not signed in, fails, naming the check (the recorded run: a person signs in once from the row's button) 0ms
+ ❯ plants.test.ts (3 tests | 3 failed) 178846ms
+   ❯ AC2 #1349.30081c64 A topic then makes a workspace with working history and going back. A build that needs a system git fails, naming the call (the build that needs a system git) (1)
+     × AC2 #1349.30081c64 (wrong program) a runtime folder with no shipped git, node scripts/app-runtime.mjs --plant system-git, fails at its first git call, naming the call 89401ms
+   ❯ AC6 #1349.aa369523 On the clean account, a person, not the harness, signs in once from the row's button in a recorded run, and the words typed before sign-in reach the agent once. A planted hub that closes the row when the page returns, with the probe still reading not signed in, fails, naming the check (the planted hub) (1)
+     × AC6 #1349.aa369523 (wrong program) a hub that closes the sign-in row when the agent's page comes back, DEEP_HUB_PLANT=closes-on-return, fails, naming the check 89444ms
+   ❯ AC8 #1349.8524225c The record's setup events name the agent the first screen's row named before the click. A planted setup that installs a different agent fails, naming both (the planted setup) (1)
+     × AC8 #1349.8524225c (wrong program) a setup that installs another agent, DEEP_HUB_PLANT=installs-other-agent, fails, naming both 0ms
+ ✓ first-screen.test.ts (3 tests) 10862ms
+   ✓ AC7 #1349.72be1f28 The first screen has one button with no agent found. A planted screen with an install button beside Set up fails, naming the control (2)
+     ✓ AC7 #1349.72be1f28 with no agent found, the first screen's only control that writes is the one Set up button 4856ms
+     ✓ AC7 #1349.72be1f28 (wrong program) a planted screen with an install button beside Set up, DEEP_HUB_PLANT=install-button-beside-set-up, fails, naming the control 4159ms
+   ✓ AC8 #1349.8524225c The record's setup events name the agent the first screen's row named before the click. A planted setup that installs a different agent fails, naming both (the screen's half) (1)
+     ✓ AC8 #1349.8524225c with no agent found, the first screen's Claude Code row says Set up installs it, from the install step of setup's list 1846ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  clean-account.test.ts > the clean account > AC1 #1349.ba1a9b5f On a clean macOS test account with no agent, Node, git or developer tools, the download reaches the box with no terminal and no developer tools prompt. The sign-in step is the harness's, in the agent's own window (the recorded run)
+AssertionError: INCONCLUSIVE: the clean account's run isn't recorded: docs/evidence/1349/ lacks clean-account.mov, clean-account.json, deepbuild; this is not a pass
+ ❯ inconclusive helpers.ts:37:60
+     35| export const sleep = (ms: number): Promise<void> => new Promise((resol…
+     36| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+     37| export const inconclusive = (why: string): never => expect.fail(`INCON…
+       |                                                            ^
+     38| export const said = (v: unknown, n = 400): string => (JSON.stringify(v…
+     39| export const sha256 = (bytes: Buffer | string): string => createHash('…
+ ❯ evidence clean-account.test.ts:18:23
+ ❯ clean-account.test.ts:56:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  clean-account.test.ts > the clean account > AC6 #1349.aa369523 On the clean account, a person, not the harness, signs in once from the row's button in a recorded run, and the words typed before sign-in reach the agent once. A planted hub that closes the row when the page returns, with the probe still reading not signed in, fails, naming the check (the recorded run: a person signs in once from the row's button)
+AssertionError: INCONCLUSIVE: the clean account's run isn't recorded: docs/evidence/1349/ lacks clean-account.mov, clean-account.json, deepbuild; this is not a pass
+ ❯ inconclusive helpers.ts:37:60
+     35| export const sleep = (ms: number): Promise<void> => new Promise((resol…
+     36| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+     37| export const inconclusive = (why: string): never => expect.fail(`INCON…
+       |                                                            ^
+     38| export const said = (v: unknown, n = 400): string => (JSON.stringify(v…
+     39| export const sha256 = (bytes: Buffer | string): string => createHash('…
+ ❯ evidence clean-account.test.ts:18:23
+ ❯ clean-account.test.ts:67:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  journey.test.ts > the journey on the fixture machine > AC1 #1349.ba1a9b5f On a clean macOS test account with no agent, Node, git or developer tools, the download reaches the box with no terminal and no developer tools prompt. The sign-in step is the harness's, in the agent's own window (the fixture machine's part: from the Set up press to the box with no developer tool run)
+ FAIL  journey.test.ts > the journey on the fixture machine > AC2 #1349.30081c64 A topic then makes a workspace with working history and going back. A build that needs a system git fails, naming the call (a topic makes a workspace with working history and going back)
+ FAIL  journey.test.ts > the journey on the fixture machine > AC3 #1349.d6911e12 DeepBuild's record and logs hold no credential, and a scan of them finds none
+ FAIL  journey.test.ts > the journey on the fixture machine > AC4 #1349.e08d3218 A planted lapsed sign-in pauses the work with one plain line, and the work resumes after signing in, with nothing lost
+ FAIL  journey.test.ts > the journey on the fixture machine > AC5 #1349.7e8a2760 Budgets, on the reference Mac in the local preflight: the app's part of this, leaving out the agent's own installer and sign-in, takes under 2 minutes (timed on the fixture machine, the stand-in installer's own time left out)
+ FAIL  journey.test.ts > the journey on the fixture machine > AC6 #1349.aa369523 On the clean account, a person, not the harness, signs in once from the row's button in a recorded run, and the words typed before sign-in reach the agent once. A planted hub that closes the row when the page returns, with the probe still reading not signed in, fails, naming the check (the fixture machine's part: the words typed before sign-in reach the agent once, and only the probe closes the row)
+ FAIL  journey.test.ts > the journey on the fixture machine > AC8 #1349.8524225c The record's setup events name the agent the first screen's row named before the click. A planted setup that installs a different agent fails, naming both (the record's half)
+Error: BLOCKED: the release's archives couldn't be made: node scripts/release-pack.mjs --repo <checkout> --commit HEAD --out ~/private/d22w/target/da1349/97fffed50514/archives: exit 1, stdout "", stderr "release-pack: ~/.nvm/versions/node/v24.22.0/bin/node /var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/release-pack-5D90Lf/checkout/scripts/release-stage.mjs --out /var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/release-pack-5D90Lf/stage failed: release-stage: no zig on PATH, /opt/homebrew/bin or /usr/local/bin to link deep-hook for linux-x64\n\n"
+ ❯ blocked helpers.ts:36:56
+     34| export const MIN = 60_000;
+     35| export const sleep = (ms: number): Promise<void> => new Promise((resol…
+     36| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     37| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     38| export const said = (v: unknown, n = 400): string => (JSON.stringify(v…
+ ❯ helpers.ts:164:80
+ ❯ journey.test.ts:49:40
+ ❯ journey.test.ts:149:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  plants.test.ts > AC2 #1349.30081c64 A topic then makes a workspace with working history and going back. A build that needs a system git fails, naming the call (the build that needs a system git) > AC2 #1349.30081c64 (wrong program) a runtime folder with no shipped git, node scripts/app-runtime.mjs --plant system-git, fails at its first git call, naming the call
+Error: BLOCKED: the release's archives couldn't be made: node scripts/release-pack.mjs --repo <checkout> --commit HEAD --out ~/private/d22w/target/da1349/97fffed50514/archives: exit 1, stdout "", stderr "release-pack: ~/.nvm/versions/node/v24.22.0/bin/node /var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/release-pack-5I9GU9/checkout/scripts/release-stage.mjs --out /var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/release-pack-5I9GU9/stage failed: release-stage: no zig on PATH, /opt/homebrew/bin or /usr/local/bin to link deep-hook for linux-x64\n\n"
+ ❯ blocked helpers.ts:36:56
+     34| export const MIN = 60_000;
+     35| export const sleep = (ms: number): Promise<void> => new Promise((resol…
+     36| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     37| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     38| export const said = (v: unknown, n = 400): string => (JSON.stringify(v…
+ ❯ helpers.ts:164:80
+ ❯ plants.test.ts:27:42
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  plants.test.ts > AC6 #1349.aa369523 On the clean account, a person, not the harness, signs in once from the row's button in a recorded run, and the words typed before sign-in reach the agent once. A planted hub that closes the row when the page returns, with the probe still reading not signed in, fails, naming the check (the planted hub) > AC6 #1349.aa369523 (wrong program) a hub that closes the sign-in row when the agent's page comes back, DEEP_HUB_PLANT=closes-on-return, fails, naming the check
+ FAIL  plants.test.ts > AC8 #1349.8524225c The record's setup events name the agent the first screen's row named before the click. A planted setup that installs a different agent fails, naming both (the planted setup) > AC8 #1349.8524225c (wrong program) a setup that installs another agent, DEEP_HUB_PLANT=installs-other-agent, fails, naming both
+Error: BLOCKED: the release's archives couldn't be made: node scripts/release-pack.mjs --repo <checkout> --commit HEAD --out ~/private/d22w/target/da1349/97fffed50514/archives: exit 1, stdout "", stderr "release-pack: ~/.nvm/versions/node/v24.22.0/bin/node /var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/release-pack-7LI8s4/checkout/scripts/release-stage.mjs --out /var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/release-pack-7LI8s4/stage failed: release-stage: no zig on PATH, /opt/homebrew/bin or /usr/local/bin to link deep-hook for linux-x64\n\n"
+ ❯ blocked helpers.ts:36:56
+     34| export const MIN = 60_000;
+     35| export const sleep = (ms: number): Promise<void> => new Promise((resol…
+     36| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     37| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     38| export const said = (v: unknown, n = 400): string => (JSON.stringify(v…
+ ❯ helpers.ts:164:80
+ ❯ plants.test.ts:60:42
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+
+ Test Files  3 failed | 1 passed (4)
+      Tests  12 failed | 3 passed (15)
+   Start at  18:54:56
+   Duration  282.01s (tests 100%)
+
+===== 1349 exit=1 end 18:59:38 load { 2.95 5.63 20.67 } thermal 0 front app [Windows App]
+
+===== 319-budgets start 18:59:38 load { 2.95 5.63 20.67 } thermal 0 Now drawing from 'Battery Power' free KB 30051708 front app [Windows App]
+== command: NO_COLOR=1 npx vitest run tests/acceptance/319/budgets.test.ts
+
+ RUN  v5.0.5 ~/private/d22w
+
+ ✓ tests/acceptance/319/budgets.test.ts (2 tests | 2 skipped) 33ms
+
+ Test Files  1 passed (1)
+      Tests  2 skipped (2)
+   Start at  18:59:38
+   Duration  249ms (import 54%, transform 26%, tests 17%, setup 2%, worker 1%)
+
+===== 319-budgets exit=0 end 18:59:39 load { 2.95 5.63 20.67 } thermal 0 front app [Windows App]
+
+===== 83-redraft-319 start 18:59:39 load { 2.95 5.63 20.67 } thermal 0 Now drawing from 'Battery Power' free KB 30051424 front app [Windows App]
+== command: NO_COLOR=1 npx vitest run --root tests/acceptance/83/redraft-319 --no-file-parallelism
+
+ RUN  v5.0.5 ~/private/d22w/tests/acceptance/83/redraft-319
+
+ ✓ status.test.ts (5 tests) 13706ms
+   ✓ AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call (2)
+     ✓ AC2 #83.5bcede40 each of "still going?", "all done?", "what's next?", "anything for me?" typed after a judged stop is answered from the record: the reply blocks the prompt with the answer, naming a state, a time, the next step and the Needs-you count, and the hook log shows no model call; a prompt that isn't a status question reaches the model 4314ms
+     ✓ AC2 #83.5bcede40 an ask still waiting for its batch isn't counted: under the settings deep setup drafts (batches 8 hours apart), an ask raised between batches is open but not shown in Needs you, deep inbox lists no row for it, and each status question's answer carries the Needs-you count deep inbox shows, without it 4032ms
+   ✓ AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged (2)
+     ✓ AC4 #83.4b0836ba "still going?" from a scheduled task, a subagent's report, another session, a prompt the adapter can't place reaches the model unchanged (no block, a model call in the hook log); the same words a person typed are answered from the record 1903ms
+     ✓ AC4 #83.4b0836ba (wrong program) a hub that reads an unplaced prompt as a person's (DEEP_HUB_PLANT=unplaced-is-person) answers a status question nobody typed from the record, and fails this check naming the prompt 1674ms
+   ✓ AC6 #83.eb2dc033 Where the work is, which session holds it, how to resume it and its link are answered from the record (1)
+     ✓ AC6 #83.eb2dc033 "what's next?" typed into the session that holds the work is answered from the record with the worktree the work is in, the session that holds it, a resume command naming that session, and its link 1670ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  18:59:39
+   Duration  13.82s (tests 100%)
+
+===== 83-redraft-319 exit=0 end 18:59:53 load { 3.04 5.52 20.37 } thermal 0 front app [Windows App]

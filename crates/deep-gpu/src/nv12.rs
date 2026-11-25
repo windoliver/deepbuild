@@ -215,12 +215,13 @@ impl Planes {
     /// padding.
     fn read(&self, (slot, sent): (usize, wgpu::SubmissionIndex)) -> Result<Vec<u8>, Lost> {
         let padded = read_back(&self.device, &self.ring[slot], sent)?;
-        let w = self.size[0] as usize;
-        Ok(padded
-            .chunks_exact(self.stride as usize)
-            .flat_map(|row| &row[..w])
-            .copied()
-            .collect())
+        let (w, stride) = (self.size[0] as usize, self.stride as usize);
+        // #231: a row at a time, into a buffer of the planes' own size.
+        let mut planes = Vec::with_capacity(padded.len() / stride * w);
+        for row in padded.chunks_exact(stride) {
+            planes.extend_from_slice(&row[..w]);
+        }
+        Ok(planes)
     }
 }
 

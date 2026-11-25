@@ -2,7 +2,7 @@
 // `session.state` and builds the list's rows from (rows.ts, #1463), and each session's detail deep status shows under
 // its row: a session whose turn finished, that turn's tool calls, failures and commits (#668), and a session with a
 // claim, its newest claim's line, the one its chat showed (#669). `deep numbers` reads the hub's readings.
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { codeWords } from '@deepbuild/contracts';
 import { billingMode } from '@deepbuild/readings';
@@ -12,7 +12,7 @@ import { CAN_RUN, CANT_RUN } from './hook-programs.js';
 import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
 import { numbersLines } from './numbers.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
 import { startOf } from './wire.js';
@@ -377,9 +377,13 @@ export async function sessionFacts(read: Query, only?: ReadonlySet<string>): Pro
   // An answer of yours whose delivery stalled or timed out (#2018), as the newest outcome its delivery recorded. A
   // database older than the deliveries table has none.
   const words = new Map<string, { outcome: string; at?: Fact }>();
-  for (const d of (await query(`SELECT a.session_id, a.id, d.outcome FROM deliveries d JOIN asks a ON a.id = d.delivery WHERE d.outcome IN ('stalled', 'timed_out') AND a.session_id IS NOT NULL${of('a.session_id')}`).catch(() => [])) as { session_id: string; id: string; outcome: string }[]) {
-    const [at] = (await query(`SELECT ts, log_pos FROM events WHERE kind = 'delivery.outcome' AND json_extract(data, '$.delivery') = ${quoted(`ask:${d.id}`)} ORDER BY log_pos DESC LIMIT 1`)) as { ts: number; log_pos: number }[];
-    words.set(d.session_id, { outcome: d.outcome, ...(at ? { at: { kind: 'delivery.outcome', ts: at.ts, log_pos: at.log_pos } } : {}) });
+  // Each with its delivery's newest outcome, read in one statement through the index on the delivery (#3389): a statement
+  // an answer, each stepping every outcome in the record, was half of a pass over a month's sessions.
+  for (const d of (await query(`SELECT a.session_id, d.outcome, e.ts, MAX(e.log_pos) AS log_pos FROM deliveries d JOIN asks a ON a.id = d.delivery
+    LEFT JOIN events e ON e.kind = 'delivery.outcome' AND json_extract(e.data, '$.delivery') = 'ask:' || d.delivery
+    WHERE d.outcome IN ('stalled', 'timed_out') AND a.session_id IS NOT NULL${of('a.session_id')} GROUP BY d.rowid`).catch(() => [])) as { session_id: string; outcome: string; ts: number | null; log_pos: number | null }[]) {
+    const at = fact('delivery.outcome', d.ts, d.log_pos);
+    words.set(d.session_id, { outcome: d.outcome, ...(at ? { at } : {}) });
   }
   // A task of the session's thread that no turn has started: read only for a session no hook has moved yet.
   const waiting = sessions.filter((s) => s.status === 'running').map((s) => s.id);
@@ -644,10 +648,9 @@ export async function numbersCommand(args: readonly string[]): Promise<number> {
     return 2;
   }
   try {
-    const socket = hubAddress().path;
-    const token = [join(dirname(socket), 'control.token'), rootOf(installedRoot()).token].find((p) => existsSync(p));
+    const { path: socket, token } = hubControl();
     // Named so the hub can refuse an agent's process tree what feeds your numbers.
-    const reply = await call(socket, token ? readFileSync(token, 'utf8').trim() : '', asks[0], asks[1], { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+    const reply = await call(socket, token, asks[0], asks[1], { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
     if (!('result' in reply)) {
       process.stderr.write(`deep numbers: ${reply.error.remediation}\n`);
       return 3;

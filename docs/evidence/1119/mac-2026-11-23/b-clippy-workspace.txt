@@ -1,0 +1,2493 @@
+at: 2026-11-23T11:09:34Z
+cwd: ~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/copy
+CARGO_TARGET_DIR: ~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/target
+argv: cargo clippy --workspace --all-targets --locked -- -D warnings
+--- stderr ---
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
+    Checking deep-canvas-marks v0.0.0 (~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/copy/crates/deep-canvas-marks)
+    Checking deep-canvas-sandbox v0.0.0 (~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/copy/crates/deep-canvas-sandbox)
+    Checking gpui-pre-util v0.3.9
+   Compiling strum_macros v0.28.0
+    Checking rand_xorshift v0.5.0
+    Checking sha1 v0.10.7
+    Checking rgb v0.8.53
+    Checking crossbeam-queue v0.3.14
+   Compiling gpui-pre-derive-refineable v0.3.9
+    Checking smol_str v0.3.6
+    Checking data-encoding v2.11.1
+    Checking unarray v0.1.4
+    Checking pollster v0.2.5
+    Checking fixedbitset v0.5.7
+    Checking link-section v0.19.3
+    Checking new_debug_unreachable v1.0.6
+    Checking core_detect v1.0.0
+    Checking atomic v0.5.3
+    Checking svg_fmt v0.4.5
+    Checking tungstenite v0.29.0
+    Checking proptest v1.12.0
+    Checking gpui-pre-shared-string v0.3.9
+    Checking postage v0.5.0
+    Checking futures-concurrency v7.7.1
+    Checking ctor v1.0.13
+    Checking etagere v0.2.15
+    Checking gpui-pre-refineable v0.3.9
+    Checking resvg v0.46.0
+    Checking gpui-pre-collections v0.3.9
+    Checking gpui-pre-scheduler v0.3.9
+   Compiling crossbeam-deque v0.8.8
+   Compiling gpui-pre v0.3.9 (~/Library/Caches/deepbuild-perf/MacBook-Pro-3b7e28487b8d/base/copy/vendor/gpui-pre)
+    Checking parry2d v0.31.1
+error: the `Err`-variant returned from this function is very large
+   --> crates/deep-canvas-sandbox/src/link.rs:331:34
+    |
+331 | pub fn signatures(o: &Object) -> Result<BTreeMap<String, (Vec<String>, Vec<String>)>, Refusal> {
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the `Err`-variant is at least 264 bytes
+    |
+    = help: try reducing the size of `check::Refusal`, for example by boxing large elements or replacing it with `Box<check::Refusal>`
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#result_large_err
+    = note: `-D clippy::result-large-err` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::result_large_err)]`
+
+error: very complex type used. Consider factoring parts into `type` definitions
+   --> crates/deep-canvas-sandbox/src/link.rs:331:34
+    |
+331 | pub fn signatures(o: &Object) -> Result<BTreeMap<String, (Vec<String>, Vec<String>)>, Refusal> {
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#type_complexity
+    = note: `-D clippy::type-complexity` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::type_complexity)]`
+
+error: could not compile `deep-canvas-sandbox` (lib) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: using `chunks_exact_mut` with a constant chunk size
+   --> crates/deep-canvas-marks/src/light.rs:226:29
+    |
+226 |         for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+    |                             ^^^^^^^^^^^^^^^^^^^ help: consider using `as_chunks_mut` instead: `as_chunks_mut::<4>().0.iter_mut()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#chunks_exact_to_as_chunks
+    = note: `-D clippy::chunks-exact-to-as-chunks` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::chunks_exact_to_as_chunks)]`
+
+error: could not compile `deep-canvas-marks` (lib) due to 1 previous error

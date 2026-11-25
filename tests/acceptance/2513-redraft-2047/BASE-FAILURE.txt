@@ -1,0 +1,80 @@
+Base commit: 5330aaf29 ("Merge pull request #2509 ...", main on Nov 14), branch blind-2513-redraft-2047.
+Machine: macOS 27.2 on Apple silicon (Mac17,10, M5 Max, 64 GB, 18 cores) and its Metal GPU; the shared Mac this job ran
+         on, one-minute load 14 to 453 over the runs and thermal state "fair" at the base run.
+ID: criterionId from scripts/proof-change.mjs, run on the issue body line "- [ ] `tests/acceptance/1939/` and
+    `tests/acceptance/1938/machines.test.ts` pass unchanged": #2513.296f5cfc, as briefed.
+Builds: cargo build --locked --bin deep-show --no-default-features --features full, CARGO_INCREMENTAL=0
+        CARGO_PROFILE_DEV_DEBUG=0, toolchain 1.99.1 (rust-toolchain.toml), through scripts/lease nice -n 10, which ran
+        unleased here ("no deep on PATH and no built CLI at packages/cli/dist"). A first build from scratch, started
+        21:32 on Nov 21, was cut off when the coordinating session restarted; resumed, it finished in 1710 s (exit 0,
+        load 85 at its start, 453 at its end). npm ci once (node_modules was missing), 61 s.
+Command (from the worktree):
+  PATH="$PATH:/opt/homebrew/opt/rustup/bin" NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    scripts/lease nice -n 10 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2513-redraft-2047 \
+    --no-file-parallelism --testTimeout=600000
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/2513-redraft-2047/tsconfig.json passes (exit 0).
+
+== The base: INCONCLUSIVE by load, never a pass (one run, 23:01:35 Nov 21, 77 s, vitest 74.75 s, load 442 to 343)
+
+The guarded files are the base's, so the unchanged assertion holds. Each child, run as its suite runs it:
+  tests/acceptance/1939/ac1-readings.test.ts  #1939.398baf58  passed
+  tests/acceptance/1939/ac2-budget.test.ts    #1939.9c67dc55  failed INCONCLUSIVE, after its structure held:
+    AssertionError: INCONCLUSIVE: the readings' added time is judged only on a reference Mac at rest: a reading, not a
+    budget result: off the reference Macs (...; mains power, Low Power Mode off, thermal state nominal): thermal state
+    is "fair", not "nominal"; load 380.09521484375 at a run's start or end is above the 18 cores; this is not a pass
+  tests/acceptance/1938/machines.test.ts      #1938.636cd049  passed
+So the guard failed at its INCONCLUSIVE line (expect.fail, then line 124; 134 now):
+  AssertionError: INCONCLUSIVE: a guarded test can't be judged on this machine, so this is not a pass:
+    tests/acceptance/1939/ac2-budget.test.ts: #1939.9c67dc55 ... thermal state is "fair", not "nominal"; load
+    380.09521484375 at a run's start or end is above the 18 cores; this is not a pass
+This is a guard: on the base it ends INCONCLUSIVE for a reason of the machine (the timing gate), with no failure at
+an assertion. On a reference Mac at rest, #1939's ac2-budget builds deep-show for release and times five runs of 20
+rounds before it decides, so the guard then takes that long (seen once below).
+The base run was made on the file before two later edits, kept as evidence as the coordinator asked: how a child's
+failure is printed (its message without its stack, naming where it failed, and 200 characters of the test name, not
+120) and the header comments. Neither touches how unchanged, pass or INCONCLUSIVE are decided.
+
+== The twin: ev-sign-flipped fails at the pass assertion (twins.json)
+
+crates/deep-canvas-marks/src/finish.rs, byte-equal at 5330aaf29 and 5f5791e2d (rev-parse of <commit>:<path> gives
+02bdbbd3f0986af76acc1ce9f2d42b14cf28545c at both), with exposure_scale reading EV100 with its sign flipped. Laid over
+the worktree, built (47 s, load 63 to 40), the guard run once (4 s), the base's file put back:
+  tests/acceptance/1939/ac1-readings.test.ts failed at its assertion:
+    AssertionError: render.exposure reads the planted fixture's key under -0.5 EV: {... "results":[{"t":0,
+    "subject":["subject"],"px":9604,"clipped":0,"crushed":0,"key_ev":2.456398190620124,"exposure":5.555555555555555,
+    "pass":false, ...}], "result":"FAIL"}: expected 2.456398190620124 to be less than -0.5
+    (from tests/acceptance/1939/ac1-readings.test.ts:56:126)
+  so the guard failed at unchanged.test.ts:132:122, its pass assertion:
+    AssertionError: tests/acceptance/1939/ac1-readings.test.ts passes unchanged, every test in it: ...
+  and stopped there (the first file with a failure ends the run).
+
+== The unchanged half: two mutants (the final file, under a second each)
+
+  A line added to tests/acceptance/1939/README.md, then put back from a saved copy:
+    AssertionError: the guarded files are the base's (5330aaf29), unchanged:
+      tests/acceptance/1939/README.md is 36011062b40d45bcfb19ca277cb1ebd1d9e3b245adc4806eed3e3ef53bcf3279, not the
+      base's 0f8cdce72786f177e701ff4fdde306d460c79e001b70401bf39beaa3873235a5   (unchanged.test.ts:123:108)
+  A new file tests/acceptance/1939/planted-extra.test.ts, then removed:
+    AssertionError: the guarded files are the base's (5330aaf29), unchanged:
+      tests/acceptance/1939/planted-extra.test.ts is new   (unchanged.test.ts:123:108)
+  Neither reached a child. Twins can't replace a test's files, so this half has mutants, not twins.
+
+== Dropped twins (runs on the base's tree, kept as evidence)
+
+  subject-px-none: crates/deep-canvas-loop/src/pixels.rs with mask reading no px. Build 201 s; guard 15 s: ac1 failed
+    at its assertion ("render.exposure measures 01JB1939D00000000000000001 once at the start: []: expected +0 to be 1",
+    tests/acceptance/1939/helpers.ts:317), so the guard failed at its pass assertion. Run alone on it,
+    1938/machines.test.ts failed too: render.exposure on clipped highlights and render.contrast on text under 4.5:1
+    were BLOCKED on machine A, not FAIL. Dropped: that file isn't byte-equal on main, and other files of its crate
+    there use items the base's copy doesn't define, so the twin doesn't build on main.
+  text-bounds-none: the same file with bounds finding no box. Built (19 s); its guard run was stopped by PID for the
+    same reason before it finished. That run showed the reference-Mac path: the load read 14 as ac2-budget started, so
+    it began building deep-show for release to time the readings.
+  ground-median-zero: the same file with median reading 0. Build 140 s; guard 30 s: ac1 passed, ac2-budget
+    INCONCLUSIVE by load, machines passed, so the guard read INCONCLUSIVE and the twin caught nothing. The likely
+    reason, read and not run: the machines file's planted contrast text also fails the document's own check
+    (number_unsourced), so render.contrast's row stays FAIL whatever ratio it reads.
+  Two earlier twins, copies of crates/deep-show/src/pixels.rs (the readings at exposure 1; render.exposure holding on
+    any machine), were dropped unrun: #2513 rewrites that file's light3d, so a base copy would revert it or not build.
+
+Not run here: the guard on a reference Mac at rest (where ac2-budget judges its timing), and the twin on a later main.

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the checkout's target and crates sources: its files build deep-show in the checkout's own target and write, change and put back files under crates/deep-app/panels, crates/deep-canvas-loop/src and crates/deep-show, then read cargo's fingerprint reasons, which any other build or edit in the checkout changes" }

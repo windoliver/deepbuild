@@ -26,34 +26,24 @@ fn hook(home: &std::path::Path, event: &str) -> std::process::Child {
 }
 
 /// A hub on `home`'s socket that writes its hello, reads one request, writes what `answer` makes of the request's
-/// id, then holds the connection for `linger`. A deep-hook that never connects, or that hangs up before its request
-/// (on a loaded machine its own budgets can run out first), ends the hub after `GIVE_UP` instead of leaving the test
-/// waiting on it forever; the test's assertions then say what deep-hook did. It ends with the request it read.
+/// id, then holds the connection until deep-hook hangs up. A deep-hook that never connects, or that hangs up before
+/// its request (on a loaded machine its own budgets can run out first), leaves the hub waiting on its accept until
+/// [`wake`] connects once deep-hook has exited, so the test never waits on it forever; the test's assertions then say
+/// what deep-hook did. A read that gets nothing for `GIVE_UP` ends it too. It ends with the request it read.
 fn fake_hub(
     home: &std::path::Path,
     answer: impl Fn(&str) -> String + Send + 'static,
-    linger: std::time::Duration,
 ) -> std::thread::JoinHandle<String> {
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
     const GIVE_UP: std::time::Duration = std::time::Duration::from_secs(30);
     let listener =
         std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
-    listener.set_nonblocking(true).unwrap();
     std::thread::spawn(move || {
-        let deadline = std::time::Instant::now() + GIVE_UP;
-        let stream = loop {
-            match listener.accept() {
-                Ok((stream, _)) => break stream,
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    if std::time::Instant::now() >= deadline {
-                        return String::new();
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(2));
-                }
-                Err(e) => panic!("the fake hub's accept failed: {e}"),
-            }
-        };
-        stream.set_nonblocking(false).unwrap();
+        // deep-hook's connection, or the test's wake once deep-hook has exited without one: connections queue in
+        // order, so deep-hook's comes first when it made one.
+        let (stream, _) = listener
+            .accept()
+            .unwrap_or_else(|e| panic!("the fake hub's accept failed: {e}"));
         stream.set_read_timeout(Some(GIVE_UP)).unwrap();
         let mut reader = BufReader::new(stream);
         let mut request = String::new();
@@ -72,9 +62,17 @@ fn fake_hub(
             return request;
         };
         let _ = reader.get_mut().write_all(answered.as_bytes());
-        std::thread::sleep(linger);
+        // Held open, as a hub holds it, until deep-hook hangs up: its exit closes its end.
+        let _ = reader.read_to_end(&mut Vec::new());
         request
     })
+}
+
+/// Ends a fake hub still waiting on its accept, once deep-hook has exited: a connection the test makes and drops at
+/// once, which that hub reads as one that hung up before its request. A hub that already has deep-hook's connection
+/// never accepts it, and one that has ended refuses it.
+fn wake(home: &std::path::Path) {
+    let _ = std::os::unix::net::UnixStream::connect(home.join(".deepbuild/hub.sock"));
 }
 
 /// A hub's acknowledgement of request `id` with no hold, and the empty reply.
@@ -119,12 +117,14 @@ fn decided(name: &str, rules: &str, event: &str, payload: &[u8], answering: bool
     for _ in 0..20 {
         let home = short_home(name);
         std::fs::write(home.join(".deepbuild/rules.json"), rules).unwrap();
-        let hub =
-            answering.then(|| fake_hub(&home, empty_reply, std::time::Duration::from_millis(50)));
+        let hub = answering.then(|| fake_hub(&home, empty_reply));
         let mut child = hook(&home, event);
         // deep-hook may decide before it has read all of a long payload: what it decided is the answer.
         let _ = std::io::Write::write_all(&mut child.stdin.take().unwrap(), payload);
         let out = child.wait_with_output().unwrap();
+        if answering {
+            wake(&home);
+        }
         let spooled =
             std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
         // A fake hub whose socket deep-hook hung up before it was set up panics (macOS refuses the timeout on it):

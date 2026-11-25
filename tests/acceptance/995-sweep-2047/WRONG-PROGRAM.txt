@@ -1,0 +1,146 @@
+# Wrong program 1, the twin keeps-unused-pictures: an APFS clone of the base clone (target/ included), its crates/deep-app/src/show.rs replaced by twins/keeps-unused-pictures/crates/deep-app/src/show.rs.
+## npx vitest run tests/acceptance/995-sweep-2047/panel.test.ts
+start Sun Nov 22 22:16:04 PST 2026 22:16  up 3 days,  2:42, 4 users, load averages: 76.31 72.03 73.63
+
+ RUN  v5.0.5 <c995>/twin-keeps
+
+stdout | tests/acceptance/995-sweep-2047/panel.test.ts > #995.1c8866b5 presenting 1,000 revisions, each with a new 1 MB picture, into one panel leaves the app's memory within 20 MB of its level after the first 10, and only the shown pictures held
+#995 memory after revision 10: 22200848 B; after revision 1000: 1065125112 B; grew 1042924264 B (limit 20000000 B); held 1001 (most 1001), shown 2; gauge CanvasPanel::pictures 1001 entries, 1049624576 B; shown pictures not held when presented again: 0
+test canvas_panel_holds_only_the_shown_revisions_pictures ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 62.91s
+thread 'canvas_panel_holds_only_the_shown_revisions_pictures' (135517426) panicked at crates/deep-app/tests/sweep_995_panel.rs:218:5:
+FAIL #995: the canvas panel (CanvasPanel) grew the app's memory by 1042924264 B from revision 10 (22200848 B) to revision 1000 (1065125112 B), over the 20000000 B limit; after revision 2 the canvas panel holds 3 pictures; its shown revisions use 2; after revision 3 the canvas panel holds 4 pictures; its shown revisions use 2; after revision 4 the canvas panel holds 5 pictures; its shown revisions use 2; the canvas panel holds 1001 pictures at the end; its 2 shown revisions use 2; the canvas panel's gauge CanvasPanel::pictures reads 1001 entries, 1049624576 B; the shown pictures are 2 entries, 2097152 B
+error: test failed, to rerun pass `-p deep-app --test sweep_995_panel`
+
+ ❯ tests/acceptance/995-sweep-2047/panel.test.ts (1 test | 1 failed) 332318ms
+   × #995.1c8866b5 presenting 1,000 revisions, each with a new 1 MB picture, into one panel leaves the app's memory within 20 MB of its level after the first 10, and only the shown pictures held 332255ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/995-sweep-2047/panel.test.ts > #995.1c8866b5 presenting 1,000 revisions, each with a new 1 MB picture, into one panel leaves the app's memory within 20 MB of its level after the first 10, and only the shown pictures held
+AssertionError: cargo exited 101
+#995 memory after revision 10: 22200848 B; after revision 1000: 1065125112 B; grew 1042924264 B (limit 20000000 B); held 1001 (most 1001), shown 2; gauge CanvasPanel::pictures 1001 entries, 1049624576 B; shown pictures not held when presented again: 0
+test canvas_panel_holds_only_the_shown_revisions_pictures ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 62.91s
+thread 'canvas_panel_holds_only_the_shown_revisions_pictures' (135517426) panicked at crates/deep-app/tests/sweep_995_panel.rs:218:5:
+FAIL #995: the canvas panel (CanvasPanel) grew the app's memory by 1042924264 B from revision 10 (22200848 B) to revision 1000 (1065125112 B), over the 20000000 B limit; after revision 2 the canvas panel holds 3 pictures; its shown revisions use 2; after revision 3 the canvas panel holds 4 pictures; its shown revisions use 2; after revision 4 the canvas panel holds 5 pictures; its shown revisions use 2; the canvas panel holds 1001 pictures at the end; its 2 shown revisions use 2; the canvas panel's gauge CanvasPanel::pictures reads 1001 entries, 1049624576 B; the shown pictures are 2 entries, 2097152 B
+error: test failed, to rerun pass `-p deep-app --test sweep_995_panel`: expected 101 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 101
+
+ ❯ tests/acceptance/995-sweep-2047/panel.test.ts:49:93
+     47|     // A failure counts only as the test's verdict, its one FAIL #995 …
+     48|     if (run.status !== 0 && !panic('FAIL #995:')) throw Error(`BLOCKED…
+     49|     expect(run.status, `cargo exited ${run.status}\n${[...readings, ..…
+       |                                                                                             ^
+     50|     expect(/^test result: ok\. 1 passed/m.test(out), tail).toBe(true);
+     51|   },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:16:08
+   Duration  332.64s (tests 100%)
+
+exit 1 after 336 s; 22:21  up 3 days,  2:48, 4 users, load averages: 70.44 71.68 73.13
+
+
+# Wrong program 2 (the review's, not a twin): CanvasPanel::show reads which pictures are used before the revision takes its place, so it lets go of the newest picture. With each PNG taken out of the evidence store once decoded, it can't get it back. Its change to the base's show.rs:
+427,429c427
+<         self.shown
+<             .retain(|s| s.rect != p.rect || s.session != p.session);
+<         self.shown.push(p);
+---
+>         // Review's wrong program: which pictures are used is read before the revision takes its place.
+445a444,446
+>         self.shown
+>             .retain(|s| s.rect != p.rect || s.session != p.session);
+>         self.shown.push(p);
+## npx vitest run tests/acceptance/995-sweep-2047/panel.test.ts
+start Sun Nov 22 22:16:04 PST 2026 22:16  up 3 days,  2:42, 4 users, load averages: 76.31 72.03 73.63
+
+ RUN  v5.0.5 <c995>/wrong-stale
+
+stdout | tests/acceptance/995-sweep-2047/panel.test.ts > #995.1c8866b5 presenting 1,000 revisions, each with a new 1 MB picture, into one panel leaves the app's memory within 20 MB of its level after the first 10, and only the shown pictures held
+#995 memory after revision 10: 11715064 B; after revision 1000: 11780600 B; grew 65536 B (limit 20000000 B); held 0 (most 0), shown 2; gauge CanvasPanel::pictures 0 entries, 0 B; shown pictures not held when presented again: 2000
+test canvas_panel_holds_only_the_shown_revisions_pictures ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 62.23s
+thread 'canvas_panel_holds_only_the_shown_revisions_pictures' (135520863) panicked at crates/deep-app/tests/sweep_995_panel.rs:218:5:
+FAIL #995: after revision 1 the canvas panel holds 0 pictures; its shown revisions use 2; after revision 1 the canvas panel doesn't hold the picture of shown revision 1 of redrawn: presented again, it decodes it (true) and holds 0 pictures, from 0; after revision 1 the canvas panel doesn't hold the picture of shown revision 1 of kept: presented again, it decodes it (true) and holds 0 pictures, from 0; after revision 2 the canvas panel holds 0 pictures; its shown revisions use 2; after revision 2 the canvas panel doesn't hold the picture of shown revision 2 of redrawn: presented again, it decodes it (true) and holds 0 pictures, from 0; after revision 3 the canvas panel holds 0 pictures; its shown revisions use 2; the canvas panel holds 0 pictures at the end; its 2 shown revisions use 2; the canvas panel's gauge CanvasPanel::pictures reads 0 entries, 0 B; the shown pictures are 2 entries, 2097152 B
+error: test failed, to rerun pass `-p deep-app --test sweep_995_panel`
+
+ ❯ tests/acceptance/995-sweep-2047/panel.test.ts (1 test | 1 failed) 333341ms
+   × #995.1c8866b5 presenting 1,000 revisions, each with a new 1 MB picture, into one panel leaves the app's memory within 20 MB of its level after the first 10, and only the shown pictures held 333261ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/995-sweep-2047/panel.test.ts > #995.1c8866b5 presenting 1,000 revisions, each with a new 1 MB picture, into one panel leaves the app's memory within 20 MB of its level after the first 10, and only the shown pictures held
+AssertionError: cargo exited 101
+#995 memory after revision 10: 11715064 B; after revision 1000: 11780600 B; grew 65536 B (limit 20000000 B); held 0 (most 0), shown 2; gauge CanvasPanel::pictures 0 entries, 0 B; shown pictures not held when presented again: 2000
+test canvas_panel_holds_only_the_shown_revisions_pictures ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 62.23s
+thread 'canvas_panel_holds_only_the_shown_revisions_pictures' (135520863) panicked at crates/deep-app/tests/sweep_995_panel.rs:218:5:
+FAIL #995: after revision 1 the canvas panel holds 0 pictures; its shown revisions use 2; after revision 1 the canvas panel doesn't hold the picture of shown revision 1 of redrawn: presented again, it decodes it (true) and holds 0 pictures, from 0; after revision 1 the canvas panel doesn't hold the picture of shown revision 1 of kept: presented again, it decodes it (true) and holds 0 pictures, from 0; after revision 2 the canvas panel holds 0 pictures; its shown revisions use 2; after revision 2 the canvas panel doesn't hold the picture of shown revision 2 of redrawn: presented again, it decodes it (true) and holds 0 pictures, from 0; after revision 3 the canvas panel holds 0 pictures; its shown revisions use 2; the canvas panel holds 0 pictures at the end; its 2 shown revisions use 2; the canvas panel's gauge CanvasPanel::pictures reads 0 entries, 0 B; the shown pictures are 2 entries, 2097152 B
+error: test failed, to rerun pass `-p deep-app --test sweep_995_panel`: expected 101 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 101
+
+ ❯ tests/acceptance/995-sweep-2047/panel.test.ts:49:93
+     47|     // A failure counts only as the test's verdict, its one FAIL #995 …
+     48|     if (run.status !== 0 && !panic('FAIL #995:')) throw Error(`BLOCKED…
+     49|     expect(run.status, `cargo exited ${run.status}\n${[...readings, ..…
+       |                                                                                             ^
+     50|     expect(/^test result: ok\. 1 passed/m.test(out), tail).toBe(true);
+     51|   },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:16:08
+   Duration  333.59s (tests 100%)
+
+exit 1 after 337 s; 22:21  up 3 days,  2:48, 4 users, load averages: 70.44 71.68 73.13
+
+
+# Not a run: wrong program 2 with a syntax error appended to show.rs, so deep-app doesn't build. It throws BLOCKED, never reaching an expect.
+start Sun Nov 22 22:22:04 PST 2026 22:22  up 3 days,  2:48, 4 users, load averages: 65.76 70.50 72.68
+
+ RUN  v5.0.5 <c995>/wrong-stale
+
+stdout | tests/acceptance/995-sweep-2047/panel.test.ts > #995.1c8866b5 presenting 1,000 revisions, each with a new 1 MB picture, into one panel leaves the app's memory within 20 MB of its level after the first 10, and only the shown pictures held
+error: this file contains an unclosed delimiter
+error: could not compile `deep-app` (lib) due to 1 previous error
+
+ ❯ tests/acceptance/995-sweep-2047/panel.test.ts (1 test | 1 failed) 3439ms
+   × #995.1c8866b5 presenting 1,000 revisions, each with a new 1 MB picture, into one panel leaves the app's memory within 20 MB of its level after the first 10, and only the shown pictures held 3231ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/995-sweep-2047/panel.test.ts > #995.1c8866b5 presenting 1,000 revisions, each with a new 1 MB picture, into one panel leaves the app's memory within 20 MB of its level after the first 10, and only the shown pictures held
+Error: BLOCKED: the sweep_995_panel test didn't build or run (cargo exited 101):
+error: this file contains an unclosed delimiter
+error: could not compile `deep-app` (lib) due to 1 previous error
+ ❯ tests/acceptance/995-sweep-2047/panel.test.ts:41:13
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:22:07
+   Duration  3.72s (tests 99%)
+
+exit 1 after 7 s; 22:22  up 3 days,  2:48, 4 users, load averages: 64.25 70.01 72.48

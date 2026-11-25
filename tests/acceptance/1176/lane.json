@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the screen and hub ports, as after.test.ts and before.test.ts run the #806 sessions suite, whose hubs, agent stand-ins and app replica would meet another suite's" }
