@@ -1,6 +1,6 @@
-== PR 3124 (#3114) e2e  HEAD ed41b5e0f  last code commit 8cba59661  2026-11-23 21:53:12
-== gate-runner reads:
-   184:  const [diff, others, tracked] = await Promise.all([paths(['diff', '-z', '--name-only', '--no-renames', base]), paths(['ls-files', '-z', '--ot
+== PR 3373 (#3114) e2e  HEAD a4adcce71  last code commit 61e6002a1  2026-11-24 16:54:30
+== claim-changes reads:
+   15:  const [diff, others, tracked] = await Promise.all([paths(['diff', '-z', '--name-only', '--no-renames', base]), paths(['ls-files', '-z', '--oth
 == suites: tests/acceptance/3114 (blind) + packages/hub/test/quoted-config-3114.test.ts
 ✓ packages/hub/test/quoted-config-3114.test.ts > a tracked runner config under a non-ASCII folder (#3114) > makes the setup file it names the 
 ✓ tests/acceptance/3114/quoted-paths.test.ts > #3114.1c2cb3dd a claim that edits an approved check's tracked test file test/é.test.js, which its run re
