@@ -1,8 +1,9 @@
 //! Shared documents' behavior past #96's acceptance tests (the issue's Patch and Writer connection
 //! fields): an undo puts back only the paths its patch wrote, the marks module checks a patch as
 //! it checks a whole revision, a result's issues stop at the read cap, a coalesce key keeps only
-//! the latest patch, the writer's other quotas, a view of the record is never patched, and a
-//! check's verdict counts an error admission carried (#371).
+//! the latest patch, the writer's other quotas, a view of the record is never patched, a
+//! check's verdict counts an error admission carried (#371), and a restart stops a document whose
+//! rebuilt revision hashes other than its record says (#1412).
 //! Each drives `deep-show run` as the acceptance tests do.
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -397,4 +398,129 @@ fn a_checks_verdict_counts_a_carried_error_that_admission_lets_through() {
     stored["items"]["you.dot"]["params"]["r"] = json!(2);
     let r = run_on(stored, vec![show], json!({}));
     assert_eq!(r[0]["result"], json!("PASS"), "{}", r[0]);
+}
+
+/// #1412: a restart whose rebuilt document hashes other than its event records stops the document
+/// at the revision before, with `revision_hash_mismatch`, and refuses its patches. The record's
+/// revision 2 is made to name revision 1's layer file: a file that matches its own name, so only
+/// the revision hash can tell.
+#[test]
+fn a_restart_whose_rebuilt_revision_hashes_otherwise_stops_the_document_before_it() {
+    let state = std::env::temp_dir().join(format!("deep-show-shared-state-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&state);
+    let extra = json!({"state": state});
+    let mv = |n: u32, base: u64, x: i64| {
+        you(
+            n,
+            base,
+            json!([{"op": "set", "id": "you.n1", "path": "items/you.n1/at/pos", "value": [x, 40, 0]}]),
+        )
+    };
+    let before = run(vec![mv(1, 0, 100), mv(2, 1, 200), read()], extra.clone());
+    assert_eq!(before[2]["rev"], json!(2), "{}", before[2]);
+    let record = state.join("record.jsonl");
+    let mut lines: Vec<Value> = std::fs::read_to_string(&record)
+        .expect("the record")
+        .lines()
+        .map(|l| serde_json::from_str(l).expect("a JSON line"))
+        .collect();
+    assert!(
+        lines.iter().all(|l| l["event"]["data"]["hash"].is_string()),
+        "each event carries its revision's hash"
+    );
+    lines[1]["event"]["evidence"] = lines[0]["event"]["evidence"].clone();
+    let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    std::fs::write(&record, text).expect("the record rewritten");
+    let after = run(vec![read(), mv(3, 1, 300)], extra);
+    let _ = std::fs::remove_dir_all(&state);
+    assert_eq!(after[0]["rev"], json!(1), "{}", after[0]);
+    assert_eq!(
+        after[0]["hash"], lines[0]["event"]["data"]["hash"],
+        "{}",
+        after[0]
+    );
+    assert!(
+        codes(&after[0]).contains(&"revision_hash_mismatch".to_string()),
+        "{}",
+        after[0]
+    );
+    assert_eq!(after[1]["outcome"], json!("refused"), "{}", after[1]);
+    assert!(
+        codes(&after[1]).contains(&"revision_hash_mismatch".to_string()),
+        "{}",
+        after[1]
+    );
+}
+
+/// #1412: a patch that changes only a field no layer file holds, a pack pin (#1961), restarts at
+/// its revision and hash, with the pin, and nothing stops.
+#[test]
+fn a_pack_pin_patch_restarts_whole() {
+    let state = std::env::temp_dir().join(format!("deep-show-shared-pin-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&state);
+    std::fs::create_dir_all(&state).expect("the state folder");
+    let extra = json!({"state": state});
+    let mut document = board();
+    document["packs"] = json!(["deepbuild/godot@1.0.0"]);
+    let pin = you(
+        1,
+        0,
+        json!([{"op": "set", "id": "godot", "path": "packs/godot", "value": "deepbuild/godot@1.1.0"}]),
+    );
+    let revisions = json!({"call": "revisions", "doc": DOC});
+    let before = run_on(document.clone(), vec![pin, revisions], extra.clone());
+    assert_eq!(before[0]["outcome"], json!("applied"), "{}", before[0]);
+    let hash = before[1]["revisions"][1]["hash"].clone();
+    assert!(hash.is_string(), "{}", before[1]);
+    let after = run_on(document, vec![read()], extra);
+    let _ = std::fs::remove_dir_all(&state);
+    assert_eq!(after[0]["rev"], json!(1), "{}", after[0]);
+    assert_eq!(after[0]["hash"], hash, "{}", after[0]);
+    assert_eq!(
+        after[0]["document"]["packs"],
+        json!(["deepbuild/godot@1.1.0"]),
+        "{}",
+        after[0]
+    );
+    assert!(
+        !codes(&after[0])
+            .iter()
+            .any(|c| c == "revision_hash_mismatch"),
+        "{}",
+        after[0]
+    );
+}
+
+/// #1412: deleting an entry the stored document holds in no writer's layer, a collection, restarts
+/// at its revision and hash without the entry, and nothing stops.
+#[test]
+fn deleting_an_entry_no_layer_holds_restarts_whole() {
+    let state = std::env::temp_dir().join(format!("deep-show-shared-entry-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&state);
+    std::fs::create_dir_all(&state).expect("the state folder");
+    let extra = json!({"state": state});
+    let mut document = board();
+    document["collections"] = json!({"kept": {"members": ["you.n1"]}});
+    let delete = you(1, 0, json!([{"op": "delete", "id": "kept"}]));
+    let revisions = json!({"call": "revisions", "doc": DOC});
+    let before = run_on(document.clone(), vec![delete, revisions], extra.clone());
+    assert_eq!(before[0]["outcome"], json!("applied"), "{}", before[0]);
+    let hash = before[1]["revisions"][1]["hash"].clone();
+    assert!(hash.is_string(), "{}", before[1]);
+    let after = run_on(document, vec![read()], extra);
+    let _ = std::fs::remove_dir_all(&state);
+    assert_eq!(after[0]["rev"], json!(1), "{}", after[0]);
+    assert_eq!(after[0]["hash"], hash, "{}", after[0]);
+    assert!(
+        after[0]["document"]["collections"].get("kept").is_none(),
+        "{}",
+        after[0]
+    );
+    assert!(
+        !codes(&after[0])
+            .iter()
+            .any(|c| c == "revision_hash_mismatch"),
+        "{}",
+        after[0]
+    );
 }

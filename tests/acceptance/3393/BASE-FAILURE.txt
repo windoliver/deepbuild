@@ -1,0 +1,69 @@
+# #3393 acceptance suite on the base: 12 of 17 tests fail, 5 hold. Two runs say so, and neither says all of it.
+#
+# Run 1, this job's, 2026-11-24 19:06 UTC, Node v24.22.2, vitest 5.0.5, macOS (darwin-arm64), one-minute load 195: the suite as
+# it was then, 16 tests, on the base commit as it was exported for this job (the export holds no git, so no hash is named).
+# 11 fail, 5 hold. The words below are its words. 15 of its 16 tests are in the suite now with the same bodies; node:test's
+# AC5 test has a shorter title now, written here as it was. The other, AC5's first Vitest test, was then split in two.
+#
+# Run 2, the repo's `before` lane, `node scripts/proof.mjs before` in its bay, 2026-11-24 19:37 to 20:02 UTC, Node v24.22.2,
+# vitest 5.0.5: the suite as it stands, 17 tests, on the merge base 35ce3cc66. This job was given its result, not its output.
+#   failed on the merge base at their assertion (12): AC1 both; AC2 Vitest's afterAll, AC2 node:test's after in a describe;
+#     AC3 all four; AC5 all four
+#   held on the merge base (5): AC2 node:test's after at the top of a file; AC4 both; AC6 both
+#
+# Run only by the lane, so with no words below: AC5's two Vitest tests as they stand, the ES module with the file that
+# requires its product in a CommonJS package, and the CommonJS file.
+# The type check, node node_modules/typescript/bin/tsc -p tests/acceptance/3393/tsconfig.json, exits 0 on the suite as it stands.
+# Trimmed: each failure's source excerpt, its second copy in the summary, and the part of each name before its AC.
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/3393 --testTimeout=900000 --reporter=verbose --reporter=json --outputFile.json=<tmp>/out.json
+(run 1, under a test grant; exit 1)
+
+ RUN  v5.0.5 <checkout>
+
+ × AC1 #3393.1677935b a step after vitest run, in the command or a package script, runs: one that exits 1 fails the run, one that exits 0 leaves its file and the run passed with exit 0 3109ms
+   → node_modules/.bin/vitest run && node e2e.mjs, a step that exits 1: {"outcome":"passed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[],"attempts":[{"test":"total is 12","outcome":"passed"}]}: expected { outcome: 'passed', stepRan: false } to deeply equal { outcome: 'failed', stepRan: true }
+ × AC1 #3393.1677935b a step after node --test, in the command or a package script, runs: one that exits 1 fails the run, one that exits 0 leaves its file and the run passed with exit 0 206ms
+   → node --test && node e2e.mjs, a step that exits 1: {"outcome":"passed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[],"attempts":[{"test":"total is 12","outcome":"passed"}]}: expected { outcome: 'passed', stepRan: false } to deeply equal { outcome: 'failed', stepRan: true }
+ × AC2 #3393.ec7f411b Vitest's afterAll in a describe: a failure carries its error and the line it threw at 556ms
+   → {"outcome":"passed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[],"attempts":[{"test":"cart > total is 12","outcome":"passed"}]}: expected 'passed' to be 'failed' // Object.is equality
+ × AC2 #3393.ec7f411b node:test's after in a describe: a failure carries its error and the line it threw at 249ms
+   → {"outcome":"passed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[],"attempts":[{"test":"total is 12","outcome":"passed"}]}: expected 'passed' to be 'failed' // Object.is equality
+ ✓ AC2 #3393.ec7f411b node:test's after at the top of a file: a failure carries its error and the line it threw at 246ms
+ × AC3 #3393.f37b061d a Vitest global teardown that throws 550ms
+   → {"outcome":"passed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[],"attempts":[{"test":"total is 12","outcome":"passed"}]}: expected { outcome: 'passed', exitsZero: false } to deeply equal { outcome: 'failed', exitsZero: false }
+ × AC3 #3393.f37b061d a Vitest config whose coverage provider sets a failing exit when its thresholds aren't met 620ms
+   → {"outcome":"passed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[],"attempts":[{"test":"total is 12","outcome":"passed"}]}: expected { outcome: 'passed', exitsZero: false } to deeply equal { outcome: 'failed', exitsZero: false }
+ × AC3 #3393.f37b061d node:test's own coverage threshold (--test-coverage-lines) 254ms
+   → {"outcome":"passed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[],"attempts":[{"test":"total is 12","outcome":"passed"}]}: expected { outcome: 'passed', exitsZero: false } to deeply equal { outcome: 'failed', exitsZero: false }
+ × AC3 #3393.f37b061d a node:test file whose process ends with status 1 after its tests passed, set as it exits or before 191ms
+   → {"outcome":"passed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[],"attempts":[{"test":"total is 12","outcome":"passed"}]}: expected { outcome: 'passed', exitsZero: false } to deeply equal { outcome: 'failed', exitsZero: false }
+ ✓ AC4 #3393.7873278a Vitest: the run fails, naming the test, and the step doesn't run 543ms
+ ✓ AC4 #3393.7873278a node:test: the run fails, naming the test, and the step doesn't run 216ms
+ × AC5 #3393.27163b72 Vitest, its files ES modules and CommonJS: passed, exit 0, no failure, and as many tests as the files hold 729ms
+   (as it was then: one project of three files, split in two since)
+   → {"outcome":"passed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[],"attempts":[{"test":"globals one","outcome":"passed"},{"test":"cjs one","outcome":"passed"},{"test":"esm one","outcome":"passed"},{"test":"esm two","outcome":"passed"}]}: expected [ 'passed', null, 1, [] ] to deeply equal [ 'passed', null, +0, [] ]
+ × AC5 #3393.27163b72 node:test, its files ES modules and CommonJS: passed, exit 0, no failure, and as many tests as the files hold 227ms
+   (now titled "node:test, an ES module and a CommonJS file: …")
+   → {"outcome":"passed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[],"attempts":[{"test":"cjs one","outcome":"passed"},{"test":"esm one","outcome":"passed"},{"test":"esm two","outcome":"passed"}]}: expected [ 'passed', null, 1, [] ] to deeply equal [ 'passed', null, +0, [] ]
+ × AC5 #3393.27163b72 Vitest files whose config stops at the first failure (bail: 1): every test of every file runs 618ms
+   → {"outcome":"failed","mask":null,"exit":{"code":1,"signal":null,"cause":"exit"},"failures":[["b one","test/b.test.js",2,"b one never ran: something other than its source or the check's command left it out"],["b two","test/b.test.js",3,"b two never ran: something other than its source or the check's command left it out"],["c one","test/c.test.js",2,"c one never ran: something other than its source or the check's command left it out"],["c two","test/c.test.js",3,"c two never ran: something other than its source or the check's command left it out"]],"attempts":[{"test":"a one","outcome":"passed"},{"test":"a two","outcome":"passed"}]}: expected [ 'failed', null, 1, …(1) ] to deeply equal [ 'passed', null, +0, [] ]
+ ✓ AC6 #3393.8dce2db5 Vitest: the run stays uncounted, naming the control and that the report can't record a failure, alone and with a step chained 1187ms
+ ✓ AC6 #3393.8dce2db5 node:test, an ES module and CommonJS: the run stays uncounted, naming the control and that the report can't record a failure, alone and with a step chained 1000ms
+
+ Where each failed, all AssertionError, by the helper that asserts:
+ AC1 both                          stepDecides exit.test.ts:84:123, called at 91:5 and 95:5
+ AC2 Vitest, node:test describe    hookFailed exit.test.ts:102:33, called at 112:5 and 117:5
+ AC3 all four                      toolFailed exit.test.ts:130:77, called at 134:5, 142:5, 168:5 and 176:7
+ AC5 (the three it then held)      clean; its lines have moved since
+
+ Test Files  1 failed (1)
+      Tests  11 failed | 5 passed (16)
+   Duration  17.39s (tests 97%, transform 3%, import 1%)
+
+The CommonJS forms of Vitest, read by this job on the base before run 1 in the same grant, one runCommandCheck each, no test of
+the suite:
+  a CommonJS file with Vitest's globals that doesn't name Vitest: passed, exit 0 (it gets no control)
+  the same file, 'vitest' in a comment: failed, exit 1, at the line of the appended control: "Vitest cannot be imported in a
+    CommonJS module using require()"
+  a file that imports Vitest and requires its product, in a CommonJS package: passed, exit 1 (its control's)

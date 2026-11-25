@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { readApprovals } from './proof-approvals.mjs';
+import { named, watchTree } from './proof-stop.mjs';
 
 const metrics = ['p50Ms', 'p95Ms', 'peakBytes'];
 // What a budget runs and builds is bare by this module's own setting, never by the machine's: an empty RUSTC_WRAPPER is no
@@ -213,7 +214,11 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
   const timing = join(directory, 'time');
   const counted = join(directory, 'counted');
   const build = follow ? counterBuild() : null;
+  // A captured run's stop reaches every process it started, a detached one too, and names them (#3433). The watcher
+  // lists the run's tree twice a second while it runs.
+  const watch = stream ? null : watchTree();
   try {
+    watch?.arm();
     if (build) writeFileSync(counted, '');
     const argv = build ? [build.run, follow && build.library ? build.library : '-', ...command] : command;
     const env = build ? { ...bare(), DEEP_COUNT_LOG: counted } : bare();
@@ -227,11 +232,13 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
     const elapsedMs = performance.now() - started;
     const loadEnd = loadavg()[0];
     if (result.error) {
+      const stopped = watch && result.pid > 0 ? watch.stop(result.pid) : null;
       try {
         if (!stream && result.pid > 0) process.kill(-result.pid, 'SIGKILL');
       } catch (error) {
         if (error.code !== 'ESRCH') throw error;
       }
+      if (stopped) result.error.message += `; ${named(stopped)}`;
       throw result.error;
     }
     const report = readFileSync(timing, 'utf8');
@@ -242,6 +249,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
       : !follow ? { instructions: own, uncounted: [], qos: null } : build && own !== null ? countChildren(readFileSync(counted, 'utf8'), command) : { instructions: null, uncounted: [], qos: null };
     return { elapsedMs, loadStart, loadEnd, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, qos, status: result.status, output: stream ? '' : result.stdout + result.stderr, stdout: stream ? '' : result.stdout };
   } finally {
+    watch?.disarm();
     rmSync(directory, { recursive: true, force: true });
   }
 }

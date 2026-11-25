@@ -3,9 +3,10 @@
 // `reference.files`, rows of scripts/fetch-lock.json read through scripts/fetch-lock.mjs, never committed) and its scope.
 // `names` holds one row per name the listed files export, `{name, state, target?, reason?}`, with `state` one of
 // mapped, refused or open; the mapped rows are the pack's aliases. `params` holds one row per constructor parameter of
-// each mapped name, or each property its constructor sets when it takes one `parameters` object, mapped when the
-// target recipe has an input of that name, unless its row refuses it (an input the recipe accepts and draws nothing
-// from: the pack check's field.effect refuses a mapped one). `totals` counts both tables by state.
+// each mapped name, or each property its constructor sets when it takes one `parameters` object (a field it keeps
+// behind an accessor by the accessor's name), mapped when the target recipe has an input of that name, unless its row
+// refuses it (an input the recipe accepts and draws nothing from: the pack check's field.effect refuses a mapped one).
+// `totals` counts both tables by state.
 //
 //   node scripts/census.mjs [--root <dir>]            rewrites each census from its reference, keeping states and reasons
 //   node scripts/census.mjs --check [--root <dir>]    FAIL names each difference either way; a missing reference is BLOCKED
@@ -93,7 +94,9 @@ function paramsOf(text, name) {
   if (plain.length !== 1 || plain[0] !== 'parameters') return plain;
   const body = inside(text, text.indexOf('{', ctor + 'constructor'.length + list.length)) ?? '';
   const set = [...body.matchAll(/\bthis\.([A-Za-z_$][\w$]*)\s*=[^=]/g)].map((m) => m[1]);
-  return [...new Set(set)].filter((p) => !/^is[A-Z]/.test(p) && p !== 'type' && p !== 'defines');
+  // A field kept behind an accessor (`this._clearcoat` under `get clearcoat()`) goes by the name its users write.
+  const named = (p) => (p.startsWith('_') && new RegExp(`\\bget\\s+${p.slice(1)}\\s*\\(`).test(text.slice(cls)) ? p.slice(1) : p);
+  return [...new Set(set.map(named))].filter((p) => !/^is[A-Z]/.test(p) && p !== 'type' && p !== 'defines');
 }
 
 /** A census's reference files from the cache, or the lines that say why they can't be read. */

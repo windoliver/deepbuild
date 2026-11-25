@@ -37,19 +37,19 @@ pub struct Shipped {
 }
 
 /// A graph under construction: steps named in the order they're added.
-struct G {
-    steps: Map<String, Value>,
+pub(crate) struct G {
+    pub(crate) steps: Map<String, Value>,
     n: usize,
     /// Starts every step ID, so a repeat's body never reuses its graph's IDs.
     prefix: &'static str,
 }
 
 impl G {
-    fn new() -> G {
+    pub(crate) fn new() -> G {
         G::named("s")
     }
 
-    fn named(prefix: &'static str) -> G {
+    pub(crate) fn named(prefix: &'static str) -> G {
         G {
             steps: Map::new(),
             n: 0,
@@ -58,7 +58,7 @@ impl G {
     }
 
     /// Adds a step; `args` are refs (strings) or literals.
-    fn s(&mut self, op: &str, args: Value) -> String {
+    pub(crate) fn s(&mut self, op: &str, args: Value) -> String {
         self.n += 1;
         let id = format!("{}{}_{}", self.prefix, self.n, op.trim_end_matches("@1"));
         self.steps
@@ -67,47 +67,47 @@ impl G {
     }
 
     /// Adds a step under a given ID (a repeat body's step that gives an accumulator's next value).
-    fn named_step(&mut self, id: &str, op: &str, args: Value) -> String {
+    pub(crate) fn named_step(&mut self, id: &str, op: &str, args: Value) -> String {
         self.steps
             .insert(id.into(), json!({"op": op, "args": args}));
         id.into()
     }
 
-    fn c(&mut self, value: Value) -> String {
+    pub(crate) fn c(&mut self, value: Value) -> String {
         self.s("const@1", json!({"value": value}))
     }
-    fn ty(&mut self, value: Value, ty: &str) -> String {
+    pub(crate) fn ty(&mut self, value: Value, ty: &str) -> String {
         self.s("const@1", json!({"value": value, "type": ty}))
     }
-    fn add(&mut self, a: &str, b: &str) -> String {
+    pub(crate) fn add(&mut self, a: &str, b: &str) -> String {
         self.s("add@1", json!({"a": a, "b": b}))
     }
-    fn sub(&mut self, a: &str, b: &str) -> String {
+    pub(crate) fn sub(&mut self, a: &str, b: &str) -> String {
         self.s("sub@1", json!({"a": a, "b": b}))
     }
-    fn mul(&mut self, a: &str, b: &str) -> String {
+    pub(crate) fn mul(&mut self, a: &str, b: &str) -> String {
         self.s("mul@1", json!({"a": a, "b": b}))
     }
-    fn mulk(&mut self, a: &str, k: f64) -> String {
+    pub(crate) fn mulk(&mut self, a: &str, k: f64) -> String {
         self.s("mul@1", json!({"a": a, "b": k}))
     }
-    fn div(&mut self, a: &str, b: &str) -> String {
+    pub(crate) fn div(&mut self, a: &str, b: &str) -> String {
         self.s("div@1", json!({"a": a, "b": b}))
     }
-    fn split(&mut self, x: &str, pick: &str) -> String {
+    pub(crate) fn split(&mut self, x: &str, pick: &str) -> String {
         self.s("split@1", json!({"x": x, "pick": pick}))
     }
-    fn convert(&mut self, x: &str, to: &str) -> String {
+    pub(crate) fn convert(&mut self, x: &str, to: &str) -> String {
         self.s("convert@1", json!({"x": x, "to": to}))
     }
-    fn sample(&mut self, tex: &str, uv: &str) -> String {
+    pub(crate) fn sample(&mut self, tex: &str, uv: &str) -> String {
         self.s("sample@1", json!({"tex": tex, "uv": uv, "lod": 0.0}))
     }
-    fn select(&mut self, f: &str, t: &str, cond: &str) -> String {
+    pub(crate) fn select(&mut self, f: &str, t: &str, cond: &str) -> String {
         self.s("select@1", json!({"f": f, "t": t, "cond": cond}))
     }
 
-    fn done(self) -> Value {
+    pub(crate) fn done(self) -> Value {
         Value::Object(self.steps)
     }
 }
@@ -728,7 +728,7 @@ pub fn particles() -> Value {
     })
 }
 
-fn set_when(g: &mut G, step: &str, cond: &str) {
+pub(crate) fn set_when(g: &mut G, step: &str, cond: &str) {
     if let Some(s) = g.steps.get_mut(step) {
         s["when"] = json!(cond);
     }
