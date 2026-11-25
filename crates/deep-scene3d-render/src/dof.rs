@@ -28,6 +28,7 @@ pub struct Planted {
     pub linear_coc: bool,
 }
 
+deep_gpu::paired! { params: "dof.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Params {
@@ -37,6 +38,7 @@ struct Params {
     band_at: [f32; 4],
     band: [f32; 4],
     bokeh: [f32; 4],
+}
 }
 
 /// The frame-sized targets and the bind groups over them, for one linear and depth target.

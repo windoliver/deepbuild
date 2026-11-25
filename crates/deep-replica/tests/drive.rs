@@ -363,3 +363,49 @@ fn an_ask_that_comes_due_with_notifications_off_is_said_in_the_window() {
         assert_eq!(its.count(), posts, "notifications {setting}: {posted:?}");
     }
 }
+
+/// The press that brings the window back from another app is refused (#1843), so Send is often the first thing pressed
+/// there. A resize re-arms the card too, and Send is pressed at once.
+#[test]
+fn a_send_the_card_refused_leaves_your_words_in_the_box() {
+    const RECORD: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/acceptance/1462/fixtures/record.events.jsonl"
+    );
+    let (mut drive, _) = Drive::launch(
+        "refused-send",
+        json!({"from": "fixture", "fixture": RECORD, "center": "deepbuild/needs-you"}),
+    );
+    let mut does = |call: Value| {
+        let reply = drive.call(call);
+        assert_eq!(reply["ok"], true, "{reply}");
+        reply
+    };
+    does(json!({"call": "open", "open": {"address": "ask/01KB1462AK0000000000000002"}}));
+    does(
+        json!({"call": "wait_for", "locator": {"id": "question-card"},
+        "wait_for": {"state": "value", "value": "armed"}, "timeout": 5000}),
+    );
+    does(json!({"call": "act", "act": {"kind": "press", "keys": "cmd-n"}}));
+    does(json!({"call": "act", "act": {"kind": "type", "text": "plain files"}}));
+    does(json!({"call": "resize", "resize": {"size": [1200, 800]}}));
+    does(json!({"call": "act", "locator": {"id": "box-send"}, "act": {"kind": "click"}}));
+    let seen = does(json!({"call": "see"}));
+    let value = |id: &str| value_of(&seen["snapshot"]["tree"], id);
+    assert_eq!(
+        (value("question-card"), value("box-draft")),
+        (json!("presented"), json!("plain files"))
+    );
+}
+
+/// The value of the node whose id is `id`.
+fn value_of(node: &Value, id: &str) -> Value {
+    if node["id"] == id {
+        return node["value"].clone();
+    }
+    let children = node["children"].as_array().into_iter().flatten();
+    children
+        .map(|child| value_of(child, id))
+        .find(|value| !value.is_null())
+        .unwrap_or(Value::Null)
+}

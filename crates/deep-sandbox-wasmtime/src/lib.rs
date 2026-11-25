@@ -173,6 +173,23 @@ pub struct Runner {
     faults: Faults,
 }
 
+/// What a `Program` is made from: its bytes, its memory's pages, its two faults and `written`.
+#[cfg(not(target_arch = "wasm32"))]
+type ProgramKey = (Vec<u8>, Option<u64>, bool, bool, bool);
+
+#[cfg(not(target_arch = "wasm32"))]
+thread_local! {
+    /// #1172: the programs `Runner::sized` compiled on this thread. Per thread, because a
+    /// runner's deadline interrupts by its engine's epoch: an engine shared across threads would
+    /// let one call's deadline stop another's.
+    static PROGRAMS: std::cell::RefCell<std::collections::HashMap<ProgramKey, Program>> =
+        Default::default();
+}
+
+/// The most programs a thread keeps compiled; past it, the thread starts over.
+#[cfg(not(target_arch = "wasm32"))]
+const PROGRAMS_MAX: usize = 256;
+
 #[cfg(not(target_arch = "wasm32"))]
 impl Runner {
     /// `written`: a trap names the offset in the program as written; else in the rewritten one.
@@ -188,7 +205,28 @@ impl Runner {
         faults: Faults,
         written: bool,
     ) -> Result<Runner, String> {
-        Program::new(bytes, pages, faults, written)?.runner()
+        // #1172: a pack's check makes runners of one program many times, and a fresh canvas
+        // core's first reply paid for compiling it each time; this thread's earlier compile of the
+        // same program is reused, and the runner is a fresh instance of it all the same.
+        let key: ProgramKey = (
+            bytes.to_vec(),
+            pages,
+            faults.wasmtime_fuel,
+            faults.every_trap_unreachable,
+            written,
+        );
+        if let Some(p) = PROGRAMS.with(|c| c.borrow().get(&key).cloned()) {
+            return p.runner();
+        }
+        let program = Program::new(bytes, pages, faults, written)?;
+        PROGRAMS.with(|c| {
+            let mut c = c.borrow_mut();
+            if c.len() >= PROGRAMS_MAX {
+                c.clear();
+            }
+            c.insert(key, program.clone());
+        });
+        program.runner()
     }
 
     /// #2662's planted wrong engine: a second runner on this one's store and instance, so a call

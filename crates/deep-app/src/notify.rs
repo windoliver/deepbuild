@@ -184,8 +184,6 @@ pub struct Notifier {
     /// The work runs whose end was told, by their approval's ask, and the log position last read for one (#1348).
     told: HashSet<String>,
     told_at: Option<u64>,
-    /// The asks this notifier saw opened, which notify once they show (#1345).
-    opened: HashSet<String>,
     /// The asks that came due and posted nothing, for the session you're looking at or with notifications off, since
     /// they were last taken: what the window says instead (#3232).
     unposted: Vec<String>,
@@ -208,7 +206,6 @@ impl Notifier {
             logged: 0,
             told: HashSet::new(),
             told_at: None,
-            opened: HashSet::new(),
             unposted: Vec::new(),
             said: HashSet::new(),
         }
@@ -258,13 +255,11 @@ impl Notifier {
     /// The app starts on the record's `view` with what Notification Center still holds from it: nothing already
     /// in the record notifies, since you could have seen it before.
     pub fn start(&mut self, view: &View, delivered: Vec<Notification>) {
-        self.read.extend(view.unseen.iter().filter_map(opening));
-        self.read.extend(
-            view.unseen
-                .iter()
-                .filter(|event| showing(event).is_some())
-                .filter_map(|event| event["id"].as_str().map(str::to_owned)),
-        );
+        self.read
+            .extend(view.unseen.iter().flat_map(openings).map(|(key, _)| key));
+        // And nothing the hub's list already holds.
+        self.read
+            .extend(view.table().list().iter().filter_map(|row| listing(row)));
         self.delivered = delivered;
         // A run that had ended already was told, or could have been seen.
         self.told
@@ -274,34 +269,30 @@ impl Notifier {
 
     /// An event reached the app at `now`.
     pub fn saw(&mut self, event: &Value, now: u64) {
-        if let Some(id) = opening(event) {
-            if self.read.insert(id) {
-                let handle = match event["kind"].as_str() {
-                    Some("ask.created") => {
-                        self.opened.insert(states::handle(event));
-                        states::handle(event)
-                    }
-                    _ => event["subject"].as_str().unwrap_or_default().to_owned(),
-                };
-                if !self.waiting.iter().any(|(waiting, _)| *waiting == handle) {
+        for (key, handle) in openings(event) {
+            if self.read.insert(key) && !self.waiting.iter().any(|(waiting, _)| *waiting == handle)
+            {
+                self.waiting
+                    .push((handle, now + self.after.as_millis() as u64));
+            }
+        }
+        // The hub's list takes an ask in a moment after the core shows it (#1463), and only a listed ask is in sight:
+        // being listed opens it too, so one that came due in between still notifies; leaving the list lets its next
+        // listing, when its Later ends, open it again.
+        if event["kind"] == "row.set" {
+            if let Some(key) = listing(&event["data"]) {
+                let handle = key["row ".len()..].to_owned(); // copy-exception: a record key read back, never drawn
+                if event["data"]["listed"] != true {
+                    self.read.remove(&key);
+                } else if self.read.insert(key)
+                    && !self.waiting.iter().any(|(waiting, _)| *waiting == handle)
+                {
                     self.waiting
                         .push((handle, now + self.after.as_millis() as u64));
                 }
             }
-        } else if let Some(asks) = showing(event) {
-            // The core's showing, at your visit or at once: each ask it shows comes due a moment after (#1345).
-            if self
-                .read
-                .insert(event["id"].as_str().unwrap_or_default().to_owned())
-            {
-                for handle in asks {
-                    if !self.waiting.iter().any(|(waiting, _)| *waiting == handle) {
-                        self.waiting
-                            .push((handle, now + self.after.as_millis() as u64));
-                    }
-                }
-            }
-        } else if event["kind"] == "notice.sent" {
+        }
+        if event["kind"] == "notice.sent" {
             self.notices
                 .push(event["session"].as_str().unwrap_or_default().to_owned());
         }
@@ -398,11 +389,20 @@ impl Notifier {
                 sound: None,
             });
         }
-        // The open asks are read only for a tick with an ask come due.
+        // The open asks are read only for a tick with an ask come due; one waiting for its batch notifies nothing (#22).
         let open = if due.is_empty() {
             Vec::new()
         } else {
-            table.open_asks(None)
+            let shown = view.needs_you();
+            table
+                .open_asks(None)
+                .into_iter()
+                .filter(|ask| {
+                    shown
+                        .iter()
+                        .any(|row| row["ask"] == states::handle(ask).as_str())
+                })
+                .collect()
         };
         // Asks shown together in one showing are one card, so they post one notification (#1345): the batch's, under
         // its first ask, saying how many it holds.
@@ -414,11 +414,6 @@ impl Notifier {
             let Some(ask) = open.iter().find(|ask| states::handle(ask) == handle) else {
                 continue;
             };
-            // An ask waiting for your next visit notifies once that visit shows it (#1345). A record that holds no
-            // showing, as a fixture from before the core recorded them, shows each ask as it opens.
-            if self.opened.contains(&handle) && table.shown(&handle) == Some(false) {
-                continue;
-            }
             let session = ask["session"].as_str().unwrap_or_default();
             if looking_at == Some(session) {
                 self.unposted.push(handle);
@@ -486,29 +481,57 @@ impl Notifier {
 
 /// Whether the notifier reads the event: it opens an ask, gives it a new deadline, shows asks or sends a notice.
 pub fn reads(event: &Value) -> bool {
-    opening(event).is_some() || showing(event).is_some() || event["kind"] == "notice.sent"
+    !openings(event).is_empty()
+        || event["kind"] == "notice.sent"
+        || (event["kind"] == "row.set" && listing(&event["data"]).is_some())
 }
 
-/// The asks a showing of the core's holds (#1345): `ask.batched`, at a visit or at once.
-pub(crate) fn showing(event: &Value) -> Option<Vec<String>> {
-    (event["kind"] == "ask.batched" && event["writer"] == "core").then(|| {
-        event["data"]["asks"]
+/// The key a list row of an ask is read under, `row ask:<id>`; `None` for a session's or a job's row.
+fn listing(row: &Value) -> Option<String> {
+    row["id"]
+        .as_str()
+        .filter(|id| id.starts_with("ask:"))
+        .map(|id| format!("row {id}")) // copy-exception: a record key, never drawn
+}
+
+/// Each ask the event puts in front of you, keyed by the event and the ask: the core showing it, at its batch or at
+/// once (#22), the core's undo of its default, or the core moving its deadline (#908), so the notification names the
+/// time its default applies. An ask being raised is one too, for a record nothing shows its asks in: it notifies only
+/// if the ask is in sight when it comes due, and one waiting for its batch isn't.
+fn openings(event: &Value) -> Vec<(String, String)> {
+    let id = event["id"].as_str().unwrap_or_default();
+    if event["kind"] == "ask.created" {
+        return vec![(id.to_owned(), states::handle(event))];
+    }
+    if event["writer"] != "core" {
+        return Vec::new();
+    }
+    if event["kind"] == "ask.batched" {
+        return event["data"]["asks"]
             .as_array()
             .into_iter()
             .flatten()
-            .filter_map(|item| item["ask"].as_str().map(str::to_owned))
-            .collect()
-    })
+            .filter_map(|item| item["ask"].as_str())
+            .map(|ask| (format!("{id} {ask}"), ask.to_owned()))
+            .collect();
+    }
+    let reopens = (event["kind"] == "default.undone" || event["kind"] == "deadline.moved")
+        && event["data"]["deadline"].is_u64();
+    match event["subject"].as_str() {
+        Some(ask) if reopens => vec![(id.to_owned(), ask.to_owned())],
+        _ => Vec::new(),
+    }
 }
 
-/// The id of the event, if it opens an ask or gives it a new deadline: its creation, the core's undo of its
-/// default, or the core moving its deadline (#908), so the notification names the time its default applies.
-fn opening(event: &Value) -> Option<String> {
-    let opens = event["kind"] == "ask.created"
-        || ((event["kind"] == "default.undone" || event["kind"] == "deadline.moved")
-            && event["writer"] == "core"
-            && event["data"]["deadline"].is_u64());
-    opens.then(|| event["id"].as_str().unwrap_or_default().to_owned())
+/// The asks the event may bring in sight, as the notifier reads it: each it opens, and one the hub's list takes in.
+/// The window says one of them where its notification would post nothing (#3232).
+pub(crate) fn opens(event: &Value) -> Vec<String> {
+    let row = &event["data"];
+    let listed = (event["kind"] == "row.set" && row["listed"] == true && listing(row).is_some())
+        .then(|| row["id"].as_str())
+        .flatten();
+    let opened = openings(event).into_iter().map(|(_, handle)| handle);
+    opened.chain(listed.map(str::to_owned)).collect()
 }
 
 /// The notification a session's state posts: DeepBuild and the session's task, then its mark and its state's words.
@@ -717,14 +740,16 @@ mod tests {
         let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
             "question": "Push?", "default": "no", "deadline": raised + 3_600_000,
             "options": [{"id": "no", "label": "No"}]}});
+        let shown = json!({"kind": "ask.batched", "id": "b1", "writer": "core", "data": {
+            "batch": "now:1970-01-01T00:00:01.000Z", "asks": [{"ask": "ask:a1"}]}});
         let mut notifier = Notifier::new(Duration::from_secs(1));
-        notifier.start(&view(std::slice::from_ref(&ask)), Vec::new());
+        notifier.start(&view(&[ask.clone(), shown.clone()]), Vec::new());
         let woke = raised + 9 * 3_600_000;
         let moved = woke + 3_600_000;
         let event = json!({"kind": "deadline.moved", "id": "m1", "writer": "core", "subject": "ask:a1",
                            "data": {"span": moved - (raised + 3_600_000), "deadline": moved, "because": "notice"}});
         notifier.saw(&event, woke);
-        let posted = notifier.due(&view(&[ask, event]), woke + 1_000, None, false);
+        let posted = notifier.due(&view(&[ask, shown, event]), woke + 1_000, None, false);
         let want = Local
             .timestamp_millis_opt(moved as i64)
             .unwrap()
@@ -737,5 +762,78 @@ mod tests {
             "{}",
             posted[0].text
         );
+    }
+
+    #[test]
+    fn an_ask_notifies_when_the_core_shows_it_not_when_it_is_raised() {
+        // #22: an ask waits for its batch, and the notification interrupts you only once it shows.
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {
+            "question": "Push?", "default": "no", "deadline": 99_000_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        // The record is a batching core's: an earlier ask was shown and answered.
+        let before = [
+            json!({"kind": "ask.created", "id": "a0", "session": "s1", "writer": "mcp:agent", "data": {"question": "Lint?"}}),
+            json!({"kind": "ask.batched", "id": "b0", "writer": "core", "data": {"asks": [{"ask": "ask:a0"}]}}),
+            json!({"kind": "ask.answered", "id": "c0", "writer": "core", "subject": "ask:a0", "data": {}}),
+        ];
+        let with = |events: &[Value]| view(&[&before[..], events].concat());
+        let mut notifier = Notifier::new(Duration::from_secs(1));
+        notifier.start(&View::default(), Vec::new());
+        notifier.saw(&ask, 1_000);
+        let early = notifier.due(&with(std::slice::from_ref(&ask)), 5_000, None, false);
+        assert_eq!(early.len(), 0, "notified before its batch: {early:?}");
+
+        let shown = json!({"kind": "ask.batched", "id": "b1", "writer": "core", "data": {
+            "batch": "batch:1970-01-01T08:00:00.000Z", "asks": [{"ask": "ask:a1"}]}});
+        notifier.saw(&shown, 6_000);
+        let posted = notifier.due(&with(&[ask, shown]), 8_000, None, false);
+        let asks: Vec<Option<&str>> = posted.iter().map(|n| n.ask.as_deref()).collect();
+        assert_eq!(asks, [Some("ask:a1")], "{posted:?}");
+    }
+
+    #[test]
+    fn an_ask_notifies_once_the_hubs_list_holds_it_though_it_came_due_before() {
+        // The hub lists an ask a moment after the core shows it (#1463): one that came due in between still notifies.
+        let row = |event: &str, id: &str| {
+            json!({"kind": "row.set", "id": event, "writer": "core",
+            "data": {"id": id, "listed": true, "order": event, "session": "s1"}})
+        };
+        let (session, listed) = (row("r0", "session:s1"), row("r1", "ask:a1"));
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {
+            "question": "Push?", "default": "no", "deadline": 99_000_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        let shown = json!({"kind": "ask.batched", "id": "b1", "writer": "core", "data": {"asks": [{"ask": "ask:a1"}]}});
+        let asks = |posted: &[Notification]| -> Vec<String> {
+            posted.iter().filter_map(|n| n.ask.clone()).collect()
+        };
+        let mut notifier = Notifier::new(Duration::from_secs(1));
+        notifier.start(&view(std::slice::from_ref(&session)), Vec::new());
+        notifier.saw(&ask, 1_000);
+        notifier.saw(&shown, 1_500);
+        let before = view(&[session.clone(), ask.clone(), shown.clone()]);
+        let early = notifier.due(&before, 2_100, None, false);
+        assert_eq!(
+            asks(&early),
+            Vec::<String>::new(),
+            "before the hub listed it"
+        );
+
+        notifier.saw(&listed, 2_300);
+        let posted = notifier.due(&view(&[session, ask, shown, listed]), 3_400, None, false);
+        assert_eq!(asks(&posted), ["ask:a1"], "{posted:?}");
+    }
+
+    #[test]
+    fn an_ask_in_a_record_with_no_batches_notifies_when_it_is_raised() {
+        // A fixture's record, or an older hub's: nothing shows its asks, the list draws them at once, and so each notifies.
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {
+            "question": "Push?", "default": "no", "deadline": 99_000_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        let mut notifier = Notifier::new(Duration::from_secs(1));
+        notifier.start(&View::default(), Vec::new());
+        notifier.saw(&ask, 1_000);
+        let posted = notifier.due(&view(std::slice::from_ref(&ask)), 5_000, None, false);
+        let asks: Vec<Option<&str>> = posted.iter().map(|n| n.ask.as_deref()).collect();
+        assert_eq!(asks, [Some("ask:a1")], "{posted:?}");
     }
 }

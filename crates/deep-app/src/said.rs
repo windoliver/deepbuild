@@ -162,11 +162,7 @@ fn put(
 
 /// Says `change` at `now`. #3232's planted window joins no two changes.
 fn say(change: Change, alone: bool, now: u64, cx: &mut App) {
-    // An ask said as it opens is counted before the hub's row for it arrives.
-    let asks = record::with_view(|view| {
-        let table = view.table();
-        states::count(&table).max(table.open_asks(None).len())
-    });
+    let asks = record::with_view(|view| states::count(&view.table()));
     let alone = alone || planted("announces-each-change");
     let said = cx.default_global::<Said>();
     put(
@@ -321,9 +317,8 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
         for event in new {
             let core = event["writer"] == "core";
             let subject = event["subject"].as_str().unwrap_or_default();
+            shown.extend(crate::notify::opens(event));
             match event["kind"].as_str().unwrap_or_default() {
-                "ask.created" => shown.push(states::handle(event)),
-                "ask.batched" => shown.extend(crate::notify::showing(event).unwrap_or_default()),
                 "ask.answered" if core && on_page(subject) => {
                     next.answered = Some(subject.to_owned())
                 }
@@ -345,19 +340,19 @@ pub(crate) fn tick(now: u64, key: bool, cx: &mut App) {
                 _ => {}
             }
         }
-        // An ask is said where its notification would post: once it opened and a showing holds it, or the record
-        // holds no showing at all (#1345). One waiting for your next visit is said when that visit shows it.
-        let open = if shown.is_empty() {
-            Vec::new()
+        // An ask is said where its notification would post: once an event opened or listed it and it is in sight
+        // (#22). One waiting for its batch is said when the core shows it, and the hub's list takes it in.
+        let (open, sight) = if shown.is_empty() {
+            (Vec::new(), Vec::new())
         } else {
-            table.open_asks(None)
+            (table.open_asks(None), view.needs_you())
         };
         for (at, handle) in shown.iter().enumerate() {
             let ask = open.iter().find(|ask| states::handle(ask) == *handle);
             let Some(ask) = ask.filter(|_| !shown[..at].contains(handle)) else {
                 continue;
             };
-            if table.shown(handle) == Some(false) {
+            if !sight.iter().any(|row| row["ask"] == handle.as_str()) {
                 continue;
             }
             let looking = key && session.is_some_and(|s| ask["session"] == s.id.as_str());

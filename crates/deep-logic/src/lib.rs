@@ -994,7 +994,7 @@ impl Logic {
                     .map(|e| {
                         let (kind, from, offset) = match &e.read {
                             piece::Read::Control => ("control", Value::Null, 0),
-                            piece::Read::Reading { .. } | piece::Read::World | piece::Read::Draws => unreachable!("refused above"),
+                            piece::Read::Reading { .. } | piece::Read::World | piece::Read::Count | piece::Read::Centre | piece::Read::Draws => unreachable!("refused above"),
                             piece::Read::Array { item, offset } => ("array", json!(item), *offset),
                             piece::Read::Seed => ("seed", Value::Null, 0),
                             piece::Read::Carry => ("carry", Value::Null, 0),

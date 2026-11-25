@@ -1,0 +1,106 @@
+
+ RUN  v5.0.5 <the base checkout, 2c79d71eb>
+
+ ❯ tests/acceptance/999/cut.test.ts (2 tests | 2 failed) 5162ms
+   ❯ #999.1bb7a56d A Claude Code session on a test host records its tool calls and claim into your hub, shows under the host's name, and its claim is gated by a check run on the host; with the link cut for 5 minutes mid-session, its events arrive once and in order after the link returns, and its row reads unknown meanwhile (2)
+     × with the link cut mid-session and five minutes passing on the hub's clock, the session's hooks are let through on the host, its row reads quiet with the link down and never finished, and after the link returns its events arrive once and in order 3242ms
+     × a hook request deep-hook spooled on the host, handed to the hub on this Mac's own socket, is not recorded under the host's name 1838ms
+ ❯ tests/acceptance/999/session.test.ts (1 test | 1 failed) 1389ms
+   ❯ #999.1bb7a56d A Claude Code session on a test host records its tool calls and claim into your hub, shows under the host's name, and its claim is gated by a check run on the host; with the link cut for 5 minutes mid-session, its events arrive once and in order after the link returns, and its row reads unknown meanwhile (1)
+     × a session on the host records its tool calls and claims into your hub under the host's name, shows under it in deep status, and each claim is judged by the check run on the host 1333ms
+ ❯ tests/acceptance/999/skew.test.ts (2 tests | 2 failed) 3460ms
+   ❯ #999.4257f07c A host whose deep-hook is a version older than the hub's, within the contract version, keeps recording; one outside it says so on its row and in `deep doctor`, naming both versions (2)
+     × after the hub is updated one contract minor ahead, the session on the host keeps recording under the host's name 1881ms
+     × after the hub is updated one contract major ahead, a row of deep status and an item of deep doctor say the host's deep-hook is outside the contract, naming both versions 1502ms
+ ❯ tests/acceptance/999/listeners.test.ts (1 test | 1 failed) 1439ms
+   ❯ #999.9065ba1c Nothing on the host listens on a network port, by its listeners before and after (1)
+     × the host has no listener after `deep host add`, nor after a session whose hooks reached the hub, that it didn't have before 1380ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/999/cut.test.ts > #999.1bb7a56d A Claude Code session on a test host records its tool calls and claim into your hub, shows under the host's name, and its claim is gated by a check run on the host; with the link cut for 5 minutes mid-session, its events arrive once and in order after the link returns, and its row reads unknown meanwhile > with the link cut mid-session and five minutes passing on the hub's clock, the session's hooks are let through on the host, its row reads quiet with the link down and never finished, and after the link returns its events arrive once and in order
+Error: `deep host add boxb2182b` must install deep-hook and Claude Code's hooks on the host and end with exit 0: exit 2, stdout "", stderr "Usage: deep host run <ask>\n       deep host changes <host>\n       deep host remove <host>\n       deep host list\n       deep host facts <host> [--refresh]\n"
+ ❯ hostAdd tests/acceptance/999/helpers.ts:517:29
+    515|     ran = await deep(w, ['host', 'add', w.alias], COMMAND_MS);
+    516|   }
+    517|   if (ran.code !== 0) throw Error(`\`deep host add ${w.alias}\` must i…
+       |                             ^
+    518| }
+    519| /** The rows `deep status --json` prints, as you. */
+ ❯ tests/acceptance/999/cut.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/acceptance/999/cut.test.ts > #999.1bb7a56d A Claude Code session on a test host records its tool calls and claim into your hub, shows under the host's name, and its claim is gated by a check run on the host; with the link cut for 5 minutes mid-session, its events arrive once and in order after the link returns, and its row reads unknown meanwhile > a hook request deep-hook spooled on the host, handed to the hub on this Mac's own socket, is not recorded under the host's name
+Error: `deep host add boxbdaeff` must install deep-hook and Claude Code's hooks on the host and end with exit 0: exit 2, stdout "", stderr "Usage: deep host run <ask>\n       deep host changes <host>\n       deep host remove <host>\n       deep host list\n       deep host facts <host> [--refresh]\n"
+ ❯ hostAdd tests/acceptance/999/helpers.ts:517:29
+    515|     ran = await deep(w, ['host', 'add', w.alias], COMMAND_MS);
+    516|   }
+    517|   if (ran.code !== 0) throw Error(`\`deep host add ${w.alias}\` must i…
+       |                             ^
+    518| }
+    519| /** The rows `deep status --json` prints, as you. */
+ ❯ tests/acceptance/999/cut.test.ts:128:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/acceptance/999/listeners.test.ts > #999.9065ba1c Nothing on the host listens on a network port, by its listeners before and after > the host has no listener after `deep host add`, nor after a session whose hooks reached the hub, that it didn't have before
+Error: `deep host add boxa77a90` must install deep-hook and Claude Code's hooks on the host and end with exit 0: exit 2, stdout "", stderr "Usage: deep host run <ask>\n       deep host changes <host>\n       deep host remove <host>\n       deep host list\n       deep host facts <host> [--refresh]\n"
+ ❯ hostAdd tests/acceptance/999/helpers.ts:517:29
+    515|     ran = await deep(w, ['host', 'add', w.alias], COMMAND_MS);
+    516|   }
+    517|   if (ran.code !== 0) throw Error(`\`deep host add ${w.alias}\` must i…
+       |                             ^
+    518| }
+    519| /** The rows `deep status --json` prints, as you. */
+ ❯ tests/acceptance/999/listeners.test.ts:17:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/999/session.test.ts > #999.1bb7a56d A Claude Code session on a test host records its tool calls and claim into your hub, shows under the host's name, and its claim is gated by a check run on the host; with the link cut for 5 minutes mid-session, its events arrive once and in order after the link returns, and its row reads unknown meanwhile > a session on the host records its tool calls and claims into your hub under the host's name, shows under it in deep status, and each claim is judged by the check run on the host
+Error: `deep host add boxf1c81c` must install deep-hook and Claude Code's hooks on the host and end with exit 0: exit 2, stdout "", stderr "Usage: deep host run <ask>\n       deep host changes <host>\n       deep host remove <host>\n       deep host list\n       deep host facts <host> [--refresh]\n"
+ ❯ hostAdd tests/acceptance/999/helpers.ts:517:29
+    515|     ran = await deep(w, ['host', 'add', w.alias], COMMAND_MS);
+    516|   }
+    517|   if (ran.code !== 0) throw Error(`\`deep host add ${w.alias}\` must i…
+       |                             ^
+    518| }
+    519| /** The rows `deep status --json` prints, as you. */
+ ❯ tests/acceptance/999/session.test.ts:53:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/999/skew.test.ts > #999.4257f07c A host whose deep-hook is a version older than the hub's, within the contract version, keeps recording; one outside it says so on its row and in `deep doctor`, naming both versions > after the hub is updated one contract minor ahead, the session on the host keeps recording under the host's name
+Error: `deep host add box066089` must install deep-hook and Claude Code's hooks on the host and end with exit 0: exit 2, stdout "", stderr "Usage: deep host run <ask>\n       deep host changes <host>\n       deep host remove <host>\n       deep host list\n       deep host facts <host> [--refresh]\n"
+ ❯ hostAdd tests/acceptance/999/helpers.ts:517:29
+    515|     ran = await deep(w, ['host', 'add', w.alias], COMMAND_MS);
+    516|   }
+    517|   if (ran.code !== 0) throw Error(`\`deep host add ${w.alias}\` must i…
+       |                             ^
+    518| }
+    519| /** The rows `deep status --json` prints, as you. */
+ ❯ recording tests/acceptance/999/skew.test.ts:20:3
+ ❯ tests/acceptance/999/skew.test.ts:34:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/acceptance/999/skew.test.ts > #999.4257f07c A host whose deep-hook is a version older than the hub's, within the contract version, keeps recording; one outside it says so on its row and in `deep doctor`, naming both versions > after the hub is updated one contract major ahead, a row of deep status and an item of deep doctor say the host's deep-hook is outside the contract, naming both versions
+Error: `deep host add box5941a4` must install deep-hook and Claude Code's hooks on the host and end with exit 0: exit 2, stdout "", stderr "Usage: deep host run <ask>\n       deep host changes <host>\n       deep host remove <host>\n       deep host list\n       deep host facts <host> [--refresh]\n"
+ ❯ hostAdd tests/acceptance/999/helpers.ts:517:29
+    515|     ran = await deep(w, ['host', 'add', w.alias], COMMAND_MS);
+    516|   }
+    517|   if (ran.code !== 0) throw Error(`\`deep host add ${w.alias}\` must i…
+       |                             ^
+    518| }
+    519| /** The rows `deep status --json` prints, as you. */
+ ❯ recording tests/acceptance/999/skew.test.ts:20:3
+ ❯ tests/acceptance/999/skew.test.ts:48:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  6 failed (6)
+   Start at  19:53:15
+   Duration  12.19s (tests 98%, import 1%, transform 1%)
+

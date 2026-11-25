@@ -4,12 +4,19 @@
 //! backend interface's ray query on the pinned backend; and `pick` is the ground point a point
 //! control writes for that ray, the plate's samples met as the two triangles per cell its
 //! height-field collision uses, rounded to 1/1024 m (Control: point).
+//!
+//! #3036: `t` (flicks, 0 when left out) is the time they are met at. A plate that keeps tracks
+//! answers `drawn` from the solids a frame at `t` draws of it, lowered about the paths its items
+//! took; `physics` and `pick` read its samples as built, whatever its tracks.
+
+use std::sync::Arc;
 
 use deep_canvas::heights::{meet, Heights};
 use deep_canvas_physics::backend::Backend;
 use deep_canvas_physics::caps::RAPIER3D;
+use deep_canvas_scene3d::geom::Mesh;
 use deep_canvas_scene3d::scene::Affine3;
-use deep_canvas_scene3d::{build, stack, terrain};
+use deep_canvas_scene3d::{build, stack, terrain, tracks};
 use deep_physics_rapier::Rapier;
 use serde_json::{json, Map, Value};
 
@@ -22,6 +29,7 @@ pub struct TerrainRays {
     pub doc: String,
     pub item: String,
     pub rays: Vec<(V3, V3)>,
+    pub t: i64,
 }
 
 fn v3(v: &Value) -> Option<V3> {
@@ -39,6 +47,10 @@ pub fn parse(c: &Map<String, Value>) -> Option<TerrainRays> {
             .iter()
             .map(|r| Some((v3(r.get("from")?)?, v3(r.get("dir")?)?)))
             .collect::<Option<_>>()?,
+        t: match c.get("t") {
+            None => 0,
+            Some(t) => t.as_i64()?,
+        },
     })
 }
 
@@ -71,7 +83,34 @@ fn collision(t: &terrain::Terrain, centre: V3) -> Option<Rapier> {
     Some(b)
 }
 
+/// What a frame draws of an item: its triangles in the world, and its first solid's mesh.
+type Drawn = (Vec<[V3; 3]>, Option<Arc<Mesh>>);
+
 impl Hub<'_> {
+    /// What a frame at `t` draws of `item` (#3036): the revision `rev` as the hub draws its 3D
+    /// frame then, its worlds' outputs and its logic's arrays among it, under the scenario's
+    /// planted program; or the frame's refusal.
+    fn drawn_at(&self, doc: &str, rev: &Value, item: &str, t: i64) -> Result<Drawn, Value> {
+        let shown = self.shown_at(doc, &self.with_outputs(doc, rev), t);
+        let form = self.arranged(doc, &shown);
+        let planted = self.scenario.module_planted.as_deref();
+        let sealed = &self.startup.sealed;
+        let scene = crate::scene3d::scene_at(&form, t, &self.look.light, sealed, planted)
+            .map_err(|u| json!({"code": u.code, "path": u.path}))?;
+        let solids = scene.layers.iter().flat_map(|l| &l.solids);
+        let solids: Vec<_> = solids.filter(|s| s.id == item).collect();
+        let tris: Vec<[V3; 3]> = solids
+            .iter()
+            .filter_map(|s| Some((s.mesh.as_ref()?, &s.model)))
+            .flat_map(|(mesh, m)| {
+                mesh.indices
+                    .chunks(3)
+                    .map(move |t| [0, 1, 2].map(|k| apply(m, mesh.positions[t[k] as usize])))
+            })
+            .collect();
+        Ok((tris, solids.iter().find_map(|s| s.mesh.clone())))
+    }
+
     pub(crate) fn terrain_rays(&mut self, r: &TerrainRays) -> Value {
         let Some(doc) = self
             .sessions
@@ -83,7 +122,7 @@ impl Hub<'_> {
         let Some(item) = doc.pointer(&format!("/items/{}", r.item)) else {
             return json!({"code": "ref_unresolved", "path": format!("items/{}", r.item)});
         };
-        let m: Affine3 = deep_canvas_scene3d::scene::placed_at(&doc, 0)
+        let m: Affine3 = deep_canvas_scene3d::scene::placed_at(&doc, r.t)
             .ok()
             .and_then(|p| {
                 p.into_iter()
@@ -101,24 +140,40 @@ impl Hub<'_> {
             fills: self.startup.sealed.fills.clone(),
             ..Default::default()
         };
-        let built = match build::built(&doc, &r.item, item, &run, 0.0) {
+        let secs = r.t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+        let built = match build::built(&doc, &r.item, item, &run, secs) {
             Ok(b) => b,
             Err(path) => {
                 return json!({"code": "out_of_range", "path": format!("items/{}/{path}", r.item)})
             }
         };
-        let tris: Vec<[V3; 3]> = built.mesh.as_ref().map_or_else(Vec::new, |mesh| {
+        let mut tris: Vec<[V3; 3]> = built.mesh.as_ref().map_or_else(Vec::new, |mesh| {
             mesh.indices
                 .chunks(3)
                 .map(|t| [0, 1, 2].map(|k| apply(&m, mesh.positions[t[k] as usize])))
                 .collect()
         });
         let centre = apply(&m, [0.0; 3]);
-        let plate = item
+        let mut plate = item
             .get("params")
             .filter(|p| terrain::of_params(p).is_some())
             .and_then(|p| terrain::build(p, false).ok());
         let surface: Option<Heights> = plate.as_ref().map(|t| t.heights(centre));
+        // #3036: a plate that keeps tracks is met as a frame at t draws it; the planted plate's
+        // physics shape takes the heights it draws there, one a sample.
+        if item.pointer("/params/tracks/items").is_some() {
+            let (drawn, mesh) = match self.drawn_at(&r.doc, &doc, &r.item, r.t) {
+                Ok(drawn) => drawn,
+                Err(refusal) => return refusal,
+            };
+            tris = drawn;
+            let feeds = self.scenario.module_planted.as_deref() == Some(tracks::FEEDS_PHYSICS);
+            if let (true, Some(t), Some(mesh)) = (feeds, plate.as_mut(), mesh) {
+                if mesh.positions.len() == t.h.len() {
+                    t.h = mesh.positions.iter().map(|p| p[1]).collect();
+                }
+            }
+        }
         let physics = plate.as_ref().and_then(|t| collision(t, centre));
         let rays: Vec<Value> = r
             .rays

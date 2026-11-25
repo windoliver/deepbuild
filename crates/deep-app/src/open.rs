@@ -530,6 +530,7 @@ fn show(address: &Address, window: &mut Window, cx: &mut App) -> Result<Address,
         notice,
     };
     if changed {
+        crate::find::close(window, cx);
         selection(cx).opened_at = views::now();
     }
     window.refresh();
@@ -816,12 +817,9 @@ pub fn tick(now: u64, cx: &mut App) {
                     !crate::plain::planted("read-needs-reopen") || since < opened_at
                 })
             });
-        let present = crate::unread::present(
-            key(window),
-            crate::shown::seen(window),
-            views::last_input(),
-            now,
-        );
+        let seen = crate::shown::seen(window);
+        crate::card::look(window, seen, cx);
+        let present = crate::unread::present(key(window), seen, views::last_input(), now);
         let due = READER.with(|reader| reader.borrow_mut().due(row.as_deref(), present, now));
         if let Some(row) = due {
             record::mark_read(&row);

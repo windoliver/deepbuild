@@ -1,0 +1,27 @@
+Base commit: 118ec119f1a769c2125a8a815a72031e3be29248
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/96-redraft-1412 --no-file-parallelism --testTimeout=60000
+Date: 2026-11-24T06:55:07Z  Node v24.22.0  load averages: 189.27 235.06 368.30
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/96-redraft-1412
+
+ ❯ commit.test.ts (5 tests | 1 failed) 17820ms
+   ❯ AC14 the doc.patched event is the commit point: a hub killed after a layer file is written by hash and before its event lands restarts showing the revision before, the record and the shown revision agree, and the orphan layer file is never current (3)
+     × AC14 the record and the shown revision agree by hash: the doc.patched event carries its revision's hash, and after the restart the record's last event names the shown revision's hash 1741ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  commit.test.ts > AC14 the doc.patched event is the commit point: a hub killed after a layer file is written by hash and before its event lands restarts showing the revision before, the record and the shown revision agree, and the orphan layer file is never current > AC14 the record and the shown revision agree by hash: the doc.patched event carries its revision's hash, and after the restart the record's last event names the shown revision's hash
+AssertionError: the record's last event, of patch 01JB96P0000000000000000001, carries its revision's hash (Revision: "The doc.patched event carries the revision's hash"; doc.patched@2's data.hash): expected undefined to be defined
+ ❯ commit.test.ts:109:204
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 7 passed (8)
+   Start at  22:55:09
+   Duration  40.00s (tests 99%)
+
+Exit code: 1
