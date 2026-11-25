@@ -9,7 +9,6 @@ import {
 /** The criteria, by their IDs (#2669. + the first 8 hex of the SHA-256 of each criterion's text). */
 export const LATE = '#2669.3a6c6d5b';
 export const ONCE = '#2669.8fb05bc5';
-export const STATUS83 = '#2669.6995f057';
 
 /** The workspace notice's own words, as the hub tells a session outside any repo where its task's home is. */
 export const NOTICE = 'this session is outside any repo';

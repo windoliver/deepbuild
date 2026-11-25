@@ -160,11 +160,13 @@ pub fn irradiance(c: &[[f32; 4]; 9], n: [f64; 3]) -> [f64; 3] {
     out
 }
 
+deep_gpu::paired! { params: "env.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Params {
     at: [u32; 4],
     k: [f32; 4],
+}
 }
 
 /// The prefiltered cube and what it was made from.
