@@ -1,0 +1,313 @@
+diff --git a/crates/deep-gpu/src/counted.rs b/crates/deep-gpu/src/counted.rs
+index 560a5c810..050e6e38a 100644
+--- a/crates/deep-gpu/src/counted.rs
++++ b/crates/deep-gpu/src/counted.rs
+@@ -142,12 +142,21 @@ fn options(h: &mut DefaultHasher, o: &wgpu::PipelineCompilationOptions<'_>) {
+     o.zero_initialize_workgroup_memory.hash(h);
+ }
+ 
++/// Spike #3444: the WGSL each module was made from, by its label, and the modules cut from it, by
++/// the entry points one pipeline uses.
++#[derive(Debug, Default)]
++struct Split {
++    sources: HashMap<wgpu::ShaderModule, (String, String)>,
++    cut: HashMap<(wgpu::ShaderModule, Vec<String>), wgpu::ShaderModule>,
++}
++
+ /// The app's wgpu device.
+ #[derive(Clone, Debug)]
+ pub struct Wgpu {
+     raw: wgpu::Device,
+     counts: Arc<Counts>,
+     kept: Arc<Mutex<Kept>>,
++    split: Arc<Mutex<Split>>,
+     /// The test shim's delay, in ms, before the next pipeline the device makes (#1903).
+     delay_ms: Arc<AtomicU64>,
+ }
+@@ -183,6 +192,7 @@ impl Wgpu {
+             raw,
+             counts,
+             kept: Arc::default(),
++            split: Arc::default(),
+             delay_ms: Arc::default(),
+         }
+     }
+@@ -252,13 +262,52 @@ impl Wgpu {
+             wgpu::ShaderSource::Wgsl(source) => Some(key(|h| (desc.label, source).hash(h))),
+             _ => None,
+         };
+-        self.kept(
++        let module = self.kept(
+             |k| &mut k.modules,
+             key,
+             None,
+             Some(desc.label.unwrap_or("shader module")),
+             || self.raw.create_shader_module(desc.clone()),
+-        )
++        );
++        if let wgpu::ShaderSource::Wgsl(source) = &desc.source {
++            let mut split = self.split.lock().unwrap_or_else(|e| e.into_inner());
++            let label = desc.label.unwrap_or("shader module");
++            let made_from = || (label.to_string(), source.to_string());
++            split
++                .sources
++                .entry(module.clone())
++                .or_insert_with(made_from);
++        }
++        module
++    }
++
++    /// Spike #3444: a module made from `module`'s source with only `entries`, the entry points
++    /// one pipeline uses; `module` itself when it holds no other or wasn't made from WGSL here.
++    fn cut(&self, module: &wgpu::ShaderModule, entries: &[&str]) -> wgpu::ShaderModule {
++        let mut names: Vec<String> = entries.iter().map(|e| e.to_string()).collect();
++        names.sort();
++        names.dedup();
++        let key = (module.clone(), names);
++        let lock = || self.split.lock().unwrap_or_else(|e| e.into_inner());
++        let (label, source) = {
++            let split = lock();
++            if let Some(found) = split.cut.get(&key) {
++                return found.clone();
++            }
++            let Some((label, source)) = split.sources.get(module) else {
++                return module.clone();
++            };
++            match crate::split::only(source, entries) {
++                Some(cut) => (label.clone(), cut),
++                None => return module.clone(),
++            }
++        };
++        let made = self.create_shader_module(wgpu::ShaderModuleDescriptor {
++            label: Some(&label),
++            source: wgpu::ShaderSource::Wgsl(source.into()),
++        });
++        lock().cut.insert(key, made.clone());
++        made
+     }
+ 
+     pub fn create_bind_group_layout(
+@@ -348,12 +397,35 @@ impl Wgpu {
+             }
+             (desc.multiview_mask, desc.cache.is_some()).hash(h);
+         });
++        // Spike #3444: each stage's module holds this pipeline's entry points and no other.
++        let (v, f) = (&desc.vertex, desc.fragment.as_ref());
++        let shared = f.filter(|f| f.module == v.module);
++        let names = v
++            .entry_point
++            .into_iter()
++            .chain(shared.and_then(|f| f.entry_point));
++        let names: Vec<&str> = names.collect();
++        let whole = v.entry_point.is_some() && shared.is_none_or(|f| f.entry_point.is_some());
++        let vertex = match whole {
++            true => self.cut(v.module, &names),
++            false => v.module.clone(),
++        };
++        let fragment = f.map(|f| match (shared.is_some(), f.entry_point) {
++            (true, _) => vertex.clone(),
++            (false, Some(entry)) => self.cut(f.module, &[entry]),
++            (false, None) => f.module.clone(),
++        });
++        let mut cut = desc.clone();
++        cut.vertex.module = &vertex;
++        if let (Some(stage), Some(module)) = (cut.fragment.as_mut(), fragment.as_ref()) {
++            stage.module = module;
++        }
+         self.kept(
+             |k| &mut k.render,
+             Some(key),
+             Some(&self.counts.pipelines),
+             Some(desc.label.unwrap_or("render pipeline")),
+-            || self.raw.create_render_pipeline(desc),
++            || self.raw.create_render_pipeline(&cut),
+         )
+     }
+ 
+@@ -366,12 +438,19 @@ impl Wgpu {
+             options(h, &desc.compilation_options);
+             desc.cache.is_some().hash(h);
+         });
++        // Spike #3444: the module holds this pipeline's entry point and no other.
++        let module = match desc.entry_point {
++            Some(entry) => self.cut(desc.module, &[entry]),
++            None => desc.module.clone(),
++        };
++        let mut cut = desc.clone();
++        cut.module = &module;
+         self.kept(
+             |k| &mut k.compute,
+             Some(key),
+             Some(&self.counts.pipelines),
+             Some(desc.label.unwrap_or("compute pipeline")),
+-            || self.raw.create_compute_pipeline(desc),
++            || self.raw.create_compute_pipeline(&cut),
+         )
+     }
+ }
+diff --git a/crates/deep-gpu/src/lib.rs b/crates/deep-gpu/src/lib.rs
+index 9e07285ed..4ff5e7c4a 100644
+--- a/crates/deep-gpu/src/lib.rs
++++ b/crates/deep-gpu/src/lib.rs
+@@ -21,6 +21,7 @@ pub mod render;
+ pub mod ring;
+ pub mod seam;
+ pub mod spans;
++pub mod split;
+ pub mod structural;
+ pub mod surface;
+ pub mod upload;
+diff --git a/crates/deep-gpu/src/split.rs b/crates/deep-gpu/src/split.rs
+new file mode 100644
+index 000000000..9e1930336
+--- /dev/null
++++ b/crates/deep-gpu/src/split.rs
+@@ -0,0 +1,148 @@
++//! Spike #3444's split: a shader module's source with only the entry points one pipeline uses.
++//! wgpu-hal translates a module again for each stage of each pipeline, and naga's override step
++//! hands a module back untouched only when it holds no override and at most one entry point; a
++//! module that holds a pipeline's entry points alone gives it less to clone and compact.
++
++use std::ops::Range;
++
++/// The entry points `source` declares: each one's name and the bytes from its first attribute to
++/// the brace that closes its body.
++pub fn entry_points(source: &str) -> Vec<(&str, Range<usize>)> {
++    let bytes = source.as_bytes();
++    let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
++    let (mut i, mut depth, mut parens) = (0, 0u32, 0u32);
++    // The attributes ahead of the declaration being read: where they start, and whether one of
++    // them makes it an entry point.
++    let (mut attrs, mut entry) = (None, false);
++    let mut function: Option<&str> = None;
++    let mut found = Vec::new();
++    while i < bytes.len() {
++        let c = bytes[i];
++        if bytes[i..].starts_with(b"//") {
++            i += source[i..].find('\n').unwrap_or(source.len() - i);
++        } else if bytes[i..].starts_with(b"/*") {
++            // Block comments nest.
++            let mut open = 1;
++            i += 2;
++            while i < bytes.len() && open > 0 {
++                if bytes[i..].starts_with(b"/*") {
++                    open += 1;
++                    i += 2;
++                } else if bytes[i..].starts_with(b"*/") {
++                    open -= 1;
++                    i += 2;
++                } else {
++                    i += 1;
++                }
++            }
++        } else if word(c) || c == b'@' {
++            let start = i;
++            i += 1;
++            while i < bytes.len() && word(bytes[i]) {
++                i += 1;
++            }
++            if depth > 0 || parens > 0 {
++                continue;
++            }
++            match &source[start..i] {
++                "@vertex" | "@fragment" | "@compute" => {
++                    attrs.get_or_insert(start);
++                    entry = true;
++                }
++                a if a.starts_with('@') => {
++                    attrs.get_or_insert(start);
++                }
++                "fn" => {
++                    let name = source[i..].trim_start();
++                    let end = name.bytes().position(|c| !word(c)).unwrap_or(name.len());
++                    function = Some(&name[..end]);
++                }
++                _ => {}
++            }
++        } else {
++            match c {
++                b'(' => parens += 1,
++                b')' => parens = parens.saturating_sub(1),
++                b'{' => depth += 1,
++                b'}' => {
++                    depth = depth.saturating_sub(1);
++                    if depth == 0 {
++                        if let (Some(name), Some(start), true) = (function.take(), attrs, entry) {
++                            found.push((name, start..i + 1));
++                        }
++                        (attrs, entry) = (None, false);
++                    }
++                }
++                b';' if depth == 0 && parens == 0 => {
++                    (attrs, entry, function) = (None, false, None);
++                }
++                _ => {}
++            }
++            i += 1;
++        }
++    }
++    found
++}
++
++/// `source` without the entry points `keep` doesn't name, or `None` when it holds no other.
++pub fn only(source: &str, keep: &[&str]) -> Option<String> {
++    let cut: Vec<Range<usize>> = entry_points(source)
++        .into_iter()
++        .filter(|(name, _)| !keep.contains(name))
++        .map(|(_, at)| at)
++        .collect();
++    if cut.is_empty() {
++        return None;
++    }
++    let mut out = String::with_capacity(source.len());
++    let mut from = 0;
++    for at in cut {
++        out.push_str(&source[from..at.start]);
++        from = at.end;
++    }
++    out.push_str(&source[from..]);
++    Some(out)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    const SOURCE: &str = "\
++struct In { @location(0) at: vec3<f32>, }
++@group(0) @binding(0) var<uniform> frame: mat4x4<f32>;
++override LOBES: bool = true;
++// @vertex fn commented() {}
++/* @fragment fn also() { /* nested */ } */
++fn shared(p: vec3<f32>) -> vec4<f32> { return frame * vec4<f32>(p, 1.0); }
++@vertex
++fn vs_main(in: In) -> @builtin(position) vec4<f32> { return shared(in.at); }
++@fragment fn fs_main() -> @location(0) vec4<f32> { if LOBES { return vec4<f32>(1.0); } return vec4<f32>(0.0); }
++@compute @workgroup_size(8, 8)
++fn cull(@builtin(global_invocation_id) id: vec3<u32>) { }
++@fragment fn fs_other() -> @location(0) vec4<f32> { return vec4<f32>(0.5); }
++";
++
++    #[test]
++    fn names_every_entry_point_and_no_comment() {
++        let names: Vec<&str> = entry_points(SOURCE).into_iter().map(|(n, _)| n).collect();
++        assert_eq!(names, ["vs_main", "fs_main", "cull", "fs_other"]);
++    }
++
++    #[test]
++    fn keeps_a_pipelines_entry_points_and_everything_shared() {
++        let kept = only(SOURCE, &["vs_main", "fs_main"]).expect("two others to cut");
++        let names: Vec<&str> = entry_points(&kept).into_iter().map(|(n, _)| n).collect();
++        assert_eq!(names, ["vs_main", "fs_main"]);
++        for line in [
++            "struct In",
++            "var<uniform> frame",
++            "override LOBES",
++            "fn shared",
++        ] {
++            assert!(kept.contains(line), "{line} is kept");
++        }
++        assert!(!kept.contains("workgroup_size") && !kept.contains("fs_other"));
++        assert_eq!(only(&kept, &["vs_main", "fs_main"]), None);
++    }
++}
