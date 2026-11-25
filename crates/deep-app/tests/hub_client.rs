@@ -207,7 +207,9 @@ fn the_hub_check_fails_when_the_hub_drops_the_app_after_its_hello() {
     let dir = PathBuf::from(format!("/tmp/dad-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let socket = dir.join("hub.sock");
+    let _ = std::fs::remove_file(&socket);
     let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    let (answered, took_hello) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
         let mut writer = stream.try_clone().unwrap();
@@ -217,9 +219,15 @@ fn the_hub_check_fails_when_the_hub_drops_the_app_after_its_hello() {
             .read_line(&mut String::new())
             .unwrap();
         writeln!(writer, "{}", json!({ "v": 1, "role": "app" })).unwrap();
+        answered.send(()).unwrap();
     });
     let (code, output) = hub_check(&socket, "token");
     let _ = std::fs::remove_dir_all(&dir);
+    took_hello
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap_or_else(|_| {
+            panic!("the stand-in hub must take the app's hello before it drops it: {output}")
+        });
     assert!(
         code.is_some_and(|code| code != 0),
         "a hub that drops the app after its hello must fail the check: exit {code:?}, {output}"
