@@ -122,6 +122,12 @@ impl Scene {
                 );
                 out.push(refusal("ref_unresolved", field.clone(), json!(path), what));
             }
+            // #290: a driver may read this copy's player, a view value no world reads, directly
+            // or through a driver, so every copy's world stays the same (Net: this copy's player).
+            if let Some(driver) = reads_me(&program, &path, &mut BTreeSet::new()) {
+                let what = format!("{field} reads {path}, which driver {driver} writes from match.me, this copy's player: a view value no world reads, so every copy's world stays the same");
+                out.push(refusal("out_of_range", field.clone(), json!(path), what));
+            }
             if let Some(chain) = cycle(&program, &path, &outputs, id, &mut BTreeSet::new()) {
                 let what = format!("{field} reads {path}, which depends on a physics pose ({}); a channel physics reads can't read physics", chain.join(" → "));
                 out.push(refusal("cycle", field, json!(path), what));
@@ -329,6 +335,31 @@ fn slots(program: &Program, path: &str, width: usize) -> Option<Vec<usize>> {
             program.slot_of(owner, &f)
         })
         .collect()
+}
+
+/// The driver through which `path` depends on `match.me` (#290): one writing it that reads the
+/// view value, or that reads a path such a driver writes.
+fn reads_me(program: &Program, path: &str, seen: &mut BTreeSet<String>) -> Option<String> {
+    if !seen.insert(path.to_string()) {
+        return None;
+    }
+    for d in &program.motion.drivers {
+        let target = format!("items/{}/{}", d.target.owner, d.target.field.join("/"));
+        if !overlaps(&target, path) {
+            continue;
+        }
+        let me = |i: &DriverInput| matches!(i, DriverInput::Array(a) if a == deep_canvas_motion::me::VAR);
+        if d.inputs.iter().any(|(_, i)| me(i)) {
+            return Some(d.id.clone());
+        }
+        for (_, t) in &d.vars {
+            let var = format!("items/{}/{}", t.owner, t.field.join("/"));
+            if let Some(through) = reads_me(program, &var, seen) {
+                return Some(through);
+            }
+        }
+    }
+    None
 }
 
 /// The chain by which `path` depends on world `world`'s physics: through a driver writing it

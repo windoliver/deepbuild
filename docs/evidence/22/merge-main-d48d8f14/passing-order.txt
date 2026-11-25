@@ -1,0 +1,29 @@
+# packages/record/test and tests/acceptance/1410 with the ordering fix; 2026-11-16T09:09:20Z; load 269.48 289.86 254.93
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-22-asks-4dae39
+
+ ❯ packages/record/test/record.test.ts (81 tests | 1 failed) 25143ms
+   ❯ readSince follows the log for a fold (1)
+     × hands on each event of its kinds once, in log order, across pages, and moves the cursor past the rest 5069ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/record/test/record.test.ts > readSince follows the log for a fold > hands on each event of its kinds once, in log order, across pages, and moves the cursor past the rest
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/record/test/record.test.ts:1081:3
+    1079|
+    1080| describe('readSince follows the log for a fold', () => {
+    1081|   it('hands on each event of its kinds once, in log order, across page…
+       |   ^
+    1082|     const { record: r, S } = await record();
+    1083|     // 2,500 calls, every fifth a tool.before: three pages of the othe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 7 passed (8)
+      Tests  1 failed | 117 passed (118)
+   Start at  01:09:30
+   Duration  29.60s (tests 84%, transform 8%, import 6%, setup 1%, worker 1%)
+

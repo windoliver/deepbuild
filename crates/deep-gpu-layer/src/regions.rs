@@ -569,6 +569,7 @@ pub fn keys_in_view(
 /// The most looks one frame mixes: a transition window's two sides, each with a region in view.
 const MOST_LOOKS: usize = 4;
 
+deep_gpu::paired! { frame_u: "regions.wgsl", Frame;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct FrameU {
@@ -584,16 +585,21 @@ struct FrameU {
     /// #463: where each look's render starts in the frame, px: looks 0 and 1, then 2 and 3.
     origins: [[f32; 4]; 2],
 }
+}
 
+deep_gpu::paired! { region_u: "regions.wgsl", Region;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct RegionU {
-    inv: [[f32; 4]; 3],
+    inv0: [f32; 4],
+    inv1: [f32; 4],
+    inv2: [f32; 4],
     lens: [f32; 4],
     centre: [f32; 4],
     tag: [u32; 4],
     seed_hi: [u32; 4],
     params: [f32; 4],
+}
 }
 
 /// A frame's mix as the composite pass reads it: the looks it mixes, by key, in the order their
@@ -650,8 +656,11 @@ pub fn mix(
                 Shape::Sphere => 2.0,
                 _ => 0.0,
             };
+            let [inv0, inv1, inv2] = inv.map(|row| row.map(f));
             regions.push(RegionU {
-                inv: inv.map(|row| row.map(f)),
+                inv0,
+                inv1,
+                inv2,
                 lens: [
                     f(axis_len(&v.1, 0)),
                     f(axis_len(&v.1, 1)),
@@ -809,6 +818,16 @@ const SOURCE: &str = include_str!("regions.wgsl");
 const BOUNDS_SOURCE: &str = include_str!("regions_bounds.wgsl");
 pub const PASS: &str = "look.regions";
 
+/// The composite's shader over the depth it binds: the core's raw depth, or view z.
+pub(crate) fn source(raw: bool) -> String {
+    let depth = if raw {
+        "texture_depth_2d;\nfn view_z(at: vec2<i32>) -> f32 { return from_depth(textureLoad(depth, at, 0)); }"
+    } else {
+        "texture_2d<f32>;\nfn view_z(at: vec2<i32>) -> f32 { return textureLoad(depth, at, 0).r; }"
+    };
+    SOURCE.replace("DEPTH;", depth)
+}
+
 fn pipeline(device: &Wgpu, raw: bool) -> (wgpu::BindGroupLayout, wgpu::RenderPipeline) {
     let fs = wgpu::ShaderStages::FRAGMENT;
     let texture = |binding, sample_type| wgpu::BindGroupLayoutEntry {
@@ -851,14 +870,9 @@ fn pipeline(device: &Wgpu, raw: bool) -> (wgpu::BindGroupLayout, wgpu::RenderPip
             ),
         ],
     });
-    let depth = if raw {
-        "texture_depth_2d;\nfn view_z(at: vec2<i32>) -> f32 { return from_depth(textureLoad(depth, at, 0)); }"
-    } else {
-        "texture_2d<f32>;\nfn view_z(at: vec2<i32>) -> f32 { return textureLoad(depth, at, 0).r; }"
-    };
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(PASS),
-        source: wgpu::ShaderSource::Wgsl(SOURCE.replace("DEPTH;", depth).into()),
+        source: wgpu::ShaderSource::Wgsl(source(raw).into()),
     });
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some(PASS),
@@ -1245,9 +1259,7 @@ fn bounds_pipeline(device: &Wgpu) -> (wgpu::BindGroupLayout, wgpu::ComputePipeli
             buffer(7, wgpu::BufferBindingType::Storage { read_only: false }),
         ],
     });
-    let depth =
-        "texture_2d<f32>;\nfn view_z(at: vec2<i32>) -> f32 { return textureLoad(depth, at, 0).r; }";
-    let source = format!("{}\n{BOUNDS_SOURCE}", SOURCE.replace("DEPTH;", depth));
+    let source = format!("{}\n{BOUNDS_SOURCE}", source(false));
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("look.regions bounds"),
         source: wgpu::ShaderSource::Wgsl(source.into()),

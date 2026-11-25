@@ -21,6 +21,7 @@ const MOST: usize = 17;
 const COLOR: wgpu::TextureFormat = FORMAT;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
+deep_gpu::paired! { entry_uniform: "history.wgsl", Entry;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct EntryUniform {
@@ -29,7 +30,9 @@ struct EntryUniform {
     info: [f32; 4],
     jitter: [f32; 4],
 }
+}
 
+deep_gpu::paired! { uniform: "history.wgsl", Resolve;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Uniform {
@@ -37,6 +40,7 @@ struct Uniform {
     sizes: [f32; 4],
     flags: [f32; 4],
     entries: [EntryUniform; MOST],
+}
 }
 
 /// The resolve's pipeline, compiled once a device.

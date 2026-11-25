@@ -79,10 +79,17 @@ path = "../../tests/acceptance/3016/noop.rs"
 name = "acceptance_3016_heap"
 path = "../../tests/acceptance/3016/heap.rs"
 
+# `metal` and `views` run their blind redraft for #3169 (tests/acceptance/3016-redraft-3169, README there) in the first
+# drafts' place: the same tests, which off macOS are ignored as needing Metal or the reference Mac.
 [[test]]
 name = "acceptance_3016_metal"
-path = "../../tests/acceptance/3016/metal.rs"
+path = "../../tests/acceptance/3016-redraft-3169/metal.rs"
 
 [[test]]
 name = "acceptance_3016_views"
-path = "../../tests/acceptance/3016/views.rs"
+path = "../../tests/acceptance/3016-redraft-3169/views.rs"
+
+# Issue #3256: the acceptance suite's own target, written blind in tests/acceptance/3256 (README there).
+[[test]]
+name = "acceptance_3256_twin_shaders"
+path = "../../tests/acceptance/3256/twin_shaders.rs"

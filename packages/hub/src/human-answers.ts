@@ -1,5 +1,5 @@
 import type { HubEvents } from './hub-capabilities.js';
-import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, SessionStatePort, McpOperationsPort } from './hub-ports.js';
+import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, SessionStatePort } from './hub-ports.js';
 import { execFile } from 'node:child_process';
 
 
@@ -26,6 +26,9 @@ import { type ChannelAsk } from './channels.js';
 
 import { OpenItems } from './open-items.js';
 import { Runs } from './runs.js';
+import { approvedSpec } from './approved-spec.js';
+import { checksIn } from './spec-entries.js';
+import { headOf } from './session-facts.js';
 
 import { cursorAt, cursorOf, refuse, Refused, refusal, SETTLED_PAGE, ulid, type CoreOptions, type HookMeta } from './wire.js';
 import type { CallContext } from './session-types.js';
@@ -57,7 +60,6 @@ readonly canvasSide: Pick<HubCanvas, "explainsOf">;
 delivery: () => Pick<AnswerDeliveryPort, "openOffers" | "switches">;
  control: () => Pick<HumanControlPort, "trusted">;
 judging: () => Pick<StopJudgingPort, "reachOfSession" | "runEnded" | "turnTaskOf">;
-mcp: () => Pick<McpOperationsPort, "checksOf">;
 state: () => Pick<SessionStatePort, "liveOf" | "sessions">;
 memory: () => Pick<SessionMemoryPort, "syncStanding">;
 }
@@ -203,7 +205,7 @@ export class HumanAnswers {
     if (data.provisional === true && chosen && chosen.id !== data.recommended && row.session && this.options.settings.plant !== 'records-switch-only') await this.provisionalSwitched(handle, row.session, data).catch(() => undefined);
     await answered();
     // "I did it" to a task proved by a spec check runs that check again at once (#323): a claim never passes on it alone.
-    if (data.kind === 'unblock' && chosen?.id === 'done' && row.session && typeof data.proves === 'string' && this.options.mcp().checksOf((await this.options.services.teardowns.of(data))?.cwd ?? this.options.state().sessions.get(row.session)?.cwd ?? '').has(data.proves)) {
+    if (data.kind === 'unblock' && chosen?.id === 'done' && row.session && typeof data.proves === 'string' && await this.proves((await this.options.services.teardowns.of(data))?.cwd ?? this.options.state().sessions.get(row.session)?.cwd ?? '', data.proves)) {
       void this.didIt(handle, row.session, data).catch((error: unknown) => process.stderr.write(`deep hub: ${handle}'s check did not run again: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     // Your waiver of an open item closes it (#323).
@@ -233,7 +235,7 @@ export class HumanAnswers {
     if (!cwd || pinned?.kind !== 'commit') return;
     const git = (...args: string[]) => new Promise<string>((done) => execFile('git', ['-C', cwd, ...args], { timeout: 2000 }, (_, out) => done(String(out ?? '').trim())));
     const commits = (await git('rev-list', '--reverse', `${pinned.ref}..HEAD`)).split('\n').filter(Boolean);
-    this.options.delivery().switches.set(handle.slice(4), commits.map((c) => c.slice(0, 7)));
+    this.options.delivery().switches.set(handle.slice(4), { session, commits: commits.map((c) => c.slice(0, 7)) });
     const head = await git('rev-parse', 'HEAD^{tree}');
     await this.options.events.appendReading(session, this.options.state().sessions.get(session)!.agent, `Switched ${handle}: tree ${head}`);
   }
@@ -250,6 +252,11 @@ export class HumanAnswers {
     return tree === switched[2] ? `your answer to ${switched[1]} switched the option the agent went on with, and no check has run on a commit after it` : undefined;
   }
 
+  /** A folder's spec checks as the revision you approved writes them (#1864): its HEAD's spec, never the worktree's file. */
+  private async approvedChecks(cwd: string): Promise<ReturnType<typeof checksIn>> {
+    return checksIn((await approvedSpec(cwd, (await headOf(cwd).catch(() => undefined))?.sha ?? '')).spec);
+  }
+  private async proves(cwd: string, check: string): Promise<boolean> { return (await this.approvedChecks(cwd).catch(() => new Map())).has(check); }
   /**
    * Your "I did it" to a task (#323; design: Tasks only you can do): its check runs again at once, as your claim on the
    * session's task, on a snapshot of the session's folder. One that still fails returns the task to you, raised again
@@ -265,7 +272,7 @@ export class HumanAnswers {
     let findings: string[] = [];
     try {
       const cwd = resource?.cwd ?? this.options.state().sessions.get(session)!.cwd;
-      const check = this.options.mcp().checksOf(cwd).get(name);
+      const check = (await this.approvedChecks(cwd)).get(name);
       if (!check) throw Error(`${name} is no check of ${cwd}'s spec any more`);
       // Run on a snapshot of the session's folder, in a temporary checkout of it, as a claim's checks are (#29).
       const commit = (await this.options.services.checkouts.snapshot(cwd)).commit;
@@ -369,13 +376,13 @@ export class HumanAnswers {
    */
   private async cards(handle?: string): Promise<Map<string, { plan: ChannelAsk['plan']; revision: number; holder: string | null }>> {
     const one = handle ? ` AND (subject = ? OR json_extract(data, '$.ask') = ?)` : '';
-    const rows = (await this.options.services.record.raw(`SELECT kind, subject, json_extract(data, '$.ask') AS ask, json_extract(data, '$.hash') AS hash, json_extract(data, '$.steps') AS steps, json_extract(data, '$.device') AS device FROM events WHERE ((kind = 'plan.proposed' AND writer = 'core') OR kind = 'ask.taken_over')${one} ORDER BY log_pos`, handle ? [handle, handle] : [])) as { kind: string; subject: string | null; ask: string | null; hash: string | null; steps: string | null; device: string | null }[];
+    const rows = (await this.options.services.record.raw(`SELECT kind, subject, json_extract(data, '$.ask') AS ask, json_extract(data, '$.hash') AS hash, json_extract(data, '$.steps') AS steps, json_extract(data, '$.device') AS device FROM events WHERE ((kind = 'plan.proposed' AND writer = 'core') OR kind = 'card.taken_over')${one} ORDER BY log_pos`, handle ? [handle, handle] : [])) as { kind: string; subject: string | null; ask: string | null; hash: string | null; steps: string | null; device: string | null }[];
     const held = new Map<string, { hash?: string; steps?: string; revision: number; holder: string | null }>();
     for (const r of rows) {
-      const key = String(r.kind === 'ask.taken_over' ? r.subject : r.ask);
+      const key = String(r.kind === 'card.taken_over' ? r.subject : r.ask);
       const card = held.get(key) ?? { revision: 1, holder: null };
       held.set(key, card);
-      if (r.kind === 'ask.taken_over') Object.assign(card, { revision: card.revision + 1, holder: r.device });
+      if (r.kind === 'card.taken_over') Object.assign(card, { revision: card.revision + 1, holder: r.device });
       else if (r.hash !== card.hash) Object.assign(card, { revision: card.revision + (card.hash === undefined ? 0 : 1), hash: String(r.hash), steps: r.steps ?? '[]' });
     }
     return new Map([...held].map(([key, c]) => [key, {
@@ -418,7 +425,7 @@ export class HumanAnswers {
     await this.options.control().trusted('ask.take_over', params, context, `take over ${handle}`, handle, 'take over');
     const device = String((params.signature as { signed: { device: string } }).signed.device);
     const revision = ((await this.cards(handle)).get(handle)?.revision ?? 1) + 1;
-    await this.options.events.appendCore('ask.taken_over', { device, revision }, { subject: handle });
+    await this.options.events.appendCore('card.taken_over', { device, revision }, { subject: handle });
     return { ask: handle, device, revision };
   }
 

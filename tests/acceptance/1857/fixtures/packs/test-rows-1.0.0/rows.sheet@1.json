@@ -1,0 +1,24 @@
+{
+  "id": "rows.sheet",
+  "version": "1.0",
+  "title": "Sheet",
+  "license": "MIT",
+  "author": "the #1857 acceptance suite",
+  "description": "1,024 rows.",
+  "steps": {
+    "rows": {
+      "op": "recipe",
+      "kind": "rows.row@1",
+      "params": {},
+      "repeat": {
+        "count": 1024,
+        "as": "i"
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "rows"
+    ]
+  }
+}

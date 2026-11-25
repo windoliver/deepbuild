@@ -408,7 +408,7 @@ fn run_building(v: &mut View<'_>) -> Result<(), OpError> {
     let spec = spec_of(&kind).ok_or_else(|| fault(&id, "kind".into()))?;
     let params = item.get("params").cloned().unwrap_or(json!({}));
     let resolved = spec::resolved(&spec, &params, true, v.planted());
-    let mesh = crate::building::build(doc, &id, &item).map_err(|p| fault(&id, p))?;
+    let mesh = crate::building::build(doc, &id, &item, v.planted()).map_err(|p| fault(&id, p))?;
     let declared = mesh.positions.len() as u64;
     v.write(
         "building.built",

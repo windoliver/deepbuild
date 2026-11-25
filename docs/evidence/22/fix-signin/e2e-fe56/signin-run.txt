@@ -1,0 +1,7 @@
+World: home /tmp/dh27-uq2m28/h; machine linux; 2026-11-16T00:49:49.434Z; batches as setup drafts them
+
+$ deep inbox    # 2026-11-16T00:49:58.479Z
+Nothing needs you
+
+sign-in task ask:01M7GX9XZ7K3YC49QHZFK7SDA8 "Sign in to Claude Code again? Your sign-in lapsed. The work waits, and nothing is lost.": inbox held, hub list not listed
+taste call ask:01M7GX9VZPQWFNEP09VMGSPXZW: inbox queued, hub list not listed

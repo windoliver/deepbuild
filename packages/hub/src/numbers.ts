@@ -44,8 +44,28 @@ interface NumbersOptions {
   evidence(sha256: string): Promise<Uint8Array | null>;
   /** Values the hub holds, scrubbed from text it stores. */
   held(): readonly string[] | undefined;
+  /** #3234's planted readings of taste calls, if a test asked for one. */
+  plant?: 'folds-seen-unseen' | 'one-median-per-run';
 }
 interface Row { id: string; kind: string; v: number; ts: number; session_id: string | null; subject: string | null; data: string; log_pos: number }
+
+/**
+ * #3234's planted wrong programs over the taste readings: every accepted call counted as seen, or a run's halves each
+ * given the whole run's median.
+ */
+function planted(readings: Reading[], plant: NumbersOptions['plant']): Reading[] {
+  if (plant === 'folds-seen-unseen') {
+    const all = readings.filter((r) => r.id === 'taste_calls_seen' || r.id === 'taste_calls_unseen').reduce((n, r) => n + Number(r.value), 0);
+    return readings.map((r) => (r.id === 'taste_calls_seen' ? { ...r, value: all } : r.id === 'taste_calls_unseen' ? { ...r, value: 0 } : r));
+  }
+  if (plant === 'one-median-per-run') {
+    return readings.map((r) => {
+      if (r.id !== 'taste_calls_in_a_row' || !r.detail) return r;
+      return { ...r, detail: r.detail.map((d) => { const whole = (Number(d.first_half_ms) + Number(d.second_half_ms)) / 2; return { ...d, first_half_ms: whole, second_half_ms: whole }; }) };
+    });
+  }
+  return readings;
+}
 
 export class Numbers {
   private state: ReadingsState = recompute([]);
@@ -118,7 +138,7 @@ export class Numbers {
   }
   async read(): Promise<{ rows: ReturnType<typeof panelRows>; decision_one: ReturnType<typeof decisionOneInputs> }> {
     await this.catchUp();
-    return { rows: panelRows(await this.checked(readingsOf(this.state)), { now: this.o.now(), fresh_for: FRESH_FOR }), decision_one: decisionOneInputs(await this.checks()) };
+    return { rows: panelRows(planted(await this.checked(readingsOf(this.state)), this.o.plant), { now: this.o.now(), fresh_for: FRESH_FOR }), decision_one: decisionOneInputs(await this.checks()) };
   }
   /** Readings for deep_search: a call reads its own session's and those of no session, never another session's. */
   async search(query: string, session: string | undefined | { everyone: true }) {
@@ -242,7 +262,8 @@ const ageOf = (ms: number): string => { for (const [unit, name] of AGE) if (ms >
 /** One line per row: what, its value, its source, how it was got and its age; STALE when its source is. */
 export function numbersLines(rows: Awaited<ReturnType<Numbers['read']>>['rows']): string[] {
   return rows.map((r) => {
-    const value = r.value === null ? 'unknown' : String(r.value);
+    // A lower bound says so before its amount (#3250).
+    const value = r.value === null ? 'unknown' : `${r.cost?.basis === 'estimated' && r.cost.at_least ? 'at least ' : ''}${r.value}`;
     const cost = r.cost ? ` ${r.cost.basis}${r.cost.basis === 'estimated' ? ` (${r.cost.rate_card})` : ''}` : '';
     const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n}, ${r.agreement.yes} yes, recall ${r.agreement.recall?.toFixed(2) ?? 'none'}, precision ${r.agreement.precision?.toFixed(2) ?? 'none'} ${r.agreement.status}` : r.id in CLASSIFIERS || r.id.endsWith(CLASSIFIED) ? ' not checked against your labels' : '';
     const by = r.by ? ` (${Object.entries(r.by).filter(([, ms]) => ms).map(([why, ms]) => `${why} ${ms}`).join(', ')})` : r.id === 'cache.low' ? ' cache hit rate low: most of the context was billed again' : '';

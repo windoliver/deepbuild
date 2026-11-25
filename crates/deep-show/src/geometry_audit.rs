@@ -286,7 +286,27 @@ pub(crate) fn solids_at(
                     seat_of(item, numbers, m, mesh.bounds(), boundary_edges(&mesh, m)),
                 )
             }
-            _ => continue,
+            // #1219: a timber hall's items enter with their true shapes: a bay frame and a
+            // bracket set each one solid, a roof on a frame one solid per part,
+            // `<item>#<part>`, so a rafter in a purlin or a tile in a ridge is an overlap.
+            _ => {
+                let timber = deep_canvas_scene3d::building::timber::solids(doc, item);
+                for (part, shapes) in timber.into_iter().flatten() {
+                    let place = |s: &Shape| deep_canvas_scene3d::shapes::placed(s, m);
+                    out.push(Solid {
+                        id: part.map_or_else(|| id.clone(), |p| format!("{id}#{p}")),
+                        shapes: shapes.iter().map(place).collect(),
+                        ends: Vec::new(),
+                        moved: moved.contains(id),
+                        seat: None,
+                        part_of: part.map(|_| PartOf {
+                            item: id.clone(),
+                            joints: Vec::new(),
+                        }),
+                    });
+                }
+                continue;
+            }
         };
         out.push(Solid {
             id: id.clone(),

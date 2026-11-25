@@ -1,0 +1,90 @@
+   Compiling gpui-pre v0.3.9 (<tree>/vendor/gpui-pre)
+   Compiling deep-canvas v0.0.0 (<tree>/crates/deep-canvas)
+   Compiling deep-canvas-seams v0.0.0 (<tree>/crates/deep-canvas-seams)
+   Compiling gpui-pre-wgpu v0.3.9
+   Compiling deep-text v0.0.0 (<tree>/crates/deep-text)
+   Compiling deep-canvas-drawn v0.0.0 (<tree>/crates/deep-canvas-drawn)
+   Compiling gpui-base v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling deep-canvas-marks v0.0.0 (<tree>/crates/deep-canvas-marks)
+   Compiling gpui-pre-linux v0.3.9
+   Compiling gpui-kit-assets v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling gpui-component v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling gpui-pre-platform v0.3.9
+   Compiling quickjs-jit-runtime v0.12.11 (<tree>/vendor/quickjs-jit-runtime)
+   Compiling llrt_crypto v0.9.0-beta (<tree>/vendor/llrt_crypto)
+   Compiling gpui-kit v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling deep-canvas-motion v0.0.0 (<tree>/crates/deep-canvas-motion)
+   Compiling deep-gpu v0.0.0 (<tree>/crates/deep-gpu)
+   Compiling gpui-fps v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling deep-canvas-scene3d v0.0.0 (<tree>/crates/deep-canvas-scene3d)
+   Compiling quickjs-jit-stdlib v0.12.7 (https://github.com/longbridge/quickjs-jit?rev=605da483611a3548edb8c33fdff602e3f5f42076#605da483)
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+   Compiling gpui-shell v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling deep-canvas-effects v0.0.0 (<tree>/crates/deep-canvas-effects)
+   Compiling deep-text-gpui v0.0.0 (<tree>/crates/deep-text-gpui)
+   Compiling deep-marks-gpui v0.0.0 (<tree>/crates/deep-marks-gpui)
+   Compiling deep-canvas-cells v0.0.0 (<tree>/crates/deep-canvas-cells)
+   Compiling deep-images v0.0.0 (<tree>/crates/deep-images)
+   Compiling deep-app v0.0.0 (<tree>/crates/deep-app)
+warning: unused import: `gpui_kit`
+  --> crates/deep-app/src/gpu_view.rs:12:5
+   |
+12 | use gpui_kit::*;
+   |     ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `deep-app` (lib) generated 1 warning
+warning: `deep-app` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized] target(s) in 17m 25s
+     Running unittests src/lib.rs (target/debug/deps/deep_app-a0ec336ea453d78f)
+
+running 2 tests
+test record::tests::a_panel_isnt_given_an_ask_folded_into_an_exception_not_yet_in_sight ... ok
+test record::tests::a_panel_isnt_given_an_ask_folded_into_another_sessions_exception_on_its_thread_before_that_is_in_sight ... FAILED
+
+failures:
+
+---- record::tests::a_panel_isnt_given_an_ask_folded_into_another_sessions_exception_on_its_thread_before_that_is_in_sight stdout ----
+
+thread 'record::tests::a_panel_isnt_given_an_ask_folded_into_another_sessions_exception_on_its_thread_before_that_is_in_sight' (2687525) panicked at crates/deep-app/src/record.rs:1245:9:
+assertion `left == right` failed
+  left: "queued"
+ right: "folded"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    record::tests::a_panel_isnt_given_an_ask_folded_into_another_sessions_exception_on_its_thread_before_that_is_in_sight
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p deep-app --lib`
+[exit 101]
