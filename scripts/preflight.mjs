@@ -128,7 +128,7 @@ function work(args) {
   // children: a hung check would hold the machine's timed grant, and so every build and test on it, for ever.
   const allowanceMs = budgetMs * (1 + budgets.preflight.margin);
   const started = performance.now();
-  let observation = {}, checkStatus = 1;
+  let observation = {}, checkStatus = 1, stopped = false;
   console.log('Warming builds (not timed)');
   warm(root);
   try {
@@ -139,7 +139,7 @@ function work(args) {
     if (kept) try { observation.kept = JSON.parse(readFileSync(join(lanesFolder(), `${kept.tree}-unit.json`), 'utf8')).kept; observation.key = kept; } catch {}
     checkStatus = status === 0 ? 0 : 1;
   } catch (error) {
-    if (error.code === 'ETIMEDOUT') console.log(`FAIL preflight budget: the checks ran past ${(allowanceMs / 1000).toFixed(2)} s, the budget with its margin, and were stopped\n  Fix: Find the check that didn't end (a hung test, a leaked child) or reduce local check time below the budget in benchmarks/budgets.json.`);
+    if ((stopped = error.code === 'ETIMEDOUT')) console.log(`FAIL preflight budget: the checks ran past ${(allowanceMs / 1000).toFixed(2)} s, the budget with its margin, and were stopped\n  Fix: Find the check that didn't end (a hung test, a leaked child) or reduce local check time below the budget in benchmarks/budgets.json.`);
     else console.log(`BLOCKED check workload: ${error.message}\n  Fix: Install /usr/bin/time (GNU time on Linux) and restore the check runner.`);
   }
   const checksMs = performance.now() - started;
@@ -167,7 +167,8 @@ function work(args) {
     const { jobs, ms, runs } = keptTime(kept);
     console.log(`Kept: ${jobs} jobs, ${(ms / 1000).toFixed(0)} s of machine time, from ${runs} runs`);
   }
-  if (checksMs >= budgetMs) {
+  // A stop at the allowance has said so above.
+  if (checksMs >= budgetMs && !stopped) {
     console.log(`FAIL preflight budget: checks took ${(checksMs / 1000).toFixed(2)} s\n  Fix: Reduce local check time below the budget in benchmarks/budgets.json.`);
     process.exitCode = 1;
   }
