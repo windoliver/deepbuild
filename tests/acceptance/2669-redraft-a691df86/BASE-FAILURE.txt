@@ -1,0 +1,98 @@
+#2669.a691df86 at the base, with each twin swapped in
+=====================================================
+
+Base commit : 89713fcd8 (main, "Merge pull request #3381")
+Machine     : macOS on Apple silicon, Node v24.22.0, vitest 5.0.5; one-minute load 5.6 to 9.7 over the runs
+Setup       : npm ci; npm run build --workspaces; cargo build -p deep-hook (fresh GitHub clone)
+Command     : NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2669-redraft-a691df86 --no-file-parallelism --silent=false
+Type check  : npx tsc -p tests/acceptance/2669-redraft-a691df86 --noEmit -> exit 0
+Twin runs   : copy twins/<name>/<path> over <path>, npm run build --workspaces (exit 0), run, git checkout -- <path>,
+              rebuild. Paths below: the clone is <clone>, temp folders <tmp>.
+
+== Base: PASS (exit 0, 16.7 s)
+
+PROOF #2669.a691df86 tests/acceptance/83/redraft-319/status.test.ts: exit 0
+ RUN  v5.0.5 <clone>/tests/acceptance/83/redraft-319
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  18:33:38
+   Duration  16.44s (tests 100%)
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  18:33:38
+   Duration  16.69s (tests 100%)
+EXIT 0
+
+== Twin status-never-asked (packages/hub/src/verdict-chat.ts: isStatusQuestion returns false): FAIL (exit 1)
+
+The redraft: 5 of 5 fail (AC2 x2, AC4 x2, AC6), each at its 'answered from the record' expect (model:true).
+PROOF #2669.a691df86 tests/acceptance/83/redraft-319/status.test.ts: exit 1
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  status.test.ts > AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call > AC2 #83.5bcede40 each of "still going?", "all done?", "what's next?", "anything for me?" typ
+AssertionError: "still going?" is answered from the record (the UserPromptSubmit reply blocks the prompt with the answer as its reason): {"model":true,"runs":[{"command":"exec '<tmp>
+ ❯ status.test.ts:101:159
+ FAIL  status.test.ts > AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call > AC2 #83.5bcede40 an ask still waiting for its batch isn't counted: under the settings deep s
+ ❯ status.test.ts:140:159
+ FAIL  status.test.ts > AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged > AC4 #83.4b0836ba "still going?" from a schedu
+AssertionError: the same words a person typed are answered from the record: {"model":true,"runs":[{"command":"exec '<tmp>","code":0
+ ❯ status.test.ts:171:113
+ FAIL  status.test.ts > AC4 #83.4b0836ba Only a prompt a person typed is answered from the record; one from a scheduled task, a subagent's report or another session reaches the model unchanged > AC4 #83.4b0836ba (wrong program) a hub that r
+AssertionError: the planted hub must fail the unplaced-prompt check: expected null not to be null
+ ❯ status.test.ts:187:80
+ FAIL  status.test.ts > AC6 #83.eb2dc033 Where the work is, which session holds it, how to resume it and its link are answered from the record > AC6 #83.eb2dc033 "what's next?" typed into the session that holds the work is answered from the
+AssertionError: the question is answered from the record: {"model":true,"runs":[{"command":"exec '<tmp>","code":0,"signal":null,"ti
+ ❯ status.test.ts:202:86
+ ❯ redraft-319-passes.test.ts (1 test | 1 failed) 12024ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  redraft-319-passes.test.ts > #2669.a691df86 tests/acceptance/83/redraft-319/status.test.ts passes > #2669.a691df86 tests/acceptance/83/redraft-319/status.test.ts, run once through the repo's vitest as its README runs it, exits 0 with
+AssertionError: tests/acceptance/83/redraft-319/status.test.ts exits 0 under the repo's vitest:
+ ❯ redraft-319-passes.test.ts:52:83
+      Tests  1 failed (1)
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ redraft-319-passes.test.ts:52:83
+     50|
+     51|     expect(r.error?.message, `${ROOT}/${FILE} ran to its end (not kill…
+     52|     expect(r.status, `${ROOT}/${FILE} exits 0 under the repo's vitest:…
+       |                                                                                   ^
+     53|     const files = counts(output, 'Test Files');
+
+== Twin needs-you-counts-queued (packages/hub/src/core.ts: Needs you counts every inbox ask): FAIL (exit 1)
+
+The redraft: 1 failed | 4 passed; the waiting-for-its-batch test reads 'needs you: 1' where 0 is expected.
+PROOF #2669.a691df86 tests/acceptance/83/redraft-319/status.test.ts: exit 1
+PROOF #2669.a691df86 tests/acceptance/83/redraft-319/status.test.ts: exit 1
+ ❯ status.test.ts (5 tests | 1 failed) 15196ms
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  status.test.ts > AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call > AC2 #83.5bcede40 an ask still waiting for its batch isn't counted: under the settings deep s
+AssertionError: the answer to "still going?" carries the Needs-you count, 0 (the asks Needs you shows; ask:01M888Z4RQBKAVYQ9JB35C4NY9 still waits for its batch, so it isn't counted): "says done · next: DeepBuild (for 0s) · needs you: 1\nw
+ ❯ status.test.ts:142:224
+ ❯ redraft-319-passes.test.ts (1 test | 1 failed) 15429ms
+ FAIL  redraft-319-passes.test.ts > #2669.a691df86 tests/acceptance/83/redraft-319/status.test.ts passes > #2669.a691df86 tests/acceptance/83/redraft-319/status.test.ts, run once through the repo's vitest as its README runs it, exits 0 with
+AssertionError: tests/acceptance/83/redraft-319/status.test.ts exits 0 under the repo's vitest:
+ ❯ redraft-319-passes.test.ts:52:83
+      Tests  1 failed (1)
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ redraft-319-passes.test.ts:52:83
+     50|
+     51|     expect(r.error?.message, `${ROOT}/${FILE} ran to its end (not kill…
+     52|     expect(r.status, `${ROOT}/${FILE} exits 0 under the repo's vitest:…
+       |                                                                                   ^
+     53|     const files = counts(output, 'Test Files');
