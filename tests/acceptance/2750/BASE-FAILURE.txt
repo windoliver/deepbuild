@@ -1,30 +1,35 @@
-#2750's acceptance suite, run at the base 5fcfb690ba6592ad567c303ecf67054dbcbdfc3c. The checkout, <checkout> below, is
-this job's own git worktree under ~, detached at that commit: no implementation, only tests/acceptance/2750/ untracked.
+#2750's acceptance suite, as redrafted (README: Redraft), run at the base 5fcfb690ba6592ad567c303ecf67054dbcbdfc3c.
+The checkout, <checkout> below, is this job's own git worktree under ~, detached at that commit: no implementation,
+only tests/acceptance/2750/ untracked.
 
 Built first (the job's build log):
   npm run build --workspaces           exit 0, done 2026-11-23 08:44:23 UTC
   cargo build --locked -p deep-hook    exit 0, done 2026-11-24 03:02:51 UTC
+<checkout>/target was gone after the first job's runs. The redraft's brief says the caller built deep-hook at the base
+again; the build log holds no line for that build. packages/cli/dist/main.js and target/debug/deep-hook were both
+listed just before the runs below.
 
 Run: each of the six test files once, one command per file, through the machine's test slot:
-  node scripts/throttle.mjs test --wait 900 -- node node_modules/vitest/vitest.mjs run \
+  NO_COLOR=1 node scripts/throttle.mjs test --wait 240 -- node node_modules/vitest/vitest.mjs run \
     --root tests/acceptance/2750 --no-file-parallelism <file>
-Each log (p2-<name>.log, kept outside the repo) holds Vitest's output (v5.0.5, root tests/acceptance/2750) and the
-exit code. It holds no command line, and no line from the throttle: no BLOCKED and no "INCONCLUSIVE no grant".
+Each log (r1-<name>.log, kept outside the repo) holds Vitest's output (v5.0.5, root tests/acceptance/2750), without
+colour. It holds no command line, no exit code and no line from the throttle: no BLOCKED and no "INCONCLUSIVE no
+grant". The loop that ran the six printed each command's exit code: 1, six times.
 
-When: 2026-11-24, 03:37 to 04:06 UTC, starting about 35 minutes after the cargo build ended. Vitest prints a clock
-with no date or zone ("Start at"); each log file's last write, in the machine's zone (UTC-5), is that clock plus the
-run's duration, which gives both.
+When: 2026-11-25, 10:40:54 to 10:41:25 UTC, as the loop printed its start and its end. Vitest prints a clock with no
+date or zone ("Start at"), the machine's (UTC-5); each log file's last write is that clock plus the run's duration.
 
   file              Start at   duration   log last written (UTC)   result
-  landed.test.ts    22:37:26    3.89 s    2026-11-24 03:37:30      1 test, 1 failed, exit 1
-  revert.test.ts    22:52:43    4.00 s    2026-11-24 03:52:47      1 test, 1 failed, exit 1
-  missing.test.ts   22:54:16    3.65 s    2026-11-24 03:54:20      1 test, 1 failed, exit 1
-  rebuild.test.ts   22:54:34    2.99 s    2026-11-24 03:54:37      1 test, 1 failed, exit 1
-  quiet.test.ts     22:56:57    2.96 s    2026-11-24 03:57:00      1 test, 1 failed, exit 1
-  budgets.test.ts   23:05:57   12.56 s    2026-11-24 04:06:09      1 test, 1 failed, exit 1
+  landed.test.ts    05:40:54    3.49 s    2026-11-25 10:40:58      1 test, 1 failed, exit 1
+  revert.test.ts    05:40:58    3.34 s    2026-11-25 10:41:02      1 test, 1 failed, exit 1
+  missing.test.ts   05:41:02    3.80 s    2026-11-25 10:41:06      1 test, 1 failed, exit 1
+  rebuild.test.ts   05:41:06    3.19 s    2026-11-25 10:41:09      1 test, 1 failed, exit 1
+  quiet.test.ts     05:41:10    3.25 s    2026-11-25 10:41:13      1 test, 1 failed, exit 1
+  budgets.test.ts   05:41:13   12.25 s    2026-11-25 10:41:25      1 test, 1 failed, exit 1
 
-Machine: the logs name no machine, no Node version and no load. The job's brief names the Mac: a 16-inch MacBook Pro,
-Mac17,10, one of the design's reference Macs, on mains power, shared with about twenty other agent sessions.
+Machine: the logs name no machine, no Node version and no load. Read by the job: Node v24.22.0; `uptime` in the
+minute before the first run gave load averages 5.12, 5.37 and 11.40; `sysctl` and `pmset`, read after the runs, gave
+Mac17,10, 18 cores, on mains power.
 
 Result: 6 files, 6 tests: 6 failed, none passed, none skipped. No test reached a timeout, and none read BLOCKED or
 INCONCLUSIVE.
@@ -34,15 +39,22 @@ Every test fails at an assertion in its own file, because the reading is missing
 None fails at load: each file collected its one test. None fails in a helper: each failure is an AssertionError whose
 one stack frame is the test file's own expect(...).toEqual([]), with no frame in helpers.ts, judges.ts, fixture.ts or
 forge.ts. The line and column each log gives are that expect's in the file as delivered (checked for all six), and
-the suite's files were all last written before the first run. Each assertion ends
+they are the lines and columns of the first job's runs: the redraft moved no line at or above a failing assertion.
+The test files and helpers.ts were all last written before the first run (helpers.ts 10:36:18 UTC, quiet.test.ts
+10:40:25 UTC, the rest on 2026-11-22). Each assertion ends
   : expected [ Array(1) ] to deeply equal []
 with the finding above as the array's one entry.
 
 What ran cleanly before the failing assertion, in every test: the fixture was built and the record seeded with the hub
-stopped; the hub started on that record (helpers.ts:164); `deep numbers refresh --json` exited 0 and named acme/shop
-among the repos it read (:290, :291); the hub's socket gave its hello and took the control token (:201, :204);
-numbers.read answered with rows (:223, :224, :236). The lines named are the helpers' own guards, each a throw that
+stopped; the hub started on that record (helpers.ts:170); `deep numbers refresh --json` exited 0 and named acme/shop
+among the repos it read (:293, :294); the hub's socket gave its hello and took the control token (:203, :206);
+numbers.read answered with rows (:226, :227, :239). The lines named are the helpers' own guards, each a throw that
 starts BLOCKED: none was thrown, and no other error was.
+
+What ran after it, in every file: afterAll's cleanup, which the redraft changed. The hub, still running, got SIGTERM
+by its PID and the cleanup waited for its exit (helpers.ts: stopped, exited), then closed the forge and removed the
+temp folder. No file hung there or logged an error, and after the six no /tmp/dh2750-* folder and no process of the
+suite's was left.
 
 Failures, each at its assertion:
 
@@ -60,7 +72,7 @@ AC2 #2750.230902ce  revert.test.ts:30:167
   Title: AC2 #2750.230902ce a revert of a commit that read none is counted apart, as never judged >
     AC2 #2750.230902ce the revert of the commit pushed while the gate was off counts as one revert of a commit never
     judged, and the escapes after PASS stay at zero
-  AssertionError: the revert efdd7eea783c24eaac4c3d2aedf336d707f0549a of e0a71e60be12d4cdb2293e8ce66906f3305dd350
+  AssertionError: the revert 5317b4cc39b3bfdbb79c164b74076389e1facc5d of 0ba271ac13b28843812e5ed474eda8e1051ea825
     must count as one revert of a commit never judged, with no escape after PASS:
     numbers.read lists no landed.none reading for acme/shop
   The two SHAs are that run's fixture commits. Before it, the fixture's own two assertions held (lines 23 and 24):
@@ -70,7 +82,7 @@ AC3 #2750.8f4da496  missing.test.ts:29:228
   Title: AC3 #2750.8f4da496 a span the push readings don't cover reads missing, with its dates, never zero >
     AC3 #2750.8f4da496 with the forge refusing the push readings for three of the thirty days, the reading says
     missing for those dates and gives no share for them
-  AssertionError: the reading must say missing for 2026-11-18 to 2026-11-20, give no number for those dates, and
+  AssertionError: the reading must say missing for 2026-11-19 to 2026-11-21, give no number for those dates, and
     still read the ten commits the forge answers for:
     numbers.read lists no landed.none reading for acme/shop
   Before it, the fixture's own two assertions held (lines 22 and 23): three refused dates; ten commits the forge
@@ -93,9 +105,10 @@ AC5 #2750.099939a8  quiet.test.ts:26:153
   AssertionError: the reading must have been made in this run, three of its commits unjudged, or posting nothing
     shows nothing:
     numbers.read lists no landed.none reading for acme/shop
-  This is the test's first assertion; before it, events.read answered on the hub's socket (line 24). Lines 28 to 36
-  did not run: the second listing, the quiet 5 s, the judging of the forge's calls and the record's events, and the
-  test's own POST of a status. So the base was not shown posting nothing: no reading was made there to show it on.
+  This is the test's first assertion; before it, events.read answered on the hub's socket (line 24). Lines 29 to 37
+  did not run: the second listing, the wait for the reading made and listed again, the judging of the forge's calls
+  and the record's events, and the test's own POST of a status. So the base was not shown posting nothing by this
+  test: no reading was made there to show it on. The probe below ran those lines' steps without the reading.
 
 AC6 #2750.e41e681f  budgets.test.ts:45:206
   Title: AC6 #2750.e41e681f budgets, on the reference Mac in the local preflight, compared with the merge base >
@@ -107,33 +120,51 @@ AC6 #2750.e41e681f  budgets.test.ts:45:206
 
 What budgets.test.ts read at the base: nothing of the machine, and no time. It built the month (the fixture's own
 tally held, line 40: 1,800 PASS, 100 FAIL and 100 none), copied the seeded log's files (line 41), started the hub,
-ran the refresh, read numbers.read and failed at line 45 on the missing reading, 12.09 s into the test. Lines 46 to
+ran the refresh, read numbers.read and failed at line 45 on the missing reading, 11.83 s into the test. Lines 46 to
 70 did not run: the machine was not asked whether a timing could count there (machineProblem), no rebuild was made
 or timed, and no INCONCLUSIVE was reached. The base has no such reading, so it has nothing to time.
 
-The probe. A throwaway file, probe.test.ts, was run once the same way after the six (Start at 23:06:54, 45 s after
-budgets.test.ts ended; 2 tests, 2 failed, exit 1) and has been removed. It was to run the steps the failing
-assertions never reach. It confirmed:
-  - Both of its tests built their fixture and seeded the record. The month's is 6,080 events: "PROBE month built and
-    seeded (6080 events) in 10311 ms". The month's seeded log's files were copied.
-  - Without deep-hook the suite reads BLOCKED, never a pass. Both tests stopped at the hub's start, in the helper and
-    at no assertion (helpers.ts:164, from probe.test.ts:13 and :47): "BLOCKED: the hub didn't start: deep hub: the
-    core stopped: Error: no deep-hook is built under <checkout>/target; run cargo build -p deep-hook first". By then
-    deep-hook was no longer where the six runs' hubs had found it 45 s before; <checkout>/target is absent now.
-It could not confirm anything of the base hub, which it never started. Of what it set out to print, nothing at the
-base shows: whether the base hub writes ask.created or notice.* of its own after its start; which kinds it writes at
-all; what `deep numbers refresh --json` prints beyond the repos it read; how many rows numbers.read lists, and their
-ids; the calls the forge received; that the forge takes the test's own status (201); the hub's stop and the log's
-files after it; a rebuild from the event log alone, twice, and how long it takes; the machine's own verdict and the
-five-run judge. Of the base hub, only what the six runs show stands: its start on the seeded record, the refresh, and
-the socket's hello, numbers.read and events.read, as said above.
+The probe. A throwaway file, probe.test.ts, was run once the same way before the six (Start at 05:38:19, which is
+10:38:19 UTC; 6.98 s; 1 test, passed, exit 0; its log r1-probe.log and its source are kept outside the repo), with
+helpers.ts as delivered, and has been removed. It ran, on a real hub at the base and without the reading the base
+lacks, the steps the failing assertions never reach. It showed:
+  - quiet.test.ts's run past its first assertion. The hub started in 609 ms; its log then held 67 events, the
+    seeded ones and its start's own (9 session.start, 10 commit.made, 8 claim.made, 8 verdict.made, 9 session.end,
+    2 holds.watch, 3 agent.reach, 9 session.state, 9 row.set). Making and listing took 156 ms: `deep numbers refresh
+    --json` exited 0 with nothing unread, and numbers.read gave 10 rows, billing.mode nine times and
+    handbacks_sent_back, no landed.none. One listing more took 1 ms. The wait, the same made and listed again, took
+    106 ms. Then events.read held no event after those 67; the forge held 3 calls of two kinds,
+    GET /repos/acme/shop/actions/runs (404) and GET /repos/acme/shop/pulls (200); and judgeQuiet gave no failure.
+    So with the delivery rule on, the base hub posts nothing, raises no ask and sends no notification on this
+    fixture.
+  - The wait, held to a stand-in for the planted reader's post: the probe's own POST of a deepbuild/verdict status
+    on an unjudged commit with the hub's token, sent to the forge and not awaited at the moment a listing answered;
+    then the wait; then the forge's recorded calls judged. 20 times of 20 the POST was among the recorded calls when
+    the wait ended, and judgeQuiet named it: "the forge received POST /repos/acme/shop/statuses/<sha> (answered
+    201): a status posted on the unjudged commit <sha>". From sent to recorded took 9 to 16 ms (median 9); the wait
+    took 103 to 108 ms (median 105). For contrast, 20 more: with nothing awaited the POST was recorded 0 times of
+    20, and after one bare listing more (1 ms) 0 times of 20. Every POST was answered 201: the forge takes a status
+    on an unjudged commit from the hub's token.
+  - The hub's stop by its exit (helpers.ts: stopped): 36 ms from SIGTERM to the exit. A status sent just before
+    it was recorded by then, in the one stop made.
+  - After the stop the log's files were ledger.db alone. A rebuild from the event log alone ran twice (a new home,
+    the record replayed, a hub started, numbers.read, the hub stopped): 393 ms and 400 ms, 10 rows each, no
+    landed.none in either.
+It did not show: the planted reader itself, which posts from inside a hub and needs the reading it changes (the
+stand-in's POST left the test's process, not the hub's); the month's steps past the reading (budgets.test.ts lines
+46 to 70: the machine's own verdict, the timed rebuilds, the five-run judge); the revert's and the refused days'
+fixtures on a hub past their first assertion.
 
-An earlier run, not the base's result: landed.test.ts was run once on 2026-11-22, about 19:07 UTC, before anything
-was built. It failed at load (0 tests): "ENOENT: no such file or directory, open
-'<checkout>/packages/evidence/dist/patterns.json'". README's How to run names the build that file comes from.
+Earlier runs, not this file's result: the first job ran the six files as first written on 2026-11-24, 03:37 to
+04:06 UTC, and each failed at the assertion, line and column above with the same message (its own SHAs and dates).
+Before anything was built, on 2026-11-22 about 19:07 UTC, landed.test.ts failed at load (0 tests): "ENOENT: no such
+file or directory, open '<checkout>/packages/evidence/dist/patterns.json'". README's How to run names the build that
+file comes from.
 
-Passing at the base: none.
+Passing at the base: none of the six. The probe is not one of the suite's tests.
 
-Not run: nothing was rerun to write this file (with <checkout>/target gone a run would read BLOCKED). The five twins
-were not run at the base (twins/README.md). No type check is among these logs. No implementation exists, so no
-test's passing path, and no line after a failing assertion above, has run on a hub.
+Not run: nothing was rerun to write this file. <checkout>/target is absent again now: the checkout's folder was last
+changed at 2026-11-25 13:11:35 UTC, two and a half hours after the runs and not by this job, so a run now would read
+BLOCKED at the hub's start, as the first job's probe did. The five twins were not run at the base (twins/README.md).
+The type check and the two lints the redraft answers are not among these logs. No implementation exists, so no
+test's passing path, and no line after a failing assertion above, has run on a hub with the reading there.

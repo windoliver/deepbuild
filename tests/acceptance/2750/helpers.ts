@@ -36,12 +36,9 @@ export const AC6 = 'AC6 #2750.e41e681f';
 
 /** A test's limit: a hub's start can take minutes on a loaded machine, and no test waits on the clock for anything else. */
 export const TIMEOUT = 15 * 60_000;
-/** How long a test waits before it says nothing was posted, raised or sent. */
-export const QUIET_MS = 5000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Line = { [key: string]: any };
-export const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const parseObject = (raw: string): Line | undefined => {
   try {
     const value: unknown = JSON.parse(raw);
@@ -59,17 +56,24 @@ function tempDir(): string {
   made.push(dir);
   return dir;
 }
-const owned = new Set<number>();
+const owned = new Set<ChildProcess>();
 const closing: (() => Promise<void>)[] = [];
-function alive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
+/** A process's exit, the event a stop waits for: at once for one that has exited. */
+const exited = (child: ChildProcess): Promise<void> => new Promise((resolve) => {
+  if (child.exitCode !== null || child.signalCode !== null) resolve();
+  else child.once('exit', () => resolve());
+});
+/** SIGTERM to a process this suite started, by its PID, then its exit; one still running `graceMs` later gets SIGKILL. */
+async function stopped(child: ChildProcess, graceMs: number): Promise<void> {
+  child.kill('SIGTERM');
+  // deadline: bounds the wait for the exit after SIGTERM, so a process that ignores it is killed instead of hanging the test
+  const timer = setTimeout(() => child.kill('SIGKILL'), graceMs);
+  await exited(child);
+  clearTimeout(timer);
 }
 /** Stops every process this suite started, by PID, closes the forges and removes the temp folders. */
 export async function cleanup(): Promise<void> {
-  for (const pid of owned) try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ }
-  const deadline = Date.now() + 5000;
-  while ([...owned].some(alive) && Date.now() < deadline) await sleep(100);
-  for (const pid of owned) if (alive(pid)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+  await Promise.all([...owned].map((child) => stopped(child, 5000)));
   owned.clear();
   await Promise.all(closing.splice(0).map((close) => close().catch(() => undefined)));
   for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -98,13 +102,14 @@ interface Ran { code: number | null; stdout: string; stderr: string }
 function run(command: string, args: readonly string[], o: { env: NodeJS.ProcessEnv; cwd: string; timeoutMs: number }): Promise<Ran> {
   return new Promise((resolve) => {
     const child = spawn(command, args, { cwd: o.cwd, env: o.env, stdio: ['ignore', 'pipe', 'pipe'] });
-    if (child.pid) owned.add(child.pid);
+    if (child.pid) owned.add(child);
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout += d));
     child.stderr.setEncoding('utf8').on('data', (d: string) => (stderr += d));
+    // deadline: bounds the wait for the command's exit, so one that hangs is killed and reads as a failed run, never a pass
     const timer = setTimeout(() => child.kill('SIGKILL'), o.timeoutMs);
-    child.on('close', (code) => { clearTimeout(timer); if (child.pid) owned.delete(child.pid); resolve({ code, stdout, stderr }); });
+    child.on('close', (code) => { clearTimeout(timer); owned.delete(child); resolve({ code, stdout, stderr }); });
   });
 }
 
@@ -148,11 +153,12 @@ async function startHub(home: string, forge: string): Promise<Hub> {
   writeFileSync(join(tmp, 'work.json'), JSON.stringify({ readings: [] }));
   const env = childEnv(home, { DEEP_HUB_TEST_FORGE: forge, GH_TOKEN: TOKEN, DEEP_HUB_TEST_CONFIRM: join(tmp, 'confirm'), DEEP_HUB_TEST_WORK: join(tmp, 'work.json') });
   const child = spawn(NODE, [CLI, 'hub', 'run'], { cwd: REPO, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
-  if (child.pid) owned.add(child.pid);
+  if (child.pid) owned.add(child);
   let out = '';
   child.stderr!.setEncoding('utf8').on('data', (d: string) => (out += d));
   const ready = await new Promise<boolean>((resolve) => {
     let first = '';
+    // deadline: bounds the wait for the hub's ready line, so a hub that never says it is ready reads BLOCKED, never a pass
     const timer = setTimeout(() => resolve(false), 300_000);
     child.stdout!.setEncoding('utf8').on('data', (d: string) => {
       out += d;
@@ -166,12 +172,8 @@ async function startHub(home: string, forge: string): Promise<Hub> {
 }
 /** SIGTERM to the hub, by its PID, and waits for it to exit. */
 async function stopHub(hub: Hub): Promise<void> {
-  try { process.kill(hub.pid, 'SIGTERM'); } catch { owned.delete(hub.pid); return; }
-  const deadline = Date.now() + 60_000;
-  while (alive(hub.pid) && hub.child.exitCode === null && hub.child.signalCode === null && Date.now() < deadline) await sleep(25);
-  if (hub.child.exitCode === null && hub.child.signalCode === null) try { process.kill(hub.pid, 'SIGKILL'); } catch { /* gone */ }
-  while (hub.child.exitCode === null && hub.child.signalCode === null) await sleep(25);
-  owned.delete(hub.pid);
+  await stopped(hub.child, 60_000);
+  owned.delete(hub.child);
 }
 /** One connection holding the control token, read from `<home>/.deepbuild/control.token`, as `deep` holds it. */
 class Conn {
@@ -210,6 +212,7 @@ class Conn {
         const found = pick(this.lines);
         if (found || this.closed) { clearTimeout(timer); this.wakers.delete(check); resolve(found); }
       };
+      // deadline: bounds the wait for the hub's line, so a hub that never answers reads BLOCKED, never a pass
       const timer = setTimeout(() => { this.wakers.delete(check); resolve(undefined); }, timeoutMs);
       this.wakers.add(check);
       check();

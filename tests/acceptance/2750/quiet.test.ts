@@ -11,7 +11,7 @@
 // status-on-unjudged, on which the failure names the POST and the unjudged commit (twins/README.md).
 import { afterAll, describe, expect, it } from 'vitest';
 import { REPO_NAME, Shop } from './fixture.ts';
-import { AC5, cleanup, eventsRead, numbersRead, QUIET_MS, sleep, TIMEOUT, TOKEN, World } from './helpers.ts';
+import { AC5, cleanup, eventsRead, numbersRead, TIMEOUT, TOKEN, World } from './helpers.ts';
 import { judgeLanded, judgeQuiet } from './judges.ts';
 
 afterAll(cleanup, 120_000);
@@ -24,9 +24,10 @@ describe(`${AC5} it is a reading: it posts nothing to GitHub, raises no ask and 
     const before = (await eventsRead(hub)).at(-1)?.log_pos ?? 0;
     const made = judgeLanded((await w.read()).reading, REPO_NAME, expected);
     expect(made, `the reading must have been made in this run, three of its commits unjudged, or posting nothing shows nothing:\n${made.join('\n')}\n`).toEqual([]);
-    // Listed once more, then left alone for a while: a post made after the reply is still this reading's.
+    // Listed once more, then made and listed again: a post made after a reply is still this reading's, and it left the
+    // hub before the hub's next reads of the same forge, which the forge has answered by then (README: Readings, 17).
     await numbersRead(hub);
-    await sleep(QUIET_MS);
+    await w.read();
 
     const failures = judgeQuiet(forge.calls, (await eventsRead(hub)).filter((e) => e.log_pos > before), unjudged);
     expect(failures, `nothing but GETs may reach the forge, and the record may take no ask and no notification, while the reading is made and listed:\n${failures.join('\n')}\n`).toEqual([]);

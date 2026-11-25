@@ -2,7 +2,8 @@
 
 Written first, blind, at base commit `5fcfb690` (the issue says it read main at `1463afcb`; the base is newer and is what
 counts), from the issue, the design and the base alone, before any implementation. The implementing agent doesn't edit
-these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job.
+these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job. There has been one, for two lints
+(Redraft, at the end): it changed how the tests wait and nothing they assert.
 
 All six checkbox criteria are tested, in issue order, as AC1 to AC6, each `describe` and each test named with its
 criterion's ID (`#2750.<h8>`, as `scripts/proof-change.mjs`'s `criterionId` computes it).
@@ -211,7 +212,7 @@ run of DeepBuild.
 | AC2 `#2750.230902ce` | `revert.test.ts`: the revert's row names commit 5 in `reverts` and is counted `never_judged`; it is the one row counted so; no row is counted `escape` | the merge base; **named:** `revert-as-escape` (the failure names the revert); a reader that doesn't see a revert |
 | AC3 `#2750.8f4da496` | `missing.test.ts`: one missing row covering exactly the three refused dates, no number in it, none of the six refused commits listed, and the ten readable commits read as before with their share | the merge base; **named:** `uncovered-as-zero` (the failure names the span); a reader that gives the span a zero; one that says missing for other dates |
 | AC4 `#2750.6b561f56` | `rebuild.test.ts`: the reading is made and is the fixture's; then, with the forge closed and the repos removed, two hubs each started on a copy of the event log alone, the record's tables replayed first, list `landed.none` with the same bytes, and it is still the fixture's ten commits | the merge base; a reading kept in memory, in `github.json`, or read again from git or the forge; rows that hold a clock's reading or an unfixed order |
-| AC5 `#2750.099939a8` | `quiet.test.ts`: with the delivery rule on and the reading made and listed twice, after a quiet 5 s the forge received nothing but GETs and the record took no `ask.created`, `notice.sent` or `notice.delivered` since the hub started; the test's own POST then lands, so one could have | the merge base (no reading is made, so the run doesn't exist); **named:** `status-on-unjudged` (the failure names the POST and the unjudged commit) |
+| AC5 `#2750.099939a8` | `quiet.test.ts`: with the delivery rule on, the reading is made and listed, listed once more, then made and listed again; once that has answered (Readings, 17), the forge received nothing but GETs and the record took no `ask.created`, `notice.sent` or `notice.delivered` since the hub started; the test's own POST then lands, so one could have | the merge base (no reading is made, so the run doesn't exist); **named:** `status-on-unjudged` (the failure names the POST and the unjudged commit) |
 | AC6 `#2750.e41e681f` | `budgets.test.ts`: the month's 2,000 commits are read and listed as the fixture says; then, on a reference Mac at rest, a warm-up and five runs of what the month adds to a rebuild from the event log, judged against 2,000 ms | the merge base (nothing to time); a rebuild that takes 2 s or more. Off the reference Macs or under load it fails as INCONCLUSIVE, never passes |
 
 The Proof line ("the fixture's ten commits with how each was judged, the revert counted apart, the missing span, and
@@ -266,6 +267,27 @@ acme/shop` (`BASE-FAILURE.txt`). No test asserts with `toThrow`.
     it, as #46's budget reads the same words.
 16. **The reference Macs** are `scripts/benchmark.mjs`'s list, and its `judgeLimit` decides, as the perf lane does:
     mains power, Low Power Mode off, thermal state nominal, load within the cores.
+17. **When the recorded calls are read (AC5; the redraft's).** The issue says what is read, "the recorded calls", and
+    not when. A reader acts where it runs, in the hub (design: One hub per user, extensions in-process): while the
+    reading is made (`deep numbers refresh`, which returns once the hub has read the forge), while it is listed
+    (`numbers.read`), or in work the hub still holds when it answers. A status is a call the hub sends to the forge.
+    An ask or a notification is an event the hub appends, and log positions commit in order (design: One event log).
+    So the test makes and lists the reading, lists it once more, and waits for one event: the reading made and
+    listed again by the same hub. When that has answered, a status sent while the reading was made or listed, or as
+    late as the second listing's answer, left the hub before the hub's next reads of the same forge; the forge has
+    since answered those reads, a `deep` process has started and ended, and the hub has answered two more calls. And
+    `events.read`, paged to the log's end after it, holds every event appended before it. That is enough for the
+    reader the criterion names, one that posts when the reading is made or listed, whether or not the hub awaits
+    the post, and the wait stretches with the machine's load as the post does, which a fixed 5 s did not. It is an
+    order of sending, not a proof of arrival: the forge records a call once it has an answer for it, so a status
+    the forge still held when the wait ended would be missed. At the base a stand-in for the planted
+    reader's post, a status sent to the forge and not awaited at the moment a listing answered, was among the
+    recorded calls when the wait ended 20 times of 20: recorded 9 to 16 ms after it was sent, while the wait took
+    103 to 108 ms. One bare listing more, 1 ms, caught it 0 times of 20 (`BASE-FAILURE.txt`, The probe). A reader
+    that holds its post back on a clock of its own for longer than a making and listing take isn't seen; the 5 s saw
+    it only when it held back less than 5 s. The hub's exit was not chosen as the event: it shows the hub will send
+    nothing more, but a hub that exits sends nothing it still held, and the record could then be read only through
+    another hub's `events.read`.
 
 ## What isn't asserted, because no criterion says so
 
@@ -284,7 +306,30 @@ acme/shop` (`BASE-FAILURE.txt`). No test asserts with `toThrow`.
 ## What the implementer adds outside this folder
 
 - `scripts/lanes.mjs`: `timed.push('tests/acceptance/2750/budgets.test.ts');`, since that file's verdict reads the
-  machine's load and timing. `lane.json` already says the folder runs alone.
+  machine's load and timing. `lane.json` already says the folder runs alone, and why: `binary`, since every test
+  starts a hub.
 - `twins.json`'s five twins are delivered here and need nothing added, as long as `packages/readings/src/index.ts`
   stays `export * from './impl.js'` and the reading's row reaches `numbers.read` through `panelRows` (section 3).
 - `BASE-FAILURE.txt` holds the base's run.
+
+## Redraft
+
+Redrafted once by the blind job, at the same base and from the same inputs, with two lints' findings on this folder
+and nothing of any implementation. No criterion, tag, test name, expected value, surface or judge changed, and
+`judges.ts`, `fixture.ts`, `forge.ts`, `twins.json` and `twins/` are byte for byte as first written.
+
+- **The wait ratchet** (`scripts/wait-ratchet.mjs`: a test waits for the event it needs, never for time to pass)
+  found eight fixed waits. In `helpers.ts`, a stop now waits for the process's exit (`exited`, `stopped`), where
+  `cleanup` and `stopHub` looked at the PID every 25 or 100 ms. A process is still signalled only by its PID, SIGTERM
+  first and SIGKILL after the same grace as before (5 s at cleanup, 60 s for a hub). The four timers left only bound
+  a wait for an event, each with its reason on a `// deadline:` line: a command's exit, the hub's ready line, a line
+  from the hub's socket, an exit after SIGTERM. `sleep` and `QUIET_MS` are gone. In `quiet.test.ts`, the 5 s after
+  the second listing became a wait for an event, the reading made and listed again (Readings, 17, which says why
+  that event is enough and what it doesn't see). Its assertions, their messages and its judge are as they were.
+- **The lanes' rule for `lane.json`** (it landed after the base, and this job was given its text): `why` begins with
+  the reason the folder runs alone. Here it is `binary`: `helpers.ts` starts a hub for every test, and a hub takes
+  `deep-hook` from the checkout's `target/` (How to run). The rest of the sentence says what it said.
+- `BASE-FAILURE.txt` is rewritten from the redraft's runs at the base, where each test fails at the same assertion
+  with the same message. Read for the redraft, beside What was read: the ratchet's header, a hub's stop in
+  `packages/hub/src/server.ts` and `core.ts`, and `packages/github/src/rest.ts`, the one client the hub's forge calls
+  go through.
