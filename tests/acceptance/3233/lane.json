@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: budgets.test.ts judges a 1 ms limit on five timed runs; it and panels.test.ts build with cargo, and the Rust half draws headless on Metal" }

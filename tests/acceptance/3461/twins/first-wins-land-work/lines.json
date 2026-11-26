@@ -1,0 +1,12 @@
+{
+  "packages/cli/src/main.ts": [
+    {
+      "find": [
+        "} else if (givenTwice(args) !== undefined) {"
+      ],
+      "wrong": [
+        "} else if (givenTwice(args) !== undefined && !['land', 'work'].includes(args[0]!)) {"
+      ]
+    }
+  ]
+}
