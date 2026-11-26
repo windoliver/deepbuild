@@ -4,6 +4,7 @@ import { fixtures, type JsonValue } from '@deepbuild/contracts';
 import { openRecord, testStorage, type Connection } from '@deepbuild/record';
 import type { LineState } from '@deepbuild/verdicts';
 import { describe, expect, it } from 'vitest';
+import { SLOT_WAIT } from '@deepbuild/readings';
 import { claimState, isStatusQuestion, statusAnswer } from '../src/verdict-chat.js';
 
 describe('isStatusQuestion', () => {
@@ -78,6 +79,34 @@ describe('claimState', () => {
         { check: '.deepbuild/checks/seq-number.sh', outcome: 'passed' },
         { check: '.deepbuild/checks/health.sh', outcome: 'passed', stand_in: true },
       ]);
+    } finally {
+      await r.close();
+    }
+  });
+
+  it('a place that waits for a slot reads queued, with its requirement\'s drafted time, never held for a loop; a check about to start reads running (#3562)', async () => {
+    const T = 1_760_013_451_123;
+    const r = await openRecord({ path: 'record.db', now: () => T, storage: testStorage() });
+    try {
+      const core: Connection = { writer: 'core', actor: 'you', scope: 'you' };
+      const fixture = (name: string) => fixtures(name)[0] as { v: number; id: string; kind: string; ts: number; data: Record<string, JsonValue> };
+      const at = (e: ReturnType<typeof fixture>, id: string, data: Record<string, JsonValue> = {}) => ({ v: e.v, id, kind: e.kind, ts: T, data: { ...e.data, ...data } });
+      await r.append(core, at(fixture('definition.locked@4'), '01K74FKZVK8Q2X5R7M3N9P4T60'));
+      const claim = '01K74FKZVK8Q2X5R7M3N9P4T62';
+      await r.append(core, at(fixture('claim.made@3'), claim));
+      // seq-number.sh, drafted at 1.2 s, waits for a slot; health.sh waits for a wake-up; a place a newer snapshot took waits for nothing.
+      const held = fixture('check.held@1');
+      const place = (id: string, data: Record<string, JsonValue>) => r.append(core, { ...at(held, `01K74FKZVK8Q2X5R7M3N9P4T${id}`, { claim: `claim:${claim}`, ...data }), subject: `claim:${claim}` });
+      await place('63', { check: '.deepbuild/checks/seq-number.sh', reason: SLOT_WAIT });
+      await place('64', { check: '.deepbuild/checks/health.sh' });
+      await place('65', { check: '.deepbuild/checks/old.sh', snapshot: 'older', reason: SLOT_WAIT, replaced_by: held.data.snapshot! });
+      const state = await claimState((q) => r.raw(q), claim, new Map(), ['.deepbuild/checks/e2e.sh']);
+      expect(state?.state.queued).toEqual([{ check: '.deepbuild/checks/seq-number.sh', about_s: 1.2 }]);
+      expect(state?.state.held).toEqual([{ check: '.deepbuild/checks/health.sh', reason: 'wake-up' }]);
+      expect(state?.state.running).toEqual([{ check: '.deepbuild/checks/e2e.sh', about_s: null }]);
+      // Once the place has its slot it is queued no more.
+      await place('66', { check: '.deepbuild/checks/seq-number.sh', reason: SLOT_WAIT, started_at: T, started_by: 'slot' });
+      expect((await claimState((q) => r.raw(q), claim, new Map()))?.state.queued).toBeUndefined();
     } finally {
       await r.close();
     }
