@@ -27,6 +27,7 @@ const ONE: f64 = 16.0;
 const REACH: f64 = 11_000.0;
 const NO_LIGHT: u32 = u32::MAX;
 
+deep_gpu::paired! { prim: "indexed.wgsl", Prim; "indexed_up.wgsl", Prim;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable, PartialEq)]
 pub struct Prim {
@@ -39,7 +40,9 @@ pub struct Prim {
     r_inner: u32,
     light: u32,
 }
+}
 
+deep_gpu::paired! { params: "indexed.wgsl", Params; "indexed_up.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Params {
@@ -51,6 +54,7 @@ struct Params {
     light_max: u32,
     scale: u32,
     palette: u32,
+}
 }
 
 const FLAG_BLEND: u32 = 1;

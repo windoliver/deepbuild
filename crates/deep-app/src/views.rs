@@ -1888,7 +1888,16 @@ pub fn sidebar() -> Vec<(String, String, states::State)> {
 
 /// The one count, as the record the views draw stands: the window and the menu bar both read it (#1172).
 pub fn count() -> usize {
-    crate::record::with_view(|view| states::count(&view.table())).unwrap_or(0)
+    crate::record::with_view(count_of).unwrap_or(0)
+}
+
+/// The count of what needs you in this view: as many as Needs you draws.
+fn count_of(view: &crate::record::View) -> usize {
+    let table = view.table();
+    if table.listed() {
+        return states::count(&table);
+    }
+    view.needs_you().len()
 }
 
 fn record(kind: Kind, opened: Option<&str>) -> Record {
@@ -1934,9 +1943,9 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
             })
             .collect()
     } else {
-        view.inbox
-            .iter()
-            .filter(|row| row["status"] != "closed")
+        // Each open ask the core has shown: one waiting for its batch isn't drawn (#22).
+        view.needs_you()
+            .into_iter()
             .map(|row| {
                 // The row draws the question as the card does, its controls and direction marks shown (#1510).
                 (
@@ -2204,6 +2213,8 @@ impl Render for Shipped {
                 let planted_nothing = crate::plain::planted("hub-down-nothing-needs-you")
                     && matches!(empty, crate::empties::Empty::Unreachable { .. });
                 let mut drawn: Vec<AnyElement> = Vec::new();
+                // #3282's planted list draws its topmost ask row's time 0 wide.
+                let mut plant_left = crate::plain::planted("ask-time-0-wide");
                 // What's drawn above the rows that scroll: Needs you's heading and what goes under it.
                 let mut heading_ends = None;
                 for (n, item) in items.iter().enumerate() {
@@ -2291,7 +2302,13 @@ impl Render for Shipped {
                                 still: cx.reduce_motion(),
                                 width: self.list_room.get().map(|area| area.width),
                             };
-                            let drawn_row = RowDrawn::of(row, selected, ring, shape, now, window);
+                            let mut drawn_row =
+                                RowDrawn::of(row, selected, ring, shape, now, window);
+                            if row.id.starts_with("ask:")
+                                && std::mem::replace(&mut plant_left, false)
+                            {
+                                drawn_row.timed = false;
+                            }
                             drawn.push(self.row_in_view(row, drawn_row, window, cx));
                         }
                     }

@@ -29,7 +29,7 @@ const SIZE: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 /// The taps.
 const TAPS: usize = 16;
 
-const SHADER: &str = "
+pub(crate) const SHADER: &str = "
 struct Spread {
     // x: 1 for the planted pass that takes every tap; y: its scale in mm and z its pixel's size
     // in mm, where a pixel holds no subsurface part.
@@ -180,12 +180,14 @@ fn taps() -> ([f32; TAPS], [f32; TAPS + 4]) {
     (radii, edges)
 }
 
+deep_gpu::paired! { spread_uniform: "sss.rs", Spread;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct SpreadUniform {
     opts: [f32; 4],
     radii: [f32; TAPS],
     edges: [f32; TAPS + 4],
+}
 }
 
 /// One share-pass draw: a solid set's mesh, its records and their count, its maps' bind group.

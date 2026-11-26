@@ -35,6 +35,7 @@
   "actions.write_to_it": "Write to it",
   "arming.hold_still": "Hold still",
   "arming.too_small": "Make the window taller",
+  "arming.unseen": "Show the window first",
   "bound.card_named": "card {0}: {1}",
   "bound.no_run": "no run",
   "bound.panel_named": "panel {0}: {1}",
@@ -292,6 +293,7 @@
   "question.back_sends": "{0} · {1}",
   "question.default_at": "Default: {0} · at {1}",
   "question.field": "{0}: {1}",
+  "question.holds_escapes": "This holds characters you can't see, each drawn as its escape",
   "question.look_first": "Look at each picture first",
   "question.more_options": {
     "one": "{0} more options",

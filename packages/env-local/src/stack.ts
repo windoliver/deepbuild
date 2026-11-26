@@ -421,8 +421,9 @@ export const daemon = (docker: string): Daemon => {
   return found;
 };
 /**
- * What the CLI runs with in a compose stack or step: the daemon's pinned environment, a PATH of the CLI's own folder and
- * the system's, and the hub's own Docker config, which only links the compose plugin: no run writes either, so neither
+ * What the CLI runs with in a compose stack or step: the daemon's pinned environment, a PATH of the hub's folder that
+ * links the CLI alone and the system's, and the hub's own Docker config, which only links the compose plugin: no run
+ * writes either, and a credential helper kept beside the CLI (Docker Desktop's keychain one) isn't found, so neither
  * your config's plugins, hooks and credential helpers nor a program planted on your PATH runs with the socket. Compose
  * fetches no remote include (a git one runs git, as configured from a home a run may write) and has an empty home of
  * the hub's; these outrank what a folder's `.env` sets.
@@ -430,7 +431,7 @@ export const daemon = (docker: string): Daemon => {
 export const dockerEnv = (docker: string, dir: string): Record<string, string> => {
   const d = daemon(docker);
   return 'env' in d ? {
-    ...d.env, PATH: `${dirname(docker)}:${SYSTEM_PATH}`, HOME: join(dir, 'home'), DOCKER_CONFIG: join(dir, 'docker'),
+    ...d.env, PATH: `${join(dir, 'bin')}:${SYSTEM_PATH}`, HOME: join(dir, 'home'), DOCKER_CONFIG: join(dir, 'docker'),
     COMPOSE_EXPERIMENTAL_GIT_REMOTE: '0', COMPOSE_EXPERIMENTAL_OCI_REMOTE: '0', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
   } : {};
 };
@@ -453,7 +454,10 @@ export function composeKind(dir: string): ResourceKind & { dir: string; guarded:
   // In `dir`, which no run writes: an empty folder, so no compose file nearby is read by `down`, and the CLI's config.
   const cwd = join(dir, 'steps');
   rmSync(join(dir, 'docker'), { recursive: true, force: true });
+  rmSync(join(dir, 'bin'), { recursive: true, force: true });
   mkdirSync(cwd, { recursive: true });
+  mkdirSync(join(dir, 'bin'));
+  symlinkSync(docker, join(dir, 'bin', 'docker'));
   mkdirSync(join(dir, 'home'), { recursive: true });
   mkdirSync(join(dir, 'docker', 'cli-plugins'), { recursive: true });
   writeFileSync(join(dir, 'docker', 'config.json'), '{}\n');

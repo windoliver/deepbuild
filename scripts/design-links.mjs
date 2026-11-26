@@ -2,8 +2,10 @@
 // lands. The file exists, and its anchor is a heading slugged as GitHub slugs it or an explicit <a id>. And every
 // `deep` command and agent tool an open issue names in code is in a design doc's code, or in scripts/planned-names.txt
 // with the open issue that plans it. It reads the open issues the catalogue drift lane fetched; without them it is
-// INCONCLUSIVE, never PASS. And the design states its principles as scripts/principles.mjs holds them (#2339).
+// INCONCLUSIVE, never PASS. And the design states its principles as scripts/principles.mjs holds them (#2339), and
+// what main holds in each place scripts/design-drift.mjs compares with a file on main (#1876).
 import { existsSync, readFileSync } from 'node:fs';
+import { drift } from './design-drift.mjs';
 import { DOCS, anchors, prose, resolve, targets } from './doc-links.mjs';
 import { openIssues } from './open-issues.mjs';
 import { principles } from './principles.mjs';
@@ -72,14 +74,16 @@ for (const [number, found] of open) {
 }
 
 const unprincipled = principles();
-if (broken.length || unheld.length || stale.length || unprincipled.length) {
-  console.log(`FAIL ${broken.length} links into docs/*.md land on no heading, ${unheld.length} names are not in the design, ${stale.length} planned names are stale, ${unprincipled.length} principles findings${missing ? `; the open issues were not read: ${missing}` : ''}`);
-  for (const line of [...broken, ...unheld, ...stale, ...unprincipled]) console.log(`  ${line}`);
+const behind = drift();
+if (broken.length || unheld.length || stale.length || unprincipled.length || behind.length) {
+  console.log(`FAIL ${broken.length} links into docs/*.md land on no heading, ${unheld.length} names are not in the design, ${stale.length} planned names are stale, ${unprincipled.length} principles findings, ${behind.length} places where the design is behind main${missing ? `; the open issues were not read: ${missing}` : ''}`);
+  for (const line of [...broken, ...unheld, ...stale, ...unprincipled, ...behind]) console.log(`  ${line}`);
   if (unprincipled.length) console.log('  Fix: keep Principles to 8 to 12 one-sentence lines of at most 160 characters, each linking the design and naming a check that exists; edit its first four lines with AGENTS.md\'s invariants; open the canvas conventions with a link to it.');
+  if (behind.length) console.log('  Fix: state in the design what main holds at each line named above, in the change that moves main.');
   process.exit(1);
 }
 if (missing) {
   console.log(`INCONCLUSIVE ${missing}`);
   process.exit(1);
 }
-console.log(`design links and names: ${checked} links checked from ${DOCS.length} docs and ${issues.length} open issues, each landing on a heading or an <a id>; ${named} \`deep\` commands and agent tools named, each in the design or planned (${planned.size} planned); the design's principles hold`);
+console.log(`design links and names: ${checked} links checked from ${DOCS.length} docs and ${issues.length} open issues, each landing on a heading or an <a id>; ${named} \`deep\` commands and agent tools named, each in the design or planned (${planned.size} planned); the design's principles hold; the design states what main holds in each place scripts/design-drift.mjs compares`);

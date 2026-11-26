@@ -1,0 +1,36 @@
+World: home /private/tmp/dh27-E4K8m1/h; deep-app pid 34163; machine Mac18,1
+
+$ deep inbox    # before the batch, 2026-11-21T04:38:24.049Z
+Nothing needs you
+   screenshot 0-before-batch.png (window 3712)
+
+$ deep inbox    # after the 2026-11-21T04:39:00.000Z batch
+A1: which header colour for this checkout screen?  taste  repof1e9  a9d23b67-6bc6-4314-b7d6-8f13e4939cee  46s  If you don't answer: Green header, on Mon 23 Nov at 20:38  ask:01M7Y6BS99JKQ67FZMJK012V0H
+    answer with blue (Blue header), green (Green header)
+B1: which header colour for this checkout screen?  taste  repof1e9  fd5c9696-ec4d-4c61-a604-cbdbd3fd34fb  45s  If you don't answer: Green header, on Mon 23 Nov at 20:38  ask:01M7Y6BSTQ4QF61JYQZ9C052HF
+    answer with blue (Blue header), green (Green header)
+D1: which header colour for this checkout screen?  taste  repof1e9  56abc140-8f94-486f-a541-6e090a5af0bb  45s  If you don't answer: Green header, on Mon 23 Nov at 20:38  ask:01M7Y6BTC0932F7WWD72Q7E51A
+    answer with blue (Blue header), green (Green header)
+D2: which header colour for this checkout screen?  taste  repof1e9  56abc140-8f94-486f-a541-6e090a5af0bb  45s  If you don't answer: Green header, on Mon 23 Nov at 20:38  ask:01M7Y6BTK4F2X0VADK2VGQSQN8
+    answer with blue (Blue header), green (Green header)
+D3: which header colour for this checkout screen?  taste  repof1e9  56abc140-8f94-486f-a541-6e090a5af0bb  44s  If you don't answer: Green header, on Mon 23 Nov at 20:38  ask:01M7Y6BTSQ6JHVW8TN1B6BMECW
+    answer with blue (Blue header), green (Green header)
+D4: which header colour for this checkout screen?  taste  repof1e9  56abc140-8f94-486f-a541-6e090a5af0bb  44s  If you don't answer: Green header, on Mon 23 Nov at 20:38  ask:01M7Y6BTZYCTTTE40F9DFZNM9Q
+    answer with blue (Blue header), green (Green header)
+D5: which header colour for this checkout screen?  taste  repof1e9  56abc140-8f94-486f-a541-6e090a5af0bb  44s  If you don't answer: Green header, on Mon 23 Nov at 20:38  ask:01M7Y6BV68D6SD823T05TX9ZGE
+    answer with blue (Blue header), green (Green header)
+This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  exception  repof1e9  56abc140-8f94-486f-a541-6e090a5af0bb  44s  If you don't answer: Leave them to their defaults, on Mon 23 Nov at 20:38  ask:01M7Y6BVD11WZ60K4N8KCJGPXK
+    answer with together (Answer them together), pause (Pause the session), defaults (Leave them to their defaults)
+8 asks need you
+   screenshot 1-needs-you.png (window 3712)
+
+$ deep inbox answer ask:01M7Y6BVD11WZ60K4N8KCJGPXK together
+ask:01M7Y6BVD11WZ60K4N8KCJGPXK answered together; no decision saved (exit 0)
+
+$ deep inbox
+A1: which header colour for this checkout screen?  taste  repof1e9  a9d23b67-6bc6-4314-b7d6-8f13e4939cee  56s  If you don't answer: Green header, on Mon 23 Nov at 20:38  ask:01M7Y6BS99JKQ67FZMJK012V0H
+    answer with blue (Blue header), green (Green header)
+B1: which header colour for this checkout screen?  taste  repof1e9  fd5c9696-ec4d-4c61-a604-cbdbd3fd34fb  56s  If you don't answer: Green header, on Mon 23 Nov at 20:38  ask:01M7Y6BSTQ4QF61JYQZ9C052HF
+    answer with blue (Blue header), green (Green header)
+2 asks need you
+   screenshot 2-after-bulk-answer.png (window 3712)

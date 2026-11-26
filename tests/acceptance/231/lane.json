@@ -1,0 +1,1 @@
+{ "alone": true, "why": "every file builds deep-show (two with test-encode-tools too) and exports films through the GPU, an encode tool and a fresh decode worker, four of them at 1080p60; speed.test.ts, wall.test.ts and starts.test.ts read a clock and the machine's load" }

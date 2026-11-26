@@ -1,0 +1,16 @@
+== head 07587e38b594f97a7c3098dc10df8104813f7525 tests/acceptance/1459/panel.test.ts
+== start 2026-11-14 14:48:56 load { 6.80 43.15 43.79 } thermal 0
+
+ RUN  v5.0.5 ~/private/dbc-22l
+
+ ✓ tests/acceptance/1459/panel.test.ts (1 test) 20374ms
+   ✓ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     ✓ AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 20269ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  14:48:57
+   Duration  20.53s (tests 100%)
+
+== end 2026-11-14 14:49:17 load { 5.65 39.96 42.62 } thermal 0
+vitest exit=0

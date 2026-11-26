@@ -451,6 +451,7 @@ fn finish(
                 Tail::Document => {
                     check_id_maps(lowered, &mut issues);
                     check_controls(lowered, sealed, &mut issues);
+                    check_control_reads(lowered, sealed, &mut issues);
                     check_constraints(lowered, sealed, &mut issues);
                     check_assemblies(lowered, &mut issues);
                     check_viewer_tools(lowered, &mut issues);
@@ -1633,12 +1634,12 @@ fn check_item(
             None
         }
         Lookup::Malformed => {
-            issues.push(Issue::error(
-                "out_of_range",
+            // Another tool's word is refused as a pack's census holds it (#3032).
+            issues.push(super::close::no_kind(
                 key,
-                at("kind"),
-                json!(text),
-                "not family.name@major",
+                text,
+                (ctx.packs, ctx.resolved),
+                ctx.sealed.close_fault,
             ));
             None
         }
@@ -2080,6 +2081,22 @@ fn check_key(section: &str, key: &str, issues: &mut Vec<Issue>) {
             format!("{section}/{key}"),
             json!(key),
             &r.what,
+        ));
+    }
+}
+
+/// A declared field that reads a control the document doesn't hold (#3379): `ref_unresolved`
+/// at the field, so a revision that removes or renames a control something still reads is
+/// refused, as one that removes an item something names is.
+fn check_control_reads(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
+    for (id, path, control) in crate::refs::unresolved_controls(doc, sealed) {
+        let what = format!("{id} reads the control {control}, which the document doesn't hold");
+        issues.push(Issue::error(
+            "ref_unresolved",
+            &id,
+            path,
+            json!(control),
+            &what,
         ));
     }
 }
