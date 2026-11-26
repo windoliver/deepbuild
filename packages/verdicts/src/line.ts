@@ -29,6 +29,8 @@ export interface LineState {
   round?: number;
   /** Checks still running, each with the time it is expected to take, in seconds, where known. */
   running: { check: string; about_s: number | null }[];
+  /** Checks queued for a slot, each with the time it is expected to take, in seconds, where known (#3562). */
+  queued?: { check: string; about_s: number | null }[];
   /** Checks held in their places for a loop, each with what it waits for (#965). */
   held?: { check: string; reason: string }[];
   /** The tests the claim's checks ran on its commit, as their reports counted them (#669); none shown when none were counted. */
@@ -82,6 +84,11 @@ function parts(s: LineState): Parts {
     }
   } else if (s.outcome === 'FAIL' && !s.watch?.unsent) outcome = `sent back ${Math.max(1, s.round ?? 1)}/${ROUNDS}`;
   else outcome = `${s.outcome} ${count}`;
+  if (s.queued?.length) {
+    running.push(`${s.queued.length} check${s.queued.length === 1 ? '' : 's'} queued`);
+    const longest = Math.max(...s.queued.map((q) => q.about_s ?? -1));
+    if (longest >= 0) running.push(about(longest));
+  }
   if (s.held?.length) running.push(`${s.held.length} check${s.held.length === 1 ? ' waits' : 's wait'} for the loop`, [...new Set(s.held.map((h) => h.reason))].join(', '));
   let cause = '';
   let points = '';

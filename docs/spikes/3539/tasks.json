@@ -1,0 +1,20 @@
+{
+ "followUp": {
+  "issue": 3563,
+  "title": "The slow lane starts a place whose turn a person opened before the others: on 4 slots beside 6 sessions nobody types in, a person's median wait falls from 307 s to 149 s",
+  "criteria": [
+   "- [ ] `simulate` on each of #3539's twelve scripts (`docs/spikes/3539/scripts/`) gives the rows of its kept `person-first` output, place for place. A scheduler with today's order fails, naming the first place that starts at another time",
+   "- [ ] `simulate` on `docs/spikes/3539/scripts/never-stops.json` gives the trace the merge base gives. A scheduler that takes a session for a person's whoever opened its turns fails, naming the script",
+   "- [ ] A person's place queued while every slot runs a check nobody waits for starts when the first of them ends, and none of them is stopped. A scheduler that stops a run for it fails, naming the run",
+   "- [ ] Through a hub's hook socket on a controlled clock, with two check slots: a session nobody types in has a slow check queued behind a running journey, and a person's session then stops green with one. The person's starts first. A hub that walks its queue in the order it was set fails, naming the check",
+   "- [ ] In the same hub, a turn opened from the app and one opened by a delivered answer are taken first too, and a turn opened by a `scheduled` prompt is not",
+   "- [ ] The readings give a slow check's wait for a slot at p50 and p95, split by who opened its turn. A reading that gives one number for both fails this test"
+  ]
+ },
+ "alsoFiled": [
+  {
+   "issue": 3562,
+   "title": "A green stop's reply waits for a slot: `turnEnded` returns only once the checks its pump took have started, so a session's stop is held while other sessions' slow checks run"
+  }
+ ]
+}
