@@ -12,7 +12,7 @@ import { basename, dirname, join } from 'node:path';
 import type { Grant, Host, Supervisor } from '@deepbuild/supervisor';
 import { parse } from './yaml.js';
 import {
-  composeRefusal, composed, daemon, dockerEnv, downStack, get, isObj, newRun, quote, readEnvironment, seedRecordAt, sleep, stackValues, step,
+  composeRefusal, composed, daemon, openBinds, dockerEnv, downStack, get, isObj, newRun, quote, readEnvironment, seedRecordAt, sleep, stackValues, step,
   type Environment, type SeedRecord, type Take,
 } from './stack.js';
 
@@ -270,8 +270,11 @@ export class WarmStack {
    * anonymous volume is removed first and made anew: on Docker Desktop a container recreated with a new bind source can
    * show it as the VM's /host_mnt path. One that holds one is recreated, which carries its anonymous volumes over.
    */
-  private async up(file: string, services: string[], wait = true): Promise<string | undefined> {
+  private async up(file: string, folder: string, services: string[], wait = true): Promise<string | undefined> {
     if (!services.length) return undefined;
+    // Right before they start: a step before may have written in a folder a service mounts.
+    const closed = openBinds(JSON.parse(readFileSync(file, 'utf8')) as Config, folder);
+    if (closed) return closed;
     const named = services.map(quote).join(' ');
     const fresh = `f=; for s in ${named}; do id=$(${this.compose(file, 'ps -aq "$s"')}) || exit 1; v=; [ -z "$id" ] || v=$("$0" inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' $id) || exit 1; printf '%s\\n' "$v" | grep -Eq '(^| )[0-9a-f]{64} ' || f="$f $s"; done; [ -z "$f" ] || { ${this.compose(file, 'stop -t 3 $f')} && ${this.compose(file, 'rm -f $f')}; }`;
     const ran = await this.dock(`${fresh} && ${this.compose(file, `up -d ${wait ? '--wait ' : ''}-t 3 --no-deps --no-build --pull never --force-recreate ${named}`)}`, [], BUILD_MS);
@@ -280,12 +283,25 @@ export class WarmStack {
   /** Waits for the database on its own TCP port: Postgres's first start answers on its socket before it is ready. */
   private async dbReady(file: string): Promise<string | undefined> {
     const d = this.db!;
+    // `-a`: a container that already exited is listed too, so its exit and log can be named.
     const ran = await this.dock([
-      `id=$(${this.compose(file, `ps -q ${quote(d.service)}`)}) || exit 1`, 'echo "$id"',
-      `i=0; until "$0" exec "$id" pg_isready -q -h 127.0.0.1 -U ${quote(d.user)}; do i=$((i+1)); [ $i -lt 600 ] || exit 1; sleep 0.1; done`,
+      `id=$(${this.compose(file, `ps -a -q ${quote(d.service)}`)}) || exit 1`, 'echo "$id"', '[ -n "$id" ] || exit 1',
+      `i=0; until "$0" exec "$id" pg_isready -q -h 127.0.0.1 -U ${quote(d.user)}; do`,
+      // Every tenth try, whether it still runs: one exited, or waiting on its restart policy to start it again, has ended.
+      `  if [ $((i % 10)) -eq 0 ]; then s=$("$0" inspect -f '{{.State.Status}}' "$id"); [ -z "$s" ] || [ "$s" = running ] || exit 3; fi`,
+      '  i=$((i+1)); [ $i -lt 600 ] || exit 1; sleep 0.1',
+      'done',
     ].join('\n'));
+    const id = ran.stdout.trim().split('\n')[0] ?? '';
+    if (ran.code === 3 && id) {
+      // A service that ended before it answered: its exit code and the last line it logged, as Docker keeps them.
+      const exit = (await this.dock(`"$0" inspect -f '{{.State.ExitCode}}' "$1"`, [id])).stdout.trim();
+      const logs = await this.dock('"$0" logs --tail 1 "$1" 2>&1', [id]);
+      const log = logs.code === 0 ? logs.stdout.trim().split('\n').slice(-1)[0] ?? '' : '';
+      return `the database service ${d.service} exited with code ${exit || '(unknown)'} before it answered on its port; its last log line: ${log || '(none Docker could read)'}`;
+    }
     if (ran.code !== 0) return `the database service ${d.service} never answered on its port`;
-    d.container = ran.stdout.trim().split('\n')[0]!;
+    d.container = id;
     return undefined;
   }
   /** One statement in the database service, with a template's last connection given time to close. */
@@ -384,7 +400,7 @@ export class WarmStack {
     if (config) {
       const made = await this.makeVolumes(others.flatMap((s) => this.namedVolumes(config, s).map((v) => this.volumeName(tag, v))));
       if (made) return made;
-      const up = await this.up(file, others);
+      const up = await this.up(file, folder, others);
       if (up) return up;
     }
     const at2 = join(this.data, `seed-record-${tag}.json`);
@@ -491,7 +507,7 @@ export class WarmStack {
     }
     // A service bind-mounting the repo restarts for each run, with its mount in the run's checkout and its volumes kept.
     if (dbService && (first || (this.o.plant !== 'env-keeps-db-mount' && config!.services![dbService]!.volumes?.some((v) => v.type === 'bind')))) {
-      const why = await this.up(base, [dbService], false);
+      const why = await this.up(base, r.folder, [dbService], false);
       if (why) return { cause: why };
     }
     if (dbService) {
@@ -561,7 +577,7 @@ export class WarmStack {
           const copied = await this.dock('"$0" run --rm --network none --label "com.docker.compose.project=$1" --entrypoint sh -v "$2:/from:ro" -v "$3:/to" "$4" -c "cp -a /from/. /to/"', [this.project!, p.from, p.to, image]);
           if (copied.code !== 0) return { cause: `the template's volume ${p.v} couldn't be copied: ${copied.stderr.trim().slice(-300)}` };
         }
-        const up = await this.up(file, others);
+        const up = await this.up(file, r.folder, others);
         if (up) return { cause: up };
         if (this.o.plant === 'env-keeps-redis') { this.held.started = true; this.held.volume = Object.fromEntries(pairs.map((p) => [p.v, p.to])); own.others = []; own.volumes = []; }
       }
@@ -584,7 +600,7 @@ export class WarmStack {
       images.push(...b.images);
       Object.assign(digests, b.digests);
       own.compose = file = this.filed(config, `run-${word}`, Object.fromEntries(others.map((s) => [s, keepRedis ? (v: string) => this.held.volume![v]! : (v: string) => this.volumeName(runTag, v)])), b.tags);
-      const up = await this.up(file, toBuild);
+      const up = await this.up(file, r.folder, toBuild);
       own.others = [...own.others, ...toBuild];
       if (up) return { cause: up };
     }

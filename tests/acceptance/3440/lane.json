@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the disk and the perf lane's record tasks: wal-limit.test.ts and held-read.test.ts each hold a write-ahead file of 130 to 290 MiB beside a log of the same size in a temp folder, and budget.test.ts runs record-append-20k and record-replay-100k" }

@@ -1,0 +1,12 @@
+{
+  "scripts/affected.mjs": [
+    {
+      "find": [
+        "    const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || watched.folders.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');"
+      ],
+      "wrong": [
+        "    const state = fresh.length && !bound ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || watched.folders.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');"
+      ]
+    }
+  ]
+}
