@@ -1592,6 +1592,12 @@ byHand.push('tests/acceptance/96/commit.test.ts', 'tests/acceptance/96/proof.tes
 Object.assign(redrafted, { 'tests/acceptance/3295/late-close.test.mjs': 'tests/acceptance/3295-redraft-fae86cca/' });
 byHand.push('tests/acceptance/3295/late-close.test.mjs');
 
+// #1886's route.test.ts fails on the merge base before its assertion, its twin carries AC1's tag, and AC2 and AC3 have
+// no #1886-tagged test (tests/acceptance/1886/redraft/DISPUTE.md). Kept as written, by hand only; its blind redraft
+// runs in its place, alone as the rest of #1886's folder does.
+Object.assign(redrafted, { 'tests/acceptance/1886/route.test.ts': 'tests/acceptance/1886/redraft/' });
+byHand.push('tests/acceptance/1886/route.test.ts');
+
 // #3257's folder (blind) runs alone by its lane.json: its files build deep-gpu, the merge base's too, and draw on Metal.
 // ac7-budget.test.ts times the mask map's chain against the merge base's on the reference Mac.
 timed.push('tests/acceptance/3257/ac7-budget.test.ts');
@@ -1609,9 +1615,3 @@ timed.push('tests/acceptance/2750/budgets.test.ts');
 // only; its blind redraft, which runs the merge base's program beside the checkout's, runs in its place.
 Object.assign(redrafted, { 'tests/acceptance/3461/once.test.ts': 'tests/acceptance/3461-redraft-once/' });
 byHand.push('tests/acceptance/3461/once.test.ts');
-
-// #1886's route.test.ts fails on the merge base before its assertion, its twin carries AC1's tag, and AC2 and AC3 have
-// no #1886-tagged test (tests/acceptance/1886/redraft/DISPUTE.md). Kept as written, by hand only; its blind redraft
-// runs in its place, alone as the rest of #1886's folder does.
-Object.assign(redrafted, { 'tests/acceptance/1886/route.test.ts': 'tests/acceptance/1886/redraft/' });
-byHand.push('tests/acceptance/1886/route.test.ts');
