@@ -326,9 +326,15 @@ export class TrustedActions {
   /** Each view's panel held to panel@1 (#1454), its verdict kept for the app: what failed, in words, or undefined. */
   async panelKits(id: string, unrun = false): Promise<string | undefined> {
     const failed: string[] = [];
-    for (const view of this.options.services.extensions!.installedViews().filter((v) => v.extension === id && (!unrun || v.kit === null))) {
-      const { verdict, why } = await panelKit(view.folder);
-      this.options.services.extensions!.keepKit(id, { slot: 'panel@1', fill: view.name, verdict });
+    // On a start, beside a view whose kit never ran, one that passed before the kit's revision was kept is read once,
+    // held to revision 1, for what the current revision would refuse in it: its listing shows that (#3233).
+    const due = (v: { kit: string | null; revision?: number }): boolean => !unrun || v.kit === null || (v.kit === 'PASS' && v.revision === undefined);
+    for (const view of this.options.services.extensions!.installedViews().filter((v) => v.extension === id && due(v))) {
+      const earlier = unrun && view.kit === 'PASS';
+      const { verdict, why, revision, reading } = await panelKit(view.folder, earlier ? 1 : undefined);
+      // A kit that can't run now takes nothing from a panel that passed.
+      if (earlier && verdict !== 'PASS') continue;
+      this.options.services.extensions!.keepKit(id, { slot: 'panel@1', fill: view.name, verdict, ...(revision !== undefined ? { revision } : {}), ...(reading !== undefined ? { reading } : {}) });
       if (verdict !== 'PASS') failed.push(`${view.name} reads ${verdict} on panel@1: ${why}`);
     }
     return failed.length ? failed.join('; ') : undefined;

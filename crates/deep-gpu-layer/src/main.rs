@@ -64,6 +64,7 @@ mod regions;
 mod relation;
 mod reseed;
 mod scene;
+mod sea;
 mod seam;
 mod serve;
 mod session3;
@@ -280,6 +281,11 @@ pub enum Planted {
     HiddenViewWithoutOwnDepth,
     HiddenViewWritesIds,
     HiddenViewAfterStatus,
+    /// #3033's wrong seas (tests/acceptance/3033/README.md: Planted programs): every amplitude
+    /// of the table halved; every row at the longest wave's speed; only its four longest kept.
+    WaterSeaAmplitudesHalved,
+    WaterSeaSpeedOfLongest,
+    WaterSeaDrawsFourLongest,
     /// #971: the local tone map's base brought back up with a range weight of 1 at every tap.
     LocalBaseIgnoresEdges,
     /// #971: the local tone map's pyramid has the look's `levels` at every output size.
@@ -795,6 +801,9 @@ impl Planted {
             "hidden_view_without_own_depth" => Planted::HiddenViewWithoutOwnDepth,
             "hidden_view_writes_ids" => Planted::HiddenViewWritesIds,
             "hidden_view_after_status" => Planted::HiddenViewAfterStatus,
+            "water_sea_amplitudes_halved" => Planted::WaterSeaAmplitudesHalved,
+            "water_sea_speed_of_longest" => Planted::WaterSeaSpeedOfLongest,
+            "water_sea_draws_four_longest" => Planted::WaterSeaDrawsFourLongest,
             "local_base_ignores_edges" => Planted::LocalBaseIgnoresEdges,
             "local_pyramid_fixed_levels" => Planted::LocalPyramidFixedLevels,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,

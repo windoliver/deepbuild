@@ -10,7 +10,9 @@
 use std::collections::BTreeMap;
 
 use deep_canvas_scene3d::scene::{Scene, Shape};
-use deep_canvas_scene3d::water::{Water, MAX_RINGS, MAX_WAKE, MAX_WAVES, RING_GRID};
+use deep_canvas_scene3d::water::{
+    Swell, Water, MAX_RINGS, MAX_WAKE, MAX_WAVES, RING_GRID, SEA_DRAWN, SEA_WAVES,
+};
 use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
@@ -18,6 +20,34 @@ use deep_gpu::encode::Job;
 use crate::{DEPTH, IDS_MS, LINEAR, WATER_PASS};
 
 const SOURCE: &str = include_str!("water.wgsl");
+/// #3033: a sea's waves, compiled after water.wgsl for water that has a sea.
+const SEA: &str = include_str!("sea.wgsl");
+
+/// #3033: water.wgsl as water with a sea compiles it: the list's `waves_scaled` gives way to
+/// sea.wgsl's, which draws the waves the vertex stage sums, and the pixel's normal reads the
+/// whole table, which water.wgsl's uniform ends with. Water without a sea compiles water.wgsl as
+/// it is and reads none of the table.
+fn sea_source() -> String {
+    let swaps = [
+        ("fn waves_scaled(", "fn waves_listed("),
+        (
+            "    let w = waves_scaled(rest, t, scale);",
+            "    let w = sea_shaded(rest, scale, xy, z, size, p, v, facing);",
+        ),
+        // The pixel's waves carry no height, so the plate's level reads the drawn ones'.
+        (
+            "        let level = p.y - w.offset.y;",
+            "        let level = p.y - waves_scaled(rest, t, scale).offset.y;",
+        ),
+    ];
+    let mut source = SOURCE.to_string();
+    for (from, to) in swaps {
+        assert_eq!(source.matches(from).count(), 1, "water.wgsl holds {from}");
+        source = source.replace(from, to);
+    }
+    source + SEA
+}
+
 /// The most water parts one view shades.
 pub const MAX_PARTS: usize = 8;
 /// The `reflection` target's format: the mirror's lookup, linear, f32 RGBA.
@@ -80,8 +110,23 @@ struct Params {
     // what a ray shows above the water where nothing stands and no sky's pass draws, w 1 when so.
     under: [f32; 4],
     above: [f32; 4],
+    // #3033: a sea's table, longest first, four waves a lane (sea.wgsl draws its first
+    // SEA_DRAWN in the vertex stage). x: its shortest wave's wavenumber. Then, a lane each:
+    // the waves' wavenumbers along their headings (x, then z), their phases at t, their
+    // wavenumbers, their amplitudes, their slopes along their headings (x, then z) and their
+    // steepness's share of those slopes.
+    sea: [f32; 4],
+    sea_kx: [[f32; 4]; SEA_WAVES / 4],
+    sea_kz: [[f32; 4]; SEA_WAVES / 4],
+    sea_at: [[f32; 4]; SEA_WAVES / 4],
+    sea_k: [[f32; 4]; SEA_WAVES / 4],
+    sea_a: [[f32; 4]; SEA_WAVES / 4],
+    sea_sx: [[f32; 4]; SEA_WAVES / 4],
+    sea_sz: [[f32; 4]; SEA_WAVES / 4],
+    sea_steep: [[f32; 4]; SEA_WAVES / 4],
 }
 }
+const _: () = assert!(SEA_WAVES == 64 && SEA_DRAWN == 16);
 
 /// The light the water's foam and its fill read.
 #[derive(Clone, Copy, Debug, Default)]
@@ -169,6 +214,8 @@ pub struct Targets {
 }
 
 pub struct Waterer {
+    /// #3033: whether its pipelines draw a sea's table or a list's waves.
+    pub(crate) sea: bool,
     layout: wgpu::BindGroupLayout,
     ids: wgpu::RenderPipeline,
     /// The shading pass by which of the `reflection` (1) and `foam` (2) targets it writes.
@@ -294,8 +341,12 @@ pub fn inverse(m: &[f64; 16]) -> [f64; 16] {
 }
 
 impl Waterer {
-    pub fn new(device: &Device, reversed: bool, samples: u32) -> Self {
+    pub fn new(device: &Device, reversed: bool, samples: u32, sea: bool) -> Self {
         let d = &device.device;
+        let source: std::borrow::Cow<'static, str> = match sea {
+            true => sea_source().into(),
+            false => SOURCE.into(),
+        };
         let both = wgpu::ShaderStages::VERTEX_FRAGMENT;
         let frag = wgpu::ShaderStages::FRAGMENT;
         let entry = |binding, visibility, ty| wgpu::BindGroupLayoutEntry {
@@ -374,12 +425,12 @@ impl Waterer {
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(WATER_PASS),
             source: wgpu::ShaderSource::Wgsl(if samples == 1 {
-                SOURCE
+                source
                     .replace("multisampled_2d", "2d")
                     .replace("SAMPLES: i32 = 4", "SAMPLES: i32 = 1")
                     .into()
             } else {
-                SOURCE.into()
+                source
             }),
         });
         let pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -560,6 +611,7 @@ impl Waterer {
         // A bit a ring for each cell, 32 a word.
         let cells = ring_buffer(RING_GRID * RING_GRID * MAX_PARTS * MAX_RINGS / 8);
         Waterer {
+            sea,
             layout,
             ids,
             shade,
@@ -671,6 +723,35 @@ impl Waterer {
             ];
             amps[i] = [w.amplitude as f32, w.steepness as f32, 0.0, 0.0];
         }
+        // #3033: a sea's table, longest first.
+        let rows: &[Swell] = match &water.sea {
+            Some(sea) => &sea.rows,
+            None => &[],
+        };
+        let mut sea_waves = [[[0f32; 4]; SEA_WAVES / 4]; 8];
+        let mut shortest = 0f64;
+        for (i, r) in rows.iter().take(SEA_WAVES).enumerate() {
+            let w = &r.wave;
+            let (k, a) = (w.k(), w.amplitude);
+            // Its phase at the frame's t, wrapped here in f64 so a long film keeps it.
+            let at = (r.phase - k * r.speed * water.t).rem_euclid(std::f64::consts::TAU);
+            let lane = [
+                k * w.dir[0],
+                k * w.dir[1],
+                at,
+                k,
+                a,
+                k * a * w.dir[0],
+                k * a * w.dir[1],
+                w.steepness * k * a,
+            ];
+            for (field, v) in lane.into_iter().enumerate() {
+                sea_waves[field][i / 4][i % 4] = v as f32;
+            }
+            shortest = shortest.max(k);
+        }
+        let sea = [shortest as f32, 0.0, 0.0, 0.0];
+        let [sea_kx, sea_kz, sea_at, sea_k, sea_a, sea_sx, sea_sz, sea_steep] = sea_waves;
         let wake = water.wake.as_ref().filter(|w| w.path.len() >= 2);
         let path: Vec<[f32; 2]> = match wake {
             Some(w) => w
@@ -839,8 +920,9 @@ impl Waterer {
         });
         self.draws.clear();
         // The parts' world box at rest, grown by the waves' summed amplitude: no vertex moves
-        // further.
-        let reach: f64 = water.waves.iter().map(|w| w.amplitude).sum();
+        // further. A sea moves its vertices by the waves the vertex stage draws.
+        let drawn = rows.iter().take(SEA_DRAWN).map(|r| &r.wave);
+        let reach: f64 = water.waves.iter().chain(drawn).map(|w| w.amplitude).sum();
         let mut bounds = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
         for solid in scene.layers.iter().flat_map(|l| &l.solids) {
             if !water.parts.contains(&solid.id) {
@@ -966,6 +1048,15 @@ impl Waterer {
                 ],
                 above: (frame.above)
                     .map_or([0.0; 4], |c| [c[0] as f32, c[1] as f32, c[2] as f32, 1.0]),
+                sea,
+                sea_kx,
+                sea_kz,
+                sea_at,
+                sea_k,
+                sea_a,
+                sea_sx,
+                sea_sz,
+                sea_steep,
             };
             if self.parts.len() == self.draws.len() {
                 self.parts.push(Part {

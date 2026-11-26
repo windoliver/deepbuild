@@ -1,0 +1,12 @@
+{
+  "scripts/affected.mjs": [
+    {
+      "find": [
+        "        for (const file of unstarted) { partial.add(file); failures.push({ id: file, state: 'INCONCLUSIVE', message: `not started: the run reached its bound of ${bound} min` }); }"
+      ],
+      "wrong": [
+        "        for (const file of unstarted) passed.push(file);"
+      ]
+    }
+  ]
+}

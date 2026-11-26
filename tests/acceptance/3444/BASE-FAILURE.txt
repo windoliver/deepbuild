@@ -1,0 +1,70 @@
+Base 390c3f39067e7520ca7d2405d86578d17fe4f668 (detached worktree, tests/acceptance/3444/ the only change), Node 24.22.0,
+Mac17,10 (Apple M5 Max, 18 CPU cores), 2026-11-24.
+
+NO FILE OF THIS SUITE HAS RUN AT THE BASE UNDER `node --test`. The machine's throttle gave no test grant.
+
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac1-pipeline-table.test.mjs
+  (asked at 22:32 with load averages 59.13 109.67 111.27; ended at 23:32)
+INCONCLUSIVE no grant: no test grant came within 60 min
+  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+exit 3
+
+No second request was made: at 23:33 the load averages were 375.64 262.21 195.73, and at 23:42 166.09 213.03 208.47,
+on 18 cores. So these six runs are UNRUN. Each needs Node 24.22 and git and nothing else: no build, no binary, no GPU.
+Each is run from the root of a checkout of the base with this folder in it, one at a time:
+
+  node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac1-pipeline-table.test.mjs
+  node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac2-split-module.test.mjs
+  node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac3-indirect.test.mjs
+  node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac4-query-sets.test.mjs
+  node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac5-thresholds.test.mjs
+  node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/validate.test.mjs
+
+What each is expected to meet at the base, where docs/spikes/3444/ doesn't exist. This is expected, not observed under
+the test runner:
+
+  ac1 to ac5: one test each, failing at its own assertion (node:assert, raised in validate.mjs's `holds`), in the state
+              BLOCKED, with the message below. A pass there, or a failure before the assertion, is a finding.
+  validate.test.mjs: 16 tests, all passing. It carries no criterion and reads nothing of the spike: it builds a
+              synthetic spike in a temporary folder and should pass on any checkout.
+
+What was run instead, outside the throttle, as checks that need no build. None of them is a run of a test file under
+the test runner, and none stands for the six runs above.
+
+1. $ node --check <file>, for each of the eight .mjs files of this folder: no error.
+
+2. A scratch probe (not kept) that makes, on the base checkout, the two calls each criterion's test makes, in the same
+   order (`holds(tag, loadRecord().problems)`, then `holds(tag, <the criterion's check>(record))`), and prints the
+   error raised. Its whole output:
+
+AssertionError [ERR_ASSERTION] state BLOCKED: BLOCKED: AC1 #3444.2cc7fe69: no spike record at docs/spikes/3444/record.json: the spike hasn't been recorded
+AssertionError [ERR_ASSERTION] state BLOCKED: BLOCKED: AC2 #3444.441f7ad4: no spike record at docs/spikes/3444/record.json: the spike hasn't been recorded
+AssertionError [ERR_ASSERTION] state BLOCKED: BLOCKED: AC3 #3444.f25f18de: no spike record at docs/spikes/3444/record.json: the spike hasn't been recorded
+AssertionError [ERR_ASSERTION] state BLOCKED: BLOCKED: AC4 #3444.05638bf4: no spike record at docs/spikes/3444/record.json: the spike hasn't been recorded
+AssertionError [ERR_ASSERTION] state BLOCKED: BLOCKED: AC5 #3444.f6f69d8c: no spike record at docs/spikes/3444/record.json: the spike hasn't been recorded
+
+3. $ node tests/acceptance/3444/validate.test.mjs   (the self-test as a plain node script, not `node --test`; run
+   twice on the files as they are kept, at 22:31 and at 23:34)
+
+✔ validator: a well-formed spike passes every check
+✔ validator: a report's tables and numbers are read as written
+✔ validator: with no spike, the record is BLOCKED, never a pass
+✔ wrong program, criterion 1: a table that leaves a pipeline out fails, naming it
+✔ validator: criterion 1's check fails a table its run doesn't give, and reads a run that isn't there as not passed
+✔ wrong program, criterion 2: a split-module column whose frame differs, taken as the result, fails
+✔ validator: a split-module column whose frame differs, headed as a reading, is INCONCLUSIVE, never a pass
+✔ validator: criterion 2's check fails a branch that isn't the kept patch, isn't split, or isn't in the report
+✔ wrong program, criterion 3: a side whose flag was not what its column says fails, naming the run
+✔ validator: criterion 3's check fails readings that aren't five runs a side, alternated, on one Mac, of indirect draws
+✔ wrong program, criterion 4: a one-more-than-32 run on the app's own device fails the lane
+✔ wrong program, criterion 4: a count that isn't the device's own fails, naming the state
+✔ validator: criterion 4's check reads a state that wasn't read as BLOCKED, and fails a run that doesn't show what the device did
+✔ wrong program, criterion 5: a report that says a threshold wasn't passed when its own readings pass it fails
+✔ wrong program, criterion 5: a report that files no task for a threshold its readings pass fails
+✔ validator: criterion 5's check recomputes each threshold from the kept runs
+ℹ tests 16
+ℹ pass 16
+ℹ fail 0
+
+4. A scratch probe (not kept) that reads each test file's import statements and checks every name it takes from
+   validate.mjs or example.mjs is exported there: every import resolves.

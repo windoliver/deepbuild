@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: helpers.ts starts real hubs in temp homes for each test, and a hub takes deep-hook from this checkout's target/; each test also starts a forge on 127.0.0.1 and git repositories, and budgets.test.ts times hub starts" }
