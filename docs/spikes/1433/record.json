@@ -14,22 +14,22 @@
         }
       },
       "harness": {
-        "sha256": "1177d5d1833fcb86a581862d82b13f8c732765123a95305254446e92bb4332ef"
+        "sha256": "dcdc34415987f4d6d5d9bed534e625b99cbb7ecf5790a95aebdff5d0193823ce"
       },
       "gates": {
         "canvas-handoff": {
           "status": "inconclusive",
           "raw": {
             "file": "raw/candidate-canvas-handoff.json",
-            "sha256": "84f82ad04677e58aac3fcda56eecd41d487834d218dfa50899408a928f82114b"
+            "sha256": "4071867e42b7657891a2232acd7cd0362fd09c84f6f4a4e133ae4935cd471197"
           },
           "reading": {
             "frame_ms": [
-              1.3503867900000002,
-              1.5426045700000002,
-              1.1093305199999992,
-              1.1245719733333333,
-              1.1264558433333327
+              0.9374824899999995,
+              0.9555901699999998,
+              0.9959823333333325,
+              1.0212406666666656,
+              1.0115050266666663
             ]
           },
           "machine": {
@@ -41,26 +41,26 @@
             "thermalState": "nominal",
             "macosBuild": "26B8119"
           },
-          "load": 13.822265625,
-          "why": "frame ms a run, on average [1.3503867900000002,1.5426045700000002,1.1093305199999992,1.1245719733333333,1.1264558433333327] against under 1: the five runs are neither all within it nor all over it by more than the margin"
+          "load": 19.6015625,
+          "why": "frame ms a run, on average [0.9374824899999995,0.9555901699999998,0.9959823333333325,1.0212406666666656,1.0115050266666663] against under 1 is a reading, not a result: a one-minute load of 19.6015625 at a run's start or end is at or above the MacBook Pro's 18 cores"
         },
         "idle": {
           "status": "inconclusive",
           "raw": {
             "file": "raw/candidate-idle.json",
-            "sha256": "ffc4471f3f6662d207facd64826e3069efecdb0b14d718d67d47ba6863359f93"
+            "sha256": "95963d2bc74b2cef4028717c2538aab94989b036e7ef9133df4e7a01e0ac0f9d"
           },
           "reading": {
             "frames": [
-              null,
-              null,
-              2,
-              1,
+              0,
+              0,
+              0,
+              0,
               0
             ],
             "wakeups": [
-              null,
-              null,
+              0,
+              0,
               0,
               0,
               0
@@ -75,50 +75,50 @@
             "thermalState": "nominal",
             "macosBuild": "26B8119"
           },
-          "load": 22.07421875,
-          "why": "run 1's window was \"not read\", not shown; each run holds the still window 60 s, as canvas-idle does; frames [null,null,2,1,0]: each run gives the frames it presented while still; wakeups [null,null,0,0,0] against at most 1: a limit is judged on 5 runs after warm-up"
+          "load": 22.11083984375,
+          "why": "wakeups [0,0,0,0,0] against at most 1 is a reading, not a result: a one-minute load of 22.11083984375 at a run's start or end is at or above the MacBook Pro's 18 cores"
         },
         "list-transcript": {
           "status": "inconclusive",
           "raw": {
             "file": "raw/candidate-list-transcript.json",
-            "sha256": "da560fa1190cadc42b7e96708d7bdf4c10f90007b7ea92934f785eb8e269f279"
+            "sha256": "638584593dc015bc9bc2cbb62c22cc1cda8703615de263f2717f18cd3b20de1d"
           },
           "reading": {
             "update_p99_ms": [
-              1.1004999999999998,
-              1.086792,
-              1.835,
-              1.063666,
-              2.225
+              1.2210420000000002,
+              1.185958,
+              1.150709,
+              1.166042,
+              1.223375
             ],
             "coldStartMs": [
-              121.6,
-              110.8,
-              116.2,
-              130.2,
-              113.2
+              106.3,
+              108,
+              119.4,
+              115.7,
+              95
             ],
             "idleCpuPercent": [
               0,
               0,
-              0.05,
-              0.2,
-              0.3
+              0,
+              0,
+              0
             ],
             "memoryBytes": [
-              113508352,
-              112328704,
-              112181248,
-              114573312,
-              114950144
+              111919104,
+              112033792,
+              112066560,
+              112082944,
+              112181248
             ],
             "appBytes": [
-              28004632,
-              28004632,
-              28004632,
-              28004632,
-              28004632
+              28021240,
+              28021240,
+              28021240,
+              28021240,
+              28021240
             ]
           },
           "machine": {
@@ -130,8 +130,8 @@
             "thermalState": "nominal",
             "macosBuild": "26B8119"
           },
-          "load": 19.61572265625,
-          "why": "run 3's window was \"not shown\", not shown; update ms at p99 [1.1004999999999998,1.086792,1.835,1.063666,2.225] against at most 4 is a reading, not a result: a one-minute load of 19.61572265625 at a run's start or end is at or above the MacBook Pro's 18 cores; coldStartMs [121.6,110.8,116.2,130.2,113.2] against under 1000 is a reading, not a result: a one-minute load of 19.61572265625 at a run's start or end is at or above the MacBook Pro's 18 cores; idleCpuPercent [0,0,0.05,0.2,0.3] against under 1 is a reading, not a result: a one-minute load of 19.61572265625 at a run's start or end is at or above the MacBook Pro's 18 cores; memoryBytes [113508352,112328704,112181248,114573312,114950144] against under 200000000 is a reading, not a result: a one-minute load of 19.61572265625 at a run's start or end is at or above the MacBook Pro's 18 cores; appBytes [28004632,28004632,28004632,28004632,28004632] against under 60000000 is a reading, not a result: a one-minute load of 19.61572265625 at a run's start or end is at or above the MacBook Pro's 18 cores"
+          "load": 23.10498046875,
+          "why": "update ms at p99 [1.2210420000000002,1.185958,1.150709,1.166042,1.223375] against at most 4 is a reading, not a result: a one-minute load of 23.10498046875 at a run's start or end is at or above the MacBook Pro's 18 cores; coldStartMs [106.3,108,119.4,115.7,95] against under 1000 is a reading, not a result: a one-minute load of 23.10498046875 at a run's start or end is at or above the MacBook Pro's 18 cores; idleCpuPercent [0,0,0,0,0] against under 1 is a reading, not a result: a one-minute load of 23.10498046875 at a run's start or end is at or above the MacBook Pro's 18 cores; memoryBytes [111919104,112033792,112066560,112082944,112181248] against under 200000000 is a reading, not a result: a one-minute load of 23.10498046875 at a run's start or end is at or above the MacBook Pro's 18 cores; appBytes [28021240,28021240,28021240,28021240,28021240] against under 60000000 is a reading, not a result: a one-minute load of 23.10498046875 at a run's start or end is at or above the MacBook Pro's 18 cores"
         },
         "text-input": {
           "status": "inconclusive",
@@ -149,16 +149,16 @@
           "status": "pass",
           "raw": {
             "file": "raw/candidate-panel.json",
-            "sha256": "36fb5cf604b8516657e6b233e28366de698fc91bbeede14e9d8639b4da930103"
+            "sha256": "355a9fb4cb6c16a39fab58922236915fe895c12c2cb58ae538e3370eb8a5f34d"
           },
           "reading": {
             "parity": true,
             "update_p99_ms": [
-              1.635917,
-              1.231666,
-              1.188,
-              1.120583,
-              1.1668749999999999
+              1.261125,
+              1.3359999999999999,
+              1.264875,
+              1.2500829999999998,
+              1.164958
             ]
           },
           "machine": {
@@ -170,7 +170,7 @@
             "thermalState": "nominal",
             "macosBuild": "26B8119"
           },
-          "load": 16.0361328125
+          "load": 16.84375
         }
       }
     },
@@ -1410,36 +1410,36 @@
           "status": "inconclusive",
           "raw": {
             "file": "raw/gpui-fast-list-transcript.json",
-            "sha256": "1144be83b0ef35a338ab0d4c4fb96f5d4cc7d594d5f3745792dce663fb3d59d4"
+            "sha256": "772a1497bd75c0dd56169a15975cd5fbffb03111e58bd4cba270b199063eafea"
           },
           "reading": {
             "update_p99_ms": [
-              0.7722910000000001,
-              0.77875,
-              0.802333,
-              0.7445839999999999,
-              null
+              0.914417,
+              0.8358340000000001,
+              0.8047920000000001,
+              0.8717090000000001,
+              0.805041
             ],
             "coldStartMs": [
-              222.2,
-              191.2,
-              191.8,
-              194.9,
-              171.4
+              193.8,
+              178.6,
+              171.8,
+              156.2,
+              186
             ],
             "idleCpuPercent": [
               0,
-              0.1,
+              0,
               0,
               0,
               0
             ],
             "memoryBytes": [
-              122322944,
-              122634240,
-              121012224,
-              121225216,
-              121208832
+              120815616,
+              120717312,
+              120913920,
+              120995840,
+              120619008
             ],
             "appBytes": [
               35704120,
@@ -1458,8 +1458,8 @@
             "thermalState": "nominal",
             "macosBuild": "26B8119"
           },
-          "load": 20.99755859375,
-          "why": "run 5's window was \"not shown\", not shown; update ms at p99 [0.7722910000000001,0.77875,0.802333,0.7445839999999999,null] against at most 4: a limit is judged on 5 runs after warm-up; coldStartMs [222.2,191.2,191.8,194.9,171.4] against under 1000 is a reading, not a result: a one-minute load of 20.99755859375 at a run's start or end is at or above the MacBook Pro's 18 cores; idleCpuPercent [0,0.1,0,0,0] against under 1 is a reading, not a result: a one-minute load of 20.99755859375 at a run's start or end is at or above the MacBook Pro's 18 cores; memoryBytes [122322944,122634240,121012224,121225216,121208832] against under 200000000 is a reading, not a result: a one-minute load of 20.99755859375 at a run's start or end is at or above the MacBook Pro's 18 cores; appBytes [35704120,35704120,35704120,35704120,35704120] against under 60000000 is a reading, not a result: a one-minute load of 20.99755859375 at a run's start or end is at or above the MacBook Pro's 18 cores"
+          "load": 24.07373046875,
+          "why": "update ms at p99 [0.914417,0.8358340000000001,0.8047920000000001,0.8717090000000001,0.805041] against at most 4 is a reading, not a result: a one-minute load of 24.07373046875 at a run's start or end is at or above the MacBook Pro's 18 cores; coldStartMs [193.8,178.6,171.8,156.2,186] against under 1000 is a reading, not a result: a one-minute load of 24.07373046875 at a run's start or end is at or above the MacBook Pro's 18 cores; idleCpuPercent [0,0,0,0,0] against under 1 is a reading, not a result: a one-minute load of 24.07373046875 at a run's start or end is at or above the MacBook Pro's 18 cores; memoryBytes [120815616,120717312,120913920,120995840,120619008] against under 200000000 is a reading, not a result: a one-minute load of 24.07373046875 at a run's start or end is at or above the MacBook Pro's 18 cores; appBytes [35704120,35704120,35704120,35704120,35704120] against under 60000000 is a reading, not a result: a one-minute load of 24.07373046875 at a run's start or end is at or above the MacBook Pro's 18 cores"
         },
         "retention-frames": {
           "status": "pass",
@@ -1522,18 +1522,18 @@
           "status": "inconclusive",
           "raw": {
             "file": "raw/gpui-fast-list-shapes.json",
-            "sha256": "b04f03fa01a939bd3033520a0a58eddbde6491f5593634237fbb9945c8fee488"
+            "sha256": "8c2f37d185b8eca68467d987d72e1ffe8ba3e9552b5418a43f0470f04b2396cd"
           },
           "reading": {
             "ships": "shared",
             "list": {
               "shared": {
-                "on": null,
-                "off": 0.39183399999999996
+                "on": 0.442083,
+                "off": 0.354209
               },
               "own": {
-                "on": 0.37220899999999996,
-                "off": 0.367959
+                "on": 0.348042,
+                "off": 0.380125
               }
             },
             "label": {
@@ -1541,28 +1541,28 @@
                 "on": {
                   "views_rendered": 1,
                   "elements_laid_out": 3,
-                  "cpu_ms_p50": 1.174999999999983,
-                  "cpu_ms_p95": 1.3088340000000471
+                  "cpu_ms_p50": 1.2042079999999942,
+                  "cpu_ms_p95": 1.4039999999999964
                 },
                 "off": {
                   "views_rendered": 1008,
                   "elements_laid_out": 3023,
-                  "cpu_ms_p50": 2.084791999999993,
-                  "cpu_ms_p95": 2.328958
+                  "cpu_ms_p50": 2.163792000000001,
+                  "cpu_ms_p95": 2.4131249999999795
                 }
               },
               "3000": {
                 "on": {
                   "views_rendered": 1,
                   "elements_laid_out": 3,
-                  "cpu_ms_p50": 3.34533399999998,
-                  "cpu_ms_p95": 3.6727920000000154
+                  "cpu_ms_p50": 3.2773750000000064,
+                  "cpu_ms_p95": 3.6709169999999176
                 },
                 "off": {
                   "views_rendered": 3008,
                   "elements_laid_out": 9023,
-                  "cpu_ms_p50": 5.680667000000085,
-                  "cpu_ms_p95": 6.243249999999989
+                  "cpu_ms_p50": 5.339832999999999,
+                  "cpu_ms_p95": 5.816915999999992
                 }
               }
             }
@@ -1576,8 +1576,8 @@
             "thermalState": "nominal",
             "macosBuild": "26B8119"
           },
-          "load": 25.17724609375,
-          "why": "run 1's window was \"not shown\", not shown; its update times and CPU are readings, not results: a one-minute load of 25.17724609375 at a run's start or end is at or above the MacBook Pro's 18 cores; INCONCLUSIVE for the list: the list in the shared shape (rows told by one shared model) with retention on gives no update_ms"
+          "load": 18.37744140625,
+          "why": "its update times and CPU are readings, not results: a one-minute load of 18.37744140625 at a run's start or end is at or above the MacBook Pro's 18 cores"
         }
       }
     }

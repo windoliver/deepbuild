@@ -3,7 +3,7 @@
   "arm": "candidate",
   "gate": "idle",
   "gates": "985cbda74da94b32847f9f9cd45361969781911fc321eed08a5e27d29c536e92",
-  "harness": "1177d5d1833fcb86a581862d82b13f8c732765123a95305254446e92bb4332ef",
+  "harness": "dcdc34415987f4d6d5d9bed534e625b99cbb7ecf5790a95aebdff5d0193823ce",
   "profile": "release",
   "command": "scripts/lease node run.mjs --gate idle --candidate ./candidate/harness",
   "machine": {
@@ -18,62 +18,10 @@
   "surface": "window",
   "runs": [
     {
-      "started": "2026-11-26T04:46:21.299Z",
+      "started": "2026-11-26T17:25:26.519Z",
       "load": {
-        "start": 13.822265625,
-        "end": 17.412109375
-      },
-      "window": {
-        "state": "not read"
-      },
-      "unread": "exit 0: first-frame-ms 99.5"
-    },
-    {
-      "started": "2026-11-26T04:47:25.952Z",
-      "load": {
-        "start": 16.658203125,
-        "end": 17.181640625
-      },
-      "window": {
-        "state": "not read"
-      },
-      "unread": "exit 0: first-frame-ms 105.2"
-    },
-    {
-      "started": "2026-11-26T04:49:38.524Z",
-      "load": {
-        "start": 21.1708984375,
-        "end": 21.1220703125
-      },
-      "window": {
-        "state": "not shown"
-      },
-      "seconds": 60,
-      "frames": 2,
-      "frames_at_the_hold_edges": 1,
-      "slot_frames_drawn": 1,
-      "wakeups": 0
-    },
-    {
-      "started": "2026-11-26T04:52:41.380Z",
-      "load": {
-        "start": 17.91748046875,
-        "end": 20.27978515625
-      },
-      "window": {
-        "state": "not shown"
-      },
-      "seconds": 60,
-      "frames": 1,
-      "frames_at_the_hold_edges": 1,
-      "slot_frames_drawn": 1,
-      "wakeups": 0
-    },
-    {
-      "started": "2026-11-26T04:55:44.344Z",
-      "load": {
-        "start": 22.07421875,
-        "end": 19.693359375
+        "start": 16.2421875,
+        "end": 19.1982421875
       },
       "window": {
         "state": "shown"
@@ -82,6 +30,71 @@
       "frames": 0,
       "frames_at_the_hold_edges": 1,
       "slot_frames_drawn": 1,
+      "seconds_since_input": 6295.300189875,
+      "wakeups": 0
+    },
+    {
+      "started": "2026-11-26T17:28:29.564Z",
+      "load": {
+        "start": 22.11083984375,
+        "end": 19.91845703125
+      },
+      "window": {
+        "state": "shown"
+      },
+      "seconds": 60,
+      "frames": 0,
+      "frames_at_the_hold_edges": 1,
+      "slot_frames_drawn": 1,
+      "seconds_since_input": 6478.335365083,
+      "wakeups": 0
+    },
+    {
+      "started": "2026-11-26T17:30:02.291Z",
+      "load": {
+        "start": 16.31396484375,
+        "end": 20.82470703125
+      },
+      "window": {
+        "state": "shown"
+      },
+      "seconds": 60,
+      "frames": 0,
+      "frames_at_the_hold_edges": 1,
+      "slot_frames_drawn": 1,
+      "seconds_since_input": 6571.048701625,
+      "wakeups": 0
+    },
+    {
+      "started": "2026-11-26T17:31:26.972Z",
+      "load": {
+        "start": 16.74072265625,
+        "end": 12.8828125
+      },
+      "window": {
+        "state": "shown"
+      },
+      "seconds": 60,
+      "frames": 0,
+      "frames_at_the_hold_edges": 1,
+      "slot_frames_drawn": 1,
+      "seconds_since_input": 6655.735779166,
+      "wakeups": 0
+    },
+    {
+      "started": "2026-11-26T17:32:29.579Z",
+      "load": {
+        "start": 12.8828125,
+        "end": 16.70263671875
+      },
+      "window": {
+        "state": "shown"
+      },
+      "seconds": 60,
+      "frames": 0,
+      "frames_at_the_hold_edges": 1,
+      "slot_frames_drawn": 1,
+      "seconds_since_input": 6718.353962416,
       "wakeups": 0
     }
   ]
