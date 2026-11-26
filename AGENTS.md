@@ -27,7 +27,7 @@ These hold in the core and every extension:
 
 - An issue is one task: work until its PR is open, mergeable on main's head, and the issue is closed or names what's still open. Committing, pushing, opening the PR and merging main once are part of it; don't wait to be asked.
 - Before reporting, close every gap you can: run what's unrun, fix what fails. Report once, listing only what needs a person.
-- Testing a change takes at most an hour, waits for a grant included. Stop what still runs then, by PID, and report it `INCONCLUSIVE` by name; don't wait longer or run it again to finish.
+- Testing a change takes at most an hour, waits for a grant and any run on the merge base included. Stop what still runs then, by PID, and report it `INCONCLUSIVE` by name; don't wait longer or run it again to finish. A lint finding that names no file you changed is main's: list it, don't prove it.
 - A budget or timing criterion is best effort under load: take one reading without waiting for a timed grant or a quiet machine, and record it with the load. If it reads `INCONCLUSIVE`, leave its box unticked, say `Part of #n`, and close the issue on its other criteria.
 - A taste criterion ("Shown to you") is delegated: judge the run's pictures, record the call as the owner's delegation and attach them to the PR. The owner overrules by reopening.
 
