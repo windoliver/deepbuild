@@ -10,6 +10,17 @@ use crate::{mp4, track_color, turn, Planted};
 /// The live decode worker's header magic (#499).
 pub const LIVE_MAGIC: &[u8; 4] = b"DVL1";
 
+/// #3467: the most pictures kept ahead of their turn, as many as a stream's own order may need.
+#[cfg(target_os = "macos")]
+const AHEAD: usize = 16;
+
+/// #3467: whether the picture of a sample decoded for request `k` is kept for its own turn: it
+/// is presented after `k`, and fewer than `AHEAD` pictures are held.
+#[cfg(target_os = "macos")]
+fn kept_ahead(place: usize, k: usize, held: usize) -> bool {
+    place > k && held < AHEAD
+}
+
 /// #499: the live view's decode worker for one video: sandboxed, it opens `path` and decodes the
 /// frames the view asks for, one session kept open so playing forward decodes each frame once, as
 /// NV12 at `out_w × out_h` (0 for the source's size) in the range the stream is tagged with.
@@ -99,8 +110,7 @@ pub fn serve_live(args: &[String]) -> i32 {
         let size = ow * oh * 3 / 2;
         let blank = vec![0u8; size];
         // #3467: each sample's place in presentation order, and the pictures decoded before
-        // their turn, by sample: as many as a stream's own order may need, and no more.
-        const AHEAD: usize = 16;
+        // their turn, by sample.
         let mut place = vec![0usize; t.samples.len()];
         for (k, (s, _)) in shown.iter().enumerate() {
             place[*s] = k;
@@ -144,7 +154,7 @@ pub fn serve_live(args: &[String]) -> i32 {
                 for (i, smp) in t.samples.iter().enumerate().take(s + 1).skip(from) {
                     let bytes =
                         data.get(smp.offset as usize..smp.offset as usize + smp.size as usize)?;
-                    let early = place[i] > k as usize && ahead.len() < AHEAD;
+                    let early = kept_ahead(place[i], k as usize, ahead.len());
                     let early = early && !base_rule && !every_key;
                     samples += 1;
                     for p in dec.decode(i, bytes, i == s || early || hoards).ok()? {
@@ -189,4 +199,33 @@ pub fn serve_live(args: &[String]) -> i32 {
         }
     }
     0
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    /// #3467: a picture is kept ahead only while its turn is still to come and under 16 are held.
+    #[test]
+    fn at_most_16_pictures_are_kept_ahead_of_their_turn() {
+        assert!(kept_ahead(7, 6, 15));
+        assert!(!kept_ahead(7, 6, 16));
+        assert!(!kept_ahead(6, 6, 0));
+        assert!(!kept_ahead(5, 6, 0));
+    }
+
+    /// #3467: a picture the worker doesn't keep is decoded and never copied out of the decoder's
+    /// buffer; the next one, kept, is its own sample's at the output size.
+    #[test]
+    fn a_picture_not_kept_is_not_copied() {
+        let (w, h) = (64usize, 64usize);
+        let frames: Vec<Vec<u8>> = (0..3u8).map(|k| vec![40 + 60 * k; w * h * 3 / 2]).collect();
+        let (coded, avcc, _) = apple::encode_h264(&frames, w, h, &[0, 1, 2], 30, None).unwrap();
+        let config = (*b"avcC", avcc);
+        let mut dec = apple::LiveDecoder::new(*b"avc1", &config, (64, 64), (w, h), false).unwrap();
+        assert!(dec.decode(0, &coded[0].bytes, false).unwrap().is_empty());
+        let kept = dec.decode(1, &coded[1].bytes, true).unwrap();
+        let sizes: Vec<(usize, usize)> = kept.iter().map(|p| (p.sample, p.planes.len())).collect();
+        assert_eq!(sizes, [(1, w * h * 3 / 2)]);
+    }
 }
