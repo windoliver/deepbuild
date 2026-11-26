@@ -1,5 +1,5 @@
 // #1853's review regressions, beyond its acceptance tests: a plug-in's ask may not carry an allow option, which only
-// DeepBuild writes; and a file it puts as evidence is on the record as an evidence.stored event, as the hub's own puts
+// DeepBuild writes, nor declare what may answer it; and a file it puts as evidence is on the record as an evidence.stored event, as the hub's own puts
 // are. Each runs a real sandboxed package through a real host, asks core, evidence store and record.
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -55,6 +55,17 @@ it('a plug-in\'s ask with an allow option is refused, naming the option, and no 
   expect(result?.error).toContain('ship declares allow');
   const asked = (await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'ask.created');
   expect(asked).toEqual([]);
+}, 60_000);
+
+it('a plug-in\'s ask takes the trusted path alone, whatever it declares (#1581): only DeepBuild declares what may answer it', async () => {
+  const ask = { ...JSON.parse(ASK('none')) as Record<string, unknown>, may_answer: 'verified_channel' };
+  const { result, record } = await loaded(`export default async function (deep: any) {
+  try { return { ok: await deep.asks.create(${JSON.stringify(ask)}) }; } catch (e: any) { return { error: String(e.message) }; }
+}
+`);
+  expect(result?.error).toBeUndefined();
+  const asked = (await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'ask.created').map((e) => (e.data as { may_answer?: unknown }).may_answer);
+  expect(asked).toEqual(['trusted_path']);
 }, 60_000);
 
 it('a file a plug-in puts as evidence is on the record as evidence.stored, by its sha256, with the cautious origin', async () => {

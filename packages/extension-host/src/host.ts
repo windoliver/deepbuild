@@ -2003,7 +2003,8 @@ class Host implements ExtensionHost {
         // Only DeepBuild writes an allow option, as the asks core holds an agent to.
         const allow = Array.isArray(ask.options) ? (ask.options as unknown[]).find((o) => isPlain(o) && o.decision === 'allow') as { id?: unknown } | undefined : undefined;
         if (allow) throw Error(`${method}: ${id}'s option ${String(allow.id)} declares allow, which only DeepBuild writes`);
-        return asks.raise(connection, 'extension.choice', ask);
+        // What may answer it is DeepBuild's to declare (#1581), not the plug-in's: the trusted path alone.
+        return asks.raise(connection, 'extension.choice', { ...ask, may_answer: 'trusted_path' });
       }
       // #1853: a file of the package's own folder, its files grant, into the evidence store, under the most cautious origin.
       case 'deep.evidence.put': {

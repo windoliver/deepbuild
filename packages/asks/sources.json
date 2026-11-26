@@ -1571,6 +1571,7 @@
     "fixture": {
       "ask": {
         "kind": "choice",
+        "may_answer": "trusted_path",
         "question": "Show the weather for home or for work?",
         "options": [
           {
