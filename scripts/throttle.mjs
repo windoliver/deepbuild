@@ -482,6 +482,14 @@ export const asking = (pid) => locked((table) => table.requests.some((request) =
 // one closed: 6 hours on it opens when no grant is held, and 12 hours on it waits every held grant out. Both drafted.
 const APART_MIN = 6 * 60, OVERDUE_MIN = 12 * 60;
 /**
+ * A window's case, asked `since` minutes after the last one closed while `held` grants are in the table: `overdue`
+ * once the overdue span has passed, `empty` with no grant held once the apart span has, `not yet` otherwise.
+ */
+export function windowCase(held, since, [apart, overdue] = [APART_MIN, OVERDUE_MIN]) {
+  if (since >= overdue) return 'overdue';
+  return !held && since >= apart ? 'empty' : 'not yet';
+}
+/**
  * What a window asked now does: `leave`, the words it leaves with, having joined no line, or `wait`, the minutes it
  * waits for its grant, a held grant's bound when it is overdue; and `waited`, the grants it waits on, by class. The
  * last window closed at the newest window-close in the log, and with none the window is overdue; a log that can't be
@@ -490,7 +498,7 @@ const APART_MIN = 6 * 60, OVERDUE_MIN = 12 * 60;
  * name is none, since its log is as old as its test.
  */
 function due() {
-  const [apart, overdue] = own() ? [process.env.DEEP_WINDOW_APART_MIN, process.env.DEEP_WINDOW_OVERDUE_MIN].map((minutes) => Number(minutes ?? 0)) : [APART_MIN, OVERDUE_MIN];
+  const spans = own() ? [process.env.DEEP_WINDOW_APART_MIN, process.env.DEEP_WINDOW_OVERDUE_MIN].map((minutes) => Number(minutes ?? 0)) : undefined;
   const file = join(folder(), 'log');
   let lines = Buffer.alloc(0), closed = -Infinity;
   try {
@@ -515,8 +523,8 @@ function due() {
     const waited = {};
     for (const grant of held) waited[grant.class] = (waited[grant.class] ?? 0) + 1;
     const since = (Date.now() - closed) / 60_000;
-    if (since >= overdue) return { wait: HOLD, waited };
-    if (!held.length && since >= apart) return { wait: 60, waited };
+    const state = windowCase(held.length, since, spans);
+    if (state !== 'not yet') return { wait: state === 'overdue' ? HOLD : 60, waited };
     return { leave: `${held.length} grants held; the last window closed ${(since / 60).toFixed(1)} h ago` };
   });
 }

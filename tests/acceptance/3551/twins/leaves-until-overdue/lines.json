@@ -2,9 +2,11 @@
   "scripts/throttle.mjs": [
     {
       "find": [
-        "    if (!held.length && since >= apart) return { wait: 60, waited };"
+        "  return !held && since >= apart ? 'empty' : 'not yet';"
       ],
-      "wrong": []
+      "wrong": [
+        "  return 'not yet';"
+      ]
     }
   ]
 }
