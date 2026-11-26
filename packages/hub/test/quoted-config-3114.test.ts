@@ -39,8 +39,11 @@ async function judge(base: Record<string, string>, claim: Record<string, string>
   } as unknown as ReturnType<GateOptions['checkouts']>;
   const keys = new Map<string, RunKey | undefined>();
   let ran = false;
+  let judged!: () => void;
+  const made = new Promise<void>((resolve) => { judged = resolve; });
   const gate: GateRunner = new GateRunner({
     raw: async () => [], now: () => Date.now(), core: {} as GateOptions['core'], append: async () => undefined,
+    judged: async (claim) => { if (gate.verdictOf(claim)?.outcome !== 'pending') judged(); },
     start: async (r) => { keys.set('run1', r.key); return 'run1'; },
     ended: async (run) => {
       const record = gate.recorded(run, { run, outcome: 'passed', testsRun: 1, failures: [], evidence: [], read, mask: null, exit: { code: 0, signal: null, cause: 'exit' }, output: { stdout: 'ok\n', stderr: '', sha256: { stdout: 'a'.repeat(64), stderr: 'a'.repeat(64) } }, attempts: [], seeded: [], contract: null } as unknown as RecordedRun);
@@ -53,8 +56,8 @@ async function judge(base: Record<string, string>, claim: Record<string, string>
     stopping: () => false, stoodIn: async () => undefined, kept: async () => true,
   });
   await gate.stop({ session: 'S', claim: 'claim:A', task: 'task:1', cwd: dir, base: head, requirements: [], checks: [check], stopAt: Date.now() });
-  for (let i = 0; i < 100 && !ran; i++) await new Promise((r) => setTimeout(r, 20));
-  await new Promise((r) => setTimeout(r, 100));
+  // deadline: a verdict that is never made fails at the expect below instead of hanging the file
+  await Promise.race([made, new Promise((r) => setTimeout(r, 20_000))]);
   expect(ran, 'the check ran on the claim').toBe(true);
   return gate.verdictOf('claim:A');
 }
