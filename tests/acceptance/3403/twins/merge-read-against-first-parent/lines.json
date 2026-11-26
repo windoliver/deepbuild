@@ -1,0 +1,12 @@
+{
+  "scripts/proof-change.mjs": [
+    {
+      "find": [
+        "    const parent = merge ? merge.tree : parents[0];"
+      ],
+      "wrong": [
+        "    const parent = parents[0];"
+      ]
+    }
+  ]
+}

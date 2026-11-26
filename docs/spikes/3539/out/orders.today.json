@@ -1,0 +1,28 @@
+{
+ "script_sha256": "05c365b492af18fbf8fd1ced71b4aca9edfb306ae593b8924a22c8bc21ee7281",
+ "order": "today",
+ "places": [
+  {"session":"other-1","check":"check-1m","snapshot":"other-1-01","queued_at":5000,"started_at":5000,"ended_at":65000},
+  {"session":"other-1","check":"check-5m","snapshot":"other-1-01","queued_at":5000,"started_at":5000,"ended_at":305000},
+  {"session":"other-1","check":"check-20m","snapshot":"other-1-01","queued_at":5000,"started_at":5000,"ended_at":1205000},
+  {"session":"person","check":"check-1m","snapshot":"person-01","queued_at":45000,"started_at":45000,"ended_at":105000},
+  {"session":"person","check":"check-5m","snapshot":"person-01","queued_at":45000,"started_at":105000,"ended_at":405000},
+  {"session":"person","check":"check-20m","snapshot":"person-01","queued_at":45000,"started_at":null,"ended_at":null},
+  {"session":"other-3","check":"check-1m","snapshot":"other-3-01","queued_at":50000,"started_at":405000,"ended_at":465000},
+  {"session":"other-3","check":"check-5m","snapshot":"other-3-01","queued_at":50000,"started_at":365000,"ended_at":665000},
+  {"session":"other-3","check":"check-20m","snapshot":"other-3-01","queued_at":50000,"started_at":305000,"ended_at":1505000},
+  {"session":"other-2","check":"check-5m","snapshot":"other-2-01","queued_at":60000,"started_at":65000,"ended_at":365000},
+  {"session":"other-2","check":"check-1m","snapshot":"other-2-01","queued_at":60000,"started_at":465000,"ended_at":525000},
+  {"session":"other-2","check":"check-20m","snapshot":"other-2-01","queued_at":60000,"started_at":525000,"ended_at":1725000},
+  {"session":"person","check":"check-1m","snapshot":"person-02","queued_at":200000,"started_at":665000,"ended_at":725000},
+  {"session":"person","check":"check-5m","snapshot":"person-02","queued_at":200000,"started_at":725000,"ended_at":1025000},
+  {"session":"person","check":"check-20m","snapshot":"person-02","queued_at":200000,"started_at":1025000,"ended_at":2225000}
+ ],
+ "stops": [
+  {"session":"other-1","stop":"other-1#1","snapshot":"other-1-01","at":5000,"verdict_at":1205000},
+  {"session":"person","stop":"person#1","snapshot":"person-01","at":45000,"verdict_at":null},
+  {"session":"other-3","stop":"other-3#1","snapshot":"other-3-01","at":50000,"verdict_at":1505000},
+  {"session":"other-2","stop":"other-2#1","snapshot":"other-2-01","at":60000,"verdict_at":1725000},
+  {"session":"person","stop":"person#2","snapshot":"person-02","at":200000,"verdict_at":2225000}
+ ]
+}
