@@ -1,0 +1,48 @@
+landed.none acme/shop: 0.2727272727272727 share (band: over; the band is 0.1) · github · observed
+
+counts   {"commits":11,"PASS":7,"FAIL":1,"none":3,"off":1,"no_session":1,"tree":1,"never_judged":1}
+
+4b9e2cc412d0  PASS
+              a PASS on its tree
+3f515c226e8e  PASS
+              a PASS on its tree
+b534e1158113  FAIL
+              a FAIL on its tree
+ab0cc5cf59b1  PASS
+              a PASS on its tree: a squash with its branch head's tree
+aef573fbe9c1  none  cause off
+              pushed while the gate was off
+a6cc21411ebc  PASS
+              a PASS on its tree
+859aad4833e7  none  cause no_session, pusher sam
+              by a person from no session in the record
+9028a2ee2391  PASS
+              a PASS on its tree
+98c6006f24cd  none  cause tree, verdict PASS on 30bb38dca9cf
+              the squash whose tree no snapshot matches, its branch's head PASS
+fed0ebfe0ff1  PASS
+              a PASS on its tree
+a20fc224f6e2  PASS  reverts aef573fbe9c1, counted never_judged
+              the revert of the commit pushed while the gate was off, a PASS on its own tree
+missing  2026-11-18 to 2026-11-20: the forge refused to name the commits pushed on these dates
+
+tally: 7 PASS, 1 FAIL and 3 none of 11 commits; the fixture says 7 PASS, 1 FAIL and 3 none
+forge: 16 calls, 0 of them not a GET; 3 answered 403 (the refused pushes)
+PASS  judgeLanded (AC1: each commit as the fixture says)
+PASS  judgeRevert (AC2: one revert of a commit never judged, no escape)
+PASS  judgeMissing (AC3: missing for the three refused dates, no number)
+
+The five planted wrong readers, each over the reading above: its criterion's judge must FAIL
+FAIL  AC1 twin squash-takes-head-verdict
+      the reading is 8 PASS, 1 FAIL and 2 none: it lists 11 of the 11 commits the default branch gained, 9 of 11 judged; the fixture is 7 PASS, 1 FAIL and 3 none
+      the reading's value is 0.18181818181818182 "share"; the share with none is 3 of 11, 0.2727272727272727 in unit "share"
+FAIL  AC1 twin lists-only-judged
+      the reading is 7 PASS, 1 FAIL and 0 none: it lists 8 of the 11 commits the default branch gained, 8 of 8 judged; the fixture is 7 PASS, 1 FAIL and 3 none
+      the reading's value is 0 "share"; the share with none is 3 of 11, 0.2727272727272727 in unit "share"
+FAIL  AC2 twin revert-as-escape
+      reverts of a commit never judged: 0 (none), not one, the revert a20fc224f6e2 of aef573fbe9c1, a commit that read none (gate off)
+      escapes after PASS: 1, not zero: a20fc224f6e2, counting the revert a20fc224f6e2 of aef573fbe9c1, a commit that read none (gate off)
+FAIL  AC3 twin uncovered-as-zero
+      the reading says missing for no date; the forge refused the push readings for 2026-11-18 to 2026-11-20 (3 dates): that span reads as zero unjudged commits, not as missing
+FAIL  AC5 twin status-on-unjudged
+      the forge received POST /repos/acme/shop/statuses/aef573fbe9c1388dbd09f9565522801b5ab419db (answered 201): a status posted on the unjudged commit aef573fbe9c1

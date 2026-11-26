@@ -13,6 +13,7 @@ import type { Connection, Event, RecordStore } from '../../../packages/record/sr
 import { AskRefused, askSources, openAsks } from '../../../packages/asks/src/index.ts';
 import type { Asks, Card, Delivery, InboxRow } from '../../../packages/asks/src/index.ts';
 import { bare, makeClock, SETTINGS, T0, ulid, YOU, type Clock, type Obj } from './data.ts';
+import { withDeclared } from '../declared.ts';
 
 export * from './data.ts';
 
@@ -54,7 +55,7 @@ export async function openWorld(plant: Planting = {}): Promise<World> {
   const w = { clock, deliveries, dir, home } as World;
   const open = async () => {
     w.record = await openRecord({ path: join(dir, 'record.db'), now: clock.now });
-    const asks = await openAsks({ record: w.record, now: clock.now, deliver: (d) => { deliveries.push(d); }, home });
+    const asks = withDeclared(await openAsks({ record: w.record, now: clock.now, deliver: (d) => { deliveries.push(d); }, home }));
     w.asks = plant.asks ? plant.asks(asks, w) : asks;
   };
   const events = async (kind?: string): Promise<Event[]> => {

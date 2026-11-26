@@ -11,6 +11,7 @@ process.busy #983
 process.little #983
 plan.sheet #1260
 plan.overlay #1260
+card.rs #1842
 archive.scene #2036
 user.pan #2056
 lease.gpu #2133
@@ -20,6 +21,4 @@ hub.address #2958
 hub.stop #2975
 hub.restart #2975
 hub.health #2975
-setup.installs #3088
-setup.needs #3088
 spend.usd #3250

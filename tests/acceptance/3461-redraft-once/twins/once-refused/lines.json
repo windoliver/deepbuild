@@ -1,0 +1,12 @@
+{
+  "packages/cli/src/main.ts": [
+    {
+      "find": [
+        "    if (seen.has(flag) && !flags.get(flag)) return flag;"
+      ],
+      "wrong": [
+        "    if (!flags.get(flag)) return flag;"
+      ]
+    }
+  ]
+}

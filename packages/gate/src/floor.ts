@@ -111,6 +111,20 @@ const LINK = /^https?:\/\/\S+$|^[\w./@-]+#[\w-]+$/;
 const TEST = /^(.+?)\s+›\s+(.+)$/;
 const FILE_LINE = /^([\w./@-]+?)(?::(\d+))?$/;
 
+/** A final message's cites. Inline ones only: a fenced block is code shown, never a cite, and its backticks would pair with the next inline one. */
+function citesOf(message: string): string[] {
+  const prose = message.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n {0,3}\1[^\n]*|$)/gm, '');
+  return [...prose.matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
+}
+/**
+ * The paths the validity gate may read of a claim's checkout: each deliverable, each file a cite names, and the files
+ * a cited run's script is read from. What a checkout on another machine (#999) brings here for the gate to read.
+ */
+export function validityReads(input: Pick<ValidityInput, 'claim' | 'deliverables'>): string[] {
+  const cited = citesOf(input.claim.message).flatMap((cite) => [TEST.exec(cite)?.[1], FILE_LINE.exec(cite)?.[1], LINK.test(cite) && !/^https?:/.test(cite) ? cite.replace(/#.*$/, '') : undefined]);
+  return [...new Set([...input.deliverables, 'package.json', 'Makefile', 'makefile', 'justfile', 'Justfile', ...cited.filter((path): path is string => !!path)])];
+}
+
 /** What the validity gate reads: the claim and its final message, its checkout, the deliverables named, the session's log. */
 export interface ValidityInput { claim: { claim: string; message: string }; checkout: string; deliverables: string[]; session: SessionLog }
 /**
@@ -126,9 +140,7 @@ export function validityGate(input: ValidityInput, plant?: FloorPlant): Finding[
       if (!existsSync(inside(checkout, d) ?? '\0')) found.push({ kind: 'deliverable', ref: d, why: `the deliverable ${d} the definition names doesn't exist in the claim's checkout` });
     }
   }
-  // Inline cites only: a fenced block is code shown, never a cite, and its backticks would pair with the next inline one.
-  const prose = input.claim.message.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n {0,3}\1[^\n]*|$)/gm, '');
-  const cites = [...prose.matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
+  const cites = citesOf(input.claim.message);
   const runs = session.ran.map((r) => ({ ...r, command: typed(r.command) }));
   for (const cite of new Set(cites)) {
     // The run typed as the cite first (#1860), else the first the cite extends with its arguments.

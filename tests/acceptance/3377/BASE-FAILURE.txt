@@ -1,0 +1,88 @@
+# #3377 acceptance tests on the merge base: the recorded failure
+
+Base commit: 4eed9684f5bcb29360b2c1d92c4fc3fc826b913e (head of fix/bwrap-docker-socket, #3371's fix)
+Checkout:    a fresh GitHub clone at the base on a Linux machine (<home>/3377-base), npm ci, npm run build --workspaces
+             and cargo build done by the coordinator's build job (ci 0, build 0, cargo 0); this suite copied in
+             unchanged (git status: only ?? tests/acceptance/3377/)
+Command:     NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3377 --no-file-parallelism
+Machine:     Linux 7.0.0-1025-nvidia aarch64 (Ubuntu), Docker 29.6.2, Node v24.22.0, Vitest 5.0.5
+Type-check:  node node_modules/typescript/bin/tsc -p tests/acceptance/3377/tsconfig.json -> exit 0
+
+Per test:
+  AC2 #3377.28c30daf  FAILED before its assertions: the stack never came up (the bug itself: the db can't read its
+    mount), so there is no stack.served to look at. A failure, not a pass; its wrong program is the twin
+    twins/checkout-0755 (README, "Twin failure").
+  AC3 #3377.ac962c70  FAILED at its assertions: the finding names db but neither the exit code 93 nor the last log
+    line; it reads only "the database service db never answered on its port".
+
+Output (paths redacted: <home>):
+
+date 2026-11-24T10:38:10Z
+load before 23.83 43.71 57.53
+Linux 7.0.0-1025-nvidia aarch64
+v24.22.0
+docker 29.6.2
+4eed9684f5bcb29360b2c1d92c4fc3fc826b913e
+?? tests/acceptance/3377/
+
+ RUN  v5.0.5 <home>/3377-base/tests/acceptance/3377
+
+ ❯ mounts.test.ts (2 tests | 2 failed) 161453ms
+   × AC2 #3377.28c30daf after a stack comes up, <home>/.deepbuild and its checkouts folder keep mode 0700, and another checkout's folder is not readable by any uid but yours 80678ms
+   × AC3 #3377.ac962c70 a stack whose database service exits before it answers yields a finding that names the service, its exit code and its last log line 80773ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  mounts.test.ts > AC2 #3377.28c30daf after a stack comes up, <home>/.deepbuild and its checkouts folder keep mode 0700, and another checkout's folder is not readable by any uid but yours
+Error: run:01M86J52KV3GRYCE77JQBJCA95 (wt-a) ended missing with no stack.served event: the stack's record is missing (findings: ["(stack) (.:1): its stack never came up: the database service db never answered on its port"])
+ ❯ ../580/helpers.ts:400:23
+
+ ❯ Bench.until ../580/helpers.ts:368:17
+ ❯ mounts.test.ts:67:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  mounts.test.ts > AC3 #3377.ac962c70 a stack whose database service exits before it answers yields a finding that names the service, its exit code and its last log line
+AssertionError: the finding naming db names its exit code 93: expected '(stack) (.:1): its stack never came u…' to match /\b93\b/
+
+- Expected:
+/\b93\b/
+
++ Received:
+"(stack) (.:1): its stack never came up: the database service db never answered on its port"
+
+ ❯ mounts.test.ts:124:80
+    122|   const named = findings.find((f) => /\bdb\b/.test(f)) ?? '';
+    123|   expect.soft(named, `a finding names the service db (findings: ${show…
+    124|   expect.soft(named, `the finding naming db names its exit code ${EXIT…
+       |                                                                                ^
+    125|   expect.soft(named, 'the finding naming db names its last log line').…
+    126| }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  mounts.test.ts > AC3 #3377.ac962c70 a stack whose database service exits before it answers yields a finding that names the service, its exit code and its last log line
+AssertionError: the finding naming db names its last log line: expected '(stack) (.:1): its stack never came u…' to contain 'deep-3377: the database gave up befor…'
+
+Expected: "deep-3377: the database gave up before it answered"
+Received: "(stack) (.:1): its stack never came up: the database service db never answered on its port"
+
+ ❯ mounts.test.ts:125:71
+    123|   expect.soft(named, `a finding names the service db (findings: ${show…
+    124|   expect.soft(named, `the finding naming db names its exit code ${EXIT…
+    125|   expect.soft(named, 'the finding naming db names its last log line').…
+       |                                                                       ^
+    126| }, TIMEOUT);
+    127|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  02:38:10
+   Duration  162.86s (tests 99%, transform 1%)
+
+exit 1
+load after 25.87 36.81 52.63
+date 2026-11-24T10:40:54Z

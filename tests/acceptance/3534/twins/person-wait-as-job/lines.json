@@ -1,0 +1,12 @@
+{
+  "scripts/issue-time.mjs": [
+    {
+      "find": [
+        "  const ranThrough = (ended, prompt) => notices.some((notice) => notice.at > prompt && notice.ids.some((job) => started.get(job) <= ended));"
+      ],
+      "wrong": [
+        "  const ranThrough = (ended) => [...started.values()].some((at) => at <= ended);"
+      ]
+    }
+  ]
+}

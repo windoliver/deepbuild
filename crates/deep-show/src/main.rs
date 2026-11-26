@@ -2894,6 +2894,13 @@ fn main() {
             }
             let _ = writeln!(out, "{line}");
             let _ = out.flush();
+            // #3356: stderr names the refusal too, so a caller that shows only stderr reads why.
+            eprintln!(
+                "deep-show: seal_refused ({}): modules [{}]: {}",
+                err.code,
+                err.modules.join(", "),
+                err.what
+            );
             std::process::exit(2);
         }
     };

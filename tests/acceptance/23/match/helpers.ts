@@ -15,6 +15,7 @@ import type { Asks, AsksPlant, Card, Delivery, InboxRow, Resolver } from '../../
 import { resolverDecisions } from '../../../../packages/resolver-decisions/src/index.ts';
 import { makeClock, ulid, type Clock, type Obj } from './data.ts';
 import { shownPlanHash, withPlans } from '../../plans.ts';
+import { withDeclared } from '../../declared.ts';
 
 export * from './data.ts';
 
@@ -84,7 +85,7 @@ export async function openWorld(plant: Planting = {}, options: { resolver?: bool
   const real = await openRecord({ path: join(dir, 'record.db'), now: clock.now });
   const record = plant.record ? plant.record(real) : real;
   const deliveries: Delivery[] = [];
-  const opened = withPlans(await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(structuredClone(d)); }, ...(plant.core ? { plant: plant.core } : {}) }));
+  const opened = withDeclared(withPlans(await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(structuredClone(d)); }, ...(plant.core ? { plant: plant.core } : {}) })));
   const w = { clock, record, deliveries, dir } as World;
   w.asks = plant.asks ? plant.asks(opened, w) : opened;
   const resolver = resolverDecisions({ record });

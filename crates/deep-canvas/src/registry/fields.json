@@ -161,7 +161,7 @@
 {"list":"material@1.water.foam.speed","closed":"determinism","reopens_if":"never: none lets foam ignore the flow's speed","instead":"a speed in m/s"},
 {"list":"material@1.water.rings","closed":"determinism","reopens_if":"never: none leaves the water without touch rings","instead":"`{on, speed, span, strength}`"},
 {"list":"material@1.water.wake","closed":"determinism","reopens_if":"never: none leaves the water without a wake","instead":"`{item, span}`"},
-{"list":"material@1.water.waves","closed":"interval_forms","reopens_if":"water needs waves neither the wind's table nor up to four trochoidal waves give","instead":"a list of up to four waves, each with its direction, length, amplitude and steepness"},
+{"list":"material@1.water.waves","closed":"interval_forms","reopens_if":"water needs waves that neither the wind's table, a sea's spectrum nor up to four trochoidal waves give","instead":"a list of up to four waves, each with its direction, length, amplitude and steepness"},
 {"list":"media.strip@1.align.onset","closed":"determinism","reopens_if":"a strip needs aligning to an onset other than its strongest or its first","instead":"set `at` to the onset's time"},
 {"list":"media.strip@1.at_stage","closed":"determinism","reopens_if":"a strip needs a stage rule other than playing on or waiting","instead":"nothing"},
 {"list":"media.strip@1.fade_in.curve","closed":"determinism","reopens_if":"a fade needs a curve none of the three draws","instead":"a gain channel keyed by hand"},

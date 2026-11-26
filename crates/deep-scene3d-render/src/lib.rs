@@ -4754,8 +4754,13 @@ impl Renderer {
             planted: self.planted.water,
             above: (!self.sky).then(|| scene.ground.map(decode)),
         };
+        // #3033: a sea draws through pipelines of its own, made when the water first has one.
+        let sea = w.sea.is_some();
+        if self.waterer.as_ref().is_some_and(|held| held.sea != sea) {
+            self.waterer = None;
+        }
         self.waterer
-            .get_or_insert_with(|| Box::new(water::Waterer::new(device, reversed, samples)))
+            .get_or_insert_with(|| Box::new(water::Waterer::new(device, reversed, samples, sea)))
             .prepare(device, scene, w, &frame, &ids, &depth, [&ids_ms, &depth_ms]);
         self.watering = true;
     }
