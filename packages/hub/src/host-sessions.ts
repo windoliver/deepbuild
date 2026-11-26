@@ -81,8 +81,8 @@ g() { LC_ALL=C GIT_NO_REPLACE_OBJECTS=1 timeout -k 1 "$S" git -c core.hooksPath=
 say() { printf 'unread\t%s\n' "$(printf "$@" | base64 -w0)"; }
 one() { n=$1; shift; if o=$(g "$@"); then printf '%s\t%s\n' "$n" "$(printf '%s' "$o" | base64 -w0)"; else say 'git %s exited %s' "$*" "$?"; fi; }
 S=$3; [ -z "$(g config --get core.worktree)" ] || say 'git there is set to read another folder as its work tree (core.worktree)'
-f=$(g ls-files -z | g check-attr --stdin -z filter | tr '\0' '\n' | awk 'NR % 3 == 1 { p = $0 } NR % 3 == 0 && $0 != "unspecified" && $0 != "unset" { n++; if (n == 1) q = p } END { if (n) printf "%d\t%s", n, q }')
-[ -z "$f" ] || say 'git reads %s tracked file(s) through a filter program (%s), so their bytes are not compared' "${f%%	*}" "${f#*	}"
+f=$(g ls-files -z | g check-attr --stdin -z filter | tr '\0' '\n' | awk 'NR % 3 == 1 { p = $0 } NR % 3 == 0 && $0 != "unspecified" && $0 != "unset" { n++; if (n == 1) q = p } END { if (n) printf "%d tracked file(s) through a filter program (%s)", n, q }')
+[ -z "$f" ] || say 'git reads %s, so their bytes are not compared' "$f"
 one diff diff --name-only --no-renames "$2"; one others ls-files --others --exclude-standard; one tracked ls-files -v
 if p=$(g ls-tree --name-only "$2" -- package.json); then [ -z "$p" ] || one was show "$2:package.json"; else say 'git ls-tree %s exited %s' "$2" "$?"; fi
 [ -f package.json ] && printf 'now\t%s\n' "$(head -c 1048576 package.json | base64 -w0)"; echo read`;
