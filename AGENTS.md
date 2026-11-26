@@ -1,6 +1,6 @@
 # Rules for agents working in this repo
 
-Read the design sections your issue links before edits. `node scripts/design-section.mjs --issue <n>` prints them. Keep this file under one page. Delegates follow these rules. Before delivery, review requirement → change → proof mappings; disclose deviations and unrun checks.
+Read the design sections your issue links before edits. `node scripts/design-section.mjs --issue <n>` prints them. `--issue` counts their tokens on its last line, and past 25,000 it prints each section's outline in place of its text, where `--all` prints the text. Keep this file under one page. Delegates follow these rules. Before delivery, review requirement → change → proof mappings; disclose deviations and unrun checks.
 
 ## The four invariants
 
