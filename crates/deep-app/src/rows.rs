@@ -258,7 +258,8 @@ fn fit<E: Styled + ParentElement>(slot: E, title: String, cut: Option<String>) -
     }
 }
 
-/// How wide `text` draws in the chrome's face at the body size and `weight`.
+/// How wide `text` draws in the chrome's face at the body size and `weight`, with the tabular figures a row's text is
+/// set in (`Typed`), so a time measures as wide as it draws (#3282).
 fn drawn_width(window: &Window, text: &str, weight: FontWeight) -> Pixels {
     if text.is_empty() {
         return px(0.);
@@ -268,6 +269,7 @@ fn drawn_width(window: &Window, text: &str, weight: FontWeight) -> Pixels {
         len: text.len(),
         font: Font {
             weight,
+            features: FontFeatures(std::sync::Arc::new(vec![("tnum".into(), 1)])),
             ..font(s.face.clone())
         },
         color: Hsla::default(),
@@ -328,8 +330,10 @@ pub(crate) struct RowDrawn {
     cut: Option<String>,
     /// The title reads right to left from its first strong character, so from the slot's right (#1808).
     rtl: bool,
-    /// The time is drawn: beside a long state word at the list's narrowest it leaves what's drawn (#1808).
-    timed: bool,
+    /// The time is drawn: beside a long state word at the list's narrowest a session row's leaves what's drawn
+    /// (#1808); an ask row's stays (#3282). The list sets it too, for #3282's planted row, since only it knows a row's
+    /// place.
+    pub(crate) timed: bool,
     /// #1808's planted row draws its title whole, over the slots to its right.
     under: bool,
 }
@@ -444,21 +448,32 @@ impl RowDrawn {
         // state word; the slots keep their sides (#1808).
         let rtl = unicode_bidi::get_base_direction(title.as_str()) == unicode_bidi::Direction::Rtl;
         // Once the list's width is known, the title's room is what the row's other slots leave it (#1808). Beside a long
-        // state word at the list's narrowest the time leaves what's drawn, its slot kept in the tree with no width, so
-        // the title keeps at least 12 characters.
+        // state word at the list's narrowest a session row's time leaves what's drawn, its slot kept in the tree with no
+        // width, so the title keeps at least 12 characters. An ask row's time is when its recommended answer applies, so
+        // it stays and the title takes what's left (#3282).
         let wide = |text: &str, weight| drawn_width(window, text, weight);
+        // A slot beside the title is laid out at least its text's width rounded up to a whole point, so each is taken
+        // so: an ask's title cut to a few characters would otherwise be fitted to room its slot doesn't have, and lose
+        // its ellipsis.
+        let slot_wide = |text: &str| wide(text, FontWeight::NORMAL).ceil();
         let roomy = shape.width.map(|width| {
-            let flag = row.flag.as_ref().map_or(px(0.), |flag| {
-                s.space(1) + wide(&flag.code, FontWeight::NORMAL)
-            });
-            let fixed = s.space(1) * 4. + s.space(3) + wide(&drawn_word, FontWeight::NORMAL) + flag;
-            let time = (s.space(1) + wide(&time, FontWeight::NORMAL)).max(s.space(5));
+            let flag = row
+                .flag
+                .as_ref()
+                .map_or(px(0.), |flag| s.space(1) + slot_wide(&flag.code));
+            let fixed = s.space(1) * 4. + s.space(3) + slot_wide(&drawn_word) + flag;
+            let time = (s.space(1) + slot_wide(&time)).max(s.space(5));
             let mut least: String = title.chars().take(TITLE_LEAST).collect();
             if title.chars().count() > TITLE_LEAST {
                 least.push('…');
             }
-            let timed = width - fixed - time >= wide(&least, weight);
-            (timed, width - fixed - if timed { time } else { px(0.) })
+            // The title's slot is laid out at whole points too, so it gets the room's whole points: a list dragged to a
+            // fractional width never fits a title to room its slot doesn't have.
+            let timed = ask || (width - fixed - time).floor() >= wide(&least, weight);
+            (
+                timed,
+                (width - fixed - if timed { time } else { px(0.) }).floor(),
+            )
         });
         let timed = roomy.is_none_or(|(timed, _)| timed);
         // #1808's planted rows: a title drawn whole over the slots to its right, and one cut at 8 characters whatever
@@ -472,7 +487,9 @@ impl RowDrawn {
             Some(eight)
         } else {
             roomy.map(|(_, room)| match &twin {
-                Some((name, short)) => fitted(window, name, room - wide(short, weight), weight),
+                Some((name, short)) => {
+                    fitted(window, name, room - wide(short, weight).ceil(), weight)
+                }
                 None => fitted(window, &title, room, weight),
             })
         };
@@ -929,16 +946,7 @@ pub(crate) fn in_lane(
                 .child(
                     match scrolls.filter(|_| !crate::plain::planted("page-clips")) {
                         // Under its title the page scrolls (#1808), each address from its top.
-                        Some(key) => div()
-                            .id(ElementId::Name(format!("lane-scroll:{key}").into()))
-                            .flex_1()
-                            .min_h_0()
-                            .w_full()
-                            .flex()
-                            .flex_col()
-                            .overflow_y_scroll()
-                            .child(content)
-                            .into_any_element(),
+                        Some(key) => crate::find::lane(key, content).into_any_element(),
                         // A page whose content scrolls inside itself, as a card's rows do.
                         None => div()
                             .flex_1()

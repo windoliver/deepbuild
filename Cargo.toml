@@ -156,3 +156,30 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.deep-sandbox-wasmtime]
 opt-level = 3
+# Issue #1172: the canvas core checks every installed pack before its first reply, and a pack's library check
+# compiles each program and fixture with wasmtime's compiler; built at the dev default that compiler took the dev
+# `deep-show` the acceptance tests run past their 10 s for a reply, so it and its register allocator build at release
+# speed there.
+[profile.dev.package.wasmtime]
+opt-level = 3
+[profile.dev.package.wasmtime-environ]
+opt-level = 3
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 3
+[profile.dev.package."cranelift-frontend@0.136.5"]
+opt-level = 3
+[profile.dev.package."cranelift-entity@0.136.5"]
+opt-level = 3
+[profile.dev.package."cranelift-bforest@0.136.5"]
+opt-level = 3
+[profile.dev.package."cranelift-bitset@0.136.5"]
+opt-level = 3
+[profile.dev.package."cranelift-control@0.136.5"]
+opt-level = 3
+# Issue #3108: a hub's first deep_kinds call waits for the pack check, which compiles every
+# pack's programs through Cranelift; at the dev default that passed the hub's 55 s answer wait under
+# load, so the compiler and its register allocator build at release speed there.
+[profile.dev.package.cranelift-codegen]
+opt-level = 3
+[profile.dev.package.regalloc2]
+opt-level = 3

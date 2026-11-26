@@ -41,6 +41,7 @@ pub mod device;
 pub mod empties;
 #[cfg(feature = "fixtures")]
 pub mod events;
+pub mod find;
 pub mod footprint;
 pub mod frame;
 pub mod gpu_view;
@@ -56,6 +57,7 @@ pub mod installed;
 /// #1606: the device key in the OS secret store.
 mod keystore;
 pub mod kinds;
+mod lines;
 pub mod list;
 pub mod notice;
 pub mod notify;
@@ -65,6 +67,7 @@ pub mod panel_check;
 #[cfg(feature = "panel-check")]
 pub mod panel_keys;
 pub mod panel_module;
+pub mod panel_rules;
 pub mod panel_tree;
 pub mod panel_values;
 pub mod pictures;
@@ -232,8 +235,12 @@ pub fn deepbuild_module() -> HostModule {
 /// them are folded or in Later, and the asks that left the list. It reads the one record reader, which holds the hub's
 /// record in the app and the fixture's in a replica, so a panel gets the same answer in both (#1459).
 fn needs_you() -> Result<HostValue, HostError> {
-    let (log_pos, inbox) = record::with_view(|view| (view.log_pos, view.inbox.clone()))
-        .ok_or_else(|| HostError::new("the app hasn't read the record from the hub yet"))?;
+    // The rows are those Needs you draws: an ask waiting for its batch isn't one (#22).
+    let (log_pos, inbox, open) = record::with_view(|view| {
+        let open: Vec<serde_json::Value> = view.panel_asks().into_iter().cloned().collect();
+        (view.log_pos, view.inbox.clone(), open)
+    })
+    .ok_or_else(|| HostError::new("the app hasn't read the record from the hub yet"))?;
     let text =
         |row: &serde_json::Value, key: &str| row[key].as_str().unwrap_or_default().to_owned();
     // Needs you's order (#1462): open asks oldest first, those put off with Later after them until they come back.
@@ -241,16 +248,11 @@ fn needs_you() -> Result<HostValue, HostError> {
     let later = |row: &serde_json::Value| {
         row["status"] == "later" && row["until"].as_u64().is_none_or(|until| until > now)
     };
-    let mut inbox = inbox;
-    inbox.sort_by_key(|row| later(row));
-    let open: Vec<&serde_json::Value> = inbox
-        .iter()
-        .filter(|row| row["status"] != "closed")
-        .collect();
-    let handles = |keep: &dyn Fn(&serde_json::Value) -> bool| {
+    let mut open = open;
+    open.sort_by_key(|row| later(row));
+    let handles = |rows: &[serde_json::Value], keep: &dyn Fn(&serde_json::Value) -> bool| {
         HostValue::Array(
-            inbox
-                .iter()
+            rows.iter()
                 .filter(|row| keep(row))
                 .map(|row| HostValue::Str(text(row, "ask")))
                 .collect(),
@@ -259,7 +261,7 @@ fn needs_you() -> Result<HostValue, HostError> {
     Ok(HostValue::Object(vec![
         ("now".into(), HostValue::Number(views::now() as f64)),
         ("log_pos".into(), HostValue::Number(log_pos as f64)),
-        ("rows".into(), handles(&|row| row["status"] != "closed")),
+        ("rows".into(), handles(&open, &|_| true)),
         (
             "asks".into(),
             HostValue::Array(
@@ -273,13 +275,22 @@ fn needs_you() -> Result<HostValue, HostError> {
                     .collect(),
             ),
         ),
-        ("folded".into(), handles(&|row| row["status"] == "folded")),
-        ("later".into(), handles(&|row| row["status"] == "later")),
+        (
+            "folded".into(),
+            handles(&open, &|row| row["status"] == "folded"),
+        ),
+        (
+            "later".into(),
+            handles(&open, &|row| row["status"] == "later"),
+        ),
         (
             "superseded".into(),
-            handles(&|row| row["outcome"] == "superseded"),
+            handles(&inbox, &|row| row["outcome"] == "superseded"),
         ),
-        ("moot".into(), handles(&|row| row["outcome"] == "moot")),
+        (
+            "moot".into(),
+            handles(&inbox, &|row| row["outcome"] == "moot"),
+        ),
         (
             "held".into(),
             // The hub records no event for a hold yet, so only a replica's fixture names one (#1454), and the shipped
@@ -382,6 +393,16 @@ pub fn init(cx: &mut App) {
     cx.set_reduce_motion(
         objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion(),
     );
+    // Tab with nothing focused goes to the window's first tab stop (#3233). The toolkit binds Tab under its root's
+    // key context, which a window with no focus never reaches, so no key could reach a panel's press from there.
+    cx.intercept_keystrokes(|event, window, cx| {
+        let tab = event.keystroke.key == "tab" && !event.keystroke.modifiers.modified();
+        if tab && window.focused(cx).is_none() {
+            window.focus_next(cx);
+            cx.stop_propagation();
+        }
+    })
+    .detach();
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")
@@ -392,8 +413,58 @@ pub fn init(cx: &mut App) {
 
 /// Loads a panel directory's `main.js` and mounts its view. A panel loads nothing from the network: one whose
 /// gpui-shell manifest lists a Git dependency is refused before gpui-shell reads it, so nothing is fetched (#326). A
-/// panel that imports the toolkit, or a name off the panel catalog, is refused before it loads too (#1425).
+/// panel that imports the toolkit, or a name off the panel catalog, is refused before it loads too (#1425). So is
+/// one whose first tree breaks a rule of `panel@1`'s current revision (#3233): a press with no name or no key, or
+/// text under the ink floor on its fill. A panel its installer recorded against an earlier revision still loads.
 pub fn mount_panel(
+    runtime: &Rc<ShellRuntime>,
+    dir: &Path,
+    window: &mut Window,
+    cx: &mut App,
+) -> anyhow::Result<Entity<ScriptView>> {
+    let view = mount_panel_unheld(runtime, dir, window, cx)?;
+    if panel_rules::held_to(dir) >= panel_rules::REVISION {
+        draw_once(&view, window, cx)?;
+        if let Some(finding) = panel_rules::of_view(&view, cx).into_iter().next() {
+            anyhow::bail!("{}", finding.text);
+        }
+    }
+    Ok(view)
+}
+
+/// A script builds its tree only when a frame draws its view, so the view is drawn once in a window of its own that
+/// is never shown, of the size of the window it loads into: a panel is checked before it shows.
+fn draw_once(view: &Entity<ScriptView>, window: &Window, cx: &mut App) -> anyhow::Result<()> {
+    struct Once(Entity<ScriptView>);
+    impl Render for Once {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(self.0.clone())
+        }
+    }
+    let options = WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(Bounds {
+            origin: Point::default(),
+            size: window.viewport_size(),
+        })),
+        focus: false,
+        show: false,
+        ..Default::default()
+    };
+    let drawn = view.clone();
+    let scratch: AnyWindowHandle = cx
+        .open_window(options, |_, cx| cx.new(|_| Once(drawn)))?
+        .into();
+    cx.update_window(scratch, |_, scratch, cx| {
+        scratch.refresh();
+        scratch.draw(cx).clear(cx);
+        scratch.remove_window();
+    })
+}
+
+/// The panel host's load (#358): the panel loaded and mounted as [`mount_panel`] does, its trees held by the app
+/// that reads them, `panel-check`, and not here. A replica's `launch` loads a panel this way too: the UI check draws
+/// a panel to say what is wrong with it, a control with no name among it, so the loader's refusal mustn't come first.
+pub fn mount_panel_unheld(
     runtime: &Rc<ShellRuntime>,
     dir: &Path,
     window: &mut Window,

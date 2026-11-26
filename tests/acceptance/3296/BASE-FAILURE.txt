@@ -1,0 +1,490 @@
+# #3296's suite on the merge base a288ae247, each test file run once with `node --test --test-reporter=spec <file>` on the
+# Mac (18 cores, darwin, node v24.22.2), while other sessions kept the 1-minute load at what each heading says, up to
+# four files at a time. Home folders read ~ (a scene's own HOME too), temp folders <tmp>, the checkout <checkout>; each
+# failure's dump of its scene is cut to its first line, and the assertion's own comparison is kept.
+#
+# Every test fails at an assertion, for the expected reason, but the one guard, which passes:
+#   resume.test.mjs     #3296.72441260  each stopped preflight dies by itself and leaves its jobs running: the measuring
+#                                       process, checks.mjs, the throttle, vitest or node --test with its worker, the build
+#                                       it waited for with its compiler, and the child in a process group apart
+#                       #3296.87081be7  the next run starts every job that ended before the stop again (p, q, a, b, c, d);
+#                                       no line was kept; a run with nothing left to run starts everything
+#   counts.test.mjs     #3296.4125e574  the run after starts the jobs that ended whole again, as it starts every job: it
+#                                       keeps nothing, so no bad job can be told from a good one
+#   stands.test.mjs     #3296.a6124068  every failed file is run again, and then passes; no line is kept to plant a later
+#                                       PASS after
+#   key-lines.test.mjs  #3296.870c9548  no line is kept; the control is run again
+#   key-real.test.mjs   #3296.870c9548  the file is started again though nothing changed; no line is kept. The guard passes
+#   open.test.mjs       #3296.7136c045  every file is started again, the settled ones and the listed skip's with the open
+#   unrun.test.mjs      #3296.7136c045  the lane names no unrun file; every file is started again
+#   binaries.test.mjs   #3296.27d9fa8c  every job but a folder's first starts without seen3296 and placed3296, in the
+#                                       worktree and in both shards
+
+## node --test tests/acceptance/3296/resume.test.mjs (1-minute load 285 at its start, 261 s, exit 1)
+
+✖ #3296.72441260 a preflight sent SIGINT while the parallel block is part way leaves no process it started running, exits 128 plus the signal and holds no grant (257189.964583ms)
+✖ #3296.72441260 a preflight sent SIGTERM while an alone group is part way leaves no process it started running, exits 128 plus the signal and holds no grant (0.998833ms)
+✖ #3296.72441260 a preflight sent SIGHUP while node --test is part way leaves no process it started running, exits 128 plus the signal and holds no grant (0.507625ms)
+✖ #3296.87081be7 a run on the same clean tree starts no job that ended before the stop, and starts the one that was part way (0.20175ms)
+✖ #3296.87081be7 a stopped run keeps one whole line for each job that ended, as the job ended, and none for the one it stopped (0.274833ms)
+✖ #3296.87081be7 once the last job has run, the lane's record holds every test's row once and passes, and a run with nothing left to run starts nothing (1.230708ms)
+ℹ tests 6
+ℹ pass 0
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3296/resume.test.mjs:96:3
+✖ #3296.72441260 a preflight sent SIGINT while the parallel block is part way leaves no process it started running, exits 128 plus the signal and holds no grant (257189.964583ms)
+  AssertionError [ERR_ASSERTION]: the stopped preflight left processes it started running
+  kept lines (~/.deepbuild/preflight/718b808947028c1b5b17199721ca973fe22699d5.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+  + [
+  +   '730 /usr/bin/time -l -o <tmp>/tmp/deep-benchmark-time-rudG80/time node scripts/checks.mjs',
+  +   '731 node scripts/checks.mjs',
+  +   '1280 node <tmp>/tree/scripts/proof-binaries.mjs <tmp>/tmp/deep-lane-binaries-rNE9Nt',
+  +   '1773 node <tmp>/tree/scripts/throttle.mjs test --wait 30 -- <tmp>/tree/scripts/lease node',
+  +   '1890 node node_modules/vitest/vitest.mjs run --reporter=default --reporter=<tmp>/tree/scripts/proof-vitest-reporter.mjs --',
+  +   '2420 node --experimental-import-meta-resolve --require <checkout>',
+  +   '2543 sh <tmp>/bin/apart p (the child in a process group apart)',
+  +   '2605 sh <tmp>/bin/build p (the build it waits for)',
+  +   "2608 sleep 3600 (that build's compiler)",
+  +   '12683 sleep 1'
+  + ]
+  - []
+
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/resume.test.mjs:102:12)
+
+test at tests/acceptance/3296/resume.test.mjs:96:3
+✖ #3296.72441260 a preflight sent SIGTERM while an alone group is part way leaves no process it started running, exits 128 plus the signal and holds no grant (0.998833ms)
+  AssertionError [ERR_ASSERTION]: the stopped preflight left processes it started running
+  kept lines (~/.deepbuild/preflight/718b808947028c1b5b17199721ca973fe22699d5.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+  + [
+  +   '13414 /usr/bin/time -l -o <tmp>/tmp/deep-benchmark-time-wXyVoj/time node scripts/checks.mjs',
+  +   '13415 node scripts/checks.mjs',
+  +   '13817 node <tmp>/tree/scripts/proof-binaries.mjs <tmp>/tmp/deep-lane-binaries-MW4GRB',
+  +   '15355 node <tmp>/tree/scripts/throttle.mjs build --wait 30 -- <tmp>/tree/scripts/lease node',
+  +   '15484 node scripts/affected.mjs --alone --slow --timed --results=<tmp>/tmp/deep-preflight-output-1vb16h/report',
+  +   '16220 node <tmp>/tree/scripts/proof-binaries.mjs <tmp>/tmp/deep-affected-Qjo4Sn/binaries',
+  +   '16330 node <tmp>/tree/scripts/throttle.mjs test --wait 30 -- node <tmp>/tree/scr',
+  +   '16545 node <tmp>/tree/scripts/affected.mjs --alone --slow --timed --results=<tmp>/tmp/deep-preflight-output-1vb16h/report',
+  +   '20394 node <tmp>/tree/scripts/throttle.mjs test --wait 30 -- <tmp>/tree/scripts/lease node',
+  +   '20560 node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-report',
+  +   '20858 node --experimental-import-meta-resolve --require <checkout>',
+  +   '21036 sh <tmp>/bin/apart h (the child in a process group apart)',
+  +   '21062 sh <tmp>/bin/build h (the build it waits for)',
+  +   "21065 sleep 3600 (that build's compiler)",
+  +   '32921 sleep 1'
+  + ]
+  - []
+
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/resume.test.mjs:102:12)
+
+test at tests/acceptance/3296/resume.test.mjs:96:3
+✖ #3296.72441260 a preflight sent SIGHUP while node --test is part way leaves no process it started running, exits 128 plus the signal and holds no grant (0.507625ms)
+  AssertionError [ERR_ASSERTION]: the stopped preflight left processes it started running
+  kept lines (~/.deepbuild/preflight/718b808947028c1b5b17199721ca973fe22699d5.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+  + [
+  +   '33731 /usr/bin/time -l -o <tmp>/tmp/deep-benchmark-time-kUzFDv/time node scripts/checks.mjs',
+  +   '33732 node scripts/checks.mjs',
+  +   '34036 node <tmp>/tree/scripts/proof-binaries.mjs <tmp>/tmp/deep-lane-binaries-81huR4',
+  +   '41094 node <tmp>/tree/scripts/throttle.mjs test --wait 30 -- <tmp>/tree/scripts/lease node',
+  +   '41157 node --test --test-reporter=file://<tmp>/tree/scripts/proof-reporter.mjs --test-reporter-destination=<tmp>/tmp/deep-p',
+  +   '41177 node --test-concurrency=0 --heap-prof-interval=524288 --use-system-ca --stack-trace-limit=10 --report-signal=SIGUSR2 ',
+  +   '41215 sh <tmp>/bin/apart n (the child in a process group apart)',
+  +   '41272 sh <tmp>/bin/build n (the build it waits for)',
+  +   "41273 sleep 3600 (that build's compiler)",
+  +   '51309 sleep 1'
+  + ]
+  - []
+
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/resume.test.mjs:102:12)
+
+test at tests/acceptance/3296/resume.test.mjs:114:1
+✖ #3296.87081be7 a run on the same clean tree starts no job that ended before the stop, and starts the one that was part way (0.20175ms)
+  AssertionError [ERR_ASSERTION]: jobs that ended before the run stopped by SIGTERM were started again by the next run: p, q, a, b, c, d
+  kept lines (~/.deepbuild/preflight/718b808947028c1b5b17199721ca973fe22699d5.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+  + [
+  +   'p',
+  +   'q',
+  +   'a',
+  +   'b',
+  +   'c',
+  +   'd'
+  + ]
+  - []
+
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/resume.test.mjs:121:12)
+
+test at tests/acceptance/3296/resume.test.mjs:126:1
+✖ #3296.87081be7 a stopped run keeps one whole line for each job that ended, as the job ended, and none for the one it stopped (0.274833ms)
+  AssertionError [ERR_ASSERTION]: p ended before the stop by SIGTERM, and its kept rows then weren't its two tests', once each
+  kept lines (~/.deepbuild/preflight/718b808947028c1b5b17199721ca973fe22699d5.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+  + []
+  - [
+  -   'PASS',
+  -   'PASS'
+  - ]
+
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/resume.test.mjs:130:43)
+
+test at tests/acceptance/3296/resume.test.mjs:145:1
+✖ #3296.87081be7 once the last job has run, the lane's record holds every test's row once and passes, and a run with nothing left to run starts nothing (1.230708ms)
+  AssertionError [ERR_ASSERTION]: a run on a tree whose every job is kept started jobs again: p, q, a, b, c, h, d, t, n, cargo test
+  kept lines (~/.deepbuild/preflight/718b808947028c1b5b17199721ca973fe22699d5.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+  + {
+  +   'cargo test': 1,
+  +   a: 1,
+  +   b: 1,
+  +   c: 1,
+  +   d: 1,
+  +   h: 1,
+  +   n: 1,
+  +   p: 1,
+  +   q: 1,
+  +   t: 1
+  + }
+  - {}
+
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/resume.test.mjs:158:10)
+
+## node --test tests/acceptance/3296/counts.test.mjs (1-minute load 293 at its start, 155 s, exit 1)
+
+✖ #3296.4125e574 a job whose runner was killed counts for nothing on the next run, in the alone block, in cargo test and in node --test (152573.53675ms)
+✖ #3296.4125e574 a job whose report was cut, in a line or of its end, counts for nothing on the next run (0.934708ms)
+✖ #3296.4125e574 a job that ended with an unhandled error counts for nothing on the next run, in the alone block and in the parallel block (0.521917ms)
+✖ #3296.4125e574 a job that was refused its grant counts for nothing on the next runs (0.8125ms)
+✖ #3296.4125e574 a kept line that doesn't parse is no result, and the line kept after it is whole (0.424041ms)
+✖ #3296.4125e574 the third run passes on the rows of the jobs that ended whole, each test once, and none of a bad job's (1.503917ms)
+ℹ tests 6
+ℹ pass 0
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3296/counts.test.mjs:79:1
+✖ #3296.4125e574 a job whose runner was killed counts for nothing on the next run, in the alone block, in cargo test and in node --test (152573.53675ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/66/a.test.ts, whose job ended whole in the first run, was started again by the second
+  kept lines (~/.deepbuild/preflight/65b5f813fb4e561ded21440e3caab8c5eec4067e.jsonl): none, the file is missing
+  …
+  at control (<checkout>/tests/acceptance/3296/counts.test.mjs:68:12)
+
+test at tests/acceptance/3296/counts.test.mjs:89:1
+✖ #3296.4125e574 a job whose report was cut, in a line or of its end, counts for nothing on the next run (0.934708ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/66/a.test.ts, whose job ended whole in the first run, was started again by the second
+  kept lines (~/.deepbuild/preflight/65b5f813fb4e561ded21440e3caab8c5eec4067e.jsonl): none, the file is missing
+  …
+  at control (<checkout>/tests/acceptance/3296/counts.test.mjs:68:12)
+
+test at tests/acceptance/3296/counts.test.mjs:95:1
+✖ #3296.4125e574 a job that ended with an unhandled error counts for nothing on the next run, in the alone block and in the parallel block (0.521917ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/66/a.test.ts, whose job ended whole in the first run, was started again by the second
+  kept lines (~/.deepbuild/preflight/65b5f813fb4e561ded21440e3caab8c5eec4067e.jsonl): none, the file is missing
+  …
+  at control (<checkout>/tests/acceptance/3296/counts.test.mjs:68:12)
+
+test at tests/acceptance/3296/counts.test.mjs:100:1
+✖ #3296.4125e574 a job that was refused its grant counts for nothing on the next runs (0.8125ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/66/a.test.ts, whose job ended whole in the first run, was started again by the second
+  kept lines (~/.deepbuild/preflight/65b5f813fb4e561ded21440e3caab8c5eec4067e.jsonl): none, the file is missing
+  …
+  at control (<checkout>/tests/acceptance/3296/counts.test.mjs:68:12)
+
+test at tests/acceptance/3296/counts.test.mjs:110:1
+✖ #3296.4125e574 a kept line that doesn't parse is no result, and the line kept after it is whole (0.424041ms)
+  AssertionError [ERR_ASSERTION]: the first run kept no line for the good group
+  kept lines (~/.deepbuild/preflight/65b5f813fb4e561ded21440e3caab8c5eec4067e.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/counts.test.mjs:112:10)
+
+test at tests/acceptance/3296/counts.test.mjs:120:1
+✖ #3296.4125e574 the third run passes on the rows of the jobs that ended whole, each test once, and none of a bad job's (1.503917ms)
+  AssertionError [ERR_ASSERTION]: the third run started tests/p.test.ts, tests/q.test.ts, tests/acceptance/149/a.test.ts, tests/acceptance/149/b.test.ts, tests/acceptance/1523/a.test.ts, tests/acceptance/84/a.test.ts, tests/acceptance/580/a.test.ts, tests/acce…
+  kept lines (~/.deepbuild/preflight/65b5f813fb4e561ded21440e3caab8c5eec4067e.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+    [
+  +   'p',
+  +   'q',
+  +   'killed',
+  +   'beside the killed',
+  +   'torn',
+  +   'unended',
+  +   'unhandled',
+      'refused',
+  +   'whole',
+  +   'halved',
+  +   't',
+      'n',
+  +   'cargo test'
+    ]
+
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/counts.test.mjs:123:10)
+
+## node --test tests/acceptance/3296/stands.test.mjs (1-minute load 285 at its start, 68 s, exit 1)
+
+✖ #3296.a6124068 the next run doesn't start a file whose kept row reads FAIL or INVALID, whichever job ran it, and starts the open file beside it (65578.650375ms)
+✖ #3296.a6124068 the lane doesn't pass on the run after, each failed test reads as it did, and the rows are each there once (1.110417ms)
+✖ #3296.a6124068 with a PASS kept after it, a FAIL stands: nothing is started, the row reads FAIL and the lane doesn't pass (0.2715ms)
+✖ #3296.a6124068 with a PASS kept after it, an INVALID stands: nothing is started, the row reads INVALID and the lane doesn't pass (0.115584ms)
+ℹ tests 4
+ℹ pass 0
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3296/stands.test.mjs:59:1
+✖ #3296.a6124068 the next run doesn't start a file whose kept row reads FAIL or INVALID, whichever job ran it, and starts the open file beside it (65578.650375ms)
+  AssertionError [ERR_ASSERTION]: files with a kept FAIL or INVALID were run again: tests/acceptance/149/a.test.ts, tests/acceptance/1523/a.test.ts, tests/acceptance/84/a.test.ts, tests/acceptance/1018/budgets.test.ts, tests/n.test.mjs, cargo test
+  kept lines (~/.deepbuild/preflight/58191620f5a75139bded3de01303bded3c652777.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+  + [
+  +   'fails',
+  +   'fails too',
+  +   'invalid',
+  +   't',
+  +   'n',
+  +   'cargo test'
+  + ]
+  - []
+
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/stands.test.mjs:64:10)
+
+test at tests/acceptance/3296/stands.test.mjs:69:1
+✖ #3296.a6124068 the lane doesn't pass on the run after, each failed test reads as it did, and the rows are each there once (1.110417ms)
+  AssertionError [ERR_ASSERTION]: the lane reads PASS
+  kept lines (~/.deepbuild/preflight/58191620f5a75139bded3de01303bded3c652777.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/stands.test.mjs:71:12)
+
+test at tests/acceptance/3296/stands.test.mjs:79:1
+✖ #3296.a6124068 with a PASS kept after it, a FAIL stands: nothing is started, the row reads FAIL and the lane doesn't pass (0.2715ms)
+  AssertionError [ERR_ASSERTION]: the runs kept no line, so there is none to plant a later PASS after
+  kept lines (~/.deepbuild/preflight/58191620f5a75139bded3de01303bded3c652777.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/stands.test.mjs:80:10)
+
+test at tests/acceptance/3296/stands.test.mjs:92:1
+✖ #3296.a6124068 with a PASS kept after it, an INVALID stands: nothing is started, the row reads INVALID and the lane doesn't pass (0.115584ms)
+  AssertionError [ERR_ASSERTION]: the runs kept no line, so there is none to plant a later PASS after
+  kept lines (~/.deepbuild/preflight/58191620f5a75139bded3de01303bded3c652777.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/stands.test.mjs:93:10)
+
+## node --test tests/acceptance/3296/key-lines.test.mjs (1-minute load 285 at its start, 185 s, exit 1)
+
+✖ #3296.870c9548 every kept line names its tree, host, platform, operating-system build, Node and Rust version and a digest of its environment that gives no value away (182399.7105ms)
+✖ #3296.870c9548 an alone group's line with one part of its key changed isn't used: its file runs again, for each part, and a line unchanged is used (0.852583ms)
+✖ #3296.870c9548 a line of the parallel block, cargo test, node --test or the timed block with one part of its key changed isn't used: its job runs again (0.3025ms)
+ℹ tests 3
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3296/key-lines.test.mjs:66:1
+✖ #3296.870c9548 every kept line names its tree, host, platform, operating-system build, Node and Rust version and a digest of its environment that gives no value away (182399.7105ms)
+  AssertionError [ERR_ASSERTION]: the run kept no line
+  kept lines (~/.deepbuild/preflight/21353e5ad2bd4384b25a8c734f568089b9d8620a.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/key-lines.test.mjs:68:10)
+
+test at tests/acceptance/3296/key-lines.test.mjs:84:1
+✖ #3296.870c9548 an alone group's line with one part of its key changed isn't used: its file runs again, for each part, and a line unchanged is used (0.852583ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/65/a.test.ts, kept under the run's own key, was run again
+  kept lines (~/.deepbuild/preflight/21353e5ad2bd4384b25a8c734f568089b9d8620a.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/key-lines.test.mjs:87:10)
+
+test at tests/acceptance/3296/key-lines.test.mjs:95:1
+✖ #3296.870c9548 a line of the parallel block, cargo test, node --test or the timed block with one part of its key changed isn't used: its job runs again (0.3025ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/65/a.test.ts, kept under the run's own key, was run again
+  kept lines (~/.deepbuild/preflight/21353e5ad2bd4384b25a8c734f568089b9d8620a.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/key-lines.test.mjs:98:12)
+
+## node --test tests/acceptance/3296/key-real.test.mjs (1-minute load 285 at its start, 42 s, exit 1)
+
+✖ #3296.870c9548 another environment, Rust version or tree runs the file again, and the same ones don't (37806.4735ms)
+✖ #3296.870c9548 a variable's value is in no kept line, and two values of it give two keys (0.566958ms)
+✔ guard: the lanes run with no preflight above them, as the main watch runs them, start every file and keep nothing (0.172292ms)
+ℹ tests 3
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3296/key-real.test.mjs:54:1
+✖ #3296.870c9548 another environment, Rust version or tree runs the file again, and the same ones don't (37806.4735ms)
+  AssertionError [ERR_ASSERTION]: nothing changed: the file was started 1 times, not 0
+  kept lines (~/.deepbuild/preflight/3a1047e4e821ca3fdff2d20260e4c6aece0276c5.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/key-real.test.mjs:56:12)
+
+test at tests/acceptance/3296/key-real.test.mjs:61:1
+✖ #3296.870c9548 a variable's value is in no kept line, and two values of it give two keys (0.566958ms)
+  AssertionError [ERR_ASSERTION]: the runs kept no line
+  kept lines (~/.deepbuild/preflight/3a1047e4e821ca3fdff2d20260e4c6aece0276c5.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/key-real.test.mjs:63:10)
+
+## node --test tests/acceptance/3296/open.test.mjs (1-minute load 283 at its start, 113 s, exit 1)
+
+✖ #3296.7136c045 a file with an INCONCLUSIVE row makes the lane INCONCLUSIVE, and the next run runs it and starts none of the files that ran (110060.910334ms)
+✖ #3296.7136c045 a kept INCONCLUSIVE row of a file whose job is refused its grant makes the lane INCONCLUSIVE (0.77425ms)
+✖ #3296.7136c045 a file whose skip known-failures.json lists is settled: its row is kept as it read and it isn't run again (0.373125ms)
+ℹ tests 3
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3296/open.test.mjs:71:1
+✖ #3296.7136c045 a file with an INCONCLUSIVE row makes the lane INCONCLUSIVE, and the next run runs it and starts none of the files that ran (110060.910334ms)
+  AssertionError [ERR_ASSERTION]: tests/p.test.ts and tests/acceptance/1523/a.test.ts were to run again, with the parallel block whole, and nothing else could start
+  kept lines (~/.deepbuild/preflight/880e5254298b91091a22b65dc3cabd3145724836.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+    [
+  +   'listed skip',
+  +   'n',
+      'p',
+      'q',
+      'skipped'
+    ]
+
+  at started (<checkout>/tests/acceptance/3296/open.test.mjs:69:49)
+
+test at tests/acceptance/3296/open.test.mjs:82:1
+✖ #3296.7136c045 a kept INCONCLUSIVE row of a file whose job is refused its grant makes the lane INCONCLUSIVE (0.77425ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/1523/a.test.ts, whose rows all ran in the run before, was started again
+  kept lines (~/.deepbuild/preflight/880e5254298b91091a22b65dc3cabd3145724836.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/open.test.mjs:84:10)
+
+test at tests/acceptance/3296/open.test.mjs:88:1
+✖ #3296.7136c045 a file whose skip known-failures.json lists is settled: its row is kept as it read and it isn't run again (0.373125ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/84/a.test.ts, whose one open row a skips entry covers, was started 4 times in four runs
+  kept lines (~/.deepbuild/preflight/880e5254298b91091a22b65dc3cabd3145724836.jsonl): none, the file is missing
+  …
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/open.test.mjs:90:10)
+
+## node --test tests/acceptance/3296/unrun.test.mjs (1-minute load 289 at its start, 109 s, exit 1)
+
+✖ #3296.7136c045 a file with a BLOCKED row keeps the lane from passing, and the next run runs it (106082.697958ms)
+✖ #3296.7136c045 a file with no kept result makes the lane INCONCLUSIVE, named as 1 of 5 unrun, and the next run runs it (0.869125ms)
+✖ #3296.7136c045 a file whose kept line is taken away has no result and is run by the next run, and no other file is (0.773708ms)
+ℹ tests 3
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3296/unrun.test.mjs:52:1
+✖ #3296.7136c045 a file with a BLOCKED row keeps the lane from passing, and the next run runs it (106082.697958ms)
+  AssertionError [ERR_ASSERTION]: the lane doesn't name that 1 of its 5 files, tests/acceptance/149/a.test.ts, is unrun
+  kept lines (~/.deepbuild/preflight/ec7d0e13cfdba89d925b322a19b3e9ce7b3f818f.jsonl): none, the file is missing
+  …
+  at nameUnrun (<checkout>/tests/acceptance/3296/unrun.test.mjs:49:10)
+
+test at tests/acceptance/3296/unrun.test.mjs:61:1
+✖ #3296.7136c045 a file with no kept result makes the lane INCONCLUSIVE, named as 1 of 5 unrun, and the next run runs it (0.869125ms)
+  AssertionError [ERR_ASSERTION]: the lane doesn't name that 1 of its 5 files, tests/acceptance/149/a.test.ts, is unrun
+  kept lines (~/.deepbuild/preflight/ec7d0e13cfdba89d925b322a19b3e9ce7b3f818f.jsonl): none, the file is missing
+  …
+  at nameUnrun (<checkout>/tests/acceptance/3296/unrun.test.mjs:49:10)
+
+test at tests/acceptance/3296/unrun.test.mjs:75:1
+✖ #3296.7136c045 a file whose kept line is taken away has no result and is run by the next run, and no other file is (0.773708ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/84/a.test.ts, whose kept line was taken away, was to run, and no other file
+  kept lines (~/.deepbuild/preflight/ec7d0e13cfdba89d925b322a19b3e9ce7b3f818f.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+    [
+  +   'blocked',
+  +   'missing',
+  +   'n',
+  +   'p',
+      'whole'
+    ]
+
+  at started (<checkout>/tests/acceptance/3296/unrun.test.mjs:45:49)
+
+## node --test tests/acceptance/3296/binaries.test.mjs (1-minute load 299 at its start, 73 s, exit 1)
+
+✖ #3296.27d9fa8c in the worktree, every job finds every binary the run's plan built, the folders emptied after the job before it (69838.851625ms)
+✖ #3296.27d9fa8c in a shard, every job finds every binary the run's plan built, the folders emptied after the job before it (0.823709ms)
+ℹ 5 jobs in 2 places: ~/deepbuild-shards/2, ~/deepbuild-shards/1
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+test at tests/acceptance/3296/binaries.test.mjs:84:1
+✖ #3296.27d9fa8c in the worktree, every job finds every binary the run's plan built, the folders emptied after the job before it (69838.851625ms)
+  AssertionError [ERR_ASSERTION]: jobs started without a binary the run's plan built
+  kept lines (~/.deepbuild/preflight/71bac92bfca00e9909189fe34ba99b4a8913aa88.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+  + [
+  +   'seen3296 missing at the start of tests/acceptance/1523/a.test.ts, after 2 other jobs',
+  +   'placed3296 missing at the start of tests/acceptance/1523/a.test.ts, after 2 other jobs',
+  +   'seen3296 missing at the start of tests/acceptance/84/a.test.ts, after 3 other jobs',
+  +   'placed3296 missing at the start of tests/acceptance/84/a.test.ts, after 3 other jobs',
+  +   'seen3296 missing at the start of tests/acceptance/1018/budgets.test.ts, after 4 other jobs',
+  +   'seen3296 missing at the start of tests/n.test.mjs, after 5 other jobs'
+  + ]
+  - []
+
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/binaries.test.mjs:86:10)
+
+test at tests/acceptance/3296/binaries.test.mjs:90:1
+✖ #3296.27d9fa8c in a shard, every job finds every binary the run's plan built, the folders emptied after the job before it (0.823709ms)
+  AssertionError [ERR_ASSERTION]: jobs started without a binary the run's plan built
+  kept lines (~/.deepbuild/preflight/9c97276a4c1cd9e294f6141b0dcbec97215525e6.jsonl): none, the file is missing
+  …
+  + actual - expected
+
+  + [
+  +   'seen3296 missing at the start of tests/acceptance/580/a.test.ts, after 2 other jobs',
+  +   'placed3296 missing at the start of tests/acceptance/580/a.test.ts, after 2 other jobs',
+  +   'seen3296 missing at the start of tests/acceptance/67/a.test.ts, after 3 other jobs',
+  +   'placed3296 missing at the start of tests/acceptance/67/a.test.ts, after 3 other jobs',
+  +   'seen3296 missing at the start of tests/acceptance/84/a.test.ts, after 4 other jobs',
+  +   'placed3296 missing at the start of tests/acceptance/84/a.test.ts, after 4 other jobs'
+  + ]
+  - []
+
+  at TestContext.<anonymous> (<checkout>/tests/acceptance/3296/binaries.test.mjs:95:10)

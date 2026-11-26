@@ -1,0 +1,219 @@
+# #3400 acceptance tests: the run on the base, and the planted inputs
+
+## The base (d0030e12b, the head of #3365's branch, no implementation), in this checkout, November 25 (UTC)
+
+$ node --test tests/acceptance/3400/ac1-project-hub.test.mjs tests/acceptance/3400/ac2-audit-lines.test.mjs \
+    tests/acceptance/3400/ac4-taste-call.test.mjs
+(stack-trace and assertion-object lines dropped; times dropped)
+
+All four offline tests fail, each at its own assertion and for its expected reason: no line of One hub for a project
+holds a decision's words, the Decided tables hold the base's 123 rows, the one audit line of The learned layer that
+names a project's hub says neither thing, and no taste call is recorded.
+
+✖ failing tests:
+
+test at tests/acceptance/3400/ac1-project-hub.test.mjs:8:1
+✖ AC1 #3400.65620d27 One hub for a project answers each of the three decisions (what a miss freezes, whose count, when an unshared claim reaches the project), each on a line of its own section that says "Not taken"
+  AssertionError [ERR_ASSERTION]: the section "One hub for a project shared by several people" doesn't answer these decisions with what was not taken:
+  - what a miss freezes: no line of the section holds `freez…` or `frozen`, and `audit…` or `miss`
+  - whose count: no line of the section holds `audit…`, and `count…`, `30` or `50`
+  - when an unshared claim reaches the project: no line of the section holds `claim`, and `unshared` or `nobody shared`
+
+test at tests/acceptance/3400/ac1-project-hub.test.mjs:15:1
+✖ AC1 #3400.65620d27 the Decided tables gain a row for each of the three decisions: a row whose question no Decided row had at the base
+  AssertionError [ERR_ASSERTION]: the Decided tables haven't gained their rows:
+  - the Decided tables gained no row: each row's question is one a Decided row had at d0030e12b
+
+test at tests/acceptance/3400/ac2-audit-lines.test.mjs:9:1
+✖ AC2 #3400.7371b274 The learned layer's audit lines say what a miss freezes and whose count starts an audit on a project's hub, each in a sentence the section didn't hold at the base
+  AssertionError [ERR_ASSERTION]: The learned layer's audit lines don't say these on a project's hub:
+  - what a miss freezes: silent on a project's hub. None of the section's 1 audit lines that name a project's hub ("- **On a project's hub.** Where several people share one rec…") holds `freez…` or `frozen` in a sentence the section didn't hold at d0030e12b
+  - whose count starts an audit: silent on a project's hub. None of the section's 1 audit lines that name a project's hub ("- **On a project's hub.** Where several people share one rec…") holds `count…`, `30` or `50` in a sentence the section didn't hold at d0030e12b
+
+test at tests/acceptance/3400/ac4-taste-call.test.mjs:9:1
+✖ AC4 #3400.28fd1eed docs/evidence/3400/taste-call.json records one person's taste call that the text reads right, bound to the text as the design holds it now
+  AssertionError [ERR_ASSERTION]: no taste call is recorded: docs/evidence/3400/taste-call.json doesn't exist
+
+ℹ tests 4
+ℹ pass 0
+ℹ fail 4
+ℹ skipped 0
+
+## The live files on the base, each run once the same day (gh 2.103.3, signed in, network on)
+
+$ node --test tests/acceptance/3400/ac2-doc-lanes.live.test.mjs
+It stops at the missing new text before it reads GitHub or runs a lane.
+
+test at tests/acceptance/3400/ac2-doc-lanes.live.test.mjs:18:1
+✖ AC2 #3400.7371b274 (live) with the new text in the design, the doc lanes (catalogue drift, design links and names, public text) find nothing the change brings
+  AssertionError [ERR_ASSERTION]: the design doesn't hold the new text yet, so the doc lanes have nothing to hold the rest of it against:
+  - what a miss freezes: no line of the section holds `freez…` or `frozen`, and `audit…` or `miss`
+  - whose count: no line of the section holds `audit…`, and `count…`, `30` or `50`
+  - when an unshared claim reaches the project: no line of the section holds `claim`, and `unshared` or `nobody shared`
+  - what a miss freezes: silent on a project's hub. None of the section's 1 audit lines that name a project's hub ("- **On a project's hub.** Where several people share one rec…") holds `freez…` or `frozen` in a sentence the section didn't hold at d0030e12b
+  - whose count starts an audit: silent on a project's hub. None of the section's 1 audit lines that name a project's hub ("- **On a project's hub.** Where several people share one rec…") holds `count…`, `30` or `50` in a sentence the section didn't hold at d0030e12b
+
+$ node --test tests/acceptance/3400/ac3-issue-links.live.test.mjs
+It read the two bodies from GitHub. They link what the bodies saved that day link.
+
+test at tests/acceptance/3400/ac3-issue-links.live.test.mjs:13:1
+✖ AC3 #3400.8f95766f (live) #3397 and #3398 each have a body link into the new text: one that lands in One hub for a project, where the three decisions are answered, by an anchor the design gained or from a line that holds a decision's words
+  AssertionError [ERR_ASSERTION]: the issues don't each link into the new text:
+  - the section holds no new text to link into yet: what a miss freezes: no line of the section holds `freez…` or `frozen`, and `audit…` or `miss`
+  - the section holds no new text to link into yet: whose count: no line of the section holds `audit…`, and `count…`, `30` or `50`
+  - the section holds no new text to link into yet: when an unshared claim reaches the project: no line of the section holds `claim`, and `unshared` or `nobody shared`
+  - #3397 links nothing new: it links "One hub for a project shared by several people" by #project-hub, which the design had at d0030e12b, and only on lines that hold no decision's words ("**Epic:** #1324 · **Decided in:** #3242 · **Beside:** #726, …")
+  - #3398 links nothing new: it links "One hub for a project shared by several people" by #project-hub, which the design had at d0030e12b, and only on lines that hold no decision's words ("**Epic:** #1324 · **Decided in:** #3242 · **Beside:** #1567,…")
+
+$ node --test tests/acceptance/3400/ac4-told.live.test.mjs
+It read #3400's comments from GitHub: there are none.
+
+test at tests/acceptance/3400/ac4-told.live.test.mjs:10:1
+✖ AC4 #3400.28fd1eed (live) a comment on #3400, made no earlier than the recorded taste call, names the criterion and says the others can overrule the call
+  AssertionError [ERR_ASSERTION]: the others on the project aren't told of the taste call:
+  - no taste call is recorded: docs/evidence/3400/taste-call.json doesn't exist
+  - none of #3400's 0 comments names #3400.28fd1eed and says the call can be overruled (`overrul…`)
+
+Each of the three: tests 1, pass 0, fail 1, skipped 0.
+
+## The judges on planted inputs (a scratch folder outside the checkout, never this checkout's docs/)
+
+Plain node scripts imported helpers.mjs and doc-lanes.mjs from this folder and held each judge against the base's
+design, a planted design built from it in memory, and mutants of that. The planted design, written for the harness
+only: three list items after the section's last, each opening with the decision's label from the issue and ending
+"Not taken: …"; two sentences in The learned layer's item On a project's hub, before its last, one saying what a miss
+freezes and one saying when each person's audit comes; and three rows, one a decision, after the last row under
+Decided for what a project learns and audits. The planted issue bodies are the two saved on November 25, each with a
+`#project-hub` link put on its Scope line that names what #3400 decides. All 100 checks came out as expected.
+
+decisionProblems (criterion 1, the section). The planted fix passes. So do the issue's own three Scope lines, word for
+word, as the section's items; the three decisions in one paragraph that says "Not taken" three times; a decision
+wrapped over three physical lines; the three under a subheading of the section; the freeze said with `miss` and no
+`audit`; and the freeze and the count written into the base's item Who is audited with one more "Not taken" on that
+line. Each of these fails, naming what is wrong:
+- the base: all three decisions, "no line of the section holds …".
+- one decision left out, each of the three in turn, from the planted items and from the issue's Scope lines: that
+  decision, "whose count: no line of the section holds `audit…`, and `count…`, `30` or `50`" and so on.
+- the count decision, and the claim decision, without its "Not taken": "no line that holds … says "Not taken"".
+- the three decisions on one line with one "Not taken", and the freeze and the count written into Who is audited,
+  which says it once: "leaves one without its own".
+- a decision whose "Not taken" is a list item nested under it: "no line that holds … says "Not taken"".
+- a miss that "stops" the kinds, with no freeze word: "what a miss freezes: no line of the section holds …".
+- the three decisions under a new heading beside the section, or in The learned layer: all three.
+- `<a id="project-hub">` removed: no section, "has no heading or <a id> #project-hub".
+
+rowProblems (criterion 1, the Decided tables). The planted fix passes, and so do the same rows in a table of their own
+under a new heading in Decisions, under `### Decided`, and as one row that holds two decisions beside a row for the
+third. Each of these fails:
+- the base, and the planted fix without its rows: "the Decided tables gained no row".
+- rows for two decisions: "when an unshared claim reaches the project: none of the 2 rows the Decided tables gained
+  (…) holds `claim`, and `unshared` or `nobody shared`". A row for the claim alone: the other two, by name.
+- a base row's decision reworded to hold every word, its question kept, also in other case and spacing: "gained no
+  row".
+- the three rows added to the Yours table, and to a table with the Decided columns outside Decisions: "gained no row".
+
+auditProblems (criterion 2, the audit lines). The planted fix passes. So do both things said in a new item of the
+section that names an audit and a project's hub, and Judged after it applies with a clause on a project's hub written
+into its sentence on what is frozen and into its sentence on the 30 days and 50 decisions. Each of these fails, naming
+the thing:
+- the base: both, "silent on a project's hub".
+- only one of the two sentences added to On a project's hub, each in turn: the other thing alone.
+- Judged after it applies with the clause in its frozen sentence only: whose count, since its `30` and `50` stand in a
+  sentence the base holds. With the clause in its 30-days sentence only: what a miss freezes, the same way.
+- Judged after it applies with one added sentence that names a project's hub and holds neither thing's words: both.
+- both said on a line of the section that holds no `audit…` (Local first), in a new item that names a project and no
+  hub, only inside the section's fenced example, on the audit line of How we know version 0 works, or only in One hub
+  for a project: both.
+- the word audit gone from the section: "has no audit lines". The item On a project's hub gone: "silent on a
+  project's hub: none of the section's 1 lines that hold `audit…` holds both `project` and `hub`". The heading
+  renamed: "has no heading or <a id> #the-learned-layer".
+
+linkProblems (criterion 3), against the planted design. The planted bodies pass. So do bodies whose Design line gains
+a link to an `<a id>` the planted design sets inside the section, or to the slug of a subheading it adds there, and a
+relative link that ends a sentence on a line that holds a decision's words. Each of these fails, naming the issue:
+- the two bodies as saved on November 25: both, "#3397 links nothing new: it links "One hub for a project shared by
+  several people" by #project-hub, which the design had at d0030e12b, and only on lines that hold no decision's words".
+- either body left as saved, the other linked: that one.
+- a second link on the Design line, by `#project-hub` again, by the heading's own slug (which the base has), or by an
+  anchor the design doesn't have: both, "links nothing new".
+- a link to `#the-learned-layer` on the line that names the decision; the link and the words only inside fenced code;
+  the words in one paragraph and the link in the next: both, "links nothing new".
+- bodies that link only `#cloud-hub`, the section after, or no design anchor: both, "none of them lands in".
+
+callProblems and theText (criterion 4, the call). The planted fix's text is 7 lines: the three decisions, the item On
+a project's hub and the three rows; the base's is none. A record bound to that text passes, and still passes after an
+edit to another line of One hub for a project, to another Decided row or to another line of The learned layer. Each
+of these fails:
+- a record with the hash of other text, and the same record after an edit to a decision's line, to a gained row or to
+  The learned layer's item On a project's hub, or after a decision is removed: "the call was made on other text".
+- a record on the base: "holds none of the text a call is on".
+- #3242's criterion ID, a call of `reads_wrong`, no person, a time without its zone, another file, no `text`: each by
+  its field.
+
+toldProblems (criterion 4, the others). A comment made after the call, or at its very time, that holds the ID and
+"overrule" passes, and so does an earlier one beside a later one. Each of these fails:
+- no comment, a comment with the ID and no `overrul…`, one with `overrul…` and no ID, and one with #3242's ID: "none
+  of #3400's … comments".
+- a comment made before the call: "were made before the call".
+- a record whose `when` can't be read: "no comment can be held against the time of the call".
+
+findings (the doc lanes' reader) gave the expected items for lines in the formats `scripts/design-links.mjs`,
+`scripts/catalogue-drift.mjs` and `scripts/public-text.mjs` print at this base, and none for a passing lane.
+
+## The test files on planted trees (the same scratch folder)
+
+The suite was copied beside a planted `docs/technical-design.md` and a planted record, with stand-ins first on PATH:
+one for gh that answers from planted files, and one for git that answers only `show <base>:<path>` and `ls-tree`
+from this checkout's files, which are the base's. So each test's own pass, fail and skip paths ran without touching
+GitHub. In order: AC1 section, AC1 Decided, AC2 audit lines, AC3 links, AC4 call, AC4 told. All 19 runs came out as
+expected.
+
+- planted fix, linked bodies, a record bound to the text, a comment after the call: pass, pass, pass, pass, pass, pass.
+- the same with an `<a id>` set inside the section and each body linking it from its Design line: six passes.
+- the base, the bodies as saved, no comment, no record: six failures, as above.
+- planted fix, gh signed out: AC3 and AC4 told skip as `INCONCLUSIVE: gh couldn't read …`; the other four pass.
+- the base, gh signed out: six failures. The two live tests fail on what they could read, and say gh couldn't.
+- planted fix, #3398 as saved, the comment made before the call: AC3 and AC4 told fail; the other four pass.
+- planted fix, #3398 unreadable: AC3 skips as INCONCLUSIVE, naming #3398; the other five pass.
+- planted fix, #3398 unreadable and #3397 as saved: AC3 fails, naming #3397; the other five pass.
+- planted fix, #3400's comments unreadable: AC4 told skips as INCONCLUSIVE; the other five pass.
+- planted fix, a record with another text's hash: AC4 call fails; the other five pass.
+- planted fix, no record: AC4 call and AC4 told fail; the other four pass.
+- planted fix with the count decision removed and the record bound to that text: AC1 section and AC3 fail.
+- planted fix with only what a miss freezes said in The learned layer, the record bound to that text: AC2 audit lines
+  fails, naming whose count; the other five pass.
+- planted fix, in a checkout without the base commit (the stand-in git knows no such object): AC1 Decided, AC2 audit
+  lines, AC3 and AC4 call fail, each with "git show d0030e12ba9b71ab37aafba73c5633989d36530f:docs/technical-design.md
+  failed (the checkout needs the base commit, the head of #3365's branch)"; AC1 section and AC4 told pass.
+
+The doc lanes test ran on five such trees, with no `packages/contracts/dist`. The open issues the stand-in listed
+were the ten bodies saved on November 25 and one planted issue naming the one planned name:
+- planted fix, in a folder that is no repository: skips, "INCONCLUSIVE: the catalogue drift lane reads
+  packages/contracts/dist/index.js, which this checkout has not built …; the public text lane couldn't read all it
+  checks: INCONCLUSIVE the change could not be worked out: no merge base with origin/main". Design links and names
+  passed there.
+- the base's design: fails at the missing new text, as above.
+- planted fix, gh signed out: skips, "INCONCLUSIVE: gh couldn't list the open issues …".
+- planted fix with `<a id="cloud-hub">` dropped: fails, "design links and names finds what the base's files don't
+  give: docs/technical-design.md #cloud-hub (no heading or <a id> in docs/technical-design.md is #cloud-hub)", once
+  for each link the design holds to it.
+- planted fix in a tree with no `adapters/` folder, so the public text lane can't start: fails, "public text fails:".
+
+And the lanes' runner alone (`docLanes`), in this checkout at the base with the ten bodies as the open issues: design
+links and names failed only on the planned name, whose issue was not among the ten, which the base's files give too,
+so it brought nothing; public text passed, reading this folder's ten files and #3242's as the change against
+`origin/main`; catalogue drift could not run.
+
+## Not run, and known limits
+
+- Catalogue drift ran nowhere: neither this checkout nor the scratch trees hold `packages/contracts/dist`, and this
+  job starts no build. Its findings reader was held only against lines in the format `scripts/catalogue-drift.mjs`
+  prints. So the doc lanes test has not been seen to pass, only to fail and to skip.
+- No live test has been seen to pass on GitHub: nothing of the work is there. Their pass paths ran against the
+  stand-in only.
+- The base is not on `origin/main`. Every test file but `ac4-told.live.test.mjs` reads it with git by its full hash,
+  so a checkout that doesn't hold that commit fails them, naming it.
+- A decision's words can sit in what was not taken, or in a line about something else; an audit line can hold a
+  thing's words in a new sentence and say nothing of it; a link counts from any line that holds a decision's words,
+  whatever the issue says there; and a comment can hold the ID and the word and tell no one. Criterion 4's reader
+  covers those.

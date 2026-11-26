@@ -1,0 +1,7 @@
+ProductName:		macOS
+ProductVersion:		14.7.7
+BuildVersion:		23H723
+Mac15,12
+Now drawing from 'Battery Power'
+start 2026-11-13 08:12:51  8:12  up 45 days, 10:38, 2 users, load averages: 7.39 4.83 4.88
+end 2026-11-13 08:14:19  8:14  up 45 days, 10:39, 2 users, load averages: 6.03 4.95 4.91

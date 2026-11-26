@@ -31,6 +31,10 @@
     "text": "{0}未能执行：{1}",
     "source": "e68b76a430f2cfc178e57dd495278f1741b3190efa61750d14923908045f8401"
   },
+  "actions.find": {
+    "text": "查找",
+    "source": "822b2ae4542bc74b8fccf9ec3e08408d33d35b919101760dc27e1ea7822f1818"
+  },
   "actions.forward": {
     "text": "前进",
     "source": "f1c65e14817efef2b77973a4f63446a7d462cd2636bbe721207107b7d126a001"
@@ -138,6 +142,10 @@
   "arming.too_small": {
     "text": "请把窗口拉高一些",
     "source": "1e7ce73b197ceeb14302e3f2b5a5d7672c88dfab6299a5e4546be24c8d496719"
+  },
+  "arming.unseen": {
+    "text": "请先显示窗口",
+    "source": "9434f3b46895456752857cad31d64db69b3bb708b5dadacae3f8a318e681e4bf"
   },
   "bound.card_named": {
     "text": "卡片 {0}：{1}",
@@ -442,6 +450,14 @@
   "empties.reading": {
     "text": "读取中",
     "source": "d70afca615203838da3d858e60dda12f900e83e4a6fb03a63cfadb8576ca8985"
+  },
+  "find.on_this_page": {
+    "text": "在此页面查找",
+    "source": "eb48f8fd62d8367b724fad879f1440def40935a9d0d9ddcb5817cd31ecdbceb2"
+  },
+  "find.place": {
+    "text": "第 {0} 个，共 {1} 个",
+    "source": "9fea8201753aa74d07526b957c3b193baf893f3246074b750a113588c55dedc7"
   },
   "hub.an_ask_open": {
     "text": "有 1 个请求待处理",
@@ -1032,6 +1048,10 @@
   "question.field": {
     "text": "{0}：{1}",
     "source": "fb62fe2ae6b2ae6cd472717ded838cce62600f4789e31aa5873e7e69407848bc"
+  },
+  "question.holds_escapes": {
+    "text": "这里含有看不见的字符，每个都显示为它的转义序列",
+    "source": "e3054503d3316a73ae3f086cc105a2047417b268d2cdb0db17b2a0b878798f65"
   },
   "question.look_first": {
     "text": "请先看完每张图片",

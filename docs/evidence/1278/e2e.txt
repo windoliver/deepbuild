@@ -1,0 +1,12 @@
+#1278 e2e hand run, branch head acb717f0d (no source change; renderer = its merge base with main, 1b4929ae7), Mac18,1, 2026-11-25 00:11
+deep-gpu run exited 0
+play 1: 97 frames, every one with a pixel_hash: true
+play 2: 97 frames, every one with a pixel_hash: true
+play 3: 97 frames, every one with a pixel_hash: true
+play 4: 97 frames, every one with a pixel_hash: true
+play 5: 97 frames, every one with a pixel_hash: true
+0 of 97 frames differ across the four plays
+frame 0: PNG <out>/03f1fadb4db10b8c761723bba187d16cc91a08d82a1ef6e836068387021c9ab8.png, the captured play's pixel_hash matches play 1: true
+frame 48: PNG <out>/81a51f671c3b2fe06a2329458be54739624eb815215387bb1f0dfc134236bab4.png, the captured play's pixel_hash matches play 1: true
+frame 96: PNG <out>/cf140c9bec620ac9834306a6e5298945e9dbb785c6349143639bf65fa88a0e83.png, the captured play's pixel_hash matches play 1: true
+e2e exit 0

@@ -1,0 +1,507 @@
+[
+ {
+  "args": [
+   "doctor",
+   "--json"
+  ],
+  "code": 1,
+  "stdout": "{\"item\":\"hub.socket\",\"agent\":\"deepbuild\",\"code\":\"hub_unreachable\",\"level\":\"fail\",\"evidence\":\"no hub answers at unix:<tmp>/h/.deepbuild/hub.sock\",\"fix\":\"Run `deep setup`, which adds the hooks and starts the hub at login.\"}\n{\"item\":\"hub.disk\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"<size> free where <tmp>/h/.deepbuild lives\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"hub.service\",\"agent\":\"deepbuild\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no login service for the hub at <tmp>/h/Library/LaunchAgents/com.deepbuild.hub.plist\",\"fix\":\"Run `deep setup`, which installs it.\"}\n{\"item\":\"hub.ports\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"port <n> is free on 127.0.0.1 for the next worktree's stack, leased from <n> up\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"claude.hooks\",\"agent\":\"claude-code\",\"code\":\"hooks_missing\",\"level\":\"fail\",\"evidence\":\"DeepBuild's hooks aren't installed: no setup has written them to <tmp>/h/.claude/settings.json\",\"fix\":\"Run `deep setup`, which adds them beside yours.\"}\n{\"item\":\"claude.mcp\",\"agent\":\"claude-code\",\"code\":\"mcp_unregistered\",\"level\":\"fail\",\"evidence\":\"DeepBuild's MCP server isn't registered in ~/.claude.json, so sessions can't ask you or claim done\",\"fix\":\"Run `deep setup`.\"}\n{\"item\":\"claude.statusline\",\"agent\":\"claude-code\",\"code\":\"statusline_missing\",\"level\":\"warn\",\"evidence\":\"<tmp>/h/.claude/settings.json's statusLine isn't DeepBuild's forwarder, so the plan windows aren't read\",\"fix\":\"Run `deep setup`, which puts the forwarder in front of your own status line.\"}\n{\"item\":\"claude.binary\",\"agent\":\"claude-code\",\"code\":\"binary_missing\",\"level\":\"fail\",\"evidence\":\"no claude on your PATH\",\"fix\":\"Install Claude Code, or put it on your PATH.\"}\n{\"item\":\"canvas.gpu\",\"agent\":\"deepbuild\",\"code\":\"binary_missing\",\"level\":\"fail\",\"evidence\":\"no deep-gpu is built under <checkout>/target\",\"fix\":\"Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.\"}\n{\"item\":\"canvas.headless\",\"agent\":\"deepbuild\",\"code\":\"render_failed\",\"level\":\"fail\",\"evidence\":\"no deep-canvas-render is built under <checkout>/target, so nothing can render headless\",\"fix\":\"Run `cargo build --locked --bin deep-canvas-render`, then `deep doctor` again.\"}\n{\"item\":\"canvas.verdict\",\"agent\":\"deepbuild\",\"code\":\"render_failed\",\"level\":\"fail\",\"evidence\":\"the canvas is unhealthy: canvas.gpu failed, canvas.headless failed\",\"fix\":\"Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.\"}\n{\"item\":\"app.footprint\",\"agent\":\"deepbuild\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"not checked: the app isn't running, so its footprint wasn't read\",\"fix\":\"Open the DeepBuild app, then run `deep doctor` again.\"}\n{\"item\":\"otlp.telemetry\",\"agent\":\"claude-code\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"CLAUDE_CODE_ENABLE_TELEMETRY=(unset): Claude Code exports no telemetry, so there is no protocol or address to read\",\"fix\":\"To send Claude Code's telemetry to the receiver, set CLAUDE_CODE_ENABLE_TELEMETRY=1, OTEL_LOGS_EXPORTER=otlp, OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf and OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 in its settings.json env.\"}\n",
+  "stderr": ""
+ },
+ {
+  "args": [
+   "status",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "status",
+   "session:<ulid>",
+   "--why",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "explain",
+   "<tmp>/session",
+   "--json"
+  ],
+  "code": 2,
+  "stdout": "",
+  "stderr": "deep explain: <tmp>/session is not a recorded session folder; explaining a live session by ID needs the hub's record (#14, #16)\n"
+ },
+ {
+  "args": [
+   "host",
+   "facts",
+   "h1",
+   "--refresh"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "hub",
+   "status",
+   "--root",
+   "<tmp>/devhub"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "hub",
+   "stop",
+   "--root",
+   "<tmp>/devhub"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "deep hub stop: no hub could be stopped at unix:<tmp>/devhub/hub.sock: ENOENT: no such file or directory, open '<tmp>/devhub/control.token'\n"
+ },
+ {
+  "args": [
+   "hub",
+   "use",
+   "--root",
+   "<tmp>/devhub"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "run",
+   "--result",
+   "<tmp>/doc.json"
+  ],
+  "code": 3,
+  "stdout": "INVALID run code \"\" is not listed by run.finished@1: INVALID, never a success (raw code )\n",
+  "stderr": ""
+ },
+ {
+  "args": [
+   "fix",
+   "ACME-1",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "land",
+   "--repo",
+   "<tmp>/repo",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "land",
+   "judge",
+   "--repo",
+   "<tmp>/repo",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "work",
+   "fix the login page",
+   "--repo",
+   "<tmp>/repo",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "work",
+   "--repo",
+   "<tmp>/repo",
+   "--issues",
+   "1,2",
+   "--once",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "workspace",
+   "new",
+   "topic",
+   "--folder",
+   "<tmp>/ws"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "workspace",
+   "task",
+   "ws1",
+   "title",
+   "--criterion",
+   "text",
+   "--blocked-by",
+   "1"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "workspace",
+   "drift",
+   "ws1",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "setup",
+   "--undo"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "env",
+   "up",
+   "--root",
+   "<tmp>/devhub",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "env",
+   "down",
+   "--root",
+   "<tmp>/devhub",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "numbers",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "numbers",
+   "refresh",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "show",
+   "--doc",
+   "doc1",
+   "--document",
+   "<tmp>/doc.json",
+   "--removes",
+   "a,b",
+   "--t",
+   "0",
+   "--size",
+   "10x10",
+   "--include",
+   "issues",
+   "--check",
+   "--snap",
+   "--claim",
+   "claim1",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "export",
+   "--document",
+   "<tmp>/doc.json",
+   "--still",
+   "0",
+   "--out",
+   "<tmp>/still.png"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "deep export: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\n"
+ },
+ {
+  "args": [
+   "kinds",
+   "--dump",
+   "<tmp>/dump"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\n"
+ },
+ {
+  "args": [
+   "kinds",
+   "--diff",
+   "<tmp>/doc.json",
+   "<tmp>/other.json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.\n"
+ },
+ {
+  "args": [
+   "inbox",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "start",
+   "approve",
+   "--repo",
+   "<tmp>/repo",
+   "--issues",
+   "1",
+   "--agents",
+   "claude-code",
+   "--home",
+   "claude-code=<tmp>/cc",
+   "--mode",
+   "claude-code=plan",
+   "--at-once",
+   "1",
+   "--plan-share",
+   "10",
+   "--until",
+   "<time>",
+   "--host",
+   "h1",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "start",
+   "--repo",
+   "<tmp>/repo",
+   "--issue",
+   "1",
+   "--agent",
+   "claude-code",
+   "--mode",
+   "plan",
+   "--prompt",
+   "go",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "gate",
+   "rules",
+   "--json"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "deep gate rules: name the gate's GitHub App in your settings first, as github.gate: { \"app_id\": <id>, \"key\": \"<Keychain service>\" }\n"
+ },
+ {
+  "args": [
+   "install",
+   "--trust-key",
+   "<tmp>/pkg"
+  ],
+  "code": 3,
+  "stdout": "Source: <tmp>/pkg\n  dh3461.fixture@0.0.1, digest undefined, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: none\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\n",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "memory",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "rules",
+   "sync",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "rules",
+   "reach",
+   "--repo",
+   "<tmp>/repo",
+   "--scope",
+   "**",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "rules",
+   "credit",
+   "rule:<ulid>",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "session",
+   "rules",
+   "session:<ulid>",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "secret",
+   "list",
+   "--json"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "join",
+   "https://github.com/acme/widget",
+   "--invite",
+   "deepbuild-invite:eyJ2IjoxLCJhZGRyZXNzIjoiMTI3LjAuMC4xOjkiLCJodWIiOiJodWItZml4dHVyZSIsInNlY3JldCI6ImZpeHR1cmUtc2VjcmV0IiwicHJvamVjdCI6ImdpdGh1Yi5jb20vYWNtZS9vdGhlciIsInBlcnNvbiI6ImxvZ2luMSJ9"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "deep join changed nothing: the invite is for github.com/acme/other, the link names github.com/acme/widget, and this folder is no clone of a repo with an origin remote. Run it in a clone of github.com/acme/other.\n"
+ },
+ {
+  "args": [
+   "person",
+   "invite",
+   "login1",
+   "--address",
+   "127.0.0.1:9"
+  ],
+  "code": 3,
+  "stdout": "",
+  "stderr": "The hub isn't answering; start it with deep hub start.\n"
+ },
+ {
+  "args": [
+   "update",
+   "--check"
+  ],
+  "code": 3,
+  "stdout": "Couldn't check for updates; the last check was never.\n",
+  "stderr": ""
+ },
+ {
+  "args": [
+   "read",
+   "handle1",
+   "--slice",
+   "c1",
+   "--json",
+   "--root",
+   "<tmp>/readroot"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "deep read handle1: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\n"
+ },
+ {
+  "args": [
+   "find",
+   "query",
+   "--file",
+   "a.txt",
+   "--slice",
+   "c1",
+   "--json",
+   "--root",
+   "<tmp>/readroot"
+  ],
+  "code": 1,
+  "stdout": "",
+  "stderr": "deep find query: no record to read at <tmp>/readroot: Cannot open database because the directory does not exist\n"
+ }
+]

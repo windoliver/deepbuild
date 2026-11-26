@@ -23,6 +23,7 @@ const fixes = {
   empty: 'Run this from a checkout whose files git lists.',
   card: 'Give the folder a README.md with the headings What it is for, Where new code goes, What it may import and Deviations.',
   deviation: 'Correct the deviation to the file it is about, or remove it if the file is gone.',
+  body: "Put <file>.statement.json beside it: drawn, with the script that drew it, or agreed, with a maintainer's signed agreement (scripts/body-fixtures.mjs).",
   security: 'Keep SECURITY.md linking this repository\'s private report form, keep that link in .github/ISSUE_TEMPLATE/config.yml\'s contact_links with a name and an about, each key on one line, and keep the one line ending <!-- security rule --> the same in CONTRIBUTING.md and SECURITY.md, editing both together.',
 };
 const cardHeadings = 'What it is for|Where new code goes|What it may import|Deviations'.split('|');
@@ -422,6 +423,22 @@ function checkPhysicsBuild() {
   else for (const l of lines.length ? lines : [`it didn't run: ${run.error?.message ?? run.stderr}`]) report('FAIL', 'physics-build', l.replace(/^FAIL /, ''), 'Remove the feature or flag the line names from the physics build: rapier3d stays at 0.36.1 with enhanced-determinism, without simd8 or parallel, built for the target\'s baseline features.');
 }
 
+/** The display-text guard (#1456): a session's state never decided by words a person reads. */
+function checkDisplayText() {
+  const run = spawnSync(process.execPath, [join(root, 'scripts', 'display-text-guard.mjs')], { cwd: root, encoding: 'utf8' });
+  const lines = `${run.stdout ?? ''}`.split('\n').filter(Boolean);
+  if (run.status === 0) report('PASS', 'display-text', 'no state in status.ts or states.rs is decided by display text');
+  else for (const l of lines.length ? lines : [`it didn't run: ${run.error?.message ?? run.stderr}`]) report('FAIL', 'display-text', l.replace(/^FAIL display text: /, ''), 'Read the reading\'s code (readingCode in packages/hub/src/reading-codes.ts) or the code the hub sends, never the words shown.');
+}
+
+// #3347: every fixture for a class whose entries are a body's motion, listed with its statement (scripts/body-fixtures.mjs).
+function checkBodyFixtures() {
+  const run = spawnSync(process.execPath, [join(root, 'scripts', 'body-fixtures.mjs')], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const lines = run.status === 0 ? run.stdout.split('\n').filter(Boolean) : [];
+  for (const line of lines) report(line.split(' ', 1)[0], 'body-fixtures', line.slice(line.indexOf(' ') + 1), line.startsWith('PASS ') ? undefined : fixes.body);
+  if (!lines.length) report('BLOCKED', 'body-fixtures', `it didn't run: ${run.error?.message ?? /^\w*Error.*$/m.exec(run.stderr)?.[0] ?? `exit ${run.status}`}`, 'Run this from a git checkout that holds scripts/body-fixtures.mjs.');
+}
+
 function readConfig() {
   let rules;
   try {
@@ -464,6 +481,8 @@ if (files) {
   noteSize();
 }
 checkPhysicsBuild();
+checkDisplayText();
+checkBodyFixtures();
 const order = ['FAIL', 'INVALID', 'BLOCKED', 'PASS', 'NOTE'];
 for (const { line, fix } of results.sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state))) console.log(fix ? `${line}\n  Fix: ${fix}` : line);
 if (results.some(({ state }) => ['FAIL', 'INVALID', 'BLOCKED'].includes(state))) process.exitCode = 1;

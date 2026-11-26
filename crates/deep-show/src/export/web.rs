@@ -384,8 +384,8 @@ fn gpu_needs(doc: &Value, read: &dyn Fn(&str) -> Option<Vec<u8>>) -> Value {
     let cut = items.into_iter().any(|(_, i)| i["kind"] == "cutaway@1");
     let features: Vec<&str> = if cut { vec!["clip-distances"] } else { vec![] };
     let (mut decoded, mut blocks) = (0u64, 0u64);
-    for sha in deep_canvas_scene3d::light::material_maps(doc).keys() {
-        let Some((w, h, whole)) = read(sha).as_deref().and_then(map_size) else {
+    for of in deep_canvas_scene3d::light::material_maps(doc).values() {
+        let Some((w, h, whole)) = read(&of.sha).as_deref().and_then(map_size) else {
             continue;
         };
         let rgba8 = chain_bytes(w, h, |lw, lh| u64::from(lw) * u64::from(lh) * 4);

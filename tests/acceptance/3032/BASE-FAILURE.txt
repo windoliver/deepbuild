@@ -1,0 +1,129 @@
+#3032's suite, run on the base (9187aab36, origin/main when this job started), in this job's worktree at that commit
+with only tests/acceptance/3032/ added.
+Date: 2026-11-24  darwin-arm64, Node 24.22.0, cargo 1.99.1. deep-show (the full set) was built once before the runs,
+cold, by the caller under the machine's build queue; each file's own `cargo build` then found it fresh.
+
+Commands (from the checkout root, one file at a time):
+  export CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/3032 --no-file-parallelism --testTimeout=3600000 census.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/3032 --no-file-parallelism --testTimeout=3600000 recipes.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/3032 --no-file-parallelism --testTimeout=3600000 refusals.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/3032 --no-file-parallelism --testTimeout=3600000 lights.test.ts
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/3032 --no-file-parallelism --testTimeout=3600000 words.test.ts
+  node node_modules/typescript/bin/tsc -p tests/acceptance/3032/tsconfig.json
+
+Result: Test Files 5 failed (5); Tests 8 failed (8); vitest exit 1 for each run (1.0 s, 2.1 s, 1.8 s, 1.5 s, 3.9 s).
+tsc exit 0. Every test ran and failed at an assertion of its own; none passed, and none failed to load, build or run.
+Builds: each run's process tree was watched for a compile; none started, and target/debug/deep-show had the same
+SHA-256 before and after every run (ca0b1b9b41e632e0…). The fetch cache held the pack's 34 reference files, so
+census.mjs --check ran and passed; it was never BLOCKED.
+
+Before its guard, every test ran suite(): both fixtures held to what they rest on, and each judge failed its planted
+sets and passed the right ones (judgeProblems). Those assertions passed in all eight tests.
+
+census.test.ts
+  × AC1 #3032.dae946a2 node scripts/census.mjs --check passes with at most 402 names open, none of the twenty among
+      them, and totals equal to the rows
+      census.test.ts:21 (none, helpers.ts:43)  "packs/familiar-1.0.0's census": expected [ …(21) ] to deeply equal []
+        422 names are open, more than 402
+        DirectionalLight is open, neither mapped nor refused
+        … and the same line for each of the other nineteen (AmbientLight to TorusKnotGeometry)
+      The assertion before it passed: census.mjs --check on the checkout exits 0 with its PASS census: line and no
+      line in another state. The failing list holds no line about a total, so the census's totals equal its rows in
+      both tables. The base fails on the count and on the twenty alone, as the criterion says ("On the merge base
+      422 are open").
+
+recipes.test.ts
+  × AC2 #3032.b6de0329 each of the twenty the census maps has a recipe that lowers to one item of its target kind,
+      and each of its parameters has a params row
+      recipes.test.ts:30  "the census maps at least one of the twenty, so there is a recipe to lower; it maps none of
+      DirectionalLight, … TorusKnotGeometry": expected 0 to be greater than 0
+  × AC2 #3032.b6de0329 the planted parameter_draws_nothing, a recipe that accepts a parameter and draws nothing from
+      it, fails the pack's check, naming the field
+      recipes.test.ts:45  "the census maps at least one of the twenty, so there is a recipe to plant the parameter
+      on; it maps none of DirectionalLight, … TorusKnotGeometry": expected 0 to be greater than 0
+
+refusals.test.ts
+  × AC3 #3032.5da79b5b a document that uses a name the census refuses is refused at check with the name, its reason
+      and the nearest kind or recipe
+      refusals.test.ts:35  "the census refuses at least one of the twenty, so there is a refused name to use; it
+      refuses none of DirectionalLight, … TorusKnotGeometry": expected 0 to be greater than 0
+  × AC3 #3032.5da79b5b the planted shader_text_material_mapped, a pack that maps the library's shader-text material
+      onto material@1, fails, naming the word
+      refusals.test.ts:47 (none, helpers.ts:43)  "ShaderMaterial, the library's material that takes shader text":
+      ["ShaderMaterial is open in the census, not refused with its reason and what ours has in its place"]
+
+lights.test.ts
+  × AC4 #3032.876d5479 for each light the census maps, the fixture states the library's own value and ours with the
+      conversion between them, and the recipe's item holds ours
+      lights.test.ts:49  "the census maps at least one of the four lights, so there is a number to convert; it maps
+      none of DirectionalLight, AmbientLight, HemisphereLight, RectAreaLight": expected 0 to be greater than 0
+  × AC4 #3032.876d5479 the planted light_number_copied, a recipe that copies the library's number as written, fails,
+      naming both values
+      lights.test.ts:62  "INCONCLUSIVE unless the census maps a light whose number differs between the library and
+      ours (AmbientLight, HemisphereLight, RectAreaLight): a recipe that copies the number is wrong only for those,
+      and it maps none of them": expected 0 to be greater than 0
+
+words.test.ts
+  × AC5 #3032.5d808b13 deep_kinds asked for each of the twenty returns its recipe or its refusal, and a word still
+      open answers that it is undecided, never an empty reply
+      words.test.ts:29 (none, helpers.ts:43)  "deep_kinds' answers": expected [ …(20) ] to deeply equal []
+        DirectionalLight: open in the census, so deep_kinds has neither a recipe nor a refusal to return; it answers
+        {"word":"DirectionalLight","state":"open","pack":"deepbuild/familiar@1.0.0",…}
+        … and the same line for each of the other nineteen
+      The pack installed, and the open word's answer is not among the failures: asked for ACESFilmicToneMapping, the
+      first name the census leaves open beside the twenty, the base answers {word, state: "open", pack}, which is
+      the criterion's second sentence and holds on the base already. This is the one test that reaches the binary on
+      the base; the other four files' tests stop at their guard, with the binary built and unused.
+
+Why each fails there: the base's census decides none of the twenty and leaves ShaderMaterial open. Seven tests stop at
+that, read from the census file; AC5's stops at what the binary answers from it. None fails for another reason.
+
+No test passes on the base. Two clauses of the criteria hold there already and are asserted inside tests that fail
+for the rest: the census's totals equal its rows (AC1), and an open word answers `open` (AC5).
+
+What the base does with each fixture, helper and judge, probed outside the suite through the suite's own helpers.ts
+and judges.ts (loaded in plain node), driving target/debug/deep-show run with one scenario on stdin. The probes and
+the packs they wrote are in the job's scratch folder and are no part of the suite.
+
+1. The base's pack, as the suite reads and installs it:
+   - familiar() finds deepbuild/familiar@1.0.0 in packs/familiar-1.0.0; install_pack answers outcome installed with
+     no issues.
+   - A document over a word of the pack presents and lowers to one item. PointLight gives one light.point@1 (power
+     12.566370614359172), MeshStandardMaterial one material@1, PerspectiveCamera one camera@1 (projection
+     perspective), BoxGeometry one slab@1; loweredProblems passes each. A material alone in a scene, and a second
+     camera beside the document's own, both present.
+   - A kind no registry holds is presented with an unknown_kind notice in the reply's `notices`, and a word of the
+     pack written with an input it doesn't take is refused with unknown_field at items/word/params/<word>;
+     loweredProblems fails both.
+   - deep_kinds: PointLight answers {state: mapped, target: familiar.point_light@1, conversion, pack}; an open word
+     {state: open, pack}; a word in no row {word, code: no_match}. wordProblems and openWordProblems pass the first
+     two, and openWordProblems fails the third.
+   - Each of the twenty, and ShaderMaterial, behaves alike: deep_kinds answers {state: open}, and written as an
+     item's kind the revision is refused with one issue at items/word/kind, out_of_range, "not family.name@major",
+     fix "Give the field a value of its type inside its range.", no close name, nothing derived. So the base
+     already refuses such a document, and says nothing of the pack, the reason or what to write instead.
+2. The planted programs, as helpers.ts writes them, on names the base maps:
+   - parameter_draws_nothing on PointLight's recipe: the unchanged copy installs; the planted copy is refused with
+     out_of_range at kinds/familiar.point_light@1, actual {part: field.effect, field: unreadParameter, tried: [0, 1]};
+     inertProblems passes it and fails the control.
+   - shader_text_material_mapped on the base's pack: it installs; the word through familiar.shader_material@1 lowers
+     to one material@1; deep_kinds then answers ShaderMaterial as mapped to that recipe; written as a kind the word
+     is refused as before; refusalProblems fails on it, naming ShaderMaterial.
+   - The base's pack with ShaderMaterial's row refused by hand (reason no_counterpart, a target): it installs,
+     refusedRowProblems passes, and deep_kinds answers {state: refused, reason, target}, which wordProblems passes.
+     The document check is unchanged, so refusalProblems fails there: the close entry and the fix are the part of
+     AC3 the base's binary lacks.
+   - light_number_copied on PointLight, with a stand-in entry (candela against lumens, × 4π): the unchanged copy
+     passes lightProblems; the planted copy installs, leaves 2 and 1 in `power`, and fails each case with one failure
+     naming the light, the library's value and ours ("intensity 2 cd … power 25.13274123 lm").
+3. The fixture's own planted recipes (area, ambient, hemisphere) and right recipes written for the probe, added to a
+   copy of the base's pack: the copy installs, every case presents, the judge passes each right recipe at the
+   fixture's numbers (3 and 1 lx; 0.6366197723675814 and 0.3183098861837907 cd/m²; 9.42477796076938 lm over [3, 0.5]
+   and 314.1592653589793 lm over [10, 10]) and fails each copying one, naming both values.
+4. The five test files' flows past their guards, on a stand-in pack written for the probe (the four lights and Fog
+   mapped, Scene and ShaderMaterial refused): AC2's first flow and its planted program, AC4's first flow and its
+   planted program on all three lights, and AC5's flow each run and judge as meant. Fog is written with the one
+   input its reference requires (color: 16777215). AC3's first flow fails there, as it must on the base's binary.
+
+Nothing in the suite's tests, helpers, judges or fixtures needed a correction after the probes.

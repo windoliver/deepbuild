@@ -55,6 +55,7 @@ pub struct Source {
     pub count: wgpu::Buffer,
 }
 
+deep_gpu::paired! { params: "cull.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Params {
@@ -65,6 +66,7 @@ struct Params {
     centers: u32,
     reversed: u32,
     row_as_element: u32,
+}
 }
 
 /// The six planes a clip matrix (column-major) holds, each `q` with `q · (x, y, z, 1) ≥ 0` inside:
@@ -780,6 +782,7 @@ impl Culled {
     }
 }
 
+deep_gpu::paired! { occlusion_params: "cull.wgsl", Occlusion;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct OcclusionParams {
@@ -787,6 +790,7 @@ struct OcclusionParams {
     size: [f32; 2],
     levels: u32,
     centre: u32,
+}
 }
 
 /// The camera's prepass depth and the pyramid built from it each frame (#1637), at the frame's

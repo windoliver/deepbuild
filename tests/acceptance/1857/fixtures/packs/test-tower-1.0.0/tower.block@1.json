@@ -1,0 +1,24 @@
+{
+  "id": "tower.block",
+  "version": "1.0",
+  "title": "Block",
+  "license": "MIT",
+  "author": "the #1857 acceptance suite",
+  "description": "1,024 floors.",
+  "steps": {
+    "floors": {
+      "op": "recipe",
+      "kind": "tower.floor@1",
+      "params": {},
+      "repeat": {
+        "count": 1024,
+        "as": "i"
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "floors"
+    ]
+  }
+}

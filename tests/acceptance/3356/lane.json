@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: every file builds deep-show with cargo (debug, and release; refusal.test.ts builds release twice, once with another ledger), as #2362's do" }

@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use deep_canvas::document::{
-    canonical_in, check_costed, check_sized, Expansion, Issue, Notice, PackPlanted, Packs,
+    canonical_in, check_costed, check_sized, Expansion, Issue, Notice, Packs,
 };
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
@@ -796,6 +796,8 @@ pub struct Hub<'a> {
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
     /// is none.
     pub gpu3: Option<Option<crate::scene3d::Gpu3>>,
+    /// #1719: the looks its 3D frames draw in, kept by their hash.
+    pub looks3: BTreeMap<String, crate::scene3d::look::Dressed>,
     /// The GPU pixel hash's pipeline, built on the first canonical render it hashes (#405).
     pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
@@ -951,40 +953,7 @@ impl<'a> Hub<'a> {
         {
             sched.look_hook = Some(crate::planted::look_hook);
         }
-        let pack_planted = PackPlanted {
-            seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
-            drops_stroke: scenario.planted == Some(Planted::ExpansionDropsStroke),
-            overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
-            skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
-            key_by_name: matches!(
-                scenario.planted,
-                Some(Planted::PacksKeyedByName | Planted::LoaderDrawsMissingWithInstalled)
-            ),
-            each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
-            each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
-            orphan_drops: scenario.planted == Some(Planted::OrphanLoadDropsBrokenOut),
-            orphan_hands_id: scenario.planted == Some(Planted::OrphanLoadHandsIdToExpansion),
-            rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
-            kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
-            migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
-            migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
-            migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
-            migrate_params_only: matches!(
-                scenario.planted,
-                Some(Planted::MigrationRenamesParamsOnly | Planted::MoveRewritesKindOnly)
-            ),
-            migrate_channels_only: scenario.planted
-                == Some(Planted::MigrationRewritesChannelTargetsOnly),
-            drops_moved: scenario.planted == Some(Planted::LoaderDropsMovedInstances),
-            walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
-                .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
-            // #222: the planted cue-list expander.
-            expander: scenario
-                .module_planted
-                .as_deref()
-                .filter(|p| deep_canvas_motion::cues::planted(p))
-                .map(|p| &*Box::leak(p.to_string().into_boxed_str())),
-        };
+        let pack_planted = crate::packs::planted(scenario);
         let mut hub = Hub {
             scenario,
             startup,
@@ -1014,6 +983,7 @@ impl<'a> Hub<'a> {
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
+            looks3: BTreeMap::new(),
             hash_pass: None,
             pending3d: None,
             pending_light: None,
@@ -1254,7 +1224,7 @@ impl<'a> Hub<'a> {
     }
 
     /// The record's readings as the scheduler reads them, from outside the document.
-    fn readings(&self) -> BTreeMap<String, Value> {
+    pub(crate) fn readings(&self) -> BTreeMap<String, Value> {
         self.scenario
             .record
             .iter()
@@ -1280,45 +1250,6 @@ impl<'a> Hub<'a> {
                     .map(|(sha, c)| (format!("terminal:{sha}"), c.clone())),
             )
             .collect()
-    }
-
-    /// A new session for a document: its epochs from the scenario's start, the look's tokens
-    /// and the record's readings.
-    /// The look a document names by asset, resolved over the bundled faces (#1162).
-    pub(crate) fn look_of(&self, doc: &Value) -> Option<Look> {
-        let def = self.look_def_of(doc)?;
-        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
-        // The status distance holds wherever status can show: a document with a status binding
-        // (the status-color rule's first case); any other may use any palette (#464).
-        let binds = doc
-            .get("status_bindings")
-            .and_then(Value::as_object)
-            .is_some_and(|b| !b.is_empty());
-        let at = if binds {
-            look::Distance::Everywhere
-        } else {
-            look::Distance::WhereStatusShows
-        };
-        look::resolve_in(&def, &bundled, at).ok()
-    }
-
-    /// The look `doc` names, where the evidence store holds it.
-    pub(crate) fn take_look(&mut self, doc: &Value) {
-        if let Some(look) = self.look_of(doc) {
-            self.look = look;
-            self.look_def = self.look_def_of(doc);
-        }
-    }
-
-    /// The look@1 a document names by asset, as the evidence store holds it.
-    pub(crate) fn look_def_of(&self, doc: &Value) -> Option<Value> {
-        let name = doc.pointer("/look/asset")?.as_str()?;
-        let id = name.split('@').next()?;
-        let sha = doc.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;
-        let bytes = (sha.len() == 64)
-            .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
-            .flatten()?;
-        serde_json::from_slice(&bytes).ok()
     }
 
     /// Mark set columns that read the agent's table, inlined from the evidence store as
@@ -1395,6 +1326,8 @@ impl<'a> Hub<'a> {
         issues
     }
 
+    /// A new session for a document: its epochs from the scenario's start, the look's tokens
+    /// and the record's readings.
     pub(crate) fn new_session(&self) -> DocSession {
         let mut s = DocSession::new(
             self.scenario.epoch_start,
@@ -2055,14 +1988,24 @@ impl<'a> Hub<'a> {
                     }
                 };
                 // #1801: an item the revision leaves out that rows still name: its refusal lists
-                // every one of them.
-                let removed: Vec<&str> = current_doc
-                    .as_ref()
-                    .and_then(|c| c.get("items")?.as_object())
-                    .into_iter()
-                    .flat_map(|items| items.keys())
-                    .filter(|id| doc["items"].get(id.as_str()).is_none())
-                    .map(String::as_str)
+                // every one of them. #3379: so does a control the revision leaves out.
+                let gone = |map: &str| -> Vec<String> {
+                    current_doc
+                        .as_ref()
+                        .and_then(|c| c.get(map)?.as_object())
+                        .into_iter()
+                        .flat_map(|entries| entries.keys())
+                        .filter(|id| doc[map].get(id.as_str()).is_none())
+                        .cloned()
+                        .collect()
+                };
+                let removed: Vec<deep_canvas::refs::Name> = (gone("items").into_iter())
+                    .map(deep_canvas::refs::Name::Item)
+                    .chain(
+                        gone("controls")
+                            .into_iter()
+                            .map(deep_canvas::refs::Name::Control),
+                    )
                     .collect();
                 let planted = self.scenario.planted;
                 crate::shared::name_referrers(
@@ -2344,9 +2287,7 @@ impl<'a> Hub<'a> {
                     // isn't in the store) is answered at what it names, never presented.
                     if let Some(Err(u)) = &drawn3d {
                         if u.code != "unsupported_platform" {
-                            let issue = json!({"code": u.code, "severity": "error",
-                                "ids": u.path.split('/').nth(1).into_iter().collect::<Vec<_>>(),
-                                "path": u.path, "what": "the 3D frame can't be drawn"});
+                            let issue = snapshot::issue(u);
                             match reply.get_mut("issues").and_then(Value::as_array_mut) {
                                 Some(list) => list.push(issue),
                                 None => {
@@ -2396,6 +2337,7 @@ impl<'a> Hub<'a> {
                     if self.scenario.planted == Some(Planted::SeedsNoiseFromClock) {
                         clock_noise(&mut rgba);
                     }
+                    let blank = three.then(|| snapshot::blank(&rgba)).flatten();
                     let png = snapshot::png(rgba, size);
                     match evidence::put(&self.scenario.evidence, &png) {
                         Ok(sha) => {
@@ -2417,6 +2359,12 @@ impl<'a> Hub<'a> {
                                     reply.insert("visible".into(), rows);
                                 }
                                 None => shown.put(&mut reply),
+                            }
+                            if let Some(b) = blank {
+                                let notices = reply.entry("notices").or_insert(json!([]));
+                                if let Some(list) = notices.as_array_mut() {
+                                    list.push(b.notice(&sha, None));
+                                }
                             }
                             // #464: a 2D print look adds this machine's GPU snapshot, display
                             // only, beside the Vello CPU one.
@@ -2548,25 +2496,6 @@ impl BandRow {
 
 /// A revision's check time and its `kind_rules` check's own time, when asked for (#202), in ms.
 type CheckTimes = (f64, Option<Map<String, Value>>);
-
-/// #202's planted expander: an instance's inputs walked through a std hash map, whose order a
-/// fresh random state picks, so two expansions of one example differ in their bytes. It redraws
-/// until the order differs from the previous walk's, which three inputs would match by chance.
-fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
-    thread_local! {
-        static LAST: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
-    }
-    let last = LAST.with(|l| l.borrow().clone());
-    for _ in 0..64 {
-        let walked: std::collections::HashMap<String, Value> = inputs.clone().into_iter().collect();
-        let order: Vec<String> = walked.keys().cloned().collect();
-        if order != last || inputs.len() < 2 {
-            LAST.with(|l| *l.borrow_mut() = order);
-            return walked.into_iter().collect();
-        }
-    }
-    inputs
-}
 
 /// The store's packs with each one a pack requires (`requires.packs`, by its name) before it, in
 /// the order offered otherwise (#142).

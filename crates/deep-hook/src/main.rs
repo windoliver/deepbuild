@@ -26,11 +26,13 @@ use deep_hook::matcher;
 mod actions;
 mod cow;
 mod heavy;
+mod heavy_entry;
 mod remote;
 mod spool_file;
 mod tool_paths;
 
 use cow::clone;
+use heavy_entry::heavy_entry;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -133,6 +135,7 @@ fn current_cwd() -> Option<PathBuf> {
 fn address() -> PathBuf {
     let config = config();
     let hub = |key: &str| member(member(config.as_ref()?, "hub")?, key);
+    remote::note_forwarded(hub("forwarded"));
     if let Some(path) = worktree_hub(hub("use")) {
         return path;
     }
@@ -527,26 +530,6 @@ fn peer() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
-/// `{"name", "jobs", "jobs_flag"}`, or `null`; `deep lease` reads it to know how the command takes jobs.
-fn heavy_entry() -> ExitCode {
-    let mut command = String::new();
-    let _ = io::stdin().read_to_string(&mut command);
-    let cwd = env::current_dir().ok();
-    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
-    match heavy::matched(&command, cwd.as_deref(), &home, None) {
-        Some(hit) => println!(
-            "{{\"name\":{},\"jobs\":{},\"jobs_flag\":{},\"memory_mb\":{}}}",
-            quoted(&hit.name),
-            quoted(&hit.jobs),
-            hit.jobs_flag.as_deref().map_or("null".to_string(), quoted),
-            hit.memory_mb.map_or("null".to_string(), |m| m.to_string())
-        ),
-        None => println!("null"),
-    }
-    ExitCode::SUCCESS
-}
-
 /// `deep-hook check`: whether a guard@1 entry matches a call, read on stdin as `{"entry": guard@1, "call":
 /// {"tool_name", "tool_input", "cwd"?}, "classes"?: {<tool>: <class>}}`; prints `{"matched":true}` or
 /// `{"matched":false}`. The hub runs it over each entry's planted call and twin at install, so an entry is matched
@@ -786,12 +769,10 @@ fn exchange(
     id: &str,
     line: impl Fn(&[&str]) -> String,
 ) -> (Option<String>, Outcome, String) {
-    // A joined project's hub (#1338) has the network route's time to acknowledge, short of its fail-open time.
+    // A joined project's hub (#1338), or one behind a forwarded socket (#999), has the network route's time to acknowledge.
     let joined = REMOTE.get().and_then(Option::as_ref);
-    let ack_due = start
-        + joined.map_or(ACK_BUDGET, |_| {
-            remote::FAIL_OPEN - Duration::from_millis(30)
-        });
+    let network = joined.is_some() || remote::forwarded(&hub_address());
+    let ack_due = start + remote::ack_budget(network).unwrap_or(ACK_BUDGET);
     // Only the planted connect-timeout-only build reads with no deadline.
     let ack_deadline = (!cfg!(feature = "plant-connect-timeout-only")).then_some(ack_due);
     let late = Outcome::Down { late: true };
@@ -1230,7 +1211,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             .as_deref()
             .and_then(|cwd| remote::joined(&home(), cwd))
     });
-    if joined.is_some() {
+    if joined.is_some() || remote::forwarded(&hub_address()) {
         WATCH_MS.store(
             (remote::FAIL_OPEN - Duration::from_millis(2)).as_millis() as u64,
             Ordering::SeqCst,
@@ -1908,8 +1889,9 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
+        [arg] if arg == "--contract" => println!("{CONTRACT}"),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook peer               a Unix socket on stdin: the PID at its other end\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook --contract         the contract version it speaks\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook peer               a Unix socket on stdin: the PID at its other end\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),

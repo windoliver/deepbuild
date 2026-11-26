@@ -1,0 +1,13 @@
+{
+  "crates/deep-app/src/plain.rs": [
+    {
+      "find": ["pub fn planted(name: &str) -> bool {"],
+      "wrong": [
+        "pub fn planted(name: &str) -> bool {",
+        "    if name == \"card-draws-raw\" {",
+        "        return true;",
+        "    }"
+      ]
+    }
+  ]
+}

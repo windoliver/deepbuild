@@ -35,6 +35,8 @@ export interface Connection {
   session?: string;
   project?: string;
   agent?: string;
+  /** The host whose forwarded socket the connection came over (#999); none for this machine. */
+  host?: string;
   run?: { env?: Readonly<Record<string, string>>; held?: readonly string[] };
   /** False when the event claims a session the hub couldn't check it against; the event keeps that mark. */
   verified?: boolean;
@@ -67,6 +69,7 @@ export interface Event {
   session?: string;
   project?: string;
   agent?: string;
+  host?: string;
   /** Set when the hub recorded the event as unverified: it claims a session it couldn't be checked against. */
   unverified?: true;
 }
@@ -245,11 +248,17 @@ CREATE TABLE IF NOT EXISTS events (
   data        TEXT NOT NULL,
   evidence    TEXT,
   hash        TEXT NOT NULL,
-  unverified  INTEGER NOT NULL DEFAULT 0
+  unverified  INTEGER NOT NULL DEFAULT 0,
+  host        TEXT
 ) STRICT;
 CREATE INDEX IF NOT EXISTS events_session ON events (session_id, log_pos);
 CREATE INDEX IF NOT EXISTS events_session_bounds ON events (session_id, log_pos) WHERE kind IN ('session.start', 'session.end');
 CREATE INDEX IF NOT EXISTS events_kind ON events (kind, log_pos);
+CREATE INDEX IF NOT EXISTS events_session_gone ON events (session_id, log_pos) WHERE kind = 'session.gone';
+CREATE INDEX IF NOT EXISTS events_run_key ON events (json_extract(data, '$.key.id')) WHERE kind = 'run.finished';
+CREATE INDEX IF NOT EXISTS events_run_stem ON events (json_extract(data, '$.key.stem')) WHERE kind = 'run.finished';
+CREATE INDEX IF NOT EXISTS events_delivery ON events (json_extract(data, '$.delivery'), log_pos) WHERE kind = 'delivery.outcome';
+CREATE INDEX IF NOT EXISTS events_reading ON events (json_extract(data, '$.reading')) WHERE kind = 'reading.recorded';
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no UPDATE'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no DELETE'); END;
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
@@ -288,6 +297,7 @@ interface Prepared {
   session: string | null;
   project: string | null;
   agent: string | null;
+  host: string | null;
   seq: bigint | null;
   data: JsonValue;
   evidence: string[];
@@ -318,6 +328,8 @@ class SqliteRecord implements RecordStore {
   private readonly migrations = new Map<string, Migration>();
   private readonly evidenceWriter: EvidenceWriter | undefined;
   private readonly queue: Pending[] = [];
+  /** The FULL appends made in this turn of the event loop: they share one FULL commit at its end (#22). */
+  private readonly fulls: Pending[] = [];
   private scheduled = false;
   /**
    * The commits that may wait, each for an earlier one or for the evidence it names to sync (#1410), in arrival order:
@@ -363,6 +375,8 @@ class SqliteRecord implements RecordStore {
     // A record made before events kept the unverified mark gains the column, every event in it unmarked.
     const columns = this.db.prepare("SELECT name FROM pragma_table_info('events')").all() as { name: string }[];
     if (columns.length && !columns.some((c) => c.name === 'unverified')) this.db.exec('ALTER TABLE events ADD COLUMN unverified INTEGER NOT NULL DEFAULT 0');
+    // One made before events named their host (#999) gains the column, every event in it from this machine.
+    if (columns.length && !columns.some((c) => c.name === 'host')) this.db.exec('ALTER TABLE events ADD COLUMN host TEXT');
     this.db.exec(DDL);
     this.projector = new Projector(this.db, options.plant);
     this.stale = this.projector.ensure();
@@ -500,6 +514,12 @@ class SqliteRecord implements RecordStore {
     }
   }
 
+  /** The host a session is on, as its first hook's connection named it; with no session, the one that made the claim `subject` names. */
+  private hostOf(session: string | undefined, subject: string | undefined): string | null {
+    const id = session ?? (subject?.startsWith('claim:') ? (this.stmt('SELECT session_id FROM claims WHERE id = ?').get(subject.slice('claim:'.length)) as { session_id: string | null } | undefined)?.session_id : undefined);
+    return id ? (this.stmt('SELECT host FROM sessions WHERE id = ?').get(id) as { host: string | null } | undefined)?.host ?? null : null;
+  }
+
   // ---- Append.
 
   /** The synchronous part of an append: what the connection supplies, the forged fields, the writer rule and the schema. */
@@ -538,6 +558,8 @@ class SqliteRecord implements RecordStore {
     const prepared: Prepared = {
       input, writer: connection.writer, actor: connection.actor, scope: connection.scope,
       session: connection.session ?? null, project: connection.project ?? null, agent: connection.agent ?? null,
+      // A hook's host is its connection's. The core's own events about a session on a host, or a claim one made, carry that host too (#999).
+      host: connection.host ?? (connection.writer === 'core' ? this.hostOf(connection.session, input.subject) : null),
       seq: input.seq === undefined ? null : BigInt(input.seq), data, evidence: [...(input.evidence ?? [])], unverified: connection.verified === false, hash: '',
     };
     if (whole !== undefined) prepared.whole = whole;
@@ -549,7 +571,7 @@ class SqliteRecord implements RecordStore {
     p.hash = sha256Hex(canonicalize({
       v: p.input.v, kind: p.input.kind, subject: p.input.subject ?? null, ts: p.input.ts, seq: p.input.seq ?? null, data: p.data, evidence: p.evidence,
       writer: p.writer, actor: p.actor, scope: p.scope, session: p.session, project: p.project, agent: p.agent,
-      ...(p.unverified ? { unverified: true } : {}),
+      ...(p.unverified ? { unverified: true } : {}), ...(p.host ? { host: p.host } : {}),
     }));
     return p;
   }
@@ -627,11 +649,21 @@ class SqliteRecord implements RecordStore {
     }
     this.sealed(prepared);
     if (CORE_ONLY.has(input.kind) || this.options.commitEach) {
+      // FULL appends made in one turn sync once, so an answer and the decision it saves cost one sync, not two (#22).
+      if (CORE_ONLY.has(input.kind) || this.resumes([prepared])) {
+        return new Promise<Appended>((resolve, reject) => {
+          this.fulls.push({ prepared, resolve, reject });
+          if (this.fulls.length === 1) queueMicrotask(() => this.commitFulls(this.takeFulls()));
+        });
+      }
+      // The FULL appends that arrived before it take their place in the line just before it (#22).
+      this.commitFulls(this.takeFulls());
       const me = this.arrive(prepared.session, () => this.resumes([prepared]));
       try {
-        // Its mode is read once the commits before it landed, from the log they left.
+        // Its mode is read once the commits before it landed, from the log they left: a stop committed ahead of it can
+        // make it resume a session.
         for (let wait = this.earlier(me); wait; wait = this.earlier(me)) await wait;
-        const mode = CORE_ONLY.has(input.kind) || me.resumes() ? 'full' : 'normal';
+        const mode = me.resumes() ? 'full' : 'normal';
         const synced = this.evidenceSynced([prepared], mode);
         if (synced) await synced;
         this.committing = me;
@@ -681,32 +713,74 @@ class SqliteRecord implements RecordStore {
   }
 
   /**
-   * Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit. A FULL one waits
-   * for the evidence it names, still scheduled, so a read that settles the queue waits for it too.
+   * Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit, after the FULL
+   * appends of this turn (#22). A FULL one waits for the evidence it names, still scheduled, so a read that settles the
+   * queue waits for it too.
    */
   private async flush(): Promise<void> {
     const batch = this.queue.splice(0);
-    let outcomes: Outcome[] = [];
-    let me: Waiting | undefined;
+    const fulls = this.takeFulls();
+    // A batch may hold several sessions' events, so it waits as an event of no session does.
+    const me = batch.length ? this.arrive(null, () => this.resumes(batch.map((p) => p.prepared)), new Set(batch.map((p) => p.prepared.session))) : undefined;
     try {
-      const items = batch.map((p) => p.prepared);
-      // A batch may hold several sessions' events, so it waits as an event of no session does.
-      me = this.arrive(null, () => this.resumes(items), new Set(items.map((p) => p.session)));
-      for (let wait = this.earlier(me); wait; wait = this.earlier(me)) await wait;
-      const mode = me.resumes() ? 'full' : 'normal';
-      const synced = this.evidenceSynced(items, mode);
-      if (synced) await synced;
-      this.committing = me;
-      if (items.length) outcomes = this.commit(items, mode);
-    } catch (error) {
-      for (const p of batch) p.reject(error as Error);
+      this.commitFulls(fulls);
+      if (me) await this.commitPending(batch, false, me);
     } finally {
-      if (me) this.landed(me);
       this.scheduled = false;
       if (this.queue.length) {
         this.scheduled = true;
         setImmediate(() => void this.flush());
       }
+    }
+  }
+
+  /**
+   * The FULL appends that arrived so far, a batch for each session in the order its first one arrived, each taking its
+   * place in the line as it is taken: a FULL append that arrives later never commits ahead of what arrived before it,
+   * and one session's batch never waits on another's evidence sync (#2539). One of no session takes its place after
+   * every batch holding an earlier append, so it lands after everything before it; a session's later append then
+   * starts a batch of its own.
+   */
+  private takeFulls(): { batch: Pending[]; me: Waiting }[] {
+    const taken: { batch: Pending[]; me: Waiting }[] = [];
+    let open = new Map<string | null, Pending[]>();
+    const place = (): void => {
+      for (const batch of open.values()) taken.push({ batch, me: this.arrive(batch[0]!.prepared.session, () => this.resumes(batch.map((p) => p.prepared))) });
+      open = new Map();
+    };
+    for (const p of this.fulls.splice(0)) {
+      const session = p.prepared.session;
+      if (session === null && [...open.keys()].some((k) => k !== null)) place();
+      open.set(session, [...(open.get(session) ?? []), p]);
+    }
+    place();
+    return taken;
+  }
+
+  /** Commits each session's FULL appends of one turn in one FULL commit, so an answer and its decision sync once (#22). */
+  private commitFulls(batches: { batch: Pending[]; me: Waiting }[]): void {
+    for (const { batch, me } of batches) void this.commitPending(batch, true, me);
+  }
+
+  /**
+   * Commits a batch of appends in one commit, FULL when asked or when it resumes an ended session, and answers each.
+   * It first waits for the commits before it in the line (`me`), then syncs the evidence a FULL one names (#1410).
+   */
+  private async commitPending(batch: Pending[], full: boolean, me: Waiting): Promise<void> {
+    let outcomes: Outcome[];
+    try {
+      const items = batch.map((p) => p.prepared);
+      for (let wait = this.earlier(me); wait; wait = this.earlier(me)) await wait;
+      const mode = full || me.resumes() ? 'full' : 'normal';
+      const synced = this.evidenceSynced(items, mode);
+      if (synced) await synced;
+      this.committing = me;
+      outcomes = this.commit(items, mode);
+    } catch (error) {
+      for (const p of batch) p.reject(error as Error);
+      return;
+    } finally {
+      this.landed(me);
     }
     for (const [i, outcome] of outcomes.entries()) {
       const pending = batch[i]!;
@@ -780,7 +854,7 @@ class SqliteRecord implements RecordStore {
       // Each event, and a move.refused for each object it could move.
       this.reserve(items.reduce((n, p) => n + 1 + movable(p.input.kind, p.data), 0));
       const existing = this.stmt('SELECT log_pos, hash FROM events WHERE id = ?');
-      const insert = this.stmt('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash, unverified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      const insert = this.stmt('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash, unverified, host) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       const write = (work: () => void) => (mode === 'full' ? this.full(work) : this.backend.commit(this.db, 'normal', work));
       write(() => {
         for (const p of items) {
@@ -792,7 +866,7 @@ class SqliteRecord implements RecordStore {
           }
           const put = (q: Prepared): { log_pos: number; refused: Refusal[] } => {
             const log_pos = this.next++;
-            insert.run(q.input.id, log_pos, q.input.v, q.input.ts, q.project, q.session, q.seq, q.agent, q.writer, q.actor, q.scope, q.input.kind, q.input.subject ?? null, JSON.stringify(q.data), q.evidence.length ? JSON.stringify(q.evidence) : null, q.hash, q.unverified ? 1 : 0);
+            insert.run(q.input.id, log_pos, q.input.v, q.input.ts, q.project, q.session, q.seq, q.agent, q.writer, q.actor, q.scope, q.input.kind, q.input.subject ?? null, JSON.stringify(q.data), q.evidence.length ? JSON.stringify(q.evidence) : null, q.hash, q.unverified ? 1 : 0, q.host);
             return { log_pos, refused: this.projector.apply(this.projected(q, log_pos)) };
           };
           const { log_pos, refused } = put(p);
@@ -824,7 +898,7 @@ class SqliteRecord implements RecordStore {
 
   private projected(p: Prepared, log_pos: number): Projected {
     return {
-      id: p.input.id, v: p.input.v, kind: p.input.kind, ts: p.input.ts, seq: p.seq, log_pos, session: p.session, project: p.project, agent: p.agent,
+      id: p.input.id, v: p.input.v, kind: p.input.kind, ts: p.input.ts, seq: p.seq, log_pos, session: p.session, project: p.project, agent: p.agent, host: p.host,
       writer: p.writer, actor: p.actor, scope: p.scope, subject: p.input.subject ?? null, data: this.migrate(p.input.kind, p.input.v, p.data), evidence: p.evidence,
     };
   }
@@ -884,7 +958,7 @@ class SqliteRecord implements RecordStore {
           for (const row of rows) {
             const e = toEvent(row);
             this.projector.apply({
-              id: e.id, v: e.v, kind: e.kind, ts: e.ts, seq: e.seq ?? null, log_pos: e.log_pos, session: e.session ?? null, project: e.project ?? null, agent: e.agent ?? null,
+              id: e.id, v: e.v, kind: e.kind, ts: e.ts, seq: e.seq ?? null, log_pos: e.log_pos, session: e.session ?? null, project: e.project ?? null, agent: e.agent ?? null, host: e.host ?? null,
               writer: e.writer, actor: e.actor, scope: e.scope, subject: e.subject ?? null, data: this.migrate(e.kind, e.v, e.data), evidence: e.evidence,
             }, e.log_pos >= from);
             after = e.log_pos;
@@ -1039,7 +1113,7 @@ class SqliteRecord implements RecordStore {
 
   /** Waits for every queued stream event to commit or be refused. */
   private async settle(): Promise<void> {
-    while (this.queue.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
+    while (this.queue.length || this.fulls.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
   }
 
   /** A clean stop: no new appends, every one accepted committed or refused, the state recorded FULL. */
@@ -1049,7 +1123,7 @@ class SqliteRecord implements RecordStore {
   }
   private async stop(): Promise<void> {
     await this.indexing.catch(() => undefined);
-    while (this.inFlight || this.queue.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
+    while (this.inFlight || this.queue.length || this.fulls.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
     const lost = this.db.prepare('INSERT OR IGNORE INTO lost_sessions (session) VALUES (?)');
     const put = this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
     this.full(() => {
@@ -1063,7 +1137,7 @@ class SqliteRecord implements RecordStore {
 
 interface StoredRow {
   id: string; log_pos: bigint; v: bigint; ts: bigint; project_id: string | null; session_id: string | null; seq: bigint | null; agent: string | null;
-  writer: string; actor: string; scope: string; kind: string; subject: string | null; data: string; evidence: string | null; hash: string; unverified: bigint;
+  writer: string; actor: string; scope: string; kind: string; subject: string | null; data: string; evidence: string | null; hash: string; unverified: bigint; host: string | null;
 }
 function toEvent(row: StoredRow): Event {
   const event: Event = {
@@ -1075,6 +1149,7 @@ function toEvent(row: StoredRow): Event {
   if (row.session_id !== null) event.session = row.session_id;
   if (row.project_id !== null) event.project = row.project_id;
   if (row.agent !== null) event.agent = row.agent;
+  if (row.host !== null) event.host = row.host;
   if (row.unverified) event.unverified = true;
   return event;
 }
