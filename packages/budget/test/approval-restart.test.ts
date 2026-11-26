@@ -17,7 +17,7 @@ it('the same answered ask approves one budget, even after the record and ledger 
     let ledger = await openLedger({ record, asks, now, price: async () => 4 });
     const input = { scope: { kind: 'issue' as const, ref: 'task:item42' }, runs: 1, cap_usd: 4, ends: now() + 604_800_000 };
     const ask = await asks.raise(core, 'budget.issue', {
-      kind: 'authority', question: 'Approve $4 for one run?', options: [{ id: 'approve', label: 'Approve $4', decision: 'allow' }, { id: 'decline', label: 'Decline', decision: 'deny' }],
+      kind: 'authority', may_answer: 'trusted_path', question: 'Approve $4 for one run?', options: [{ id: 'approve', label: 'Approve $4', decision: 'allow' }, { id: 'decline', label: 'Decline', decision: 'deny' }],
       recommended: null, default: 'decline', deadline: now() + 86_400_000, fallback: 'you', provisional: false, owner: 'you', key: 'a'.repeat(64), pinned_to: { kind: 'evidence', ref: 'a'.repeat(64) },
     }, { steps: [{ does: 'Approve $4 for one run', changes: ['task:item42'], undo: null, public: false, cost: 4 }], diff: 'a'.repeat(64) });
     await asks.answer({ ...core, writer: 'app' }, ask, { option: 'approve', token: 'a-real-card-click', plan_hash: (await asks.card(ask)).plan!.hash });

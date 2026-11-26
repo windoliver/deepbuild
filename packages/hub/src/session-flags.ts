@@ -134,7 +134,7 @@ export class SessionFlags {
     // The planted wrong program asks you instead.
     if (activePlant() === 'repeat-raises-ask') {
       const question = `${text} Stop the session?`;
-      await asks.raise(this.options.events.connection('core', { session: meta.session, agent: meta.agent }), 'guard.overridden', { kind: 'exception', question, options: [{ id: 'checked', label: 'Stop it', decision: 'none' }, { id: 'later', label: 'Let it go on', decision: 'none' }], recommended: 'later', deadline: now() + 2 * 86_400_000, fallback: 'you', default: 'later', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'repeat', session: meta.session, first: run.first.at.log_pos } as JsonValue)), pinned_to: await this.options.mcp().pinOf(meta.cwd, question) }).catch(() => undefined);
+      await asks.raise(this.options.events.connection('core', { session: meta.session, agent: meta.agent }), 'guard.overridden', { kind: 'exception', may_answer: 'trusted_path', question, options: [{ id: 'checked', label: 'Stop it', decision: 'none' }, { id: 'later', label: 'Let it go on', decision: 'none' }], recommended: 'later', deadline: now() + 2 * 86_400_000, fallback: 'you', default: 'later', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'repeat', session: meta.session, first: run.first.at.log_pos } as JsonValue)), pinned_to: await this.options.mcp().pinOf(meta.cwd, question) }).catch(() => undefined);
       return;
     }
     await siblings.tell(meta, { type: 'repeat', source: null, files: [], pr: null, key: `repeat:${run.first.at.log_pos}`, version: activePlant() === 'repeat-notifies-each' ? String(run.count) : String(REPEATS), text });

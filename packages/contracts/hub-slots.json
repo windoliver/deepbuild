@@ -107,7 +107,10 @@
       "runs-a-program",
       "moves-focus-unasked",
       "draws-outside",
-      "covers-the-card"
+      "covers-the-card",
+      "presses-with-no-name",
+      "draws-faint-text",
+      "presses-by-pointer-only"
     ],
     "since": "R1"
   },

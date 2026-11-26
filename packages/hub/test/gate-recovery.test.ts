@@ -18,7 +18,7 @@ it('an approved budget cut before its spend event does not prevent startup after
     let asks = await openAsks({ record, now, deliver: () => undefined });
     const action = { kind: 'budget.issue', scope: { kind: 'issue', ref: 'task:item42' }, runs: 1, cap_usd: 4, ends: at + 604_800_000 };
     const ask = await asks.raise(core, 'budget.issue', {
-      action, kind: 'authority', question: 'Approve $4 for one run?', options: [{ id: 'approve', label: 'Approve', decision: 'allow' }, { id: 'decline', label: 'Decline', decision: 'deny' }],
+      action, kind: 'authority', may_answer: 'trusted_path', question: 'Approve $4 for one run?', options: [{ id: 'approve', label: 'Approve', decision: 'allow' }, { id: 'decline', label: 'Decline', decision: 'deny' }],
       recommended: null, default: 'decline', deadline: at + 86_400_000, fallback: 'you', provisional: false, owner: 'you', key: 'a'.repeat(64), pinned_to: { kind: 'evidence', ref: 'a'.repeat(64) },
     }, { steps: [{ does: 'Approve $4 for one run', changes: ['task:item42'], undo: null, public: false, cost: 4 }], diff: 'a'.repeat(64) });
     await asks.answer({ ...core, writer: 'app' }, ask, { option: 'approve', token: 'card-click', plan_hash: (await asks.card(ask)).plan!.hash });

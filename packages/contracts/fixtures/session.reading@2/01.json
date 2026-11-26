@@ -1,0 +1,13 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "session.reading",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "reading": "Waiting on its monitor `npm test`: each event wakes it, and its stop is judged once the watch ends.",
+    "code": "monitor_waiting"
+  }
+}
