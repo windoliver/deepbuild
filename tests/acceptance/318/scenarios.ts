@@ -127,7 +127,7 @@ export async function lateAllow(w: World): Promise<void> {
 
 /** #318.af2a2599: one row per place that raises an ask, each with a fixture that takes its default. */
 export async function sourcesTable(rows: AskSource[], open: () => Promise<World>): Promise<void> {
-  expect(validate('ask.sources@1', rows), 'the table holds to ask.sources@1').toEqual({ ok: true });
+  expect(validate('ask.sources@2', rows), 'the table holds to ask.sources@2').toEqual({ ok: true });
   expect(new Set(rows.map((r) => r.source)).size, 'one row per place').toBe(rows.length);
   for (const kind of KINDS) expect(rows.some((r) => r.kind === kind), `some place raises a ${kind} ask`).toBe(true);
   for (const name of ['budget.raise', 'generation.paid']) {
@@ -137,7 +137,7 @@ export async function sourcesTable(rows: AskSource[], open: () => Promise<World>
   for (const row of rows) {
     const data = row.fixture.ask as Obj;
     expect(data.kind, `row ${row.source}: its fixture is an ask of the row's kind`).toBe(row.kind);
-    expect(validate('ask.created@1', created(data)), `row ${row.source}: its fixture is a valid ask.created`).toEqual({ ok: true });
+    expect(validate('ask.created@6', { ...created(data), v: 6 }), `row ${row.source}: its fixture is a valid ask.created`).toEqual({ ok: true });
     if (row.kind === 'authority') expect(row.fixture.at_deadline.decision, `row ${row.source}: an authority ask defaults to no`).toBe('deny');
     // Raised as DeepBuild raises it, then left to its deadline on the virtual clock.
     const w = await open();

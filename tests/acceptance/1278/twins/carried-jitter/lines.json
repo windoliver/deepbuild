@@ -1,0 +1,14 @@
+{
+  "crates/deep-gpu-layer/src/view3d.rs": [
+    {
+      "find": ["                sc.jitter = plan[k].offset;"],
+      "wrong": [
+        "                // Wrong program: a count kept across the process's plays nudges each frame's sample",
+        "                // offset, so a play's frames depend on what drew before them in the process.",
+        "                static DRAWN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);",
+        "                let carried = DRAWN.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 5;",
+        "                sc.jitter = [plan[k].offset[0] + carried as f64 * 0.1, plan[k].offset[1]];"
+      ]
+    }
+  ]
+}

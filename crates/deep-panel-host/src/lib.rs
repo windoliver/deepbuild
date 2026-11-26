@@ -100,7 +100,7 @@ impl Panel {
         let window = cx
             .update(|cx| {
                 cx.open_window(options, |window, cx| {
-                    let view = deep_app::mount_panel(&runtime, dir, window, cx);
+                    let view = deep_app::mount_panel_unheld(&runtime, dir, window, cx);
                     mounted = view
                         .as_ref()
                         .map(Clone::clone)

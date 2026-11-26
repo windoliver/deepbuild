@@ -3,7 +3,7 @@ import type { JsonValue } from '@deepbuild/contracts';
 import type { Connection, RecordStore } from '@deepbuild/record';
 import type { AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Decision, InboxStatus, Missing, PlanStep, Refusal, Resolver, RuleState } from './model.js';
 
-/** One row of ask.sources@1: a place that raises asks, the one kind it raises, and its fixture. */
+/** One row of ask.sources@2: a place that raises asks, the one kind it raises, and its fixture, an ask as the place raises it. */
 export interface AskSource {
   source: string;
   kind: AskKind;

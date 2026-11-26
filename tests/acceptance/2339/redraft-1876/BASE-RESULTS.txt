@@ -1,0 +1,711 @@
+# Blind redraft of four files of #2339: the run on the base, and the wrong programs
+
+Base: 9e77c2ad6c0ff460dcff6905a161adee490536aa (main; its last merge is #3450), a git worktree detached at it, with
+this folder untracked in it. Run on 2026-11-25 with Node v24.22.2 on macOS (Darwin arm64), with no node_modules and no
+build, on a machine shared with other sessions. Paths are written short: <checkout> the checkout, <inputs> the folder
+the issue was saved in, <scratch tree> the tree the wrong programs were made in, <tmp> the OS temp folder, ~ a home
+folder.
+
+## 1. The criteria's IDs, from the issue's body as saved
+
+$ node <inputs>/scratch/ids.mjs <inputs>/issue-2339-body.md
+1 #2339.2ae5a05d The section sits before "What version 0 builds, and what waits" and holds between 8 and 12 lines, each one sen
+2 #2339.a190c5fb The four invariants' sentences in the section match `AGENTS.md` word for word, held by a text check that fails
+3 #2339.b90141c9 Each line names at least one check that exists: a file under `scripts/`, or a lane name in the list `scripts/l
+4 #2339.6eaafe21 The canvas reference's link to the section lands, by the same lane. A planted canvas reference without the lin
+
+## 2. The base: each file once, from the checkout's root
+
+All ten tests pass. Each temp folder was removed (none named deep-2339-redraft-* was left), and no process was left
+running: every child is a spawnSync that ended before its test went on. This run was made with README.md and an
+earlier writing of this file in the folder, so each copy held them; only the text of those two changed after it. The
+machine was busy during it; the README gives the times of the quieter runs too.
+
+$ node --check tests/acceptance/2339/redraft-1876/helpers.mjs   (exit 0)
+$ node --check tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs   (exit 0)
+$ node --test tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs   (exit 0, 26.9 s)
+✔ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (20484.812125ms)
+✔ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (539.662417ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26820.694541
+
+$ node --check tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs   (exit 0)
+$ node --test tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs   (exit 0, 21.1 s)
+✔ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (15.842292ms)
+✔ #2339.a190c5fb criterion 2: AGENTS.md edited alone fails the design links lane, naming the invariant (16149.449125ms)
+✔ #2339.a190c5fb criterion 2: the design edited alone fails the design links lane, naming the invariant (388.885792ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20995.28675
+
+$ node --check tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 0)
+$ node --test tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 0, 23.3 s)
+✔ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (76.950083ms)
+✔ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (14959.88375ms)
+✔ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (872.456166ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23280.340125
+
+$ node --check tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs   (exit 0)
+$ node --test tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs   (exit 0, 27.1 s)
+✔ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (29.37575ms)
+✔ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under (20513.941166ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27083.076709
+
+## 3. What the base's lane printed for each plant
+
+Made with the suite's own helpers on one scratch copy (scratch/probe-plants.mjs, outside the checkout): the control,
+then each plant as its test makes it, with the lane's exit status and output and, after "->", the finding the test's
+naming reads. The first plant is the planted line with nothing wrong, which no test asserts: the base's lane passes
+it, so each planted line after it fails for the one thing it lacks. The lane ends each FAIL with the same line, left
+out below: "  Fix: keep Principles to 8 to 12 one-sentence lines of at most 160 characters, each linking the design
+and naming a check that exists; edit its first four lines with AGENTS.md's invariants; open the canvas conventions
+with a link to it." One run is not a plant of these tests: the section's own fifth line with its link turned into
+its label in place, for which the base's lane prints two findings; that is why the fifth line is replaced by a line
+the test writes (README: The plants). The last lines are the checks each line of the base's section names, as the
+test of the tree reads them.
+
+the copy: 24609 files; the lane "design links and names", its commands [["node","scripts/design-links.mjs"]]; 37 lane names; made, and the lane run on it unplanted, in 20936 ms
+
+== the unplanted copy (the control)
+exit 0
+design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+the section: heading at docs/technical-design.md:9, anchors #principles, 10 lines at 13, 14, 15, 16, 17, 18, 19, 20, 21, 22
+
+== the planted line with nothing wrong (asserted by no test), at docs/technical-design.md:17 (74 characters as it reads; checks it names, by the tests' reading: {"existing":["scripts/lanes.mjs"],"missing":[]}):
+- A planted sentence points at [its section](#prim-rules) and is held by `scripts/lanes.mjs`.
+exit 0
+design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+-> names the line: no finding
+
+== fifth line with no link, at docs/technical-design.md:17 (73 characters as it reads; checks it names, by the tests' reading: {"existing":["scripts/lanes.mjs"],"missing":[]}):
+- A planted sentence is held by `scripts/lanes.mjs` and points at no section.
+exit 1
+FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+  docs/technical-design.md:17 (line 5) has no link into the design
+-> names the line: docs/technical-design.md:17 (line 5) has no link into the design
+
+== two sentences, at docs/technical-design.md:17 (103 characters as it reads; checks it names, by the tests' reading: {"existing":["scripts/lanes.mjs"],"missing":[]}):
+- A planted sentence points at [its section](#prim-rules) and is held by `scripts/lanes.mjs`. This is its second sentence.
+exit 1
+FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+  docs/technical-design.md:17 (line 5) holds 2 sentences; it holds 1
+-> names the line: docs/technical-design.md:17 (line 5) holds 2 sentences; it holds 1
+
+== names scripts/no-such-check.mjs, at docs/technical-design.md:17 (82 characters as it reads; checks it names, by the tests' reading: {"existing":[],"missing":["scripts/no-such-check.mjs"]}):
+- A planted sentence points at [its section](#prim-rules) and is held by `scripts/no-such-check.mjs`.
+exit 1
+FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 2 principles findings
+  docs/technical-design.md:17 (line 5) names scripts/no-such-check.mjs, which isn't a file under scripts/
+  docs/technical-design.md:17 (line 5) names no check: a file under scripts/ or a lane scripts/lanes.mjs lists, in code
+-> names the line: docs/technical-design.md:17 (line 5) names scripts/no-such-check.mjs, which isn't a file under scripts/
+-> names the name: docs/technical-design.md:17 (line 5) names scripts/no-such-check.mjs, which isn't a file under scripts/
+
+== names no check, at docs/technical-design.md:17 (64 characters as it reads; checks it names, by the tests' reading: {"existing":[],"missing":[]}):
+- A planted sentence points at [its section](#prim-rules) and is held by nothing.
+exit 1
+FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+  docs/technical-design.md:17 (line 5) names no check: a file under scripts/ or a lane scripts/lanes.mjs lists, in code
+-> names the line: docs/technical-design.md:17 (line 5) names no check: a file under scripts/ or a lane scripts/lanes.mjs lists, in code
+
+== not a plant of these tests: the section's own fifth line with each link turned into its label, in place, at docs/technical-design.md:17 (120 characters as it reads; checks it names, by the tests' reading: {"existing":["canvas kit"],"missing":[]}):
+- Agents and plug-ins write data, not code, and a piece's logic runs only sandboxed. (Data, not code; the `canvas kit` lane)
+exit 1
+FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 2 principles findings
+  docs/technical-design.md:17 (line 5) holds 2 sentences; it holds 1
+  docs/technical-design.md:17 (line 5) has no link into the design
+-> names the line: docs/technical-design.md:17 (line 5) holds 2 sentences; it holds 1
+
+== AGENTS.md edited alone, at AGENTS.md:10:
+2. Nothing or unrun passes. It's `BLOCKED`, `INVALID` or `INCONCLUSIVE`, never `PASS`.
+exit 1
+FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+  docs/technical-design.md:14 (line 2) doesn't state invariant 2 as AGENTS.md:10 words it: "Nothing or unrun passes. It's `BLOCKED`, `INVALID` or `INCONCLUSIVE`, never `PASS`."
+-> names the invariant: docs/technical-design.md:14 (line 2) doesn't state invariant 2 as AGENTS.md:10 words it: "Nothing or unrun passes. It's `BLOCKED`, `INVALID` or `INCONCLUSIVE`, never `PASS`."
+
+== the design edited alone, at docs/technical-design.md:16:
+- A sees only what needs a person, and never the same question twice. ([An ask, and your answer getting back](#an-ask-and-your-answer-getting-back); `unit` lane, `scripts/ask-sources-guard.mjs`)
+exit 1
+FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+  docs/technical-design.md:16 (line 4) doesn't state invariant 4 as AGENTS.md:12 words it: "A person sees only what needs a person, and never the same question twice."
+-> names the invariant: docs/technical-design.md:16 (line 4) doesn't state invariant 4 as AGENTS.md:12 words it: "A person sees only what needs a person, and never the same question twice."
+
+== the canvas reference without the link (heading at docs/canvas-primitives.md:7, slug conventions-every-primitive-uses, anchors #conventions), its first paragraph at docs/canvas-primitives.md:9:
+The design's principles hold here; these are the conventions every primitive shares.
+exit 1
+FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+  docs/canvas-primitives.md:7 "Conventions every primitive uses" doesn't open with a link to the design's Principles section
+-> names the heading: docs/canvas-primitives.md:7 "Conventions every primitive uses" doesn't open with a link to the design's Principles section
+
+after the plants the copy is put back, and the lane passes on it again: exit 0
+
+the checks each line of the tree's own section names, by the tests' reading:
+docs/technical-design.md:13 {"existing":["verdict proofs"],"missing":[]}
+docs/technical-design.md:14 {"existing":["verdict proofs"],"missing":[]}
+docs/technical-design.md:15 {"existing":["scripts/proof-guard.mjs"],"missing":[]}
+docs/technical-design.md:16 {"existing":["scripts/ask-sources-guard.mjs","unit"],"missing":[]}
+docs/technical-design.md:17 {"existing":["canvas kit"],"missing":[]}
+docs/technical-design.md:18 {"existing":["canvas kit"],"missing":[]}
+docs/technical-design.md:19 {"existing":["scripts/canvas-lint.mjs"],"missing":[]}
+docs/technical-design.md:20 {"existing":["proof"],"missing":[]}
+docs/technical-design.md:21 {"existing":["scripts/wait-ratchet.mjs","unit"],"missing":[]}
+docs/technical-design.md:22 {"existing":["scripts/slots-check.mjs"],"missing":[]}
+
+## 4. The wrong programs
+
+The section and its check are on the base, so each wrong program was made in a scratch tree outside the checkout
+(scratch/wrong.mjs): a clone of every file git lists in the checkout, this folder among them, with `git init` and
+one wrong program laid over at a time. Each run is this folder's own file, started from the checkout's root as
+`node --test [--test-name-pattern='…'] <scratch tree>/tests/acceptance/2339/redraft-1876/<file>`. A run that names a
+pattern runs the one test of the tree, which makes no copy. The scratch tree held this folder's helpers and four test
+files as they are now, compared byte for byte, and not README.md or this file, which were written after.
+
+- BASE is the control: the scratch tree with nothing laid over, where all ten pass.
+- L0 to L11 are wrong lanes: the base's scripts/design-links.mjs or scripts/principles.mjs with one rule left out or
+  one finding reworded. L0 is the lane without the Principles findings, which every planted test fails on with
+  "the lane passed …".
+- D1 to D8 are wrong trees for the three tests that read the checkout: a design, an AGENTS.md or a canvas reference
+  that breaks the test's fact. C1 is a control, not a wrong program: both files reworded alike, which passes.
+- NOGIT, X1 and D4's two planted tests show that nothing unrun passes: a tree git can't list, a tree that holds
+  scripts/no-such-check.mjs, and an unplanted copy the lane already fails each fail the test, naming why.
+
+Each test, and the programs it fails on:
+
+ 1. #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line
+    fails on: L0, L1, L8, L11
+    stopped, and so not passed, on: NOGIT
+ 2. #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it
+    fails on: L0, L2, L8, L11
+    stopped, and so not passed, on: NOGIT
+ 3. #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it
+    fails on: D1, D2, D3
+ 4. #2339.a190c5fb criterion 2: AGENTS.md edited alone fails the design links lane, naming the invariant
+    fails on: L0, L3, L10
+ 5. #2339.a190c5fb criterion 2: the design edited alone fails the design links lane, naming the invariant
+    fails on: L0, L3, L10
+ 6. #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't
+    fails on: D4, D5
+ 7. #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name
+    fails on: L0, L4, L5, L8
+    stopped, and so not passed, on: X1, D4
+ 8. #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line
+    fails on: L0, L6, L8
+    stopped, and so not passed, on: D4
+ 9. #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section
+    fails on: D6, D7, D8
+10. #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under
+    fails on: L0, L7, L9
+
+Each run: the program, the command, each test's mark, and under "failing tests" the assertion without its stack and
+its own fields. The lane's Fix line is left out, as above.
+
+--- NOGIT: the scratch tree before `git init`: git can't list its files, so the copy can't be made
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs   (exit 1, 0.2 s)
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (10.445ms)
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (0.156ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs:11:1
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (10.445ms)
+  Error: the scratch copy of the checkout could not be made, so no lane ran: git can't list the checkout's files (exit 128): fatal: not a git repository (or any of the parent directories): .git
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs:23:1
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (0.156ms)
+  Error: the scratch copy of the checkout could not be made, so no lane ran: git can't list the checkout's files (exit 128): fatal: not a git repository (or any of the parent directories): .git
+
+--- BASE: the scratch tree as cloned, nothing laid over (the control for every wrong program below)
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs   (exit 0, 17.1 s)
+✔ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (11991.732583ms)
+✔ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (337.843208ms)
+ℹ tests 2
+ℹ pass 2
+ℹ fail 0
+
+--- BASE: the scratch tree as cloned, nothing laid over (the control for every wrong program below)
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs   (exit 0, 21.9 s)
+✔ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (15.707625ms)
+✔ #2339.a190c5fb criterion 2: AGENTS.md edited alone fails the design links lane, naming the invariant (17063.538041ms)
+✔ #2339.a190c5fb criterion 2: the design edited alone fails the design links lane, naming the invariant (340.979458ms)
+ℹ tests 3
+ℹ pass 3
+ℹ fail 0
+
+--- BASE: the scratch tree as cloned, nothing laid over (the control for every wrong program below)
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 0, 15.2 s)
+✔ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (91.758334ms)
+✔ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (10972.965958ms)
+✔ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (333.461833ms)
+ℹ tests 3
+ℹ pass 3
+ℹ fail 0
+
+--- BASE: the scratch tree as cloned, nothing laid over (the control for every wrong program below)
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs   (exit 0, 10.4 s)
+✔ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (18.731042ms)
+✔ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under (6941.90425ms)
+ℹ tests 2
+ℹ pass 2
+ℹ fail 0
+
+--- L0: the lane without the Principles findings: scripts/design-links.mjs with `const unprincipled = principles();` made `const unprincipled = [];`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs   (exit 1, 10.3 s)
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (6472.232875ms)
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (283.169959ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs:11:1
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (6472.232875ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a section whose fifth line has no link (docs/technical-design.md:17: A planted sentence is held by `scripts/lanes.mjs` and points at no section.): exit 0, output:
+  design links and names: 175 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs:23:1
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (283.169959ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a line of two sentences (docs/technical-design.md:17: A planted sentence points at [its section](#prim-rules) and is held by `scripts/lanes.mjs`. This is its second sentence.): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+--- L0: the lane without the Principles findings: scripts/design-links.mjs with `const unprincipled = principles();` made `const unprincipled = [];`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs   (exit 1, 13.1 s)
+✔ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (8.807917ms)
+✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone fails the design links lane, naming the invariant (9118.003125ms)
+✖ #2339.a190c5fb criterion 2: the design edited alone fails the design links lane, naming the invariant (305.399125ms)
+ℹ tests 3
+ℹ pass 1
+ℹ fail 2
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs:21:1
+✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone fails the design links lane, naming the invariant (9118.003125ms)
+  AssertionError [ERR_ASSERTION]: the lane passed AGENTS.md with one word ("missing") taken out of invariant 2 (AGENTS.md:10) and the design left as it was: exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs:38:1
+✖ #2339.a190c5fb criterion 2: the design edited alone fails the design links lane, naming the invariant (305.399125ms)
+  AssertionError [ERR_ASSERTION]: the lane passed the section with one word ("person") taken out of invariant 4 (docs/technical-design.md:16) and AGENTS.md left as it was: exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+--- L0: the lane without the Principles findings: scripts/design-links.mjs with `const unprincipled = principles();` made `const unprincipled = [];`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 1, 23.7 s)
+✔ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (197.160542ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (18552.03425ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (285.057375ms)
+ℹ tests 3
+ℹ pass 1
+ℹ fail 2
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:25:1
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (18552.03425ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a line naming scripts/no-such-check.mjs (docs/technical-design.md:17: A planted sentence points at [its section](#prim-rules) and is held by `scripts/no-such-check.mjs`.): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:38:1
+✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (285.057375ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a line naming no check (docs/technical-design.md:17: A planted sentence points at [its section](#prim-rules) and is held by nothing.): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+--- L0: the lane without the Principles findings: scripts/design-links.mjs with `const unprincipled = principles();` made `const unprincipled = [];`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs   (exit 1, 14.4 s)
+✔ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (22.750333ms)
+✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under (10761.883541ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs:18:1
+✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under (10761.883541ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a canvas reference whose "Conventions every primitive uses" (docs/canvas-primitives.md:7) has no link to the Principles section: exit 0, output:
+  design links and names: 175 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+--- L1: the lane without the link rule: scripts/principles.mjs without its line `if (!targets(line).some(rule)) fail(where, 'has no link into the design');`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs   (exit 1, 12 s)
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (8292.1355ms)
+✔ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (301.0215ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs:11:1
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (8292.1355ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a section whose fifth line has no link (docs/technical-design.md:17: A planted sentence is held by `scripts/lanes.mjs` and points at no section.): exit 0, output:
+  design links and names: 175 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+--- L2: the lane without the sentence rule: scripts/principles.mjs without its line `… fail(where, `holds ${sentences(text)} sentences; it holds ${allowed}`);`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs   (exit 1, 12.7 s)
+✔ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (8941.194875ms)
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (294.527959ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs:23:1
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (294.527959ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a line of two sentences (docs/technical-design.md:17: A planted sentence points at [its section](#prim-rules) and is held by `scripts/lanes.mjs`. This is its second sentence.): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+--- L3: the lane without the invariant rule: scripts/principles.mjs without its line `else if (invariant && stated !== invariant.text) fail(where, …);`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs   (exit 1, 11.8 s)
+✔ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (9.135291ms)
+✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone fails the design links lane, naming the invariant (8085.545833ms)
+✖ #2339.a190c5fb criterion 2: the design edited alone fails the design links lane, naming the invariant (295.89525ms)
+ℹ tests 3
+ℹ pass 1
+ℹ fail 2
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs:21:1
+✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone fails the design links lane, naming the invariant (8085.545833ms)
+  AssertionError [ERR_ASSERTION]: the lane passed AGENTS.md with one word ("missing") taken out of invariant 2 (AGENTS.md:10) and the design left as it was: exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs:38:1
+✖ #2339.a190c5fb criterion 2: the design edited alone fails the design links lane, naming the invariant (295.89525ms)
+  AssertionError [ERR_ASSERTION]: the lane passed the section with one word ("person") taken out of invariant 4 (docs/technical-design.md:16) and AGENTS.md left as it was: exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+--- L4: the lane that fails a missing script only as "names no check": scripts/principles.mjs without its line `… fail(where, `names ${path}, which isn't a file under scripts/`);`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 1, 12.5 s)
+✔ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (75.82125ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (8605.327666ms)
+✔ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (295.69625ms)
+ℹ tests 3
+ℹ pass 2
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:25:1
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (8605.327666ms)
+  AssertionError [ERR_ASSERTION]: the lane failed without naming scripts/no-such-check.mjs: exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+    docs/technical-design.md:17 (line 5) names no check: a file under scripts/ or a lane scripts/lanes.mjs lists, in code
+
+--- L5: the lane that takes any scripts/ path for a check, on disk or not: scripts/principles.mjs with `const real = () => true;`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 1, 11 s)
+✔ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (77.107958ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (7298.815417ms)
+✔ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (351.872417ms)
+ℹ tests 3
+ℹ pass 2
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:25:1
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (7298.815417ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a line naming scripts/no-such-check.mjs (docs/technical-design.md:17: A planted sentence points at [its section](#prim-rules) and is held by `scripts/no-such-check.mjs`.): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+--- L6: the lane without the names-a-check rule: scripts/principles.mjs without its line `… fail(where, 'names no check: …');`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 1, 11.3 s)
+✔ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (77.183583ms)
+✔ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (7529.966292ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (296.0975ms)
+ℹ tests 3
+ℹ pass 2
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:38:1
+✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (296.0975ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a line naming no check (docs/technical-design.md:17: A planted sentence points at [its section](#prim-rules) and is held by nothing.): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+--- L7: the lane without the canvas rule: scripts/principles.mjs without its line `if (!linked) fail(…);`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs   (exit 1, 12.4 s)
+✔ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (20.40725ms)
+✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under (8974.126875ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs:18:1
+✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under (8974.126875ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a canvas reference whose "Conventions every primitive uses" (docs/canvas-primitives.md:7) has no link to the Principles section: exit 0, output:
+  design links and names: 175 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0 `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+--- L8: the lane whose findings name no place: scripts/principles.mjs with `const fail = (where, problem) => found.push(problem);`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs   (exit 1, 11.2 s)
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (7432.428209ms)
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (295.964584ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs:11:1
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (7432.428209ms)
+  AssertionError [ERR_ASSERTION]: the lane failed without naming the fifth line (docs/technical-design.md:17): exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+    has no link into the design
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs:23:1
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (295.964584ms)
+  AssertionError [ERR_ASSERTION]: the lane failed without naming the line of two sentences (docs/technical-design.md:17, line 5 of the section): exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+    holds 2 sentences; it holds 1
+
+--- L8: the lane whose findings name no place: scripts/principles.mjs with `const fail = (where, problem) => found.push(problem);`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 1, 11.1 s)
+✔ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (79.275792ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (7097.088333ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (305.106916ms)
+ℹ tests 3
+ℹ pass 1
+ℹ fail 2
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:25:1
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (7097.088333ms)
+  AssertionError [ERR_ASSERTION]: the lane failed without naming the line (docs/technical-design.md:17, line 5 of the section): exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 2 principles findings
+    names scripts/no-such-check.mjs, which isn't a file under scripts/
+    names no check: a file under scripts/ or a lane scripts/lanes.mjs lists, in code
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:38:1
+✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (305.106916ms)
+  AssertionError [ERR_ASSERTION]: the lane failed without naming the line (docs/technical-design.md:17, line 5 of the section): exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+    names no check: a file under scripts/ or a lane scripts/lanes.mjs lists, in code
+
+--- L9: the lane whose canvas finding names the file and not the heading: scripts/principles.mjs with `if (!linked) fail(CANVAS, 'the conventions don\'t open with a link to the design\'s Principles section');`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs   (exit 1, 12.3 s)
+✔ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (19.441ms)
+✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under (8915.915ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs:18:1
+✖ #2339.6eaafe21 criterion 4: a planted canvas reference without the link fails the design links lane, naming the heading it belongs under (8915.915ms)
+  AssertionError [ERR_ASSERTION]: the lane failed without naming the heading "Conventions every primitive uses" (docs/canvas-primitives.md:7): exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+    docs/canvas-primitives.md the conventions don't open with a link to the design's Principles section
+
+--- L10: the lane whose invariant finding names no invariant: scripts/principles.mjs with `else if (invariant && stated !== invariant.text) fail(DESIGN, 'the section and AGENTS.md don\'t word the same rules');`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs   (exit 1, 11.5 s)
+✔ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (9.088333ms)
+✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone fails the design links lane, naming the invariant (7832.446542ms)
+✖ #2339.a190c5fb criterion 2: the design edited alone fails the design links lane, naming the invariant (301.745125ms)
+ℹ tests 3
+ℹ pass 1
+ℹ fail 2
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs:21:1
+✖ #2339.a190c5fb criterion 2: AGENTS.md edited alone fails the design links lane, naming the invariant (7832.446542ms)
+  AssertionError [ERR_ASSERTION]: the lane failed without naming invariant 2 (AGENTS.md:10, docs/technical-design.md:14): exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+    docs/technical-design.md the section and AGENTS.md don't word the same rules
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs:38:1
+✖ #2339.a190c5fb criterion 2: the design edited alone fails the design links lane, naming the invariant (301.745125ms)
+  AssertionError [ERR_ASSERTION]: the lane failed without naming invariant 4 (AGENTS.md:12, docs/technical-design.md:16): exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+    docs/technical-design.md the section and AGENTS.md don't word the same rules
+
+--- L11: the lane that crashes on a Principles finding instead of printing FAIL: scripts/design-links.mjs with `const unprincipled = principles(); if (unprincipled.length) throw new Error('principles');`
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs   (exit 1, 12.9 s)
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (9018.492625ms)
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (408.677167ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs:11:1
+✖ #2339.2ae5a05d criterion 1: a planted section whose fifth line has no link into the design fails the design links lane, naming the line (9018.492625ms)
+  AssertionError [ERR_ASSERTION]: the lane exited 1 on a section whose fifth line has no link (docs/technical-design.md:17: A planted sentence is held by `scripts/lanes.mjs` and points at no section.) with no line starting FAIL, which is not a failure of the plant: exit 1, output:
+  file://<tmp>/deep-2339-redraft-snR6Nu/repo/scripts/design-links.mjs:74
+  const unprincipled = principles(); if (unprincipled.length) throw new Error('principles');
+                                                                    ^
+  Error: principles
+  Node.js v24.22.2
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac1-planted.test.mjs:23:1
+✖ #2339.2ae5a05d criterion 1: a planted line of two sentences fails the design links lane, naming it (408.677167ms)
+  AssertionError [ERR_ASSERTION]: the lane exited 1 on a line of two sentences (docs/technical-design.md:17: A planted sentence points at [its section](#prim-rules) and is held by `scripts/lanes.mjs`. This is its second sentence.) with no line starting FAIL, which is not a failure of the plant: exit 1, output:
+  file://<tmp>/deep-2339-redraft-snR6Nu/repo/scripts/design-links.mjs:74
+  const unprincipled = principles(); if (unprincipled.length) throw new Error('principles');
+                                                                    ^
+  Error: principles
+  Node.js v24.22.2
+
+--- X1: a tree that holds scripts/no-such-check.mjs, so the name the criterion plants is a script that exists
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 1, 10.4 s)
+✔ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (75.620792ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (6399.138583ms)
+✔ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (298.609208ms)
+ℹ tests 3
+ℹ pass 2
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:25:1
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (6399.138583ms)
+  AssertionError [ERR_ASSERTION]: the planted line doesn't name scripts/no-such-check.mjs alone, as a script the copy lacks: A planted sentence points at [its section](#prim-rules) and is held by `scripts/no-such-check.mjs`.
+  + actual - expected
+  +   existing: [
+  -   existing: [],
+  -   missing: [
+        'scripts/no-such-check.mjs'
+      ],
+  +   missing: []
+
+--- D1: the design edited alone: the section's third line reads "Agents cannot change checks or decisions."
+$ node --test --test-name-pattern='the section opens with the four invariants' <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs   (exit 1, 0.1 s)
+✖ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (9.35475ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs:11:1
+✖ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (9.35475ms)
+  AssertionError [ERR_ASSERTION]: line 3 of the section (docs/technical-design.md:15) doesn't hold invariant 3 word for word: AGENTS.md:11 words it "Agents can't change checks or decisions.", the section's line reads "Agents cannot change checks or decisions. ([The edit guard](#tests); `scripts/proof-guard.mjs`)"
+
+--- D2: AGENTS.md edited alone: invariant 1 reads "An agent's word is not evidence. Only check results are."
+$ node --test --test-name-pattern='the section opens with the four invariants' <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs   (exit 1, 0.1 s)
+✖ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (10.272792ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs:11:1
+✖ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (10.272792ms)
+  AssertionError [ERR_ASSERTION]: line 1 of the section (docs/technical-design.md:13) doesn't hold invariant 1 word for word: AGENTS.md:9 words it "An agent's word is not evidence. Only check results are.", the section's line reads "An agent's word is never evidence. Only check results are. ([How runs become one of five verdicts](#verdicts); the `verdict proofs` lane)"
+
+--- D3: a section that doesn't open with the invariants: lines 13 and 17 of the design swapped, so its fifth line comes first
+$ node --test --test-name-pattern='the section opens with the four invariants' <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs   (exit 1, 0.1 s)
+✖ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (11.71525ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs:11:1
+✖ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (11.71525ms)
+  AssertionError [ERR_ASSERTION]: line 1 of the section (docs/technical-design.md:13) doesn't hold invariant 1 word for word: AGENTS.md:9 words it "An agent's word is never evidence. Only check results are.", the section's line reads "Agents and plug-ins write data, not code, and a piece's logic runs only sandboxed. ([Data, not code](#prim-rules); the `canvas kit` lane)"
+
+--- C1: a control, not a wrong program: invariant 3 reworded the same way in both files ("Agents cannot change checks or decisions.")
+$ node --test --test-name-pattern='the section opens with the four invariants' <scratch tree>/tests/acceptance/2339/redraft-1876/ac2-invariants.test.mjs   (exit 0, 0.1 s)
+✔ #2339.a190c5fb criterion 2: the section opens with the four invariants, each word for word as AGENTS.md has it (9.220708ms)
+ℹ tests 1
+ℹ pass 1
+ℹ fail 0
+
+--- D4: a design whose last line names no check: `; `scripts/slots-check.mjs`)` taken out of line 22
+$ node --test <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 1, 11.1 s)
+✖ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (77.031ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (7343.259458ms)
+✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (142.647958ms)
+ℹ tests 3
+ℹ pass 0
+ℹ fail 3
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:12:1
+✖ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (77.031ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md:22 names no check that exists, a file under scripts/ or a lane scripts/lanes.mjs lists: - Every hub slot names its interface and the planted wrong fills its kit must fail. ([Hub slots](#composition))
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:25:1
+✖ #2339.b90141c9 criterion 3: a planted line naming scripts/no-such-check.mjs fails the design links lane, naming the line and the name (7343.259458ms)
+  Error: the unplanted scratch copy doesn't pass the lane "design links and names", so a failure after a plant would prove nothing: exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+    docs/technical-design.md:22 (line 10) names no check: a file under scripts/ or a lane scripts/lanes.mjs lists, in code
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:38:1
+✖ #2339.b90141c9 criterion 3: a planted line naming no check fails the design links lane, naming the line (142.647958ms)
+  Error: the unplanted scratch copy doesn't pass the lane "design links and names", so a failure after a plant would prove nothing: exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 1 principles findings
+    docs/technical-design.md:22 (line 10) names no check: a file under scripts/ or a lane scripts/lanes.mjs lists, in code
+
+--- D5: a design whose last line names a script that isn't there beside its own: `, `scripts/no-such-check.mjs`` added to line 22
+$ node --test --test-name-pattern='each line of the section names' <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs   (exit 1, 0.2 s)
+✖ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (85.568125ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac3-checks.test.mjs:12:1
+✖ #2339.b90141c9 criterion 3: each line of the section names at least one check that exists and none that doesn't (85.568125ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md:22 names scripts/no-such-check.mjs, which is not a file under scripts/
+
+--- D6: a canvas reference without the link: "The design's principles hold here; …" with no link
+$ node --test --test-name-pattern='opens with a link to the section' <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs   (exit 1, 0.1 s)
+✖ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (21.9345ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs:11:1
+✖ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (21.9345ms)
+  AssertionError [ERR_ASSERTION]: the first paragraph under "Conventions every primitive uses" (docs/canvas-primitives.md:7) holds no link to the design's Principles section (docs/technical-design.md#principles):
+  The design's principles hold here; these are the conventions every primitive shares.
+
+--- D7: a canvas reference whose link sits under the first subheading, "### Time and the flick", not in the opening
+$ node --test --test-name-pattern='opens with a link to the section' <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs   (exit 1, 0.1 s)
+✖ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (20.100666ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs:11:1
+✖ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (20.100666ms)
+  AssertionError [ERR_ASSERTION]: the first paragraph under "Conventions every primitive uses" (docs/canvas-primitives.md:7) holds no link to the design's Principles section (docs/technical-design.md#principles):
+  The design's principles hold here; these are the conventions every primitive shares.
+
+--- D8: a canvas reference whose opening links another section of the design: `./technical-design.md#scope`
+$ node --test --test-name-pattern='opens with a link to the section' <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs   (exit 1, 0.1 s)
+✖ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (19.191542ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ failing tests:
+test at <scratch tree>/tests/acceptance/2339/redraft-1876/ac4-canvas.test.mjs:11:1
+✖ #2339.6eaafe21 criterion 4: the canvas reference's "Conventions every primitive uses" opens with a link to the section (19.191542ms)
+  AssertionError [ERR_ASSERTION]: the first paragraph under "Conventions every primitive uses" (docs/canvas-primitives.md:7) holds no link to the design's Principles section (docs/technical-design.md#principles):
+  The design's [principles](./technical-design.md#scope) hold here; these are the conventions every primitive shares.
+
+## 5. Not run, and what couldn't be checked
+
+- tests/acceptance/2339/ac1-section.test.mjs and lane.live.test.mjs aren't part of this redraft and weren't run. No
+  run here reads the real open issues: every lane run is given an empty list.
+- scripts/affected.mjs wasn't run: it imports typescript from node_modules, which this checkout doesn't have. Each
+  file was run with plain `node --test`.
+- `node scripts/repo-rules.mjs` was run for what it says of this folder: `PASS secrets` (no home path or key-shaped
+  string in any file). Its checks that need cargo (deps, physics-build) were BLOCKED or failed for lack of cargo, and
+  say nothing of this folder.
+- `node scripts/wait-ratchet.mjs` names no file of this folder. It fails on the base for six findings in other files
+  (crates/deep-hook/tests/cli.rs, crates/deep-sandbox-wasmtime/tests/compile_once.rs, packages/asks/test/asks.test.ts,
+  packages/hub/test/start-budget.test.ts), which are the base's own.
+- The public text lane wasn't run: it reads the open issues. Its word rule, `findings` of scripts/studied-names.mjs,
+  was run over every line of this folder's seven files and found no studied name.
+- The tests weren't run on Linux, on a checkout with node_modules, or with the temp folder on another volume.
