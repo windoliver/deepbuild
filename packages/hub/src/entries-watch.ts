@@ -7,7 +7,7 @@ import { existsSync, readFileSync, statSync, watch, type FSWatcher } from 'node:
 import { join, resolve } from 'node:path';
 import { statKey, target, writeThrough } from './agent-files.js';
 import { claudeJson, claudeSettings, installed, readJson, restore, restoreServers, serversChanged, tampered } from './claude-settings.js';
-import { brokenIn, keepIntact, keptIntact, recordedHooks, withRecorded } from './codex-settings.js';
+import { brokenIn, keepIntact, keptIntact, leftAs, recordedHooks, withRecorded } from './codex-settings.js';
 import { FileWatch } from './file-watch.js';
 import type { Plant } from './plant.js';
 
@@ -64,13 +64,14 @@ const codexHooks = (root: string): Kept => ({
     return broken ?? [];
   },
   restore(file) {
-    const next = keptIntact(root, file) ?? withRecorded(root, bytesOf(file)?.toString());
+    const now = bytesOf(file);
+    const next = keptIntact(root, file, now) ?? withRecorded(root, now?.toString());
     if (next === undefined) return false;
     writeThrough(file, next);
     return true;
   },
-  // What you have since changed in the file must not be lost with it: after this, ours go back one by one.
-  stays: (file) => keepIntact(root, file, undefined),
+  // What you change in the file after this must not be lost to the bytes kept before it: then ours go back one by one.
+  stays: (file) => leftAs(root, file, bytesOf(file)),
   // Setup's record says which home the file is in; a link is watched where it points, and by its own folder for being replaced.
   watched() {
     const file = recordedHooks(root);

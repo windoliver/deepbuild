@@ -349,21 +349,33 @@ export function brokenIn(root: string, text: string | undefined): string[] | und
   const value = hooksOf(text);
   return value && recorded(root).filter(({ event, command, entry }) => !entriesFor(value.hooks, event).some((h) => h.command === command && JSON.stringify(h) === JSON.stringify(entry))).map(({ event, command }) => `${event} ${command}`);
 }
+/** What the hub kept of `file`: its bytes when it last held every entry of ours, and the bytes it was left as since, if a change to ours was left in it. */
+const intactOf = (root: string, file: string): { bytes: string; left?: unknown } | undefined => {
+  const kept = readJson(intactFile(root));
+  return kept?.file === file && typeof kept.bytes === 'string' ? { bytes: kept.bytes, left: kept.left } : undefined;
+};
+const base64 = (bytes: Buffer | undefined): string => bytes?.toString('base64') ?? '';
 /**
  * Keeps the hooks file's bytes while it holds every entry of ours as setup wrote it. Codex keeps trust per entry, by
  * its place in the file and a hash of it, so what goes back is the file whole, as it was: byte for byte, with Codex
- * asking for nothing again; and a hub that starts on a changed file still has it. With no `bytes`, what was kept goes:
- * the file was left holding less of ours, as yours, so what was kept is no longer the file before its next change.
+ * asking for nothing again; and a hub that starts on a changed file still has it.
  */
-export function keepIntact(root: string, file: string, bytes: Buffer | undefined): void {
-  if (!bytes) return rmSync(intactFile(root), { force: true });
-  const [kept, text] = [readJson(intactFile(root)), bytes.toString('base64')];
-  if (kept?.file !== file || kept.bytes !== text) writeThrough(intactFile(root), `${JSON.stringify({ file, bytes: text })}\n`);
+export function keepIntact(root: string, file: string, bytes: Buffer): void {
+  const kept = intactOf(root, file);
+  if (kept?.bytes !== base64(bytes) || kept.left !== undefined) writeThrough(intactFile(root), `${JSON.stringify({ file, bytes: base64(bytes) })}\n`);
 }
-/** Those bytes, for the same file, while they hold every entry of ours as setup's record has them now. */
-export function keptIntact(root: string, file: string): Buffer | undefined {
-  const kept = readJson(intactFile(root));
-  if (kept?.file !== file || typeof kept.bytes !== 'string') return undefined;
+/** A change to ours was left in the file, as yours: what was kept is the file before `left`, its bytes at the first such change, and before nothing you change after. */
+export function leftAs(root: string, file: string, left: Buffer | undefined): void {
+  const kept = intactOf(root, file);
+  if (kept && kept.left === undefined) writeThrough(intactFile(root), `${JSON.stringify({ file, bytes: kept.bytes, left: base64(left) })}\n`);
+}
+/**
+ * The kept bytes, to put back over the file as it is `now`: while they hold every entry of ours as setup's record has
+ * them, and the file is the one they were kept of, changed only by what is being put back.
+ */
+export function keptIntact(root: string, file: string, now: Buffer | undefined): Buffer | undefined {
+  const kept = intactOf(root, file);
+  if (!kept || (kept.left !== undefined && kept.left !== base64(now))) return undefined;
   const bytes = Buffer.from(kept.bytes, 'base64');
   return brokenIn(root, bytes.toString())?.length === 0 ? bytes : undefined;
 }

@@ -10,7 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { writeThrough } from '../src/agent-files.js';
 import { codexReadings, heartbeatsGone, rowReadings, standingReadings } from '../src/codex-loops.js';
-import { brokenIn, keepIntact, keptIntact, readTrust, recordEntries, tomlTables, withEntries, withoutServer, withRecorded, withServer } from '../src/codex-settings.js';
+import { brokenIn, keepIntact, keptIntact, leftAs, readTrust, recordEntries, tomlTables, withEntries, withoutServer, withRecorded, withServer } from '../src/codex-settings.js';
 import { openCheckouts, type Checkouts, type CheckoutsOptions, type RecordedRun } from '@deepbuild/gate';
 import { GateRunner } from '../src/gate-runner.js';
 import { answerWaitMs } from '../src/mcp.js';
@@ -285,17 +285,24 @@ describe('our entries put back into Codex\'s hooks.json (#1867)', () => {
   });
   it('keeps the file\'s bytes for that file alone, and gives them back only while they hold what setup recorded', () => {
     const { root, file, text } = set();
-    expect(keptIntact(root, file)).toBeUndefined();
+    const now = Buffer.from('{}');
+    expect(keptIntact(root, file, now)).toBeUndefined();
     keepIntact(root, file, Buffer.from(text));
-    expect(keptIntact(root, file)?.toString()).toBe(text);
-    expect(keptIntact(root, join(root, 'elsewhere', 'hooks.json'))).toBeUndefined();
+    expect(keptIntact(root, file, now)?.toString()).toBe(text);
+    expect(keptIntact(root, join(root, 'elsewhere', 'hooks.json'), now)).toBeUndefined();
     expect(statSync(join(root, 'codex-hooks.intact.json')).mode & 0o777).toBe(0o600);
-    // A change to ours left in the file as yours: what was kept goes, and comes back with a file that holds ours again.
-    keepIntact(root, file, undefined);
-    expect(keptIntact(root, file)).toBeUndefined();
+    // A change to ours left in the file as yours: what was kept goes back over those bytes alone, never over what you
+    // changed after them; a file that holds ours again is kept afresh.
+    const yours = Buffer.from(edited(text, (hooks) => { hooks.Stop!.pop(); }));
+    leftAs(root, file, yours);
+    leftAs(root, file, Buffer.from(`${yours.toString()} `));
+    expect(keptIntact(root, file, yours)?.toString()).toBe(text);
+    expect(keptIntact(root, file, Buffer.from(`${yours.toString()} `))).toBeUndefined();
+    expect(keptIntact(root, file, undefined)).toBeUndefined();
     keepIntact(root, file, Buffer.from(text));
+    expect(keptIntact(root, file, now)?.toString()).toBe(text);
     // Setup records other entries (an update that moved deep-hook): the bytes kept before it are no longer ours to put back.
     writeFileSync(join(root, 'codex-hooks.json'), readFileSync(join(root, 'codex-hooks.json'), 'utf8').replaceAll('/opt/deep-hook', '/new/deep-hook'));
-    expect(keptIntact(root, file)).toBeUndefined();
+    expect(keptIntact(root, file, now)).toBeUndefined();
   });
 });
