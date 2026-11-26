@@ -148,6 +148,8 @@ const FORM = /^(?:exact|glob|prefix|pool\(([1-9][0-9]*)\))$/;
  * all but one slot, so the last is kept for a held stop's fast-lane checks.
  */
 export const SLOW_SLOT = 'slow';
+/** How many of a `cpu.slot` pool's `n` slots that key may hold at once. */
+export const slowSlots = (n: number): number => (n > 1 ? n - 1 : n);
 /** The MB of a host's memory `mem` leaves out of its pool: 4 GiB, drafted (#3218). */
 export const MEM_KEPT_MB = 4096;
 /** The kinds a table with a fixed list of resources leases: the planted wrong program of AC4. */
@@ -416,7 +418,7 @@ class Table implements LeaseTable {
         return { status: 'refused', reason: 'pool', holders: pool, free, message: `the pool ${where} is full for ${units}: ${used} of ${kind.n} held, ${free} free, by ${names(pool)}` };
       }
       const slow = pool.filter((l) => l.resource.key === SLOW_SLOT);
-      if (kind.name === 'cpu.slot' && resource.key === SLOW_SLOT && kind.n > 1 && sum(slow) + units > kind.n - 1 && this.plant !== 'fills-every-slot') {
+      if (kind.name === 'cpu.slot' && resource.key === SLOW_SLOT && sum(slow) + units > slowSlots(kind.n) && this.plant !== 'fills-every-slot') {
         return { status: 'refused', reason: 'pool', holders: slow, free: Math.max(0, kind.n - used), message: `the pool ${where} keeps its last slot for a held stop's fast-lane checks: slow work holds ${sum(slow)} of ${kind.n}, by ${names(slow)}` };
       }
     } else {
