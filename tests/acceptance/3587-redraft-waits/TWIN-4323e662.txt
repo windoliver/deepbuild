@@ -1,0 +1,55 @@
+# Twin fractional-timeout (tests/acceptance/3587-redraft-waits/twins/fractional-timeout/lines.json) laid over base b48a47db7 + 89d5ed924, 2026-11-26T23:20:57Z, node v24.22.0
+# command: node --test --test-concurrency=1 --test-name-pattern '#3587.4323e662' tests/acceptance/3587-redraft-waits/waits.test.mjs
+# load at start:15:20  up 6 days, 19:47, 3 users, load averages: 10.73 13.68 19.24
+# load at end:15:20  up 6 days, 19:47, 3 users, load averages: 10.73 13.68 19.24
+
+✖ #3587.4323e662 a budget whose allowance is not whole milliseconds (margin 0.1) still runs and times the checks: no BLOCKED check workload, and checks that pass read as passed (469.27775ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 564.900167
+
+✖ failing tests:
+
+test at tests/acceptance/3587-redraft-waits/waits.test.mjs:108:1
+✖ #3587.4323e662 a budget whose allowance is not whole milliseconds (margin 0.1) still runs and times the checks: no BLOCKED check workload, and checks that pass read as passed (469.27775ms)
+  AssertionError [ERR_ASSERTION]: a BLOCKED check workload line for a fractional allowance
+  --- preflight output ---
+  Warming builds (not timed)
+  BLOCKED check workload: The value of "timeout" is out of range. It must be an unsigned integer. Received 3301.1000000000004
+    Fix: Install /usr/bin/time (GNU time on Linux) and restore the check runner.
+  RUN perf
+  BLOCKED perf: the check lanes did not pass, so their workload was not measured
+    Fix: Repair the failing lanes above; perf runs once they pass.
+  SKIP copy: it spends plan usage, so only the release preflight runs it
+  SKIP closed issues: it spends plan usage, so only the release preflight runs it
+  SKIP release budgets: it spends plan usage, so only the release preflight runs it
+  SKIP hub churn: it spends plan usage, so only the release preflight runs it
+  SKIP hub sessions: it spends plan usage, so only the release preflight runs it
+  SKIP ecosystem corpus: it spends plan usage, so only the release preflight runs it
+  SKIP operator calibration: it spends plan usage, so only the release preflight runs it
+  SKIP spine checkpoint: it spends plan usage, so only the release preflight runs it
+  SKIP setup checkpoint: it spends plan usage, so only the release preflight runs it
+  SKIP done gate checkpoint: it spends plan usage, so only the release preflight runs it
+  SKIP risky calls checkpoint: it spends plan usage, so only the release preflight runs it
+  SKIP spine exit: it spends plan usage, so only the release preflight runs it
+  SKIP claude code adapter live: it spends plan usage, so only the release preflight runs it
+  SKIP parity suite release: it spends plan usage, so only the release preflight runs it
+  SKIP gpu validation: it spends plan usage, so only the release preflight runs it
+  Checks elapsed: 0.23 s (budget: <3.001 s); preflight elapsed: 0.23 s
+  --- end ---
+      at TestContext.<anonymous> (file://~/mac-runs/blind-3587w-twins/fractional-timeout/tests/acceptance/3587-redraft-waits/waits.test.mjs:114:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'Warming builds (not timed)\nBLOCKED check workload: The value of "timeout" is out of range. It must be an unsigned integer. Received 3301.1000000000004\n  Fix: Install /usr/bin/time (GNU time on Linux) and restore the check runner.\nRUN perf\nBLOCKED perf: the check lanes did not pass, so their workload was not measured\n  Fix: Repair the failing lanes above; perf runs once they pass.\nSKIP copy: it spends plan usage, so only the release preflight runs it\nSKIP closed issues: it spends plan usage, so only the release preflight runs it\nSKIP release budgets: it spends plan usage, so only the release preflight runs it\nSKIP hub churn: it spends plan usage, so only the release preflight runs it\nSKIP hub sessions: it spends plan usage, so only the release preflight runs it\nSKIP ecosystem corpus: it spends plan usage, so only the release preflight runs it\nSKIP operator calibration: it spends plan usage, so only the release preflight runs it\nSKIP spine checkpoint: it spends plan usage, so only the release preflight runs it\nSKIP setup checkpoint: it spends plan usage, so only the release preflight runs it\nSKIP done gate checkpoint: it spends plan usage, so only the release preflight runs it\nSKIP risky calls checkpoint: it spends plan usage, so only the release preflight runs it\nSKIP spine exit: it spends plan usage, so only the release preflight runs it\nSKIP claude code adapter live: it spends plan usage, so only the release preflight runs it\nSKIP parity suite release: it spends plan usage, so only the release preflight runs it\nSKIP gpu validation: it spends plan usage, so only the release preflight runs it\nChecks elapsed: 0.23 s (budget: <3.001 s); preflight elapsed: 0.23 s\n',
+    expected: /BLOCKED check workload/,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }
+

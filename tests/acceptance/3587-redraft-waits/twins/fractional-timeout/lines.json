@@ -1,0 +1,24 @@
+{
+  "scripts/preflight.mjs": [
+    {
+      "find": [
+        "    const { elapsedMs, cpuMs, peakBytes, instructions, status } = measureOnce([process.execPath, 'scripts/checks.mjs', ...args], root, true, undefined, false);"
+      ],
+      "wrong": [
+        "    // The planted wrong program: the allowance, the budget with its margin, goes to the measured run as its timeout as it is.",
+        "    const planted = JSON.parse(readFileSync(new URL('../benchmarks/budgets.json', import.meta.url), 'utf8')).preflight;",
+        "    const { elapsedMs, cpuMs, peakBytes, instructions, status } = measureOnce([process.execPath, 'scripts/checks.mjs', ...args], root, true, planted.limits.elapsedMs * (1 + planted.margin), false);"
+      ]
+    }
+  ],
+  "scripts/benchmark.mjs": [
+    {
+      "find": [
+        "      ? { cwd, env, stdio: ['ignore', 'inherit', 'inherit'] }"
+      ],
+      "wrong": [
+        "      ? { cwd, env, stdio: ['ignore', 'inherit', 'inherit'], timeout: timeoutMs }"
+      ]
+    }
+  ]
+}

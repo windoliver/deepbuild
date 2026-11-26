@@ -1,0 +1,15 @@
+{
+  "scripts/preflight.mjs": [
+    {
+      "find": [
+        "  console.log('Warming builds (not timed)');"
+      ],
+      "wrong": [
+        "  console.log('Warming builds (not timed)');",
+        "  // The planted wrong program: the checks and every process they started are stopped at the budget itself, from the",
+        "  // work's start, not at the budget with its margin.",
+        "  spawn(process.execPath, ['--input-type=module', '-e', `const { descendants, killTree } = await import(${JSON.stringify(new URL('./throttle.mjs', import.meta.url).href)}); setTimeout(() => killTree(descendants(${process.pid}).filter(({ pid }) => pid !== process.pid)), ${JSON.parse(readFileSync(new URL('../benchmarks/budgets.json', import.meta.url), 'utf8')).preflight.limits.elapsedMs});`], { detached: true, stdio: 'ignore' }).unref();"
+      ]
+    }
+  ]
+}
