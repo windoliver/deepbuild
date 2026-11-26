@@ -317,6 +317,30 @@ impl Player {
         Ok(())
     }
 
+    /// #1042: the readings the export recorded, the bundle's file `sha256` (`{handle: {value,
+    /// as_of}}`): what the piece's bound values show from its first frame.
+    pub fn recorded_readings(&mut self, sha256: &str) -> Result<(), JsValue> {
+        let bytes = (self.files.get(sha256))
+            .ok_or_else(|| fail(format!("the bundle holds no file {sha256}")))?;
+        let readings = serde_json::from_slice(bytes).map_err(fail)?;
+        if let Some(p) = self.played.as_mut() {
+            p.set_recorded(readings);
+        }
+        Ok(())
+    }
+
+    /// #1042: a value one of the piece's public sources gave the page, its value JSON, with its
+    /// as-of time in microseconds: the input track gains it as a reading at the first step not
+    /// yet run, and the entry it became is answered as JSON.
+    pub fn reading(&mut self, source: &str, value: &str, as_of: f64) -> Result<String, JsValue> {
+        let value: Value = serde_json::from_str(value).map_err(fail)?;
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        let p = self.played.as_mut().ok_or_else(|| fail("no piece plays"))?;
+        let entry = p.read(self.sealed, source, value, as_of as i64, &read);
+        entry.map(|e| e.to_string()).map_err(fail)
+    }
+
     /// The piece's saves as the page keeps them (Logic: saves): `{piece, slots, gives, takes,
     /// profile}` as JSON, the document's stable ID, the most slots its logic declares (0 for a
     /// piece with no saves), whether its logic gives a carry record (`carry`) or takes one
