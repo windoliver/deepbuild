@@ -65,7 +65,7 @@ it('a background job that fails is named in hub.health with its error, and clear
   const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
   const taste = askSources().find((row) => row.kind === 'taste')!.fixture.ask as Record<string, unknown>;
   const ask = ulid(now - 60_000);
-  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now - 60_000, data: { ...structuredClone(taste), deadline: now - 1000 } as never });
+  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 6, id: ask, kind: 'ask.created', ts: now - 60_000, data: { ...structuredClone(taste), deadline: now - 1000 } as never });
   await record.close();
   // The test VFS reads the ledger as one serialized image, as its last FULL commit left it.
   const image = new Database(join(root, 'ledger.db'));

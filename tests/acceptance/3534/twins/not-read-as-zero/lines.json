@@ -1,0 +1,12 @@
+{
+  "scripts/issue-time.mjs": [
+    {
+      "find": [
+        "  if (!prompts.length) return { unread: { issue, pr: pr.number, why: sessions.length ? 'its transcripts hold no prompt of a person before the merge' : 'no transcript holds its PR link or its head branch' } };"
+      ],
+      "wrong": [
+        "  if (!prompts.length) return { row: { issue, pr: pr.number, first_prompt: pr.mergedAt, merged: pr.mergedAt, minutes: 0, causes: Object.fromEntries(CAUSES.map((cause) => [cause, 0])), person: Object.fromEntries(PERSON.map((kind) => [kind, 0])), prompts: 0 }, hooks: [] };"
+      ]
+    }
+  ]
+}

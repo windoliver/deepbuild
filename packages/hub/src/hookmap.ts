@@ -412,6 +412,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       const reason = scrub(str(mapped.reason)).slice(0, 200);
       const said = kind === 'turn.interrupted' ? `you interrupted this turn${reason ? ` (${reason})` : ''}` : kind === 'subagent.start' ? `subagent ${str(payload.agent_id) || 'unknown'} (${str(mapped.type) || 'unknown'}) started` : `the context compacts (${str(mapped.trigger) || 'unknown'})`;
       meta.reading = `${request.event}: ${scrub(said)}`;
+      if (kind === 'turn.interrupted') meta.readingCode = 'interrupted';
       // An interrupted turn is no stop, whichever hook ended it (#3430): it takes the hook's own moment, as Codex's
       // Interrupt does, so nothing holds, judges or sends back into a turn you stopped.
       if (kind === 'turn.interrupted') Object.assign(meta, { interrupted: true, event: request.event });

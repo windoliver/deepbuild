@@ -1,0 +1,121 @@
+# #3356 acceptance suite at the base, 8c984adb9 (sources unmodified; tests/acceptance/3356 added), one run on
+# 2026-11-24:
+#   NO_COLOR=1 sh scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/3356 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+# Duration 994 s (refusal (a), two release builds, about 797 s of it). 1-minute load about 94 at the start and 34 at
+# the end (the machine was shared with other sessions). The lease ran the command unleased (no deep CLI here). The
+# checkout's path is written <checkout> below.
+#
+# Result: 4 tests, 4 fail, each at its assertion and for the expected reason. Nothing is BLOCKED or skipped.
+#   AC1 (#3356.8d8c3ce5), digest.test.ts: the kit over scene3d's current sources answers PASS at digest 919d7004...;
+#       the committed kit-ledger.json records scene3d at 68337736....
+#   AC1 (#3356.8d8c3ce5), live.test.ts: the release deep-show live refuses to seal (seal_refused, kit_failed,
+#       modules ["scene3d"], exit 2) instead of answering bad_input.
+#   AC2 (#3356.c602cb3f), refusal.test.ts (a): a release build embedding a ledger with scene3d at a digest no source
+#       has refuses (kit_failed, scene3d, exit 2) with the refusal on stdout and stderr empty.
+#   AC2 (#3356.c602cb3f), refusal.test.ts (b): the release build with --planted constraint_iterates_to_convergence
+#       refuses (entry_refused, motion, exit 2) with the refusal on stdout and stderr empty.
+# The last three lines are the run script's: the suite's exit status, the date, and the load averages at the end.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/3356 --no-file-parallelism --testTimeout=600000 --reporter=verbose` runs under the throttle's grant with no lease
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3356
+
+ × refusal.test.ts > #3356.c602cb3f when deep-show live refuses to seal, its stderr names the code and the module > #3356.c602cb3f a release build whose ledger records scene3d at a digest its sources don't have: deep-show live refuses to seal (kit_failed) and its stderr names seal_refused and scene3d 796865ms
+   → scene3d recorded at another digest: deep-show live's stderr isn't empty when it refuses to seal: exit 2; stdout: {"ok":false,"code":"seal_refused","reason":"kit_failed","modules":["scene3d"],"operators":[],"arrays":[],"what":"scene3d hasn't passed the canvas conformance kit at its digest","interface":"scene3d@1","implementations":["scene3d"]}
+; stderr: "": expected '' not to be '' // Object.is equality
+ × refusal.test.ts > #3356.c602cb3f when deep-show live refuses to seal, its stderr names the code and the module > #3356.c602cb3f the release build of the committed ledger with --planted constraint_iterates_to_convergence: deep-show live refuses to seal (motion's planted constraint solve) and its stderr names seal_refused and motion 3790ms
+   → motion with a planted constraint solve: deep-show live's stderr isn't empty when it refuses to seal: exit 2; stdout: {"ok":false,"code":"seal_refused","reason":"entry_refused","modules":["motion"],"operators":[],"arrays":[],"what":"`look_at` in `constraint@1` fails its kit: fixed_ops: its op count changes with its params, 82 then 84: it loops","registry":"constraint@1","entries":["look_at"],"rules":["fixed_ops"]}
+; stderr: "": expected '' not to be '' // Object.is equality
+ × digest.test.ts > #3356.8d8c3ce5 scene3d's ledger digest matches its sources > #3356.8d8c3ce5 the committed kit-ledger.json records scene3d as the kit canvas-kit.mjs runs finds it for scene3d's current sources: the same digest, verdict and parts 179989ms
+   → kit-ledger.json's scene3d digest is the one the kit computes for scene3d's sources (the kit's verdict there: PASS ): expected '683377360bf94ea1a0bf34a1047052495d2fd…' to be '919d7004d7721fa4bad7f9cc7ea22474d9f72…' // Object.is equality
+ × live.test.ts > #3356.8d8c3ce5 a release deep-show live starts > #3356.8d8c3ce5 the release deep-show live seals every module it holds, scene3d among them, and reads its first line: it answers bad_input to a line it can't read, exit 0, rather than refusing to seal 2827ms
+   → deep-show live doesn't refuse to seal: {"ok":false,"code":"seal_refused","reason":"kit_failed","modules":["scene3d"],"operators":[],"arrays":[],"what":"scene3d hasn't passed the canvas conformance kit at its digest","interface":"scene3d@1","implementations":["scene3d"]}: expected { ok: false, …(8) } to be undefined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  digest.test.ts > #3356.8d8c3ce5 scene3d's ledger digest matches its sources > #3356.8d8c3ce5 the committed kit-ledger.json records scene3d as the kit canvas-kit.mjs runs finds it for scene3d's current sources: the same digest, verdict and parts
+AssertionError: kit-ledger.json's scene3d digest is the one the kit computes for scene3d's sources (the kit's verdict there: PASS ): expected '683377360bf94ea1a0bf34a1047052495d2fd…' to be '919d7004d7721fa4bad7f9cc7ea22474d9f72…' // Object.is equality
+
+Expected: "919d7004d7721fa4bad7f9cc7ea22474d9f72e0d9cc3ad8b9f3de0b87647b793"
+Received: "683377360bf94ea1a0bf34a1047052495d2fd83f0f1a72eb00eb6fce21e8fab7"
+
+ ❯ digest.test.ts:32:161
+     30|     const committed = readLedger(LEDGER)[SCENE3D];
+     31|     expect(isObject(committed) ? committed['digest'] : committed,
+     32|       `kit-ledger.json's scene3d digest is the one the kit computes fo…
+       |                                                                                                                                                                 ^
+     33|     expect(same(committed, fresh), `kit-ledger.json records scene3d as…
+     34|   }, 3_000_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  live.test.ts > #3356.8d8c3ce5 a release deep-show live starts > #3356.8d8c3ce5 the release deep-show live seals every module it holds, scene3d among them, and reads its first line: it answers bad_input to a line it can't read, exit 0, rather than refusing to seal
+AssertionError: deep-show live doesn't refuse to seal: {"ok":false,"code":"seal_refused","reason":"kit_failed","modules":["scene3d"],"operators":[],"arrays":[],"what":"scene3d hasn't passed the canvas conformance kit at its digest","interface":"scene3d@1","implementations":["scene3d"]}: expected { ok: false, …(8) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "arrays": [],
+  "code": "seal_refused",
+  "implementations": [
+    "scene3d",
+  ],
+  "interface": "scene3d@1",
+  "modules": [
+    "scene3d",
+  ],
+  "ok": false,
+  "operators": [],
+  "reason": "kit_failed",
+  "what": "scene3d hasn't passed the canvas conformance kit at its digest",
+}
+
+ ❯ live.test.ts:20:98
+     18|     const said = `exit ${String(r.status)}; stdout: ${r.stdout.slice(0…
+     19|     const refusal = r.lines.find((l) => isObject(l) && l['code'] === '…
+     20|     expect(refusal, `deep-show live doesn't refuse to seal: ${refusal …
+       |                                                                                                  ^
+     21|     expect(r.status, `deep-show live exits 0 after answering its line:…
+     22|     expect(r.lines.length, `deep-show live answers its one line with o…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  refusal.test.ts > #3356.c602cb3f when deep-show live refuses to seal, its stderr names the code and the module > #3356.c602cb3f a release build whose ledger records scene3d at a digest its sources don't have: deep-show live refuses to seal (kit_failed) and its stderr names seal_refused and scene3d
+AssertionError: scene3d recorded at another digest: deep-show live's stderr isn't empty when it refuses to seal: exit 2; stdout: {"ok":false,"code":"seal_refused","reason":"kit_failed","modules":["scene3d"],"operators":[],"arrays":[],"what":"scene3d hasn't passed the canvas conformance kit at its digest","interface":"scene3d@1","implementations":["scene3d"]}
+; stderr: "": expected '' not to be '' // Object.is equality
+ ❯ refusedNaming refusal.test.ts:37:112
+     35|   expect(r.lines.some((l) => isObject(l) && l['code'] === 'bad_input')…
+     36|   expect(r.status, `${what}: deep-show live exits 2 on a refused seal:…
+     37|   expect(r.stderr.trim(), `${what}: deep-show live's stderr isn't empt…
+       |                                                                                                                ^
+     38|   expect(word(r.stderr, 'seal_refused'), `${what}: stderr names the co…
+     39|   for (const m of modules) expect(word(r.stderr, m), `${what}: stderr …
+ ❯ refusal.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  refusal.test.ts > #3356.c602cb3f when deep-show live refuses to seal, its stderr names the code and the module > #3356.c602cb3f the release build of the committed ledger with --planted constraint_iterates_to_convergence: deep-show live refuses to seal (motion's planted constraint solve) and its stderr names seal_refused and motion
+AssertionError: motion with a planted constraint solve: deep-show live's stderr isn't empty when it refuses to seal: exit 2; stdout: {"ok":false,"code":"seal_refused","reason":"entry_refused","modules":["motion"],"operators":[],"arrays":[],"what":"`look_at` in `constraint@1` fails its kit: fixed_ops: its op count changes with its params, 82 then 84: it loops","registry":"constraint@1","entries":["look_at"],"rules":["fixed_ops"]}
+; stderr: "": expected '' not to be '' // Object.is equality
+ ❯ refusedNaming refusal.test.ts:37:112
+     35|   expect(r.lines.some((l) => isObject(l) && l['code'] === 'bad_input')…
+     36|   expect(r.status, `${what}: deep-show live exits 2 on a refused seal:…
+     37|   expect(r.stderr.trim(), `${what}: deep-show live's stderr isn't empt…
+       |                                                                                                                ^
+     38|   expect(word(r.stderr, 'seal_refused'), `${what}: stderr names the co…
+     39|   for (const m of modules) expect(word(r.stderr, m), `${what}: stderr …
+ ❯ refusal.test.ts:64:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed (4)
+   Start at  02:39:04
+   Duration  994.15s (tests 100%)
+
+suite exit 1
+Tue Nov 24 02:55:39 PST 2026
+{ 33.93 45.20 112.44 }

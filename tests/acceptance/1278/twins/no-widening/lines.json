@@ -1,0 +1,8 @@
+{
+  "crates/deep-scene3d-render/src/scene3d.wgsl": [
+    {
+      "find": ["    let dn = dot(dpdx(n), dpdx(n)) + dot(dpdy(n), dpdy(n));"],
+      "wrong": ["    let dn = 0.0;"]
+    }
+  ]
+}
