@@ -1,8 +1,15 @@
 # Evidence for #2764: a Codex subagent's prompt starts no turn of a proceed's
 
-Criterion `#2764.d93a7447`: in a turn a proceed started, a Codex subagent's prompt followed by a call that deletes on a
+Criterion `#2764.f88db370` (the first blind suite named it `#2764.d93a7447`, which is no criterion of the issue): in a turn a proceed started, a Codex subagent's prompt followed by a call that deletes on a
 remote service holds the call with one authority ask naming the proceed; a planted query that counts a subagent's
 prompt lets the call run and fails, naming the call.
+
+**Superseded suite (2026-11-26).** The files below were recorded against the first blind suite, `tests/acceptance/2764/`,
+and the plant name `proceed-ends-at-subagent-prompt`. That suite's tag isn't the issue's criterion ID, so the trace lane
+refused Closes. It is retired in 3d196ac69, which lands only with the maintainer's tag. Its blind redraft,
+`tests/acceptance/2764-redraft/` (written at 914bd5f29 and named `#2764.f88db370`), takes its place. The plant is now
+`proceed-ends-at-child-prompt`, the redraft's name, with the same query. The redraft's own results come from the
+PR's bounded affected run and the before and trace lanes at the head; the PR comment lists them.
 
 | File | What it shows |
 | --- | --- |
