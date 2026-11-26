@@ -719,14 +719,17 @@ function crates(bay, paths) {
 
 /**
  * A pair claimed for `root`: one bay for the base and one for the change, each used in turn by the copies its role
- * makes and never by the other's. `{ refused }` says why the root gets no bay, `{ blocked }` that none came in time.
+ * makes and never by the other's. `{ refused }` says why the root gets no bay, `{ blocked }` that the line stalled.
  * The grant passes to the holder's descendants through DEEP_THROTTLE until `close`.
  */
 export function claimPair(root, print) {
   const refused = refusal(root);
   if (refused) return { refused };
-  const grant = acquire('bay-pair', { wait: 30 });
-  if (!grant) return { blocked: 'INCONCLUSIVE no grant: no bay pair came within 30 min' };
+  // The claim keeps its place while bay-pair grants change hands, and leaves the line once none has for 720 minutes, a
+  // hung holder's bound (#3590); DEEP_TEST_GRANT_STALL sets the bound in minutes, for tests.
+  const stall = Number(process.env.DEEP_TEST_GRANT_STALL ?? '720');
+  const grant = acquire('bay-pair', { stall });
+  if (!grant) return { blocked: `INCONCLUSIVE no grant: no bay pair changed hands within ${stall} min` };
   try {
     return new Pair(root, grant, print);
   } catch (error) {
@@ -944,7 +947,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2);
   }
   if (pair.blocked?.startsWith('INCONCLUSIVE')) {
-    say(`${pair.blocked}\n  Fix: Wait for the other sessions' proofs on this machine, then run again.`);
+    say(`${pair.blocked}\n  Fix: No pair changed hands for the whole bound, so a holder may be hung: check the bay-pair grants in the throttle's table, then run again.`);
     process.exit(3);
   }
   if (pair.blocked) {
