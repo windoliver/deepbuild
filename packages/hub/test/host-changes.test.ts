@@ -1,7 +1,8 @@
 // What a claim on a host changed (#3511), with the SSH link as the boundary: the script host-sessions.ts sends is run
 // here by `sh -s` in a real repo, as the host's shell runs it there, and the gate runner judges the claim on its read.
 import { execFileSync, spawn } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { deflateSync } from 'node:zlib';
@@ -79,8 +80,8 @@ describe('what a claim on a host changed (#3511)', () => {
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed package\.json, tests\/setup\.sh,/));
   }, 60_000);
 
-  it('a claim that changed only the code under test, or package.json outside its scripts, passes', async () => {
-    const v = await claimed({ base: BASE, head: { 'price.txt': '17.00\n', 'package.json': JSON.stringify({ name: 'cart', scripts: { test: 'sh tests/price_test.sh' } }) } });
+  it('a claim that changed only the code under test, or package.json outside its scripts, passes, an empty test file beside', async () => {
+    const v = await claimed({ base: { ...BASE, 'tests/__init__.py': '' }, head: { 'price.txt': '17.00\n', 'package.json': JSON.stringify({ name: 'cart', scripts: { test: 'sh tests/price_test.sh' } }) } });
     expect(v?.outcome, JSON.stringify(v?.reasons)).toBe('PASS');
   }, 60_000);
 
@@ -167,11 +168,28 @@ describe('what a claim on a host changed (#3511)', () => {
       writeFileSync(join(dir, 'package.json'), pkg('true'));
       forge(dir, git('rev-parse', 'HEAD:package.json'), 'blob', Buffer.from(pkg('true')));
     }, /holds no package\.json there that is the object its id names/],
+    ['the base\'s commit graph and test folder forged to name the edited tree', (git, dir) => {
+      writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED);
+      git('add', '-A');
+      const [real, edited, tests] = [git('rev-parse', 'HEAD^{tree}'), git('write-tree'), git('rev-parse', 'HEAD:tests')];
+      git('commit-graph', 'write', '--reachable');
+      const graph = join(dir, '.git', 'objects', 'info', 'commit-graph');
+      const body = Buffer.from(readFileSync(graph).subarray(0, -20).toString('hex').replace(real, edited), 'hex');
+      chmodSync(graph, 0o644);
+      writeFileSync(graph, Buffer.concat([body, createHash('sha1').update(body).digest()]));
+      forge(dir, tests, 'tree', execFileSync('git', ['cat-file', 'tree', git('rev-parse', `${edited}:tests`)], { cwd: dir }));
+    }, /or a tree it holds there is not the object its id names/],
   ];
   it.each(blinds)('a folder whose git is kept from showing what changed is no change set: %s', async (_how, blind, why) => {
     const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: blind });
     expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
     expect(v?.reasons).toContainEqual(expect.stringMatching(new RegExp(`price-approved counts as the agent's own: what the claim changed couldn't be read \\(on gpu-box, .*${why.source}`)));
+  }, 60_000);
+
+  it('a test file added beside one whose name differs only in case is named, though the folder\'s git ignores case', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n', 'tests/Price_test.sh': GUTTED }, there: (git) => { git('config', 'core.ignorecase', 'true'); } });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/Price_test\.sh, which it may load/));
   }, 60_000);
 
   it('a changed test file whose name git still quotes is no change set: nothing is known of it', async () => {
