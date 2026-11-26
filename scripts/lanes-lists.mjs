@@ -1609,3 +1609,7 @@ timed.push('tests/acceptance/2750/budgets.test.ts');
 // only; its blind redraft, which runs the merge base's program beside the checkout's, runs in its place.
 Object.assign(redrafted, { 'tests/acceptance/3461/once.test.ts': 'tests/acceptance/3461-redraft-once/' });
 byHand.push('tests/acceptance/3461/once.test.ts');
+
+// #3467's folder (blind) runs alone by its lane.json: each file draws on Metal and decodes on the hardware decoder.
+// players.test.ts judges #499's five players' frames a second on the real clock on a reference Mac.
+timed.push('tests/acceptance/3467/players.test.ts');
