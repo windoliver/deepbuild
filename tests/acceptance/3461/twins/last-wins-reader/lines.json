@@ -1,0 +1,12 @@
+{
+  "packages/cli/src/main.ts": [
+    {
+      "find": [
+        "} else if (givenTwice(args) !== undefined) {"
+      ],
+      "wrong": [
+        "} else if ((() => { for (let flag = givenTwice(args); flag !== undefined; flag = givenTwice(args)) args.splice(args.indexOf(flag), 2); return false; })()) {"
+      ]
+    }
+  ]
+}

@@ -21,6 +21,7 @@ pub fn readback_bytes(size: [u32; 2]) -> u64 {
     u64::from((size[0] * size[1]).div_ceil(GROUP).clamp(1, GROUPS)) * 20
 }
 
+deep_gpu::paired! { params: "exposure.wgsl", Query { floor: floor_at };
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Params {
@@ -32,6 +33,7 @@ struct Params {
     black: f32,
     floor: f32,
     weights: [f32; 4],
+}
 }
 
 /// The reduction's pipeline, built once per device.

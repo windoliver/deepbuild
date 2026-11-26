@@ -554,7 +554,18 @@ impl Hub<'_> {
         let mut refusals = blocking(&issues, &allowed, &shared.doc, &layer, &changed, planted);
         if !refusals.is_empty() {
             // #1801: a removed item that rows still name: its refusal lists every one of them.
-            let removed: Vec<&str> = patched.removed.iter().map(|(id, _)| id.as_str()).collect();
+            // #3379: so does a removed control a logic item still reads.
+            let removed: Vec<Name> = patched
+                .removed
+                .iter()
+                .map(|(id, _)| Name::Item(id.clone()))
+                .chain(
+                    entries
+                        .iter()
+                        .filter(|(map, _)| map == "controls")
+                        .map(|(_, id)| Name::Control(id.clone())),
+                )
+                .collect();
             name_referrers(
                 &mut refusals,
                 &shared.doc,
@@ -783,10 +794,11 @@ impl Hub<'_> {
         }
         let shared = &self.shared[doc];
         if let Some(state) = &self.scenario.state {
-            // The layers it changed: its items' layers before and after, and every layer whose
-            // entry in `layers` or whose other entries it changed.
+            // The layers it changed: its items' layers before and after (those it migrated
+            // included, which only `before` lists), and every layer whose entry in `layers` or
+            // whose other entries it changed.
             let mut layers: BTreeSet<String> = BTreeSet::new();
-            for id in &next.changed {
+            for id in next.changed.iter().chain(next.before.keys()) {
                 let now = shared.doc["items"][id]["layer"].as_str();
                 let was = next.before.get(id).and_then(|w| w.as_ref());
                 for l in [now, was.and_then(|w| w["layer"].as_str())]
@@ -808,10 +820,26 @@ impl Hub<'_> {
                     }
                 }
             }
+            let mut files: Vec<Vec<u8>> = layers
+                .iter()
+                .map(|layer| layer_file(doc, &shared.doc, &shared.owners, layer))
+                .collect();
+            // #1412: what no layer file holds, the document's own fields and the entries no
+            // layer owns, when it changed them.
+            let own_before = next
+                .envelope_before
+                .as_ref()
+                .map(|(fields, owners)| own_fields(fields, owners));
+            let own_now = shared
+                .doc
+                .as_object()
+                .map(|f| own_fields(f, &shared.owners));
+            if own_before.is_some_and(|was| own_now.as_ref() != Some(&was)) {
+                files.push(envelope_file(doc, own_now.unwrap_or_default()));
+            }
             let mut written = Vec::new();
-            for layer in &layers {
-                let bytes = layer_file(doc, &shared.doc, &shared.owners, layer);
-                match evidence::put(&state.join("layers"), &bytes) {
+            for bytes in &files {
+                match evidence::put(&state.join("layers"), bytes) {
                     Ok(sha) => written.push(sha),
                     Err(_) => return false,
                 }
@@ -823,11 +851,16 @@ impl Hub<'_> {
             let record = state.join("record.jsonl");
             let log_pos = fs::read_to_string(&record).map_or(0, |t| t.lines().count()) + 1;
             let writer = next.writer.as_ref().expect("a commit has a writer");
+            // #1412: the event carries the revision's hash, which a restart checks it against.
+            let hash = canonical_in(&shared.doc, &self.startup.sealed.kinds())
+                .map_or(String::new(), |c| c.sha256);
+            let _ = next.hash.set(hash.clone());
+            let thread = (writer.kind == WriterKind::Agent).then(|| writer.id.clone());
             let ts = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_millis() as u64);
             let event = json!({
-                "v": 1,
+                "v": 2,
                 "id": ulid_of(&format!("{doc}|{}|{patch}", next.rev)),
                 "kind": "doc.patched",
                 "subject": format!("doc:{doc}"),
@@ -842,6 +875,9 @@ impl Hub<'_> {
                     "patch": patch,
                     "writer": writer.kind.name(),
                     "achieved": achieved,
+                    "hash": hash,
+                    "layer": writer.layer_id(),
+                    "thread": thread,
                 },
                 "evidence": written,
             });
@@ -1011,6 +1047,21 @@ impl Hub<'_> {
             planted,
         ));
         issues.extend(carried(&result.issues, &last, planted));
+        // #3379: an ID the revision removes that rows still name, such as a control a logic item
+        // still reads: its refusal lists every one of them, as a patch's does (#1801).
+        // Each by the map it left, both when it left both.
+        let gone =
+            |map: &str, id: &str| was_doc[map].get(id).is_some() && doc[map].get(id).is_none();
+        let removed: Vec<Name> = show
+            .removes
+            .iter()
+            .flat_map(|id| {
+                let item = gone("items", id).then(|| Name::Item(id.clone()));
+                let control = gone("controls", id).then(|| Name::Control(id.clone()));
+                item.into_iter().chain(control)
+            })
+            .collect();
+        name_referrers(&mut issues, &doc, &removed, &self.startup.sealed, planted);
         issues.extend(foreign_writes(&doc, &owners, &layer));
         let mine = |id: &String| {
             ["bound_values", "status_bindings"]
@@ -1143,7 +1194,11 @@ impl Hub<'_> {
         let issues: Vec<Value> = shared.revs[k]
             .issues
             .iter()
-            .filter(|i| reader.is_none() || i.ids.iter().any(in_layer))
+            .filter(|i| {
+                reader.is_none()
+                    || i.ids.iter().any(in_layer)
+                    || shared.stopped.as_ref() == Some(*i)
+            })
             .map(Issue::to_json)
             .collect();
         let mut reply = Map::new();

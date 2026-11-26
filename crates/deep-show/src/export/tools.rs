@@ -206,6 +206,13 @@ impl Hub<'_> {
         tools
     }
 
+    /// #231: the first encode tool that registers `codec` and takes GPU surfaces, by its ID.
+    pub(crate) fn surface_tool(&self, codec: &str) -> Option<String> {
+        let tools = self.encode_tools();
+        let takes = |t: &&Tool| t.surface && t.codecs.iter().any(|c| c == codec);
+        tools.iter().find(takes).map(|t| t.id.clone())
+    }
+
     /// #518: an export that names a tool (`tool: name@version`) names one its brief pins
     /// (`brief: {tools}`), or it is refused before anything else is read.
     pub(super) fn pinned(&self, job: &Job) -> Result<(), Value> {

@@ -1360,7 +1360,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
-                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p)
+                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p) || packs::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -2894,6 +2894,13 @@ fn main() {
             }
             let _ = writeln!(out, "{line}");
             let _ = out.flush();
+            // #3356: stderr names the refusal too, so a caller that shows only stderr reads why.
+            eprintln!(
+                "deep-show: seal_refused ({}): modules [{}]: {}",
+                err.code,
+                err.modules.join(", "),
+                err.what
+            );
             std::process::exit(2);
         }
     };

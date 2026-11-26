@@ -1,0 +1,8 @@
+{
+  "packages/checks-command/src/index.ts": [
+    {
+      "find": ["      if (plant === 'exit-code-only') return done(code === 0 ? 'passed' : 'failed', { ...rest, mask }, ran);"],
+      "wrong": ["      if (cause === 'exit') return done(code === 0 ? 'passed' : 'failed', { ...rest, mask }, ran);"]
+    }
+  ]
+}

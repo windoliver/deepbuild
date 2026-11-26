@@ -670,7 +670,7 @@ export class HeavyQueue {
       const peak = used?.memory_peak_mb ?? null;
       const use = h.memory ? `; admitted on ${h.memory.mb} MB (${h.memory.on === 'declared' ? 'its entry' : 'its class'}), peaked at ${peak === null ? 'an unread' : `${peak} MB`}${used?.cpu_s != null ? ` with ${used.cpu_s} CPU s` : ''}` : '';
       const reading = `deep lease ran \`${h.command}\` for ${span(this.o.now() - h.started)}${waited ? ` after waiting ${waited}` : ' with no wait'}; load ${(h.load ?? 0).toFixed(1)} on ${availableParallelism()} cores when it started${use}`;
-      await this.o.append('session.reading', 1, { reading }, undefined, h.session).catch(() => undefined);
+      await this.o.append('session.reading', 2, { reading, code: 'other' }, undefined, h.session).catch(() => undefined);
     }
     return released;
   }

@@ -5,13 +5,15 @@
 // shows each control of a file it ran failed at the line written for it. In a file that focuses tests its control is
 // focused too, so it runs; one a filter other than the command's own left out can't hold, and the run can't pass (#2081).
 // Controls are never tests of the check: left out of its counts, failures and listing, and the file is put back as it
-// was once the run ends.
+// was once the run ends. Nor is a control's failure the tool's: a run that fails nothing else exits 0, so a step chained
+// after it runs and any failing exit is the run's own. node:test's control is a todo test, whose failure the tool reports
+// and doesn't count; Vitest counts its own as passed once the runner's reporter has its failure (vitest-reporter.mjs).
 import { randomBytes } from 'node:crypto';
 import { chmodSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Failure } from '@deepbuild/conformance';
 import { focusesTests, type Listed } from './listing.js';
-import type { Ran } from './report.js';
+import { CONTROL, isControl, type Ran } from './report.js';
 
 /** Writes a file whose approved bytes the hub keeps read-only, putting its mode back after. */
 function rewrite(path: string, text: string): void {
@@ -20,8 +22,6 @@ function rewrite(path: string, text: string): void {
   try { writeFileSync(path, text); } finally { chmodSync(path, mode); }
 }
 
-/** Every control's name starts so, whichever run drew it: a run that shares its checkout leaves its own out too. */
-const CONTROL = 'deepbuild control ';
 /** The words a run's evidence and its check's reason carry when a control didn't fail where it was written. */
 const UNRECORDED = "the report can't record a failure";
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]s$/;
@@ -34,7 +34,9 @@ export interface Control extends Listed { block: string }
 const queue = new Map<string, Promise<unknown>>();
 function serial<T>(key: string, fn: () => T | Promise<T>): Promise<T> {
   const next = (queue.get(key) ?? Promise.resolve()).then(fn, fn);
-  queue.set(key, next.catch(() => undefined));
+  const tail = next.then(() => undefined, () => undefined);
+  queue.set(key, tail);
+  void tail.then(() => { if (queue.get(key) === tail) queue.delete(key); });
   return next;
 }
 
@@ -50,20 +52,21 @@ function testFiles(root: string, dir = root, out: string[] = []): string[] {
 
 /** The control block for a file, by the tool and module form its own text uses, and whether the tool is node:test; null for a file of another tool. Its names carry the run's draw, so two runs' controls in one file never clash. */
 async function blockFor(text: string, file: string, name: string, draw: string): Promise<{ block: string; node: boolean } | null> {
-  const esm = /^\s*(import|export)\s/m.test(text);
   const n = JSON.stringify(name);
-  const [t, e] = [`__deepControl${draw}`, `__deepCheck${draw}`];
+  const [d, t, e] = [`__deepSuite${draw}`, `__deepControl${draw}`, `__deepCheck${draw}`];
   if (/['"]vitest['"]/.test(text)) {
     // The listing reads the file as planted, so it sees in this focus one the source states as `{ only: true }`.
     const only = (await focusesTests(text, file)) ? '.only' : '';
-    return { node: false, block: esm ? `\nimport { test as ${t}, expect as ${e} } from 'vitest';\n${t}${only}(${n}, () => { ${e}(0).toBe(1); });\n`
-      : `\nrequire('vitest').test${only}(${n}, () => { require('vitest').expect(0).toBe(1); });\n` };
+    // Vitest can't be required, and takes an import in a CommonJS file too.
+    return { node: false, block: `\nimport { test as ${t}, expect as ${e} } from 'vitest';\n${t}${only}(${n}, () => { ${e}(0).toBe(1); });\n` };
   }
   if (/['"]node:test['"]/.test(text)) {
+    const esm = /^\s*(import|export)\s/m.test(text);
     // node:test runs focused tests alone only under --test-only, which a script the command runs may give it.
     const only = "{ only: process.execArgv.includes('--test-only') }";
-    return { node: true, block: esm ? `\nimport ${t} from 'node:test';\nimport ${e} from 'node:assert';\n${t}(${n}, ${only}, () => { ${e}.strictEqual(0, 1); });\n`
-      : `\nrequire('node:test')(${n}, ${only}, () => { require('node:assert').strictEqual(0, 1); });\n` };
+    // In a suite of its own: node:test takes a todo test that fails at the top of a file as why the file's process failed.
+    return { node: true, block: esm ? `\nimport { describe as ${d}, test as ${t} } from 'node:test';\nimport ${e} from 'node:assert';\n${d}(${n}, ${only}, () => { ${t}(${n}, { todo: true }, () => { ${e}.strictEqual(0, 1); }); });\n`
+      : `\nrequire('node:test').describe(${n}, ${only}, () => { require('node:test').test(${n}, { todo: true }, () => { require('node:assert').strictEqual(0, 1); }); });\n` };
   }
   return null;
 }
@@ -84,7 +87,7 @@ export function plantControls(checkout: string): Promise<Control[]> {
       // The control's assertion is the block's last line, after the file's lines and the blank one the block opens with.
       const line = body.split('\n').length - 1 + block.split('\n').length - 1;
       rewrite(path, `${body}${block}`);
-      out.push({ test: name, file, line, tagged: false, block, ...(node ? { names: [name] } : {}) });
+      out.push({ test: name, file, line, tagged: false, block, ...(node ? { names: [name, name] } : {}) });
     }
     return out;
   });
@@ -125,4 +128,4 @@ export function unheld(controls: Control[], ran: Ran[], failures: Failure[], fil
   }
   return out;
 }
-export const isControl = (test: string): boolean => test.includes(CONTROL);
+export { isControl };

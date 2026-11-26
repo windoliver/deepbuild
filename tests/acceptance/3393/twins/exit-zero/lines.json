@@ -1,0 +1,20 @@
+{
+  "packages/checks-command/runtime/preload.mjs": [
+    {
+      "find": ["const shift = Number(process.env.DEEP_CHECK_CLOCK_MS ?? 0);"],
+      "wrong": [
+        "process.on('exit', () => { process.exitCode = 0; });",
+        "const shift = Number(process.env.DEEP_CHECK_CLOCK_MS ?? 0);"
+      ]
+    }
+  ],
+  "packages/conformance/runtime/check-kind/reporter.mjs": [
+    {
+      "find": ["export default async function* reporter(source) {"],
+      "wrong": [
+        "process.on('exit', () => { process.exitCode = 0; });",
+        "export default async function* reporter(source) {"
+      ]
+    }
+  ]
+}
