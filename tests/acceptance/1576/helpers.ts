@@ -18,6 +18,7 @@ import {
   asApp, asCli, Confirmer, confirmEnv, Conn, installedRoot, makeHome, own, REPO, result, sendHook, sleep, startHub, stopHub,
   tempDir, tokenOf, ulid, type Hub, type Line,
 } from '../34/helpers.ts';
+import { withDeclared } from '../declared.ts';
 
 export { asApp, asCli, cleanup, deep, result, type Hub, type Line } from '../34/helpers.ts';
 export { shared } from '../16/helpers.ts';
@@ -68,7 +69,7 @@ export async function seedRecord(root: string, o: { sessions: number; live: numb
   mkdirSync(root, { recursive: true, mode: 0o700 });
   let now = Date.now() - 6 * 3_600_000;
   const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
-  const asks = await openAsks({ record, now: () => now, deliver: () => undefined });
+  const asks = withDeclared(await openAsks({ record, now: () => now, deliver: () => undefined }));
   const source = askSources().find((r) => r.source === 'deep_ask.choice')!;
   const ask = (n: number, deadline: number): Line => ({
     ...structuredClone(source.fixture.ask as Line), question: `Keep the store of item ${six(n)} on SQLite or plain files?`, key: sha256(`#1576 ${n}`), deadline,

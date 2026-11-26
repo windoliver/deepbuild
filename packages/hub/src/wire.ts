@@ -134,6 +134,8 @@ export interface HookMeta {
   blockedBy?: string[];
   /** What a hook said beside its turn, for the core to append as a session.reading (#39). */
   reading?: string;
+  /** The reading's code (#1456): what it is, which its session's state reads. */
+  readingCode?: ReadingCode;
   /** The hook ends a turn you interrupted, its facts' turn.interrupted (#39, #3430): no stop, no claim. */
   interrupted?: boolean;
   /** A reading naming a payload value the facts don't list (#3430), for the core to record the hook unverified. */
@@ -244,6 +246,7 @@ export type Parsed =
   | { kind: 'refused'; id: string | null; error: Refusal };
 
 import type { Plant } from './plant.js';
+import type { ReadingCode } from './reading-codes.js';
 export { activePlant, plantOf, type Plant } from './plant.js';
 
 /**
