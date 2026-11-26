@@ -1,0 +1,324 @@
+The #3467 suite run at the base, recorded by the blind job (README) from the caller's logs. This job started no
+binary and no test: the caller built the base, ran each file once, and ran two files once more after this job's
+corrections. Every result below is from its logs (one for the build, one for each run of a file), trimmed to each
+test's line and its failing assertion, with the checkout's root written <checkout>. What the logs don't hold is
+marked as the caller's reading.
+
+Base: a1ef97760cbcc9935b8fdadd4a7bef586969ef4d (main after #3457), with nothing changed but tests/acceptance/3467/:
+as this job first wrote it at the first runs, and with README.md and judges.ts corrected (findings 1 to 3) at the
+second. Built there once, on Nov 25, 2026, 14:30:03 to 14:36:13 local (load 22.18 21.55 21.81 at its start):
+$ CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -j 8 --bin deep-canvas-render --bin deep-show
+    Finished `dev` profile [unoptimized] target(s) in 6m 07s
+deep-canvas-render sha256 718dc9ebbb7856f5a87cf803676a63e00bc67680f13c0e0ea8e07410d4841fe7
+deep-show sha256 e543ad451d5e2dad0fac8dbf84f7be361f8cb1b20faba6550479d55be5785289
+
+First runs: each file once, one at a time, the first started at 14:40:24 and the last at 14:41:46, in the order of
+the blocks below, each under `node scripts/throttle.mjs test --wait 60 --`, by the command the README gave it then:
+$ DEEP_BIN_DIR="$PWD/target/debug" NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3467 --no-file-parallelism <file>
+Machine at these runs, the caller's reading (no log of them prints it): a Mac17,10 (M5 Max, 64 GB), one of the
+reference Macs, on mains power, Low Power Mode off, the 1-minute load 22 to 48 on 18 cores.
+
+Second runs: the two files the findings named, each once, both under one `node scripts/throttle.mjs timed` grant (the
+caller's reading: the machine drained, and the grant came at 15:53:51). Each of these two logs starts with three
+lines of the caller's runner (the time, the checkout and its commit, the 1-, 5- and 15-minute load and the machine's
+state; the SHA-256 of deep-canvas-render, the build's above; the command) and ends with one (the exit code, the time,
+the load, the state):
+- players.test.ts, 15:53:51 to 15:54:49, by its command with `--reporter=default` added, as the README offers. Load
+  17.51 41.71 55.57 before and 12.27 36.16 52.63 after; `Mac17,10 power ac lowPowerMode false thermal nominal` at
+  both ends. The 1-minute load is under the 18 cores at both.
+- forward.test.ts, 15:55:48 to 15:56:02, by the corrected command (block 1). Load 20.82 34.08 50.72 before and 21.27
+  33.56 50.25 after, the same state at both ends. This file judges counts and no timing, so its load decides nothing.
+At the second runs the folder's other files were as they are now. The caller says the runs used the suite at the
+SHA-256 values this job reads after them (judges.ts 8e933a1afcc23b22b38816febc24d16d03a353ea8b5face0bf8d066da5a13d9e,
+README.md a3b3a4b16ac6b443b8b3c11928b637695acf89a7f95a51e01d0d7168b7842e33), and none of those files was written
+after 15:01:22. No log prints a suite file's SHA-256.
+
+Vitest v5.0.5, root <checkout>/tests/acceptance/3467. Started by an agent it takes its `minimal` reporter: a failed
+test's line, what it printed and its failure, and nothing of a passing test. Every log but the second
+players.test.ts.log has that shape. That one is the `default` reporter's: the file's line, what each test printed,
+and a passing test's own line only when the test took over 300 ms.
+
+| File | Run | Exit, time (the caller's runner) | Test files | Tests | Is it the result that stands? |
+|---|---|---|---|---|---|
+| forward.test.ts | first, 14:40:24 | 1, 20 s | 2 failed (2) | 5 failed (5): its own 3 and jump-forward.test.ts's 2 (finding 1) | no: the command ran two files |
+| forward.test.ts | second, 15:55:48 | 1, 14 s | 1 failed (1) | 3 failed (3) | yes |
+| jumps.test.ts | first | 1, 11 s | 1 failed (1) | 2 failed (2) | yes |
+| jump-forward.test.ts | first | 1, 2 s | 1 failed (1) | 2 failed (2) | yes |
+| forward-and-back.test.ts | first | 1, 1 s | 1 failed (1) | 2 failed (2) | yes |
+| bytes.test.ts | first | 1, 50 s | 1 failed (1) | 2 failed (2) | yes |
+| players.test.ts | first, 14:41:46 | 0, 58 s | 1 passed (1) | 2 passed (2) | no: the timing was judged under load (finding 3) |
+| players.test.ts | second, 15:53:51 | 0, 58 s | 1 passed (1) | 2 passed (2) | yes |
+
+== Each test's result at the base, and whether it stands
+
+All 13 stand: 11 fail and 2 pass, as each should.
+
+ 1. forward.test.ts, AC1 on the real clock (`idle`): FAILS. Second run; the first held the same failure word for
+    word. Stands: it fails at its own assertion, naming the field `samples` that the base's 250 `decodes` rows don't
+    hold, which is the reason the criterion's second sentence gives.
+ 2. forward.test.ts, AC1 stepped through (`session`): FAILS. Second run, as the first. Stands: at its own assertion;
+    the base's `session` answers no `players` block, so no `decodes` row holds `samples`.
+ 3. forward.test.ts, AC1 planted `keeps_base_start_rule`: FAILS. Second run, as the first. Stands: at its first
+    assertion, that the planted worker ran; the base's `session` answers `bad_input` to the name. It can't fail by
+    the sum at the base, where the worker can't be built (README: Planted workers).
+ 4. jumps.test.ts, AC2 at 200 seeded times: FAILS. First run. Stands: at its own assertion; no `players` block, so
+    no `shown` row names the frame on screen.
+ 5. jumps.test.ts, AC2 planted `answers_picture_kept_for_another`: FAILS. First run. Stands: `bad_input`, as 3.
+ 6. jump-forward.test.ts, AC3 the jump from frame 30 to frame 1,515: FAILS. First run, its own, and the same again
+    inside the first forward.test.ts run. Stands: at its own assertion; no `players` block, so no `samples`.
+ 7. jump-forward.test.ts, AC3 planted `keeps_base_start_rule`: FAILS. First run. Stands: `bad_input`, as 3.
+ 8. forward-and-back.test.ts, AC4 forward and a jump back: FAILS. First run. Stands: at its own assertion; no
+    `players` block, so no `samples`.
+ 9. forward-and-back.test.ts, AC4 planted `starts_every_request_at_key_frame`: FAILS. First run. Stands:
+    `bad_input`, as 3.
+10. bytes.test.ts, AC5 played through: FAILS. First run. Stands: at its own assertion; no `players` block, so no
+    `frame_bytes`.
+11. bytes.test.ts, AC5 planted `keeps_every_picture`: FAILS. First run. Stands: `bad_input`, as 3.
+12. players.test.ts, AC6 allocations: PASSES. Second run, as the first. Stands: behaviour the base has and the change
+    must keep; a count, judged on any Mac at any load.
+13. players.test.ts, AC6 frames shown and dropped: PASSES. Second run. Stands: behaviour the base has and the change
+    must keep, judged this time where a timing counts: on a fit reference Mac, at a 1-minute load of 17.51 before
+    the run and 12.27 after it on 18 cores, all five runs passing. The first run's pass does not stand (finding 3).
+
+Tests 4 to 11 were not run again. Their commands, their test files and every function those call are as they were at
+the first runs: since then only README.md and judges.ts changed, judges.ts in `judgeFive` alone, which only
+helpers.ts's `timingOverFive` calls, and that only players.test.ts.
+
+== What the runs show
+
+AC1 to AC5: all 11 tests fail at the base, each at its own assertion, in every run of them. None fails at load, at a
+fixture or at a missing tool: every fixture came out as its recipe says (no `BLOCKED:` line), the canonical decode
+named 250 different planes (the jumps test reached its judge), and `session` ran every line that names no planted
+worker (its answer holds ok, steps, backends).
+
+- AC1 #3467.261c442a, on the real clock (`idle`): fails naming the field, as the criterion's second sentence says. The
+  base's 250 `decodes` rows hold `at_ms` and `frame` and no `samples`.
+- AC1 stepped through, AC3 #3467.f53de7f6, AC4 #3467.4c4b1527 (`session`): each fails naming the field too. The
+  base's `session` answers no `players` block, so there is no `decodes` row and no `samples` to sum or count.
+- AC2 #3467.6bd8eb71 (`session`): fails for the same missing block, read for its `shown` rows. This is not a wrong
+  frame at the base: the criterion's wrong program is its planted worker, and the base has no surface to read the
+  frame shown at a jump from.
+- AC5 #3467.1a19a5d4 (`session`): fails for the same missing block, read for `frame_bytes`. The base reports no frame
+  bytes anywhere.
+- The five planted tests (AC1 to AC5) fail at their first assertion, that the planted worker ran: the base's `session`
+  answers `{"ok":false,"code":"bad_input"}` to each of the four names, while it runs the same line without `planted`.
+  None of the four can be built at the base (README: Planted workers), so none fails there by the sum, the frame, the
+  count or the bytes its criterion names; each must, on the change, in these same tests.
+
+AC6 #3467.43114bc0: both tests pass at the base, in both runs. The second run is the one that stands.
+
+- The allocations test passes and should: 0 allocations a frame after warm-up is behaviour the base has (#499's) and
+  the change must keep. It is a count, judged on any Mac at any load.
+- The timing test passes and should: 150 frames a second with under 0.5% dropped is behaviour the base has (#499's)
+  and the change must keep, and the criterion names no planted program. Its pass in the second run counts. The judge
+  as corrected passes only five runs that each pass, on a fit reference Mac (one of the design's three, on mains
+  power, Low Power Mode off, the thermal state nominal) whose 1-minute load is no higher than its cores when the runs
+  have ended; the test printed `run 1: pass; run 2: pass; run 3: pass; run 4: pass; run 5: pass` and passed. The
+  runner's lines say the same from outside the test: that machine in that state before and after, and a 1-minute
+  load of 17.51 before and 12.27 after, on 18 cores. Its pass in the first run, at a load of 22 to 48, was no result
+  (finding 3). Of a run that passes the test prints only that it passed, so no log holds the frames a second or the
+  share dropped: each of the five runs showed at least 150 a second less 0.5%, with under 0.5% dropped.
+
+== Findings from the first runs, what was corrected, and what the second runs show
+
+1. The command for forward.test.ts ran two files. Vitest runs every file whose path holds the name given, and
+   `jump-forward.test.ts` holds `forward.test.ts`. The three tests of forward.test.ts ran and failed as they should;
+   the two of jump-forward.test.ts ran twice, with the same failures both times. Corrected in the README: that
+   command now reads `... --no-file-parallelism --exclude jump-forward.test.ts forward.test.ts`. No test file
+   changed. Second run: the corrected command ran the one file, Test Files 1 failed (1), Tests 3 failed (3), and its
+   three failures are the first run's word for word, at the same lines (block 1). Closed.
+2. A passing test's output is not in the first runs' logs (the reporter above), so the first players.test.ts.log
+   holds two passes and no reading. The README now says so and names `--reporter=default`, which prints it. No
+   command changed for this. Second run: started with that flag, players.test.ts.log holds what the timing test
+   printed (block 6). Closed.
+3. AC6's timing test passed at a 1-minute load of 22 to 48 on 18 cores. The design counts a loaded run neither way
+   (technical design: How runs become one of five verdicts, "a loaded run ... is uncounted and counts neither way";
+   parallel proof: Invariants, a budget at a load above the cores is "INCONCLUSIVE or BLOCKED, never PASS"). The
+   judge held five failures under load INCONCLUSIVE and let five passes under load count, as #499's own helper does.
+   That was this suite's error, not the base's. Corrected in judges.ts (`judgeFive`): a 1-minute load above the core
+   count, or one that can't be read, makes the five runs a reading, INCONCLUSIVE, whether they passed or failed.
+   README reading 13 says so. players.test.ts itself is unchanged. So the first run's pass was no result. Second
+   run: with the judge as corrected, on a fit reference Mac at a 1-minute load of 17.51 before and 12.27 after, both
+   tests pass, and the timing's pass counts (block 6). Closed. No base run met a load above the cores with the
+   corrected judge, so no log shows its INCONCLUSIVE; that reading is shown by the judge's own cases alone, run by
+   this job as a plain script on made-up inputs (five passes at a load of 22 and of 48 on 18 cores read
+   INCONCLUSIVE, at a load no higher than the cores PASS).
+
+The second runs show nothing new that is wrong: no fixture failed its check, no test is `BLOCKED:` or
+`INCONCLUSIVE:`, and none fails or passes for a reason other than its own. After them this job changed no file of
+the suite but this one, so nothing is left to run again at the base.
+
+The six blocks: 1 and 6 are the second runs of their files, each with a note of its first run; 2 to 5 are the first
+runs, the only runs of those files by their own commands.
+
+== 1. forward.test.ts: exit 1 in 14 s (the second run, 15:55:48 to 15:56:02; the result that stands)
+$ ... --no-file-parallelism --exclude jump-forward.test.ts forward.test.ts
+
+ ❯ forward.test.ts (3 tests | 3 failed) 13663ms
+   ❯ AC1 #3467.261c442a a recording stored out of presentation order plays forward and each sample is decoded once (3)
+     × AC1 #3467.261c442a played forward through its whole span on the real clock, the `samples` of its requests sum to at most 250 10458ms
+     × AC1 #3467.261c442a stepped through each of its 250 frames in order, the `samples` of its requests sum to at most 250 3114ms
+     × AC1 #3467.261c442a a planted worker that keeps today's start rule sums to over 10,000 and fails the same check, naming the sum 89ms
+
+ FAIL  forward.test.ts > AC1 #3467.261c442a a recording stored out of presentation order plays forward and each sample is decoded once > AC1 #3467.261c442a played forward through its whole span on the real clock, the `samples` of its requests sum to at most 250
+AssertionError: every `decodes` row holds `samples`, and they sum to at most 250: expected '250 of the 250 `decodes` rows of idle…' to be null
++ Received:
+"250 of the 250 `decodes` rows of idle's players.rec hold no `samples`, the whole number of samples the worker decoded for that request: decodes[0] is {\"at_ms\":0,\"frame\":0}"
+ ❯ forward.test.ts:46:128
+
+ FAIL  forward.test.ts > AC1 #3467.261c442a a recording stored out of presentation order plays forward and each sample is decoded once > AC1 #3467.261c442a stepped through each of its 250 frames in order, the `samples` of its requests sum to at most 250
+AssertionError: every `decodes` row holds `samples`, and they sum to at most 250: expected 'session\'s answer holds no `players` …' to be null
++ Received:
+"session's answer holds no `players` block, so it has no `decodes` row and none holds `samples` (it holds ok, steps, backends)"
+ ❯ forward.test.ts:54:130
+
+ FAIL  forward.test.ts > AC1 #3467.261c442a a recording stored out of presentation order plays forward and each sample is decoded once > AC1 #3467.261c442a a planted worker that keeps today's start rule sums to over 10,000 and fails the same check, naming the sum
+AssertionError: the planted worker `keeps_base_start_rule` isn't in this binary: session answered {"ok":false,"code":"bad_input"} to a line with `planted: "keeps_base_start_rule"` (README: Planted workers)
+ ❯ plantedRan helpers.ts:153:36
+ ❯ forward.test.ts:61:5
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  15:55:49
+   Duration  13.74s (tests 100%)
+
+ The first run (14:40:24, exit 1 in 20 s, by `... --no-file-parallelism forward.test.ts`) held these three failures
+ word for word, at the same lines, and after them the two of jump-forward.test.ts, which are block 3's word for
+ word: Test Files 2 failed (2), Tests 5 failed (5), Duration 16.83s.
+
+== 2. jumps.test.ts: exit 1 in 11 s
+$ ... --no-file-parallelism jumps.test.ts
+
+ ❯ jumps.test.ts (2 tests | 2 failed) 10811ms
+   ❯ AC2 #3467.6bd8eb71 a jump shows the frame at its time, as the canonical decode gives it (2)
+     × AC2 #3467.6bd8eb71 at 200 seeded times jumped to in a seeded order, the frame shown has the planes of the canonical decode of that frame 10704ms
+     × AC2 #3467.6bd8eb71 a planted worker that answers a picture it kept for another sample fails the same check, naming the frame 91ms
+
+ FAIL  jumps.test.ts > AC2 #3467.6bd8eb71 a jump shows the frame at its time, as the canonical decode gives it > AC2 #3467.6bd8eb71 at 200 seeded times jumped to in a seeded order, the frame shown has the planes of the canonical decode of that frame
+AssertionError: each jump shows the frame at its time, by its planes' hash: expected [ Array(1) ] to deeply equal []
+- []
++ [
++   "session's answer holds no `players` block, so it has no `shown` row to name the frame on screen (it holds ok, steps, backends)",
++ ]
+ ❯ jumps.test.ts:45:85
+
+ FAIL  jumps.test.ts > AC2 #3467.6bd8eb71 a jump shows the frame at its time, as the canonical decode gives it > AC2 #3467.6bd8eb71 a planted worker that answers a picture it kept for another sample fails the same check, naming the frame
+AssertionError: the planted worker `answers_picture_kept_for_another` isn't in this binary: session answered {"ok":false,"code":"bad_input"} to a line with `planted: "answers_picture_kept_for_another"` (README: Planted workers)
+ ❯ plantedRan helpers.ts:153:36
+ ❯ jumps.test.ts:52:5
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  14:40:41
+   Duration  10.91s (tests 100%)
+
+== 3. jump-forward.test.ts: exit 1 in 2 s
+$ ... --no-file-parallelism jump-forward.test.ts
+
+ ❯ jump-forward.test.ts (2 tests | 2 failed) 1406ms
+   ❯ AC3 #3467.f53de7f6 a jump forward starts at the key frame before its target (2)
+     × AC3 #3467.f53de7f6 a jump from frame 30 to frame 1,515 decodes at most 16 samples 1307ms
+     × AC3 #3467.f53de7f6 a planted worker that keeps today's start rule decodes 1,485 and fails the same check, naming the count 97ms
+
+ FAIL  jump-forward.test.ts > AC3 #3467.f53de7f6 a jump forward starts at the key frame before its target > AC3 #3467.f53de7f6 a jump from frame 30 to frame 1,515 decodes at most 16 samples
+AssertionError: the request for frame 1,515 decodes at most 16 samples: expected 'session\'s answer holds no `players` …' to be null
++ Received:
+"session's answer holds no `players` block, so it has no `decodes` row and none holds `samples` (it holds ok, steps, backends)"
+ ❯ jump-forward.test.ts:44:123
+
+ FAIL  jump-forward.test.ts > AC3 #3467.f53de7f6 a jump forward starts at the key frame before its target > AC3 #3467.f53de7f6 a planted worker that keeps today's start rule decodes 1,485 and fails the same check, naming the count
+AssertionError: the planted worker `keeps_base_start_rule` isn't in this binary: session answered {"ok":false,"code":"bad_input"} to a line with `planted: "keeps_base_start_rule"` (README: Planted workers)
+ ❯ plantedRan helpers.ts:153:36
+ ❯ jump-forward.test.ts:51:5
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  14:40:52
+   Duration  1.49s (tests 99%, import 1%)
+
+== 4. forward-and-back.test.ts: exit 1 in 1 s
+$ ... --no-file-parallelism forward-and-back.test.ts
+
+ ❯ forward-and-back.test.ts (2 tests | 2 failed) 1050ms
+   ❯ AC4 #3467.4c4b1527 a recording stored in order plays as it does today (2)
+     × AC4 #3467.4c4b1527 played forward it decodes one sample a frame, and a jump back decodes from the key frame before its target and no sample earlier 959ms
+     × AC4 #3467.4c4b1527 a planted worker that starts every request at a key frame decodes more than one sample a frame and fails the same check, naming the sum 89ms
+
+ FAIL  forward-and-back.test.ts > AC4 #3467.4c4b1527 a recording stored in order plays as it does today > AC4 #3467.4c4b1527 played forward it decodes one sample a frame, and a jump back decodes from the key frame before its target and no sample earlier
+AssertionError: one sample a frame forward; the jump back decodes frames 30 to 47: expected [ Array(1) ] to deeply equal []
+- []
++ [
++   "session's answer holds no `players` block, so it has no `decodes` row and none holds `samples` (it holds ok, steps, backends)",
++ ]
+ ❯ forward-and-back.test.ts:44:136
+
+ FAIL  forward-and-back.test.ts > AC4 #3467.4c4b1527 a recording stored in order plays as it does today > AC4 #3467.4c4b1527 a planted worker that starts every request at a key frame decodes more than one sample a frame and fails the same check, naming the sum
+AssertionError: the planted worker `starts_every_request_at_key_frame` isn't in this binary: session answered {"ok":false,"code":"bad_input"} to a line with `planted: "starts_every_request_at_key_frame"` (README: Planted workers)
+ ❯ plantedRan helpers.ts:153:36
+ ❯ forward-and-back.test.ts:51:5
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  14:40:54
+   Duration  1.14s (tests 97%, transform 1%, import 1%)
+
+== 5. bytes.test.ts: exit 1 in 50 s
+$ ... --no-file-parallelism bytes.test.ts
+
+ ❯ bytes.test.ts (2 tests | 2 failed) 49891ms
+   ❯ AC5 #3467.1a19a5d4 a 4K recording in a 640 × 360 player holds under 8 MB of frames (2)
+     × AC5 #3467.1a19a5d4 played through, the frame bytes the app and the worker hold together stay under 8 MB 49801ms
+     × AC5 #3467.1a19a5d4 a planted worker that keeps every picture it decodes fails the same check, naming the bytes 86ms
+
+ FAIL  bytes.test.ts > AC5 #3467.1a19a5d4 a 4K recording in a 640 × 360 player holds under 8 MB of frames > AC5 #3467.1a19a5d4 played through, the frame bytes the app and the worker hold together stay under 8 MB
+AssertionError: the app and the worker together hold under 8,000,000 bytes of frames: expected 'session\'s answer holds no `players` …' to be null
++ Received:
+"session's answer holds no `players` block, so no item's `frame_bytes` can be read (it holds ok, steps, backends)"
+ ❯ bytes.test.ts:44:138
+
+ FAIL  bytes.test.ts > AC5 #3467.1a19a5d4 a 4K recording in a 640 × 360 player holds under 8 MB of frames > AC5 #3467.1a19a5d4 a planted worker that keeps every picture it decodes fails the same check, naming the bytes
+AssertionError: the planted worker `keeps_every_picture` isn't in this binary: session answered {"ok":false,"code":"bad_input"} to a line with `planted: "keeps_every_picture"` (README: Planted workers)
+ ❯ plantedRan helpers.ts:153:36
+ ❯ bytes.test.ts:51:5
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  14:40:55
+   Duration  49.98s (tests 100%)
+
+== 6. players.test.ts: exit 0 in 58 s (the second run, 15:53:51 to 15:54:49; the result that stands)
+$ ... --no-file-parallelism --reporter=default players.test.ts
+# 2026-11-25 15:53:51 in <checkout> at a1ef97760; load before 17.51 41.71 55.57; Mac17,10 power ac lowPowerMode false thermal nominal
+# exit 0 15:54:49; load after 12.27 36.16 52.63; Mac17,10 power ac lowPowerMode false thermal nominal
+
+stdout | players.test.ts > AC6 #3467.43114bc0 #499's five players at 640 × 360 show their frames as on the merge base > AC6 #3467.43114bc0 on a fit reference Mac the five players show 150 frames a second with under 0.5% dropped
+AC6 #3467.43114bc0 run 1: pass; run 2: pass; run 3: pass; run 4: pass; run 5: pass
+
+ ✓ players.test.ts (2 tests) 57612ms
+   ✓ AC6 #3467.43114bc0 #499's five players at 640 × 360 show their frames as on the merge base (2)
+     ✓ AC6 #3467.43114bc0 after a 1 s warm-up, no frame of the five players' window allocates in the render process, in each of five runs 57492ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  15:53:52
+   Duration  57.71s (tests 100%)
+
+ Both tests passed, and both passes stand.
+ - The allocations test has the one test line: it made the five recordings and held the warm-up run and the five
+   runs, 57.5 s. It prints nothing; it passes when every run drew a frame in [1 s, 9 s) and none of those frames
+   allocated.
+ - The timing test has no line of its own: it read the same five answers, in under the reporter's 300 ms (the file's
+   57612 ms less the first test's 57492 ms leaves 120 ms). What it printed is above, and it is the second of the 2
+   passed. Its pass says (judges.ts, `judgeFive`; helpers.ts, `timingOverFive`): there were five runs; each showed
+   at least 150 frames a second less 0.5% over [1 s, 9 s) with under 0.5% of the frames due dropped; the machine was
+   one of the design's three reference Macs, on mains power, with Low Power Mode off and the thermal state nominal;
+   and its 1-minute load, read when the five runs had ended, was no higher than its 18 cores. Had any one of those
+   not held, the test would have failed, `FAIL:` or `INCONCLUSIVE:`. The runner's two lines above agree with it from
+   outside the test.
+ - Not in this log: the load the judge itself read and the load between the runner's two readings (a passing test
+   prints neither), and a passing run's frames a second and share dropped.
+
+ The first run (14:41:46, exit 0 in 58 s, by `... --no-file-parallelism players.test.ts`) named no test: after its
+ RUN line it held four lines and no other, Test Files 1 passed (1), Tests 2 passed (2), Start at 14:41:46 and
+ Duration 57.57s. Its pass of the allocations test agrees with this one. Its pass of the timing test was taken at a
+ 1-minute load of 22 to 48 by the judge as first written, and is no result (finding 3).

@@ -25,6 +25,20 @@ pub const CAP: u64 = 64 << 20;
 
 pub use deep_images::Plant;
 
+/// A `session`'s wrong program, by its name: #417 AC2's look switch that empties every node
+/// cache, or one of #3467's decode workers, which the live decode worker knows by these names.
+pub fn session_plant(name: &str) -> Option<&'static str> {
+    [
+        "look_switch_rebuilds",
+        "keeps_base_start_rule",
+        "starts_every_request_at_key_frame",
+        "answers_picture_kept_for_another",
+        "keeps_every_picture",
+    ]
+    .into_iter()
+    .find(|p| *p == name)
+}
+
 /// The process's one image service (#1486): every image path asks it for levels.
 pub fn images() -> &'static Images {
     deep_images::shared()
