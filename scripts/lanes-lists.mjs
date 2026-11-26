@@ -119,6 +119,8 @@ export const slow = [
   'tests/acceptance/522/ac3-module-inputs.test.ts', 'tests/acceptance/522/ac7-late-joint.test.ts', 'tests/acceptance/524/ac4-skins.test.ts',
   'tests/acceptance/524/ac6-soft-cube.test.ts', 'tests/acceptance/824/leftovers.test.ts', 'tests/acceptance/824/planted.test.ts',
   'tests/acceptance/980/ac10-taste.test.ts',
+  // #3562's README: order.test.ts makes 20 runs on one hub, and unchanged.test.ts runs #907's and #965's files.
+  'tests/acceptance/3562/order.test.ts', 'tests/acceptance/3562/unchanged.test.ts',
 ];
 /**
  * Folders and files the alone block runs with nothing beside them, not even another shard: #16's and #315's files start
@@ -1614,3 +1616,7 @@ timed.push('tests/acceptance/2750/budgets.test.ts');
 // only; its blind redraft, which runs the merge base's program beside the checkout's, runs in its place.
 Object.assign(redrafted, { 'tests/acceptance/3461/once.test.ts': 'tests/acceptance/3461-redraft-once/' });
 byHand.push('tests/acceptance/3461/once.test.ts');
+
+// #3467's folder (blind) runs alone by its lane.json: each file draws on Metal and decodes on the hardware decoder.
+// players.test.ts judges #499's five players' frames a second on the real clock on a reference Mac.
+timed.push('tests/acceptance/3467/players.test.ts');
