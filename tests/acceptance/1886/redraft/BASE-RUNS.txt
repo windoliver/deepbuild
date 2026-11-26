@@ -1,0 +1,212 @@
+#1886 acceptance tests (tests/acceptance/1886/redraft), run on the base commit 914bd5f29775cf6b64a4050276afb97e04cdd659
+(origin/main), Linux x86_64, Node v24.22.0, after npm ci, npm run build --workspaces and
+cargo build --locked -q -p deep-hook, in a systemd unit capped at MemoryMax=24G, from the checkout's root:
+
+  npx vitest run tests/acceptance/1886 --testTimeout=600000 --no-file-parallelism
+
+Result: AC1 (#1886.33628f8b, proxied-hub.test.ts) fails at its first expect (AssertionError at proxied-hub.test.ts:21):
+the review of the session started with ANTHROPIC_BASE_URL counted ("same-family review (claude-sonnet-5-5)"), its run
+passed, and the claim is PASS: the merge base trusts the transcript's model. AC2's two tests and AC3's test pass.
+
+================ base run ================
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/1886/redraft/model-suites.test.ts (2 tests) 72289ms
+   ✓ #87's model suites, unchanged (2)
+     ✓ #1886.209d6f6c #87's model suites are unchanged from the merge base (byte for byte), and every test in them passes 72165ms
+ ❯ tests/acceptance/1886/redraft/proxied-hub.test.ts (1 test | 1 failed) 52928ms
+   ❯ #1886.33628f8b a session started behind a base URL override has its review read "model unknown: proxied route" on a real hub (1)
+     × #1886.33628f8b PR 21's claim from a Claude Code session started with ANTHROPIC_BASE_URL at a local listener: the review check's run reads "model unknown: proxied route", the claim isn't PASS, and the record never holds the URL 50800ms
+ ✓ tests/acceptance/1886/redraft/own-route-hub.test.ts (1 test) 43209ms
+   ✓ #1886.209d6f6c a session on the agent's own route reads as it does today on a real hub (1)
+     ✓ #1886.209d6f6c PR 21's claim from a Claude Code session started with no ANTHROPIC_BASE_URL: the review counts and passes, names no unknown model, and the claim is PASS 42645ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1886/redraft/proxied-hub.test.ts > #1886.33628f8b a session started behind a base URL override has its review read "model unknown: proxied route" on a real hub > #1886.33628f8b PR 21's claim from a Claude Code session started with ANTHROPIC_BASE_URL at a local listener: the review check's run reads "model unknown: proxied route", the claim isn't PASS, and the record never holds the URL
+AssertionError: #1886.33628f8b claim:01M8BJYKKT77GV3P5NAWDHG43Q's review (session started with ANTHROPIC_BASE_URL set) must read "model unknown: proxied route", not trust the transcript's model. Verdicts: PASS {"outcome":"PASS","verdict":"verdict:01M8BJYWJW7QYX72XEBD6X6RFV","claim":"claim:01M8BJYKKT77GV3P5NAWDHG43Q","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run","review: PASS on 1 clean run"],"requirements":[{"req":"req:sessionf310b50ccbec42ababa250800aabad730#R1","outcome":"PASS","check":".deepbuild/checks/expired-token.sh","depth":"unit","oracle":"code","runs":{"clean":1,"needed":1,"counted":["run:01M8BJYPTN8PT8ZGV94M57ZEPZ"]},"smallest":null,"points_to":null,"evidence":["292edb94ea5b5e6b35afcea27823a515906f245d50eeafbc096aeaa2021da19e","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"proof":"test_run"}],"smallest":null,"points_to":null,"commit":"0ccff252ec4c2fc71ae358403fab30495eb3eec7","key":{"commit":"0ccff252ec4c2fc71ae358403fab30495eb3eec7","doc_revisions":[],"check_digests":["d1:ada0def2db3d31d707004d57ee49c765402692: expected '[{"run":"run:01M8BJYNPM8XA1FAZ31MHDMX…' to contain 'model unknown: proxied route'
+
+Expected: "model unknown: proxied route"
+Received: "[{"run":"run:01M8BJYNPM8XA1FAZ31MHDMXWQ","outcome":"passed","tests_run":1,"passed":1,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"review","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":["same-family review (claude-sonnet-5-5)"],"environment":"linux-arm64","key":{"id":"4516dfc61581940c00e74157e949e57d27e7a123b3a76f1256df172941b4a6fc","stem":"36103c1ddc201d60247ffccd9c6f3de8a13941f18c9d7db2bb0b1fb26d8b05ce","paths":["src/auth.js"],"claim":"claim:01M8BJYKKT77GV3P5NAWDHG43Q","session":"session:f310b50ccbec42ababa250800aabad73","base":false,"withheld":false,"plain":true},"used":{"memory_peak_mb":null,"cpu_s":null}}]"
+
+ ❯ tests/acceptance/1886/redraft/proxied-hub.test.ts:21:191
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 3 passed (4)
+   Start at  01:27:00
+   Duration  172.20s (tests 99%, transform 1%)
+
+EXIT=1
+
+================ twin plant-ignored (AC3 #1886.ece183af), laid by its lines.json on a copy of the base, checks-review rebuilt ================
+  npx vitest run tests/acceptance/1886/redraft/own-route-hub.test.ts tests/acceptance/1886/redraft/model-suites.test.ts --testTimeout=600000 --no-file-parallelism
+AC3's test fails at its status expect (model-suites.test.ts:26): #87's wrong-program test no longer sees the plant fail.
+(AC2's model-suites test fails too; the own-route hub test passes.)
+
+
+ RUN  v5.0.5 <twin copy>
+
+ ❯ tests/acceptance/1886/redraft/model-suites.test.ts (2 tests | 2 failed) 77878ms
+   ❯ #87's model suites, unchanged (2)
+     × #1886.209d6f6c #87's model suites are unchanged from the merge base (byte for byte), and every test in them passes 77670ms
+     × #1886.ece183af the planted trusts-proxied-transcript still fails #87's proxied-route scenario where it does: its wrong-program test passes 16ms
+ ✓ tests/acceptance/1886/redraft/own-route-hub.test.ts (1 test) 43681ms
+   ✓ #1886.209d6f6c a session on the agent's own route reads as it does today on a real hub (1)
+     ✓ #1886.209d6f6c PR 21's claim from a Claude Code session started with no ANTHROPIC_BASE_URL: the review counts and passes, names no unknown model, and the claim is PASS 43138ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1886/redraft/model-suites.test.ts > #87's model suites, unchanged > #1886.209d6f6c #87's model suites are unchanged from the merge base (byte for byte), and every test in them passes
+AssertionError: #1886.209d6f6c tests/acceptance/87/models/proxied-route.test.ts's tests that didn't pass: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "failed: #87 behind a proxied route the change's model is unknown and a review of it is uncounted (wrong program) a check that trusts the proxied transcript's model name counts the first review, and fails
++ Error: promise resolved \"undefined\" instead of rejecting
++     at _Assertion.__VITEST_REJECTS__ (file://<twin copy>/node_modules/vitest/dist/chunks/index.aTZaPVhf.js:2480:33)
++     at _Assertion.propertyGetter (file://<twin copy>/node_modules/chai/index.js:1607:27)
++     at Reflect.get (<anonymous>)
++     at Object.proxyGetter [as get] (file://<twin copy>/node_modules/chai/index.js:1696:22)
++     at <twin copy>/tests/acceptance/87/models/proxied-route.test.ts:62:55
++     at file://<twin copy>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35
++     at file://<twin copy>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26
++     at file://<tmp>",
++ ]
+
+ ❯ tests/acceptance/1886/redraft/model-suites.test.ts:18:75
+     16|     for (const [file, tests] of byFile) {
+     17|       expect(tests.length, `${AC2} ${file} ran a test`).toBeGreaterTha…
+     18|       expect(notPassed(tests), `${AC2} ${file}'s tests that didn't pas…
+       |                                                                           ^
+     19|     }
+     20|   }, 3_100_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1886/redraft/model-suites.test.ts > #87's model suites, unchanged > #1886.ece183af the planted trusts-proxied-transcript still fails #87's proxied-route scenario where it does: its wrong-program test passes
+AssertionError: #1886.ece183af under trusts-proxied-transcript the proxied-route scenario must still fail with "the proxied transcript's model trusted": Error: promise resolved "undefined" instead of rejecting
+    at _Assertion.__VITEST_REJECTS__ (file://<twin copy>/node_modules/vitest/dist/chunks/index.aTZaPVhf.js:2480:33)
+    at _Assertion.propertyGetter (file://<twin copy>/node_modules/chai/index.js:1607:27)
+    at Reflect.get (<anonymous>)
+    at Object.proxyGetter [as get] (file://<twin copy>/node_modules/chai/index.js:1696:22)
+    at <twin copy>/tests/acceptance/87/models/proxied-route.test.ts:62:55
+    at file://<twin copy>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35
+    at file://<twin copy>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26
+    at file://<tmp> expected 'failed' to be 'passed' // Object.is equality
+
+Expected: "passed"
+Received: "failed"
+
+ ❯ tests/acceptance/87/models/proxied-route.test.ts:62:55
+ ❯ tests/acceptance/1886/redraft/model-suites.test.ts:26:218
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 1 passed (3)
+   Start at  01:32:17
+   Duration  123.40s (tests 99%)
+
+
+================ twin own-route-unknown (AC2 #1886.209d6f6c), the same way ================
+Both AC2 tests fail at an expect: own-route-hub.test.ts:15 (the review run is uncounted, "model unknown: proxied
+route") and model-suites.test.ts:18 (#87's budgets, same-model, canonical and proxied-route tests fail).
+(AC3's test fails too, on the plant-free scenario.)
+
+
+ RUN  v5.0.5 <twin copy>
+
+ ❯ tests/acceptance/1886/redraft/model-suites.test.ts (2 tests | 2 failed) 43756ms
+   ❯ #87's model suites, unchanged (2)
+     × #1886.209d6f6c #87's model suites are unchanged from the merge base (byte for byte), and every test in them passes 42883ms
+     × #1886.ece183af the planted trusts-proxied-transcript still fails #87's proxied-route scenario where it does: its wrong-program test passes 2ms
+ ❯ tests/acceptance/1886/redraft/own-route-hub.test.ts (1 test | 1 failed) 17986ms
+   ❯ #1886.209d6f6c a session on the agent's own route reads as it does today on a real hub (1)
+     × #1886.209d6f6c PR 21's claim from a Claude Code session started with no ANTHROPIC_BASE_URL: the review counts and passes, names no unknown model, and the claim is PASS 15041ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1886/redraft/model-suites.test.ts > #87's model suites, unchanged > #1886.209d6f6c #87's model suites are unchanged from the merge base (byte for byte), and every test in them passes
+AssertionError: #1886.209d6f6c tests/acceptance/87/models/budgets.test.ts's tests that didn't pass: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "failed: #87 a review check stays within its priced budget the review check declares a time and a cost budget, and a review, job and run record, keeps to both
++ AssertionError: {\"answered\":\"gpt-5-codex\",\"change\":\"unknown\",\"counted\":false,\"reason\":\"model unknown: proxied route\",\"note\":null}: expected false to be true // Object.is equality
++     at <twin copy>/tests/acceptance/87/models/budgets.test.ts:25:71
++     at async file://<twin copy>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20",
++ ]
+
+ ❯ tests/acceptance/1886/redraft/model-suites.test.ts:18:75
+     16|     for (const [file, tests] of byFile) {
+     17|       expect(tests.length, `${AC2} ${file} ran a test`).toBeGreaterTha…
+     18|       expect(notPassed(tests), `${AC2} ${file}'s tests that didn't pas…
+       |                                                                           ^
+     19|     }
+     20|   }, 3_100_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/1886/redraft/model-suites.test.ts > #87's model suites, unchanged > #1886.ece183af the planted trusts-proxied-transcript still fails #87's proxied-route scenario where it does: its wrong-program test passes
+AssertionError: #1886.ece183af tests/acceptance/87/models/proxied-route.test.ts's scenario without the plant: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "failed: #87 behind a proxied route the change's model is unknown and a review of it is uncounted a change made in a Claude Code session started with ANTHROPIC_BASE_URL at a local listener, whose transcript names claude-opus-4-1, records its model as unknown, and a review answered by gpt-5-codex is uncounted, \"model unknown: proxied route\"; the record holds that the variable was set, never its value; with the variable unset the review counts
++ AssertionError: expected { answered: 'gpt-5-codex', …(4) } to match object { change: 'claude-opus-4-1', …(4) }
++     at Proxy.<anonymous> (file://<twin copy>/node_modules/vitest/dist/chunks/index.aTZaPVhf.js:2066:10)
++     at Proxy.<anonymous> (file://<twin copy>/node_modules/vitest/dist/chunks/index.aTZaPVhf.js:1958:14)
++     at Proxy.methodWrapper (file://<twin copy>/node_modules/chai/index.js:1737:25)
++     at proxied (<twin copy>/tests/acceptance/87/models/proxied-route.test.ts:48:33)
++     at <twin copy>/tests/acceptance/87/models/proxied-route.test.ts:58:5
++     at async file://<twin copy>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20",
++ ]
+
+ ❯ tests/acceptance/1886/redraft/model-suites.test.ts:28:88
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/1886/redraft/own-route-hub.test.ts > #1886.209d6f6c a session on the agent's own route reads as it does today on a real hub > #1886.209d6f6c PR 21's claim from a Claude Code session started with no ANTHROPIC_BASE_URL: the review counts and passes, names no unknown model, and the claim is PASS
+AssertionError: #1886.209d6f6c claim:01M8BKCZ62VZNHJ0XNQ2RACSFP's review runs on the agent's own route: [{"run":"run:01M8BKD0AJ3B9SEKVKAJ82695C","outcome":"uncounted","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"review","assertion":null,"expected":null,"actual":null,"step":null,"points_to":":1","findings":["uncounted: model unknown: proxied route"],"environment":"linux-arm64","key":{"id":"b55facda3e5eb71a9ed4b18ae280c5fe9b7b53e935523f35d5f8a912c7c02287","stem":"f16eecb6864c95441d07897bebebe2bce412180e3951b2505c0ba0a5796ef095","paths":["src/auth.js"],"claim":"claim:01M8BKCZ62VZNHJ0XNQ2RACSFP","session":"session:5c03db9f6c704c0c813a0f5ed7f078ed","base":false,"withheld":false,"plain":false},"used":{"memory_peak_mb":null,"cpu_s":null}}]: expected [ 'uncounted' ] to deeply equal [ 'passed' ]
+
+- Expected
++ Received
+
+  [
+-   "passed",
++   "uncounted",
+  ]
+
+ ❯ tests/acceptance/1886/redraft/own-route-hub.test.ts:15:100
+     13|     const r = await reviewedClaim(AC2, undefined);
+     14|     const outcomes = r.review.map((x) => String(x.finished?.data.outco…
+     15|     expect(outcomes, `${AC2} ${r.claim}'s review runs on the agent's o…
+       |                                                                                                    ^
+     16|     expect(reviewText(r), `${AC2} ${r.claim}'s review on the agent's o…
+     17|     expect(lastVerdict(r), `${AC2} ${r.claim} on the agent's own route…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Start at  01:35:26
+   Duration  63.33s (tests 99%)
+

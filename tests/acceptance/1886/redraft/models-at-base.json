@@ -1,0 +1,14 @@
+{
+  "tests/acceptance/87/models/BASE-FAILURE.txt": "c50b3c51bb22eb77697b920903d4cda4765dcb89d82309c4ad17901160001720",
+  "tests/acceptance/87/models/README.md": "2a8d2fe25dff6107fe6cc0ea253f1e1b9907fc9e5f780064ebfbd1213faa6089",
+  "tests/acceptance/87/models/answering-model.test.ts": "cda68d80928d1b7f33768f71b853aae03ccccd3378982f2df26b0a5f0ea81dd0",
+  "tests/acceptance/87/models/budgets.test.ts": "d5637ddf377d9f841ae211625abb226a41490e0c8569c0ef16318f27cda3073b",
+  "tests/acceptance/87/models/canonical.test.ts": "0a17e9b46c50d0bab8a8494d7b7e90b0aede0f0b4fcdffa320b81f91d955a231",
+  "tests/acceptance/87/models/fixtures/fake-claude.pl": "25e0ac117ec5c3c55226a178d02a7834c176d9d4cc4c9800a6630fda60a8ebf9",
+  "tests/acceptance/87/models/helpers.ts": "c9f21e9965222d05c63efc2df1cdaded967813286e8dfb7f883ce61fc4a9e1c7",
+  "tests/acceptance/87/models/model-unknown.test.ts": "c670bf0b4c05f7844c59484a60e56614eab152b7b02929b647c8baf8b4c6598f",
+  "tests/acceptance/87/models/plan-window.test.ts": "f2240db1e059c501c8b518597e61678550bb9650c00fc1703b81ab0cfb0183d5",
+  "tests/acceptance/87/models/proxied-route.test.ts": "c053b19cfc3d582f4b64058a61deb2260ebaaed518f215da155a34e7a0dd770d",
+  "tests/acceptance/87/models/same-model.test.ts": "b4eba5866fedae674ca974fb7cf9f1612bc5fd54cc14d85fca3b551505c42900",
+  "tests/acceptance/87/models/tsconfig.json": "2c422e67749fb15df518bd968ae148e07fe606e0461a6927b1c3af8492564a14"
+}

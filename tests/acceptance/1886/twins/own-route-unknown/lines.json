@@ -1,0 +1,12 @@
+{
+  "packages/checks-review/src/models.ts": [
+    {
+      "find": [
+        "  const proxied = plant !== 'trusts-proxied-transcript' && PROXIED.some((k) => change.route?.[k]);"
+      ],
+      "wrong": [
+        "  const proxied = plant !== 'trusts-proxied-transcript' && (PROXIED.length > 0 || PROXIED.some((k) => change.route?.[k]));"
+      ]
+    }
+  ]
+}
