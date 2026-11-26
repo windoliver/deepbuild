@@ -17,7 +17,7 @@ interface AnswersOptions {
   settled(except?: string): Promise<unknown>;
   /** A session's thread as the core knows it, for a session whose start isn't in the record yet. */
   thread?(session: string): string | undefined;
-  /** Already in flight or owned by a permission prompt: neither is offered by another route. */
+  /** Already in flight or owned by a permission prompt still open: neither is offered by another route. */
   excluded(id: string): boolean;
   /** A delivered answer is also input to the session's loop, unless a planted program drops it. */
   delivered: ((session: string) => void) | undefined;
@@ -29,6 +29,12 @@ const sql = (text: string): string => text.replace(/'/g, "''");
  * for these in flight, never for another event's commit and the evidence sync a FULL one waits for.
  */
 export const readsAnswer = (kind: string): boolean => kind.startsWith('ask.') || kind === 'default.undone' || kind === 'approval.withdrawn' || kind === 'delivery.outcome';
+
+/**
+ * Whether the ask `a` is a permission prompt's, or a saved offer's, by its subject (#23): its answer goes back through the
+ * prompt, never as a message. Its own event has the ask's ID.
+ */
+export const OF_PROMPT = `EXISTS (SELECT 1 FROM events p WHERE p.id = a.id AND json_extract(p.data, '$.subject.effect') = 'permission')`;
 
 export class Answers {
   constructor(private readonly o: AnswersOptions) {}
@@ -43,7 +49,7 @@ export class Answers {
     const thread = `COALESCE((SELECT thread_id FROM sessions WHERE id = '${sql(session)}'), '${sql(this.o.thread?.(session) ?? session)}')`;
     const mine = scope ?? `COALESCE((SELECT thread_id FROM sessions WHERE id = a.session_id), a.session_id) = ${thread}`;
     const rows = ((await this.o.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer, iif(a.provisional = 1, a.recommended, NULL) AS undoes FROM asks a WHERE a.status = 'answered' AND ${mine}
-      AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Omit<Answer, 'words' | 'image'>[])
+      AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') AND NOT ${OF_PROMPT} ORDER BY a.answered`)) as Omit<Answer, 'words' | 'image'>[])
       .filter((row) => !this.o.excluded(row.id));
     if (!rows.length) return [];
     const events = (await this.o.raw(`SELECT subject, data FROM events WHERE kind = 'ask.answered' AND subject IN (${rows.map(() => '?').join(', ')}) ORDER BY log_pos`, rows.map((row) => `ask:${row.id}`))) as { subject: string; data: string }[];

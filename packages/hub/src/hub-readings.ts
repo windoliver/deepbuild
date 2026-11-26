@@ -53,7 +53,7 @@ readonly extensions: Pick<ExtensionHost, 'setAside'> | undefined;
  events: Pick<HubEvents, "appendCore" | "append" | "connection">;
 kernel: Pick<HubRuntime, "blocked" | "jobs">;
 
-judging: () => Pick<StopJudgingPort, "lastMessage" | "prOf" | "stateOf">;
+judging: () => Pick<StopJudgingPort, "keeps" | "lastMessage" | "prOf" | "stateOf">;
 transcripts: () => Pick<TranscriptsPort, "backfill">;
 }
 
@@ -150,8 +150,10 @@ export class HubReadings {
     return this.options.services.log.reflecting(async () => {
       const [claim] = await this.options.services.record.raw(`SELECT * FROM claims WHERE id = ?`, [id]);
       if (!claim) throw new Refused(refusal('not_found', '/params/id', `No change claim:${id} in the record.`, params.id));
-      const runs = await this.options.services.record.raw(`SELECT * FROM runs WHERE claim_id = ? ORDER BY started`, [id]);
-      const verdicts = await this.options.services.record.raw(`SELECT * FROM verdicts WHERE claim_id = ? ORDER BY created`, [id]);
+      // The planted hub of #1866 reads a claim's runs and verdicts from memory alone, so it has none once their state is let go.
+      const recorded = this.options.settings.plant !== 'claim-reads-only-memory' || this.options.judging().keeps(`claim:${id}`);
+      const runs = recorded ? await this.options.services.record.raw(`SELECT * FROM runs WHERE claim_id = ? ORDER BY started`, [id]) : [];
+      const verdicts = recorded ? await this.options.services.record.raw(`SELECT * FROM verdicts WHERE claim_id = ? ORDER BY created`, [id]) : [];
       const state = (await this.options.judging().stateOf(`claim:${id}`))!;
       const line = verdictLine(state.state);
       const url = await this.options.judging().prOf(state.session);

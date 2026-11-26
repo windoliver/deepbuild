@@ -33,6 +33,8 @@ const hooked = (session) => ({ writer: 'hook', ...you, session, agent: 'claude-c
 const core = (session) => ({ writer: 'core', ...you, ...(session ? { session, agent: 'claude-code' } : {}) });
 const agent = (session) => ({ writer: `mcp:${session}`, ...you, session, agent: 'claude-code' });
 const taste = askSources().find((row) => row.kind === 'taste');
+/** The version this checkout's record takes its taste row's fixture ask at: @6 once the fixture declares what may answer it (#1581), @5 before. */
+const ASK_V = 'may_answer' in taste.fixture.ask ? 6 : 5;
 /** The taste row's fixture ask, made distinct by `n`, open until `deadline`. */
 function ask(n, deadline) {
   const { deadline: _deadline, default: _default, ...data } = structuredClone(taste.fixture.ask);
@@ -79,7 +81,7 @@ const actions = {
         await batch.add(reading(record, at, ++written, SOURCES[written % SOURCES.length]).done);
         if (k % every === 0 && k / every < 20) {
           const n = s * 20 + k / every, id = ulid(at);
-          await batch.add(record.append(core(session), { v: 5, id, kind: 'ask.created', ts: at, data: ask(n, now + 30 * DAY) }));
+          await batch.add(record.append(core(session), { v: ASK_V, id, kind: 'ask.created', ts: at, data: ask(n, now + 30 * DAY) }));
           if (n % 20 !== 19) await batch.add(record.append(core(session), { v: 1, id: ulid(at + 1), kind: 'ask.answered', ts: at + 1, subject: `ask:${id}`, data: { answer: taste.fixture.ask.recommended, plan_hash: null, decision: 'none' } }));
         }
       }
@@ -103,7 +105,7 @@ const actions = {
     let at = clock.now;
     await start(record, session, at, worktree);
     const id = ulid(++at);
-    await record.append(core(session), { v: 5, id, kind: 'ask.created', ts: at, data: ask(1, now + 3 * DAY) });
+    await record.append(core(session), { v: ASK_V, id, kind: 'ask.created', ts: at, data: ask(1, now + 3 * DAY) });
     const old = reading(record, ++at, 3, SOURCES[0]);
     await old.done;
     const out = { ask: `ask:${id}`, reading: old.handle, option: taste.fixture.ask.recommended, state: (await record.raw('SELECT status FROM asks WHERE id = ?', [id]))[0]?.status ?? null };

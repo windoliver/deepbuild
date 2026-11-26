@@ -1,0 +1,15 @@
+{
+  "packages/gate/src/checkouts.ts": [
+    {
+      "find": [
+        "        await materialize(r.worktree, await repoEnv(r.worktree), `${r.commit}^{tree}`, c.dir);"
+      ],
+      "wrong": [
+        "        await materialize(r.worktree, await repoEnv(r.worktree), `${r.commit}^{tree}`, c.dir);",
+        "        // The planted wrong program (#3377 AC2): the checkout tree opened to every uid, so a service's own user reads",
+        "        // its bind mounts, and so does every other user of the machine.",
+        "        await new Promise((resolve) => { const child = spawn('/bin/chmod', ['-R', '0755', c.dir], { stdio: 'ignore' }); child.on('error', resolve); child.on('close', resolve); });"
+      ]
+    }
+  ]
+}

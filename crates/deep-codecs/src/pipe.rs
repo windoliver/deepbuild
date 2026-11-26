@@ -100,6 +100,37 @@ impl Helper {
         }
     }
 
+    /// #231: sends one message and its `bytes` (with "bytes" set when non-empty) without waiting
+    /// for its reply, so the helper works on it while the caller goes on; false when the helper
+    /// has gone or didn't take it within `wait`, in which case it is stopped by its own pid.
+    pub fn give(&mut self, head: &Value, bytes: &[u8], wait: Duration) -> bool {
+        let mut head = head.clone();
+        if !bytes.is_empty() {
+            head["bytes"] = json!(bytes.len());
+        }
+        let (Some(stdin), child) = (self.stdin.as_mut(), &mut self.child) else {
+            return false;
+        };
+        let taken = std::thread::scope(|s| {
+            let (tx, rx) = mpsc::channel();
+            s.spawn(move || {
+                let ok = writeln!(stdin, "{head}").is_ok()
+                    && stdin.write_all(bytes).is_ok()
+                    && stdin.flush().is_ok();
+                let _ = tx.send(ok);
+            });
+            let taken = rx.recv_timeout(wait).ok();
+            if taken.is_none() {
+                let _ = child.kill();
+            }
+            taken
+        });
+        if taken != Some(true) {
+            self.stop();
+        }
+        taken == Some(true)
+    }
+
     /// #518: sends one message without waiting for its reply, so a job's open runs beside what
     /// the caller does next; false when the helper has gone.
     pub fn send(&mut self, head: &Value) -> bool {

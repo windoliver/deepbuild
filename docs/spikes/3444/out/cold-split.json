@@ -1,0 +1,2318 @@
+{
+ "commit": "390c3f39067e7520ca7d2405d86578d17fe4f668",
+ "binary": {
+  "name": "deep-gpu",
+  "sha256": "b5fb46426dc8db64472a52f4038b7eddbe93694ad991f2f667c0199e19676796"
+ },
+ "machine": {
+  "model": "Mac17,10",
+  "chip": "Apple M5 Max",
+  "memoryBytes": 68719476736,
+  "power": "ac",
+  "lowPowerMode": false,
+  "thermalState": "nominal",
+  "macosBuild": "26B8119"
+ },
+ "adapter": {
+  "backend": "metal",
+  "name": "Apple M5 Max"
+ },
+ "patch": "88b4552c4284bd89e61ec1079726643feaafad961133ce95712f4d9fdaaca4b6",
+ "scene": "tests/acceptance/2189/fixtures/every-pass.json",
+ "pixels": [
+  1280,
+  800
+ ],
+ "metal_kept": "none: each source ends with a line no earlier run wrote",
+ "unkept_line": "spike 3444 6208b8db209c7cc0386edf49",
+ "open": "fresh",
+ "first_settled_ms": 3158.4539999999997,
+ "pipelines_made": 46,
+ "pipelines": [
+  {
+   "name": "look.history",
+   "label": "look.history",
+   "kind": "render_pipeline",
+   "around_ns": 152985333,
+   "hal_ns": 152803875,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "resolve_vs",
+     "module": "look.history",
+     "module_entry_points": [
+      "resolve_vs",
+      "resolve_fs"
+     ],
+     "override_ns": 101750,
+     "source_ns": 37000,
+     "compile_ns": 5021334,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 7,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 478
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "resolve_fs",
+     "module": "look.history",
+     "module_entry_points": [
+      "resolve_vs",
+      "resolve_fs"
+     ],
+     "override_ns": 164792,
+     "source_ns": 219583,
+     "compile_ns": 146765375,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 7,
+     "kept_functions": 7,
+     "constants": 0,
+     "msl_bytes": 37846
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 331416
+    }
+   ]
+  },
+  {
+   "name": "scene3d env prefilter",
+   "label": "scene3d env prefilter",
+   "kind": "render_pipeline",
+   "around_ns": 83974875,
+   "hal_ns": 83933834,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "vs",
+     "module": "scene3d env prefilter",
+     "module_entry_points": [
+      "vs",
+      "fs"
+     ],
+     "override_ns": 28125,
+     "source_ns": 22750,
+     "compile_ns": 4764000,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 4,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 659
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "fs",
+     "module": "scene3d env prefilter",
+     "module_entry_points": [
+      "vs",
+      "fs"
+     ],
+     "override_ns": 273209,
+     "source_ns": 124000,
+     "compile_ns": 78306667,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 4,
+     "kept_functions": 4,
+     "constants": 0,
+     "msl_bytes": 4526
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 274709
+    }
+   ]
+  },
+  {
+   "name": "scene3d.light_clusters",
+   "label": "scene3d.light_clusters",
+   "kind": "compute_pipeline",
+   "around_ns": 17482834,
+   "hal_ns": 17440500,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "assign",
+     "module": "scene3d.light_clusters",
+     "module_entry_points": [
+      "assign"
+     ],
+     "override_ns": 42,
+     "source_ns": 106708,
+     "compile_ns": 17201125,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 7,
+     "kept_functions": 7,
+     "constants": 0,
+     "msl_bytes": 12033
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 100958
+    }
+   ]
+  },
+  {
+   "name": "scene3d.opaque [mesh_vs+mesh_fs] #1",
+   "label": "scene3d.opaque",
+   "kind": "render_pipeline",
+   "around_ns": 577783000,
+   "hal_ns": 577731375,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 373084,
+     "source_ns": 137291,
+     "compile_ns": 40740333,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 1,
+     "msl_bytes": 18672
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "mesh_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 1874916,
+     "source_ns": 2005000,
+     "compile_ns": 531742125,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 128,
+     "constants": 1,
+     "msl_bytes": 223463
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 294000
+    }
+   ]
+  },
+  {
+   "name": "scene3d.opaque [mesh_vs+mesh_fs] #2",
+   "label": "scene3d.opaque",
+   "kind": "render_pipeline",
+   "around_ns": 4109959,
+   "hal_ns": 4073000,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 430583,
+     "source_ns": 139875,
+     "compile_ns": 33375,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 1,
+     "msl_bytes": 18672
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "mesh_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 1777250,
+     "source_ns": 1367875,
+     "compile_ns": 102458,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 128,
+     "constants": 1,
+     "msl_bytes": 223463
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 32750
+    }
+   ]
+  },
+  {
+   "name": "scene3d.opaque [mesh_vs+mesh_fs] #3",
+   "label": "scene3d.opaque",
+   "kind": "render_pipeline",
+   "around_ns": 4369917,
+   "hal_ns": 4335750,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 311375,
+     "source_ns": 114792,
+     "compile_ns": 15375,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 1,
+     "msl_bytes": 18672
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "mesh_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 1686459,
+     "source_ns": 1825625,
+     "compile_ns": 147125,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 128,
+     "constants": 1,
+     "msl_bytes": 223463
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 45083
+    }
+   ]
+  },
+  {
+   "name": "scene3d.output [out_vs+out_fs] #1",
+   "label": "scene3d.output",
+   "kind": "render_pipeline",
+   "around_ns": 63835333,
+   "hal_ns": 63805708,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "out_vs",
+     "module": "scene3d output",
+     "module_entry_points": [
+      "out_vs",
+      "out_fs"
+     ],
+     "override_ns": 27000,
+     "source_ns": 13333,
+     "compile_ns": 4876833,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 11,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 458
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "out_fs",
+     "module": "scene3d output",
+     "module_entry_points": [
+      "out_vs",
+      "out_fs"
+     ],
+     "override_ns": 89875,
+     "source_ns": 86625,
+     "compile_ns": 58360750,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 11,
+     "kept_functions": 11,
+     "constants": 0,
+     "msl_bytes": 9225
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 279750
+    }
+   ]
+  },
+  {
+   "name": "scene3d.output [out_vs+out_fs] #2",
+   "label": "scene3d.output",
+   "kind": "render_pipeline",
+   "around_ns": 378417,
+   "hal_ns": 354125,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "out_vs",
+     "module": "scene3d output",
+     "module_entry_points": [
+      "out_vs",
+      "out_fs"
+     ],
+     "override_ns": 46791,
+     "source_ns": 21458,
+     "compile_ns": 16333,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 11,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 458
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "out_fs",
+     "module": "scene3d output",
+     "module_entry_points": [
+      "out_vs",
+      "out_fs"
+     ],
+     "override_ns": 76958,
+     "source_ns": 88166,
+     "compile_ns": 8833,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 11,
+     "kept_functions": 11,
+     "constants": 0,
+     "msl_bytes": 9225
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 59625
+    }
+   ]
+  },
+  {
+   "name": "scene3d.sample_resolve",
+   "label": "scene3d.sample_resolve",
+   "kind": "render_pipeline",
+   "around_ns": 36311292,
+   "hal_ns": 36278417,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "resolve_vs",
+     "module": "scene3d.sample_resolve",
+     "module_entry_points": [
+      "resolve_vs",
+      "resolve_fs"
+     ],
+     "override_ns": 7417,
+     "source_ns": 6834,
+     "compile_ns": 4910875,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 0,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 504
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "resolve_fs",
+     "module": "scene3d.sample_resolve",
+     "module_entry_points": [
+      "resolve_vs",
+      "resolve_fs"
+     ],
+     "override_ns": 37209,
+     "source_ns": 39542,
+     "compile_ns": 30952667,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 0,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 2136
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 254792
+    }
+   ]
+  },
+  {
+   "name": "scene3d.outlines",
+   "label": "scene3d.outlines",
+   "kind": "render_pipeline",
+   "around_ns": 101773166,
+   "hal_ns": 101737709,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "outline_vs",
+     "module": "scene3d.outlines",
+     "module_entry_points": [
+      "outline_vs",
+      "outline_fs"
+     ],
+     "override_ns": 59000,
+     "source_ns": 75458,
+     "compile_ns": 29411000,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 15,
+     "kept_functions": 3,
+     "constants": 0,
+     "msl_bytes": 7286
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "outline_fs",
+     "module": "scene3d.outlines",
+     "module_entry_points": [
+      "outline_vs",
+      "outline_fs"
+     ],
+     "override_ns": 292875,
+     "source_ns": 243166,
+     "compile_ns": 71107750,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 15,
+     "kept_functions": 10,
+     "constants": 0,
+     "msl_bytes": 15088
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 405792
+    }
+   ]
+  },
+  {
+   "name": "scene3d.labels",
+   "label": "scene3d.labels",
+   "kind": "render_pipeline",
+   "around_ns": 120719417,
+   "hal_ns": 120689208,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "label_vs",
+     "module": "scene3d.outlines",
+     "module_entry_points": [
+      "label_vs",
+      "label_fs"
+     ],
+     "override_ns": 44917,
+     "source_ns": 60542,
+     "compile_ns": 29512875,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 15,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 6421
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "label_fs",
+     "module": "scene3d.outlines",
+     "module_entry_points": [
+      "label_vs",
+      "label_fs"
+     ],
+     "override_ns": 83708,
+     "source_ns": 75375,
+     "compile_ns": 90501209,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 15,
+     "kept_functions": 1,
+     "constants": 0,
+     "msl_bytes": 8165
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 329208
+    }
+   ]
+  },
+  {
+   "name": "cull",
+   "label": "cull",
+   "kind": "compute_pipeline",
+   "around_ns": 66557125,
+   "hal_ns": 66527834,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "cull",
+     "module": "scene3d cull",
+     "module_entry_points": [
+      "cull"
+     ],
+     "override_ns": 167,
+     "source_ns": 110250,
+     "compile_ns": 66201542,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 3,
+     "kept_functions": 3,
+     "constants": 0,
+     "msl_bytes": 11579
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 182125
+    }
+   ]
+  },
+  {
+   "name": "cull_kept",
+   "label": "cull_kept",
+   "kind": "compute_pipeline",
+   "around_ns": 68099625,
+   "hal_ns": 68037375,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "cull_kept",
+     "module": "scene3d cull",
+     "module_entry_points": [
+      "cull_kept"
+     ],
+     "override_ns": 417,
+     "source_ns": 183333,
+     "compile_ns": 67684834,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 3,
+     "kept_functions": 3,
+     "constants": 0,
+     "msl_bytes": 12627
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 107042
+    }
+   ]
+  },
+  {
+   "name": "occlude",
+   "label": "occlude",
+   "kind": "compute_pipeline",
+   "around_ns": 95056167,
+   "hal_ns": 95034500,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "occlude",
+     "module": "scene3d cull",
+     "module_entry_points": [
+      "occlude"
+     ],
+     "override_ns": 458,
+     "source_ns": 109875,
+     "compile_ns": 94779042,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 3,
+     "kept_functions": 3,
+     "constants": 0,
+     "msl_bytes": 11961
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 110375
+    }
+   ]
+  },
+  {
+   "name": "pyramid_first_ms",
+   "label": "pyramid_first_ms",
+   "kind": "compute_pipeline",
+   "around_ns": 48176917,
+   "hal_ns": 48156750,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "pyramid_first_ms",
+     "module": "scene3d.depth_pyramid",
+     "module_entry_points": [
+      "pyramid_first_ms"
+     ],
+     "override_ns": 416,
+     "source_ns": 35958,
+     "compile_ns": 47986417,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 0,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 1722
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 104333
+    }
+   ]
+  },
+  {
+   "name": "pyramid_first",
+   "label": "pyramid_first",
+   "kind": "compute_pipeline",
+   "around_ns": 58113958,
+   "hal_ns": 58095083,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "pyramid_first",
+     "module": "scene3d.depth_pyramid",
+     "module_entry_points": [
+      "pyramid_first"
+     ],
+     "override_ns": 375,
+     "source_ns": 30500,
+     "compile_ns": 57932166,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 0,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 1109
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 102083
+    }
+   ]
+  },
+  {
+   "name": "pyramid_down",
+   "label": "pyramid_down",
+   "kind": "compute_pipeline",
+   "around_ns": 74517500,
+   "hal_ns": 74498042,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "pyramid_down",
+     "module": "scene3d.depth_pyramid",
+     "module_entry_points": [
+      "pyramid_down"
+     ],
+     "override_ns": 459,
+     "source_ns": 43125,
+     "compile_ns": 74305000,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 0,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 2837
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 102083
+    }
+   ]
+  },
+  {
+   "name": "scan_tile",
+   "label": "scan_tile",
+   "kind": "compute_pipeline",
+   "around_ns": 15196834,
+   "hal_ns": 15150792,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "scan_tile",
+     "module": "structural steps",
+     "module_entry_points": [
+      "scan_tile"
+     ],
+     "override_ns": 166,
+     "source_ns": 147875,
+     "compile_ns": 14745416,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 2,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 12909
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 224750
+    }
+   ]
+  },
+  {
+   "name": "scan_add",
+   "label": "scan_add",
+   "kind": "compute_pipeline",
+   "around_ns": 13762583,
+   "hal_ns": 13734333,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "scan_add",
+     "module": "structural steps",
+     "module_entry_points": [
+      "scan_add"
+     ],
+     "override_ns": 500,
+     "source_ns": 89750,
+     "compile_ns": 13520417,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 2,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 10073
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 92167
+    }
+   ]
+  },
+  {
+   "name": "compact_count",
+   "label": "compact_count",
+   "kind": "compute_pipeline",
+   "around_ns": 15159000,
+   "hal_ns": 15132875,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "compact_count",
+     "module": "structural steps",
+     "module_entry_points": [
+      "compact_count"
+     ],
+     "override_ns": 541,
+     "source_ns": 100916,
+     "compile_ns": 14897292,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 2,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 12032
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 101792
+    }
+   ]
+  },
+  {
+   "name": "compact_scatter",
+   "label": "compact_scatter",
+   "kind": "compute_pipeline",
+   "around_ns": 16335542,
+   "hal_ns": 16294542,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "compact_scatter",
+     "module": "structural steps",
+     "module_entry_points": [
+      "compact_scatter"
+     ],
+     "override_ns": 583,
+     "source_ns": 108459,
+     "compile_ns": 16049875,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 2,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 13725
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 102834
+    }
+   ]
+  },
+  {
+   "name": "sort_hist",
+   "label": "sort_hist",
+   "kind": "compute_pipeline",
+   "around_ns": 20105042,
+   "hal_ns": 20078667,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "sort_hist",
+     "module": "structural steps",
+     "module_entry_points": [
+      "sort_hist"
+     ],
+     "override_ns": 417,
+     "source_ns": 129458,
+     "compile_ns": 19817250,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 2,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 15920
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 101209
+    }
+   ]
+  },
+  {
+   "name": "sort_offsets",
+   "label": "sort_offsets",
+   "kind": "compute_pipeline",
+   "around_ns": 16702292,
+   "hal_ns": 16650375,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "sort_offsets",
+     "module": "structural steps",
+     "module_entry_points": [
+      "sort_offsets"
+     ],
+     "override_ns": 375,
+     "source_ns": 199000,
+     "compile_ns": 16135125,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 2,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 14859
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 267041
+    }
+   ]
+  },
+  {
+   "name": "sort_scatter",
+   "label": "sort_scatter",
+   "kind": "compute_pipeline",
+   "around_ns": 20445667,
+   "hal_ns": 20414167,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "sort_scatter",
+     "module": "structural steps",
+     "module_entry_points": [
+      "sort_scatter"
+     ],
+     "override_ns": 167,
+     "source_ns": 136917,
+     "compile_ns": 19995208,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 2,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 17826
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 248042
+    }
+   ]
+  },
+  {
+   "name": "dispatch_args",
+   "label": "dispatch_args",
+   "kind": "compute_pipeline",
+   "around_ns": 13539417,
+   "hal_ns": 13515041,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "dispatch_args",
+     "module": "structural steps",
+     "module_entry_points": [
+      "dispatch_args"
+     ],
+     "override_ns": 208,
+     "source_ns": 89125,
+     "compile_ns": 13300541,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 2,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 9645
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 95416
+    }
+   ]
+  },
+  {
+   "name": "mesh_row_vs [mesh_row_vs+mesh_fs] #1",
+   "label": "mesh_row_vs",
+   "kind": "render_pipeline",
+   "around_ns": 564541625,
+   "hal_ns": 564502584,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_row_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 417334,
+     "source_ns": 134667,
+     "compile_ns": 35720167,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 0,
+     "msl_bytes": 14992
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "mesh_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 1847833,
+     "source_ns": 1356375,
+     "compile_ns": 524519125,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 128,
+     "constants": 0,
+     "msl_bytes": 223462
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 275167
+    }
+   ]
+  },
+  {
+   "name": "scene3d.occluders [mesh_row_vs+occluder_fs] #1",
+   "label": "scene3d.occluders",
+   "kind": "render_pipeline",
+   "around_ns": 9530542,
+   "hal_ns": 9478000,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_row_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "occluder_fs"
+     ],
+     "override_ns": 353167,
+     "source_ns": 136542,
+     "compile_ns": 34417,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 0,
+     "msl_bytes": 14992
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "occluder_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "occluder_fs"
+     ],
+     "override_ns": 266458,
+     "source_ns": 57583,
+     "compile_ns": 8392708,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 6415
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 167500
+    }
+   ]
+  },
+  {
+   "name": "scene3d.occluders [mesh_row_vs+occluder_fs] #2",
+   "label": "scene3d.occluders",
+   "kind": "render_pipeline",
+   "around_ns": 1700083,
+   "hal_ns": 1644875,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_row_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "occluder_fs"
+     ],
+     "override_ns": 621542,
+     "source_ns": 316542,
+     "compile_ns": 91000,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 0,
+     "msl_bytes": 14992
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "occluder_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "occluder_fs"
+     ],
+     "override_ns": 373875,
+     "source_ns": 85041,
+     "compile_ns": 23458,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 6415
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 37375
+    }
+   ]
+  },
+  {
+   "name": "scene3d.occluders [mesh_row_vs+occluder_fs] #3",
+   "label": "scene3d.occluders",
+   "kind": "render_pipeline",
+   "around_ns": 974334,
+   "hal_ns": 947792,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_row_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "occluder_fs"
+     ],
+     "override_ns": 384250,
+     "source_ns": 123791,
+     "compile_ns": 29333,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 0,
+     "msl_bytes": 14992
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "occluder_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "occluder_fs"
+     ],
+     "override_ns": 269500,
+     "source_ns": 53667,
+     "compile_ns": 10833,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 2,
+     "constants": 0,
+     "msl_bytes": 6415
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 25833
+    }
+   ]
+  },
+  {
+   "name": "mesh_row_vs [mesh_row_vs+mesh_fs] #2",
+   "label": "mesh_row_vs",
+   "kind": "render_pipeline",
+   "around_ns": 3784375,
+   "hal_ns": 3757500,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_row_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 289459,
+     "source_ns": 95667,
+     "compile_ns": 12125,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 0,
+     "msl_bytes": 14992
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "mesh_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 1766250,
+     "source_ns": 1321834,
+     "compile_ns": 104042,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 128,
+     "constants": 0,
+     "msl_bytes": 223462
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 24833
+    }
+   ]
+  },
+  {
+   "name": "mesh_row_vs [mesh_row_vs+mesh_fs] #3",
+   "label": "mesh_row_vs",
+   "kind": "render_pipeline",
+   "around_ns": 4261292,
+   "hal_ns": 4230791,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_row_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 286000,
+     "source_ns": 93750,
+     "compile_ns": 12333,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 0,
+     "msl_bytes": 14992
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "mesh_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "mesh_fs"
+     ],
+     "override_ns": 1675834,
+     "source_ns": 1735458,
+     "compile_ns": 193625,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 128,
+     "constants": 0,
+     "msl_bytes": 223462
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 38333
+    }
+   ]
+  },
+  {
+   "name": "scene3d.shadow [mesh_row_vs+shadow_fs]",
+   "label": "scene3d.shadow",
+   "kind": "render_pipeline",
+   "around_ns": 24448833,
+   "hal_ns": 24414500,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_row_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "shadow_fs"
+     ],
+     "override_ns": 328542,
+     "source_ns": 128708,
+     "compile_ns": 67375,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 0,
+     "msl_bytes": 14992
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "shadow_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_row_vs",
+      "shadow_fs"
+     ],
+     "override_ns": 510459,
+     "source_ns": 87125,
+     "compile_ns": 22882625,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 3,
+     "constants": 0,
+     "msl_bytes": 7610
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 283292
+    }
+   ]
+  },
+  {
+   "name": "scene3d.local_shadow",
+   "label": "scene3d.local_shadow",
+   "kind": "render_pipeline",
+   "around_ns": 4931750,
+   "hal_ns": 4911334,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "clear",
+     "module": "scene3d.local_shadow",
+     "module_entry_points": [
+      "clear"
+     ],
+     "override_ns": 416,
+     "source_ns": 19167,
+     "compile_ns": 4762541,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 0,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 457
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 95709
+    }
+   ]
+  },
+  {
+   "name": "scene3d.sky",
+   "label": "scene3d.sky",
+   "kind": "render_pipeline",
+   "around_ns": 118889542,
+   "hal_ns": 118854250,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "sky_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "sky_vs",
+      "sky_fs"
+     ],
+     "override_ns": 283750,
+     "source_ns": 57625,
+     "compile_ns": 17542542,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 3470
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "sky_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "sky_vs",
+      "sky_fs"
+     ],
+     "override_ns": 392709,
+     "source_ns": 144334,
+     "compile_ns": 100153375,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 8,
+     "constants": 0,
+     "msl_bytes": 13171
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 181625
+    }
+   ]
+  },
+  {
+   "name": "scene3d.shadow [mesh_vs+shadow_fs]",
+   "label": "scene3d.shadow",
+   "kind": "render_pipeline",
+   "around_ns": 1060458,
+   "hal_ns": 1030500,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "mesh_vs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_vs",
+      "shadow_fs"
+     ],
+     "override_ns": 347083,
+     "source_ns": 142542,
+     "compile_ns": 36542,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 4,
+     "constants": 0,
+     "msl_bytes": 18672
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "shadow_fs",
+     "module": "scene3d",
+     "module_entry_points": [
+      "mesh_vs",
+      "shadow_fs"
+     ],
+     "override_ns": 255667,
+     "source_ns": 67417,
+     "compile_ns": 11458,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 1,
+     "module_functions": 139,
+     "kept_functions": 3,
+     "constants": 0,
+     "msl_bytes": 7610
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 118250
+    }
+   ]
+  },
+  {
+   "name": "scene3d.mirror [vs+fs] #1",
+   "label": "scene3d.mirror",
+   "kind": "render_pipeline",
+   "around_ns": 84048792,
+   "hal_ns": 84020583,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "vs",
+     "module": "scene3d.mirror",
+     "module_entry_points": [
+      "vs",
+      "fs"
+     ],
+     "override_ns": 9792,
+     "source_ns": 7542,
+     "compile_ns": 5102833,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 1,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 444
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "fs",
+     "module": "scene3d.mirror",
+     "module_entry_points": [
+      "vs",
+      "fs"
+     ],
+     "override_ns": 54167,
+     "source_ns": 66666,
+     "compile_ns": 78418375,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 1,
+     "kept_functions": 1,
+     "constants": 0,
+     "msl_bytes": 4861
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 272833
+    }
+   ]
+  },
+  {
+   "name": "scene3d.mirror [vs+fs] #2",
+   "label": "scene3d.mirror",
+   "kind": "render_pipeline",
+   "around_ns": 288667,
+   "hal_ns": 256834,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "vs",
+     "module": "scene3d.mirror",
+     "module_entry_points": [
+      "vs",
+      "fs"
+     ],
+     "override_ns": 34917,
+     "source_ns": 21334,
+     "compile_ns": 19750,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 1,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 444
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "fs",
+     "module": "scene3d.mirror",
+     "module_entry_points": [
+      "vs",
+      "fs"
+     ],
+     "override_ns": 29959,
+     "source_ns": 49584,
+     "compile_ns": 7750,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 1,
+     "kept_functions": 1,
+     "constants": 0,
+     "msl_bytes": 4861
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 69709
+    }
+   ]
+  },
+  {
+   "name": "scene3d.flare [visible]",
+   "label": "scene3d.flare",
+   "kind": "compute_pipeline",
+   "around_ns": 32524084,
+   "hal_ns": 32502709,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "visible",
+     "module": "scene3d.flare",
+     "module_entry_points": [
+      "visible"
+     ],
+     "override_ns": 167,
+     "source_ns": 85208,
+     "compile_ns": 32271084,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 7,
+     "kept_functions": 7,
+     "constants": 0,
+     "msl_bytes": 6220
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 111667
+    }
+   ]
+  },
+  {
+   "name": "scene3d.flare [emitted]",
+   "label": "scene3d.flare",
+   "kind": "compute_pipeline",
+   "around_ns": 47427625,
+   "hal_ns": 47390916,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "emitted",
+     "module": "scene3d.flare",
+     "module_entry_points": [
+      "emitted"
+     ],
+     "override_ns": 458,
+     "source_ns": 95625,
+     "compile_ns": 46991250,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 7,
+     "kept_functions": 7,
+     "constants": 0,
+     "msl_bytes": 9009
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 260208
+    }
+   ]
+  },
+  {
+   "name": "scene3d.flare [pick]",
+   "label": "scene3d.flare",
+   "kind": "compute_pipeline",
+   "around_ns": 12391417,
+   "hal_ns": 12370667,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "pick",
+     "module": "scene3d.flare",
+     "module_entry_points": [
+      "pick"
+     ],
+     "override_ns": 750,
+     "source_ns": 86792,
+     "compile_ns": 12155125,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 7,
+     "kept_functions": 7,
+     "constants": 0,
+     "msl_bytes": 6740
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 94458
+    }
+   ]
+  },
+  {
+   "name": "scene3d.flare [vs+fs]",
+   "label": "scene3d.flare",
+   "kind": "render_pipeline",
+   "around_ns": 21656625,
+   "hal_ns": 21617542,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "vs",
+     "module": "scene3d.flare",
+     "module_entry_points": [
+      "vs",
+      "fs"
+     ],
+     "override_ns": 60750,
+     "source_ns": 82125,
+     "compile_ns": 11742208,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 7,
+     "kept_functions": 5,
+     "constants": 0,
+     "msl_bytes": 7687
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "fs",
+     "module": "scene3d.flare",
+     "module_entry_points": [
+      "vs",
+      "fs"
+     ],
+     "override_ns": 69792,
+     "source_ns": 65834,
+     "compile_ns": 9176958,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 7,
+     "kept_functions": 6,
+     "constants": 0,
+     "msl_bytes": 5202
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 332917
+    }
+   ]
+  },
+  {
+   "name": "upscale [full+upscale] #1",
+   "label": "upscale",
+   "kind": "render_pipeline",
+   "around_ns": 83493417,
+   "hal_ns": 83453542,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "full",
+     "module": "surface upscale",
+     "module_entry_points": [
+      "full",
+      "upscale"
+     ],
+     "override_ns": 25625,
+     "source_ns": 24375,
+     "compile_ns": 4380375,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 9,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 724
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "upscale",
+     "module": "surface upscale",
+     "module_entry_points": [
+      "full",
+      "upscale"
+     ],
+     "override_ns": 111125,
+     "source_ns": 108459,
+     "compile_ns": 78385541,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 9,
+     "kept_functions": 7,
+     "constants": 0,
+     "msl_bytes": 12270
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 348500
+    }
+   ]
+  },
+  {
+   "name": "upscale_half",
+   "label": "upscale_half",
+   "kind": "compute_pipeline",
+   "around_ns": 140169125,
+   "hal_ns": 140150584,
+   "stages": [
+    {
+     "stage": "compute",
+     "entry_point": "upscale_half",
+     "module": "surface upscale",
+     "module_entry_points": [
+      "upscale_half"
+     ],
+     "override_ns": 292,
+     "source_ns": 115792,
+     "compile_ns": 139795209,
+     "unkept": true,
+     "untouched": true,
+     "module_overrides": 0,
+     "module_functions": 9,
+     "kept_functions": 9,
+     "constants": 0,
+     "msl_bytes": 14163
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 207959
+    }
+   ]
+  },
+  {
+   "name": "bilinear",
+   "label": "bilinear",
+   "kind": "render_pipeline",
+   "around_ns": 41061041,
+   "hal_ns": 41027958,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "full",
+     "module": "surface upscale",
+     "module_entry_points": [
+      "full",
+      "bilinear"
+     ],
+     "override_ns": 27333,
+     "source_ns": 24417,
+     "compile_ns": 20750,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 9,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 724
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "bilinear",
+     "module": "surface upscale",
+     "module_entry_points": [
+      "full",
+      "bilinear"
+     ],
+     "override_ns": 14625,
+     "source_ns": 11084,
+     "compile_ns": 40592083,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 9,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 718
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 264042
+    }
+   ]
+  },
+  {
+   "name": "upscale [full+upscale] #2",
+   "label": "upscale",
+   "kind": "render_pipeline",
+   "around_ns": 498791,
+   "hal_ns": 455709,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "full",
+     "module": "surface upscale",
+     "module_entry_points": [
+      "full",
+      "upscale"
+     ],
+     "override_ns": 51458,
+     "source_ns": 24292,
+     "compile_ns": 20334,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 9,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 724
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "upscale",
+     "module": "surface upscale",
+     "module_entry_points": [
+      "full",
+      "upscale"
+     ],
+     "override_ns": 88208,
+     "source_ns": 99917,
+     "compile_ns": 11750,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 9,
+     "kept_functions": 7,
+     "constants": 0,
+     "msl_bytes": 12270
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 129167
+    }
+   ]
+  },
+  {
+   "name": "sharpen",
+   "label": "sharpen",
+   "kind": "render_pipeline",
+   "around_ns": 71188708,
+   "hal_ns": 71161833,
+   "stages": [
+    {
+     "stage": "vertex",
+     "entry_point": "full",
+     "module": "surface upscale",
+     "module_entry_points": [
+      "full",
+      "sharpen"
+     ],
+     "override_ns": 25125,
+     "source_ns": 16666,
+     "compile_ns": 16458,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 9,
+     "kept_functions": 0,
+     "constants": 0,
+     "msl_bytes": 724
+    },
+    {
+     "stage": "fragment",
+     "entry_point": "sharpen",
+     "module": "surface upscale",
+     "module_entry_points": [
+      "full",
+      "sharpen"
+     ],
+     "override_ns": 22917,
+     "source_ns": 28625,
+     "compile_ns": 70717875,
+     "unkept": true,
+     "untouched": false,
+     "module_overrides": 0,
+     "module_functions": 9,
+     "kept_functions": 1,
+     "constants": 0,
+     "msl_bytes": 2780
+    },
+    {
+     "stage": "pipeline",
+     "override_ns": 0,
+     "source_ns": 0,
+     "compile_ns": 290041
+    }
+   ]
+  }
+ ],
+ "same_process": {
+  "ms": 40.480542,
+  "pipelines_made": 0
+ },
+ "modules": [
+  {
+   "label": "look.history",
+   "around_ns": 740542
+  },
+  {
+   "label": "scene3d",
+   "around_ns": 7666334
+  },
+  {
+   "label": "scene3d output",
+   "around_ns": 363250
+  },
+  {
+   "label": "scene3d env prefilter",
+   "around_ns": 273125
+  },
+  {
+   "label": "scene3d.light_clusters",
+   "around_ns": 383125
+  },
+  {
+   "label": "scene3d",
+   "around_ns": 9152541
+  },
+  {
+   "label": "scene3d output",
+   "around_ns": 394458
+  },
+  {
+   "label": "scene3d.sample_resolve",
+   "around_ns": 106875
+  },
+  {
+   "label": "scene3d.sample_resolve",
+   "around_ns": 60000
+  },
+  {
+   "label": "scene3d.outlines",
+   "around_ns": 850000
+  },
+  {
+   "label": "scene3d.outlines",
+   "around_ns": 559791
+  },
+  {
+   "label": "scene3d.outlines",
+   "around_ns": 584166
+  },
+  {
+   "label": "scene3d cull",
+   "around_ns": 386584
+  },
+  {
+   "label": "scene3d.depth_pyramid",
+   "around_ns": 104292
+  },
+  {
+   "label": "scene3d cull",
+   "around_ns": 261375
+  },
+  {
+   "label": "scene3d cull",
+   "around_ns": 809250
+  },
+  {
+   "label": "scene3d cull",
+   "around_ns": 382167
+  },
+  {
+   "label": "scene3d.depth_pyramid",
+   "around_ns": 108166
+  },
+  {
+   "label": "scene3d.depth_pyramid",
+   "around_ns": 94209
+  },
+  {
+   "label": "scene3d.depth_pyramid",
+   "around_ns": 128416
+  },
+  {
+   "label": "structural steps",
+   "around_ns": 749750
+  },
+  {
+   "label": "structural steps",
+   "around_ns": 525084
+  },
+  {
+   "label": "structural steps",
+   "around_ns": 353250
+  },
+  {
+   "label": "structural steps",
+   "around_ns": 373542
+  },
+  {
+   "label": "structural steps",
+   "around_ns": 417709
+  },
+  {
+   "label": "structural steps",
+   "around_ns": 437000
+  },
+  {
+   "label": "structural steps",
+   "around_ns": 414542
+  },
+  {
+   "label": "structural steps",
+   "around_ns": 656042
+  },
+  {
+   "label": "structural steps",
+   "around_ns": 360083
+  },
+  {
+   "label": "scene3d",
+   "around_ns": 6982292
+  },
+  {
+   "label": "scene3d",
+   "around_ns": 6539625
+  },
+  {
+   "label": "scene3d",
+   "around_ns": 6341375
+  },
+  {
+   "label": "scene3d.local_shadow",
+   "around_ns": 59667
+  },
+  {
+   "label": "scene3d",
+   "around_ns": 7067542
+  },
+  {
+   "label": "scene3d",
+   "around_ns": 7056375
+  },
+  {
+   "label": "scene3d.mirror",
+   "around_ns": 127916
+  },
+  {
+   "label": "scene3d.flare",
+   "around_ns": 590542
+  },
+  {
+   "label": "scene3d.flare",
+   "around_ns": 244208
+  },
+  {
+   "label": "scene3d.flare",
+   "around_ns": 319125
+  },
+  {
+   "label": "scene3d.flare",
+   "around_ns": 502625
+  },
+  {
+   "label": "scene3d.flare",
+   "around_ns": 414000
+  },
+  {
+   "label": "surface upscale",
+   "around_ns": 594167
+  },
+  {
+   "label": "surface upscale",
+   "around_ns": 414041
+  },
+  {
+   "label": "surface upscale",
+   "around_ns": 490667
+  },
+  {
+   "label": "surface upscale",
+   "around_ns": 491709
+  },
+  {
+   "label": "surface upscale",
+   "around_ns": 581125
+  }
+ ],
+ "wgpu_own": [
+  {
+   "stage": "compute",
+   "entry_point": "main",
+   "override_ns": 7833,
+   "source_ns": 242458,
+   "compile_ns": 36325459
+  },
+  {
+   "stage": "pipeline",
+   "label": "(wgpu internal) Indirect dispatch validation pipeline",
+   "compile_ns": 4576708,
+   "hal_ns": 41250625
+  },
+  {
+   "stage": "compute",
+   "entry_point": "main",
+   "override_ns": 56916,
+   "source_ns": 64250,
+   "compile_ns": 7347375
+  },
+  {
+   "stage": "pipeline",
+   "label": "(wgpu internal) Indirect draw validation pipeline",
+   "compile_ns": 221167,
+   "hal_ns": 7740584
+  }
+ ],
+ "instance_flags": 32,
+ "indirect_validation": true,
+ "frames": [
+  {
+   "frame": 0,
+   "pixel_hash": "7dc9b947c40a4daf2f52da9097369b817a2ff6883893dc748d28dbe22c33dcc9"
+  },
+  {
+   "frame": 30,
+   "pixel_hash": "245e55b0c8fe2b4f624afffd449e5ee7bf0acd869443f5fb0798d5814166512d"
+  },
+  {
+   "frame": 59,
+   "pixel_hash": "f83b01917eef57651dcc579b7c40dad5a243d0f16f70a1c8c9d5b095e1203b0a"
+  }
+ ],
+ "started": "2026-11-25T20:49:21.817Z",
+ "ended": "2026-11-25T20:49:27.081Z",
+ "load": {
+  "start": 32.15869140625,
+  "end": 30.5439453125
+ },
+ "lease": "the file ~/.cache/deepbuild-gpu/lease",
+ "probe": {
+  "path": "cold-split.probe.jsonl",
+  "sha256": "06700c0762b1a5c85a5b94b90e43aa035bb951e92342c257324a5d89570df396",
+  "rows": 292,
+  "written": 13352
+ }
+}

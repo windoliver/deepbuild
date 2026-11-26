@@ -1,0 +1,13 @@
+{
+  "packages/record/src/storage.ts": [
+    {
+      "find": [
+        "      db.pragma(`journal_size_limit = ${WAL_LIMIT}`);"
+      ],
+      "wrong": [
+        "      // Planted: the pragma is left at SQLite's default, -1, no limit.",
+        "      void WAL_LIMIT;"
+      ]
+    }
+  ]
+}

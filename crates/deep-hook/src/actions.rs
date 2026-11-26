@@ -386,8 +386,14 @@ pub fn serve() -> ExitCode {
                 "initialize" => {
                     // #2854: the client's revision when mcp.handshake@1 holds it, as a whole string; the newest otherwise.
                     let version = member(params, "protocolVersion")
-                        .and_then(|v| McpHandshakeProtocolVersion::from_json(v, "/params/protocolVersion").ok())
-                        .unwrap_or(McpHandshakeProtocolVersion::ALL[McpHandshakeProtocolVersion::ALL.len() - 1])
+                        .and_then(|v| {
+                            McpHandshakeProtocolVersion::from_json(v, "/params/protocolVersion")
+                                .ok()
+                        })
+                        .unwrap_or(
+                            McpHandshakeProtocolVersion::ALL
+                                [McpHandshakeProtocolVersion::ALL.len() - 1],
+                        )
                         .to_json();
                     let capabilities =
                         object(vec![("tools", empty.clone()), ("resources", empty.clone())]);

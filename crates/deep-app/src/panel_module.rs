@@ -36,6 +36,11 @@ pub(crate) const PAGE_ENTRY: &str = ".deepbuild-page.js";
 const MENU_MODULE: &str = "deepbuild-menu";
 const MENU: &str = include_str!("../panel-menu.js");
 
+/// The elements a script builds from, which DeepBuild serves itself (#3233) so that one given a focus handle is a
+/// tab stop, and their source.
+const REACHED: [&str; 3] = ["div", "h_flex", "v_flex"];
+const REACH: &str = include_str!("../panel-reach.js");
+
 /// A panel's scripts are read up to this many files, so a package can't make the check walk forever.
 const MAX_SCRIPTS: usize = 256;
 
@@ -127,7 +132,7 @@ fn write_source(per_frame: bool, release_always: bool) -> String {
         .filter_map(|(name, (_, from))| Some((name, from.as_ref()?)));
     for (name, from) in catalog.offered.iter().chain(per_frame) {
         // DeepBuild's own components are written out below, not re-exported.
-        if from == MENU_MODULE {
+        if from == MENU_MODULE || REACHED.contains(&name.as_str()) {
             continue;
         }
         by_module.entry(from).or_default().push(name);
@@ -145,6 +150,7 @@ fn write_source(per_frame: bool, release_always: bool) -> String {
         "const RELEASE_ALWAYS = false;", // copy-exception: script source
         &format!("const RELEASE_ALWAYS = {release_always};"), // copy-exception: script source
     ));
+    source.push_str(REACH);
     source
 }
 

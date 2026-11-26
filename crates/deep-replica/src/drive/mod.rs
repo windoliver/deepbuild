@@ -692,7 +692,7 @@ impl Replica {
                     Some(dir) => {
                         let runtime = deep_app::new_runtime();
                         let loaded = runtime.map_err(|e| e.to_string()).and_then(|runtime| {
-                            let view = deep_app::mount_panel(&runtime, &dir, window, cx)
+                            let view = deep_app::mount_panel_unheld(&runtime, &dir, window, cx)
                                 .map_err(|e| format!("{e:#}"))?;
                             match (&area, replacing) {
                                 (Some(area), _) => deep_app::views::place(

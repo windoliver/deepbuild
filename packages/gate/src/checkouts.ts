@@ -22,7 +22,7 @@ export type CheckoutPlant =
   | 'base-in-command-check' | 'any-nonzero-base-exit' | 'any-failure-of-collected-test' | 'snapshot-through-index' | 'snapshot-into-repo' | 'keeps-skip-worktree'
   | 'links-dependencies' | 'stands-in-always' | 'stamps-time' | 'keeps-every-snapshot' | 'drops-decisions' | 'removes-at-session-end'
   | 'snapshot-unbounded' | 'snapshots-one-at-a-time' | 'git-inherits-env';
-export interface CheckoutsOptions { store: string; root: string; kinds: CheckRunnerFill[]; host: Supervisor; leases: LeaseTable; now(): number; plant?: CheckoutPlant }
+export interface CheckoutsOptions { store: string; root: string; kinds: CheckRunnerFill[]; host: Supervisor; leases: LeaseTable; now(): number; removed?(dir: string): void; plant?: CheckoutPlant }
 /** `tree` is the snapshot's tree: the same tree on another HEAD is another snapshot, but the same inputs for a check (#45). */
 export interface Snapshot { commit: string; wrote: boolean; tree: string }
 /**
@@ -419,6 +419,7 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   };
   const remove = async (l: Live): Promise<void> => {
     live.delete(l.dir);
+    o.removed?.(l.dir);
     for (const s of l.standIns) if (s.run) await o.host.cleanup(s.run).catch(() => undefined);
     await clear(l.dir);
   };

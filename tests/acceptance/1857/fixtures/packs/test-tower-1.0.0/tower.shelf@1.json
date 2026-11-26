@@ -1,0 +1,36 @@
+{
+  "id": "tower.shelf",
+  "version": "1.0",
+  "title": "Shelf",
+  "license": "MIT",
+  "author": "the #1857 acceptance suite",
+  "description": "1,024 books, each a rect.",
+  "steps": {
+    "books": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": 1024,
+        "as": "i"
+      },
+      "params": {
+        "box": [
+          0,
+          0,
+          4,
+          4
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "books"
+    ]
+  }
+}

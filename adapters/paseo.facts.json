@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@3",
+  "schema": "adapter.facts@10",
   "versions": [
     "0.15.0"
   ],
@@ -109,7 +109,8 @@
           },
           "optional": {
             "turn_id": "string",
-            "error": "string"
+            "error": "string",
+            "reason": "string"
           }
         },
         "agent.permission.before": {
@@ -165,6 +166,46 @@
       "kind": "agent.stop",
       "data": {
         "outcome": "outcome"
+      },
+      "by": {
+        "field": "outcome",
+        "values": {
+          "completed": {
+            "kind": "agent.stop",
+            "data": {
+              "outcome": "=finished"
+            }
+          },
+          "failed": {
+            "kind": "agent.stop",
+            "data": {
+              "outcome": "=failed"
+            },
+            "cause": {
+              "field": "error",
+              "values": {
+                "401": "sign_in_required",
+                "403": "sign_in_required",
+                "authentication": "sign_in_required",
+                "unauthorized": "sign_in_required",
+                "invalid api key": "sign_in_required",
+                "no api key": "sign_in_required",
+                "429": "rate_limited",
+                "rate limit": "rate_limited",
+                "overloaded": "rate_limited",
+                "context length": "context_overflow",
+                "context window": "context_overflow"
+              },
+              "otherwise": "unknown"
+            }
+          },
+          "canceled": {
+            "kind": "turn.interrupted",
+            "data": {
+              "reason": "reason"
+            }
+          }
+        }
       }
     },
     "agent.permission.before": {
