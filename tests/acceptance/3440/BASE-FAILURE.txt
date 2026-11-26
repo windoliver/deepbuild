@@ -1,0 +1,64 @@
+#3440 acceptance tests at the base, 4d8baa118 (origin/main), before any implementation.
+Run on 2026-11-25, Node 24.22.0, vitest 5.0.5, macOS 27.2 (darwin, arm64), 1-minute load 9.6 from other sessions, with
+the base's packages built (npm ci && npm run build --workspaces). Command:
+
+  npx vitest run tests/acceptance/3440 --no-file-parallelism
+
+Source excerpts and stack frames beyond the first are left out; nothing else is. Every test fails on the base at its
+named assertion: 4 of 4. The temp folders (deep-3440-*) were gone after the run.
+
+ RUN  v5.0.5
+
+ ❯ tests/acceptance/3440/wal-limit.test.ts (1 test | 1 failed) 5639ms
+   × #3440.e48b80ad on a record in a file, one commit that writes four times the 64 MiB limit and then one more commit leave a write-ahead file of at most the limit 5563ms
+ ❯ tests/acceptance/3440/held-read.test.ts (1 test | 1 failed) 2048ms
+   × #3440.fd63704e with a second process holding one read open, appends grow the write-ahead file to twice the 64 MiB limit, and within two commits after the read ends it is at most the limit again 1978ms
+ ❯ tests/acceptance/3440/budget.test.ts (1 test | 1 failed) 256ms
+   × #3440.e9dfc29b record-append-20k and record-replay-100k each name this criterion for the budget window, unchanged against the merge base's budgets, and run 187ms
+ ❯ tests/acceptance/3440/size.test.ts (1 test | 1 failed) 191ms
+   × #3440.bc903f14 the record's size as the budget reads it is the log's file and its write-ahead file together, within one page 90ms
+
+ FAIL  tests/acceptance/3440/wal-limit.test.ts > #3440.e48b80ad …
+AssertionError: after one commit that left a write-ahead file of 303586352 bytes (289.5 MiB) and one more commit, the write-ahead file is 303586352 bytes (289.5 MiB), over the limit of 67108864 bytes (64.0 MiB) (the log's file is 301232128 bytes (287.3 MiB)): expected 303586352 to be less than or equal to 67108864
+ ❯ tests/acceptance/3440/wal-limit.test.ts:23:205
+   The base sets no journal_size_limit: the file holds every page the one commit wrote, 4.5 times the limit, after the
+   next commit too. Both sizes are named.
+
+ FAIL  tests/acceptance/3440/held-read.test.ts > #3440.fd63704e …
+AssertionError: two commits after the second process's read ended, the write-ahead file is 136594512 bytes (130.3 MiB), over the limit of 67108864 bytes (64.0 MiB); it was 136545072 bytes (130.2 MiB) while the read was open (the log's file is 128946176 bytes (123.0 MiB)): expected 136594512 to be less than or equal to 67108864
+ ❯ tests/acceptance/3440/held-read.test.ts:37:218
+   The read held the file past twice the limit (the assertion before this one passed), and the base never truncates
+   it once the read ends. Both sizes are named.
+
+ FAIL  tests/acceptance/3440/size.test.ts > #3440.bc903f14 …
+AssertionError: the record package's public entry exports recordSize(path), the record's size as the budget reads it: it exports none: expected 'undefined' to be 'function' // Object.is equality
+ ❯ tests/acceptance/3440/size.test.ts:23:150
+   The base has no reading of the record's size. The file loads and its record is built (the assertion before, on the
+   write-ahead file's own bytes, passed).
+
+ FAIL  tests/acceptance/3440/budget.test.ts > #3440.e9dfc29b …
+AssertionError: the task record-append-20k of benchmarks/budgets.json names #3440.e9dfc29b in its criteria, so the budget window's record of it proves the criterion: it names []: expected [] to include '#3440.e9dfc29b'
+ ❯ tests/acceptance/3440/budget.test.ts:34:222
+   The budgets are valid against the merge base's and the task keeps its command and margin (the assertions before
+   passed); neither task names the criterion yet. By hand on the base, `node benchmarks/record.mjs append-20k` exits 0 in
+   1.0 s and `replay-100k` in 6.1 s.
+
+ Test Files  4 failed (4)
+      Tests  4 failed (4)
+   Duration  9.03s
+
+Whether the tests can pass, and what the planted programs do. No product file of the repository was touched. A throwaway
+copy of packages/record/src outside the checkout (the other packages and node_modules linked beside it, this folder
+copied in, vitest run with that copy as its root) stood in for a change and for each plant:
+  stand-in fix (`journal_size_limit = 67108864` among the writer's settings; `recordSize` = the two files' bytes):
+    wal-limit, held-read and size PASS, 3 of 3 (8.8 s; size.test.ts then filled 300 events, and passed again alone
+    with the 200 it fills now).
+  wal-limit-default (no pragma on the writer: the base's own run above, and the stand-in with the pragma moved off the
+    writer, below): wal-limit FAILs as above, 303586352 bytes against 67108864.
+  wal-limit-on-reader (the pragma in openReadOnly only): held-read FAILs as above, 136594512 bytes against 67108864,
+    130.2 MiB while the read was open.
+  size-log-file-alone (`recordSize` = the log's file): size FAILs at its last assertion: "the record's size reads 4096
+    bytes (0.0 MiB); its log's file is 4096 bytes (0.0 MiB) and its write-ahead file 2826352 bytes (2.7 MiB), 2830448
+    bytes (2.7 MiB) together: the reading is 2826352 bytes short of the two together, more than one page of 4096 bytes".
+budget.test.ts was not run to a pass: it reads this checkout's git and budgets. `validateBudgets` was called by hand on
+the base's budgets with `#3440.e9dfc29b` added to both tasks' criteria, against the base's: valid, nothing moved.

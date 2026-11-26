@@ -1,0 +1,37 @@
+{
+ "script_sha256": "05c365b492af18fbf8fd1ced71b4aca9edfb306ae593b8924a22c8bc21ee7281",
+ "order": "hub",
+ "places": [
+  {"session":"other-1","check":"check-1m","snapshot":"other-1-01","queued_at":5000,"handed_at":5000,"started_at":5000,"ended_at":65000},
+  {"session":"other-1","check":"check-5m","snapshot":"other-1-01","queued_at":5000,"handed_at":5000,"started_at":5000,"ended_at":305000},
+  {"session":"other-1","check":"check-20m","snapshot":"other-1-01","queued_at":5000,"handed_at":5000,"started_at":5000,"ended_at":1205000},
+  {"session":"person","check":"check-1m","snapshot":"person-01","queued_at":45000,"handed_at":45000,"started_at":65000,"ended_at":125000},
+  {"session":"person","check":"check-5m","snapshot":"person-01","queued_at":45000,"handed_at":45000,"started_at":125000,"ended_at":425000},
+  {"session":"person","check":"check-20m","snapshot":"person-01","queued_at":45000,"handed_at":50000,"started_at":305000,"ended_at":1505000},
+  {"session":"other-3","check":"check-1m","snapshot":"other-3-01","queued_at":50000,"handed_at":125000,"started_at":1205000,"ended_at":1265000},
+  {"session":"other-3","check":"check-5m","snapshot":"other-3-01","queued_at":50000,"handed_at":200000,"started_at":1265000,"ended_at":1565000},
+  {"session":"other-3","check":"check-20m","snapshot":"other-3-01","queued_at":50000,"handed_at":200000,"started_at":1505000,"ended_at":2705000},
+  {
+   "session": "other-2",
+   "check": "check-5m",
+   "snapshot": "other-2-01",
+   "queued_at": 60000,
+   "handed_at": 60000,
+   "started_at": 425000,
+   "ended_at": 725000,
+   "base_run": {"asked_at":725000,"started_at":1925000,"ended_at":2225000}
+  },
+  {"session":"other-2","check":"check-1m","snapshot":"other-2-01","queued_at":60000,"handed_at":65000,"started_at":725000,"ended_at":785000},
+  {"session":"other-2","check":"check-20m","snapshot":"other-2-01","queued_at":60000,"handed_at":110000,"started_at":785000,"ended_at":1985000},
+  {"session":"person","check":"check-1m","snapshot":"person-02","queued_at":200000,"handed_at":305000,"started_at":1565000,"ended_at":1625000},
+  {"session":"person","check":"check-5m","snapshot":"person-02","queued_at":200000,"handed_at":425000,"started_at":1625000,"ended_at":1925000},
+  {"session":"person","check":"check-20m","snapshot":"person-02","queued_at":200000,"handed_at":785000,"started_at":1985000,"ended_at":3185000}
+ ],
+ "stops": [
+  {"session":"other-1","stop":"other-1#1","snapshot":"other-1-01","opened_by":"scheduled","at":5000,"turn_end_returned_at":5000},
+  {"session":"person","stop":"person#1","snapshot":"person-01","opened_by":"human","at":45000,"turn_end_returned_at":125000},
+  {"session":"other-3","stop":"other-3#1","snapshot":"other-3-01","opened_by":"continuation","at":50000,"turn_end_returned_at":305000},
+  {"session":"other-2","stop":"other-2#1","snapshot":"other-2-01","opened_by":"scheduled","at":60000,"turn_end_returned_at":425000},
+  {"session":"person","stop":"person#2","snapshot":"person-02","opened_by":"human","at":200000,"turn_end_returned_at":1505000}
+ ]
+}
