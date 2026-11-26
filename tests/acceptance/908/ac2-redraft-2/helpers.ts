@@ -14,6 +14,7 @@ import { askSources, draftAskSettings, openAsks } from '../../../../packages/ask
 import type { AskKind, Asks } from '../../../../packages/asks/src/index.ts';
 import type { JsonValue } from '../../../../packages/contracts/src/index.ts';
 import { withPlans } from '../../plans.ts';
+import { withDeclared } from '../../declared.ts';
 
 export const MINUTE = 60_000;
 export const HOUR = 3_600_000;
@@ -134,7 +135,7 @@ export async function openWorld(): Promise<World> {
   const w = { dir, seen, now, told: true } as World;
   const open = async () => {
     w.record = await openRecord({ path: join(dir, 'record.db'), now });
-    w.asks = withPlans(await openAsks({ record: w.record, now, deliver: () => undefined, home }));
+    w.asks = withDeclared(withPlans(await openAsks({ record: w.record, now, deliver: () => undefined, home })));
   };
   const events = async (): Promise<Event[]> => {
     const all: Event[] = [];

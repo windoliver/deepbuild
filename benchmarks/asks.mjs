@@ -46,7 +46,7 @@ const workloads = {
       const appends = [];
       for (let i = 0; i < 5; i++) {
         const data = { ...ask(s * 5 + i), deadline: T0 + 30 * 86_400_000, default: taste.fixture.ask.recommended };
-        appends.push(record.append(as('core', `S${s}`), { v: 4, id: ulidAt(T0), kind: 'ask.created', ts: T0, data }));
+        appends.push(record.append(as('core', `S${s}`), { v: 6, id: ulidAt(T0), kind: 'ask.created', ts: T0, data }));
       }
       await Promise.all(appends);
     }

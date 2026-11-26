@@ -58,7 +58,7 @@ it('a hub that slept with an ask waiting for its batch moves its deadline later 
   const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
   const taste = askSources().find((row) => row.source === 'deep_ask.taste')!.fixture.ask as Record<string, unknown>;
   const ask = ulid(now);
-  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline } as never });
+  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 6, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline } as never });
   await record.close();
   hub = spawn(process.execPath, [MAIN, 'hub', 'run', '--root', root], { stdio: ['ignore', 'pipe', 'inherit'], env: { PATH: '/usr/bin:/bin', HOME: home } });
   const ready = await new Promise<{ socket: string }>((done) => hub!.stdout!.once('data', (d) => done(JSON.parse(String(d).split('\n')[0]!))));
@@ -96,7 +96,7 @@ it('a hub that stays up shows an ask waiting for its batch at the batch time, wi
   const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
   const taste = askSources().find((row) => row.source === 'deep_ask.taste')!.fixture.ask as Record<string, unknown>;
   const ask = ulid(now);
-  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline: now + 2 * 86_400_000 } as never });
+  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 6, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline: now + 2 * 86_400_000 } as never });
   await record.close();
   hub = spawn(process.execPath, [MAIN, 'hub', 'run', '--root', root], { stdio: ['ignore', 'pipe', 'inherit'], env: { PATH: '/usr/bin:/bin', HOME: home } });
   const ready = await new Promise<{ socket: string }>((done) => hub!.stdout!.once('data', (d) => done(JSON.parse(String(d).split('\n')[0]!))));
@@ -130,7 +130,7 @@ it("the hub's list holds an ask from the batch that shows it, not while it waits
   const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
   const taste = askSources().find((row) => row.source === 'deep_ask.taste')!.fixture.ask as Record<string, unknown>;
   const ask = ulid(now);
-  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline: now + 2 * 86_400_000 } as never });
+  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 6, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline: now + 2 * 86_400_000 } as never });
   await record.close();
   hub = spawn(process.execPath, [MAIN, 'hub', 'run', '--root', root], { stdio: ['ignore', 'pipe', 'inherit'], env: { PATH: '/usr/bin:/bin', HOME: home } });
   const ready = await new Promise<{ socket: string }>((done) => hub!.stdout!.once('data', (d) => done(JSON.parse(String(d).split('\n')[0]!))));
