@@ -1,0 +1,20 @@
+{
+  "packages/record/src/storage.ts": [
+    {
+      "find": [
+        "      db.pragma(`journal_size_limit = ${WAL_LIMIT}`);"
+      ],
+      "wrong": [
+        "      // Planted: the writer sets no limit; the read-only connection does."
+      ]
+    },
+    {
+      "find": [
+        "  try { db.pragma('cache_size = -2000'); } catch { /* a file SQLite can't read: the first read reports it */ }"
+      ],
+      "wrong": [
+        "  try { db.pragma('cache_size = -2000'); db.pragma(`journal_size_limit = ${WAL_LIMIT}`); } catch { /* a file SQLite can't read: the first read reports it */ }"
+      ]
+    }
+  ]
+}
