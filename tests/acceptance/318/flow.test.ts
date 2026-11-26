@@ -6,9 +6,10 @@ import {
   DAY, HOUR, about, agent, ask, card, core, deliveredFor, gitRepo, isObj, openWorld, plan, planShown, shown, shownAsks, sourceOf,
   type World,
 } from './helpers.ts';
+import { withDeclared } from '../declared.ts';
 
 let w: World;
-beforeEach(async () => { w = await openWorld(); });
+beforeEach(async () => { w = await openWorld({ asks: withDeclared }); });
 afterEach(async () => { await w.close(); });
 
 test('#318.471f0611 a provisional taste call hands the agent the recommended option at once, and a different answer undoes it', async () => {

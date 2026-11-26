@@ -325,7 +325,9 @@ impl Light<'_> {
     ) -> (Value, f64) {
         let table = mesh.horizon.as_deref().filter(|_| !self.unbaked);
         let cam = &self.scene.camera;
-        let depth = (0..3).map(|k| (p[k] - cam.eye[k]) * cam.forward[k]).sum::<f64>();
+        let depth = (0..3)
+            .map(|k| (p[k] - cam.eye[k]) * cam.forward[k])
+            .sum::<f64>();
         let sun = self.scene.sun.as_ref().filter(|s| s.shadow);
         let toward = sun.map_or([0.0, 1.0, 0.0], |s| s.toward);
         let [lit, sky] = table.map_or([1.0, 1.0], |h| {
@@ -338,7 +340,9 @@ impl Light<'_> {
         };
         let sky = match table {
             Some(h) if self.by_slope => {
-                0.5 + 0.5 * deep_canvas_scene3d::horizon::full_normal(h, mesh, model, p).map_or(1.0, |n| n[1])
+                0.5 + 0.5
+                    * deep_canvas_scene3d::horizon::full_normal(h, mesh, model, p)
+                        .map_or(1.0, |n| n[1])
             }
             _ => sky,
         };
@@ -350,7 +354,13 @@ impl Light<'_> {
 /// `item` that holds it, the level this frame draws that tile at, and the height of the surface
 /// it draws there, from the level's own triangles as the vertex stage places them; and there the
 /// key sun's visibility and the sky's occlusion the plate reads (#1381).
-pub fn ground_points(item: &str, at: &[[f64; 2]], tiles: &Tiles, choices: &[Choice], light: &Light<'_>) -> Value {
+pub fn ground_points(
+    item: &str,
+    at: &[[f64; 2]],
+    tiles: &Tiles,
+    choices: &[Choice],
+    light: &Light<'_>,
+) -> Value {
     json!(at
         .iter()
         .map(|&[x, z]| {

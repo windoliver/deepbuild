@@ -171,10 +171,13 @@ path = "../../tests/acceptance/883/redraft-1458/ac3_tomorrow.rs"
 harness = false
 
 # Issue #992: the sidebar row the app draws for a record, which tests/acceptance/992 compares with `deep status`.
+# #3100: only those tests run it, by name with the cases they write in DH992_APP_CASES, so a workspace run leaves it.
+# #3172: its file is the blind redraft beside the suite, which states INCONCLUSIVE off macOS (#3172.f7060cf1).
 [[test]]
 name = "acceptance_992_app"
-path = "../../tests/acceptance/992/app.rs"
+path = "../../tests/acceptance/992-redraft-3172/app.rs"
 harness = false
+test = false
 
 # Issue #994: app notifications that survive a late hub, written blind in tests/acceptance/994. `acceptance_994_sound` holds
 # AC4 and uses no new surface, so it runs on the merge base; `acceptance_994_window` holds what the window says. The
@@ -219,3 +222,18 @@ path = "../../tests/acceptance/1550/probe.rs"
 [[example]]
 name = "acceptance_1550_redraft_probe"
 path = "../../tests/acceptance/1550/redraft/probe.rs"
+
+# Issue #2660 criterion 6: the terminal's acceptance test, written blind in tests/acceptance/2660
+# (here, not in deep-canvas-cells, whose canvas lint refuses `unsafe` and a target outside it).
+[[test]]
+name = "acceptance_2660_terminal"
+path = "../../tests/acceptance/2660/terminal.rs"
+
+# Issue #3233: the pack check, the load and a panel driven by key, read for tests/acceptance/3233, written blind.
+# A probe that judges nothing: panels.test.ts runs it by name and judges what it wrote, so a workspace run leaves
+# it. No harness: AppKit wants the main thread.
+[[test]]
+name = "acceptance_3233"
+path = "../../tests/acceptance/3233/app/probe.rs"
+harness = false
+test = false

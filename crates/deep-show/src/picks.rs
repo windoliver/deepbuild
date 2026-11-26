@@ -20,6 +20,9 @@ use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
 
+/// #3236: a reading focus on a set no pick control names, beside the pick control's focus.
+mod reading;
+
 /// A pick control on rows: `verb: pick` with `rows`, the sets it names in order, and its `focus`.
 pub(crate) struct Picker {
     pub id: String,
@@ -116,6 +119,8 @@ pub(crate) struct Viewer {
     focus: Option<(String, Drawn)>,
     /// Each focus announcement, `{t, id, text}`, in the order made.
     pub(crate) said: Vec<Value>,
+    /// #3236: the reading focus on a set no pick control names: the set and the stop it holds.
+    pub(crate) reading: Option<reading::Held>,
     /// Each pick control's hovered cell.
     hover: BTreeMap<String, [i64; 2]>,
     /// #298: the pointer's place over each item a driver's `hover_at` names, 0 to 1 on each axis
@@ -133,7 +138,8 @@ pub(crate) struct Viewer {
 impl Viewer {
     /// The focused row's ID, which `state.focus` reports for the control's stop.
     pub(crate) fn focused(&self) -> Option<&str> {
-        self.focus.as_ref().map(|(_, d)| d.id.as_str())
+        let reading = self.reading.as_ref().map(|h| h.id.as_str());
+        self.focus.as_ref().map(|(_, d)| d.id.as_str()).or(reading)
     }
 }
 
@@ -332,7 +338,6 @@ fn step_rows(
     count: i64,
     full: bool,
 ) -> (Vec<Value>, Option<Value>) {
-    let len = piece.items.first().map_or(1, |i| i.step);
     let mut steps = Vec::new();
     for k in 0..count {
         world.run(k + 1, rec, &mut |_, _| {});
@@ -344,8 +349,7 @@ fn step_rows(
                 .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get(f)?.clone())))
                 .collect()
         };
-        let arrays = arrays_of(world, piece);
-        let mut step = json!({"step": k, "t": k * len, "hash": field("hash"), "arrays": arrays});
+        let mut step = step_row(world, rec, piece, k);
         if full {
             for f in ["fuel", "service_ns", "mirror_ns"] {
                 step[f] = json!(field(f));
@@ -363,8 +367,18 @@ fn step_rows(
     (steps, None)
 }
 
+/// Step `k`'s row once it ran, as the `logic` call lists it: each item's step hash and arrays.
+pub(crate) fn step_row(world: &World, rec: &Record, piece: &Piece, k: i64) -> Value {
+    let len = piece.items.first().map_or(1, |i| i.step);
+    let row = rec.rows().get(&k).map(|r| &r.0);
+    let hash: Map<String, Value> = (piece.items.iter())
+        .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get("hash")?.clone())))
+        .collect();
+    json!({"step": k, "t": k * len, "hash": hash, "arrays": arrays_of(world, piece)})
+}
+
 /// Each item's arrays as its write region holds them now, by `<item>.<name>`.
-fn arrays_of(world: &World, piece: &Piece) -> Map<String, Value> {
+pub(crate) fn arrays_of(world: &World, piece: &Piece) -> Map<String, Value> {
     let mut arrays = Map::new();
     for (n, item) in piece.items.iter().enumerate() {
         let region = world.write_region(n);
@@ -602,6 +616,7 @@ impl Hub<'_> {
     /// drawing gives way to the nearest drawn row, each announced; any other stop holds no row.
     /// The planted `focus_stops_on_hidden_rows` takes rows that don't draw as drawn ones.
     pub(crate) fn settle_focus(&mut self, panel: &str) {
+        self.settle_reading(panel);
         let Some((doc, _)) = self.panel_document(panel) else {
             return;
         };
@@ -666,7 +681,13 @@ impl Hub<'_> {
         key: &str,
         serial: u64,
     ) -> Result<Vec<Value>, Value> {
+        if key == "Tab" {
+            self.skip_empty(panel);
+        }
         self.settle_focus(panel);
+        if let Some(appended) = self.reading_key(panel, key) {
+            return Ok(appended);
+        }
         let Some((control, here)) = self.scopes.get(panel).and_then(|s| s.picks.focus.clone())
         else {
             return Ok(Vec::new());
@@ -905,7 +926,18 @@ impl Hub<'_> {
         if l.saves_dir.is_some() {
             world.held = Some(Vec::new());
         }
-        let (steps, trap) = step_rows(&mut world, &mut rec, &piece, l.steps, true);
+        let (mut steps, trap) = step_rows(&mut world, &mut rec, &piece, l.steps, true);
+        // Planted (#1500): each step a carried-on run ran, taken from that run.
+        let capture = crate::hub::Planted::Join(crate::joins::Planted::ChecksReadCarriedRun);
+        let ran = self
+            .carried_rows
+            .get(&l.doc)
+            .filter(|_| self.planted(capture));
+        for s in &mut steps {
+            if let Some(r) = s["step"].as_i64().and_then(|k| ran?.get(&k)) {
+                *s = r.clone();
+            }
+        }
         let len = piece.items.first().map_or(1, |i| i.step);
         let hashes: Vec<Value> = steps.iter().map(|s| s["hash"].clone()).collect();
         let replay = self.against_record(&l.doc, &held, &hashes, &piece, len);

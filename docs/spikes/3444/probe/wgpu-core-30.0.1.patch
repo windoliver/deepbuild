@@ -1,0 +1,213 @@
+diff -ruN -x Cargo.lock -x target a/wgpu-core-30.0.1/src/command/mod.rs b/wgpu-core-30.0.1/src/command/mod.rs
+--- a/wgpu-core-30.0.1/src/command/mod.rs
++++ b/wgpu-core-30.0.1/src/command/mod.rs
+@@ -1157,6 +1157,11 @@
+                             "Begin encoding render pass with '{}' label",
+                             pass.label.as_deref().unwrap_or("")
+                         );
++                        // DeepBuild spike #3444 probe: the time inside the pass's encode.
++                        #[cfg(metal)]
++                        let probe = hal::probe::on().then(|| {
++                            (hal::probe::now_ns(), pass.label.clone(), pass.commands.len())
++                        });
+                         let res = render::encode_render_pass(
+                             &mut state,
+                             pass,
+@@ -1166,6 +1171,18 @@
+                             occlusion_query_set,
+                             multiview_mask,
+                         );
++                        #[cfg(metal)]
++                        if let Some((started, label, commands)) = probe {
++                            hal::probe::emit(
++                                "pass_encode",
++                                &alloc::format!(
++                                    "\"kind\":\"render\",\"label\":{},\"commands\":{},\"ns\":{}",
++                                    hal::probe::quote(label.as_deref().unwrap_or("")),
++                                    commands,
++                                    hal::probe::now_ns() - started,
++                                ),
++                            );
++                        }
+                         match res.as_ref() {
+                             Err(err) => {
+                                 api_log!("Finished encoding render pass ({err:?})")
+@@ -1184,7 +1201,24 @@
+                             "Begin encoding compute pass with '{}' label",
+                             pass.label.as_deref().unwrap_or("")
+                         );
++                        // DeepBuild spike #3444 probe: the time inside the pass's encode.
++                        #[cfg(metal)]
++                        let probe = hal::probe::on().then(|| {
++                            (hal::probe::now_ns(), pass.label.clone(), pass.commands.len())
++                        });
+                         let res = compute::encode_compute_pass(&mut state, pass, timestamp_writes);
++                        #[cfg(metal)]
++                        if let Some((started, label, commands)) = probe {
++                            hal::probe::emit(
++                                "pass_encode",
++                                &alloc::format!(
++                                    "\"kind\":\"compute\",\"label\":{},\"commands\":{},\"ns\":{}",
++                                    hal::probe::quote(label.as_deref().unwrap_or("")),
++                                    commands,
++                                    hal::probe::now_ns() - started,
++                                ),
++                            );
++                        }
+                         match res.as_ref() {
+                             Err(err) => {
+                                 api_log!("Finished encoding compute pass ({err:?})")
+diff -ruN -x Cargo.lock -x target a/wgpu-core-30.0.1/src/device/queue.rs b/wgpu-core-30.0.1/src/device/queue.rs
+--- a/wgpu-core-30.0.1/src/device/queue.rs
++++ b/wgpu-core-30.0.1/src/device/queue.rs
+@@ -1352,6 +1352,26 @@
+         profiling::scope!("Queue::submit");
+         api_log!("Queue::submit");
+ 
++        // DeepBuild spike #3444 probe: the device's own counters, read as each submit begins.
++        #[cfg(metal)]
++        if hal::probe::on() {
++            let counters = self.device.get_hal_counters();
++            hal::probe::emit(
++                "submit",
++                &alloc::format!(
++                    "\"device\":{},\"command_buffers_before\":{},\"query_sets\":{},\"buffers\":{},\"textures\":{},\"render_pipelines\":{},\"compute_pipelines\":{},\"shader_modules\":{}",
++                    hal::probe::quote(self.device.label()),
++                    hal::probe::COMMAND_BUFFERS.load(core::sync::atomic::Ordering::Relaxed),
++                    counters.query_sets.read(),
++                    counters.buffers.read(),
++                    counters.textures.read(),
++                    counters.render_pipelines.read(),
++                    counters.compute_pipelines.read(),
++                    counters.shader_modules.read(),
++                ),
++            );
++        }
++
+         let snatch_guard = self.device.snatchable_lock.read();
+         let mut submission = self
+             .allocate_submission(snatch_guard)
+diff -ruN -x Cargo.lock -x target a/wgpu-core-30.0.1/src/device/resource.rs b/wgpu-core-30.0.1/src/device/resource.rs
+--- a/wgpu-core-30.0.1/src/device/resource.rs
++++ b/wgpu-core-30.0.1/src/device/resource.rs
+@@ -517,6 +517,24 @@
+             None
+         };
+ 
++        // DeepBuild spike #3444 probe: the flags the instance gave this device, and whether it
++        // validates indirect calls.
++        #[cfg(metal)]
++        if hal::probe::on() {
++            hal::probe::emit(
++                "device",
++                &alloc::format!(
++                    "\"label\":{},\"backend\":{},\"adapter\":{},\"flags_bits\":{},\"validation_indirect_call\":{},\"indirect_validation\":{}",
++                    hal::probe::quote(&desc.label.to_string()),
++                    hal::probe::quote(&alloc::format!("{:?}", adapter.backend())),
++                    hal::probe::quote(&adapter.raw.info.name),
++                    instance_flags.bits(),
++                    instance_flags.contains(wgt::InstanceFlags::VALIDATION_INDIRECT_CALL),
++                    indirect_validation.is_some(),
++                ),
++            );
++        }
++
+         Ok(Self {
+             raw: raw_device,
+             adapter: adapter.clone(),
+@@ -4045,6 +4063,18 @@
+ 
+         shader_module.same_device(self)?;
+ 
++        // DeepBuild spike #3444 probe: the module this stage is made from, by its label.
++        #[cfg(metal)]
++        if hal::probe::on() {
++            hal::probe::emit(
++                "stage_module",
++                &alloc::format!(
++                    "\"stage\":\"compute\",\"module\":{}",
++                    hal::probe::quote(shader_module.label())
++                ),
++            );
++        }
++
+         let is_auto_layout = desc.layout.is_none();
+ 
+         // Get the pipeline layout from the desc if it is provided.
+@@ -4646,6 +4676,18 @@
+                     let vertex_shader_module = &stage_desc.module;
+                     vertex_shader_module.same_device(self)?;
+ 
++                    // DeepBuild spike #3444 probe: the module this stage is made from, by its label.
++                    #[cfg(metal)]
++                    if hal::probe::on() {
++                        hal::probe::emit(
++                            "stage_module",
++                            &alloc::format!(
++                                "\"stage\":\"vertex\",\"module\":{}",
++                                hal::probe::quote(vertex_shader_module.label())
++                            ),
++                        );
++                    }
++
+                     let stage_err = |error| pipeline::CreateRenderPipelineError::Stage {
+                         stage: stage_bit,
+                         error,
+@@ -4785,6 +4827,18 @@
+ 
+                 let shader_module = &fragment_state.stage.module;
+                 shader_module.same_device(self)?;
++
++                // DeepBuild spike #3444 probe: the module this stage is made from, by its label.
++                #[cfg(metal)]
++                if hal::probe::on() {
++                    hal::probe::emit(
++                        "stage_module",
++                        &alloc::format!(
++                            "\"stage\":\"fragment\",\"module\":{}",
++                            hal::probe::quote(shader_module.label())
++                        ),
++                    );
++                }
+ 
+                 let stage_err = |error| pipeline::CreateRenderPipelineError::Stage {
+                     stage: stage_bit,
+diff -ruN -x Cargo.lock -x target a/wgpu-core-30.0.1/src/instance.rs b/wgpu-core-30.0.1/src/instance.rs
+--- a/wgpu-core-30.0.1/src/instance.rs
++++ b/wgpu-core-30.0.1/src/instance.rs
+@@ -68,6 +68,13 @@
+         mut instance_desc: wgt::InstanceDescriptor,
+         telemetry: Option<hal::Telemetry>,
+     ) -> Self {
++        // DeepBuild spike #3444 probe: the indirect-call validation flag from the environment.
++        #[cfg(metal)]
++        if let Some(on) = hal::probe::indirect_call_validation() {
++            instance_desc
++                .flags
++                .set(wgt::InstanceFlags::VALIDATION_INDIRECT_CALL, on);
++        }
+         let mut this = Self {
+             _name: name.to_owned(),
+             instance_per_backend: Vec::new(),
+@@ -90,6 +97,21 @@
+         this.try_add_hal(hal::api::Gles, &instance_desc, telemetry);
+         #[cfg(feature = "noop")]
+         this.try_add_hal(hal::api::Noop, &instance_desc, telemetry);
++
++        // DeepBuild spike #3444 probe: the flags, read back from the instance once it is made.
++        #[cfg(metal)]
++        if hal::probe::on() {
++            hal::probe::emit(
++                "instance",
++                &alloc::format!(
++                    "\"flags_bits\":{},\"validation_indirect_call\":{},\"backends\":{}",
++                    this.flags.bits(),
++                    this.flags
++                        .contains(wgt::InstanceFlags::VALIDATION_INDIRECT_CALL),
++                    hal::probe::quote(&alloc::format!("{:?}", this.requested_backends)),
++                ),
++            );
++        }
+ 
+         this
+     }

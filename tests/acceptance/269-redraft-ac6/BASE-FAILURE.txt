@@ -1,0 +1,23 @@
+#269 AC6 blind redraft at the base, 136acd22f (origin/main d84d541e9 plus the first suite), before any implementation. Run
+once on 2026-11-23 on an arm64 Mac (Mac17,10; 18 cores; one-minute load about 64 to 69 during the run, 150 to 275 in the
+builds before it), with deep-gpu built first (`sh scripts/lease nice -n 10 cargo build --locked --bin deep-gpu`, 1 min 34 s,
+after deep-show's 8 min 56 s for the probe; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, the toolchain
+rust-toolchain.toml pins, from rustup) and #544's assembler built into target/acceptance-538-wat by the probe:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    npx vitest run tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts --testTimeout=600000 --hookTimeout=600000
+
+1 test, 1 failed; none passed. Duration 5.15 s (the test 3,062 ms, its builds up to date). `npx tsc --noEmit -p
+tests/acceptance/269-redraft-ac6` exits 0. The file was not rerun.
+
+ac6-budgets.test.ts:139 (`none`, ../538/helpers.ts:89), "the budget's place in the perf lane, and the grid drawn changing
+2% of its cells a step", three failures:
+  benchmarks/budgets.json has no task whose criteria name #269.6ad7e180
+  scripts/lanes.mjs does not list tests/acceptance/269-redraft-ac6/ac6-budgets.test.ts in timed, the local preflight's perf step
+  deep-gpu's film2d doesn't draw the budget's fixture: it refuses the call: {"code":"module_missing","reason":"items/war_map/kind: grid_image@1"}
+
+The lane's validator accepted the base's benchmarks/budgets.json against the merge base's (d84d541e9), so no line names
+it. deep-gpu run answered the scenario ok and refused the one film2d call, so no frame, row upload, pixel hash, gpu_ms
+or draw_ms was read. Not reached after the assertion: the reference-Mac gate and the timings. Mac17,10 (M5 Max, 64 GB)
+is one of the lane's reference Macs (scripts/benchmark.mjs `references`), but with the load above its 18 cores the gate
+would have read INCONCLUSIVE before anything was timed.

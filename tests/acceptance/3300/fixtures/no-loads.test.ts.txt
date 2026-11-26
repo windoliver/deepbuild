@@ -1,0 +1,19 @@
+// A planted timing suite (#3300 criterion 3): it hands `node benchmarks/canvas.mjs judge` a reading it makes up whose
+// runs give no loadStart and loadEnd, as #854's and #896's first drafts did. The lint must list the marked line.
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+import { expect, test } from 'vitest';
+
+const REPO = join(import.meta.dirname, '..', '..', '..');
+const BENCH = join(REPO, 'benchmarks', 'canvas.mjs');
+const FINGERPRINT = { model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30, power: 'ac', lowPowerMode: false, thermalState: 'nominal', macosBuild: '25G241', build: { profile: 'release', toolchain: 'rustc 1.99.1 (58cf8f9c3 2026-10-13)' } };
+
+function judged(report: Record<string, unknown>): Record<string, unknown> {
+  const r = spawnSync(process.execPath, [BENCH, 'judge'], { cwd: REPO, encoding: 'utf8', input: `${JSON.stringify({ current: report, base: null })}\n` });
+  return JSON.parse(r.stdout.trim().split('\n').at(-1) ?? 'null') as Record<string, unknown>;
+}
+
+test('a replica cold start within 300 ms passes', () => {
+  const verdict = judged({ task: 'replica-cold-start', fingerprint: FINGERPRINT, fixture: 'benchmarks/canvas/figure.json', runs: Array.from({ length: 5 }, () => ({ ms: 150, pipelines: [{ name: 'marks2d.fill', on_first_frame: false }] })) }); // finding
+  expect(verdict['status']).toBe('PASS');
+});

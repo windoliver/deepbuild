@@ -1,0 +1,124 @@
+{
+  "id": "familiar.spot_light",
+  "version": "1.0",
+  "title": "Spot light",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's SpotLight: intensity in candela or power in lumens over π, as light.spot@1 lumens over the whole sphere (power × 4); decay 2 only.",
+  "inputs": {
+    "color": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "intensity": {
+      "type": "number",
+      "default": 1,
+      "unit": "cd",
+      "min": 0,
+      "about": ""
+    },
+    "power": {
+      "type": "number",
+      "default": -1,
+      "unit": "lm",
+      "min": -1,
+      "about": "−1: from intensity; else the library's lumens"
+    },
+    "distance": {
+      "type": "number",
+      "default": 0,
+      "unit": "m",
+      "min": 0,
+      "max": 0,
+      "about": "0 only: a cut-off distance is another falloff, refused"
+    },
+    "decay": {
+      "type": "number",
+      "default": 2,
+      "min": 2,
+      "max": 2,
+      "about": "2 only, the inverse square: another decay is refused"
+    },
+    "angle": {
+      "type": "number",
+      "default": 60,
+      "unit": "deg",
+      "min": 0,
+      "max": 90,
+      "about": "the cone's half angle"
+    },
+    "penumbra": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "position": {
+      "type": "vec3",
+      "default": [
+        0,
+        1,
+        0
+      ],
+      "unit": "m",
+      "about": "the library's default (0, 1, 0)"
+    },
+    "target": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": "where the spot points: the library's target object's position"
+    }
+  },
+  "let": {
+    "e0": "(floor(color / 65536) % 256) / 255",
+    "l0": "e0 <= 0.04045 ? e0 / 12.92 : pow((e0 + 0.055) / 1.055, 2.4)",
+    "e1": "(floor(color / 256) % 256) / 255",
+    "l1": "e1 <= 0.04045 ? e1 / 12.92 : pow((e1 + 0.055) / 1.055, 2.4)",
+    "e2": "(color % 256) / 255",
+    "l2": "e2 <= 0.04045 ? e2 / 12.92 : pow((e2 + 0.055) / 1.055, 2.4)",
+    "lm": "power >= 0 ? 4 * power : 4 * pi * intensity",
+    "a0": "target[0] - position[0]",
+    "a1": "target[1] - position[1]",
+    "a2": "target[2] - position[2]",
+    "al": "sqrt(a0 * a0 + a1 * a1 + a2 * a2)",
+    "pitch": "al > 0 ? deg(asin(max(-1, min(1, a1 / al)))) : -90",
+    "yaw": "al > 0 ? deg(atan2(-a0, -a2)) : 0"
+  },
+  "steps": {
+    "light": {
+      "op": "item",
+      "kind": "light.spot@1",
+      "params": {
+        "power": "lm",
+        "color": [
+          "l0",
+          "l1",
+          "l2"
+        ],
+        "outer": "angle",
+        "inner": "angle * (1 - penumbra)"
+      },
+      "at": {
+        "pos": [
+          "position[0]",
+          "position[1]",
+          "position[2]"
+        ],
+        "rot": [
+          "pitch",
+          "yaw",
+          0
+        ]
+      }
+    }
+  }
+}

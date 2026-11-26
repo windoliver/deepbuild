@@ -11,6 +11,7 @@ pub(super) fn expand_one(
     planted: Planted,
     order: &mut u64,
     issues: &mut Vec<Issue>,
+    spent: &mut Spent,
 ) -> Option<Expansion> {
     let at = |field: &str| format!("items/{id}/{field}");
     let layer = member(&item, "layer").cloned().unwrap_or(Value::Null);
@@ -69,13 +70,22 @@ pub(super) fn expand_one(
             continue;
         };
         if let Some(what) = input_fault(input, value) {
-            issues.push(Issue::error(
+            let mut issue = Issue::error(
                 "out_of_range",
                 id,
                 at(&format!("params/{name}")),
                 value.clone(),
                 &format!("{what}: {}'s input `{name}`", recipe.id),
-            ));
+            );
+            // An input held to one value, such as a falloff only the inverse square draws (#2054):
+            // its fix names that value.
+            if let Some(only) = input.min.filter(|m| input.max == Some(*m)) {
+                issue.fix = format!(
+                    "Write {only}, the one value {}'s `{name}` takes.",
+                    recipe.id
+                );
+            }
+            issues.push(issue);
             ok = false;
         }
     }
@@ -96,7 +106,7 @@ pub(super) fn expand_one(
         }
         inputs.insert(name.clone(), value);
     }
-    if let Some(walk) = planted.walk_inputs {
+    if let Some(walk) = planted.walk_inputs.filter(|_| !spent.ahead) {
         // Planted (#202): the inputs walked in another order than the recipe's.
         inputs = walk(inputs);
     }
@@ -118,7 +128,9 @@ pub(super) fn expand_one(
                             && s.strip_prefix(id).is_some_and(|r| r.starts_with('.')) =>
                     {
                         if planted.orphan_drops {
-                            items.shift_remove(s);
+                            if !spent.ahead {
+                                items.shift_remove(s);
+                            }
                         } else if planted.orphan_hands_id {
                             handed.push(s.to_string());
                         } else {
@@ -198,7 +210,7 @@ pub(super) fn expand_one(
         .chain(inputs::named(recipe, &inputs, items))
         .collect();
     for (name, expr) in &recipe.lets {
-        match expr.eval(&env) {
+        match expr.eval_in(&env, spent) {
             Ok(v) => env.push((name.clone(), v)),
             Err(what) => {
                 issues.push(Issue::error(
@@ -250,7 +262,10 @@ pub(super) fn expand_one(
         };
         let spaced = match (&step.along, &curve) {
             (Some((_, Some(spacing))), Some(points)) => {
-                let gap = spacing.eval(&scope[..base]).ok().and_then(|v| v.as_f64());
+                let gap = spacing
+                    .eval_in(&scope[..base], spent)
+                    .ok()
+                    .and_then(|v| v.as_f64());
                 match gap.filter(|g| *g > 0.0) {
                     Some(g) => Some((((polyline_length(points) / g).floor() + 1.0).min(1e9), g)),
                     None => {
@@ -280,7 +295,7 @@ pub(super) fn expand_one(
                     .and_then(|(_, item)| super::super::kind_text(item))
                     .and_then(|k| k.rsplit_once('@'))
                     .and_then(|(full, _)| resolved.elements.get(full));
-                let (Some((b, item)), Some(hook)) = (builder, hook) else {
+                let (Some((b, _)), Some(hook)) = (builder, hook) else {
                     issues.push(Issue::error(
                         "ref_unresolved",
                         id,
@@ -293,11 +308,19 @@ pub(super) fn expand_one(
                     ));
                     return None;
                 };
-                let doc = json!({ "items": Value::Object(items.clone()) });
+                // The document's items are lent whole to the elements function and taken back,
+                // never copied.
+                let mut doc = Map::new();
+                doc.insert("items".into(), Value::Object(std::mem::take(items)));
+                let mut doc = Value::Object(doc);
                 let plant = planted
                     .each_per_triangle
                     .then_some("each_face_per_triangle");
-                match hook(&doc, b, item, &each.part, &each.domain, plant) {
+                let listed = hook(&doc, b, &doc["items"][b], &each.part, &each.domain, plant);
+                if let Value::Object(lent) = doc["items"].take() {
+                    *items = lent;
+                }
+                match listed {
                     Ok(list) if list.len() as u64 <= MAX_REPEAT => Some(list),
                     Ok(list) => {
                         issues.push(Issue::error(
@@ -331,7 +354,7 @@ pub(super) fn expand_one(
         // A repeat over a list (#142): its elements, fixed by the inputs and lets.
         let listed = match &step.over {
             None => None,
-            Some(list) => match list.eval(&scope[..base]) {
+            Some(list) => match list.eval_in(&scope[..base], spent) {
                 Ok(Value::Array(a)) if a.len() as u64 <= MAX_REPEAT => Some(a),
                 Ok(other) => {
                     issues.push(Issue::error(
@@ -372,7 +395,7 @@ pub(super) fn expand_one(
                     return None;
                 }
             },
-            Some((count, _)) => match count.eval(&scope[..base]) {
+            Some((count, _)) => match count.eval_in(&scope[..base], spent) {
                 Ok(v) => match v.as_f64() {
                     Some(n) if n.fract() == 0.0 && (0.0..=MAX_REPEAT as f64).contains(&n) => {
                         Some(n as u64)
@@ -403,7 +426,7 @@ pub(super) fn expand_one(
         // A condition false at check leaves the step out: it derives nothing. Over a list, it is
         // read once per element instead.
         if let Some(when) = step.when.as_ref().filter(|_| listed.is_none()) {
-            match when.eval(&scope[..base]) {
+            match when.eval_in(&scope[..base], spent) {
                 Ok(v) if !truthy(&v) => continue,
                 Ok(_) => {}
                 Err(what) => {
@@ -419,6 +442,15 @@ pub(super) fn expand_one(
             }
         }
         let n = count.unwrap_or(1);
+        // Counted before the step makes anything (Recipe: cost).
+        if let Err(what) = spent.step(recipe, step, n) {
+            let path = at(&format!("steps/{}", step.id));
+            issues.push(Issue::error("over_budget", id, path, json!(n), &what));
+            return None;
+        }
+        if spent.ahead && step.op != "recipe" {
+            continue;
+        }
         for index in 0..n {
             let derived_id = match count {
                 None => format!("{id}.{}", step.id),
@@ -463,7 +495,7 @@ pub(super) fn expand_one(
             }
             // Over a list, the condition reads the element: false leaves that element out.
             if let (Some(when), Some(_)) = (&step.when, &listed) {
-                match when.eval(&scope) {
+                match when.eval_in(&scope, spent) {
                     Ok(v) if !truthy(&v) => {
                         derived.retain(|d| d.id != derived_id);
                         continue;
@@ -483,7 +515,7 @@ pub(super) fn expand_one(
             }
             scope.push(("seed".into(), json!(seed)));
             for (name, expr) in &step.lets {
-                match expr.eval(&scope) {
+                match expr.eval_in(&scope, spent) {
                     Ok(v) => scope.push((name.clone(), v)),
                     Err(what) => {
                         issues.push(Issue::error(
@@ -499,7 +531,7 @@ pub(super) fn expand_one(
             }
             let mut params = Map::new();
             for (k, v) in &step.params {
-                match v.eval(&scope) {
+                match v.eval_in(&scope, spent) {
                     Ok(v) => {
                         params.insert(k.clone(), v);
                     }
@@ -576,7 +608,7 @@ pub(super) fn expand_one(
             // Its own parent and adjustments over the instance's (#142).
             for (key, t) in [("parent", &step.parent), ("adjust", &step.adjust)] {
                 let Some(t) = t else { continue };
-                match t.eval(&scope) {
+                match t.eval_in(&scope, spent) {
                     Ok(v) => {
                         fields.insert(key.into(), v);
                     }
@@ -601,7 +633,7 @@ pub(super) fn expand_one(
                 fields.insert("at".into(), json!({ "pos": pos }));
             }
             if let Some(at) = &step.at {
-                match at.eval(&scope) {
+                match at.eval_in(&scope, spent) {
                     Ok(mut v) => {
                         if let (Some(origin), Some(pos)) = (
                             &origin,
@@ -704,13 +736,16 @@ pub(super) fn expand_one(
                     return None;
                 }
                 let nested = Value::Object(fields);
-                // The document's items, which the nested recipe's curves and IDs are read from.
-                let mut scratch = items.clone();
-                scratch.insert(derived_id.clone(), nested.clone());
+                if planted.copies_items_per_nested {
+                    std::hint::black_box(items.clone());
+                }
+                // The nested instance stands among the document's items, which its recipe's
+                // curves and IDs are read from, while it expands, and leaves them as they were.
+                let own = items.insert(derived_id.clone(), nested.clone());
                 let mut deeper = chain.to_vec();
                 deeper.push(child.id.clone());
                 let inner = expand_one(
-                    &mut scratch,
+                    items,
                     &derived_id,
                     nested,
                     (child_pack, child),
@@ -719,9 +754,17 @@ pub(super) fn expand_one(
                     planted,
                     order,
                     issues,
-                )?;
-                let instance = scratch.remove(&derived_id).unwrap_or(Value::Null);
-                derived_items.insert(derived_id.clone(), instance);
+                    spent,
+                );
+                let instance = match own {
+                    Some(own) => items.insert(derived_id.clone(), own),
+                    None => items.shift_remove(&derived_id),
+                };
+                let Some(inner) = inner else {
+                    spent.lift(recipe, step);
+                    return None;
+                };
+                derived_items.insert(derived_id.clone(), instance.unwrap_or(Value::Null));
                 for (k, v) in inner.derived {
                     if items.contains_key(&k) {
                         issues.push(Issue::error(
@@ -814,7 +857,11 @@ pub(super) fn expand_one(
         }
     }
     // Written only once the whole expansion went through: a refused instance writes nothing.
-    for (derived_id, fields) in &derived_items {
+    // A nested instance's items are its parent's to write, and a count ahead writes none.
+    for (derived_id, fields) in derived_items
+        .iter()
+        .filter(|_| chain.len() == 1 && !spent.ahead)
+    {
         items.insert(derived_id.clone(), fields.clone());
     }
     Some(Expansion {

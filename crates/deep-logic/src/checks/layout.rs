@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas_sandbox::rewrite::hash;
 use serde_json::{json, Map, Value};
 
@@ -106,22 +105,17 @@ fn first_difference(current: &[Value], old: &[Value], array: &str) -> Option<(Va
     (current.len() != old.len()).then(|| (json!(current.len().min(old.len())), 0))
 }
 
-/// logic.layout over `line`'s `saves`, `steps` and `same`.
+/// logic.layout over `line`'s `saves`, `steps` and `same`, each save and program read by its
+/// sha256 from `stored`.
 pub fn layout(
     current: Rc<Piece>,
     old_of: &mut OldPiece<'_>,
+    stored: &dyn Fn(&str) -> Option<Vec<u8>>,
     line: &Value,
     planted: Planted,
     adapter: &str,
 ) -> Value {
-    let assets = line.pointer("/piece/assets").and_then(Value::as_object);
-    let asset = |sha: &str| {
-        assets
-            .and_then(|a| a.get(sha))
-            .and_then(Value::as_str)
-            .and_then(|b| B64.decode(b).ok())
-            .filter(|b| hash(b) == sha)
-    };
+    let asset = |sha: &str| stored(sha).filter(|b| hash(b) == sha);
     let saves: Vec<String> = line
         .get("saves")
         .and_then(Value::as_array)

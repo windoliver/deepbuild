@@ -27,12 +27,15 @@ it('hands both variants to supervised execute and the probe/judge to isolated re
         expect(grant.write).toContain(launch.cwd);
         expect(launch.env.HOME).not.toBe(home);
         expect(launch.argv[0]).toBe(join(bin, 'claude'));
-        return [{ type: 'result', subtype: 'success', is_error: false, result: seen.at(-1) ? 'quality=0.2' : 'quality=0.8' }];
+        writeFileSync(join(launch.cwd, 'answer.txt'), seen.at(-1) ? 'quality=0.2\n' : 'quality=0.8\n');
+        return [{ type: 'result', subtype: 'success', is_error: false, result: 'done' }];
       },
       read: async (agent, _model, prompt) => {
         calls.push(`read:${agent}`);
         if (agent === 'claude-code') return [{ type: 'rate_limit_event', rate_limit_info: { rateLimitType: 'five_hour', utilization: 0.05, resetsAt: 4102444800 } }];
-        const grades = [...prompt.matchAll(/=== Output ([A-Z]) ===\nFinal reply:\nquality=(0\.[28])/g)].map((m) => ({ label: m[1]!, score: Number(m[2]) }));
+        // The control's right change scores 0.9, and no change 0.
+        const grades = prompt.split(/=== Output ([A-Z]) ===\n/).slice(1).flatMap((label, i, parts) => i % 2 ? [] : [{ label, text: parts[i + 1]! }])
+          .map(({ label, text }) => ({ label, score: Number(/quality=(0\.[28])/.exec(text)?.[1] ?? (text.includes('diff --git') ? 0.9 : 0)) }));
         expect(grades).toHaveLength(2);
         return [{ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ grades }) } }, { type: 'turn.completed' }];
       },
@@ -40,7 +43,8 @@ it('hands both variants to supervised execute and the probe/judge to isolated re
     expect(report.after.outcome, report.after.reason).toBe('adopt');
     expect(seen.sort()).toEqual(['', '', '- rule\n', '- rule\n']);
     expect(calls.filter((c) => c === 'read:claude-code')).toHaveLength(1);
-    expect(calls.filter((c) => c === 'read:codex')).toHaveLength(2);
+    expect(calls.filter((c) => c === 'read:codex'), 'the control, then a request a task').toHaveLength(3);
+    expect(calls.indexOf('read:codex'), 'the control comes before any agent').toBeLessThan(calls.indexOf('execute'));
     expect(calls.filter((c) => c === 'gate:claude-code')).toHaveLength(5);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }, 120_000);

@@ -511,6 +511,31 @@
      }
     }
    }
+  },
+  "two-floors": {
+   "seed": 556,
+   "class": "figure",
+   "controls": {},
+   "items": {
+    "floors": {
+     "kind": "logic@1",
+     "params": {
+      "program": "two-floors.wasm",
+      "step_rate": 60,
+      "reads": [],
+      "writes": {
+       "cells": {
+        "type": "i32",
+        "count": 16
+       },
+       "cell": {
+        "type": "i32",
+        "count": 2
+       }
+      }
+     }
+    }
+   }
   }
  },
  "plays": {
@@ -681,6 +706,32 @@
       5
      ]
     }
+   }
+  },
+  "two-floors": {
+   "grid": {
+    "cells": "floors.cells",
+    "size": [
+     4,
+     4
+    ],
+    "shape": "square",
+    "moves": 4,
+    "classes": {
+     "open": [
+      0
+     ],
+     "blocked": [
+      1
+     ],
+     "exit": [
+      5
+     ]
+    }
+   },
+   "units": {
+    "cell": "floors.cell",
+    "self": 0
    }
   }
  },

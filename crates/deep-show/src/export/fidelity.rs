@@ -44,6 +44,17 @@ pub(crate) struct Delivery<'a> {
     pub priming: Option<i64>,
     /// What the GPU read of each frame as the export drew it: export.sync finds its white frames.
     pub reads: &'a [deep_gpu::frame_checks::Reading],
+    /// #231: for each frame, whether the export held it: the frame before it again, which the
+    /// check doesn't draw or hash a second time either.
+    pub held: &'a [bool],
+}
+
+/// #231: the frame export.fidelity last drew again, its luma and alpha sums, and how many frames
+/// it drew and hashed again.
+#[derive(Default)]
+pub(super) struct Redrawn {
+    last: Option<(Vec<u8>, [u64; 2])>,
+    pub frames: u64,
 }
 
 /// What the delivery read: the receipt's `fidelity`, the measured offset and the sound's edit-list
@@ -507,6 +518,7 @@ impl Hub<'_> {
         let mut levels: std::collections::BTreeMap<i64, [u64; 2]> = Default::default();
         let mut buf = Vec::new();
         let mut decode_seconds: Option<f64> = None;
+        let mut redrawn = Redrawn::default();
         for i in 0..n {
             let r = readers
                 .iter()
@@ -534,7 +546,14 @@ impl Hub<'_> {
             while drawn <= (i + 1).min(want - 1) {
                 levels.insert(
                     drawn,
-                    self.redraw(d, &mut sched, &mut session, drawn, &mut hasher, &mut cmp)?,
+                    self.redraw(
+                        d,
+                        (&mut sched, &mut session),
+                        drawn,
+                        &mut hasher,
+                        &mut cmp,
+                        &mut redrawn,
+                    )?,
                 );
                 levels.retain(|j, _| *j + 2 > i);
                 drawn += 1;
@@ -626,7 +645,7 @@ impl Hub<'_> {
         let alpha = alpha.map_or(Value::Null, |(p, s)| json!({"psnr": finite(p), "ssim": s}));
         Ok(
             json!({"frames": n, "floor": {"psnr_y": floor}, "psnr_y": finite(min_p), "ssim": min_s, "alpha": alpha, "worst_1pct": worst,
-            "decode_seconds": decode_seconds}),
+            "decode_seconds": decode_seconds, "redrawn": redrawn.frames}),
         )
     }
 
@@ -666,13 +685,27 @@ impl Hub<'_> {
     fn redraw(
         &mut self,
         d: &Delivery,
-        sched: &mut Scheduler<'_>,
-        session: &mut DocSession,
+        (sched, session): (&mut Scheduler<'_>, &mut DocSession),
         j: i64,
         hasher: &mut deep_gpu::blake3::Frames,
         cmp: &mut Compare,
+        redrawn: &mut Redrawn,
     ) -> Result<[u64; 2], Value> {
         let k = d.frames.start + j;
+        let lost = |_| {
+            super::stopped(
+                k,
+                "device_lost",
+                &format!("the GPU device was lost at frame {k}"),
+            )
+        };
+        // #231: a frame the export held is the frame before it: the reference drawn for that
+        // one stands for it, with no second draw and no second hash.
+        if let (Some(true), Some((bgra, sums))) = (d.held.get(j as usize), &redrawn.last) {
+            cmp.reference(j, bgra, d.job.premultiplied).map_err(lost)?;
+            return Ok(*sums);
+        }
+        redrawn.frames += 1;
         let bgra = match d.kept {
             Some(kept) => kept[j as usize].clone(),
             None => {
@@ -685,18 +718,9 @@ impl Hub<'_> {
                             &format!("frame {k} can't be drawn again: {}", u.code),
                         )
                     })?;
-                for p in px.as_chunks_mut::<4>().0 {
-                    p.swap(0, 2);
-                }
+                deep_gpu::surface::swap_red_blue(&mut px);
                 px
             }
-        };
-        let lost = |_| {
-            super::stopped(
-                k,
-                "device_lost",
-                &format!("the GPU device was lost at frame {k}"),
-            )
         };
         let mut digest = hasher.push(&bgra).map_err(lost)?;
         if digest.is_none() {
@@ -710,10 +734,9 @@ impl Hub<'_> {
             );
         }
         cmp.reference(j, &bgra, d.job.premultiplied).map_err(lost)?;
-        Ok(deep_gpu::frame_checks::plane_sums(
-            &bgra,
-            d.job.premultiplied,
-        ))
+        let sums = deep_gpu::frame_checks::plane_sums(&bgra, d.job.premultiplied);
+        redrawn.last = Some((bgra, sums));
+        Ok(sums)
     }
 
     /// A PNG sequence's fidelity is exact: each decoded frame's BGRA8 bytes hash equal to its raw

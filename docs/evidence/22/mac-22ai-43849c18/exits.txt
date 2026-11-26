@@ -1,0 +1,27 @@
+start; Now drawing from 'AC Power'; front app [Windows App] 23:06:25 load { 77.68 85.62 71.22 }  free KB 33861904
+head 43849c18b46574f85d19b54db047c05f26743acb; origin/main 7a256fd4b9651f5ed1f5255d3520603320803eb4; merge-base 7ba31d7777990f82e6fb7ca86ebcecf103af79da 23:06:25 load { 77.68 85.62 71.22 }  free KB 33858684
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 23:06:29 load { 75.30 85.00 71.08 }  free KB 33528092
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261 23:06:29 load { 75.30 85.00 71.08 }  free KB 33523764
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720 23:06:29 load { 75.30 85.00 71.08 }  free KB 33521976
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733 23:06:29 load { 75.30 85.00 71.08 }  free KB 33521788
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711 23:06:29 load { 75.30 85.00 71.08 }  free KB 33521400
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305 23:06:30 load { 75.30 85.00 71.08 }  free KB 33519360
+judge copy checks: sha256 24f89a404cfa7581a4b79fb0307e70300cc50de11011ec4533c1f320d96406a8 diff-lines=4 reopen-early-return=1 row22=1 23:06:30 load { 75.30 85.00 71.08 }  free KB 33519200
+part 1 start: Now drawing from 'AC Power'; front app [Windows App] 23:06:30 load { 75.30 85.00 71.08 }  free KB 33518844
+1a-deep-app-lib.txt: cargo exit=0; test result: ok. 132 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.05s 23:13:19 load { 70.33 84.07 76.74 }  free KB 25663412
+1b-deep-app-full.txt: cargo exit=101; failing tests 7; targets [acceptance_1141 acceptance_1141_memory acceptance_34 hub_client]; front app [Terminal] 23:16:15 load { 52.17 71.66 73.08 }  free KB 11539724
+part setup start: Now drawing from 'AC Power'; front app [Terminal] 23:16:15 load { 52.17 71.66 73.08 }  free KB 11534728
+setup (npm ci, workspace build, deep-hook) exit=0 23:18:27 load { 42.39 61.01 68.64 }  free KB 16194204
+part 5 319-budgets start: Now drawing from 'AC Power'; front app [Terminal] 23:18:27 load { 42.39 61.01 68.64 }  free KB 16192288
+319-budgets exit=0; Tests 2 passed (2); front app [Terminal] 23:18:52 load { 51.86 61.77 68.69 }  free KB 14652360
+disk guard: own incremental removed 23:18:52 load { 51.86 61.77 68.69 }  free KB 14992940
+disk guard: under 40 GB, waiting 23:18:52 load { 51.86 61.77 68.69 }  free KB 14990772
+disk guard done (40 GB = 41943040 KB) 23:20:52 load { 143.39 89.99 78.69 }  free KB 48592176
+part 6 start: Now drawing from 'AC Power'; front app [deep-app-plain] 23:20:52 load { 143.39 89.99 78.69 }  free KB 48588784
+readIssue pre-check lines 170, 'blocked' count 0 23:20:54 load { 143.39 89.99 78.69 }  free KB 48377544
+status before the judge [?? scripts/spine-22-mac-43849c18.mjs] 23:20:56 load { 144.32 91.07 79.14 }  free KB 48259896
+gh probe before: {comments:2,number:22,state:OPEN} exit=0 {comments:1,number:319,state:CLOSED} exit=0 23:21:00 load { 148.86 92.89 79.85 }  free KB 47984100
+judge exit=0 wall 1451 s 23:45:11 load { 75.07 104.61 117.73 }  free KB 58369264
+gh probe after: {comments:2,number:22,state:OPEN} exit=0 {comments:1,number:319,state:CLOSED} exit=0 23:45:14 load { 75.07 104.61 117.73 }  free KB 57822052
+git status --porcelain lines after: 1 23:45:15 load { 75.07 104.61 117.73 }  free KB 57800788
+ALL DONE 23:45:15 load { 75.07 104.61 117.73 }  free KB 57800760

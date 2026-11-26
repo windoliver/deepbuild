@@ -10,10 +10,10 @@
   "data": {
     "files": [
       {
-        "path": "/home/you/repo/AGENTS.md"
+        "path": "/srv/repo/AGENTS.md"
       },
       {
-        "path": "/home/you/repo/packages/core/AGENTS.md"
+        "path": "/srv/repo/packages/core/AGENTS.md"
       }
     ]
   }

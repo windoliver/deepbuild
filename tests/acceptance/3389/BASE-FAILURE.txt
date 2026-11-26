@@ -1,0 +1,77 @@
+#3389 acceptance tests at the base, 1f6fd2dcd (main at 611ea46e4 plus PR #3381's branch), before any implementation.
+Run on 2026-11-24, Node 24.22.2, macOS 27.2 on a Mac17,10, its 1-minute load 70 to 170 from other sessions' builds, with
+the base's packages and its deep-hook and deep-show (debug) built. Each file ran through
+`node scripts/throttle.mjs test -- node --test tests/acceptance/3389/<file>`. Stack traces, which hold this checkout's
+path, are left out; nothing else is, but where a row's JSON is cut at `…`.
+
+Every test fails on the base at its named assertion: 5 of 5.
+
+passes.test.mjs (106 s)
+  FAIL #3389.d8c0dd63 AC1, naming how many:
+    AssertionError: after 20 of the 20 appends of no session a state pass read sessions: 20 of those passes each read all 60.
+    The first read: SELECT s.id, s.project_id, s.agent, s.status, s.last_seen, s.worktree, s.cause, st.kind AS status_kind,
+    st.ts AS status_ts, s.status_at, se.kind AS seen_kind, se.ts AS seen_ts, s.seen_at FROM sessions
+    20 !== 0
+  FAIL #3389.c0c50375 AC2, naming the append before it:
+    AssertionError: a state pass read 60 other sessions after evidence.stored (log_pos 490, of no session), the append before
+    it; 27 reads gave another session's state until its end. The first: SELECT s.id, s.project_id, s.agent, s.status, …
+
+states.test.mjs (130 s)
+  FAIL #3389.63db82fc AC3, at the three appends made under another session (the 11 of no session and the superseded ask
+  are right, since a whole pass follows each):
+    AssertionError: 5 states and rows aren't those a whole pass gives. The first: session:33890006-0000-4000-8000-000000003389's
+    row after a verdict made (verdict.made, of session 33890001-0000-4000-8000-000000003389) is {"order":"0|2|~|3|…",
+    …"entry":"pass","word":"PASS","why":"its claim passed its checks","waits_on":null,…}, and {"order":"0|1|~|1|…",
+    …"entry":"fail","word":"sent back","why":"its checks sent its claim back, round 1 of 3","waits_on":"agent",…} from a hub
+    started afresh on a copy of the record
+    session:33890006-…'s state after a verdict made (verdict.made, of session 33890001-…) is "PASS/pass", and
+    "sent back/sent_back" from a hub started afresh on a copy of the record
+    session:33890007-…'s row after a claim sent back (claim.sent_back, of session 33890001-…) is {… "PASS" …}, and
+    {… "sent back","why":"its checks sent its claim back, round 2 of 3" …} from a hub started afresh on a copy of the record
+    session:33890007-…'s state after a claim sent back (claim.sent_back, of session 33890001-…) is "PASS/pass", and
+    "sent back/sent_back" from a hub started afresh on a copy of the record
+    session:33890009-…'s row after an open item opened (open_item.opened, of session 33890010-…) is {… "why":"waits for you:
+    the probe is missing" …}, and {… "why":"waits for you: the far end was not timed" …} from a hub started afresh on a copy
+    of the record
+
+quiet.test.mjs (210 s)
+  FAIL #3389.145cd5e7 AC4, naming the sessions it left finished (nothing of no session came to have it read every one):
+    AssertionError: with the clock a day past their last event, the minute pass left 16 of 80 sessions unrecorded as quiet:
+    session 33890000-0000-4000-8000-000000003389, number 1 of 80 to end, which the hub let go of, was left finished/finished;
+    session 33890001-0000-4000-8000-000000003389, number 2 of 80 to end, which the hub let go of, was left finished/finished;
+    session 33890002-0000-4000-8000-000000003389, number 3 of 80 to end, which the hub let go of, was left finished/finished;
+    and more (appended since they ended, states and rows aside: nothing)
+    16 !== 0
+
+deliveries.test.mjs (42 s)
+  FAIL #3389.c1bfb4a2 AC5, naming both counts:
+    AssertionError: the first pass of a start read delivery.outcome 20 times on 20 sessions with an answer that timed out, and
+    80 times on 80
+    80 !== 20
+
+What AC2's session ends in on the base (its own test, its read assertion printed instead, 33 s): state PASS/pass, its row
+  {"order":"0|2|work|3|<its claim's time>|session:33893389-0000-4000-8000-000000003389","id":"session:33893389-…",
+  "address":"session/33893389-…","title":"make the value module give the number four","project":"work","session":"33893389-…",
+  "agent":"claude-code","entry":"pass","word":"PASS","why":"its claim passed its checks","waits_on":null,
+  "since":<its claim's time>,"actions":[],"unread":true}, and no ask in the list. Its life appended of no session:
+  ask.answered 1, evidence.stored 3, lease.acquired 2, lease.released 2, process.ended 2, process.starting 1,
+  process.tracked 2, reading.recorded 3, row.set 5, run.cleaned 1, run.finished 1, run.started 1, sandbox.denied 1,
+  stop.held 1, transcript.archived 1, verdict.made 1.
+
+The planted programs, and whether the tests can pass. Neither plant can exist on the base, so scratch edits of the base's
+built hub (text replaced in packages/hub/dist and packages/record/dist for the run, put back after; never committed) stood
+in for a change and for each plant. On the stand-in that reads an append's own session and those it names, keeps a let-go
+session's time and reads delivery.outcome once through an index, every test passes: passes (74 s), states (144 s), quiet
+(82 s), deliveries (31 s; those last two before a helper was renamed and a message's words changed, which the runs above and
+below have). On that stand-in, with the plant's behavior:
+  state-pass-own-session-only: states.test.mjs FAILs, 31 states and rows, the first
+    session:33890001-0000-4000-8000-000000003389's row after deep off (holds.watch, of no session), without its flag
+    {"text":"`deep off` turned holds off: no stop is held and no verdict blocks", …, "code":"watch-only"}; then at each of:
+    ask.later, ask.batched, default.undone, ask.answered, delivery.outcome, verdict.made, claim.sent_back, verdict.stale,
+    open_item.opened, open_item.closed and the ask.created of no session. It is right at deep on, ask.superseded and the
+    close of the ask of no session.
+  let-go-forgets-time: quiet.test.mjs FAILs (217 s), 16 of 80 sessions left finished, the first number 1 to end, as on the
+    base.
+Two more wrong stand-ins of AC5: one that takes a delivery's oldest outcome fails at its row (since 1795543469127, not
+1795543469137), and one that reads them once by kind, with no index on the delivery, fails at "a new record has an index on
+events by the delivery an outcome names".

@@ -1,0 +1,29 @@
+{
+  "1186": [
+    {"id":"#1186.e2b7c88f","starts":"A clip recorded for this test of one"},
+    {"id":"#1186.28f81ca0","starts":"The clip carries a 64 × 64 px"},
+    {"id":"#1186.ca702c1f","starts":"The camera session starts only on a press"},
+    {"id":"#1186.f4c295fb","starts":"A pinch on the clip made while an"},
+    {"id":"#1186.fc83893a","starts":"A test bridge registered for hands@1 that plays"},
+    {"id":"#1186.d7d1556c","starts":"Budgets, on the reference Mac in the local"},
+    {"id":"#1186.9f8327d1","starts":"Shown to you: screenshots of the fixture piece"},
+    {"id":"#1186.29d25974","starts":"control@1 seals with a hands@1 device control whose"}
+  ],
+  "1187": [
+    {"id":"#1187.485e2291","starts":"Each first-set pose made by `gesture.synth` for both"},
+    {"id":"#1187.64d1fa27","starts":"Scripted synth clips at 30 fps for each"},
+    {"id":"#1187.07bc5ca8","starts":"A synth fist held for 10 s with"},
+    {"id":"#1187.aa9ebc98","starts":"A recorded 60 s track replays to the"},
+    {"id":"#1187.9e0bff27","starts":"On a labeled set recorded for this test"},
+    {"id":"#1187.f89015ee","starts":"A test pack's pose entry for a raised"},
+    {"id":"#1187.c2b1beb3","starts":"A piece that links `gesture@1` with its config"},
+    {"id":"#1187.bcccd148","starts":"Shown to you: screenshots of `gesture.lab` with the"}
+  ],
+  "1188": [
+    {"id":"#1188.f7dab055","starts":"On a fixture where dots drift down the"},
+    {"id":"#1188.ed0cc950","starts":"With `reaction: 600` the bot lights fewer dots"},
+    {"id":"#1188.7afca557","starts":"On a fixture steered by palm roll toward"},
+    {"id":"#1188.d1220db9","starts":"Every hands, still and flail run's track replays"},
+    {"id":"#1188.b9511eab","starts":"A hands bot on an interface with no"}
+  ]
+}

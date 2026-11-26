@@ -90,6 +90,8 @@ test('a repository nothing was added to yet still has a tree: git init writes no
   t.after(() => rmSync(root, { recursive: true, force: true }));
   writeFileSync(join(root, 'gap.test.mjs'), `import { test } from 'node:test';\ntest('runs', () => {});`);
   git(root, 'init', '-q');
+  // The lane's home is outside its tree, as the other fixtures' .gitignore keeps it, without adding a file.
+  writeFileSync(join(root, '.git/info/exclude'), 'home\n');
   const output = lane(root, [[process.execPath, '--test', 'gap.test.mjs']]);
   assert.match(output, /^PASS gap\b/m);
   assert.equal(readdirSync(join(root, 'home/.deepbuild/lanes')).length, 1);

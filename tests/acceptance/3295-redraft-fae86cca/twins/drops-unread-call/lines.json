@@ -1,0 +1,13 @@
+{
+  "crates/deep-hook/src/main.rs": [
+    {
+      "find": [
+        "            && (RULING.load(Ordering::SeqCst) && !RULED.load(Ordering::SeqCst)",
+        "                || PENDING.get().is_none())"
+      ],
+      "wrong": [
+        "            && RULING.load(Ordering::SeqCst) && !RULED.load(Ordering::SeqCst)"
+      ]
+    }
+  ]
+}

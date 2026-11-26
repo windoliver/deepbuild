@@ -1,0 +1,32 @@
+# #3481 acceptance suite on the merge base 1b4929ae7 (origin/main), macOS darwin-arm64, Node 24.22.0, 2026-11-24
+# npx vitest run tests/acceptance/3481   (home paths written as ~; deep-app and deep-hook already built, so the build step was quick)
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-ae830ff84315a2d80
+
+ ❯ tests/acceptance/3481/hub-check.test.ts (2 tests | 1 failed) 40702ms
+   × #3481.e99bba39 against a real hub, an app home whose control.token differs from the hub's makes deep-app --hub-check exit non-zero, print no hub ok, and name the credential refusal 39904ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3481/hub-check.test.ts > #3481.e99bba39 against a real hub, an app home whose control.token differs from the hub's makes deep-app --hub-check exit non-zero, print no hub ok, and name the credential refusal
+AssertionError: #3481 the hub refused the app's hello (its token isn't the hub's), so deep-app --hub-check must exit non-zero: exit 0, stdout "hub ok: contract 1.0\n", stderr "deep-app: the hub refused a call: Refused(Object {\"code\": String(\"credential\"), \"retryable\": Bool(false), \"remediation\": String(\"Present the control token this hub wrote to control.token at its launch; an earlier launch's token no longer counts.\"), \"path\": String(\"/token\"), \"actual\": String(\"\"), \"evidence\": Array []})\n"
+ ❯ tests/acceptance/3481/hub-check.test.ts:45:32
+     43|     const output = `${ran.stdout}\n${ran.stderr}`;
+     44|     if (ran.timedOut || ran.signal) expect.fail(`#3481 deep-app --hub-…
+     45|     if (ran.code === 0) expect.fail(`#3481 the hub refused the app's h…
+       |                                ^
+     46|     if (/hub ok/.test(output)) expect.fail(`#3481 the hub refused the …
+     47|     if (!/\bcredential\b/.test(output)) expect.fail(`#3481 deep-app --…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/3481/hub-check.test.ts:39:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  22:33:50
+   Duration  40.89s (tests 100%)
+
+vitest-exit 1

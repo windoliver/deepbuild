@@ -1,0 +1,39 @@
+Acceptance tests for #3406 on the base 9e77c2ad6 (origin/main; it has no docs/spikes/3406/), run on 2026-11-24
+with DEEP_SPIKE3406_TRANSCRIPTS unset. One failure reason per test, each a node:assert failure raised under
+tests/acceptance/3406/. No local path appears in the output.
+
+  node --test tests/acceptance/3406/spike.test.mjs
+
+# tests 10
+# pass 0
+# fail 10
+
+not ok 1 - #3406.aee36c46 for the terminal, the desktop app, the editor extension and claude -p, in each mode and by each way to post, the session's own hook log and transcript show the post delivered, held or refused, or its version shows no route; a place or mode not run keeps this open
+    BLOCKED: the spike left no record at docs/spikes/3406/record.json
+not ok 2 - #3406.5fbeee00 an idle session woke on at least 20 posts and, beside them, on its waiter at least 20 times, in one session; each time is the one its log shows from the post to the next hook, and p50 and p95 are those of the samples
+    BLOCKED: the spike left no record at docs/spikes/3406/record.json
+not ok 3 - #3406.79aefda5 what the model received and the transcript entry's origin fields are quoted from a recording the spike added to the corpus; no recording holds a token's value, and the corpus recorder's redaction and its gitleaks scan pass on each
+    BLOCKED: the spike left no record at docs/spikes/3406/record.json
+not ok 4 - #3406.3e30684e whether a claude -p session and a desktop app session woke on a post made after their stop agrees with each one's recording
+    BLOCKED: the spike left no record at docs/spikes/3406/record.json
+not ok 5 - #3406.76bfb799 a session whose settings set crossSessionInbound to hold, and one set to refuse, never received the post, and the record and the report say the route then reads absent
+    BLOCKED: the spike left no record at docs/spikes/3406/record.json
+not ok 6 - #3406.62e7fbf4 the token decision is a question whose every answer says what it costs, with nothing chosen, and this change puts the token's name in nothing it builds
+    BLOCKED: the spike left no record at docs/spikes/3406/record.json
+not ok 7 - #3406.1fb06894 the report ends with the issues it proposes, each with its depends-on, and this change touches no package, crate or adapter file and builds nothing on the inbox
+    BLOCKED: the spike left no record at docs/spikes/3406/record.json
+not ok 8 - the record names the issue, its base commit, only throwaway hook scripts, each session with its place, version and settings, every post once, and one entry per criterion
+    BLOCKED: the spike left no record at docs/spikes/3406/record.json
+not ok 9 - nothing unproven is PASS: a criterion whose evidence doesn't hold, or whose place, mode or post wasn't run, is FAIL, BLOCKED, INVALID or INCONCLUSIVE
+    BLOCKED: the spike left no record at docs/spikes/3406/record.json
+not ok 10 - the spike's files and its corpus entries hold no personal data: no home folder, user name, git identity or email address
+    BLOCKED: there is no docs/spikes/3406/ folder
+
+  node --test tests/acceptance/3406/spike.live.test.mjs
+
+# tests 1
+# pass 0
+# fail 1
+
+not ok 1 - every transcript entry the spike copied, into its logs and into its corpus entries, is an entry of that session's own transcript, with the same type, time, version, entrypoint and origin fields, and the same nonces in it
+    BLOCKED: set DEEP_SPIKE3406_TRANSCRIPTS to the folder that holds the sessions' own transcripts (~/.claude/projects)
