@@ -1053,10 +1053,13 @@ class Host implements ExtensionHost {
     return [...this.inside.keys()].flatMap((project) => this.viewsOf(project));
   }
   installedViews(): InstalledView[] {
-    return [...this.exts.values()].filter((e) => e.live && e.project === null).flatMap((e) => [...e.panels].map(([name, panel]) => ({
-      name, extension: e.entry.id, version: e.entry.version, ...panel, commands: e.commands.get(name) ?? [],
-      kit: e.entry.kits?.find((k) => k.slot === PANEL_KIT && k.fill === name)?.verdict ?? null,
-    })));
+    return [...this.exts.values()].filter((e) => e.live && e.project === null).flatMap((e) => [...e.panels].map(([name, panel]) => {
+      const run = e.entry.kits?.find((k) => k.slot === PANEL_KIT && k.fill === name);
+      return {
+        name, extension: e.entry.id, version: e.entry.version, ...panel, commands: e.commands.get(name) ?? [], kit: run?.verdict ?? null,
+        ...(run?.revision !== undefined ? { revision: run.revision } : {}), ...(run?.reading ? { reading: run.reading } : {}),
+      };
+    }));
   }
   keepKit(id: string, run: KitRun): void {
     const entry = this.entries[id];

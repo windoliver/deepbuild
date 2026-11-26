@@ -1254,6 +1254,11 @@ byHand.push('tests/acceptance/2760/budgets.test.ts');
 timed.push('tests/acceptance/2386/ac6-budget.test.ts');
 // Its blind redraft of the pixel-hash test (tests/acceptance/2386-redraft-ac6-hashes/DISPUTE.md) builds deep-canvas-render.
 alone.push('tests/acceptance/2386-redraft-ac6-hashes/');
+// #1456's first-draft AC2 and AC4 tests: their twins widen Plant to string, which builds neither at the base nor on the
+// work, so they can't be proven. Their blind redraft (tests/acceptance/1456-redraft-ac2-ac4/DISPUTE.md) runs in their
+// place, alone: its hubs run deep-hook from target/, and #992's suite it runs builds deep-drive with cargo.
+byHand.push('tests/acceptance/1456/legacy.test.ts', 'tests/acceptance/1456/agree.test.ts');
+alone.push('tests/acceptance/1456-redraft-ac2-ac4/');
 // #2897's files (blind) start a hub and DeepBuild's MCP servers as Claude Code, as #26's do. Its AC6 runs as its blind
 // redraft: the first draft reads deep_status's argument-free schema, which AC7 keeps, as empty on any program, so it is
 // kept by hand (tests/acceptance/2897-redraft-ac6/DISPUTE.md).
@@ -1581,3 +1586,13 @@ timed.push('tests/acceptance/3257/ac7-budget.test.ts');
 // #1857's folder (blind) runs alone by its lane.json. cap.test.ts and budgets.test.ts each judge a check's time and a
 // child's peak on the reference Mac.
 timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
+
+// #2750's folder (blind) runs alone by its lane.json: each test starts real hubs, a forge on 127.0.0.1 and git
+// repositories. budgets.test.ts times a rebuild from the event log on the reference Mac.
+timed.push('tests/acceptance/2750/budgets.test.ts');
+
+// #3461's once.test.ts compares with a recording made where no canvas core was built, so it fails on the merge base's
+// own program wherever deep-show is built (tests/acceptance/3461-redraft-once/DISPUTE.md). Kept as written, by hand
+// only; its blind redraft, which runs the merge base's program beside the checkout's, runs in its place.
+Object.assign(redrafted, { 'tests/acceptance/3461/once.test.ts': 'tests/acceptance/3461-redraft-once/' });
+byHand.push('tests/acceptance/3461/once.test.ts');

@@ -351,7 +351,9 @@ const SLOT: (f32, f32) = (260., 862.);
 /// script runs per frame (#1425); when it calls the network or runs a program; when it uses a component that
 /// draws outside its parent, which could cover the question card; and, run headless in its slot for half a
 /// second, when it moves focus with no gesture from you or paints outside its slot. Each refusal says why in
-/// its own words.
+/// its own words. From revision 2 (#3233) it is refused too for a press with no name or no key, and for text under
+/// the ink floor on its fill, read off the tree it builds. A panel its installer recorded against an earlier
+/// revision still passes, and what this revision would refuse in it is named beside the pass, for its listing.
 pub fn panel(dir: &std::path::Path) -> Verdict {
     let refuse = |why: String| Verdict {
         pass: false,
@@ -380,10 +382,11 @@ pub fn panel(dir: &std::path::Path) -> Verdict {
     if let Err(why) = deep_app::panel_module::check(dir) {
         return refuse(why);
     }
-    match watch(dir) {
+    let mut reading = None;
+    match watch(dir, &mut reading) {
         Ok(None) => Verdict {
             pass: true,
-            names: None,
+            names: reading,
         },
         Ok(Some(why)) | Err(why) => refuse(why),
     }
@@ -435,8 +438,9 @@ fn imports(source: &str) -> Vec<String> {
         .collect()
 }
 
-/// Runs the panel headless in an unclipped slot: what it did that no panel may, if anything.
-fn watch(dir: &std::path::Path) -> Result<Option<String>, String> {
+/// Runs the panel headless in an unclipped slot: what it did that no panel may, if anything. `reading` is given what
+/// the kit's current revision would refuse in a panel held to an earlier one.
+fn watch(dir: &std::path::Path, reading: &mut Option<String>) -> Result<Option<String>, String> {
     use gpui_kit::test::TestWindowExt as _;
     use gpui_kit::{prelude::FluentBuilder as _, *};
 
@@ -458,9 +462,11 @@ fn watch(dir: &std::path::Path) -> Result<Option<String>, String> {
     let mut cx = crate::headless_context();
     let runtime = deep_app::new_runtime().map_err(|error| format!("it doesn't load: {error:#}"))?;
     let mut mounted = Err(String::new());
+    let mut script = None;
     let (with, _) = cx.update(|cx| {
         open_window(crate::shell::window_options(), cx, |window, cx| {
             mounted = deep_app::mount_panel(&runtime, dir, window, cx)
+                .inspect(|view| script = Some(view.clone()))
                 .map(AnyView::from)
                 .map_err(|error| format!("it doesn't load: {error:#}"));
             cx.new(|_| Probe(mounted.clone().ok()))
@@ -490,6 +496,17 @@ fn watch(dir: &std::path::Path) -> Result<Option<String>, String> {
     }
     if focused(&mut cx) != before {
         return Ok(Some("it moves focus without your gesture".into()));
+    }
+    let held_to = deep_app::panel_rules::held_to(dir);
+    if held_to < deep_app::panel_rules::REVISION {
+        let found = script.map(|view| cx.update(|cx| deep_app::panel_rules::of_view(&view, cx)));
+        *reading = found.into_iter().flatten().next().map(|found| {
+            let current = deep_app::panel_rules::REVISION;
+            format!(
+                "held to revision {held_to}; revision {current} would refuse it: {}",
+                found.text
+            )
+        });
     }
     cx.update_window(without, |_, window, cx| window.render_frame(cx))
         .expect("the window draws");
