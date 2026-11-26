@@ -1,0 +1,16 @@
+{
+  "#1181.44ca3e33": [
+    "kept_current"
+  ],
+  "#1181.5880f671": [
+    "rated_meter"
+  ],
+  "#1181.d116aeee": [
+    "late_fuse"
+  ],
+  "#1181.726c5f11": [
+    "kept_current",
+    "rated_meter",
+    "late_fuse"
+  ]
+}

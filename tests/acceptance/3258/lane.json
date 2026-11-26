@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: each file builds deep-physics with cargo into this checkout's target/ and copies it out, ac1 to ac4 with the swapped soft solver and ac5 and ac6 as shipped; ac6-budget.test.ts is a timed file" }

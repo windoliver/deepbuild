@@ -1,0 +1,39 @@
+# #2081 acceptance suite on the base commit a2cbc50d9, 2026-11-24, Node v24.22.2, vitest 5.0.5, macOS (darwin-arm64).
+# 5 of 11 tests fail, each at its outcome assertion, for the reason the issue is open: the run reads uncounted because
+# its control is missing from the report, before anything says which test was left out. Nothing fails at an import, a
+# type or a timeout. The other 6 hold on the base; TWINS-RUN.txt shows each failing on its planted twin.
+# The type check, node node_modules/typescript/bin/tsc -p tests/acceptance/2081/tsconfig.json, exits 0 on the base.
+# Trimmed: each failure's source excerpt, and the failures' second copy in the summary.
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/2081/controls.test.ts --testTimeout=600000 --reporter=verbose
+(exit 1)
+
+ RUN  v5.0.5 <checkout>
+
+ × AC1 a file whose source focuses a test, under allowOnly > AC1 #2081.3c38e0f8 test.only, describe.only, a nested it.only and { only: true } read passed by the focused tests alone, each file's control failed on its own assertion past the file's last line; a file that only mentions .only in a comment and a string runs every test 3022ms
+   → {"outcome":"uncounted","mask":"the report can't record a failure: its control deepbuild control acb2b85376e7 in test/nested.test.ts is missing from the report","failures":[],"attempts":[{"test":"mention runs","outcome":"passed"},{"test":"mention runs too","outcome":"passed"},{"test":"nested > runs","outcome":"passed"},{"test":"only runs","outcome":"passed"},{"test":"option runs","outcome":"passed"},{"test":"suite > runs","outcome":"passed"}]}: expected 'uncounted' to be 'passed' // Object.is equality
+ ✓ AC1 a file whose source focuses a test, under allowOnly > AC1 #2081.3c38e0f8 a focused run whose planted module marks its failed result passed, or drops its control too, can't pass: its control still has to be reported failed 3798ms
+ × AC2 a filter that leaves a failing test out > AC2 #2081.9e2d000b a name filter in the Vitest config reads failed, naming the test left out and the filter 2154ms
+   → {"outcome":"uncounted","mask":"the report can't record a failure: its control deepbuild control 72a4ee34935c in test/cart.test.js is missing from the report","failures":[["(run)","unplaced: tests left out by name (/^cart/) that the check's command doesn't name"]],"attempts":[{"test":"cart exists","outcome":"passed"}]}: expected 'uncounted' to be 'failed' // Object.is equality
+ × AC2 a filter that leaves a failing test out > AC2 #2081.9e2d000b a tag marked only in the Vitest config, under allowOnly, reads failed, naming the test left out and the tag 1756ms
+   → {"outcome":"uncounted","mask":"the report can't record a failure: its control deepbuild control 7d3d2013a5aa in test/cart.test.js is missing from the report","failures":[["(run)","unplaced: the config's options for tag fast change which of its tests run or how they end"]],"attempts":[{"test":"cart exists","outcome":"passed"}]}: expected 'uncounted' to be 'failed' // Object.is equality
+ × AC2 a filter that leaves a failing test out > AC2 #2081.9e2d000b a blob report the Vitest config replays (mergeReports) reads failed, naming the test left out and the replay 2959ms
+   → {"outcome":"uncounted","mask":"the report can't record a failure: its control deepbuild control 59712f703660 in test/sum.test.js is missing from the report","failures":[["(run)","unplaced: results replayed from earlier runs, not run (mergeReports .vitest/blob)"]],"attempts":[{"test":"adds one and two","outcome":"passed"}]}: expected 'uncounted' to be 'failed' // Object.is equality
+ × AC2 a filter that leaves a failing test out > AC2 #2081.9e2d000b node:test's --test-name-pattern in a package script reads failed, naming the test left out and the filter 1559ms
+   → {"outcome":"uncounted","mask":"the report can't record a failure: its control deepbuild control 69636c79c14c in test/cart.test.mjs is missing from the report","failures":[],"attempts":[{"test":"exists","outcome":"passed"}]}: expected 'uncounted' to be 'failed' // Object.is equality
+ ✓ AC2 a filter that leaves a failing test out > AC2 #2081.9e2d000b a filter the command itself names still passes by the test it chooses: --testNamePattern, --tags-filter, --test-name-pattern and --test-skip-pattern 7052ms
+ ✓ AC3 a planted module that marks every failed result passed > AC3 #2081.82c87353 its run is uncounted, naming the control and that the report can't record a failure, and the claim is INVALID 2151ms
+ ✓ AC3 a planted module that marks every failed result passed > AC3 #2081.82c87353 a control missing with nothing the run can name as having left it out leaves the run uncounted, naming the control, and the claim INVALID 2242ms
+ ✓ AC3 a planted module that marks every failed result passed > AC3 #2081.82c87353 a package script's filter that leaves out nothing but the control doesn't let its run pass 1564ms
+ ✓ AC4 the five cases' interim listing > AC4 #2081.cf48270f ends with the fix: scripts/known-failures.json sets none of the five cases apart 2ms
+
+ Where each failed, all AssertionError:
+ AC1 (1)           controls.test.ts:104:33
+ AC2 name filter   leftOut controls.test.ts:78:31, called at 132:5
+ AC2 tag           leftOut controls.test.ts:78:31, called at 136:5
+ AC2 replay        leftOut controls.test.ts:78:31, called at 146:5
+ AC2 node:test     leftOut controls.test.ts:78:31, called at 151:5
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 6 passed (11)
+   Duration  56.14s (tests 95%, transform 5%)

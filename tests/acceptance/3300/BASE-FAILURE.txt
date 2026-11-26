@@ -1,0 +1,129 @@
+#3300 base and change runs, recorded by the blind job (README). Base: a fresh clone of main at 3637dea3f with this
+job's test files added and scripts/lanes-lists.mjs as the base holds it; change: the same with the lanes addition.
+Machine: a Mac15,12 (M3, 16 GB), a reference model but not fit: shared, one-minute load 80-190 on 8 cores during these runs. No cargo build was run.
+Each block is the run's summary lines (results and first assertion lines), ANSI codes stripped, paths shortened.
+
+== 1. #3300's suite on the base (lanes-lists at the base)
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/3300/judge-only.test.ts tests/acceptance/3300/loaded-run.test.ts tests/acceptance/3300/lint.test.ts
+Criterion 1's ten rows fail at their first assertion (no `redrafted` entry); criterion 3's two fail at the lint's list (the base lint prints PASS loads). Criterion 2's six rows pass on the base, so they rest on the twin (block 4).
+
+14:23  up 10 days,  7:25, 3 users, load averages: 188.81 158.95 119.07
+   × #3300.a6ff96a8 896/settled #3: the test of the first draft that judges a made-up reading runs as its blind redraft inside the suite's folder, which passes on this Mac, while the first draft runs by hand and fails, naming the load 176ms
+   × #3300.a6ff96a8 896/dirty #4: the test of the first draft that judges a made-up reading runs as its blind redraft inside the suite's folder, which passes on this Mac, while the first draft runs by hand and fails, naming the load 1ms
+   × #3300.a6ff96a8 896/dirty #7: the test of the first draft that judges a made-up reading runs as its blind redraft inside the suite's folder, which passes on this Mac, while the first draft runs by hand and fails, naming the load 0ms
+   × #3300.a6ff96a8 854/patch #3: the test of the first draft that judges a made-up reading runs as its blind redraft inside the suite's folder, which passes on this Mac, while the first draft runs by hand and fails, naming the load 0ms
+   × #3300.a6ff96a8 854/scene-read #4: the test of the first draft that judges a made-up reading runs as its blind redraft inside the suite's folder, which passes on this Mac, while the first draft runs by hand and fails, naming the load 0ms
+   × #3300.a6ff96a8 854/idle #4: the test of the first draft that judges a made-up reading runs as its blind redraft inside the suite's folder, which passes on this Mac, while the first draft runs by hand and fails, naming the load 0ms
+   × #3300.a6ff96a8 854/replica #3: the test of the first draft that judges a made-up reading runs as its blind redraft inside the suite's folder, which passes on this Mac, while the first draft runs by hand and fails, naming the load 0ms
+   × #3300.a6ff96a8 854/release #1: the test of the first draft that judges a made-up reading runs as its blind redraft inside the suite's folder, which passes on this Mac, while the first draft runs by hand and fails, naming the load 0ms
+   × #3300.a6ff96a8 854/replica-redraft #2: the test of the first draft that judges a made-up reading runs as its blind redraft inside the suite's folder, which passes on this Mac, while the first draft runs by hand and fails, naming the load 0ms
+   × #3300.a6ff96a8 854/replica-redraft #3: the test of the first draft that judges a made-up reading runs as its blind redraft inside the suite's folder, which passes on this Mac, while the first draft runs by hand and fails, naming the load 0ms
+   × #3300.6776e60e the loads lint fails a planted suite that hands canvas.mjs judge a made-up reading whose runs give no loadStart and loadEnd, naming its file and line, and lists nothing of the same suite whose runs give them 1184ms
+   × #3300.6776e60e the loads lint lists #854's and #896's first drafts, by file and line, where no redraft sits beside them, and lists nothing of either suite in this checkout, where the redrafts have landed 1012ms
+AssertionError: scripts/lanes.mjs redrafted names the blind redraft that runs in tests/acceptance/896/settled.test.ts's place: expected undefined to deeply equal Any<String>
+AssertionError: scripts/lanes.mjs redrafted names the blind redraft that runs in tests/acceptance/896/dirty.test.ts's place: expected undefined to deeply equal Any<String>
+AssertionError: scripts/lanes.mjs redrafted names the blind redraft that runs in tests/acceptance/854/patch.test.ts's place: expected undefined to deeply equal Any<String>
+AssertionError: scripts/lanes.mjs redrafted names the blind redraft that runs in tests/acceptance/854/scene-read.test.ts's place: expected undefined to deeply equal Any<String>
+AssertionError: scripts/lanes.mjs redrafted names the blind redraft that runs in tests/acceptance/854/idle.test.ts's place: expected undefined to deeply equal Any<String>
+AssertionError: scripts/lanes.mjs redrafted names the blind redraft that runs in tests/acceptance/854/replica.test.ts's place: expected undefined to deeply equal Any<String>
+AssertionError: scripts/lanes.mjs redrafted names the blind redraft that runs in tests/acceptance/854/release.test.ts's place: expected undefined to deeply equal Any<String>
+AssertionError: scripts/lanes.mjs redrafted names the blind redraft that runs in tests/acceptance/854/replica-redraft.test.ts's place: expected undefined to deeply equal Any<String>
+AssertionError: the lint lists exactly the planted reading, by file and line:
+AssertionError: the lint lists tests/acceptance/854's first draft, whose made-up runs give no loads:
+ Test Files  2 failed | 1 passed (3)
+      Tests  12 failed | 6 passed (18)
+exit=1
+
+== 2. The first drafts' judge-only tests of 854/ and 896/ on the base
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/854/ tests/acceptance/896/ --exclude '**/redraft-3300/**' -t "the lane's judge fails a reading|the lane refuses each task's perf reading"
+9 of 10 fail, every one naming "the load at each run's start and end can't be read" (9 of 9 assertion lines). The tenth, replica-redraft.test.ts's third, passes: it reads FAIL on its pipelines, which a missing load doesn't stop.
+
+     × #854.ad11ae91 the lane's judge fails a reading whose p95 is past 4 ms in all five runs, naming each run's slowest frame and the nodes it ran, and passes its twin within 4 ms 124ms
+     × #854.3f8dbc12 the lane's judge fails a reading whose summary is 2,000 tokens or more, naming the summary's size, and passes its twin under 2,000 101ms
+     × #896.18600d21 the lane's judge fails a reading whose CPU per patch doubles from 1,000 to 10,000 items, naming in each run the operator that built the most marks and how many; passes its twin within 25%; and passes no reading without a 1,000-item board or with its ratio taken from two 10,000-item boards 126ms
+     × #896.6987c701 the lane's judge fails a reading whose one-item patch uploads 640 KB, naming each run's bytes; passes its twin at 48 B; and passes no reading that doesn't report the bytes 116ms
+     × #854.022ea575 the lane's judge fails a reading that drew frames while still, naming them, and passes its twin that drew none 98ms
+     × #896.b89e4aff the lane's judge fails a reading past 4 ms in all five runs, naming for each run the stage that took the most of its slowest patch and no stage that didn't, and passes its twin within 4 ms 137ms
+     × #854.0393e70f the lane's judge fails a reading within 300 ms whose first frames compiled pipelines, naming them, and passes its twin whose first frames compiled none 112ms
+     × #854.0393e70f the lane's judge fails a reading past 300 ms in all five runs, naming the pipelines its first frames compiled, and passes its twin within 300 ms 159ms
+     × #854.926cdce7 the lane refuses each task's perf reading taken from a debug build (dev), naming the profile, and one naming no build; the same reading from a release build is judged and passes; and the cost model refuses a coefficient file from a debug build, naming the profile, while reading its release twin 363ms
+AssertionError: a reading within every target on a reference Mac passes: {"task":"canvas-idle","status":"INCONCLUSIVE","profile":"release","targets":{"frames":{"status":"PASS","limit":0,"runs":[0,0,0,0,0]},"wakeups":{"status":"INCONCLUSIVE","limit":1,"runs":[0,0,0,0,0],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"},"cpu_fraction":{"status":"INCONCLUSIVE","limit":0.001,"runs":[0.00009998333611064822,0.00009998333611064822,0.00009998333611064822,0.00009998333611064822,0.00009998333611064822],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}},"window":{"status":"INCONCLUSIVE","runs":["headless","headless","headless","headless","headless"],"reason":"run 1: headless, run 2: headless, run 3: headless, run 4: headless, run 5: headless"},"energy":{"status":"BLOCKED","counter":"ri_energy_nj","reason":"the counter ri_energy_nj read [null,null,null,null,null] nJ over the runs; a reading of zero is not energy"},"reason":"wakeups: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, th: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+AssertionError: a reading within 4 ms on a reference Mac passes: {"task":"canvas-patch-settled","status":"INCONCLUSIVE","profile":"release","targets":{"settled_p95_ms":{"status":"INCONCLUSIVE","limit":4,"runs":[1,1,1,1,1],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}},"reason":"settled_p95_ms: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+AssertionError: canvas-patch-settled: the same reading from a release build is judged and passes: {"task":"canvas-patch-settled","status":"INCONCLUSIVE","profile":"release","targets":{"settled_p95_ms":{"status":"INCONCLUSIVE","limit":4,"runs":[1,1,1,1,1],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}},"reason":"settled_p95_ms: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+AssertionError: 150 ms with no pipeline compiled on the first frame passes on a reference Mac: {"task":"replica-cold-start","status":"INCONCLUSIVE","profile":"release","targets":{"first_settled_ms":{"status":"INCONCLUSIVE","limit":300,"runs":[150,151,152,153,154],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}},"reason":"first_settled_ms: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+AssertionError: a reading within 300 ms on a reference Mac passes: {"task":"replica-cold-start","status":"INCONCLUSIVE","profile":"release","targets":{"first_settled_ms":{"status":"INCONCLUSIVE","limit":300,"runs":[150,150,150,150,150],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}},"reason":"first_settled_ms: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+AssertionError: a reading within every target on a reference Mac passes: {"task":"canvas-scene-read","status":"INCONCLUSIVE","profile":"release","targets":{"summary_ms":{"status":"INCONCLUSIVE","limit":20,"runs":[5,5,5,5,5],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"},"summary_tokens":{"status":"PASS","limit":2000,"runs":[800,800,800,800,800]},"page_ms":{"status":"INCONCLUSIVE","limit":50,"runs":[20,20,20,20,20],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"},"page_rows":{"status":"PASS","limit":1000,"runs":[1000,1000,1000,1000,1000]}},"reason":"summary_ms: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}] | page_ms: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+AssertionError: CPU per patch 10% apart passes: {"task":"canvas-patch-dirty","status":"INCONCLUSIVE","profile":"release","targets":{"cpu_growth":{"status":"INCONCLUSIVE","limit":0.25,"runs":[0.10000000000000019,0.10000000000000019,0.10000000000000019,0.10000000000000019,0.10000000000000019],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"},"upload_bytes_per_item":{"status":"PASS","limit":64,"runs":[48,48,48,48,48]}},"reason":"cpu_growth: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+AssertionError: 48 B a patch passes: {"task":"canvas-patch-dirty","status":"INCONCLUSIVE","profile":"release","targets":{"cpu_growth":{"status":"INCONCLUSIVE","limit":0.25,"runs":[0,0,0,0,0],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"},"upload_bytes_per_item":{"status":"PASS","limit":64,"runs":[48,48,48,48,48]}},"reason":"cpu_growth: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+AssertionError: a reading within 4 ms on a reference Mac passes: {"task":"canvas-patch-settled","status":"INCONCLUSIVE","profile":"release","targets":{"settled_p95_ms":{"status":"INCONCLUSIVE","limit":4,"runs":[0.9999999999999999,0.9999999999999999,0.9999999999999999,0.9999999999999999,0.9999999999999999],"margin":0.05,"reason":"a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}},"reason":"settled_p95_ms: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): the load at each run's start and end can't be read: [{},{},{},{},{}]"}: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+ Test Files  8 failed | 1 skipped (9)
+      Tests  9 failed | 1 passed | 23 skipped (33)
+exit=1
+
+== 3. The redrafts' judge-only tests on the base
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/854/redraft-3300/ tests/acceptance/896/redraft-3300/ --exclude tests/acceptance/854/redraft-3300/release.test.ts -t "the lane's judge fails a reading|the lane refuses each task's perf reading"
+All 9 pass. release.test.ts's redraft is left out: after judging it builds deep-show (cargo), which this job doesn't run.
+
+ Test Files  7 passed (7)
+      Tests  9 passed | 19 skipped (28)
+exit=0
+
+== 4. Twin judge-ignores-loads, criterion 2 (laid in a scratch copy, never in the checkout)
+$ cd <twin checkout> && NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3300 loaded-run.test.ts
+The copy holds benchmarks/, scripts/, adapters/, package.json, tsconfig*.json and tests/acceptance/{854,896,3300} of the checkout, node_modules linked, with lines.json's edit applied to benchmarks/canvas-judge.mjs (checked to differ at line 17 only). All six rows fail at the INCONCLUSIVE assertion: the loaded reading reads PASS.
+
+   × #3300.b2574093 the redrafted made-up reading of 854 patch within every target reads PASS at rest, and INCONCLUSIVE naming the load when its run 3 starts at a load above the core count 217ms
+   × #3300.b2574093 the redrafted made-up reading of 854 scene read within every target reads PASS at rest, and INCONCLUSIVE naming the load when its run 3 starts at a load above the core count 197ms
+   × #3300.b2574093 the redrafted made-up reading of 854 idle within every target reads PASS at rest, and INCONCLUSIVE naming the load when its run 3 starts at a load above the core count 203ms
+   × #3300.b2574093 the redrafted made-up reading of 854 replica within every target reads PASS at rest, and INCONCLUSIVE naming the load when its run 3 starts at a load above the core count 183ms
+   × #3300.b2574093 the redrafted made-up reading of 896 settled within every target reads PASS at rest, and INCONCLUSIVE naming the load when its run 3 starts at a load above the core count 200ms
+   × #3300.b2574093 the redrafted made-up reading of 896 dirty within every target reads PASS at rest, and INCONCLUSIVE naming the load when its run 3 starts at a load above the core count 228ms
+AssertionError: run 3 starting at load 4096 reads INCONCLUSIVE: {"task":"canvas-patch-settled","status":"PASS","profile":"release","targets":{"settled_p95_ms":{"status":"PASS","limit":4,"runs":[1,1,1,1,1],"margin":0.05}}}: expected 'PASS' to be 'INCONCLUSIVE' // Object.is equality
+AssertionError: run 3 starting at load 4096 reads INCONCLUSIVE: {"task":"canvas-scene-read","status":"PASS","profile":"release","targets":{"summary_ms":{"status":"PASS","limit":20,"runs":[5,5,5,5,5],"margin":0.05},"summary_tokens":{"status":"PASS","limit":2000,"runs":[800,800,800,800,800]},"page_ms":{"status":"PASS","limit":50,"runs":[20,20,20,20,20],"margin":0.05},"page_rows":{"status":"PASS","limit":1000,"runs":[1000,1000,1000,1000,1000]}}}: expected 'PASS' to be 'INCONCLUSIVE' // Object.is equality
+AssertionError: run 3 starting at load 4096 reads INCONCLUSIVE: {"task":"canvas-idle","status":"PASS","profile":"release","targets":{"frames":{"status":"PASS","limit":0,"runs":[0,0,0,0,0]},"wakeups":{"status":"PASS","limit":1,"runs":[0,0,0,0,0],"margin":0.05},"cpu_fraction":{"status":"PASS","limit":0.001,"runs":[0.00009998333611064822,0.00009998333611064822,0.00009998333611064822,0.00009998333611064822,0.00009998333611064822],"margin":0.05}},"window":{"status":"PASS","runs":["shown","shown","shown","shown","shown"]},"energy":{"status":"BLOCKED","counter":"ri_energy_nj","reason":"the counter ri_energy_nj read [null,null,null,null,null] nJ over the runs; a reading of zero is not energy"}}: expected 'PASS' to be 'INCONCLUSIVE' // Object.is equality
+AssertionError: run 3 starting at load 4096 reads INCONCLUSIVE: {"task":"replica-cold-start","status":"PASS","profile":"release","targets":{"first_settled_ms":{"status":"PASS","limit":300,"runs":[150,150,150,150,150],"margin":0.05}}}: expected 'PASS' to be 'INCONCLUSIVE' // Object.is equality
+AssertionError: run 3 starting at load 4096 reads INCONCLUSIVE: {"task":"canvas-patch-settled","status":"PASS","profile":"release","targets":{"settled_p95_ms":{"status":"PASS","limit":4,"runs":[0.9999999999999999,0.9999999999999999,0.9999999999999999,0.9999999999999999,0.9999999999999999],"margin":0.05}}}: expected 'PASS' to be 'INCONCLUSIVE' // Object.is equality
+AssertionError: run 3 starting at load 4096 reads INCONCLUSIVE: {"task":"canvas-patch-dirty","status":"PASS","profile":"release","targets":{"cpu_growth":{"status":"PASS","limit":0.25,"runs":[0,0,0,0,0],"margin":0.05},"upload_bytes_per_item":{"status":"PASS","limit":64,"runs":[48,48,48,48,48]}}}: expected 'PASS' to be 'INCONCLUSIVE' // Object.is equality
+ Test Files  1 failed (1)
+      Tests  6 failed (6)
+exit=1
+
+== 5. #3300's suite on the change as this job leaves it (lanes addition in, lint not yet written)
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/3300/judge-only.test.ts tests/acceptance/3300/loaded-run.test.ts tests/acceptance/3300/lint.test.ts
+Criteria 1 and 2 pass (16); criterion 3's two fail until the implementer's lint lands, as expected.
+
+14:22  up 10 days,  7:24, 3 users, load averages: 186.88 151.83 113.60
+   × #3300.6776e60e the loads lint fails a planted suite that hands canvas.mjs judge a made-up reading whose runs give no loadStart and loadEnd, naming its file and line, and lists nothing of the same suite whose runs give them 1188ms
+   × #3300.6776e60e the loads lint lists #854's and #896's first drafts, by file and line, where no redraft sits beside them, and lists nothing of either suite in this checkout, where the redrafts have landed 1453ms
+AssertionError: the lint lists exactly the planted reading, by file and line:
+AssertionError: the lint lists tests/acceptance/854's first draft, whose made-up runs give no loads:
+ Test Files  1 failed | 2 passed (3)
+      Tests  2 failed | 16 passed (18)
+exit=1
+
+== 6. #1492's and #1551's judge-only tests, first drafts and redrafts (owner's ruling: redrafted in this PR)
+Run on <checkout> at branch claude/issue-3300-loads-redraft (the change, with these redrafts and their lanes lines added,
+uncommitted). The filter leaves out each file's measured test (the idle task run on this Mac).
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1492/idle-energy.test.ts tests/acceptance/1551/lane.test.ts -t "a reading prints beside CPU|a counter that reads zero is BLOCKED|energy is a reading only|the lane's judge takes a reading whose every run was shown|a headless reading, the merge base's shape"
+First drafts: all 5 pass, as at the base. Their tests read the energy entry and the window entry, which the missing loads
+don't change, so they never failed; the redraft is so that criterion 3's
+lint, which fails a made-up reading whose runs give no loads, lists none (not run here: this job doesn't read or run
+the implementer's lint).
+
+14:34  up 10 days,  7:36, 3 users, load averages: 20.79 88.49 110.86
+ Test Files  2 passed (2)
+      Tests  5 passed | 2 skipped (7)
+exit=0
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1492/redraft-3300/ tests/acceptance/1551/redraft-3300/ -t "a reading prints beside CPU|a counter that reads zero is BLOCKED|energy is a reading only|the lane's judge takes a reading whose every run was shown|a headless reading, the merge base's shape"
+Redrafts: all 5 pass.
+
+14:34  up 10 days,  7:36, 3 users, load averages: 20.79 88.49 110.86
+ Test Files  2 passed (2)
+      Tests  5 passed | 2 skipped (7)
+exit=0
+
+The reading itself, judged by node benchmarks/canvas.mjs judge (1492's judged and idleReport, energy 1e6 nJ a run):
+1492 idleReport first draft: INCONCLUSIVE (names the load it can't read) INCONCLUSIVE   [verdict status, window status]
+1492 idleReport redraft: PASS  PASS

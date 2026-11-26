@@ -1,0 +1,13 @@
+#!/bin/sh
+# #2126's `git` stand-in, first on the gate's PATH. Every call goes to the real git ($STANDIN_REAL_GIT), except one
+# that takes a path list on stdin (`--stdin`): that one writes its arguments to its mark ($STANDIN_MARK) and stops
+# itself with SIGSTOP before it reads a byte of its input, so the gate's path list stays queued on its stdin until the
+# budget's SIGKILL ends it.
+case " $* " in
+  *" --stdin "*)
+    printf '%s\n' "$*" > "$STANDIN_MARK"
+    kill -STOP $$
+    exit 99
+    ;;
+esac
+exec "$STANDIN_REAL_GIT" "$@"

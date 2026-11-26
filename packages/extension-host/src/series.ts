@@ -227,7 +227,7 @@ export class SeriesStore {
 
   /** A series call's values: one batch file, one reading.batch event, its values into their minute and hour. */
   async land(source: { name: string; timeout: number }, asOf: number, values: Map<string, number>): Promise<Batch> {
-    await (this.reopened ??= this.reopen());
+    await this.reopenOnce();
     const order = [...values.keys()];
     const names = await this.namesOf(order, source.name);
     const file = await this.put(batchFile(names, asOf, order.map((n) => values.get(n)!)), 'reading.batch', source.name);
@@ -243,7 +243,7 @@ export class SeriesStore {
 
   /** The hub's timer: each window that closed gets its rollup file and event; once an hour, the series' retention. */
   async tick(): Promise<void> {
-    await (this.reopened ??= this.reopen());
+    await this.reopenOnce();
     const now = this.o.now();
     for (const [source, windows] of this.windows) {
       for (const w of windows.close(now)) {
@@ -263,11 +263,21 @@ export class SeriesStore {
     return this.windows.get(source) ?? this.windows.set(source, new Rollups(timeout)).get(source)!;
   }
 
+  /** The one reopen every call waits on; a try that fails is made again at the next land or tick (#2062). */
+  private reopenOnce(): Promise<void> {
+    return this.reopened ??= this.reopen().catch((e: unknown) => {
+      this.reopened = undefined;
+      throw e;
+    });
+  }
+
   /**
    * After a restart, the windows the last process left open, rebuilt from the batches still kept: each one closes
-   * with a rollup over every value it holds, landed before the restart or after, even if its source is never called again.
+   * with a rollup over every value it holds, landed before the restart or after, even if its source is never called
+   * again. Each try starts from empty windows, so what a failed one rebuilt is never counted twice.
    */
   private async reopen(): Promise<void> {
+    this.windows.clear();
     const closed = new Map<string, number>();
     for (const r of (await this.o.record.raw('SELECT source, span, MAX(start) AS start FROM rollups GROUP BY source, span')) as { source: string; span: Span; start: number }[]) {
       closed.set(`${r.source}\n${r.span}`, Number(r.start) + (r.span === 'minute' ? MINUTE_MS : HOUR_MS));

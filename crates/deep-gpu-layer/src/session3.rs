@@ -60,6 +60,11 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             foam_keeps_state: p == Some(Planted::WaterFoamKeepsState),
             calm_ignores_shore: p == Some(Planted::ShoreCalmIgnoresField),
             flow_single_phase: p == Some(Planted::WaterFlowSinglePhase),
+            no_cone: matches!(
+                p,
+                Some(Planted::WaterBelowIorOne | Planted::WaterBelowSkyAtEveryAngle)
+            ),
+            tint_by_depth: p == Some(Planted::WaterBelowTintByDepth),
         },
         flare: deep_scene3d_render::flare::Planted {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
@@ -97,6 +102,12 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         horizon_unbaked: p == Some(Planted::TerrainNoHorizonBake),
         occlusion_from_slope: p == Some(Planted::TerrainOcclusionFromSlope),
         ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
+        hidden: deep_scene3d_render::hidden::Planted {
+            draws_visible: p == Some(Planted::HiddenViewDrawsWhereVisible),
+            stacks_layers: p == Some(Planted::HiddenViewWithoutOwnDepth),
+            writes_ids: p == Some(Planted::HiddenViewWritesIds),
+            after_status: p == Some(Planted::HiddenViewAfterStatus),
+        },
         cuts_color_only: p == Some(Planted::CutsColorOnly),
         local: deep_scene3d_render::local::Planted {
             stale: p == Some(Planted::LocalMapStale),
@@ -108,6 +119,11 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             no_reach: p == Some(Planted::CascadeNoPenumbraReach),
             noise_from_frame: p == Some(Planted::SoftNoiseFromFrame),
             filter_in_texels: p == Some(Planted::CascadeFilterInTexels),
+            tile_arrival_order: p == Some(Planted::TileArrivalOrder),
+            tile_keeps_fixed_caps: p == Some(Planted::TileKeepsFixedCaps),
+            tile_hysteresis: p == Some(Planted::TileHysteresis),
+            tile_filter_in_texels: p == Some(Planted::TileFilterInTexels),
+            tile_key_without_size: p == Some(Planted::TileKeyWithoutSize),
         },
         fill: deep_scene3d_render::fill::Planted {
             top_32: p == Some(Planted::FillTop32),
@@ -155,11 +171,13 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         .iter()
         .position(|q| p == Some(*q))
         .map_or(0, |i| 16 << i)
-            // #458's, above #1381's bit: scene3d.wgsl's `P_SUM_CLAMPED` and the two after it.
+            // #458's, above #1381's bit: scene3d.wgsl's `P_SUM_CLAMPED` and the two after it, then
+            // #2054's `P_WINDOW_SQUARED`.
             | [
                 Planted::LightSumClamped,
                 Planted::ShadesByLocalTangent,
                 Planted::ShadowBrightens,
+                Planted::LightWindowSquared,
             ]
             .iter()
             .position(|q| p == Some(*q))
@@ -457,6 +475,18 @@ pub fn kept_items(app: &mut App) -> Vec<(String, Vec<String>)> {
     })
 }
 
+/// Each tiled light's texels as the frame just drawn read them, by light ID (#2034).
+pub fn tile_texels(app: &mut App) -> Vec<(String, Vec<u8>)> {
+    app.worker.call(|state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        (shared.renderer.as_ref()).map_or(Vec::new(), |r| r.tile_texels(&device))
+    })
+}
+
 /// Draws the session from the CPU's f64 cull (#484).
 pub fn cull_on_cpu(app: &mut App) {
     app.worker.call(|state| {
@@ -675,9 +705,24 @@ pub fn view_depth(app: &App) -> Result<Option<Vec<u8>>, Value> {
         .map_err(|e| refused("render_failed", e))
 }
 
+/// #290: the shadow maps the frame the session drew last read, f32 depths: view3d's `shadow`
+/// target.
+pub fn shadows(app: &App) -> Result<Vec<u8>, Value> {
+    app.worker
+        .call(move |state| -> Result<Vec<u8>, String> {
+            let s = state.scene3d.as_mut().ok_or("no session")?;
+            let device = s.view.device().clone();
+            let shared = lock(&s.shared);
+            let r = shared.renderer.as_ref().ok_or("no renderer")?;
+            r.read_shadows(&device)
+                .ok_or("no shadow map read back".into())
+        })
+        .map_err(|e| refused("render_failed", e))
+}
+
 /// #1634: each cluster's fill lights as the frame the session drew last walked them, read back
 /// from the cluster pass's lists: nothing on the noop lane, which runs no pass.
-pub fn clusters(app: &App) -> Vec<([u32; 3], Vec<(String, f32)>)> {
+pub fn clusters(app: &App) -> Vec<deep_scene3d_render::fill::Cluster> {
     if app.backend == Backend::Noop {
         return Vec::new();
     }

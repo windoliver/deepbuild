@@ -1,0 +1,1 @@
+{ "alone": true, "why": "ac2-frames builds deep-gpu and deep-canvas-render in the checkout and at the merge base and runs every file of #2031 and #2032, which draw on Metal; ac1-budget runs the redrafted budget test of #2032, which builds deep-gpu and times the GPU" }

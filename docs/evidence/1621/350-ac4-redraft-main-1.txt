@@ -1,0 +1,12 @@
+before: 2026-11-23T07:34:21Z; HEAD c52dc3e73; load { 127.25 147.86 213.42 }
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/350/ac4-redraft
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/350/ac4-redraft
+
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  02:34:22
+   Duration  16.71s (tests 91%, transform 8%, import 1%)
+
+exit 0; after: 2026-11-23T07:34:39Z; HEAD c52dc3e73; load { 172.39 157.26 215.65 }

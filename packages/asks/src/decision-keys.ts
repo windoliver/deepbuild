@@ -41,6 +41,13 @@ export class DecisionKeys {
     return t ? `can't cover ${ask.handle}'s ${t.kind} ${t.ref}, which nothing you typed or approved names (${t.origin}${t.first ? `, first in ${t.first}` : ''})` : null;
   }
 
+  /** Why your answer to an ask holds for it alone, saved as no decision, or null: a target of its plan nothing names (#1098), or a plug-in's send, which always asks (#363). */
+  alone(ask: Ask): string | null {
+    const unplaced = this.unplaced(ask);
+    if (unplaced.length) return `goes to ${unplaced.map((t) => t.ref).join(', ')}, which nothing you typed or approved names`;
+    return isObj(ask.data.subject) && ask.data.subject.effect === 'action.send' ? 'is a send, which always asks' : null;
+  }
+
   /** The scope your answer to an ask is saved at: its session's project, or its session when it started in none; null with neither. */
   scopeOf(ask: Ask): string | null {
     const project = letters(this.options.session(ask.session)?.project ?? '');

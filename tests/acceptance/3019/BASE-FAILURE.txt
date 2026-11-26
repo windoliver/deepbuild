@@ -31,7 +31,7 @@ fixture, the bays and the build log work on the base, and only the cache is miss
 ✖ #3019.2e0b1f52 (ceiling.test.mjs:22)
   AssertionError [ERR_ASSERTION]: after the first run, with room for three builds, the cache holds no file with the base build's dist/blob.bin
   run-1: exit 0, 15.762 s
-  builds: e528abfa413b in <sandbox>/home/deepbuild-bays/1/base/packages/w; fcef694cd76a in <sandbox>/home/deepbuild-bays/1/change/packages/w; b595c465a472 in <sandbox>/home/deepbuild-bays/1/change/packages/w
+  builds: e528abfa413b in ~/deepbuild-bays/1/base/packages/w; fcef694cd76a in ~/deepbuild-bays/1/change/packages/w; b595c465a472 in ~/deepbuild-bays/1/change/packages/w
   PASS before: tests/acceptance/9301/a.test.mjs › #9301.01285c4c the built value is two: failed on the merge base at its assertion
   PASS before: tests/acceptance/9301/a.test.mjs › #9301.93bcb403 the built label is w: failed on wrong-label at its assertion
       at TestContext.<anonymous> (file://~/…/tests/acceptance/3019/ceiling.test.mjs:22:59)
@@ -39,20 +39,20 @@ fixture, the bays and the build log work on the base, and only the cache is miss
 ✖ #3019.52ff5ba5 (reuse.test.mjs:18)
   AssertionError [ERR_ASSERTION]: the merge-base tree e9262348e2ba037e5c88c6a7c8458c47e4ef0181 was built 1 time(s) in the first run and 1 in the second, not once in all
   run-1: exit 0, 15.853 s
-  builds: e528abfa413b in <sandbox>/home/deepbuild-bays/1/base/packages/w; fcef694cd76a in <sandbox>/home/deepbuild-bays/1/change/packages/w; b595c465a472 in <sandbox>/home/deepbuild-bays/1/change/packages/w
+  builds: e528abfa413b in ~/deepbuild-bays/1/base/packages/w; fcef694cd76a in ~/deepbuild-bays/1/change/packages/w; b595c465a472 in ~/deepbuild-bays/1/change/packages/w
   run-2: exit 0, 11.887 s
-  builds: e528abfa413b in <sandbox>/home/deepbuild-bays/1/base/packages/w; fcef694cd76a in <sandbox>/home/deepbuild-bays/1/change/packages/w; b595c465a472 in <sandbox>/home/deepbuild-bays/1/change/packages/w
+  builds: e528abfa413b in ~/deepbuild-bays/1/base/packages/w; fcef694cd76a in ~/deepbuild-bays/1/change/packages/w; b595c465a472 in ~/deepbuild-bays/1/change/packages/w
       at TestContext.<anonymous> (file://~/…/tests/acceptance/3019/reuse.test.mjs:18:10)
 
 ✖ #3019.117a4707 (tamper.test.mjs:18)
-  AssertionError [ERR_ASSERTION]: after the first run no file under <sandbox>/home/deepbuild-bays/cache holds the merge base's built packages/w/dist/index.mjs, so no cached build of the merge-base tree is there to change
+  AssertionError [ERR_ASSERTION]: after the first run no file under ~/deepbuild-bays/cache holds the merge base's built packages/w/dist/index.mjs, so no cached build of the merge-base tree is there to change
   run-1: exit 0, 15.065 s
       at TestContext.<anonymous> (file://~/…/tests/acceptance/3019/tamper.test.mjs:18:10)
 
 ✖ #3019.a73b4639 (verdicts.test.mjs:20, after the three runs' verdicts compared equal and the no-cache check passed)
   AssertionError [ERR_ASSERTION]: the second run built the merge-base tree e9262348e2ba037e5c88c6a7c8458c47e4ef0181 again (1 times), so it ran without the cache
   run-2: exit 0, 11.583 s
-  builds: e528abfa413b in <sandbox>/home/deepbuild-bays/1/base/packages/w; fcef694cd76a in <sandbox>/home/deepbuild-bays/1/change/packages/w; b595c465a472 in <sandbox>/home/deepbuild-bays/1/change/packages/w
+  builds: e528abfa413b in ~/deepbuild-bays/1/base/packages/w; fcef694cd76a in ~/deepbuild-bays/1/change/packages/w; b595c465a472 in ~/deepbuild-bays/1/change/packages/w
       at TestContext.<anonymous> (file://~/…/tests/acceptance/3019/verdicts.test.mjs:20:10)
 
 ## The planted program (throwaway, in a scratch folder, deleted, never committed)

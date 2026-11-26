@@ -1,0 +1,151 @@
+The #3258 suite at base commit b41a1b521 ("Merge pull request #3324 ..."; no implementation of #3258), on macOS arm64 (a
+Mac17,10, shared; 1-minute load 15 on 18 cores as it started), Node 24.22.2, vitest 5.0.5, rustc 1.99.1, the whole suite in
+one run under a test grant of the machine's throttle (2026-11-24 04:06:45 to 04:06:52 UTC; both builds of deep-physics
+already made in target/ by this suite's first run, 03:37:46 to 03:39:48 UTC, under its own grant), as
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_BUILD_JOBS=4 \
+    node scripts/throttle.mjs test --wait 240 -- sh scripts/lease nice -n 10 node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/3258 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+Result: Test Files 6 failed (6); Tests 14 failed (14); Duration 6.32 s. None passes, none is BLOCKED or INCONCLUSIVE. Every
+test fails at an assertion: the real ones at `none(failures, ...)` in their own file, where their judge names what the base
+lacks; the planted ones at "exits 0" (../1918/helpers.ts), since the base knows no `through_...` program. Every fixture's own
+facts, read from the base's bakes and asserted first, hold: none of the 14 failed on one.
+
+The merge base's run of criterion 1's rope
+------------------------------------------
+The audit of the rope through the plate, at its defaults over 60 steps, on the base's own test-swap-soft-solver build:
+
+  the rope over the plate: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185793}, no failure
+
+though its bake shows all 21 particles above the plate until step 39 and below it from there. It passes the same way on the
+rising plate, the peg, the two cloths and the crossed rope (below).
+
+What the run printed, by file (each test's console output, then its failure; paths left out)
+--------------------------------------------------------------------------------------------
+
+ac1-rope-through-plate.test.ts (#3258.acf18c87)
+ printed by: the rope let go level 0.5 m above a static plate 5 mm thick fails soft.through, naming the first particle through, the plate and the step
+   the rope over the plate: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185793}, soft.through failures [], other failures []
+ FAIL the rope let go level 0.5 m above a static plate 5 mm thick fails soft.through, naming the first particle through, the plate and the step
+   → the audit of the rope through the plate:
+   the rope over the plate: the audit's verdict is PASS, not FAIL: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185793}, soft.through failures [], other failures []
+   the rope over the plate: no failure of rule soft.through: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185793}, soft.through failures [], other failures []
+   the rope over the plate: the audit's readings hold no count `through`: null
+   the rope over the plate: the audit's readings hold no count `self_through`: null
+   the rope over the plate: no soft.through failure names a particle: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185793}, soft.through failures [], other failures []: expected [ …(5) ] to deeply equal []
+ FAIL a planted audit that reads only contact pairs passes the run and fails this test
+   → deep-physics --planted through_reads_contact_pairs (--features test-swap-soft-solver) exits 0; stdout: {"ok":false,"code":"bad_input"}
+   ; stderr: : expected 2 to be +0 // Object.is equality
+
+ac2-rising-plate.test.ts (#3258.96b5e231)
+ printed by: a kinematic plate 5 mm thick rising through the pinned rope at 0.1 m/s fails soft.through, naming a particle that never moved
+   the plate that rises through the pinned rope: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185793}, soft.through failures [], other failures []
+ printed by: the plate risen 3 mm into the rope and lowered again reads 0
+   the plate that turns back: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185793}, soft.through failures [], other failures []
+ FAIL a kinematic plate 5 mm thick rising through the pinned rope at 0.1 m/s fails soft.through, naming a particle that never moved
+   → the audit of the rising plate:
+   the plate that rises through the pinned rope: the audit's verdict is PASS, not FAIL: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185793}, soft.through failures [], other failures []
+   the plate that rises through the pinned rope: no failure of rule soft.through: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185793}, soft.through failures [], other failures []
+   the plate that rises through the pinned rope: the audit's readings hold no count `through`: null
+   the plate that rises through the pinned rope: the audit's readings hold no count `self_through`: null
+   the plate that rises through the pinned rope: no failure names a particle: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185793}, soft.through failures [], other failures []: expected [ …(5) ] to deeply equal []
+ FAIL the plate risen 3 mm into the rope and lowered again reads 0
+   → the audit of the plate that turns back:
+   the plate that turns back: the audit's readings hold no count `through`: null
+   the plate that turns back: the audit's readings hold no count `self_through`: null: expected [ …(2) ] to deeply equal []
+ FAIL a planted reading that takes the particle's path in the world reads nothing for the rising plate, and fails
+   → deep-physics --planted through_in_world_frame (--features test-swap-soft-solver) exits 0; stdout: {"ok":false,"code":"bad_input"}
+   ; stderr: : expected 2 to be +0 // Object.is equality
+ FAIL a planted reading that reads a single step reads nothing for the rising plate, and fails
+   → deep-physics --planted through_reads_one_step (--features test-swap-soft-solver) exits 0; stdout: {"ok":false,"code":"bad_input"}
+   ; stderr: : expected 2 to be +0 // Object.is equality
+ FAIL a planted reading that counts every particle that was inside a shape fails on the plate that turns back
+   → deep-physics --planted through_counts_inside (--features test-swap-soft-solver) exits 0; stdout: {"ok":false,"code":"bad_input"}
+   ; stderr: : expected 2 to be +0 // Object.is equality
+
+ac3-peg-between-particles.test.ts (#3258.e4187366)
+ printed by: the rope's ends ride down past a peg 4 mm across between two of its particles: the audit fails, naming that edge and the peg, though no particle comes within 2 cm of it
+   the rope lowered past the peg: least clearance 23.04 mm; edges that sweep the peg's axis [{"edge":10,"step":30,"was":0.011001390652105342,"is":-0.009185085041061747}]
+   the rope lowered past the peg: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.24501913693634}, soft.through failures [], other failures []
+ printed by: lowered beside the peg, the rope passes the audit
+   the rope lowered beside the peg: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.24501913693634}, soft.through failures [], other failures []
+ FAIL the rope's ends ride down past a peg 4 mm across between two of its particles: the audit fails, naming that edge and the peg, though no particle comes within 2 cm of it
+   → the audit of the rope lowered past the peg:
+   the rope lowered past the peg: the audit's verdict is PASS, not FAIL: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.24501913693634}, soft.through failures [], other failures []
+   the rope lowered past the peg: no failure of rule soft.through: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.24501913693634}, soft.through failures [], other failures []
+   the rope lowered past the peg: the audit's readings hold no count `through`: null
+   the rope lowered past the peg: the audit's readings hold no count `self_through`: null
+   the rope lowered past the peg: readings.through is null, not 1: one edge passes the peg once, and no particle passes anything: expected [ …(5) ] to deeply equal []
+ FAIL lowered beside the peg, the rope passes the audit
+   → the audit of the rope lowered beside the peg:
+   the rope lowered beside the peg: the audit's readings hold no count `through`: null
+   the rope lowered beside the peg: the audit's readings hold no count `self_through`: null: expected [ …(2) ] to deeply equal []
+
+ac4-soft-through-soft.test.ts (#3258.5e7ec8a8)
+ printed by: a cloth let go over a pinned second set half a cell aside fails, naming both soft bodies, the first particle and the face it met
+   the two cloths: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185787}, soft.through failures [], other failures [] (0 in all)
+ printed by: a rope's two passes that cross at the middle of an edge each fail with self_contacts: true, naming both edges, and with it off the audit passes and self_through reads the count the failure gave
+   self_contacts on: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000000521540644}, soft.through failures [], other failures []
+   self_contacts off: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000000521540644}, soft.through failures [], other failures []
+ FAIL a cloth let go over a pinned second set half a cell aside fails, naming both soft bodies, the first particle and the face it met
+   → the audit of the two cloths:
+   the two cloths: the audit's verdict is PASS, not FAIL: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185787}, soft.through failures [], other failures []
+   the two cloths: no failure of rule soft.through: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000002384185787}, soft.through failures [], other failures []
+   the two cloths: the audit's readings hold no count `through`: null
+   the two cloths: the audit's readings hold no count `self_through`: null
+   the two cloths: no failure names a particle: expected [ …(5) ] to deeply equal []
+ FAIL a rope's two passes that cross at the middle of an edge each fail with self_contacts: true, naming both edges, and with it off the audit passes and self_through reads the count the failure gave
+   → the audit of the rope's two passes, with self_contacts on and off:
+   self_contacts on: the audit's verdict is PASS, not FAIL: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000000521540644}, soft.through failures [], other failures []
+   self_contacts on: no failure of rule soft.through: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0000000521540644}, soft.through failures [], other failures []
+   self_contacts on: the audit's readings hold no count `through`: null
+   self_contacts on: the audit's readings hold no count `self_through`: null
+   self_contacts off: the audit's readings hold no count `through`: null
+   self_contacts off: the audit's readings hold no count `self_through`: null
+   self_contacts off: readings.self_through is null, not the count the failure gave with it on, undefined: expected [ …(7) ] to deeply equal []
+
+ac5-clean-on-the-pinned-backend.test.ts (#3258.940c680d)
+ printed by: #524's banner and its rope, its labs that hold soft bodies and the behavior kit's soft fixtures read 0
+   the behavior kit's soft fixtures: 0
+   #524's banner and its rope: FAIL, readings {"energy_gain":0.02041205673008691,"penetration":0,"max_stretch":1.6146285728817709}, soft.through failures [], other failures [{"rule":"soft","id":"rope","edge":["rope#1","rope#2"],"step":21,"measured":1.1010990363347881,"limit":1.1,"what":"the edge from rope#1 to rope#2 is 1.1011 times its rest length at step 21, past soft.max_stretch 1.1","fix":"Raise the soft body's stretch hz, lighten its particles, or pin it at more points"},{"rule":"energy","id":"rope#20","step":404,"measured":0.012221825758454465,"limit":0.01,"what":"the world's energy grew 1.22% of its own in the second to step 404, past energy.max_gain 0.01","fix":"Find what adds energy without an input: a motor, a spring stiffer than the step resolves, or a contact that pushes apart; damp it or raise the substeps"}]
+   the bridge lab: PASS, readings {"energy_gain":0,"penetration":0.002390742301940918,"max_stretch":1.002485684775193}, soft.through failures [], other failures []
+   the banner lab: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0380054017336315}, soft.through failures [], other failures []
+ printed by: a rope dragged over a box's top edge and down its side for 2 s reads 0 at the corner
+   the rope dragged over the edge: 27 particles go from the top to the side; 29 go in by the top and out of the side, 0 out of the face opposite the one they went in by, of 61 times one leaves the box
+   the rope dragged over the edge: FAIL, readings {"energy_gain":0,"penetration":0.0019207547884434462,"max_stretch":1.2576549303012372}, soft.through failures [], other failures [{"rule":"soft","id":"rope","edge":["rope#58","rope#59"],"step":25,"measured":1.101541177892857,"limit":1.1,"what":"the edge from rope#58 to rope#59 is 1.1015 times its rest length at step 25, past soft.max_stretch 1.1","fix":"Raise the soft body's stretch hz, lighten its particles, or pin it at more points"}]
+ FAIL #524's banner and its rope, its labs that hold soft bodies and the behavior kit's soft fixtures read 0
+   → the audits of soft bodies that pass through nothing:
+   #524's banner and its rope: the audit's readings hold no count `through`: null
+   #524's banner and its rope: the audit's readings hold no count `self_through`: null
+   the bridge lab: the audit's readings hold no count `through`: null
+   the bridge lab: the audit's readings hold no count `self_through`: null
+   the banner lab: the audit's readings hold no count `through`: null
+   the banner lab: the audit's readings hold no count `self_through`: null: expected [ …(6) ] to deeply equal []
+ FAIL a rope dragged over a box's top edge and down its side for 2 s reads 0 at the corner
+   → the audit of the rope dragged over the edge:
+   the rope dragged over the edge: the audit's readings hold no count `through`: null
+   the rope dragged over the edge: the audit's readings hold no count `self_through`: null: expected [ …(2) ] to deeply equal []
+
+ac6-budget.test.ts (#3258.7ba56287)
+ printed by: the banner's audit over 10 s takes under 1.5 times the merge base's and a world with no soft body no longer, on a reference Mac at rest
+   the 280-particle banner, 12 steps: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":1.0174020878186145}, soft.through failures [], other failures []
+   a world with no soft body, a stack of 36 boxes, 12 steps: PASS, readings {"energy_gain":0,"penetration":0,"max_stretch":0}, soft.through failures [], other failures []
+ FAIL the banner's audit over 10 s takes under 1.5 times the merge base's and a world with no soft body no longer, on a reference Mac at rest
+   → what is timed is the audit that reads what passed through:
+   the 280-particle banner: the audit's readings hold no count `through`: null
+   the 280-particle banner: the audit's readings hold no count `self_through`: null
+   a world with no soft body, a stack of 36 boxes: the audit's readings hold no count `through`: null
+   a world with no soft body, a stack of 36 boxes: the audit's readings hold no count `self_through`: null: expected [ …(4) ] to deeply equal []
+
+Run before it, apart from the above
+-----------------------------------
+- The suite as first written, under its own test grant (03:37:46 to 03:39:48 UTC): the same 14 failures at the same
+  assertions. Since then the dragged rope's fixture and the text its readings are printed in changed, and the judge of
+  "fails soft.through" gained one clause (the two readings counting nothing).
+- The dragged rope, hand-checked by bakes on the base's shipped binary under test grants (30 variants: friction 0.1 to 0.8,
+  particle_radius 0 to 0.02, spacing 0.025 and 0.05 m, 0.3 and 0.4 m/s, stretch 60 and 120 Hz): in none does a particle come
+  out of a face opposite the one it went in by. With a particle_radius above 0 no more than one particle cuts the corner; with
+  0, 4 to 29 do. The suite's is the smoothest of them: its particles 0.4 mm inside the box at the most, its contacts 1.9 mm
+  deep at the most, its energy never growing.
+- Type-check: `node node_modules/typescript/bin/tsc -p tests/acceptance/3258/tsconfig.json --noEmit` exits 0.

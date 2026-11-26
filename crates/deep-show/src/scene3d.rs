@@ -1,23 +1,29 @@
 //! Issue #378: a revision that holds 3D writer layers, drawn natively by scene3d's render module
 //! on the app's GPU (canvas primitives: Render-back: 3D layers render on the GPU), for its
-//! render-back snapshots and for its layer's picture in the window. The device opens on the
+//! render-back snapshots and for its layer's picture in the window, in its document's look and
+//! through the post stage `deep-gpu`'s view draws it through (#1719). The device opens on the
 //! first 3D revision drawn and stays for the run.
 
-use std::sync::Arc;
+pub(crate) mod look;
+
+use std::sync::{Arc, Mutex};
 
 use deep_canvas::registry::{LightQuery, LightSums, Reduce};
 use deep_canvas_marks::scene::Palette;
 use deep_canvas_scene3d::contributed::Fills;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{evaluate_any, Labels, Scene};
+use deep_effects_render::frame::{Effects, Shared};
+use deep_effects_render::look_ops::Finish;
+use deep_effects_render::scene::Staged;
 use deep_gpu::device::{Backend, Device, Gpu};
+use deep_groups_render::drawn::{Frame3, Post3};
 use deep_scene3d_render::exposure::{Kept, Reducer};
-use deep_scene3d_render::{draw_offscreen, Planted, Renderer};
+use deep_scene3d_render::targets::Want;
+use deep_scene3d_render::{draw_offscreen, Planted, Post, Renderer};
 use serde_json::{json, Value};
 
 use crate::snapshot::Unfit;
-
-pub(crate) use deep_play::scene::look_of;
 
 /// The rows of a frame of `size` render.exposure's reduction reads: all of them, or, under
 /// #2513's planted reduction, those in whole 32-row groups.
@@ -89,13 +95,14 @@ impl Shown {
     }
 }
 
-/// #3017's wrong programs, each reachable only through the scenario's `planted`: the merge base's
-/// table, rows from boxes alone; `px` as the box's area; `at` at the box's centre; past 200
+/// #1719's wrong program, and #3017's, each reachable only through the scenario's `planted`: the
+/// merge base's look ([`look::DROPS_LOOK`]); its table, rows from boxes alone; `px` as the box's area; `at` at the box's centre; past 200
 /// rows the first 200 by ID; a cut that reports no `cut`; and the picks of the frame drawn
 /// without its cutaway (Hub::shown3d draws that one).
 pub const AS_BOXES: &str = "visible_table_as_boxes";
 pub const BEFORE_CUTAWAY: &str = "visible_picks_before_cutaway";
-pub const PLANTED: [&str; 6] = [
+pub const PLANTED: [&str; 7] = [
+    look::DROPS_LOOK,
     AS_BOXES,
     "visible_px_from_box",
     "visible_at_box_centre",
@@ -237,10 +244,23 @@ impl Targets {
     }
 }
 
+/// #1719: a 3D frame as a draw takes it, with the post stage `deep-gpu`'s view hands the renderer:
+/// its scene, look and effects staged, what a drawing look lays over its surfaces, and its look's
+/// operator finish.
+pub struct Frame3d {
+    pub staged: Staged,
+    pub drawn: Frame3,
+    pub finish: Finish,
+}
+
 pub struct Gpu3 {
     _gpu: Arc<Gpu>,
     device: Arc<Device>,
     renderer: Renderer,
+    /// The post stage's passes, built on first use and kept, with what each frame sets in them.
+    post: Post3,
+    fx: Arc<Mutex<Effects>>,
+    drawn: Arc<Mutex<Frame3>>,
     labels: Labels,
     /// The print pass, built on first use and kept: an export prints every frame (#157).
     printer: Option<deep_scene3d_render::print::Printer>,
@@ -273,10 +293,19 @@ impl Gpu3 {
         let gpu = Gpu::open(Backend::Gpu).ok()?;
         let device = gpu.recover().ok()?;
         let renderer = Renderer::new(&device, Planted::default());
+        let fx = Arc::new(Mutex::new(Effects::new(
+            Default::default(),
+            Default::default(),
+        )));
+        let drawn = Arc::new(Mutex::new(Frame3::default()));
+        let post = Post3::new(Box::new(Shared(fx.clone())), drawn.clone(), fx.clone());
         Some(Gpu3 {
             _gpu: gpu,
             device,
             renderer,
+            post,
+            fx,
+            drawn,
             labels: Labels::new(),
             printer: None,
             reducer: None,
@@ -288,40 +317,65 @@ impl Gpu3 {
         })
     }
 
-    /// An evaluated scene drawn offscreen over the look's ground: straight RGBA, rows top-down.
-    /// When it has readouts or card lines, the picture is the draw with them as labels (#419, #504).
-    pub fn draw(&mut self, scene: &Scene, look: &Look3) -> Option<Vec<u8>> {
+    /// A frame drawn offscreen over its look's ground: straight RGBA, rows top-down. When it has
+    /// readouts or card lines, the picture is the draw with them as labels (#419, #504).
+    pub fn draw(&mut self, frame: &Frame3d) -> Option<Vec<u8>> {
+        let Staged { scene, look, .. } = &frame.staged;
+        (self.fx.lock().unwrap_or_else(|e| e.into_inner())).stage(&frame.staged);
+        *self.drawn.lock().unwrap_or_else(|e| e.into_inner()) = frame.drawn.clone();
+        self.renderer.core.want = frame.staged.want;
         let over = if scene.readouts.is_empty() {
             None
         } else {
             let mut sc = scene.clone();
             deep_scene3d_render::readouts_as_labels(&mut sc);
-            Some(draw_offscreen(
-                &self.device,
-                &mut self.renderer,
-                &sc,
-                look,
-                None,
-            )?)
+            Some(self.offscreen(&sc, look, true)?)
         };
         // The plain draw goes last even under readouts, so the ids, picks and light the renderer
         // keeps for `targets`, `picks` and `light` are the frame's own, not its labels'.
-        let plain = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
-        let mut bytes = over.unwrap_or(plain);
-        for p in bytes.as_chunks_mut::<4>().0 {
-            p.swap(0, 2);
-        }
+        let plain = self.offscreen(scene, look, true)?;
+        let bytes = over.unwrap_or(plain);
+        // #463: the look's operator finish, over the finished frame.
+        let (mut bytes, _) = frame
+            .finish
+            .apply(&self.device, None, "", bytes, scene.size, &[], true)
+            .ok()?;
+        deep_gpu::surface::swap_red_blue(&mut bytes);
         Some(bytes)
     }
 
+    /// `scene` drawn offscreen, through the post stage set when `post` says.
+    fn offscreen(&mut self, scene: &Scene, look: &Look3, post: bool) -> Option<Vec<u8>> {
+        let post = post.then_some(&mut self.post as &mut dyn Post);
+        draw_offscreen(&self.device, &mut self.renderer, scene, look, post)
+    }
+
+    /// #231: [`Gpu3::draw`]'s frame as the BGRA8 texture it is drawn into, which nothing reads
+    /// back; `None` for a frame with readouts, whose labels are a second draw, or with a look's
+    /// operator finish, which runs over the frame's bytes.
+    pub fn draw_texture(&mut self, frame: &Frame3d) -> Option<wgpu::Texture> {
+        let Staged { scene, look, .. } = &frame.staged;
+        if !scene.readouts.is_empty() || !frame.finish.is_empty() {
+            return None;
+        }
+        (self.fx.lock().unwrap_or_else(|e| e.into_inner())).stage(&frame.staged);
+        *self.drawn.lock().unwrap_or_else(|e| e.into_inner()) = frame.drawn.clone();
+        self.renderer.core.want = frame.staged.want;
+        let post = Some(&mut self.post as &mut dyn Post);
+        let (device, renderer) = (&self.device, &mut self.renderer);
+        Some(deep_scene3d_render::draw_offscreen_texture(
+            device, renderer, scene, look, post,
+        ))
+    }
+
     /// #427: `doc` at `t` on a frame of `size`, its `mesh.asset@1` items read from `assets`: the
-    /// evaluated scene a draw reads, and the look it draws in; its maps' texels are the host's
-    /// (#1729, `Hub::evaluate3d`).
+    /// evaluated scene a draw reads, and the look it draws in, `look` as its camera exposes it; its
+    /// maps' texels are the host's (#1729, `Hub::evaluate3d`).
     pub fn evaluate(
         &mut self,
         doc: &Value,
         t: i64,
-        palette: &Palette,
+        look: Look3,
         size: [u16; 2],
         assets: deep_canvas_scene3d::scene::Assets<'_>,
     ) -> Result<(Scene, Look3), Unfit> {
@@ -331,7 +385,7 @@ impl Gpu3 {
             planted: self.planted.as_deref(),
             memo: None,
         };
-        deep_play::scene::evaluate(doc, t, palette, size, &mut self.labels, assets, fills).map_err(
+        deep_play::scene::evaluate_in(doc, t, look, size, &mut self.labels, assets, fills).map_err(
             |r| Unfit {
                 code: r.code,
                 path: r.path,
@@ -339,16 +393,18 @@ impl Gpu3 {
         )
     }
 
-    /// #1401: an evaluated scene drawn offscreen as render-back draws it: straight RGBA, rows
-    /// top-down, with the targets its probes read; the view depth only when `depth` asks.
-    pub fn draw_scene(
-        &mut self,
-        scene: &Scene,
-        look: &Look3,
-        depth: bool,
-    ) -> Option<(Vec<u8>, Targets)> {
-        let bytes = self.draw(scene, look)?;
-        Some((bytes, self.targets(scene.size, depth)?))
+    /// #1401: a frame drawn offscreen as render-back draws it: straight RGBA, rows top-down, with
+    /// the targets its probes read; the view depth only when `depth` asks.
+    pub fn draw_scene(&mut self, frame: &Frame3d, depth: bool) -> Option<(Vec<u8>, Targets)> {
+        let bytes = self.draw(frame)?;
+        Some((bytes, self.targets(frame.staged.scene.size, depth)?))
+    }
+
+    /// The targets `scene`'s geometry leaves, drawn for them alone: its IDs, never its picture.
+    pub fn draw_ids(&mut self, scene: &Scene, look: &Look3) -> Option<Targets> {
+        self.renderer.core.want = Want::default();
+        self.offscreen(scene, look, false)?;
+        self.targets(scene.size, false)
     }
 
     /// Each pick of the last frame drawn with the item it stands for, read on the CPU.
@@ -425,6 +481,7 @@ impl Gpu3 {
         look: &Look3,
         diag: &deep_scene3d_render::Diag,
     ) -> Option<(Vec<u8>, deep_scene3d_render::DiagCounts)> {
+        self.renderer.core.want = Want::default();
         let (mut bytes, counts) = deep_scene3d_render::draw_offscreen_diag(
             &self.device,
             &mut self.renderer,

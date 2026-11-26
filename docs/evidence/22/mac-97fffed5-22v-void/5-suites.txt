@@ -1,0 +1,40 @@
+== head 97fffed505149c3d93599549b0a32d2e1e7494c0
+
+===== tests/acceptance/1459/identifier.test.ts  start 17:54:24 load { 21.05 37.12 32.84 } thermal 0 free KB 25552740 front app [Windows App]
+
+ RUN  v5.0.5 ~/private/d22v
+
+ ❯ tests/acceptance/1459/identifier.test.ts (1 test | 1 failed) 328126ms
+   ❯ AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped (1)
+     × AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record 328004ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1459/identifier.test.ts > AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped > AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record
+Error: BLOCKED: cargo build -p deep-replica --bin deep-drive failed: error: could not compile `cocoa-foundation` (lib)
+  process didn't exit successfully: `~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin/rustc --crate-name cocoa_foundation --edition=2021 ~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cocoa-foundation-0.2.1/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no --cfg 'feature="link"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("default", "link"))' -C metadata=080eb180c4e2ad3f -C extra-filename=-e05d7b261842bf39 --out-dir ~/private/d22v/target/debug/deps -C strip=debuginfo -L dependency=~/private/d22v/target/debug/deps --extern bitflags=~/private/d22v/target/debug/deps/libbitflags-99352760aa70178a.rmeta --extern block=~/private/d22v/target/debug/deps/libblock-23a4ef81344c04cb.rmeta --extern core_foundation=~/private/d22v/target/debug/deps/libcore_foundation-1b81a7a86e3cb8fa.rmeta --extern core_graphics_types=~/private/d22v/target/debug/deps/libcore_graphics_types-aaf3170da844f9ef.rmeta --extern objc=~/private/d22v/target/debug/deps/libobjc-9a4e0cb00d097c22.rmeta --cap-lints allow` (signal: 15, SIGTERM: termination signal)
+error: could not compile `deep-canvas-marks` (lib)
+  process didn't exit successfully: `~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin/rustc --crate-name deep_canvas_marks --edition=2021 crates/deep-canvas-marks/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C opt-level=3 -C embed-bitcode=no -C debug-assertions=on --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values())' -C metadata=3c99c9886502f889 -C extra-filename=-bc49a40a4e776e75 --out-dir ~/private/d22v/target/debug/deps -C strip=debuginfo -L dependency=~/private/d22v/target/debug/deps --extern deep_canvas=~/private/d22v/target/debug/deps/libdeep_canvas-58ea25911d17d843.rmeta --extern deep_canvas_drawn=~/private/d22v/target/debug/deps/libdeep_canvas_drawn-51f8c350291e3e5b.rmeta --extern deep_text=~/private/d22v/target/debug/deps/libdeep_text-fda87a2782142628.rmeta --extern serde_json=~/private/d22v/target/debug/deps/libserde_json-8fe4fb70ed76d629.rmeta --extern sha2=~/private/d22v/target/debug/deps/libsha2-0730c31ed3152def.rmeta --extern taffy=~/private/d22v/target/debug/deps/libtaffy-ec3077fe8a978b09.rmeta --extern unicode_normalization=~/private/d22v/target/debug/deps/libunicode_normalization-76d645281a51dcb7.rmeta -L native=~/private/d22v/target/debug/build/blake3-a97ec0336b9f08f7/out` (signal: 15, SIGTERM: termination signal)
+error: could not compile `metal` (lib)
+  process didn't exit successfully: `~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin/rustc --crate-name metal --edition=2021 ~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/metal-0.33.0/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no --cfg 'feature="default"' --cfg 'feature="link"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("cargo-clippy", "default", "dispatch", "link", "mps", "private"))' -C metadata=878653bd6c7d7523 -C extra-filename=-ad05bf6f5cb81e5f --out-dir ~/private/d22v/target/debug/deps -C strip=debuginfo -L dependency=~/private/d22v/target/debug/deps --extern bitflags=~/private/d22v/target/debug/deps/libbitflags-99352760aa70178a.rmeta --extern block=~/private/d22v/target/debug/deps/libblock-23a4ef81344c04cb.rmeta --extern core_graphics_types=~/private/d22v/target/debug/deps/libcore_graphics_types-aaf3170da844f9ef.rmeta --extern foreign_types=~/private/d22v/target/debug/deps/libforeign_types-03fae7830df76661.rmeta --extern log=~/private/d22v/target/debug/deps/liblog-5c03420ee05ea646.rmeta --extern objc=~/private/d22v/target/debug/deps/libobjc-9a4e0cb00d097c22.rmeta --extern paste=~/private/d22v/target/debug/deps/libpaste-b10b04979f2b50e7.dylib --cap-lints allow` (signal: 15, SIGTERM: termination signal)
+ ❯ blocked tests/acceptance/1459/helpers.ts:40:56
+     38| /** The reference window, in points, at 2× (design: Decided). */
+     39| export const REFERENCE = { width: 1512, height: 982, scale: 2 } as con…
+     40| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     41| const LAUNCH_MS = 180_000;
+     42|
+ ❯ cargo tests/acceptance/1459/helpers.ts:65:3
+ ❯ tests/acceptance/1459/helpers.ts:75:7
+ ❯ tests/acceptance/1459/identifier.test.ts:16:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:54:24
+   Duration  328.43s (tests 100%)
+
+/private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-45-implementation-e83eea/5a2c4c17-6cd0-4325-8d48-a9d4de6a2360/scratchpad/run-22v.sh: line 46: 25218 Terminated: 15          caffeinate -d -i -s -w $$  (wd: ~)
+===== tests/acceptance/1459/identifier.test.ts exit=1 end 17:59:53 load { 53.34 44.46 37.08 } thermal 1 front app [Windows App]

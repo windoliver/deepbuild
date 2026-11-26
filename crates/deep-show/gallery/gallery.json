@@ -82,6 +82,11 @@
       "title": "The canvas working order"
     },
     {
+      "file": "craft.md",
+      "name": "craft",
+      "title": "Craft checks a film brief names: each check's description, thresholds and fix"
+    },
+    {
       "file": "familiar-names.md",
       "name": "familiar-names",
       "title": "Familiar names and close names"

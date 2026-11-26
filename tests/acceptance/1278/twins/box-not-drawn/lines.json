@@ -1,0 +1,8 @@
+{
+  "crates/deep-canvas-scene3d/src/scene.rs": [
+    {
+      "find": ["            if !visible && !proto {"],
+      "wrong": ["            if (!visible && !proto) || kind == \"mark.box@1\" {"]
+    }
+  ]
+}

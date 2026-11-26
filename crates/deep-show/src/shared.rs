@@ -27,6 +27,7 @@ use deep_canvas::document::{
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
+use deep_canvas::refs::Name;
 use deep_canvas::registry::Sealed;
 use deep_canvas::show::{
     inline_count, order_issues, truncated, unreadable_handles, whole_diff_by, Writer, WriterKind,
@@ -142,9 +143,54 @@ pub struct Shared {
     /// Who names and who hangs from each item, as of the revision it gives (#896): a patch's
     /// recheck finds what it reaches by these, and a revision made another way rebuilds them.
     pub referrers: Option<(u64, Referrers)>,
+    /// A minted document's newest revision number, a refused whole revision's too (#1721); `None`
+    /// for a document a release stored.
+    pub numbers: Option<u64>,
+    /// Why a restart stopped the document short of its record (#1412): it shows the last revision
+    /// the state folder proves, and every patch to it is refused with this issue.
+    pub stopped: Option<Issue>,
+}
+
+impl Rev {
+    /// Revision `rev`, which changed nothing, made by no writer.
+    pub fn of(rev: u64, base_rev: u64, issues: Rc<Vec<Issue>>) -> Rev {
+        Rev {
+            rev,
+            base_rev,
+            writer: None,
+            patch: None,
+            reason: String::new(),
+            changed: BTreeSet::new(),
+            before: BTreeMap::new(),
+            paths: Paths::new(),
+            envelope_before: None,
+            issues,
+            notices: OnceCell::new(),
+            hash: OnceCell::new(),
+            current_at: None,
+        }
+    }
 }
 
 impl Shared {
+    /// `doc` at revision 0, with what its check found.
+    pub fn open(id: &str, doc: Value, issues: Vec<Issue>, notices: Vec<Notice>) -> Shared {
+        Shared {
+            id: id.to_string(),
+            doc,
+            owners: Owners::new(),
+            revs: vec![Rev {
+                notices: OnceCell::from(notices),
+                ..Rev::of(0, 0, Rc::new(issues))
+            }],
+            lost: BTreeMap::new(),
+            older: BTreeSet::new(),
+            referrers: None,
+            numbers: None,
+            stopped: None,
+        }
+    }
+
     pub fn current(&self) -> &Rev {
         self.revs.last().expect("a shared document has revision 0")
     }
@@ -201,6 +247,18 @@ impl Shared {
             })
             .filter_map(|(_, item)| item["layer"].as_str().map(str::to_string))
             .collect();
+    }
+
+    /// Stops the document at its current revision, which carries `issue` as well.
+    fn stop(&mut self, issue: Issue) {
+        let current = self
+            .revs
+            .last_mut()
+            .expect("a shared document has revision 0");
+        let mut issues = current.issues.as_ref().clone();
+        issues.push(issue.clone());
+        current.issues = Rc::new(issues);
+        self.stopped = Some(issue);
     }
 
     /// The document's fields besides its items, and the owners, as they are now.
@@ -480,6 +538,73 @@ pub fn changed_between(a: &Value, b: &Value) -> BTreeSet<String> {
     out
 }
 
+/// What no layer file holds: a document's own fields, all but its items, its `layers` and its
+/// maps keyed by ID, and in each of those maps the entries no layer owns.
+fn own_fields(fields: &Map<String, Value>, owners: &Owners) -> Map<String, Value> {
+    let mut own = Map::new();
+    for (k, v) in fields {
+        if !ID_MAPS.contains(&k.as_str()) {
+            if k != "items" && k != "layers" {
+                own.insert(k.clone(), v.clone());
+            }
+            continue;
+        }
+        let unowned: Map<String, Value> = v
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(id, _)| !owners.contains_key(&(k.clone(), id.to_string())))
+            .map(|(id, e)| (id.clone(), e.clone()))
+            .collect();
+        own.insert(k.clone(), json!({"unowned": unowned, "map": v.is_object()}));
+    }
+    own
+}
+
+/// The file that keeps what no layer file holds as a revision left it (#1412).
+fn envelope_file(doc_id: &str, own: Map<String, Value>) -> Vec<u8> {
+    serde_json::to_vec(&json!({"doc": doc_id, "envelope": own})).expect("JSON writes")
+}
+
+/// `doc` with what no layer file holds as an envelope file keeps it.
+fn take_envelope(doc: &mut Value, owners: &Owners, own: &Map<String, Value>) {
+    let Some(fields) = doc.as_object_mut() else {
+        return;
+    };
+    for (k, v) in own_fields(fields, owners) {
+        if !ID_MAPS.contains(&k.as_str()) {
+            fields.shift_remove(&k);
+            continue;
+        }
+        if let Some(Value::Object(map)) = fields.get_mut(&k) {
+            for id in v["unowned"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .map(|(id, _)| id)
+            {
+                map.shift_remove(id);
+            }
+        }
+    }
+    for (k, v) in own {
+        if !ID_MAPS.contains(&k.as_str()) {
+            fields.insert(k.clone(), v.clone());
+            continue;
+        }
+        let unowned = v["unowned"].as_object().cloned().unwrap_or_default();
+        if !fields.get(k).is_some_and(Value::is_object) {
+            if !v["map"].as_bool().unwrap_or(false) && unowned.is_empty() {
+                continue;
+            }
+            fields.insert(k.clone(), json!({}));
+        }
+        if let Some(Value::Object(map)) = fields.get_mut(k) {
+            map.extend(unowned);
+        }
+    }
+}
+
 /// The writer a layer file names.
 fn file_writer(file: &Value) -> Option<Writer> {
     let w = &file["writer"];
@@ -493,6 +618,9 @@ fn take_layer(doc: &mut Value, owners: &mut Owners, file: &Value) {
     };
     if !file["meta"].is_null() {
         doc["layers"][layer] = file["meta"].clone();
+    }
+    if !doc["items"].is_object() && file["items"].as_object().is_some_and(|i| !i.is_empty()) {
+        doc["items"] = json!({});
     }
     if let Some(Value::Object(items)) = doc.get_mut("items") {
         items.retain(|_, i| i["layer"].as_str() != Some(layer));
@@ -537,7 +665,10 @@ fn recorded_by(via: &Via) -> String {
 }
 
 mod calls;
+mod minted;
 pub use calls::*;
+pub(crate) use minted::hidden;
+pub use minted::{recorded, seeds, Recorded};
 
 /// Whether two revisions wrote one path: the same item, and one path the other's or below it.
 fn overlaps(a: &Paths, b: &Paths) -> bool {
@@ -698,13 +829,20 @@ fn marks(doc: &Value, items: &Map<String, Value>, palette: &Palette) -> Result<i
 /// A 2D mark lights nothing, so `lights` is 0; `cpu_ms`, `gpu_ms` and `gpu_mb` are the cost
 /// model's estimate (#379) of the items it wrote as they are now, less as they were, from the
 /// build's coefficients.
+/// A 3D document's 3D items are scene3d's to draw, as in a whole revision; and what a minted
+/// document's patch draws is checked with its form (#1721), so here it is only counted.
 fn marks_check(
     doc: &Value,
     before: &BTreeMap<String, Option<Value>>,
     palette: &Palette,
     sealed: &Sealed,
+    minted: bool,
 ) -> Result<Value, Box<Issue>> {
-    let draws_kind = |item: &Value| item["kind"].as_str().is_some_and(knows);
+    let flat = minted || deep_canvas_scene3d::scene::has_3d(doc);
+    let draws_kind = |item: &Value| {
+        let kind = item["kind"].as_str().unwrap_or_default();
+        knows(kind) && (!flat || scene::KINDS.contains(&kind))
+    };
     let mut context = referenced(doc);
     let named = |item: &Value, out: &mut BTreeSet<String>| {
         let mut stack: Vec<&Value> = vec![&item["params"]];
@@ -755,6 +893,7 @@ fn marks_check(
         (Ok(n), Ok(w)) => n - w,
         (Ok(n), Err(_)) => *n,
         (Err(e), Err(old)) if e == old => 0,
+        (Err(_), _) if minted => 0,
         (Err(Refused { code, path }), _) => return Err(Box::new(unfit_issue(code, path.clone()))),
     };
     let coefficients = &sealed.costs;
@@ -787,6 +926,52 @@ fn marks_check(
     }))
 }
 
+/// `layer` of `doc` emptied, then filled with `payload`'s items and entries, each stamped into it:
+/// the entries as stamped. An ID another writer's layer holds is refused, `not_your_layer`.
+pub fn fill_layer(
+    doc: &mut Value,
+    owners: &mut Owners,
+    payload: &Map<String, Value>,
+    layer: &str,
+    issues: &mut Vec<Issue>,
+) -> Value {
+    if let Some(Value::Object(items)) = doc.get_mut("items") {
+        items.retain(|_, i| i["layer"].as_str() != Some(layer));
+    }
+    drop_owned(doc, owners, layer);
+    let mut view = Map::new();
+    let empty = Map::new();
+    for map in std::iter::once("items").chain(ID_MAPS.iter().copied()) {
+        let mut stamped = Map::new();
+        for (id, entry) in payload
+            .get(map)
+            .and_then(Value::as_object)
+            .unwrap_or(&empty)
+        {
+            let mut entry = entry.clone();
+            if map == "items" {
+                entry["layer"] = json!(layer);
+            }
+            if doc[map].get(id).is_some() {
+                let what = "another writer's layer holds this ID";
+                let path = format!("{map}/{id}");
+                issues.push(Issue::error("not_your_layer", id, path, json!(id), what));
+                continue;
+            }
+            if !doc[map].is_object() {
+                doc[map] = json!({});
+            }
+            doc[map][id] = entry.clone();
+            if map != "items" {
+                owners.insert((map.to_string(), id.clone()), layer.to_string());
+            }
+            stamped.insert(id.clone(), entry);
+        }
+        view.insert(map.to_string(), Value::Object(stamped));
+    }
+    Value::Object(view)
+}
+
 /// Drops every entry of an ID map that `layer` owns, from `doc` and from `owners`.
 fn drop_owned(doc: &mut Value, owners: &mut Owners, layer: &str) {
     let held: Vec<(String, String)> = owners
@@ -803,7 +988,10 @@ fn drop_owned(doc: &mut Value, owners: &mut Owners, layer: &str) {
 }
 
 /// Rebuilds `shared` from the record in `state`: each event, in order, takes each layer from the
-/// layer file it names, at its revision. The planted twin takes each layer's newest file instead.
+/// layer file it names, at its revision. An event whose layer file is gone, or whose bytes or
+/// rebuilt document don't hash as recorded, stops the document at the revision before it, with an
+/// issue naming the file or the hash (#1412). The planted twin takes each layer's newest file
+/// instead.
 fn restore(
     shared: &mut Shared,
     state: &Path,
@@ -815,6 +1003,7 @@ fn restore(
         return;
     };
     let subject = format!("doc:{}", shared.id);
+    let layers = state.join("layers");
     for line in text.lines() {
         let Ok(entry) = serde_json::from_str::<Value>(line) else {
             continue;
@@ -823,20 +1012,41 @@ fn restore(
         if event["data"]["doc"].as_str() != Some(subject.as_str()) {
             continue;
         }
-        let files: Vec<Value> = event["evidence"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|sha| sha.as_str())
-            .filter_map(|sha| evidence::read(&state.join("layers"), sha))
-            .filter_map(|bytes| serde_json::from_slice(&bytes).ok())
-            .collect();
-        let prev = shared.doc.clone();
+        let rev = shared.current().rev;
+        let next_rev = event["data"]["rev"].as_u64().unwrap_or(rev + 1);
+        let mut files: Vec<Value> = Vec::new();
+        for sha in event["evidence"].as_array().into_iter().flatten() {
+            let sha = sha.as_str().unwrap_or_default();
+            match evidence::read(&layers, sha).and_then(|b| serde_json::from_slice(&b).ok()) {
+                Some(file) => files.push(file),
+                None => return shared.stop(damaged_file(&shared.id, &layers, sha, next_rev)),
+            }
+        }
+        let (prev, prev_owners) = (shared.doc.clone(), shared.owners.clone());
         let envelope_before = Some(shared.envelope());
         let mut writer = None;
         for file in &files {
-            writer = writer.or_else(|| file_writer(file));
-            take_layer(&mut shared.doc, &mut shared.owners, file);
+            match file["envelope"].as_object() {
+                Some(own) => take_envelope(&mut shared.doc, &shared.owners, own),
+                None => {
+                    writer = writer.or_else(|| file_writer(file));
+                    take_layer(&mut shared.doc, &mut shared.owners, file);
+                }
+            }
+        }
+        let hash = canonical_in(&shared.doc, &sealed.kinds()).map_or(String::new(), |c| c.sha256);
+        if let Some(want) = event["data"]["hash"].as_str().filter(|want| *want != hash) {
+            (shared.doc, shared.owners) = (prev, prev_owners);
+            let what = format!("revision {next_rev} rebuilt from its layer files hashes {hash}");
+            let actual = json!({"rev": next_rev, "recorded": want, "rebuilt": hash});
+            let issue = Issue::error(
+                "revision_hash_mismatch",
+                &shared.id,
+                "doc".into(),
+                actual,
+                &what,
+            );
+            return shared.stop(issue);
         }
         let changed = changed_between(&prev, &shared.doc);
         let before: BTreeMap<String, Option<Value>> = changed
@@ -845,10 +1055,9 @@ fn restore(
             .map(|id| (id.clone(), prev["items"].get(id).cloned()))
             .collect();
         let paths = paths_of(&before, &shared.doc);
-        let rev = shared.current().rev;
         let checked = check_packed(&shared.doc, sealed, packs);
         shared.revs.push(Rev {
-            rev: event["data"]["rev"].as_u64().unwrap_or(rev + 1),
+            rev: next_rev,
             base_rev: rev,
             writer,
             patch: event["data"]["patch"].as_str().map(str::to_string),
@@ -859,7 +1068,7 @@ fn restore(
             envelope_before,
             issues: Rc::new(checked.issues),
             notices: OnceCell::from(checked.notices),
-            hash: OnceCell::new(),
+            hash: OnceCell::from(hash),
             current_at: None,
         });
     }
@@ -878,22 +1087,52 @@ fn restore(
         for (_, file) in newest.values() {
             take_layer(&mut shared.doc, &mut shared.owners, file);
         }
+        // Its hash is the document it shows, not the record's.
+        if let Some(current) = shared.revs.last_mut() {
+            current.hash = OnceCell::new();
+        }
     }
+}
+
+/// The issue of `doc`'s layer or envelope file `sha`, which revision `rev`'s event names, when the state folder
+/// doesn't hold it, or holds bytes that don't hash to its name or don't read as a layer file.
+fn damaged_file(doc: &str, layers: &Path, sha: &str, rev: u64) -> Issue {
+    let (code, what) = if evidence::has(layers, sha) {
+        let what = format!("the file revision {rev} names doesn't hash to its name or read as one");
+        ("layer_file_mismatch", what)
+    } else {
+        let what = format!("the state folder doesn't hold the layer file revision {rev} names");
+        ("layer_file_missing", what)
+    };
+    let actual = json!({"rev": rev, "file": sha});
+    Issue::error(code, doc, format!("layers/{sha}"), actual, &what)
 }
 
 /// #1801: each refusal that a removed item's dangling name raised (`ref_unresolved` at one of the
 /// fields naming it, or naming it as its value) gets as its `actual` every row that still names
 /// the item in `doc`, as `refs_to` lists them and in its order, so one refusal names them all.
+/// #3379: a removed control's, the same way, its rows never an item's that shares its ID.
 pub(crate) fn name_referrers(
     refusals: &mut [Issue],
     doc: &Value,
-    removed: &[&str],
+    removed: &[Name],
     sealed: &Sealed,
     planted: Option<Planted>,
 ) {
-    for id in removed {
-        let name = deep_canvas::refs::Name::Item(id.to_string());
-        let refs = deep_canvas::refs::refs_to(doc, sealed, &name);
+    if !refusals.iter().any(|i| i.code == "ref_unresolved") {
+        return;
+    }
+    for name in removed {
+        // The other kind of name the ID may also be: its fields are never this name's.
+        let (id, other) = match name {
+            Name::Item(id) => (id, Name::Control(id.clone())),
+            Name::Control(id) => (id, Name::Item(id.clone())),
+            _ => continue,
+        };
+        let (refs, others): (Vec<_>, Vec<_>) =
+            deep_canvas::refs::refs_to_any(doc, sealed, &[name, &other])
+                .into_iter()
+                .partition(|r| &r.name == name);
         if refs.is_empty() {
             continue;
         }
@@ -904,11 +1143,13 @@ pub(crate) fn name_referrers(
         if planted == Some(Planted::RefusalNamesFirstRef) {
             rows.truncate(1);
         }
+        let at = |r: &deep_canvas::refs::Ref, issue: &Issue| {
+            issue.path == r.path || issue.path.starts_with(&format!("{}/", r.path))
+        };
         for issue in refusals.iter_mut().filter(|i| i.code == "ref_unresolved") {
-            let at_field = refs
-                .iter()
-                .any(|r| issue.path == r.path || issue.path.starts_with(&format!("{}/", r.path)));
-            if at_field || issue.actual == json!(id) {
+            let at_field = refs.iter().any(|r| at(r, issue));
+            let others = others.iter().any(|r| at(r, issue));
+            if at_field || (issue.actual == json!(id) && !others) {
                 issue.actual = Value::Array(rows.clone());
                 if !issue.ids.iter().any(|x| x == id) {
                     issue.ids.push(id.to_string());

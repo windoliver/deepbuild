@@ -1,0 +1,100 @@
+Acceptance tests for #2327 on the base 11eb8c6fd232bffa4c7f9a06ec12467e252f70e8 (no SECURITY.md, no
+config.yml, no security check in scripts/repo-rules.mjs, private reporting off), run on 2026-11-21
+with Node 24.22.0 and cargo on PATH; one-minute, five-minute and fifteen-minute load: 109.95 63.71 34.73
+
+  node --test --test-reporter=tap 'tests/acceptance/2327/*.test.mjs'
+
+Trimmed to each test's failure message; every failure is node:assert's (code ERR_ASSERTION). The
+messages leave out the failing lines of other checks and cut long lines at 240 characters. No local
+path appears below; <checkout> would be this checkout and <tmp> the system temporary folder.
+
+# tests 12
+# pass 0
+# fail 12
+# cancelled 0
+# skipped 0
+# todo 0
+
+not ok 1 - #2327.030459ba config.yml lists the private route as a contact link, beside the task template
+    '.github/ISSUE_TEMPLATE/config.yml is missing, so the issue chooser shows no contact link'
+not ok 2 - #2327.030459ba a planted config.yml without the link fails, naming the file; with it the tree passes
+    no FAIL line names .github/ISSUE_TEMPLATE/config.yml for a config.yml whose only contact link goes elsewhere
+    exit 1
+    stdout (30 failing lines of other checks left out):
+    PASS workflows: .github/workflows/ has no entries
+    PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+    PASS cards: 0 packages and 0 crates have cards with the four headings; 0 deviations, each naming a file that exists
+    NOTE size: +0 -0 handwritten lines against merge base b63d673, lockfiles and binary files excluded (guideline: about 400)
+    
+not ok 3 - #2327.030459ba a planted tree with no config.yml fails, naming the file
+    no FAIL line names .github/ISSUE_TEMPLATE/config.yml for a tree without config.yml
+    exit 1
+    stdout (30 failing lines of other checks left out):
+    PASS workflows: .github/workflows/ has no entries
+    PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+    PASS cards: 0 packages and 0 crates have cards with the four headings; 0 deviations, each naming a file that exists
+    NOTE size: +0 -0 handwritten lines against merge base 50d02cd, lockfiles and binary files excluded (guideline: about 400)
+    
+not ok 4 - #2327.b5266f32 CONTRIBUTING.md and SECURITY.md state the rule in the same words
+    "CONTRIBUTING.md doesn't state the rule: it names no private advisory"
+not ok 5 - #2327.b5266f32 the rule reworded in CONTRIBUTING.md alone fails the text check; unchanged it passes
+    node scripts/repo-rules.mjs prints no PASS line about the security route in a copy of this checkout's files
+    exit 1
+    stdout (30 failing lines of other checks left out):
+    PASS workflows: .github/workflows/ has no entries
+    PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+    PASS cards: 0 packages and 0 crates have cards with the four headings; 0 deviations, each naming a file that exists
+    NOTE size: +0 -0 handwritten lines against merge base 25ba1ad, lockfiles and binary files excluded (guideline: about 400)
+    
+not ok 6 - #2327.b5266f32 the rule reworded in SECURITY.md alone fails the text check; unchanged it passes
+    node scripts/repo-rules.mjs prints no PASS line about the security route in a copy of this checkout's files
+    exit 1
+    stdout (30 failing lines of other checks left out):
+    PASS workflows: .github/workflows/ has no entries
+    PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+    PASS cards: 0 packages and 0 crates have cards with the four headings; 0 deviations, each naming a file that exists
+    NOTE size: +0 -0 handwritten lines against merge base 50d02cd, lockfiles and binary files excluded (guideline: about 400)
+    
+not ok 7 - #2327.9c7a145b SECURITY.md at the root has the four parts, in under a page
+    'SECURITY.md is missing at the root'
+not ok 8 - #2327.9c7a145b node scripts/repo-rules.mjs passes its security check on this checkout
+    node scripts/repo-rules.mjs prints no PASS line about the security route in this checkout
+    exit 1
+    stdout (178 failing lines of other checks left out):
+    FAIL deps: crates/deep-text/Cargo.toml dependencies unicode-security ^0.1.3 is not in scripts/repo-rules.json
+    PASS workflows: .github/workflows/ has no entries
+    PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+    PASS cards: 41 packages and 54 crates have cards with the four headings; 135 deviations, each naming a file that exists
+    PASS physics-build: rapier3d 0.36.1 [alloc, dim3, enhanced-determinism, f32, serde-serialize, std], parry3d 0.31.1, rapier2d 0.36.1 [alloc, dim2, enhanced-determinism, f32, serde-serialize, std], parry2d 0.31.1, none of simd8, parallel,
+not ok 9 - #2327.9c7a145b a planted tree without SECURITY.md fails, naming the file; with it the tree passes
+    no FAIL line names SECURITY.md for a tree without SECURITY.md
+    exit 1
+    stdout (30 failing lines of other checks left out):
+    PASS workflows: .github/workflows/ has no entries
+    PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+    PASS cards: 0 packages and 0 crates have cards with the four headings; 0 deviations, each naming a file that exists
+    NOTE size: +0 -0 handwritten lines against merge base 2e64e41, lockfiles and binary files excluded (guideline: about 400)
+    
+not ok 10 - #2327.9c7a145b a planted SECURITY.md that names no route fails, naming the missing part; unchanged it passes
+    node scripts/repo-rules.mjs prints no PASS line about the security route in a copy of this checkout's files
+    exit 1
+    stdout (30 failing lines of other checks left out):
+    PASS workflows: .github/workflows/ has no entries
+    PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+    PASS cards: 0 packages and 0 crates have cards with the four headings; 0 deviations, each naming a file that exists
+    NOTE size: +0 -0 handwritten lines against merge base 906d7a4, lockfiles and binary files excluded (guideline: about 400)
+    
+not ok 11 - #2327.9c7a145b a planted SECURITY.md whose only route is another repository's form fails, naming the missing part
+    node scripts/repo-rules.mjs prints no PASS line about the security route in a copy of this checkout's files
+    exit 1
+    stdout (30 failing lines of other checks left out):
+    PASS workflows: .github/workflows/ has no entries
+    PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+    PASS cards: 0 packages and 0 crates have cards with the four headings; 0 deviations, each naming a file that exists
+    NOTE size: +0 -0 handwritten lines against merge base bfa99ea, lockfiles and binary files excluded (guideline: about 400)
+    
+not ok 12 - #2327.07f9ccee gh api repos/windoliver/deepbuild/private-vulnerability-reporting answers enabled: true
+    BLOCKED: gh api repos/windoliver/deepbuild/private-vulnerability-reporting answered {"enabled":false}; until the owner turns private reporting on this criterion is BLOCKED, never PASS
+    
+    false !== true
+    

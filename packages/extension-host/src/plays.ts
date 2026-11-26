@@ -1,5 +1,6 @@
 // The plays a running check's `deep.canvas.play` may make (Check input: plug-in reads, #184): what its input gives,
-// the plays it made, and (#832) what a catalog.dominance check's pairs take and what a pass of it must have played.
+// the plays it made, (#832) what a catalog.dominance check's pairs take and what a pass of it must have played, and
+// (#1047) where each play started, so a pass whose run started anywhere but where its input gives is refused.
 import { createHash } from 'node:crypto';
 import type { CheckResult } from '@deepbuild/conformance';
 import { isPlain } from './host-shared.js';
@@ -8,9 +9,12 @@ import { isPlain } from './host-shared.js';
  * What a check's input gives `deep.canvas.play` (Check input: plug-in reads, #184): the piece, the seed, the runs (20
  * by default), the bots and the recorded tracks it may play; a playtest's input holds more, which the host ignores.
  */
-export interface PlayInput { piece?: unknown; seed?: unknown; runs?: unknown; bots?: unknown; tracks?: unknown; play?: unknown; off?: { catalog: unknown; table: unknown; rows: number } }
-/** One play a running check made: its seed, its bot, its track's hash and whether it read values. */
-export interface Played { seed: number; bot: unknown; track: string; values: boolean; off?: number }
+export interface PlayInput { piece?: unknown; seed?: unknown; runs?: unknown; bots?: unknown; tracks?: unknown; play?: unknown; from?: unknown; off?: { catalog: unknown; table: unknown; rows: number } }
+/**
+ * One play a running check made: its seed, its bot, its track's hash, whether it read values, and (#1047) the save its
+ * run gave it to start from, none for a play from step 0, with the step it started at, its first checkpoint's.
+ */
+export interface Played { seed: number; bot: unknown; track: string; values: boolean; off?: number; from: string | undefined; first: number }
 /**
  * #832: what a catalog.dominance check's plays may take: the named playtest's input with its pairs' seeds in place of
  * its runs, its first bot alone, and an `off` on the input's catalog and table, a row of those its carried record names.
@@ -32,6 +36,23 @@ export function runSeed(seed: number, i: number): number {
   b.writeBigUInt64LE(BigInt(seed));
   b.writeUInt32LE(i, 8);
   return Number(createHash('sha256').update(b).digest().readBigUInt64BE(0) >> 11n);
+}
+/** #1047: a `from` as plays and inputs compare it: none, or its save. */
+const saveOf = (from: unknown): string | undefined => (from === undefined || from === null ? undefined : canonical(from));
+/** #1047: where a play started: the save its run gave it, and the step of its reply's first checkpoint. */
+export function startedAt(run: Record<string, unknown>, reply: Record<string, unknown>): Pick<Played, 'from' | 'first'> {
+  const first = Array.isArray(reply.checkpoints) ? (reply.checkpoints[0] as { step?: unknown } | undefined)?.step : undefined;
+  return { from: saveOf(run.from), first: typeof first === 'number' ? first : 0 };
+}
+/**
+ * What the plays of one run of a passed result lack (#184): a play at all, or values read; and (#1047) a start from
+ * what the check's input gives, the save of its `from` or step 0 without one, naming the step a play started at.
+ */
+export function lackOf(plays: Played[], input: PlayInput): string | undefined {
+  if (!plays.length) return ': it was never played';
+  const elsewhere = plays.find((p) => p.from !== saveOf(input.from));
+  if (elsewhere) return ` started from what its input gives: it started at step ${elsewhere.first}`;
+  return plays.some((p) => p.values) ? undefined : '\'s values: its play read none';
 }
 /** A bot as a play runs it: without the authorship, bands and expectations a check's input adds (#184, #555). */
 export const botOf = (bot: unknown): unknown => (isPlain(bot) ? Object.fromEntries(Object.entries(bot).filter(([k]) => k !== 'by' && k !== 'share' && k !== 'expect')) : bot);

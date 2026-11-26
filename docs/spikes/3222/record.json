@@ -1,0 +1,1454 @@
+{
+ "issue": 3222,
+ "main": "f8c6cff822b5b960d35312d75d44769616a95516",
+ "about": {
+  "list": "#3222 criterion 3: for each kind of call that reaches the canvas core through the hub, what it reads and writes among the issue's four things (the document, the documents it shows, the world the hub sends, the evidence store), and which other kinds it must follow, each with a line of code at main that shows it. `at` is path:line from the repository root; `shows` is a fragment of that line, verbatim.",
+  "things": {
+   "document": "the call's own document: its revisions, its writer layers, its shared copy when the world seeds one",
+   "shown": "other documents the call reads: every document on the same panel (the hub puts every document it shows on one panel), and the look a document sets for the whole core",
+   "world": "the world the hub sends: sessions, the record's asks and readings, panels, documents, claims, packs",
+   "evidence": "the evidence store: files the core writes under the world's evidence folder by sha256, and the hub's store, which takes the revision's canonical document from there"
+  }
+ },
+ "line": [
+  {
+   "what": "Every call joins one promise chain in the hub, and a reply is matched to its call by its place in line",
+   "file": "packages/hub/src/canvas.ts",
+   "line": 213,
+   "text": "const run = this.chain.then(async () => {"
+  },
+  {
+   "what": "The hub sends its whole world again before a call whenever the world's text changed",
+   "file": "packages/hub/src/canvas.ts",
+   "line": 218,
+   "text": "const set = await this.send({ world: shaped });"
+  },
+  {
+   "what": "The core keeps every call that is not one of six reads",
+   "file": "crates/deep-show/src/canvas_side.rs",
+   "line": 153,
+   "text": "self.calls.push(Value::Object(call));"
+  },
+  {
+   "what": "and plays each new call on a fresh hub after every kept call, every session's",
+   "file": "crates/deep-show/src/canvas_side.rs",
+   "line": 69,
+   "text": "let mut hub = hub::Hub::new(&scenario, startup);"
+  },
+  {
+   "what": "against the world as it is now, not as it was when each kept call was first played",
+   "file": "crates/deep-show/src/canvas_side.rs",
+   "line": 88,
+   "text": "let mut input = self.world.clone();"
+  },
+  {
+   "what": "Each call is stamped one spacing (10 frames at 120 Hz) after the call before it, whoever sent it: one virtual clock for all sessions",
+   "file": "crates/deep-show/src/canvas_side.rs",
+   "line": 111,
+   "text": "call.insert(key.into(), json!((self.played + 1) * CANVAS_SPACING));"
+  },
+  {
+   "what": "Nothing a replay draws is kept between calls: a render is drawn again before its file is found to exist",
+   "file": "crates/deep-show/src/evidence.rs",
+   "line": 17,
+   "text": "if path.exists() {"
+  },
+  {
+   "what": "and the GPU is opened again by each fresh hub that draws 3D",
+   "file": "crates/deep-show/src/scene3d.rs",
+   "line": 273,
+   "text": "let gpu = Gpu::open(Backend::Gpu).ok()?;"
+  }
+ ],
+ "list": [
+  {
+   "kind": "revision",
+   "call": "deep_show with a whole document (2D or 3D)",
+   "reads": [
+    {
+     "thing": "document",
+     "what": "the document's current revision and its writer",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1901,
+     "text": "let current = self.current(&show.doc);"
+    },
+    {
+     "thing": "world",
+     "what": "the writer, from the world's sessions",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1439,
+     "text": "let session = self.scenario.sessions.get(id)?;"
+    },
+    {
+     "thing": "world",
+     "what": "the record's handles the document reads",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1995,
+     "text": "issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));"
+    },
+    {
+     "thing": "world",
+     "what": "the packs, in the document's check",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1964,
+     "text": "_ => check_sized(&doc, &self.startup.sealed, &self.packs, &sizes),"
+    },
+    {
+     "thing": "shown",
+     "what": "every document on its panel, when the revision is presented: each layer's current revision",
+     "file": "crates/deep-show/src/hub/presented.rs",
+     "line": 31,
+     "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+    },
+    {
+     "thing": "evidence",
+     "what": "the look's asset, by hash",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1291,
+     "text": ".then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())"
+    }
+   ],
+   "writes": [
+    {
+     "thing": "document",
+     "what": "a new revision; the one before it superseded",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 2173,
+     "text": "r.state = \"superseded\";"
+    },
+    {
+     "thing": "shown",
+     "what": "the core's one look, read by every later render of every document",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1932,
+     "text": "self.look = look;"
+    },
+    {
+     "thing": "world",
+     "what": "the hub adds the document to the world's documents, so the next call sends the world again",
+     "file": "packages/hub/src/hub-canvas.ts",
+     "line": 227,
+     "text": "if (typeof call.doc === 'string') this.shownDocs.add(call.doc);"
+    },
+    {
+     "thing": "evidence",
+     "what": "the issues, and the snapshot when pixels are asked for",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 2446,
+     "text": "match evidence::put(&self.scenario.evidence, &png) {"
+    },
+    {
+     "thing": "evidence",
+     "what": "the canonical document, and one picture of each layer on the panel",
+     "file": "crates/deep-show/src/hub/presented.rs",
+     "line": 15,
+     "text": "let hash = evidence::put(&self.scenario.evidence, canonical.bytes.as_bytes()).ok()?;"
+    },
+    {
+     "thing": "evidence",
+     "what": "the hub reads that canonical document back and puts it in its store",
+     "file": "packages/hub/src/hub-canvas.ts",
+     "line": 386,
+     "text": "bytes: new Uint8Array(readFileSync(join(this.options.root.evidence, hash.slice(0, 2), hash.slice(2)))), kind: 'canvas.revision'"
+    }
+   ],
+   "follows": [
+    {
+     "kind": "revision",
+     "same_document": true,
+     "why": "its revision number and its layer's owner are the document's earlier revisions'",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1907,
+     "text": "let rev = self.revisions.get(&show.doc).map_or(0, Vec::len) as u64 + 1;"
+    },
+    {
+     "kind": "check",
+     "same_document": true,
+     "why": "its revision number and its layer's owner are the document's earlier revisions'",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1907,
+     "text": "let rev = self.revisions.get(&show.doc).map_or(0, Vec::len) as u64 + 1;"
+    },
+    {
+     "kind": "patch",
+     "same_document": true,
+     "why": "its revision number and its layer's owner are the document's earlier revisions'",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1907,
+     "text": "let rev = self.revisions.get(&show.doc).map_or(0, Vec::len) as u64 + 1;"
+    },
+    {
+     "kind": "revision",
+     "same_document": false,
+     "why": "its presentation draws every document on the panel as they stand",
+     "file": "crates/deep-show/src/hub/presented.rs",
+     "line": 31,
+     "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+    },
+    {
+     "kind": "check",
+     "same_document": false,
+     "why": "its presentation draws every document on the panel as they stand",
+     "file": "crates/deep-show/src/hub/presented.rs",
+     "line": 31,
+     "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+    },
+    {
+     "kind": "patch",
+     "same_document": false,
+     "why": "its presentation draws every document on the panel as they stand",
+     "file": "crates/deep-show/src/hub/presented.rs",
+     "line": 31,
+     "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+    },
+    {
+     "kind": "revision",
+     "same_document": false,
+     "why": "an earlier revision of any document that names a look sets the look it draws in",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1932,
+     "text": "self.look = look;"
+    },
+    {
+     "kind": "check",
+     "same_document": false,
+     "why": "an earlier revision of any document that names a look sets the look it draws in",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1932,
+     "text": "self.look = look;"
+    }
+   ]
+  },
+  {
+   "kind": "patch",
+   "call": "deep_show with a patch of one value",
+   "reads": [
+    {
+     "thing": "document",
+     "what": "the document's shared copy, which only a world that seeds it at revision 0 makes",
+     "file": "crates/deep-show/src/shared/calls.rs",
+     "line": 210,
+     "text": "if !self.shared.contains_key(&call.doc) {"
+    },
+    {
+     "thing": "world",
+     "what": "the seeds: the world's documents with a revision 0",
+     "file": "crates/deep-show/src/shared/calls.rs",
+     "line": 13,
+     "text": "for (id, seed) in &scenario.seeds {"
+    },
+    {
+     "thing": "world",
+     "what": "the writer's quota",
+     "file": "crates/deep-show/src/shared/calls.rs",
+     "line": 222,
+     "text": ".and_then(|s| self.scenario.quotas.get(s))"
+    },
+    {
+     "thing": "document",
+     "what": "the current revision its base is checked against",
+     "file": "crates/deep-show/src/shared/calls.rs",
+     "line": 251,
+     "text": "let cur = shared.current().rev;"
+    }
+   ],
+   "writes": [
+    {
+     "thing": "document",
+     "what": "the patched revision",
+     "file": "crates/deep-show/src/shared/calls.rs",
+     "line": 844,
+     "text": ".push(next);"
+    }
+   ],
+   "follows": [
+    {
+     "kind": "revision",
+     "same_document": true,
+     "why": "its base must be a revision the document has, and a changed ID conflicts",
+     "file": "crates/deep-show/src/shared/calls.rs",
+     "line": 284,
+     "text": "if base > cur {"
+    },
+    {
+     "kind": "check",
+     "same_document": true,
+     "why": "its base must be a revision the document has, and a changed ID conflicts",
+     "file": "crates/deep-show/src/shared/calls.rs",
+     "line": 284,
+     "text": "if base > cur {"
+    },
+    {
+     "kind": "patch",
+     "same_document": true,
+     "why": "its base must be a revision the document has, and a changed ID conflicts",
+     "file": "crates/deep-show/src/shared/calls.rs",
+     "line": 284,
+     "text": "if base > cur {"
+    }
+   ],
+   "notes": [
+    {
+     "what": "nothing: an applied patch has no presented revision, so the core writes no canonical document and the hub records none",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 187,
+     "text": "&& reply[\"outcome\"] != \"applied\""
+    },
+    {
+     "what": "Not a must-follow through the hub: only the same writer's earlier patches, through its quota window; the hub sends no quotas, so none through the hub",
+     "file": "crates/deep-show/src/shared/calls.rs",
+     "line": 227,
+     "text": "times.retain(|t| *t > checked - FLICKS);"
+    }
+   ]
+  },
+  {
+   "kind": "check",
+   "call": "deep show --check with a whole document: a revision that also decides a verdict",
+   "reads": [
+    {
+     "thing": "document",
+     "what": "as a revision",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1901,
+     "text": "let current = self.current(&show.doc);"
+    },
+    {
+     "thing": "world",
+     "what": "the claim that names the document",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 2560,
+     "text": "Some(handle) => match self.scenario.claims.get(handle) {"
+    },
+    {
+     "thing": "shown",
+     "what": "as a revision, every document on its panel when presented",
+     "file": "crates/deep-show/src/hub/presented.rs",
+     "line": 31,
+     "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+    },
+    {
+     "thing": "evidence",
+     "what": "the hub reads the revision's hash for the recorded runs on it",
+     "file": "packages/hub/src/hub-canvas.ts",
+     "line": 270,
+     "text": "const hash = typeof presented?.hash === 'string' ? presented.hash : (await this.docRevision(String(call.doc)))?.hash;"
+    }
+   ],
+   "writes": [
+    {
+     "thing": "document",
+     "what": "as a revision",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 2173,
+     "text": "r.state = \"superseded\";"
+    },
+    {
+     "thing": "evidence",
+     "what": "as a revision, and the verdict in its reply",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 2501,
+     "text": "let verdict = match self.verdict(show, snapshot_taken) {"
+    }
+   ],
+   "follows": [
+    {
+     "kind": "revision",
+     "same_document": true,
+     "why": "as a revision",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1907,
+     "text": "let rev = self.revisions.get(&show.doc).map_or(0, Vec::len) as u64 + 1;"
+    },
+    {
+     "kind": "check",
+     "same_document": true,
+     "why": "as a revision",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1907,
+     "text": "let rev = self.revisions.get(&show.doc).map_or(0, Vec::len) as u64 + 1;"
+    },
+    {
+     "kind": "patch",
+     "same_document": true,
+     "why": "as a revision",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1907,
+     "text": "let rev = self.revisions.get(&show.doc).map_or(0, Vec::len) as u64 + 1;"
+    },
+    {
+     "kind": "revision",
+     "same_document": false,
+     "why": "as a revision, through the panel",
+     "file": "crates/deep-show/src/hub/presented.rs",
+     "line": 31,
+     "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+    },
+    {
+     "kind": "check",
+     "same_document": false,
+     "why": "as a revision, through the panel",
+     "file": "crates/deep-show/src/hub/presented.rs",
+     "line": 31,
+     "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+    },
+    {
+     "kind": "patch",
+     "same_document": false,
+     "why": "as a revision, through the panel",
+     "file": "crates/deep-show/src/hub/presented.rs",
+     "line": 31,
+     "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+    }
+   ]
+  },
+  {
+   "kind": "render_back_2d",
+   "call": "deep_show with no document or patch, of a 2D revision",
+   "reads": [
+    {
+     "thing": "document",
+     "what": "the revision asked for",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 431,
+     "text": "let Some(mut document) = self.revision(doc, rev) else {"
+    },
+    {
+     "thing": "world",
+     "what": "the session it is drawn for",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 428,
+     "text": "if !self.scenario.sessions.contains_key(session) {"
+    },
+    {
+     "thing": "shown",
+     "what": "the core's one look, which any document's revision may have set",
+     "file": "crates/deep-show/src/input.rs",
+     "line": 780,
+     "text": "&self.look.light,"
+    },
+    {
+     "thing": "shown",
+     "what": "every document on its panel: a reply with a revision is presented too, though the hub keeps only the reply",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 190,
+     "text": "hub.presented_revision(doc)"
+    }
+   ],
+   "writes": [
+    {
+     "thing": "evidence",
+     "what": "the snapshot, drawn by Vello CPU",
+     "file": "crates/deep-show/src/input.rs",
+     "line": 789,
+     "text": "crate::evidence::put(&self.scenario.evidence, &png)"
+    }
+   ],
+   "follows": [
+    {
+     "kind": "revision",
+     "same_document": true,
+     "why": "the revision it draws must exist",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 431,
+     "text": "let Some(mut document) = self.revision(doc, rev) else {"
+    },
+    {
+     "kind": "check",
+     "same_document": true,
+     "why": "the revision it draws must exist",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 431,
+     "text": "let Some(mut document) = self.revision(doc, rev) else {"
+    },
+    {
+     "kind": "patch",
+     "same_document": true,
+     "why": "the revision it draws must exist",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 431,
+     "text": "let Some(mut document) = self.revision(doc, rev) else {"
+    },
+    {
+     "kind": "revision",
+     "same_document": false,
+     "why": "only one that set the core's look",
+     "file": "crates/deep-show/src/input.rs",
+     "line": 780,
+     "text": "&self.look.light,"
+    },
+    {
+     "kind": "check",
+     "same_document": false,
+     "why": "only one that set the core's look",
+     "file": "crates/deep-show/src/input.rs",
+     "line": 780,
+     "text": "&self.look.light,"
+    }
+   ],
+   "notes": [
+    {
+     "what": "nothing: it mints no revision, yet it is kept and played again by every later call",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 153,
+     "text": "self.calls.push(Value::Object(call));"
+    }
+   ]
+  },
+  {
+   "kind": "render_back_3d",
+   "call": "deep_show with no document or patch, of a 3D revision",
+   "reads": [
+    {
+     "thing": "document",
+     "what": "the revision asked for, drawn in 3D",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 449,
+     "text": "return self.render_back_3d(session, rev, &document, t, size, probes);"
+    },
+    {
+     "thing": "document",
+     "what": "whether the revision is the current one",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 443,
+     "text": "let current = self.rev_at(doc, i64::MAX) == Some(rev);"
+    },
+    {
+     "thing": "world",
+     "what": "the session it is drawn for",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 428,
+     "text": "if !self.scenario.sessions.contains_key(session) {"
+    },
+    {
+     "thing": "shown",
+     "what": "every document on its panel, as for 2D",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 190,
+     "text": "hub.presented_revision(doc)"
+    }
+   ],
+   "writes": [
+    {
+     "thing": "evidence",
+     "what": "the snapshot, drawn on the GPU",
+     "file": "crates/deep-show/src/probe.rs",
+     "line": 137,
+     "text": "let Ok(sha) = crate::evidence::put(&self.scenario.evidence, &png) else {"
+    }
+   ],
+   "follows": [
+    {
+     "kind": "revision",
+     "same_document": true,
+     "why": "the revision it draws must exist; whether it is current changes what it draws",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 443,
+     "text": "let current = self.rev_at(doc, i64::MAX) == Some(rev);"
+    },
+    {
+     "kind": "check",
+     "same_document": true,
+     "why": "the revision it draws must exist; whether it is current changes what it draws",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 443,
+     "text": "let current = self.rev_at(doc, i64::MAX) == Some(rev);"
+    },
+    {
+     "kind": "patch",
+     "same_document": true,
+     "why": "the revision it draws must exist; whether it is current changes what it draws",
+     "file": "crates/deep-show/src/ask.rs",
+     "line": 443,
+     "text": "let current = self.rev_at(doc, i64::MAX) == Some(rev);"
+    }
+   ],
+   "notes": [
+    {
+     "what": "nothing: it mints no revision, yet it is kept and played again by every later call",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 153,
+     "text": "self.calls.push(Value::Object(call));"
+    }
+   ]
+  },
+  {
+   "kind": "deep_query",
+   "call": "deep_query: a revision's rows, summary, why or cost",
+   "reads": [
+    {
+     "thing": "document",
+     "what": "the revision's evaluated rows",
+     "file": "crates/deep-show/src/query.rs",
+     "line": 409,
+     "text": "let rows = self.revisions.get(doc)?;"
+    },
+    {
+     "thing": "world",
+     "what": "the reader's session and the record's handles it may read",
+     "file": "crates/deep-show/src/query.rs",
+     "line": 493,
+     "text": "if source.starts_with(\"doc:\") || self.can_read(reader, source) {"
+    }
+   ],
+   "writes": [
+    {
+     "thing": "evidence",
+     "what": "a reply with a revision is presented, pictures of the panel's layers written, though the hub keeps only the reply",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 185,
+     "text": "if reply.get(\"rev\").is_some()"
+    }
+   ],
+   "follows": [
+    {
+     "kind": "revision",
+     "same_document": true,
+     "why": "the revision it reads; it is a read, answered at its time on the hub that played the kept calls, and not kept",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 215,
+     "text": "hub.arrive(self.played * CANVAS_SPACING);"
+    },
+    {
+     "kind": "check",
+     "same_document": true,
+     "why": "the revision it reads; it is a read, answered at its time on the hub that played the kept calls, and not kept",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 215,
+     "text": "hub.arrive(self.played * CANVAS_SPACING);"
+    },
+    {
+     "kind": "patch",
+     "same_document": true,
+     "why": "the revision it reads; it is a read, answered at its time on the hub that played the kept calls, and not kept",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 215,
+     "text": "hub.arrive(self.played * CANVAS_SPACING);"
+    }
+   ]
+  },
+  {
+   "kind": "deep_kinds",
+   "call": "deep_kinds: the listing, words, guides and gallery",
+   "reads": [
+    {
+     "thing": "world",
+     "what": "the packs the world holds",
+     "file": "crates/deep-show/src/kinds/replies.rs",
+     "line": 147,
+     "text": "Some(w) => crate::kinds_word::answer(&self.packs.all().collect::<Vec<_>>(), w),"
+    }
+   ],
+   "writes": [
+    {
+     "thing": "world",
+     "what": "the hub sends the installed packs in every later world",
+     "file": "packages/hub/src/hub-canvas.ts",
+     "line": 338,
+     "text": "this.packsNeeded = true;"
+    }
+   ],
+   "follows": []
+  },
+  {
+   "kind": "revisions",
+   "call": "revisions: the hub's own read of a document's revisions (a render-back with no rev, canvas.revisions)",
+   "reads": [
+    {
+     "thing": "document",
+     "what": "the document's revisions",
+     "file": "crates/deep-show/src/hub.rs",
+     "line": 1653,
+     "text": "Call::Revisions(doc) if self.shared.contains_key(doc) => self.shared_revisions(doc),"
+    }
+   ],
+   "writes": [],
+   "follows": [
+    {
+     "kind": "revision",
+     "same_document": true,
+     "why": "the revisions it lists",
+     "file": "packages/hub/src/hub-canvas.ts",
+     "line": 242,
+     "text": "if (rev === null) rev = ((await this.canvasCall({ call: 'revisions', doc: call.doc })).revisions"
+    },
+    {
+     "kind": "check",
+     "same_document": true,
+     "why": "the revisions it lists",
+     "file": "packages/hub/src/hub-canvas.ts",
+     "line": 242,
+     "text": "if (rev === null) rev = ((await this.canvasCall({ call: 'revisions', doc: call.doc })).revisions"
+    },
+    {
+     "kind": "patch",
+     "same_document": true,
+     "why": "the revisions it lists",
+     "file": "packages/hub/src/hub-canvas.ts",
+     "line": 242,
+     "text": "if (rev === null) rev = ((await this.canvasCall({ call: 'revisions', doc: call.doc })).revisions"
+    }
+   ]
+  },
+  {
+   "kind": "verdict",
+   "call": "verdict: the hub's document check of a claim's run (documentCheck)",
+   "reads": [
+    {
+     "thing": "world",
+     "what": "a claim the hub adds to the world for this one call",
+     "file": "packages/hub/src/hub-canvas.ts",
+     "line": 422,
+     "text": "world.file = { ...world.file, claims: { ...(isObj(world.file.claims) ? world.file.claims : {}), [handle]: canvasClaim("
+    },
+    {
+     "thing": "world",
+     "what": "the claim, in the core",
+     "file": "crates/deep-show/src/verdict.rs",
+     "line": 246,
+     "text": "let Some(c) = scenario.claims.get(claim) else {"
+    },
+    {
+     "thing": "shown",
+     "what": "each deliverable document's current revision",
+     "file": "crates/deep-show/src/verdict.rs",
+     "line": 288,
+     "text": "match self.current_of(d) {"
+    }
+   ],
+   "writes": [
+    {
+     "thing": "world",
+     "what": "the next call's world lacks the claim, so the world is sent again, and this kept call replays against a world without it",
+     "file": "packages/hub/src/hub-canvas.ts",
+     "line": 425,
+     "text": "reply = (await this.canvas().call(world, { call: 'verdict', claim: handle })).reply;"
+    }
+   ],
+   "follows": [
+    {
+     "kind": "revision",
+     "same_document": false,
+     "why": "the deliverables' revisions, whoever wrote them",
+     "file": "crates/deep-show/src/verdict.rs",
+     "line": 288,
+     "text": "match self.current_of(d) {"
+    },
+    {
+     "kind": "check",
+     "same_document": false,
+     "why": "the deliverables' revisions, whoever wrote them",
+     "file": "crates/deep-show/src/verdict.rs",
+     "line": 288,
+     "text": "match self.current_of(d) {"
+    },
+    {
+     "kind": "patch",
+     "same_document": false,
+     "why": "the deliverables' revisions, whoever wrote them",
+     "file": "crates/deep-show/src/verdict.rs",
+     "line": 288,
+     "text": "match self.current_of(d) {"
+    }
+   ]
+  },
+  {
+   "kind": "user_input",
+   "call": "canvas.user: the app's input, asks and window, played through the core",
+   "reads": [
+    {
+     "thing": "document",
+     "what": "the panel's document at the input's time",
+     "file": "crates/deep-show/src/input.rs",
+     "line": 176,
+     "text": "let shown = self.revision(&doc, self.rev_at(&doc, t)?)?;"
+    },
+    {
+     "thing": "world",
+     "what": "the panels",
+     "file": "crates/deep-show/src/input.rs",
+     "line": 363,
+     "text": "if self.panel_document(panel).is_none() && self.slot(panel).is_some() {"
+    }
+   ],
+   "writes": [
+    {
+     "thing": "document",
+     "what": "the input track's entries, kept and played again by every later call",
+     "file": "crates/deep-show/src/input.rs",
+     "line": 409,
+     "text": "return match self.enter(id, control, value.clone(), now, serial) {"
+    }
+   ],
+   "follows": [
+    {
+     "kind": "revision",
+     "same_document": false,
+     "why": "every call before it: the virtual clock the input's time is read on moves with each",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 111,
+     "text": "call.insert(key.into(), json!((self.played + 1) * CANVAS_SPACING));"
+    },
+    {
+     "kind": "check",
+     "same_document": false,
+     "why": "every call before it: the virtual clock the input's time is read on moves with each",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 111,
+     "text": "call.insert(key.into(), json!((self.played + 1) * CANVAS_SPACING));"
+    },
+    {
+     "kind": "patch",
+     "same_document": false,
+     "why": "every call before it: the virtual clock the input's time is read on moves with each",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 111,
+     "text": "call.insert(key.into(), json!((self.played + 1) * CANVAS_SPACING));"
+    },
+    {
+     "kind": "render_back_2d",
+     "same_document": false,
+     "why": "every call before it: the virtual clock the input's time is read on moves with each",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 111,
+     "text": "call.insert(key.into(), json!((self.played + 1) * CANVAS_SPACING));"
+    },
+    {
+     "kind": "render_back_3d",
+     "same_document": false,
+     "why": "every call before it: the virtual clock the input's time is read on moves with each",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 111,
+     "text": "call.insert(key.into(), json!((self.played + 1) * CANVAS_SPACING));"
+    },
+    {
+     "kind": "deep_query",
+     "same_document": false,
+     "why": "every call before it: the virtual clock the input's time is read on moves with each",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 111,
+     "text": "call.insert(key.into(), json!((self.played + 1) * CANVAS_SPACING));"
+    },
+    {
+     "kind": "user_input",
+     "same_document": false,
+     "why": "every call before it: the virtual clock the input's time is read on moves with each",
+     "file": "crates/deep-show/src/canvas_side.rs",
+     "line": 111,
+     "text": "call.insert(key.into(), json!((self.played + 1) * CANVAS_SPACING));"
+    }
+   ]
+  }
+ ],
+ "side_by_side": {
+  "about": "Two calls of two sessions, each on documents of its own: whether one could run beside the other by what they read and write, so that either order gives both the same replies. As built none does: the hub sends one call at a time (packages/hub/src/canvas.ts:213), the core plays one line at a time, and each call plays every kept call again first (crates/deep-show/src/canvas_side.rs:69).",
+  "pairs": [
+   {
+    "a": "revision",
+    "b": "revision",
+    "could": false,
+    "why": "each presentation draws every document on the hub's one panel, the other's included",
+    "file": "crates/deep-show/src/hub/presented.rs",
+    "line": 31,
+    "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+   },
+   {
+    "a": "revision",
+    "b": "patch",
+    "could": false,
+    "why": "the revision's presentation draws the patched document on the same panel",
+    "file": "crates/deep-show/src/hub/presented.rs",
+    "line": 31,
+    "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+   },
+   {
+    "a": "revision",
+    "b": "check",
+    "could": false,
+    "why": "a check is a revision: each presentation draws the other's document",
+    "file": "crates/deep-show/src/hub/presented.rs",
+    "line": 31,
+    "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+   },
+   {
+    "a": "revision",
+    "b": "render_back_2d",
+    "could": true,
+    "why": "the render-back reads its own revision and the core's look; it could not if the revision names a look, which becomes the core's",
+    "file": "crates/deep-show/src/hub.rs",
+    "line": 1932,
+    "text": "self.look = look;"
+   },
+   {
+    "a": "revision",
+    "b": "render_back_3d",
+    "could": true,
+    "why": "as for 2D: only a revision that names a look reaches it",
+    "file": "crates/deep-show/src/hub.rs",
+    "line": 1932,
+    "text": "self.look = look;"
+   },
+   {
+    "a": "patch",
+    "b": "patch",
+    "could": true,
+    "why": "each writes only its own document's shared copy and presents nothing",
+    "file": "crates/deep-show/src/shared/calls.rs",
+    "line": 844,
+    "text": ".push(next);"
+   },
+   {
+    "a": "patch",
+    "b": "check",
+    "could": false,
+    "why": "the check's presentation draws the patched document",
+    "file": "crates/deep-show/src/hub/presented.rs",
+    "line": 31,
+    "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+   },
+   {
+    "a": "patch",
+    "b": "render_back_2d",
+    "could": true,
+    "why": "the render-back reads only its own revision; the patch writes only its own document",
+    "file": "crates/deep-show/src/shared/calls.rs",
+    "line": 844,
+    "text": ".push(next);"
+   },
+   {
+    "a": "patch",
+    "b": "render_back_3d",
+    "could": true,
+    "why": "as for 2D",
+    "file": "crates/deep-show/src/shared/calls.rs",
+    "line": 844,
+    "text": ".push(next);"
+   },
+   {
+    "a": "check",
+    "b": "check",
+    "could": false,
+    "why": "each presentation draws the other's document",
+    "file": "crates/deep-show/src/hub/presented.rs",
+    "line": 31,
+    "text": "let current = b.doc.as_deref().and_then(|d| self.current(d));"
+   },
+   {
+    "a": "check",
+    "b": "render_back_2d",
+    "could": true,
+    "why": "as a revision: only a look reaches it",
+    "file": "crates/deep-show/src/hub.rs",
+    "line": 1932,
+    "text": "self.look = look;"
+   },
+   {
+    "a": "check",
+    "b": "render_back_3d",
+    "could": true,
+    "why": "as a revision: only a look reaches it",
+    "file": "crates/deep-show/src/hub.rs",
+    "line": 1932,
+    "text": "self.look = look;"
+   },
+   {
+    "a": "render_back_2d",
+    "b": "render_back_2d",
+    "could": true,
+    "why": "both only read; each snapshot is kept by its own hash, and a file already there is left alone",
+    "file": "crates/deep-show/src/evidence.rs",
+    "line": 17,
+    "text": "if path.exists() {"
+   },
+   {
+    "a": "render_back_2d",
+    "b": "render_back_3d",
+    "could": true,
+    "why": "both only read",
+    "file": "crates/deep-show/src/evidence.rs",
+    "line": 17,
+    "text": "if path.exists() {"
+   },
+   {
+    "a": "render_back_3d",
+    "b": "render_back_3d",
+    "could": true,
+    "why": "both only read",
+    "file": "crates/deep-show/src/evidence.rs",
+    "line": 17,
+    "text": "if path.exists() {"
+   }
+  ]
+ },
+ "runs": {
+  "1": {
+   "command": "node docs/spikes/3222/harness.mjs --sessions 1 --home <tmp>/h --out docs/spikes/3222/out/sessions-1.json",
+   "out": "out/sessions-1.json",
+   "sha256": "ea03d8a5169117ad414210ea0991b39d80a42d1981524d3657e89708af88eef2",
+   "date": "2026-11-23T09:37:00.021Z",
+   "load": {
+    "start": [
+     45.96,
+     53.34,
+     60.08
+    ],
+    "end": [
+     23.99,
+     45.53,
+     56.55
+    ]
+   },
+   "kinds": {
+    "check": {
+     "calls": 20,
+     "wait": {
+      "p50": 25.51416015625,
+      "p95": 55.018310546875
+     },
+     "service": {
+      "p50": 482.67822265625,
+      "p95": 624.601318359375
+     }
+    },
+    "patch": {
+     "calls": 20,
+     "wait": {
+      "p50": 0.419677734375,
+      "p95": 0.6826171875
+     },
+     "service": {
+      "p50": 534.1982421875,
+      "p95": 651.021484375
+     }
+    },
+    "render_back_2d": {
+     "calls": 20,
+     "wait": {
+      "p50": 0.358642578125,
+      "p95": 0.88671875
+     },
+     "service": {
+      "p50": 492.510009765625,
+      "p95": 638.60400390625
+     }
+    },
+    "render_back_3d": {
+     "calls": 20,
+     "wait": {
+      "p50": 0.3955078125,
+      "p95": 0.626220703125
+     },
+     "service": {
+      "p50": 550.880126953125,
+      "p95": 657.1318359375
+     }
+    },
+    "revision": {
+     "calls": 42,
+     "wait": {
+      "p50": 0.402099609375,
+      "p95": 0.724853515625
+     },
+     "service": {
+      "p50": 519.6708984375,
+      "p95": 628.361572265625
+     }
+    }
+   },
+   "all": {
+    "calls": 122,
+    "wait": {
+     "p50": 0.45068359375,
+     "p95": 39.631591796875
+    },
+    "service": {
+     "p50": 509.07275390625,
+     "p95": 638.60400390625
+    },
+    "behind": {
+     "p50": 0.066162109375,
+     "p95": 0.14892578125
+    }
+   },
+   "service_growth": {
+    "first_call_ms": 9.32373046875,
+    "first_20_p50": 362.359619140625,
+    "last_20_p50": 604.690673828125,
+    "held_last": 122
+   }
+  },
+  "4": {
+   "command": "node docs/spikes/3222/harness.mjs --sessions 4 --home <tmp>/h --out docs/spikes/3222/out/sessions-4.json",
+   "out": "out/sessions-4.json",
+   "sha256": "833e234043a9d0081ef94ba9edaaa831c7e4ce623f3b2f6e3b22dc6770afcb99",
+   "date": "2026-11-23T09:38:21.495Z",
+   "load": {
+    "start": [
+     23.99,
+     45.53,
+     56.55
+    ],
+    "end": [
+     21.15,
+     40.54,
+     53.92
+    ]
+   },
+   "kinds": {
+    "check": {
+     "calls": 20,
+     "wait": {
+      "p50": 1123.332763671875,
+      "p95": 2390.126953125
+     },
+     "service": {
+      "p50": 480.794677734375,
+      "p95": 890.463134765625
+     }
+    },
+    "patch": {
+     "calls": 20,
+     "wait": {
+      "p50": 1212.12890625,
+      "p95": 2498.24072265625
+     },
+     "service": {
+      "p50": 464.076171875,
+      "p95": 887.447998046875
+     }
+    },
+    "render_back_2d": {
+     "calls": 20,
+     "wait": {
+      "p50": 1304.013916015625,
+      "p95": 1770.07763671875
+     },
+     "service": {
+      "p50": 474.689208984375,
+      "p95": 667.403564453125
+     }
+    },
+    "render_back_3d": {
+     "calls": 20,
+     "wait": {
+      "p50": 1190.92822265625,
+      "p95": 2313.584716796875
+     },
+     "service": {
+      "p50": 475.999755859375,
+      "p95": 809.9677734375
+     }
+    },
+    "revision": {
+     "calls": 48,
+     "wait": {
+      "p50": 1137.248291015625,
+      "p95": 2305.2939453125
+     },
+     "service": {
+      "p50": 411.513671875,
+      "p95": 827.550537109375
+     }
+    }
+   },
+   "all": {
+    "calls": 128,
+    "wait": {
+     "p50": 1212.12890625,
+     "p95": 2390.126953125
+    },
+    "service": {
+     "p50": 464.076171875,
+     "p95": 864.615966796875
+    },
+    "behind": {
+     "p50": 1211.769775390625,
+     "p95": 2370.140380859375
+    }
+   },
+   "service_growth": {
+    "first_call_ms": 6.31591796875,
+    "first_20_p50": 246.31005859375,
+    "last_20_p50": 799.005126953125,
+    "held_last": 128
+   }
+  },
+  "16": {
+   "command": "node docs/spikes/3222/harness.mjs --sessions 16 --home <tmp>/h --out docs/spikes/3222/out/sessions-16.json",
+   "out": "out/sessions-16.json",
+   "sha256": "7ceb99aea00dbabd81fd5a11297eb60e1958ff6d6a651d637c0e75f2b4e3893e",
+   "date": "2026-11-23T09:39:23.082Z",
+   "load": {
+    "start": [
+     20.81,
+     40.15,
+     53.7
+    ],
+    "end": [
+     383.74,
+     210.62,
+     121.99
+    ]
+   },
+   "kinds": {
+    "check": {
+     "calls": 32,
+     "wait": {
+      "p50": 12080.170654296875,
+      "p95": 45669.515625
+     },
+     "service": {
+      "p50": 866.048828125,
+      "p95": 3312.17138671875
+     }
+    },
+    "patch": {
+     "calls": 32,
+     "wait": {
+      "p50": 12956.12060546875,
+      "p95": 45617.070068359375
+     },
+     "service": {
+      "p50": 902.522705078125,
+      "p95": 3354.938720703125
+     }
+    },
+    "render_back_2d": {
+     "calls": 32,
+     "wait": {
+      "p50": 12783.3935546875,
+      "p95": 44796.84375
+     },
+     "service": {
+      "p50": 947.120849609375,
+      "p95": 3003.64794921875
+     }
+    },
+    "render_back_3d": {
+     "calls": 32,
+     "wait": {
+      "p50": 12127.312255859375,
+      "p95": 45901.792236328125
+     },
+     "service": {
+      "p50": 916.60595703125,
+      "p95": 3197.14208984375
+     }
+    },
+    "revision": {
+     "calls": 96,
+     "wait": {
+      "p50": 10384.313720703125,
+      "p95": 44761.7734375
+     },
+     "service": {
+      "p50": 716.388671875,
+      "p95": 3049.622314453125
+     }
+    }
+   },
+   "all": {
+    "calls": 224,
+    "wait": {
+     "p50": 11713.21044921875,
+     "p95": 45003.30322265625
+    },
+    "service": {
+     "p50": 860.64404296875,
+     "p95": 3184.86328125
+    },
+    "behind": {
+     "p50": 11712.858642578125,
+     "p95": 44966.951416015625
+    }
+   },
+   "service_growth": {
+    "first_call_ms": 8.40625,
+    "first_20_p50": 25.33642578125,
+    "last_20_p50": 2490.258544921875,
+    "held_last": 224
+   }
+  }
+ },
+ "planted": {
+  "fixture": {
+   "path": "tests/acceptance/671/fixtures/scene.json",
+   "sha256": "a4d1026e4acad19ae96c19628182fdfc297d52ec4a0ac429e58b7278772e9b7a",
+   "size": [
+    640,
+    480
+   ]
+  },
+  "slow": {
+   "command": "node docs/spikes/3222/harness.mjs --sessions 15 --patches --slow --home <tmp>/h --out docs/spikes/3222/out/patches-15-slow.json",
+   "out": "out/patches-15-slow.json",
+   "sha256": "39ae67f2ed1d89ed8dd2dd4b2791ab00dc5eea8483bcfb175215eac3cb72d70d",
+   "date": "2026-11-23T09:44:18.409Z",
+   "load": {
+    "start": [
+     399.22,
+     219.66,
+     126.23
+    ],
+    "end": [
+     379.43,
+     221.14,
+     127.84
+    ]
+   },
+   "call": {
+    "wait": 0.8994140625,
+    "service": 555.407470703125
+   }
+  },
+  "without": {
+   "command": "node docs/spikes/3222/harness.mjs --sessions 15 --patches --home <tmp>/h --out docs/spikes/3222/out/patches-15.json",
+   "out": "out/patches-15.json",
+   "sha256": "90604246c10d52bcc0febcbc594a25604fd769dca16fd5acb55417a3fc454e6b",
+   "date": "2026-11-23T09:44:10.866Z",
+   "load": {
+    "start": [
+     383.74,
+     210.62,
+     121.99
+    ],
+    "end": [
+     399.22,
+     219.66,
+     126.23
+    ]
+   }
+  },
+  "patches": [
+   {
+    "session": "933418f4-2096-411e-8f64-a7a64dcab1e1",
+    "doc": "01JC3200000000000000000001",
+    "slow": 556.6298828125,
+    "without": 0.490234375,
+    "service_slow": 517.254638671875,
+    "service_without": 88.199951171875
+   },
+   {
+    "session": "53403b46-1f5e-449e-8dca-0a963f52f044",
+    "doc": "01JC3200000000000000000003",
+    "slow": 1067.131591796875,
+    "without": 89.2001953125,
+    "service_slow": 434.06396484375,
+    "service_without": 56.489990234375
+   },
+   {
+    "session": "3da37e12-5c1c-429f-8371-0b908b2ddd5f",
+    "doc": "01JC3200000000000000000005",
+    "slow": 1502.62744140625,
+    "without": 147.193359375,
+    "service_slow": 569.589111328125,
+    "service_without": 75.8544921875
+   },
+   {
+    "session": "f443d306-e26b-43d7-88e8-94829b952d15",
+    "doc": "01JC3200000000000000000009",
+    "slow": 2075.093017578125,
+    "without": 223.258544921875,
+    "service_slow": 470.390380859375,
+    "service_without": 108.5283203125
+   },
+   {
+    "session": "ab594d3f-d5b4-45d1-8615-fe4f261c9f84",
+    "doc": "01JC3200000000000000000013",
+    "slow": 2545.56982421875,
+    "without": 471.09619140625,
+    "service_slow": 440.865234375,
+    "service_without": 84.9541015625
+   },
+   {
+    "session": "75b809c2-89ca-442b-87a9-7474926c6a03",
+    "doc": "01JC3200000000000000000007",
+    "slow": 2986.43212890625,
+    "without": 330.451171875,
+    "service_slow": 484.599853515625,
+    "service_without": 57.4140625
+   },
+   {
+    "session": "1ff8f18a-e78d-4bec-8e52-c388bc2453a2",
+    "doc": "01JC3200000000000000000011",
+    "slow": 3471.170654296875,
+    "without": 388.330322265625,
+    "service_slow": 709.720458984375,
+    "service_without": 81.984130859375
+   },
+   {
+    "session": "258368d0-ae0b-40f6-825b-d75ea1449939",
+    "doc": "01JC3200000000000000000019",
+    "slow": 4180.900146484375,
+    "without": 750.36376953125,
+    "service_slow": 413.825927734375,
+    "service_without": 69.700927734375
+   },
+   {
+    "session": "64572a71-8bc9-40ac-8d4f-8d7abe5406bd",
+    "doc": "01JC3200000000000000000017",
+    "slow": 4594.68017578125,
+    "without": 655.83447265625,
+    "service_slow": 465.744873046875,
+    "service_without": 93.551513671875
+   },
+   {
+    "session": "d7263625-fd6e-43bb-84fd-acc928fc4eaa",
+    "doc": "01JC3200000000000000000023",
+    "slow": 5063.165771484375,
+    "without": 966.83740234375,
+    "service_slow": 403.9501953125,
+    "service_without": 83.121826171875
+   },
+   {
+    "session": "32101912-5538-4d84-8c98-54fc5ecf663e",
+    "doc": "01JC3200000000000000000021",
+    "slow": 5467.884521484375,
+    "without": 820.012939453125,
+    "service_slow": 352.40869140625,
+    "service_without": 140.684326171875
+   },
+   {
+    "session": "d4fadf44-3d5a-4f1c-8983-9b89ddd7983f",
+    "doc": "01JC3200000000000000000025",
+    "slow": 5821.534912109375,
+    "without": 1202.5517578125,
+    "service_slow": 361.313232421875,
+    "service_without": 120.025146484375
+   },
+   {
+    "session": "f9e8a85f-2fc7-419a-8834-52b38983f179",
+    "doc": "01JC3200000000000000000027",
+    "slow": 6186.291748046875,
+    "without": 1050.708984375,
+    "service_slow": 340.25732421875,
+    "service_without": 152.574951171875
+   },
+   {
+    "session": "463ccfea-bb9c-4dce-8ce7-ffc7db059c52",
+    "doc": "01JC3200000000000000000029",
+    "slow": 6529.04345703125,
+    "without": 1323.291259765625,
+    "service_slow": 342.515625,
+    "service_without": 92.880859375
+   },
+   {
+    "session": "1e37da0f-5918-47cb-894d-cfaf07f70d5f",
+    "doc": "01JC3200000000000000000015",
+    "slow": 6873.5791015625,
+    "without": 555.811767578125,
+    "service_slow": 336.70166015625,
+    "service_without": 103.2119140625
+   }
+  ]
+ },
+ "followUp": {
+  "issue": 3262,
+  "title": "A canvas call plays once: the canvas side keeps its hub between calls, so no session pays for every other session's history, and a render-back isn't drawn again by each later call",
+  "criteria": [
+   "With #3222's harness (`docs/spikes/3222/harness.mjs`), in each of its 1, 4 and 16-session runs, the median service of the last 20 calls is at most 1.25 times the first 20's (drafted; 1.7, 3.2 and 100 times on main). The harness's output on the merge base is kept beside it",
+   "In #3222's planted slow call's runs (`--sessions 15 --patches`, with and without `--slow`), the 15 patches' median service with the slow call in flight is at most 1.25 times their median with none (drafted; 434 ms against 88 ms on main). A planted canvas side that keeps render-backs fails, naming the render-back",
+   "Every reply equals the reply of a fresh hub that plays every kept call, on the scenarios #806's, #393's, #384's, #1415's and #2694's suites play and on #3222's 16-session script. A planted canvas side that keeps its hub across a world change that ended a session fails, naming the first call whose reply differs"
+  ]
+ }
+}

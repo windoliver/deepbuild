@@ -59,6 +59,25 @@ struct Params {
     touch: vec4<f32>,
     // The grid `touch_cells` lays over them: its origin (x, z) and its cells per m along each.
     touch_grid: vec4<f32>,
+    // #3034: x: 1 in a frame under water, its eye below the surface at rest; y: the water's index
+    // of refraction; z: 1 for the planted tint by the depth below the surface.
+    under: vec4<f32>,
+    // rgb: what a ray shows above the water where nothing stands and no sky's pass draws, linear;
+    // w: 1 when so.
+    above: vec4<f32>,
+    // #3033: a sea's table, longest first, four waves a lane, read only by water with a sea
+    // (sea.wgsl). x: its shortest wave's wavenumber. Then, a lane each: the waves' wavenumbers
+    // along their headings (x, then z), their phases at t, their wavenumbers, their amplitudes,
+    // their slopes along their headings (x, then z) and their steepness's share of those slopes.
+    sea: vec4<f32>,
+    sea_kx: array<vec4<f32>, 16>,
+    sea_kz: array<vec4<f32>, 16>,
+    sea_at: array<vec4<f32>, 16>,
+    sea_k: array<vec4<f32>, 16>,
+    sea_a: array<vec4<f32>, 16>,
+    sea_sx: array<vec4<f32>, 16>,
+    sea_sz: array<vec4<f32>, 16>,
+    sea_steep: array<vec4<f32>, 16>,
 };
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -621,6 +640,9 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>, keep: bool) -> Lit {
     let px = vec2<i32>(xy);
     let p = world_at(xy, z, size);
     let v = normalize(params.eye.xyz - p);
+    // #3034: in a frame under water the eye sees the surface from below.
+    let under = params.under.x > 0.5;
+    let facing = select(v.y, -v.y, under);
     // #268: the shore's field here, read once: the calm it scales the waves by, its foam band
     // and its shade.
     var shore = Shore(1e30, 1e30);
@@ -647,7 +669,7 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>, keep: bool) -> Lit {
     // How much water one pixel spans across the view here, and along it as the view grazes the
     // surface.
     let span = distance(world_at(xy + vec2<f32>(0.0, 1.0), z, size), p);
-    let foot = span / max(v.y, 0.02);
+    let foot = span / max(facing, 0.02);
     // Where a pixel spans more than five rings' widths a ring only sparkles: rain fades out
     // between five and ten.
     let rainy = clamp((10.0 * RING_WIDTH - foot) / (5.0 * RING_WIDTH), 0.0, 1.0);
@@ -696,6 +718,24 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>, keep: bool) -> Lit {
     let mirrored = textureSampleLevel(picture, filtered, uv, 0.0).rgb;
     let f = schlick(clamp(dot(n, v), 0.0, 1.0)) * params.look.w;
     var color = mix(transmitted, mirrored, f);
+    if under {
+        // #3034: light crosses the surface only inside a cone of asin(1 ÷ ior) about the bent
+        // normal. Inside it the surface shows what is above it as the frame drew it, dimmed
+        // already by the water the eye sees it through; where nothing stands and no sky's pass
+        // drew, the ground, dimmed over the distance to the surface. Outside it the surface
+        // mirrors what is below it, and deep water's color fills what the mirror leaves.
+        let filled = params.absorption.rgb * params.ambient.rgb;
+        let cosine = dot(n, v);
+        if (1.0 - cosine * cosine) * params.under.y * params.under.y < 1.0 {
+            color = below;
+            if far && params.above.w > 0.5 {
+                let seen = select(exp(-distance(p, params.eye.xyz) / params.absorption.w), 1.0, params.under.z > 0.5);
+                color = mix(filled, params.above.rgb, seen);
+            }
+        } else {
+            color = mix(filled, mirrored, params.look.w);
+        }
+    }
 
     // Foam where the waves grow steep past the threshold and along the wake, in patches.
     var cause = 0.0;
@@ -704,7 +744,7 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>, keep: bool) -> Lit {
     }
     var foam = 0.0;
     // The span foam's texture is filtered by, its stretch along the view capped.
-    let pixel = span / max(v.y, 0.3);
+    let pixel = span / max(facing, 0.3);
     if cause > 0.0 {
         foam = foam_cover(cause, flowing_texture(rest, pixel, ph));
     }

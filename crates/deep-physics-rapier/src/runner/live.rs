@@ -83,6 +83,7 @@ impl Run {
             lint: self.lint,
             ccd_on_kinematic: self.ccd_on_kinematic,
             set_applies_both: self.set_applies_both,
+            through: self.through,
             views: std::cell::RefCell::default(),
         }
     }
@@ -510,7 +511,8 @@ impl Session {
 
 /// What a stored bake holds before step `from`, as a run that re-simulates from its checkpoint
 /// there takes it up: the step hashes and positions of states 0 … `from` − 1, the occurrences
-/// written through `from`, and the checkpoints it kept through `from`.
+/// written through `from`, the checkpoints it kept through `from`, and (#2035) the cuts through
+/// `from`, whose steps the run never takes again.
 fn prefix(record: &Value, w: &World, from: u64, drops_oldest: bool) -> Trace {
     let n = from as usize;
     let step_hashes = record["step_hashes"].as_array().map_or(Vec::new(), |h| {
@@ -578,6 +580,7 @@ fn prefix(record: &Value, w: &World, from: u64, drops_oldest: bool) -> Trace {
         occurrences,
         peak: ring.bytes(),
         ring,
+        cuts: deep_canvas_physics::cut::read(&record["outputs"], from),
         ..Trace::default()
     }
 }

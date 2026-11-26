@@ -59,7 +59,7 @@ fn to_f16(x: f32) -> u16 {
     sign | (((e + 15) as u16) << 10) | m as u16
 }
 
-fn read_buffer(device: &Device, b: &wgpu::Buffer, words: u64) -> Vec<u8> {
+pub(crate) fn read_buffer(device: &Device, b: &wgpu::Buffer, words: u64) -> Vec<u8> {
     let d = &device.device;
     let size = (words * 4).min(b.size()).max(4);
     let back = d.create_buffer(&wgpu::BufferDescriptor {

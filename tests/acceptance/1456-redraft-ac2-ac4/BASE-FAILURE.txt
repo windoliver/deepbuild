@@ -1,0 +1,84 @@
+#1456 AC2 and AC4, blind: runs at the base, 118ec119f1a769c2125a8a815a72031e3be29248, on 2026-11-24, macOS (arm64),
+Node 24, with PATH=~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:/usr/sbin:$PATH. The checkout was built first
+(npm ci, npm run build --workspaces, cargo build -p deep-hook). The machine was heavily loaded throughout; each run's
+load is given (uptime's 1-minute average), as recorded, never waited for.
+
+Both criteria hold at the base by construction, so each test is a guard: it passes at the base and fails at its own
+assertion on a planted wrong program (twins.json). Each twin was laid over the checkout by copying its packages/ over
+the checkout's, then `npm run build --workspaces --if-present`, then the test; then `git checkout -- .` and a rebuild.
+After the last run, `git status --short` shows only `?? tests/acceptance/1456-redraft-ac2-ac4/`.
+
+The fixtures were written once, at this base, before any run below:
+
+  DEEPBUILD_1456_MAKE_RECORD=1 DEEPBUILD_1456_BASE=118ec119f1a769c2125a8a815a72031e3be29248 NO_COLOR=1 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/1456-redraft-ac2-ac4 replay.test.ts -t "writes the record"
+  exit 0: Tests 1 passed | 1 skipped
+
+and read back, at the base, as base-states.json holds them:
+  hooks-cant-run     stuck     blocked  by hooks         flag interrupted
+  hooks-run-again    flagged   fail     by gone          flag interrupted
+  monitor            working   running  by monitor
+  monitor-ended      finished  idle     by finished
+  interrupted        finished  idle     by interrupted
+  denied-ran-anyway  flagged   fail     by gone          flag interrupted
+  plain-working      flagged   fail     by gone          flag interrupted
+  plain-ended        finished  idle     by finished
+
+== AC2 #1456.f70bc414 replay.test.ts ==
+
+1. At the base (load 41.70)
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1456-redraft-ac2-ac4 replay.test.ts
+  exit 0
+  Tests  1 passed | 1 skipped (2)       (the skipped one is the fixture writer)
+
+2. Twin legacy-readings-unread laid over (packages/hub/src/status.ts)
+  build: npm run build --workspaces --if-present  exit 0 (load 121.75 at its start)
+  test (load 66.37): the same command, exit 1
+  × #1456.f70bc414: a record the merge base wrote, replayed, gives every session the state the merge base read
+  AssertionError: the sessions whose state moved from the merge base's (118ec119f) on replay: expected [ …(3) ] to deeply equal []
+    session hooks-cant-run (…; a reading that its hooks can't run): the merge base read {"word":"stuck","entry":"blocked","waits_on":"you","unread":true,"flag":"interrupted","rule":"hooks"}, this checkout reads {"word":"flagged","entry":"fail","waits_on":"you","unread":true,"flag":"interrupted","rule":"gone"}
+    session monitor (…; its turn ended, then a reading that it waits on its monitor): the merge base read {"word":"working","entry":"running","waits_on":"agent","unread":true,"flag":null,"rule":"monitor"}, this checkout reads {"word":"finished","entry":"idle","waits_on":"you","unread":true,"flag":null,"rule":"finished"}
+    session interrupted (…; its turn ended, then an interrupt reading): the merge base read {"word":"finished","entry":"idle","waits_on":"you","unread":true,"flag":null,"rule":"interrupted"}, this checkout reads {"word":"finished","entry":"idle","waits_on":"you","unread":true,"flag":null,"rule":"finished"}
+   ❯ replay.test.ts:28:126
+  It fails at its own assertion, for the criterion's reason: readings written before there was a code, read as no
+  reading, give other states than the merge base's.
+
+3. Twin legacy-table-skipped laid over (packages/hub/src/plant.ts)
+  build: exit 0 (load 78.64 at its start)
+  test (load 83.92): exit 0, Tests 1 passed | 1 skipped (2)
+  Expected at the base: the base has no table for readings with no code, so nothing reads this plant's name. The twin
+  is for the change (README, What the implementation must provide, 1); it is proven to build here, not to fail.
+  A first attempt of this twin and the next, with Plant widened to `string` as #992's twins do, failed to build
+  (exit 2: packages/hub/src/core.ts(971,66) error TS2379, ExtensionHostOptions wants the Plant union); both twins now
+  keep the base's union. That attempt's test run proves nothing (the hub package's dist wasn't rebuilt).
+
+== AC4 #1456.6799dc51 agree.test.ts ==
+
+4. At the base, after restoring and rebuilding (restore build exit 0), load 61.99
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1456-redraft-ac2-ac4 agree.test.ts
+  exit 0
+  Tests  1 passed (1)   Duration 46.78s
+  The child, #992's suite, run the same way by hand to see its output (exit 0, Tests 1 passed, 50.41s):
+  read: tools session …: deep status says done, app says done, planted app says done; … (twelve sessions)
+
+5. Twin app-maps-waiting-to-working laid over (packages/hub/src/plant.ts, activePlant() = waiting-as-working)
+  build: exit 0 (load 135.44 at its end)
+  test (load 92.74): exit 1, Duration 869s (the first run here to build deep-drive with cargo)
+  × #1456.6799dc51: 992/agree holds
+  AssertionError: tests/acceptance/992's agree.test.ts must pass as it is: exit 1, …
+    (the child) AssertionError: deep status and the app name these sessions differently: expected [ Array(1) ] to deeply equal []
+    "adapters/corpus/claude-code/2.1.308/permission-terminal-closed: session … reads \"needs you\" in deep status and \"working\" (… working · Waiting for you to allow: run touch · 1 s) in the app's list"
+   ❯ agree.test.ts:22:210
+  It fails at its own assertion, for the criterion's reason: #992's suite no longer holds.
+
+== Other checks ==
+
+  node node_modules/typescript/bin/tsc --noEmit -p tests/acceptance/1456-redraft-ac2-ac4/tsconfig.json: no diagnostic
+  (twins excluded, as they are other checkouts' files)
+  node scripts/repo-rules.mjs: no finding names this folder (its FAIL lines, deps in crates/deep-show and
+  tests/acceptance/2700, are the base's own). fixtures/ledger.db holds no home folder or user name: its only paths are
+  the fixture run's /tmp folders.
+  A run writes vitest's cache under tests/acceptance/1456-redraft-ac2-ac4/node_modules/.vite/ (git ignores it; removed
+  here) and #992's under tests/acceptance/992/node_modules/.vite/ (ignored, left).
+
+Not run: the before lane itself (scripts/proof-runs.mjs) needs a change and a merge base; it was imitated by hand above.

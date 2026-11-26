@@ -1,0 +1,58 @@
+# At f3bcc704f (main when the issue was filed on November 9; its line numbers are of this commit): git archive of
+# the two design docs and the files the checks read into a scratch folder, this change's scripts/design-drift.mjs
+# beside them, then the nine checks. Every line the issue's Scope lists is named.
+$ node --input-type=module -e "import { drift } from './scripts/design-drift.mjs'; for (const line of drift()) console.log(line)"
+docs/technical-design.md:465 the CLI row doesn't name `deep explain`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep fix`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep workspace`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep mcp`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep lease`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep numbers`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep export`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep kinds`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep race`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep start`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep gate`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep guard`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep memory`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep rules`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep session`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep undo`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep mcp-exec`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep secret`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep join`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep backup`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep restore`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row doesn't name `deep update`, which `deep --help` lists (packages/cli/src/main.ts)
+docs/technical-design.md:465 the CLI row names `deep claim`, which no command builds: agents claim through `deep_claim`
+docs/technical-design.md:343 the Extension API block doesn't name `deep.channel.fetch`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.work.fetch`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.registerRoute`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.store.put`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.store.get`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.store.list`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.read`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.call`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.fetch`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.terminal.open`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.terminal.list`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.terminal.read`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:343 the Extension API block doesn't name `deep.terminal.close`, which packages/contracts/extension-api.json publishes
+docs/technical-design.md:850 the Hub slots table has no row for `deep.registerSource`, library, which packages/contracts/hub-slots.json has
+docs/technical-design.md:850 the Hub slots table has no row for `deep.registerRoute`, which packages/contracts/hub-slots.json has
+docs/technical-design.md:2266 DeepBuild's own jobs says Codex starts with `-s read-only`; readOnlyJob.args in adapters/codex.facts.json has `-s danger-full-access`
+docs/technical-design.md:794 the Proof check kind doesn't name `lake comparator`, the `lean4` runner the proof plug-in's spec takes (packages/proof/src/types.ts)
+docs/technical-design.md:794 the Proof check kind doesn't name Kani, the `kani` runner the proof plug-in's spec takes (packages/proof/src/types.ts)
+docs/technical-design.md:929 the Lifecycles list names degrade_level, which has no degrade_level.machine@*.json table in packages/contracts/schemas
+docs/technical-design.md:40 `- In R6: playbooks (…` doesn't say a blocker on the baseline list of issues closed before the gate satisfies a blocked-by link
+docs/technical-design.md:665 says a complete game takes the engine project route as its only route: "A complete game goes through an engine project instead, which DeepBuild creates, builds, drives and proves through the g…"
+docs/technical-design.md:715 says a complete game takes the engine project route as its only route: "Complete games take the engine project route instead."
+docs/technical-design.md:2092 says a complete game takes the engine project route as its only route: "Complete games take the engine project route, through the game project blueprint; versions native to the canvas, and eac…"
+docs/technical-design.md:2815 says a complete game takes the engine project route as its only route: "A navigation graph baked again during a run waits for a brief, characters that push what they meet stay out, and complet…"
+docs/canvas-primitives.md:9415 says a complete game takes the engine project route as its only route: "A bounded game takes the physics module's character body, a navigation graph a job bakes and the piece's own logic searc…"
+docs/technical-design.md:2815 the Decided row Bounded games on the canvas doesn't name the canvas game shell (#851)
+docs/technical-design.md:101 the events table doesn't name the column `v`, which packages/record/src/index.ts creates
+docs/technical-design.md:101 the events table doesn't name the column `hash`, which packages/record/src/index.ts creates
+docs/technical-design.md:101 the events table doesn't name the column `unverified`, which packages/record/src/index.ts creates
+docs/technical-design.md:331 the hook protocol's ack doesn't carry `v`, which hook.ack@2 requires
+docs/technical-design.md:334 the hook protocol's reply doesn't carry `v`, which hook.reply@2 requires

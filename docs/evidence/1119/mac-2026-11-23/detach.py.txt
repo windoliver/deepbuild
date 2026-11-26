@@ -1,0 +1,10 @@
+# Starts run-all.sh in a session of its own, reparented to launchd, so a closed Terminal tab can't stop it.
+import os, sys
+R = '~/deepbuild-runs-1119'
+if os.fork(): sys.exit(0)
+os.setsid()
+pid = os.fork()
+if pid: print(pid, flush=True); sys.exit(0)
+fd = os.open(f'{R}/run-all.log', os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+os.dup2(os.open('/dev/null', os.O_RDONLY), 0); os.dup2(fd, 1); os.dup2(fd, 2)
+os.execvpe('caffeinate', ['caffeinate', '-i', f'{R}/run-all.sh'], {**os.environ, 'AK': os.environ.get('AK', '3 4 5')})

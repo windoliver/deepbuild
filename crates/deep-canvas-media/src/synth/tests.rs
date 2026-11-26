@@ -279,6 +279,52 @@ fn a_node_reads_in_either_form() {
     assert_eq!((odd.rule, odd.at.as_deref()), (RULE_NODE, Some("nodes/g")));
 }
 
+/// A pack's presets are refused in the pack's order, each by its own fault (#1172: the sweeps run
+/// across the cores): of 24 presets, every third a runaway, one a bad key and one that doesn't
+/// compile, the refusals name those presets and no other, in that order.
+#[test]
+fn a_packs_refusals_keep_its_presets_order() {
+    let preset = |hi: f64| {
+        json!({
+            "nodes": {
+                "src": {"kind": "osc", "hz": 220},
+                "env": {"kind": "env", "attack": 0, "sustain": 1, "release": 0},
+                "amp": {"kind": "gain", "gain": 0},
+                "echo": {"kind": "delay", "time": 0.01, "feedback": "fb", "mix": 0.5}
+            },
+            "edges": [["src", "amp", "in"], ["env", "amp", "gain"], ["amp", "echo", "in"]],
+            "out": "echo",
+            "params": {"fb": {"unit": "", "range": [0, hi], "default": 0.5}},
+            "cost": 20
+        })
+    };
+    let mut presets = serde_json::Map::new();
+    let mut expect = Vec::new();
+    for i in 0..24 {
+        let key = format!("p{i:02}@1");
+        if i == 7 {
+            presets.insert("nomajor".into(), preset(0.95));
+            expect.push("preset test.nomajor: a preset's key".to_string());
+        } else if i == 16 {
+            presets.insert(key.clone(), json!({"nodes": {}}));
+            expect.push(format!("preset test.{key} fails"));
+        } else if i % 3 == 0 {
+            presets.insert(key.clone(), preset(1.05));
+            expect.push(format!(
+                "preset test.{key} is refused: with param fb at 1.05"
+            ));
+        } else {
+            presets.insert(key, preset(0.95));
+        }
+    }
+    let bad = presets_field(&json!({"name": "test", "presets": presets}));
+    let got: Vec<&str> = bad.iter().map(|(_, why)| why.as_str()).collect();
+    assert_eq!(got.len(), expect.len(), "{got:#?}");
+    for (why, start) in got.iter().zip(&expect) {
+        assert!(why.starts_with(start.as_str()), "{why} isn't {start}");
+    }
+}
+
 /// A feedback delay whose gain may reach 1.05 passes at its default and is refused at its maximum,
 /// naming the param, the value and the first sample past 4.0; cut to 0.95 the sweep passes.
 #[test]

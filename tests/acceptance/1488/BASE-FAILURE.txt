@@ -1,0 +1,94 @@
+#1488's acceptance suite at the base, 5fcfb690b (origin/main), in this worktree with only tests/acceptance/1488 added.
+Apple M5 Max (Mac17,10), 64 GiB, 18 cores, macOS. The machine was loaded by other sessions: the one-minute load was
+between 171 and 257 across the runs (each file's start and end below); no test here is timed. The two debug binaries
+(deep-show, deep-canvas-render) were built before the runs, so each file's build step only checked them.
+
+Command, one file at a time (cargo 1.99.1 first on PATH; scripts/lease found no `deep` and ran each unleased):
+  PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:/opt/homebrew/opt/rustup/bin:$PATH" \
+    CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    scripts/lease npx vitest run --root tests/acceptance/1488 <file> --no-file-parallelism --testTimeout=600000 --hookTimeout=600000
+
+Result: 6 files, 7 tests, 7 failed, each at an assertion, none at an import or in the harness. Wall time 199 s for the
+six runs (vitest's own durations 15.8 + 16.0 + 27.8 + 24.8 + 79.5 + 13.6 s).
+
+  file                 test              first failing assertion                                          test time  load start → end   wall
+  probe.test.ts        AC2               the worker refuses the JPEG: {"refused": {"code": "unreadable",   4.6 s      234.9 → 249.1      21 s
+                                         "why": "not a format the worker reads"}, "worker": {"pid": …}}
+  intake.test.ts       AC3               the intake refuses the WebP: {"refused": {"code": "unreadable",   7.1 s      252.7 → 255.0      20 s
+                                         "why": "not a format the worker reads"}, …}
+  orientation.test.ts  AC1 honest        every path shows the photo upright, 100 × 200: 20 failures        9.4 s      256.5 → 233.7      32 s
+                                         (below)
+  orientation.test.ts  AC1 planted       planted decoder_ignores_orientation: deep-show run answers         2.2 s
+                                         {"ok":false,"code":"bad_input"}
+  sweep.test.ts        AC4               51 answers that are a crash, neither a refusal nor an image, or    67.8 s     217.7 → 222.0      82 s
+                                         past the caps (below)
+  clip.test.ts         AC5               the clip shows upright with width and height swapped: 11          10.7 s     180.9 → 188.1      28 s
+                                         failures (below)
+  taste.test.ts        AC6               INCONCLUSIVE: no taste call is recorded                            6.8 s      175.0 → 171.6      16 s
+
+What each failure says, in the tests' own words (pids and a digest elided; <worktree> is this checkout):
+
+AC2 (probe.test.ts): media_import of the plain 160 × 96 JPEG is refused `unreadable` ("not a format the worker reads"):
+the merge base refuses it, as the criterion says it does.
+
+AC3 (intake.test.ts): media_import of the 82 B lossless WebP is refused `unreadable`, in the first of the two runs; no
+asset, no PNG, no made_by.
+
+AC1 honest (orientation.test.ts), all 20:
+  the worker's probe (media_import): refused unreadable: {"code":"unreadable","why":"not a format the worker reads"}
+  the worker's decode (media_decode): refused unreadable: {"code":"unreadable","why":"not a format the worker reads"}
+  deep-show's snapshot (eval pixels): the corner pixel top-left (78, 28) is (255, 255, 255), none of the four quarters,
+    where the upright picture has blue (the stored bottom-left); likewise top-right (161, 28) where red, bottom-left
+    (78, 211) where yellow, bottom-right (161, 211) where green
+  deep-show's snapshot (eval pixels): (45, 120) is (108, 70, 164), not the ground (255, 255, 255): the picture is drawn
+    wider than the upright size, so its width and height aren't swapped; and (195, 120) is (173, 197, 52)
+  deep-canvas-render raster: the same four corners show the ground (250, 250, 248), and (45, 120) and (195, 120) show
+    the picture: (108, 70, 164) and (173, 197, 52)
+  deep-canvas-render render: the same, corners (250, 250, 248), margins (108, 70, 164) and (173, 197, 52)
+  That is, every draw path lays the photo 200 × 100 across its box (from y = 70 to 170), unturned.
+
+AC1 planted: deep-show run with `planted: "decoder_ignores_orientation"` answers {"ok":false,"code":"bad_input"}: no
+binary knows the plant.
+
+AC5 (clip.test.ts), all 11:
+  the worker's probe (media_import) reports the video's size [160,96], not [96, 160]: width and height aren't swapped
+  deep-show's snapshot (eval pixels at 0.45 s, fit contain): the four corners of [60, 20, 120, 200] are the ground
+    (255, 255, 255), and (40, 120) is (107, 70, 164) and (200, 120) is (173, 196, 51), not the ground: the frame lies
+    200 × 120 across the box, unturned
+  deep-canvas-render render (the live view, at 0.45 s, fit fill): the corner pixel top-left (68, 28) is (221, 50, 50),
+    red, the stored top-left quarter, where the upright picture has blue (the stored bottom-left); top-right (171, 28)
+    is green, the stored top-right, where red; bottom-left (68, 211) blue where yellow; bottom-right (171, 211) yellow
+    where green: the frame is drawn as coded, unturned
+
+AC4 (sweep.test.ts): 1,020 mutants (the JPEG, 2,070 B; the WebP, 82 B; the MP4, 1,717 B; 340 each, seed 1488, printed
+in full by the run), 51 failures:
+  3 for the fixtures themselves: "the JPEG itself isn't imported as an image, so a reader that refuses everything would
+    pass" and "the JPEG itself doesn't decode to a picture" (both refused unreadable); "the WebP itself isn't imported
+    as an image …" (refused unreadable)
+  1 crash in the WebP's mutants: "the WebP truncated to 4 B: media_import answers neither a refusal nor an asset:
+    {"error":"the decoder failed on the file", …}" (a decoder panic the worker caught)
+  47 in the MP4's flips (none in its truncations): media_decode answers `error`, not a refusal, e.g. "the MP4 with
+    bits 5997…6000 flipped (byte 749): … {"error":"sample 3 didn't decode"}", "… bits 4943…4946 flipped (byte 617): …
+    {"error":"the decoder answered -12909"}", "… bits 10320…10323 flipped (byte 1290): … {"error":"a video track
+    without its codec configuration"}", "… bits 12574…12577 flipped (byte 1571): …
+    {"error":"CMBlockBufferCreateWithMemoryBlock: -12704"}"
+  None past the caps; the JPEG's 340 mutants through `raster` (the in-process image service) were each drawn or
+  refused, with no crash. Every other JPEG and WebP mutant is refused `unreadable`, which the sweep counts as a refusal;
+  the fixtures' own failures are what keep the base from passing on that.
+
+AC6 (taste.test.ts): the check run drew the fixture document at the base (the photo and the clip both lying on their
+sides, unturned), wrote docs/evidence/1488/photo-and-clip-0.1s.png (37d6dc94b6a997e0…) and photo-and-clip-0.8s.png
+(6dae68e9296be330…), then failed "INCONCLUSIVE: no taste call is recorded: attach these to the PR, show them to the
+owner in the session …". Those two files were deleted after the run; they are the base's pictures, not the suite's.
+
+Changes after these runs, before the commit: the test names were rewritten from template expressions (`${AC[1]} …`)
+to plain string literals with the same text, so the trace lane (scripts/proof-change.mjs reads names statically) and
+`vitest list` read each name and its ID unrun; two imports that became unused went with them. Nothing a test does
+changed, and the files weren't run again. clip.test.ts and sweep.test.ts above are their final versions' runs (each
+was run again after a change: the live render's `fit: fill`, and the WebP's decode no longer required of the fixture
+itself). `npx tsc -p tests/acceptance/1488/tsconfig.json` passes on the committed files.
+
+A throwaway control, deleted before the commit, checked the reading on pictures the base already draws right: an
+upright 100 × 200 PNG through the worker's decode, deep-show's snapshot, raster and render, and an upright 96 × 160
+clip through the snapshot and render, read with no failure by the same corner and margin code; and this Mac's
+`sips` PNG of the WebP read back with each quarter exact.

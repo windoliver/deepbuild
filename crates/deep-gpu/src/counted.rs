@@ -23,6 +23,9 @@ pub struct Counts {
     readbacks: AtomicU64,
     index_buffers: AtomicU64,
     command_buffers: AtomicU64,
+    compile_ns: AtomicU64,
+    /// #231: each compile, in order: what was made, by its label, and the nanoseconds it took.
+    compiles: Mutex<Vec<(String, u64)>>,
 }
 
 /// A reading of [`Counts`]; two readings' difference is what happened between them.
@@ -41,6 +44,9 @@ pub struct Reading {
     pub index_buffers: u64,
     /// #2657: the command buffers handed to the queue.
     pub command_buffers: u64,
+    /// #231: the nanoseconds making shader modules and pipelines took: the device's compiles. A
+    /// kept one is made once, so a second document's compiles take none.
+    pub compile_ns: u64,
 }
 
 impl Reading {
@@ -54,6 +60,7 @@ impl Reading {
             readbacks: self.readbacks - earlier.readbacks,
             index_buffers: self.index_buffers - earlier.index_buffers,
             command_buffers: self.command_buffers - earlier.command_buffers,
+            compile_ns: self.compile_ns - earlier.compile_ns,
         }
     }
 }
@@ -69,7 +76,27 @@ impl Counts {
             readbacks: self.readbacks.load(Ordering::Relaxed),
             index_buffers: self.index_buffers.load(Ordering::Relaxed),
             command_buffers: self.command_buffers.load(Ordering::Relaxed),
+            compile_ns: self.compile_ns.load(Ordering::Relaxed),
         }
+    }
+}
+
+impl Counts {
+    /// #231: the device's compiles from the `from`th on, each a shader module's or a pipeline's
+    /// making: its label and the seconds it took. `compiles(0)` is every one since it opened.
+    pub fn compiles(&self, from: usize) -> Vec<(String, f64)> {
+        let made = self.compiles.lock().unwrap_or_else(|e| e.into_inner());
+        let rows = made.iter().skip(from);
+        rows.map(|(what, ns)| (what.clone(), *ns as f64 / 1e9))
+            .collect()
+    }
+
+    /// How many compiles the device has made.
+    pub fn compiled(&self) -> usize {
+        self.compiles
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 }
 
@@ -174,8 +201,26 @@ impl Wgpu {
         slot: fn(&mut Kept) -> &mut HashMap<u64, T>,
         key: Option<u64>,
         made: Option<&AtomicU64>,
+        compiles: Option<&str>,
         make: impl Fn() -> T,
     ) -> T {
+        // #231: a shader module's or a pipeline's making is a compile, timed where it happens
+        // and listed under its label.
+        let make = || {
+            let at = std::time::Instant::now();
+            let object = make();
+            if let Some(what) = compiles {
+                let ns = at.elapsed().as_nanos() as u64;
+                add(&self.counts.compile_ns, ns);
+                let mut made = self
+                    .counts
+                    .compiles
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                made.push((what.to_string(), ns));
+            }
+            object
+        };
         let lock = || self.kept.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(found) = key.and_then(|k| slot(&mut lock()).get(&k).cloned()) {
             return found;
@@ -211,6 +256,7 @@ impl Wgpu {
             |k| &mut k.modules,
             key,
             None,
+            Some(desc.label.unwrap_or("shader module")),
             || self.raw.create_shader_module(desc.clone()),
         )
     }
@@ -224,6 +270,7 @@ impl Wgpu {
             |k| &mut k.group_layouts,
             Some(key),
             None,
+            None,
             || self.raw.create_bind_group_layout(desc),
         )
     }
@@ -236,6 +283,7 @@ impl Wgpu {
         self.kept(
             |k| &mut k.layouts,
             Some(key),
+            None,
             None,
             || self.raw.create_pipeline_layout(desc),
         )
@@ -304,6 +352,7 @@ impl Wgpu {
             |k| &mut k.render,
             Some(key),
             Some(&self.counts.pipelines),
+            Some(desc.label.unwrap_or("render pipeline")),
             || self.raw.create_render_pipeline(desc),
         )
     }
@@ -321,6 +370,7 @@ impl Wgpu {
             |k| &mut k.compute,
             Some(key),
             Some(&self.counts.pipelines),
+            Some(desc.label.unwrap_or("compute pipeline")),
             || self.raw.create_compute_pipeline(desc),
         )
     }

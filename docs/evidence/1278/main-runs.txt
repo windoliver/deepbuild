@@ -1,0 +1,32 @@
+# #1278's blind suite (tests/acceptance/1278/, written blind at 79d98cbc) on main 1b4929ae7, before any change.
+#
+# Machine: Mac18,1 (macOS, Metal). deep-gpu built with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0
+# cargo build --locked --bin deep-gpu. Load average 80 to 370 (other sessions' builds and suites) during the runs.
+#   npx vitest run tests/acceptance/1278 --testTimeout=1800000 --no-file-parallelism
+#
+# Main, whole suite (2026-11-24 23:38): 4 of 4 tests pass.
+#   AC1 #1278.09e67199 four plays, 97 frames each: 0 of 97 frames differ across 4 plays
+#   AC1 #1278.09e67199 fixture: frame 0: ball 22633 px, box 12787 px, 129 ball px beside the box
+#                               frame 48: ball 1684 px, box 1081 px, 126 ball px beside the box
+#                               frame 96: ball 876 px, box 468 px, 28 ball px beside the box
+#   AC2 #1278.2d35ce9a energy:  ball r 1, phase 0 / 0.25 / 0.5: 8.32263e-3 / 8.32506e-3 / 8.32534e-3
+#                               against 8.26446e-3 (+0.70 / +0.73 / +0.74%)
+#                               ball r 0.125, phase 0 / 0.25 / 0.5: 1.27794e-4 / 1.27716e-4 / 1.27554e-4
+#   AC2 #1278.2d35ce9a width:   brightest pixel 9.4% (r 1), 7.1% (r 0.125) at phase 0.5; small ÷ big 0.751
+#
+# Main, AC1's file four more times (23:39 to 23:42): 0 of 97 frames differ on each run.
+# So the repro no longer flips on main: the flips the issue measured at 79d98cbc came before PR #1272 (#425) landed,
+# and PR #1282's close note read 0 of 97 on main c12a65bb on a Mac15,12 too.
+#
+# Main with PR #1272's back-face cull undone (`Some(m) if false && ...` in the opaque draw's cull, lib.rs; a
+# temporary edit, reverted): 0 of 97 frames differ, 2 of 2 runs. This Mac's GPU shows no timing flip even with the
+# discarded back faces back, so no reverted fix can fail AC1 here; the twins below plant wrong programs instead.
+#
+# Twins (tests/acceptance/1278/twins/, each laid alone or in the pair shown, then reverted):
+#   no-widening (dn = 0 in direct()) + box-not-drawn (mark.box@1 skipped), one run:
+#     × AC2 energy and × AC2 width ("the mirror balls under the sun", "the highlight on a pixel center")
+#     × AC1 fixture: frame 0: the ball (25455 px) and the box (0 px) are both in view
+#     ✓ AC1 four plays: 0 of 97 frames differ
+#   carried-jitter (a process-wide count nudges each frame's sample offset), one run:
+#     × AC1 four plays: 97 of 97 frames differ across 4 plays
+#       frame 0 (t = 0.00000 s): play 1 eb0bcf588205, play 2 361c0f22f2f7, play 3 56783358f2b6, play 4 b9dce955eaf1

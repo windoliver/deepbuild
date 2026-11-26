@@ -24,10 +24,15 @@ use deep_contracts::{parse, parse_lossy, Value};
 use deep_hook::matcher;
 
 mod actions;
+mod cow;
 mod heavy;
+mod heavy_entry;
 mod remote;
 mod spool_file;
 mod tool_paths;
+
+use cow::clone;
+use heavy_entry::heavy_entry;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -130,6 +135,7 @@ fn current_cwd() -> Option<PathBuf> {
 fn address() -> PathBuf {
     let config = config();
     let hub = |key: &str| member(member(config.as_ref()?, "hub")?, key);
+    remote::note_forwarded(hub("forwarded"));
     if let Some(path) = worktree_hub(hub("use")) {
         return path;
     }
@@ -247,7 +253,8 @@ const REMOVED: &str = "was removed after setup (`deep setup` writes it again)";
 
 /// ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}, "classes": {<tool>: <class>}}`; nothing when it
 /// is missing before setup has finished, and why not when it was removed since, can't be read or isn't that shape.
-/// Other members, such as each entry's planted call and twin, are the hub's.
+/// Other members are the hub's. Each entry's planted call and twin are in proofs.json beside it, which deep-hook never
+/// opens (#2695); a rules.json an older hub wrote still holds them, and they are parsed with it until the next install.
 fn rules() -> Result<Rules, String> {
     // The planted wrong program for #304's AC1 reads no entry: its one rule is compiled in.
     if cfg!(feature = "plant-compiled-rule") {
@@ -523,25 +530,6 @@ fn peer() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
-/// `{"name", "jobs", "jobs_flag"}`, or `null`; `deep lease` reads it to know how the command takes jobs.
-fn heavy_entry() -> ExitCode {
-    let mut command = String::new();
-    let _ = io::stdin().read_to_string(&mut command);
-    let cwd = env::current_dir().ok();
-    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
-    match heavy::matched(&command, cwd.as_deref(), &home, None) {
-        Some(hit) => println!(
-            "{{\"name\":{},\"jobs\":{},\"jobs_flag\":{}}}",
-            quoted(&hit.name),
-            quoted(&hit.jobs),
-            hit.jobs_flag.as_deref().map_or("null".to_string(), quoted)
-        ),
-        None => println!("null"),
-    }
-    ExitCode::SUCCESS
-}
-
 /// `deep-hook check`: whether a guard@1 entry matches a call, read on stdin as `{"entry": guard@1, "call":
 /// {"tool_name", "tool_input", "cwd"?}, "classes"?: {<tool>: <class>}}`; prints `{"matched":true}` or
 /// `{"matched":false}`. The hub runs it over each entry's planted call and twin at install, so an entry is matched
@@ -792,12 +780,10 @@ fn exchange(
     id: &str,
     line: impl Fn(&[&str]) -> String,
 ) -> (Option<String>, Outcome, String) {
-    // A joined project's hub (#1338) has the network route's time to acknowledge, short of its fail-open time.
+    // A joined project's hub (#1338), or one behind a forwarded socket (#999), has the network route's time to acknowledge.
     let joined = REMOTE.get().and_then(Option::as_ref);
-    let ack_due = start
-        + joined.map_or(ACK_BUDGET, |_| {
-            remote::FAIL_OPEN - Duration::from_millis(30)
-        });
+    let network = joined.is_some() || remote::forwarded(&hub_address());
+    let ack_due = start + remote::ack_budget(network).unwrap_or(ACK_BUDGET);
     // Only the planted connect-timeout-only build reads with no deadline.
     let ack_deadline = (!cfg!(feature = "plant-connect-timeout-only")).then_some(ack_due);
     let late = Outcome::Down { late: true };
@@ -1236,7 +1222,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             .as_deref()
             .and_then(|cwd| remote::joined(&home(), cwd))
     });
-    if joined.is_some() {
+    if joined.is_some() || remote::forwarded(&hub_address()) {
         WATCH_MS.store(
             (remote::FAIL_OPEN - Duration::from_millis(2)).as_millis() as u64,
             Ordering::SeqCst,
@@ -1910,138 +1896,13 @@ fn waiter() -> ExitCode {
     }
 }
 
-#[cfg(target_os = "macos")]
-extern "C" {
-    fn clonefile(src: *const std::ffi::c_char, dst: *const std::ffi::c_char, flags: u32) -> i32;
-}
-
-#[cfg(target_os = "linux")]
-extern "C" {
-    fn ioctl(fd: std::ffi::c_int, request: std::ffi::c_ulong, ...) -> std::ffi::c_int;
-}
-
-/// One copy-on-write clone of `from` at `to`, which must not exist: a folder whole, a link as a link (APFS's
-/// clonefile(2); on Linux each file a reflink, FICLONE, as btrfs and XFS make; elsewhere staging isn't built yet).
-/// Unsupported, leaving nothing at `to`, where the file system can't make one.
-fn clone_one(from: &Path, to: &Path) -> io::Result<()> {
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::io::AsRawFd;
-        const FICLONE: std::ffi::c_ulong = 0x4004_9409;
-        let meta = fs::symlink_metadata(from)?;
-        let kind = meta.file_type();
-        if kind.is_symlink() {
-            return std::os::unix::fs::symlink(fs::read_link(from)?, to);
-        }
-        if kind.is_dir() {
-            fs::create_dir(to)?;
-            let made = (|| {
-                for entry in fs::read_dir(from)? {
-                    let entry = entry?;
-                    clone_one(&entry.path(), &to.join(entry.file_name()))?;
-                }
-                fs::set_permissions(to, meta.permissions())
-            })();
-            if made.is_err() {
-                let _ = fs::remove_dir_all(to);
-            }
-            return made;
-        }
-        if !kind.is_file() {
-            // A FIFO, socket or device has no copy-on-write copy.
-            return Err(io::Error::from(ErrorKind::Unsupported));
-        }
-        let source = fs::File::open(from)?;
-        let copy = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(to)?;
-        // SAFETY: two open descriptors that live through the call.
-        if unsafe { ioctl(copy.as_raw_fd(), FICLONE, source.as_raw_fd()) } != 0 {
-            let e = io::Error::last_os_error();
-            drop(copy);
-            let _ = fs::remove_file(to);
-            // EOPNOTSUPP, EINVAL or EXDEV: no reflink on this file system, or not between these two.
-            return Err(if matches!(e.raw_os_error(), Some(95 | 22 | 18)) {
-                io::Error::from(ErrorKind::Unsupported)
-            } else {
-                e
-            });
-        }
-        copy.set_permissions(meta.permissions())?;
-        copy.set_modified(meta.modified()?)?;
-        Ok(())
-    }
-    #[cfg(target_os = "macos")]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        let c = |p: &Path| {
-            std::ffi::CString::new(p.as_os_str().as_bytes())
-                .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))
-        };
-        const CLONE_NOFOLLOW: u32 = 1;
-        // SAFETY: both are NUL-terminated paths that live through the call.
-        if unsafe { clonefile(c(from)?.as_ptr(), c(to)?.as_ptr(), CLONE_NOFOLLOW) } == 0 {
-            return Ok(());
-        }
-        Err(io::Error::last_os_error())
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        let _ = (from, to);
-        Err(io::Error::from(ErrorKind::Unsupported))
-    }
-}
-
-/// `deep-hook clone <from> <to>`: `from` cloned copy-on-write at `to` (#347). Into a folder that is there, each entry
-/// is cloned over the one of its name and nothing else there is touched, so a staged folder puts back what a run
-/// deleted. Exit 0 cloned, 3 when this file system can't make a copy-on-write copy there, 1 another failure.
-fn clone(from: &Path, to: &Path) -> ExitCode {
-    fn over(from: &Path, to: &Path) -> io::Result<()> {
-        let there = match fs::symlink_metadata(to) {
-            Err(e) if e.kind() == ErrorKind::NotFound => return clone_one(from, to),
-            other => other?,
-        };
-        if there.is_dir() && fs::symlink_metadata(from)?.is_dir() {
-            for entry in fs::read_dir(from)? {
-                let entry = entry?;
-                over(&entry.path(), &to.join(entry.file_name()))?;
-            }
-            return Ok(());
-        }
-        if there.is_dir() {
-            fs::remove_dir_all(to)?;
-        } else {
-            fs::remove_file(to)?;
-        }
-        clone_one(from, to)
-    }
-    match over(from, to) {
-        Ok(()) => ExitCode::SUCCESS,
-        // ENOTSUP and EXDEV: no copy-on-write on this volume, or not between these two.
-        Err(e)
-            if e.kind() == ErrorKind::Unsupported || matches!(e.raw_os_error(), Some(18 | 45)) =>
-        {
-            eprintln!("deep-hook clone: this file system can't make a copy-on-write copy of {} at {}: {e}", from.display(), to.display());
-            ExitCode::from(3)
-        }
-        Err(e) => {
-            eprintln!(
-                "deep-hook clone: {} at {}: {e}",
-                from.display(),
-                to.display()
-            );
-            ExitCode::from(1)
-        }
-    }
-}
-
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
+        [arg] if arg == "--contract" => println!("{CONTRACT}"),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook peer               a Unix socket on stdin: the PID at its other end\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook --contract         the contract version it speaks\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook peer               a Unix socket on stdin: the PID at its other end\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),

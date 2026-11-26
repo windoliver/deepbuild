@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU; each test starts real hubs, whose canvas core is deep-show from this checkout's target/ and draws 3D render-backs on the Metal device; no timing" }

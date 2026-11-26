@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { baselineMessages, CLASSIFIED, checkClassifier, decisionOneInputs, freshness, isItDone, isRework, lifecycleNumbers, panelRows, readingsOf, recompute, recomputeBaseline, searchReadings, update, type BaselineMeasure, type LabelledMessage, type MergedPr, type Reading, type ReadingsState, type RecordEvent } from '@deepbuild/readings';
 import { scrubText } from '@deepbuild/evidence';
+import { landedReadings, readPushes, type PushesRead } from '@deepbuild/github';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { Forge } from './forge.js';
 import { isStatusQuestion } from './verdict-chat.js';
@@ -15,8 +16,12 @@ const HOUR = 3_600_000;
 /** How long each outside source stays fresh; the record is read as it lands, so it never goes stale. */
 const FRESH_FOR: Record<string, number> = { github: 24 * HOUR };
 const KINDS = ['user.ask', 'agent.stop', 'stop.held', 'run.started', 'run.finished', 'run.stale', 'check.held', 'turn.usage', 'session.start', 'reading.recorded', 'ask.created', 'ask.answered', 'verdict.made', 'claim.made'];
+/** What only the reading of how each landed commit was judged folds (#2750), beside the verdicts. */
+const LANDED = ['pushes.read', 'commit.made', 'holds.watch', 'tool.before'];
 const CLASSIFIERS = { is_it_done: isItDone, rework: isRework };
-const quoted = KINDS.map((k) => `'${k}'`).join(', ');
+const quoted = [...KINDS, ...LANDED].filter((k) => k !== 'tool.before').map((k) => `'${k}'`).join(', ');
+/** A hook's own tool call in a session whose hooks once didn't reach: it takes that back, as the session's row reads it (watch.ts). */
+const REACHED = `kind = 'tool.before' AND writer = 'hook' AND session_id IN (SELECT session_id FROM events WHERE kind = 'holds.watch' AND json_extract(data, '$.cause') = 'hooks')`;
 const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
 /** How a recorded baseline count's id says which classifier counted it. */
 const suffixOf = (kind: string | undefined): string => (kind === 'rework' ? `rework${CLASSIFIED}` : kind === 'is_it_done' ? `isitdone${CLASSIFIED}` : '');
@@ -44,12 +49,34 @@ interface NumbersOptions {
   evidence(sha256: string): Promise<Uint8Array | null>;
   /** Values the hub holds, scrubbed from text it stores. */
   held(): readonly string[] | undefined;
+  /** #3234's planted readings of taste calls, if a test asked for one. */
+  plant?: 'folds-seen-unseen' | 'one-median-per-run';
 }
 interface Row { id: string; kind: string; v: number; ts: number; session_id: string | null; subject: string | null; data: string; log_pos: number }
+
+/**
+ * #3234's planted wrong programs over the taste readings: every accepted call counted as seen, or a run's halves each
+ * given the whole run's median.
+ */
+function planted(readings: Reading[], plant: NumbersOptions['plant']): Reading[] {
+  if (plant === 'folds-seen-unseen') {
+    const all = readings.filter((r) => r.id === 'taste_calls_seen' || r.id === 'taste_calls_unseen').reduce((n, r) => n + Number(r.value), 0);
+    return readings.map((r) => (r.id === 'taste_calls_seen' ? { ...r, value: all } : r.id === 'taste_calls_unseen' ? { ...r, value: 0 } : r));
+  }
+  if (plant === 'one-median-per-run') {
+    return readings.map((r) => {
+      if (r.id !== 'taste_calls_in_a_row' || !r.detail) return r;
+      return { ...r, detail: r.detail.map((d) => { const whole = (Number(d.first_half_ms) + Number(d.second_half_ms)) / 2; return { ...d, first_half_ms: whole, second_half_ms: whole }; }) };
+    });
+  }
+  return readings;
+}
 
 export class Numbers {
   private state: ReadingsState = recompute([]);
   private events: RecordEvent[] = [];
+  /** What the reading of landed commits folds, in the log's order. */
+  private landed: RecordEvent[] = [];
   private at = 0;
   private catching: Promise<void> = Promise.resolve();
   /** The session each claim and run belongs to: the core writes a run with no session of its own. */
@@ -65,7 +92,7 @@ export class Numbers {
     return this.catching;
   }
   private async fold(): Promise<void> {
-    const rows = (await this.o.raw(`SELECT id, kind, v, ts, session_id, subject, data, log_pos FROM events WHERE log_pos > ${this.at} AND (kind IN (${quoted}) OR (kind = 'tool.after' AND json_extract(data, '$.outcome') = 'failed')) ORDER BY log_pos`)) as Row[];
+    const rows = (await this.o.raw(`SELECT id, kind, v, ts, session_id, subject, data, log_pos FROM events WHERE log_pos > ${this.at} AND (kind IN (${quoted}) OR (kind = 'tool.after' AND json_extract(data, '$.outcome') = 'failed') OR (${REACHED})) ORDER BY log_pos`)) as Row[];
     if (!rows.length) return;
     const fresh = rows.map((r): RecordEvent => {
       const data = JSON.parse(r.data) as Record<string, unknown>;
@@ -79,8 +106,10 @@ export class Numbers {
     });
     this.at = rows.at(-1)!.log_pos;
     // One at a time: a first fold holds every row, more than one call takes as arguments.
-    for (const e of fresh) this.events.push(e);
-    this.state = update(this.state, fresh);
+    const own = fresh.filter((e) => !LANDED.includes(e.kind));
+    for (const e of own) this.events.push(e);
+    for (const e of fresh) if (LANDED.includes(e.kind) || e.kind === 'verdict.made') this.landed.push(e);
+    this.state = update(this.state, own);
   }
   /** Your own typed messages, by the opaque id `deep numbers sample` showed you. */
   private typed(): Map<string, RecordEvent> {
@@ -118,7 +147,7 @@ export class Numbers {
   }
   async read(): Promise<{ rows: ReturnType<typeof panelRows>; decision_one: ReturnType<typeof decisionOneInputs> }> {
     await this.catchUp();
-    return { rows: panelRows(await this.checked(readingsOf(this.state)), { now: this.o.now(), fresh_for: FRESH_FOR }), decision_one: decisionOneInputs(await this.checks()) };
+    return { rows: panelRows(planted(await this.checked([...readingsOf(this.state), ...landedReadings(this.landed)]), this.o.plant), { now: this.o.now(), fresh_for: FRESH_FOR }), decision_one: decisionOneInputs(await this.checks()) };
   }
   /** Readings for deep_search: a call reads its own session's and those of no session, never another session's. */
   async search(query: string, session: string | undefined | { everyone: true }) {
@@ -199,11 +228,11 @@ export class Numbers {
   /** Reads each repo your sessions worked in from the forge; a repo the forge doesn't answer for keeps its last reading, which goes STALE. */
   async refresh(): Promise<{ repos: string[]; unread: string[] }> {
     const rows = (await this.o.raw("SELECT DISTINCT json_extract(data, '$.worktree') AS worktree FROM events WHERE kind = 'session.start'")) as { worktree: string | null }[];
-    const repos = new Set<string>();
-    for (const { worktree } of rows) if (worktree) { const r = await originOf(worktree); if (r) repos.add(r); }
+    const repos = new Map<string, string[]>();
+    for (const { worktree } of rows) if (worktree) { const r = await originOf(worktree); if (r) repos.set(r, [...repos.get(r) ?? [], worktree]); }
     const token = await this.o.token();
     const unread: string[] = [];
-    for (const repo of repos) {
+    for (const [repo, worktrees] of repos) {
       const [owner, name] = repo.split('/') as [string, string];
       const prs: MergedPr[] | undefined = await new Forge(this.o.forge, token, REFRESH_MS).merged(owner, name);
       if (!prs) { unread.push(repo); continue; }
@@ -211,8 +240,25 @@ export class Numbers {
         const ts = this.o.now();
         await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'reading.recorded', ts, data: { reading: n.reading, value: n.value, unit: n.unit, as_of: ts, source: 'github', n: n.n, outside: false } });
       }
+      if (!await this.pushes(repo, worktrees, token)) unread.push(repo);
     }
-    return { repos: [...repos], unread };
+    return { repos: [...repos.keys()], unread };
+  }
+  /**
+   * One read of a repo's default branch into the record, as `pushes.read`, for the reading of how each commit it
+   * gained was judged (#2750), with the trees of the snapshots the repo's sessions' verdicts judged. False when the
+   * forge couldn't be read: nothing is recorded, so the reading keeps its age.
+   */
+  private async pushes(repo: string, worktrees: string[], token: string | undefined): Promise<boolean> {
+    await this.catchUp();
+    const cwd = new Map(this.events.flatMap((e): [string, string][] => (e.kind === 'session.start' && e.session ? [[e.session, String(e.data.worktree)]] : [])));
+    const verdicts = this.landed.flatMap((e) => (e.kind === 'verdict.made' ? [{ commit: String(e.data.commit), cwd: cwd.get(this.claims.get(String(e.data.claim)) ?? '') ?? '' }] : [])).filter((v) => worktrees.includes(v.cwd));
+    const read = this.landed.flatMap((e) => (e.kind === 'pushes.read' ? [e.data as unknown as PushesRead] : []));
+    const data = await readPushes({ api: this.o.forge, token, repo, now: this.o.now(), read, verdicts, store: join(this.o.root, 'objects') }).catch(() => undefined);
+    if (!data) return false;
+    const ts = this.o.now();
+    await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'pushes.read', ts, data: data as unknown as EventInput['data'] });
+    return true;
   }
   /** Your sample to label: your own messages at random, both sides of a date, with no date or period to see, only an opaque id. A manifest adds its transcripts' messages to the side before it. */
   async sample(before: number, manifest?: string): Promise<{ before: number; label_in: string; warning?: string; messages: { message: string; text: string }[] }> {
@@ -242,7 +288,8 @@ const ageOf = (ms: number): string => { for (const [unit, name] of AGE) if (ms >
 /** One line per row: what, its value, its source, how it was got and its age; STALE when its source is. */
 export function numbersLines(rows: Awaited<ReturnType<Numbers['read']>>['rows']): string[] {
   return rows.map((r) => {
-    const value = r.value === null ? 'unknown' : String(r.value);
+    // A lower bound says so before its amount (#3250).
+    const value = r.value === null ? 'unknown' : `${r.cost?.basis === 'estimated' && r.cost.at_least ? 'at least ' : ''}${r.value}`;
     const cost = r.cost ? ` ${r.cost.basis}${r.cost.basis === 'estimated' ? ` (${r.cost.rate_card})` : ''}` : '';
     const agreement = r.agreement ? ` agrees ${r.agreement.share.toFixed(2)} of ${r.agreement.n}, ${r.agreement.yes} yes, recall ${r.agreement.recall?.toFixed(2) ?? 'none'}, precision ${r.agreement.precision?.toFixed(2) ?? 'none'} ${r.agreement.status}` : r.id in CLASSIFIERS || r.id.endsWith(CLASSIFIED) ? ' not checked against your labels' : '';
     const by = r.by ? ` (${Object.entries(r.by).filter(([, ms]) => ms).map(([why, ms]) => `${why} ${ms}`).join(', ')})` : r.id === 'cache.low' ? ' cache hit rate low: most of the context was billed again' : '';

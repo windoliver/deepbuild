@@ -35,6 +35,7 @@ pub struct Ask {
 pub struct Session {
     pub id: String,
     pub title: String,
+    /// The name its heading carries: its project's, or its host's for a session on another machine (#999).
     pub project: Option<String>,
     /// The state word, and the status-map entry its mark draws.
     pub word: String,
@@ -354,7 +355,11 @@ pub fn opens_on(asks: &[Ask], sessions: &[Session]) -> Option<Address> {
 }
 
 /// A reading, the key it was read at, and when what it wrote from the clock next reads differently (#1482).
-type ReadAt = ((u64, u64, bool), std::rc::Rc<(Vec<Ask>, Vec<Session>)>, Option<u64>);
+type ReadAt = (
+    (u64, u64, bool),
+    std::rc::Rc<(Vec<Ask>, Vec<Session>)>,
+    Option<u64>,
+);
 
 thread_local! {
     /// The last reading of the record, by its `log_pos`, the second it was read at and whether the record before the
@@ -389,6 +394,12 @@ pub fn read_now(now: u64) -> std::rc::Rc<(Vec<Ask>, Vec<Session>)> {
         })
     })
     .unwrap_or_default()
+}
+
+/// Forgets the last reading: a record installed since is read afresh, though it stands at the `log_pos` and second the
+/// last reading was keyed by (#3100).
+pub(crate) fn forget_reading() {
+    READ.with(|cell| cell.borrow_mut().take());
 }
 
 /// How many of the list's rows are unread: what #2028's planted counts add to the asks.
@@ -491,7 +502,10 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                     hooks: table.hooks(&session),
                     id: text(row, "session"),
                     title: crate::question::visible(&text(row, "title")),
-                    project: row["project"].as_str().map(str::to_owned),
+                    project: row["host"]
+                        .as_str()
+                        .or(row["project"].as_str())
+                        .map(str::to_owned),
                     word,
                     entry,
                     since: row["since"].as_u64(),
@@ -845,6 +859,31 @@ mod tests {
         };
         assert_eq!(folded.title, "2 quiet sessions");
         assert_eq!(folded.address.to_string(), "project/shop");
+    }
+
+    #[test]
+    fn a_session_on_a_host_is_listed_under_the_hosts_name() {
+        let mut view = crate::record::View::default();
+        for (id, host) in [("a", None), ("b", Some("gpu-box"))] {
+            let mut row = serde_json::json!({"id": format!("session:{id}"), "listed": true, "order": id, "session": id,
+                "title": format!("Task {id}"), "project": "shop", "word": "working", "entry": "running"});
+            if let Some(host) = host {
+                row["host"] = host.into();
+            }
+            view.apply(serde_json::json!({"kind": "row.set", "writer": "core", "data": row}));
+        }
+        let (asks, sessions) = read(&view, 0);
+        let items = build(&asks, &sessions);
+        assert_eq!(
+            ids(&items),
+            [
+                "heading:needs-you",
+                "heading:gpu-box",
+                "session:b",
+                "heading:shop",
+                "session:a"
+            ]
+        );
     }
 
     #[test]

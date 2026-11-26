@@ -15,6 +15,7 @@ mod caption_design;
 mod capture;
 mod clip;
 mod costs;
+mod counting;
 mod data_hash;
 mod defaults;
 mod determinism;
@@ -44,6 +45,7 @@ mod host;
 mod hub;
 mod input;
 mod jobs;
+mod joins;
 mod kept;
 mod kinds;
 mod kinds_word;
@@ -124,56 +126,6 @@ mod voiced;
 mod warps;
 mod workers;
 
-/// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
-/// `frames` call can read how many the scheduler made in a frame (#387: "the scheduler
-/// allocates nothing per frame after warm-up"). Outside it nothing is counted, so the kit's
-/// threads, which allocate on every core at once, don't all contend for one counter.
-struct Counting;
-
-static COUNTING_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static ALLOCATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-fn count() {
-    if COUNTING_ON.load(std::sync::atomic::Ordering::Relaxed) {
-        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-// SAFETY: every call forwards to the system allocator unchanged; the counter is a relaxed atomic.
-unsafe impl std::alloc::GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        count();
-        unsafe { std::alloc::System.alloc(layout) }
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-        unsafe { std::alloc::System.dealloc(ptr, layout) }
-    }
-
-    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        count();
-        unsafe { std::alloc::System.alloc_zeroed(layout) }
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
-        count();
-        unsafe { std::alloc::System.realloc(ptr, layout, new_size) }
-    }
-}
-
-#[global_allocator]
-static COUNTING: Counting = Counting;
-
-/// What `f` returns and how many heap allocations the process made while it ran.
-pub fn count_allocations<T>(f: impl FnOnce() -> T) -> (T, u64) {
-    use std::sync::atomic::Ordering::Relaxed;
-    let before = ALLOCATIONS.load(Relaxed);
-    COUNTING_ON.store(true, Relaxed);
-    let out = f();
-    COUNTING_ON.store(false, Relaxed);
-    (out, ALLOCATIONS.load(Relaxed) - before)
-}
-
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -184,6 +136,7 @@ use deep_canvas::registry::{BuildSet, Fault, Module, Registry, SealError};
 use deep_canvas::schedule::HashVersion;
 use serde_json::{json, Map, Value};
 
+pub use counting::count_allocations;
 use hub::{
     flicks, Body, Call, Card, Claim, Eval, Fault as HoldFault, Hold, Include, Panel, PatchCall,
     Planted, PressPhase, Process, RecordObject, Requirement, Scenario, Session, Show, Slot,
@@ -829,6 +782,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 tour_pointer: flag("tour_pointer")?,
             })));
         }
+        "play_frames" => return joins::parse(c).map(|p| Call::PlayFrames(Box::new(p))),
         "frames" => {
             // #856: a whole revision arriving at a frame's latch.
             let revise = match c.get("revise") {
@@ -1184,10 +1138,6 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     .into_iter()
     .filter_map(|(d, f)| Some((d, f?)))
     .collect();
-    let seeds = entries(input, "docs", |d| Some(d.get("document").cloned()))?
-        .into_iter()
-        .filter_map(|(id, seed)| Some((id, seed?)))
-        .collect();
     let quotas = entries(input, "quotas", |q| {
         let cap = |k: &str| match q.get(k) {
             None => Some(None),
@@ -1377,11 +1327,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
-                || deep_canvas_marks::arrays::PLANTED.contains(p) || deep_canvas_marks::atlas::PLANTED.contains(p) || *p == spatial::HIT_READS_QUADS
+                || deep_canvas_marks::arrays::PLANTED.contains(p) || deep_canvas_marks::atlas::PLANTED.contains(p) || *p == spatial::HIT_READS_QUADS || deep_canvas_marks::grid_image::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
                 || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
-                || deep_canvas_input::rows::PLANTED.contains(p)
+                || deep_canvas_input::rows::PLANTED.contains(p) || deep_canvas_marks::data::holds::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
                 || deep_canvas_input::point::PLANTED.contains(p)
                 // #542's in the text field and the scroll control's router.
@@ -1410,7 +1360,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
-                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p)
+                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p) || packs::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1516,6 +1466,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "resolver_closes_task" => Planted::ResolverClosesTask,
                 "probe_from_depth" => Planted::ProbeFromDepth,
                 "probe_nearest_item" => Planted::ProbeNearestItem,
+                "render_back_2d_only" => Planted::RenderBack2dOnly,
                 "skips_missing_mesh_asset" => Planted::SkipsMissingMeshAsset,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
@@ -1656,6 +1607,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             }),
         },
     };
+    media::plant_images(planted);
     let u32_field = |k: &str| match input.get(k) {
         None => Some(None),
         Some(n) => n.as_u64().and_then(|n| u32::try_from(n).ok()).map(Some),
@@ -1854,7 +1806,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         logic_planted,
         calls,
         at,
-        seeds,
+        seeds: shared::seeds(input)?,
+        recorded: Default::default(),
         state: optional(input.get("state"), |s| Some(PathBuf::from(s.as_str()?)))?,
         quotas,
         clock,
@@ -2790,6 +2743,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
                 name.to_string().into_boxed_str(),
             )))
         }
+        _ if joins::planted(twin).is_some() => {
+            joins::planted(twin).map(StartPlanted::Run).ok_or(())
+        }
         _ if export_planted(twin).is_some() => {
             export_planted(twin).map(StartPlanted::Run).ok_or(())
         }
@@ -2938,6 +2894,13 @@ fn main() {
             }
             let _ = writeln!(out, "{line}");
             let _ = out.flush();
+            // #3356: stderr names the refusal too, so a caller that shows only stderr reads why.
+            eprintln!(
+                "deep-show: seal_refused ({}): modules [{}]: {}",
+                err.code,
+                err.modules.join(", "),
+                err.what
+            );
             std::process::exit(2);
         }
     };

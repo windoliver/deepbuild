@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: each test starts a hub of its own, run from this checkout's target/, whose hooks answer within deep-hook's deadlines and whose stops snapshot within the gate's budget, and whose claims run sandboxed checks" }

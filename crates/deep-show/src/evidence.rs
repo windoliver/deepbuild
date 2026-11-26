@@ -25,6 +25,13 @@ pub fn put(root: &Path, bytes: &[u8]) -> std::io::Result<String> {
     Ok(sha)
 }
 
+/// Whether bytes are kept under `sha` (#1172), unread.
+pub fn has(root: &Path, sha: &str) -> bool {
+    sha.len() == 64
+        && sha.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        && file_of(root, sha).exists()
+}
+
 /// The bytes kept under `sha`, if they are there and still match it.
 pub fn read(root: &Path, sha: &str) -> Option<Vec<u8>> {
     let valid = sha.len() == 64 && sha.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));

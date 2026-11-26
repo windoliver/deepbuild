@@ -1,0 +1,55 @@
+Runs of tests/acceptance/2043-redraft-2047 on base 8b9f8d6c7, Node 24.22.0, macOS, 2026-11-23.
+Machine load was high throughout (1-min load 160-260); recorded, not waited out.
+Each twin: its file copied over the base, `npm run build -w packages/hub` (exit 0, so it type-checks),
+its tagged tests run with `npx vitest run <file> -t <ID>`, then the source restored with git checkout, the hub rebuilt,
+and `git diff --stat` read back empty.
+
+== Base: tsc -p tests/acceptance/2043-redraft-2047/tsconfig.json exit 0; npx vitest run tests/acceptance/2043-redraft-2047
+ ✓ tests/acceptance/2043-redraft-2047/lookups.test.ts > #2043.3139319d the fixture line pi/constructor, a connection's first line, is answered as an event pi doesn't map, and a PreToolUse line on a new connection is answered afterwards 3012ms
+ ✓ tests/acceptance/2043-redraft-2047/workers.test.ts > #2043.a1a91749 a parser worker planted to throw on one line: that line's connection gets a refusal, the next 100 lines on new connections are answered, and the hub's process id is unchanged 4105ms
+ ✓ tests/acceptance/2043-redraft-2047/lookups.test.ts > #2043.630d1d3d agents constructor, toString, hasOwnProperty, valueOf and __proto__ are each refused at /agent as an unknown agent is; pi and paseo with each as the event are each answered; 15 lines, 15 answers, the hub's process id unchanged 3808ms
+ ✓ tests/acceptance/2043-redraft-2047/workers.test.ts > #2043.e52db1b5 a parser worker planted to exit while it holds a line: that line is refused, and the pool holds the same count of workers afterwards 4325ms
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
+
+== Twin event-lookup-inherited (packages/hub/src/hookmap.ts), tag #2043.3139319d
+ × tests/acceptance/2043-redraft-2047/lookups.test.ts > #2043.3139319d the fixture line pi/constructor, a connection's first line, is answered as an event pi doesn't map, and a PreToolUse line on a new connection is answered afterwards 2896ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the fixture line fixtures/pi-constructor.jsonl (agent pi, event constructor, id 01KB2043PXF1XTVRECNSTRCT00) is answered as pi's unmapped event no_such_event_2047 is ([{"v":1,"ack":"01M851J896G8K1KG4F9D8G0CSZ","hold_until_ms":null},{"v":1,"exit":0,"stdout":"","stderr":""}] (the last line came)); it got [{"v":1,"id":null,"error":{"code":"unavailable","retryable":false,"remediation":"The hub failed while it read this line, so nothing of it was recorded.","path":"","actual":"","evidence":[]}}] (the last line came); the hub's process 82019 still runs: expected '[{"v":1,"id":null,"error":{"code":"un…' to be '[{"v":1,"ack":"<id>","hold_until_ms":…' // Object.is equality
+Expected: "[{"v":1,"ack":"<id>","hold_until_ms":null},{"v":1,"exit":0,"stdout":"","stderr":""}]"
+Received: "[{"v":1,"id":null,"error":{"code":"unavailable","retryable":false,"remediation":"The hub failed while it read this line, so nothing of it was recorded.","path":"","actual":"","evidence":[]}}]"
+ ❯ tests/acceptance/2043-redraft-2047/lookups.test.ts:46:6
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+
+== Twin agent-lookup-inherited (packages/hub/src/hookmap.ts), tag #2043.630d1d3d
+ × tests/acceptance/2043-redraft-2047/lookups.test.ts > #2043.630d1d3d agents constructor, toString, hasOwnProperty, valueOf and __proto__ are each refused at /agent as an unknown agent is; pi and paseo with each as the event are each answered; 15 lines, 15 answers, the hub's process id unchanged 12986ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: each of the 15 lines is refused or answered as the criterion says; the hub's process 93716 still runs: expected [ …(5) ] to deeply equal []
+ ❯ tests/acceptance/2043-redraft-2047/lookups.test.ts:89:100
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+
+== Twin event-lookup-inherited (packages/hub/src/hookmap.ts), tag #2043.630d1d3d
+ × tests/acceptance/2043-redraft-2047/lookups.test.ts > #2043.630d1d3d agents constructor, toString, hasOwnProperty, valueOf and __proto__ are each refused at /agent as an unknown agent is; pi and paseo with each as the event are each answered; 15 lines, 15 answers, the hub's process id unchanged 6409ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: each of the 15 lines is refused or answered as the criterion says; the hub's process 1179 still runs: expected [ …(8) ] to deeply equal []
+ ❯ tests/acceptance/2043-redraft-2047/lookups.test.ts:89:100
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+
+== Twin pool-messages-only (packages/hub/src/parser-pool.ts), tag #2043.a1a91749
+ × tests/acceptance/2043-redraft-2047/workers.test.ts > #2043.a1a91749 a parser worker planted to throw on one line: that line's connection gets a refusal, the next 100 lines on new connections are answered, and the hub's process id is unchanged 2742ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the line 01M8526K5QRN21M597XYZTEC0R, on which the parser worker throws, gets a refusal on its connection: it got [] (the hub closed the connection with nothing more); the hub's process 5410 has ended; its stderr ends: node:internal/event_target:1149
+ ❯ tests/acceptance/2043-redraft-2047/workers.test.ts:24:151
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+
+== Twin pool-leaves-line-waiting (packages/hub/src/parser-pool.ts), tag #2043.e52db1b5
+ × tests/acceptance/2043-redraft-2047/workers.test.ts > #2043.e52db1b5 a parser worker planted to exit while it holds a line: that line is refused, and the pool holds the same count of workers afterwards 13475ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the line 01M852BST8BSX8SAWMTPPHJTHQ, held by a parser worker that exited, is refused within 10 s: it got [] (still waiting at 10 s); the hub's process 12519 still runs: expected false to be true // Object.is equality
+ ❯ tests/acceptance/2043-redraft-2047/workers.test.ts:48:158
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)

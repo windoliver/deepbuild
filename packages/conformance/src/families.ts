@@ -32,7 +32,7 @@ const MAPPING: Record<FamilyName, Record<string, Verdict>> = {
     healthy: 'PASS', binary_missing: 'FAIL', version_uncovered: 'FAIL', hooks_missing: 'FAIL', hooks_disabled: 'FAIL', hooks_untrusted: 'FAIL', mcp_unregistered: 'FAIL',
     statusline_missing: 'FAIL', statusline_shadowed: 'INCONCLUSIVE', signed_out: 'BLOCKED', nested_session: 'FAIL', timing_relation_broken: 'FAIL', telemetry_unreadable: 'FAIL', not_checked: 'BLOCKED',
     hub_unreachable: 'BLOCKED', disk_low: 'FAIL', ports_taken: 'FAIL', billing_api_key: 'FAIL', binary_differs: 'FAIL', token_expiring: 'BLOCKED', prompt_failed: 'FAIL', deprecated_used: 'FAIL', gpu_unsupported: 'FAIL', render_failed: 'FAIL', hook_program_missing: 'FAIL', job_failing: 'FAIL', notifications_off: 'FAIL', pack_refused: 'FAIL', service_unpromoted: 'FAIL', polkit_action_missing: 'FAIL', hooks_modified: 'FAIL', mod_overrides_guard: 'FAIL',
-    not_loaded: 'FAIL', handler_set_aside: 'FAIL', footprint_unknown: 'INCONCLUSIVE',
+    not_loaded: 'FAIL', handler_set_aside: 'FAIL', footprint_unknown: 'INCONCLUSIVE', proofs_unreadable: 'FAIL', hook_outside_contract: 'FAIL',
     unknown: 'INCONCLUSIVE',
   },
   exit: { '0': 'PASS', '1': 'FAIL', '2': 'INVALID', '3': 'INCONCLUSIVE' },
@@ -52,7 +52,9 @@ const STATE_LISTS: Record<string, readonly string[]> = {
   [`row.set@2 ${WORD}`]: [...ROW, 'running'],
   [`row.set@3 ${WORD}`]: [...ROW, 'running'],
   [`row.set@4 ${WORD}`]: [...ROW, 'running'],
+  [`row.set@5 ${WORD}`]: [...ROW, 'running'],
   'session.state@2 /properties/data/properties/state': ROW,
+  'session.state@3 /properties/data/properties/state': ROW,
   [`work.state@1 ${WORD}`]: ['queued', 'working', 'says done', 'sent back', 'needs you', 'stale', 'finished', 'closed', 'closed before the gate'],
   // Attempt and plan's closed set of causes, the two a work run adds, and none for an attempt that hasn't ended.
   'work.attempt@1 /properties/data/properties/cause': ['none', 'landed with the budget window open', 'gave up its slot', 'replaced by you', 'sent back past its rounds', 'stalled', 'context full', 'plan window or spend cap', 'crashed or interrupted'],

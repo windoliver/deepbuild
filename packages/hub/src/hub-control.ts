@@ -5,7 +5,7 @@ import { EvidenceAccess } from './evidence-access.js';
 import { HubReadings } from './hub-readings.js';
 import { WorkspaceActions } from './workspace-actions.js';
 import type { HumanControlPort } from './human-control-port.js';
-import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, TranscriptsPort, SessionStatePort, McpOperationsPort } from './hub-ports.js';
+import type { AnswerDeliveryPort, StopJudgingPort, SessionMemoryPort, TranscriptsPort, SessionStatePort } from './hub-ports.js';
 
 import { realpathSync } from 'node:fs';
 
@@ -58,7 +58,7 @@ import type { CheckKinds } from './checks-port.js';
 import { Stacks } from './stacks.js';
 import { Starts } from './starts.js';
 import { Drain, drainFor, drainHealth, drainWords } from './drain.js';
-import { argsOf } from './children.js';
+import { ancestorsOf, argsOf } from './children.js';
 
 import { HeavyQueue } from './heavy.js';
 
@@ -124,10 +124,9 @@ export interface HubControlOptions {
     readonly intakeOf: WorkspacesProvider['intake'];
   };
   delivery: () => Pick<AnswerDeliveryPort, "note" | "openOffers" | "placed" | "saveOffered" | "sendBack" | "stopWaiting" | "switches" | "waitAnswer">;
-  judging: () => Pick<StopJudgingPort, "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
+  judging: () => Pick<StopJudgingPort, "keeps" | "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
   state: () => Pick<SessionStatePort, "agentAbove" | "entered" | "liveOf" | "notAnAgent" | "renameSession" | "whySeen" | "rowsSeen" | "seeRow" | "seenBy" | "sessionRows" | "sessionWindow" | "sessions" | "startOf" | "states" | "statesSettled" | "statusSeen">;
   memory: () => Pick<SessionMemoryPort, "lessons" | "memoryAct" | "sessionRules" | "syncRules" | "syncStanding">;
-  mcp: () => Pick<McpOperationsPort, "checksOf">;
   transcripts: () => Pick<TranscriptsPort, "backfill">;
   events: Pick<HubEvents, "append" | "appendCore" | "appendReading" | "connection">;
 kernel: Pick<HubRuntime, "blocked" | "jobs" | "ready">;
@@ -145,7 +144,7 @@ export class HubControl {
 
   constructor(private readonly options: HubControlOptions) {
     const control: HumanControlPort = { trusted: (method, params, context, what, handle, revision) => this.authority.trusted(method, params, context, what, handle, revision), revisionOf: (handle, ask) => this.human.revisionOf(handle, ask) };
-    this.human = new HumanAnswers({ settings: options.settings, services: options.services, events: options.events,   delivery: options.delivery, control: () => control, judging: options.judging, mcp: options.mcp, state: options.state, memory: options.memory });
+    this.human = new HumanAnswers({ settings: options.settings, services: options.services, events: options.events,   delivery: options.delivery, control: () => control, judging: options.judging, state: options.state, memory: options.memory });
     this.authority = new TrustedActions({ settings: options.settings, services: options.services, events: options.events,   state: options.state, control: () => control });
     this.evidence = new EvidenceAccess({ settings: options.settings, services: options.services, events: options.events,   state: options.state });
     this.readings = new HubReadings({ settings: options.settings, services: options.services, events: options.events, kernel: options.kernel,  judging: options.judging, transcripts: options.transcripts });
@@ -203,6 +202,7 @@ export class HubControl {
       case 'numbers.sample': await this.options.state().notAnAgent(context, method); return this.options.services.numbers.sample(Number(params.before), typeof params.manifest === 'string' ? params.manifest : undefined);
       case 'changes.read': return this.readings.change(params);
       case 'evidence.read': return this.evidence.evidence(params);
+      case 'handle.read': return this.evidence.handle(params);
       case 'eval.report': {
         // Keep the report's exact serialization, not an outcome asserted by its caller. replayCheck reads its runs.
         let report: unknown;
@@ -291,6 +291,7 @@ export class HubControl {
       case 'host.ran': return this.options.services.hosts.ran(params.ask, params.run);
       case 'host.changes': return this.options.services.hosts.changes(params.host);
       case 'host.remove': return this.options.services.hosts.remove(params.host);
+      case 'host.add': return this.options.services.hosts.sessions.add(params.host);
       case 'start.approve': return this.options.services.sessionStarts.approve(params, context);
       case 'start.session':
         { const held = this.drain.read(); if (held) throw refuse('unavailable', '/method', `${drainWords(drainFor(held, context.role))} Start it again then.`, method, true); }
@@ -309,6 +310,9 @@ export class HubControl {
       case 'lease.wait': return this.options.services.heavy.wait(params, context.peer, () => this.options.state().agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'lease.started': return this.options.services.heavy.started(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'lease.exited': return this.options.services.heavy.exited(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+      // deep-show's GPU lease (#3219): its place in the one queue, read against any `deep lease` above it, and its release.
+      case 'lease.gpu': return this.options.services.heavy.gpu(params, context.peer, () => this.options.state().agentAbove(context.peer), () => ancestorsOf(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
+      case 'lease.release': return this.options.services.heavy.release(params).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
       case 'env.up': return this.work.envUp(params, context);
       case 'env.down': return this.work.envDown(params, context);
       // The steps setup took (#1100), each a `setup.step` event, only as its one list names them.
@@ -422,7 +426,7 @@ export class HubControl {
 
   async job(args: Obj, caller: string | undefined): Promise<Obj> { return this.authority.job(args, caller); }
 
-  async keep(bytes: Uint8Array, source: string): Promise<string> { return this.evidence.keep(bytes, source); }
+  async keep(bytes: Uint8Array, source: string, sealed?: true): Promise<string> { return this.evidence.keep(bytes, source, sealed); }
 
   async stored(put: PutResult, what: string): Promise<Evidence> { return this.evidence.stored(put, what); }
 

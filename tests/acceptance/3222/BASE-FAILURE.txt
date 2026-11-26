@@ -1,0 +1,57 @@
+$ node --test tests/acceptance/3222/ac1-table.test.mjs   (base f8c6cff82, Node 24.22.0)
+test at tests/acceptance/3222/ac1-table.test.mjs:11:1
+✖ AC1 #3222.74eeafb1 for 1, 4 and 16 sessions, each kind of call's wait and its service time at the median and the 95th percentile, with the machine and its load at the time, recomputed from the harness's kept output (1.377375ms)
+  AssertionError [ERR_ASSERTION]: AC1 #3222.74eeafb1:
+  no spike record at docs/spikes/3222/record.json: the spike hasn't been recorded
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+$ node --test tests/acceptance/3222/ac2-planted.test.mjs   (base f8c6cff82, Node 24.22.0)
+test at tests/acceptance/3222/ac2-planted.test.mjs:12:1
+✖ AC2 #3222.a59f91a3 with the planted slow call in flight, the 15 patches' waits are recorded beside the same patches' waits with no slow call, recomputed from both kept runs (0.841625ms)
+  AssertionError [ERR_ASSERTION]: AC2 #3222.a59f91a3:
+  no spike record at docs/spikes/3222/record.json: the spike hasn't been recorded
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+$ node --test tests/acceptance/3222/ac2-held-busy.test.mjs   (base f8c6cff82, Node 24.22.0)
+test at tests/acceptance/3222/ac2-held-busy.test.mjs:19:1
+✖ AC2 #3222.a59f91a3 the spike's harness reads the wait of a call that reaches the hub while the test holds the canvas core busy ahead of it (1.609625ms)
+  AssertionError [ERR_ASSERTION]: AC2 #3222.a59f91a3 BLOCKED: docs/spikes/3222/harness.mjs is not in this checkout: the spike's harness hasn't been written, so nothing can be held to the wait it reads
+test at tests/acceptance/3222/ac2-held-busy.test.mjs:26:1
+✖ AC2 #3222.a59f91a3 a harness that times a call from its start in the core reads no wait, and fails against the core the test holds busy, naming the call (0.129542ms)
+  AssertionError [ERR_ASSERTION]: AC2 #3222.a59f91a3 BLOCKED: docs/spikes/3222/harness.mjs is not in this checkout: the spike's harness hasn't been written, so nothing can be held to the wait it reads
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+
+$ node --test tests/acceptance/3222/ac3-list.test.mjs   (base f8c6cff82, Node 24.22.0)
+test at tests/acceptance/3222/ac3-list.test.mjs:10:1
+✖ AC3 #3222.ddd84c68 the list names, for each kind of call, what it reads and writes and which other kinds it must follow, each with a line of code this checkout holds (0.855209ms)
+  AssertionError [ERR_ASSERTION]: AC3 #3222.ddd84c68:
+  no spike record at docs/spikes/3222/record.json: the spike hasn't been recorded
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+$ node --test tests/acceptance/3222/ac4-follow-up.test.mjs   (base f8c6cff82, Node 24.22.0)
+test at tests/acceptance/3222/ac4-follow-up.test.mjs:11:1
+✖ AC4 #3222.40f85375 a follow-up is filed for what the table justifies, with its own criteria, or one paragraph says why the line stays as it is (0.969875ms)
+  AssertionError [ERR_ASSERTION]: AC4 #3222.40f85375:
+  no spike record at docs/spikes/3222/record.json: the spike hasn't been recorded
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+$ node --test tests/acceptance/3222/validate.test.mjs   (base f8c6cff82, Node 24.22.0; the suite's own check of its validators, no criterion)
+✔ validator: a well-formed spike passes every check, with a follow-up or with the paragraph instead
+✔ validator: criterion 1's check fails a table its kept output doesn't give
+✔ validator: criterion 2's record check fails a slow-call run that isn't what the issue plants
+✔ validator: the held-busy check fails a harness that times each call from its start in the core, naming the call
+✔ validator: criterion 3's check fails a list whose kinds, things or lines don't hold
+✔ validator: criterion 4's check fails neither, both, a follow-up with no criteria, and two paragraphs
+ℹ tests 6
+ℹ pass 6
+ℹ fail 0

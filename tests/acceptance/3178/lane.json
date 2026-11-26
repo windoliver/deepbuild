@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: suites.test.ts runs the #667, #27 and #111 files in child Vitests; #27's setup builds deep-hook with cargo (--features env-plants) and every file starts hubs that run deep-hook from target/; their stop holds, waits and deadlines are timed too" }

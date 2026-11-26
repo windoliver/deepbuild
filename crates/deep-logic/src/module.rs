@@ -24,6 +24,7 @@ use std::sync::OnceLock;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas::kinds::{Entry as KindEntry, Param, ParamType, Version};
+use deep_canvas::refs::{self, Decl, Holds};
 use deep_canvas::registry::{
     Dependency, Equivalence, Implementation, Manifest, Module, Pin, Raised, Range, Registrar,
     Report, Semver, StateClass, StepInput, Stepper,
@@ -47,7 +48,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 26] = [
+const PARAMS: [(&str, &str); 27] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -105,6 +106,8 @@ const PARAMS: [(&str, &str); 26] = [
     ),
     // process@1's kind names, which its kind rules read (#980).
     ("process", "{kinds: [name]}"),
+    // circuit@1's nodes and parts, which the check builds into its table and its kind rules read (#1181).
+    ("circuit", "{nodes: [name], parts: [{id, kind, …}]}"),
     ("wasm", "text (the program's bytes, which the hub inlines)"),
 ];
 
@@ -186,6 +189,12 @@ fn kind() -> KindEntry {
 fn register(r: &mut Registrar) {
     // The kind keeps the module's name, as the design writes it.
     r.kind(kind(), &[], "");
+    // #3379: the controls an item reads, so refs_to lists each read and a removed control's
+    // reads are refused at check.
+    r.refs(&[
+        Decl::new("params/reads", Holds::Control, refs::kind::CONTROL),
+        Decl::new("params/preview/reads", Holds::Control, refs::kind::CONTROL),
+    ]);
     r.array(STATE, "logic.state", "document", "time", "simulate");
     r.carried("checkpoint", STATE, 4 << 20);
     r.operator("step", "simulate", &["refs"], &[STATE])
@@ -218,10 +227,15 @@ fn register(r: &mut Registrar) {
         json!({"checks": [{"kind": "document.determinism"}], "oracles": ["seek_play"], "codes": [],
                "at_times": ["0s", "1s"], "inputs": [{"step": 20, "kind": "press", "value": 1}]}),
     )
-    .fixture_assets(vec![bytes.clone()]);
-    // #2363: the module's program also supplies real array readers at frame zero.
+    .fixture_assets(vec![bytes]);
+    // #2363: a logic program also supplies real array readers at frame zero.
     // The copies, flip and mark set read the core's view, not a fabricated baked envelope.
-    // With no control read, the fixture program reads the seed at offset zero: keep it zero.
+    // #3360: the counter's program is its own. With no control read, the start of the read
+    // region is the step's seed, a hash and never zero, so the kit program's sum of it isn't.
+    let (sha, bytes) = readers_program();
+    let mut params = json!({"program": sha, "step_rate": 60,
+                            "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}});
+    params["wasm"] = json!(B64.encode(&bytes));
     r.fixture("readers", json!({
         "format": 1, "profile": "board", "title": "Array readers",
         "description": "A counter selects a caption, a row label and a flip child.",
@@ -632,6 +646,11 @@ fn fixture_program() -> (String, Vec<u8>) {
     (deep_canvas_sandbox::rewrite::hash(&bytes), bytes)
 }
 
+fn readers_program() -> (String, Vec<u8>) {
+    let bytes = wat::parse_str(include_str!("readers.wat")).expect("the readers program assembles");
+    (deep_canvas_sandbox::rewrite::hash(&bytes), bytes)
+}
+
 thread_local! {
     static FIXTURE: Rc<Piece> = {
         let (sha, bytes) = fixture_program();
@@ -994,13 +1013,25 @@ mod tests {
         };
         let presses = [press(2, 0), press(5, 1), press(7, 2)];
         let mut rec = Record::default();
-        let mut on = World::new(piece.clone(), track_of(&presses), false, Planted::default(), &mut rec, None)
-            .expect("the fixture starts");
+        let mut on = World::new(
+            piece.clone(),
+            track_of(&presses),
+            false,
+            Planted::default(),
+            &mut rec,
+            None,
+        )
+        .expect("the fixture starts");
         on.run_through(3 * step, &mut rec);
         let saved = World::saved_of(&on.snapshot());
         assert_eq!(saved, on.saved(), "the snapshot's plain data is saved's");
-        let mut restored = World::from_saved(piece.clone(), track_of(&presses), &saved, Planted::default())
-            .expect("the state loads");
+        let mut restored = World::from_saved(
+            piece.clone(),
+            track_of(&presses),
+            &saved,
+            Planted::default(),
+        )
+        .expect("the state loads");
         on.run_through(9 * step, &mut rec);
         restored.run_through(9 * step, &mut Record::default());
         assert_eq!(on.saved(), restored.saved());

@@ -29,6 +29,14 @@ fn items<'a>(doc: &'a Value, kind: &'a str) -> impl Iterator<Item = (&'a String,
         .map(|(id, i)| (id, &i["params"]))
 }
 
+/// #231: whether the document holds a `test.guards` item, each of which reads the frame's index:
+/// a frame of such a document is never held.
+pub(crate) fn reads_frame(doc: &Value) -> bool {
+    ["test.redraw@1", "test.nonfinite@1", "test.device_loss@1"]
+        .iter()
+        .any(|kind| items(doc, kind).next().is_some())
+}
+
 /// Whether a `test.device_loss@1` item loses the device as frame `k` is drawn.
 pub(crate) fn loses_device_at(doc: &Value, k: i64) -> bool {
     items(doc, "test.device_loss@1").any(|(_, p)| p["frame"].as_i64() == Some(k))

@@ -9,7 +9,8 @@ scene3d's render module on the GPU layer (#378): each 3D writer layer is a batch
 - `src/lib.rs`: the renderer and its batches. `src/module.rs`: the GPU-layer adapter and pass declarations. `src/planted.rs`: the proof binary's wrong-program switches. `src/mesh.rs`: unit meshes. `src/shadow.rs`: the shadow map. `src/status.rs`: the status passes.
 - `src/ao.rs` and `src/ao.wgsl`: the depth/normal prepass, cosine-weighted direction march and edge-aware blur. `src/ao_shade.wgsl`: the surface-aware upsample and ambient visibility input; `src/ambient.wgsl`: the sky/environment lighting that reads it.
 - WGSL sits beside the Rust that loads it with `include_str!`, one file per pass.
-- Unit tests sit in a `#[cfg(test)]` module in the file they test; tests/acceptance/378, 380, 382, 383 and the later 3D issues prove the passes through `deep-gpu` (crates/deep-gpu-layer).
+- A `#[repr(C)]` struct a shader reads names its shader struct beside its definition with `deep_gpu::paired!` (#3256), and `src/shader_layout.rs` lists the modules as the renderer assembles them and the structs with one side only, each with its reason. `src/records.rs`: the line, point, text and puff records, each beside its attribute list.
+- Unit tests sit in a `#[cfg(test)]` module of the file they test (`src/lib.rs`'s in `src/tests.rs`); tests/acceptance/378, 380, 382, 383 and the later 3D issues prove the passes through `deep-gpu` (crates/deep-gpu-layer).
 - What a 3D item is and how it is checked belongs in deep-canvas-scene3d, which touches no GPU; a 2D effect pass goes in deep-effects-render, and a pass that reads the 3D targets goes here.
 
 ## What it may import
