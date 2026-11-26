@@ -1236,6 +1236,10 @@
         "miniz_oxide": {
           "spec": "^0.9",
           "why": "Issue #2892: the player's prebuilt module sets stored as gzip once per build, by the export's own compressor (src/export/gzip.rs); both already in the lockfile."
+        },
+        "ignore": {
+          "spec": "^0.4",
+          "why": "Issue #3299: the build script's source digest skips what the workspace's .gitignore names, by git's own rules; already in the lockfile."
         }
       },
       "dependencies": {
@@ -2893,6 +2897,26 @@
         }
       }
     },
+    "docs/spikes/3444/own-device/Cargo.toml": {
+      "dependencies": {
+        "wgpu": {
+          "spec": "=30.0.1",
+          "why": "Spike #3444: timestamp query sets on the wgpu the app pins, on Metal, with its internal counters on; outside the workspace with its own lockfile, so nothing it pins reaches the app."
+        },
+        "pollster": {
+          "spec": "^0.4",
+          "why": "Spike #3444: blocks on wgpu's adapter, device and error-scope futures in the headless probe."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Spike #3444: the probe's report of each attempt, keys in order."
+        },
+        "log": {
+          "spec": "^0.4",
+          "why": "Spike #3444: the logger that collects wgpu-hal's errors, Metal's own words among them, into the probe's report."
+        }
+      }
+    },
     "tests/acceptance/533/wat/Cargo.toml": {
       "dependencies": {
         "wat": {
@@ -3256,6 +3280,30 @@
         "wasmparser": {
           "spec": "=0.263.0",
           "why": "Issue #851's blind suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/2700/probe/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../../../crates/deep-canvas",
+          "why": "Issue #2700: the acceptance probe calls the canvas core's public entry, built from each checkout's own copy; test-only, outside the workspace."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2700: the probe prints what it saw as one JSON line, with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
+        }
+      }
+    },
+    "tests/acceptance/2700/probe-reached/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../../../crates/deep-canvas",
+          "why": "Issue #2700: the acceptance probe calls the canvas core's public entry, built from each checkout's own copy; test-only, outside the workspace."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2700: the probe prints what it saw as one JSON line, with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
         }
       }
     }

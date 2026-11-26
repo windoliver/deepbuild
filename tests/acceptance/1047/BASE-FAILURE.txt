@@ -1,0 +1,81 @@
+The suite at the base commit ebf1e7f44 ("Merge pull request #3411 …"), before any implementation, on macOS
+(a 16-inch MacBook Pro, Mac17,10), on 2026-11-25.
+
+Who ran it, and who wrote this file. The job that drafted the suite ended after its first phase, before the base was
+built. Its caller, the session that later made the change, built the base from its own sources in the job's checkout
+(a worktree detached at ebf1e7f44, holding nothing but this folder's eight files, each with the SHA-256 the job
+reported) and ran each file once, right after the build. This file was written by that session from those two runs'
+output. It holds the runs' own words, trimmed, and judges no test.
+
+Built first, each by the command its suite's helper runs, with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0:
+
+  npm run build --workspaces
+  cargo build --locked -p deep-replica --bin deep-drive --features env-plants
+      target/debug/deep-drive    sha256 e34ddbb3fb57db7a0b9095624c8eb0fe17adbdc1fdc75eb3079aafd6451fb2dc
+  cargo build --locked --bin deep-logic
+      target/debug/deep-logic    sha256 28c252645dc892090cc7703f486a79a74e34f9ea02890b58e12029e4ef9bbada
+  #533's assembler (tests/acceptance/533/wat, into target/acceptance-533-wat)
+      acceptance-533-wat         sha256 9d86c4c8af51633c89f46fcc34125ec6d35535821a980bcf2637a0a0aed4e7fc
+
+Each file, once, as the README runs it:
+
+  node scripts/throttle.mjs test --wait 60 -- \
+    npx vitest run --root tests/acceptance/1047 <file> --testTimeout=600000 --no-file-parallelism
+
+  ac01-from-save.test.ts        Test Files  1 failed (1)    Tests  2 failed (2)    22.16 s
+  ac02-layout-refused.test.ts   Test Files  1 failed (1)    Tests  1 failed (1)    16.90 s
+
+No test passes at the base, and none should: each is a test of new behavior. Each fails at its own assertion, after
+its fixture held.
+
+
+ac01-from-save.test.ts > AC1 #1047.310638fa each of the 20 runs starts at step 1,800 with the save's full-state hash,
+which a straight run reaches at that step, and its track replays from the save to the same hashes
+
+  Held before it: the logic module wrote the save at step 1,800; the straight run of 1,800 steps ended on (3, 1)
+  with 4 presses and its final hash was the save's; its first checkpoint was step 0 with another hash; and the
+  playtest, its input naming the save, read `passed` with testsRun 20.
+
+  AssertionError: each of the 20 runs starts at step 1,800 with the save's full-state hash:
+    bot 0 run 0 (seed 7058503038805662) starts at step 0 with the full-state hash
+      "5bc7d14cdae68de6a7d667dc7aa56e6046d4fbe7706aa8969cb0c7e26dab1a4b", given from undefined, not at the save's
+      step 1800 with "f138cdd367bca2cebefe6e332377a5381dfb82b77af97f56a4efcb452ab78a00", given from
+      {"save":"d5ea74b05b30d22a72b04d7f08796416e8618a85b77ad6529c4bdfde618574e3"}
+    … the same line for each of runs 1 to 19, each at step 0 with that hash, given from undefined
+    : expected [ …(20) ] to deeply equal []
+
+  The base's playtest passes no `from` on, so each run's play reached the replica with none and started at step 0.
+
+
+ac01-from-save.test.ts > AC1 #1047.310638fa a planted runner that starts each run at step 0 fails, naming the run
+and its first step
+
+  Held before it: the planted runner's 20 plays went through, each from step 0.
+
+  AssertionError: the planted runner's PASS is refused, naming each run and its first step: passed, testsRun 20;
+  failures: (none):
+    its outcome is passed, counting 20 runs
+    no failure names run 0 and its first step, step 0
+    … the same line for each of runs 1 to 19
+    : expected [ …(21) ] to deeply equal []
+
+  The base's validator asks nothing about where a run started, so the planted runner's PASS went through.
+
+
+ac02-layout-refused.test.ts > AC2 #1047.660130ec the save is refused by logic.layout before any run, naming both
+layouts; the playtest counts 0 runs and is INVALID, never PASS
+
+  Held before it: the logic module wrote the earlier maze's save at step 1,800; the piece declares no migration;
+  and the logic module's own logic.layout answer on that save and this piece was FAIL, refusing to open the save
+  under the piece's program for its layout, the save's layout the one its header names and the piece's another.
+
+  AssertionError: the playtest from that save counts 0 runs and is refused by logic.layout, naming both layouts:
+  passed, testsRun 20; failures: (none):
+    it counts 20 runs, not 0
+    its outcome is passed
+    no failure names logic.layout and both layouts, the save's
+      ef5d514ef372f754b688f10c10ab35177821723459a7fcc03c6bc610c89ff457 and the piece's
+      61b6fa093bb01516d98de0b8bdb7959655defad29f15f43eb3f0bc6798c27c86
+    : expected [ 'it counts 20 runs, not 0', …(2) ] to deeply equal []
+
+  The base's play reads no `from`: it played the 20 runs from step 0 and the playtest passed.

@@ -21,6 +21,7 @@ import { plantedKeeps, type Plant } from './plant.js';
 import { changesOf, type Changes } from './claim-changes.js';
 import { contents, EMPTY, installsOf, keptRecord, keyId, keyPaths, keyRows, missingRun, namesOf, plain, repoOf, SharedRuns, stemOf, withheld, type KeptRow, type KeyFacts, type Source } from './shared-runs.js';
 import type { StackWant } from './stacks.js';
+import { stopOnHost } from './host-gate.js';
 import type { Used } from '@deepbuild/supervisor';
 import { admitOn, CLASS_MB, cleanPeak, CLEAN_RUNS, KeyHistory, type Admission } from './admission.js';
 import { digestsOf, type Spent, type Variant } from './variants.js';
@@ -86,7 +87,7 @@ export interface GateOptions {
   append(connection: Connection, input: EventInput): Promise<void>;
   core: Connection;
   /** Starts one run of a claim's check in `cwd`, in its lane with its expected time; resolves with its run handle. */
-  start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant; memory?: Admission }): Promise<string>;
+  start(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane: 'fast' | 'slow'; expected_ms: number | null; deadline_ms: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant; memory?: Admission; /** The host the run is on, in `cwd` there (#999). */ host?: string }): Promise<string>;
   /** The call that spent a task's held-out variant, by its files (#3229); a runner without it knows of none. */
   spent?(task: string, files: Record<string, string>): Spent | undefined;
   /** The start a check's stack needs now, added to its expected time (#580). */
@@ -154,7 +155,7 @@ const JUDGE_FAULT = process.env.DEEP_HUB_TEST_JUDGE_FAULT as JudgeFault | undefi
  * the key its result is read from (#1018), the base run's source when another claim's, its held-out variants' runs, and whether it waits on another
  * session's run of its key.
  */
-interface Entry {
+export interface Entry {
   check: ClaimCheck; claim: string; commit: string; lane: 'fast' | 'slow'; runs: string[]; base: string | null; standIn?: StandIn; outcome: string | null; running: boolean; stale: boolean; ends?: number;
   group?: string; baseFrom?: Source; variants?: string[]; waiting?: boolean; newer?: string;
   /** The readings its carry records (#1018), written after its verdict so the verdict never waits on them. */
@@ -172,7 +173,7 @@ const LOAD_WAIT_MS = 30 * 60_000;
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
 /** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
 interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
-interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
+export interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; programs: Map<string, string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
 /** Run outcomes a key keeps: a result. Missing, stopped and uncounted runs say nothing of the key, so they never carry. */
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
 /** A base run that ended as a run: what a fix is proven by, on its key as on its claim. */
@@ -733,7 +734,8 @@ export class GateRunner {
    * A claim made at a stop: its snapshot and checkout, its checks taken in turn for the fast lane, the rest left to
    * the slow lane. Resolves once the fast lane has ended or the hold has, with the claim's checks as they stand.
    */
-  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; state?: StatePin }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
+  async stop(r: { session: string; claim: string; task: string; cwd: string; base: string; requirements: ClaimRequirement[]; checks: ClaimCheck[]; stopAt: number; definition?: DefinitionState; joins?: boolean; state?: StatePin; host?: string }): Promise<{ fast: string[]; slow: string[]; snapshot: string; readyAt: number; budgetCost: string[]; changed: boolean }> {
+    if (r.host) return stopOnHost({ claims: this.claims, definition: (c, d, s) => this.definitionEntry(c, d, s), cantStart: (e, error) => this.cantStart(e, error), o: this.o }, { ...r, host: r.host });
     // The snapshot and the checkout share one budget (#31): past it the claim is INCONCLUSIVE, naming the reason and
     // the count of untracked files, and none of its checks runs, in the live worktree or anywhere.
     const budget = this.o.checkouts().budget();
@@ -812,18 +814,8 @@ export class GateRunner {
       this.lockWaits.get(r.claim)?.();
     }
     this.claims.set(r.session, [...older, claim]);
-    // A definition still to lock stands as a pending check, so the claim never passes on the spec alone; one held by a
-    // cause outside the code, such as the plan window at your reserve, as a check missing it, so the claim is BLOCKED.
     const definition = r.definition ?? 'locked';
-    if (definition !== 'locked') {
-      const check: ClaimCheck = { check: DEFINITION, approved: null, command: DEFINITION, covers: [], depth: 'unit', on_base: 'passes', asserts: [], holds: false };
-      if (definition === 'pending' || definition === 'waiting') claim.entries.set(DEFINITION, { check, claim: r.claim, commit: snapshot, lane: 'fast', runs: [], base: null, outcome: null, running: true, stale: false });
-      else {
-        const run = `run:${DEFINITION}:${r.claim.replace(/^claim:/, '')}`;
-        this.records.set(run, missingRun(run, DEFINITION, definition.blocked));
-        claim.entries.set(DEFINITION, { check, claim: r.claim, commit: snapshot, lane: 'fast', runs: [run], base: null, outcome: 'missing', running: false, stale: false });
-      }
-    }
+    this.definitionEntry(claim, definition, snapshot);
     // Older claims' queued places for the same check give way to this one: the newest snapshot wins the queue. A stop
     // claims once per open task, each reaching here when its own snapshot is done, so an older claim arriving after a
     // newer one gives way to it, never the other way round.
@@ -941,6 +933,18 @@ export class GateRunner {
     return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, readyAt, budgetCost, changed };
   }
 
+  // A definition still to lock stands as a pending check, so the claim never passes on the spec alone; one held by a
+  // cause outside the code, such as the plan window at your reserve, as a check missing it, so the claim is BLOCKED.
+  private definitionEntry(claim: Claim, definition: DefinitionState, snapshot: string): void {
+    if (definition === 'locked') return;
+    const check: ClaimCheck = { check: DEFINITION, approved: null, command: DEFINITION, covers: [], depth: 'unit', on_base: 'passes', asserts: [], holds: false };
+    if (definition === 'pending' || definition === 'waiting') claim.entries.set(DEFINITION, { check, claim: claim.claim, commit: snapshot, lane: 'fast', runs: [], base: null, outcome: null, running: true, stale: false });
+    else {
+      const run = `run:${DEFINITION}:${claim.claim.replace(/^claim:/, '')}`;
+      this.records.set(run, missingRun(run, DEFINITION, definition.blocked));
+      claim.entries.set(DEFINITION, { check, claim: claim.claim, commit: snapshot, lane: 'fast', runs: [run], base: null, outcome: 'missing', running: false, stale: false });
+    }
+  }
   /**
    * A journey's uncounted run has one more on the same snapshot, on a stack started with no kept product (#580): when
    * that one serves another tree too, the run is missing, so its check is BLOCKED.

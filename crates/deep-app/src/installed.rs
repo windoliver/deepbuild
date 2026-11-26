@@ -159,6 +159,16 @@ pub fn load(
             .ok_or_else(|| copy::text("installed.no_folder").to_owned())
             .and_then(|from| copy_folder(Path::new(from), &dir).map_err(|e| e.to_string()));
         let mounted = copied.and_then(|()| {
+            // The record of the kit revision a view was installed against is the hub's word, never its package's: a
+            // view the hub lists with none passed panel@1 before revision 2 (#3233), and still loads.
+            let record =
+                json!({ "slot": "panel@1", "revision": view["revision"].as_u64().unwrap_or(1) });
+            // What the kit's current revision would refuse in a view held to an earlier one, as its listing has it.
+            if let Some(reading) = view["reading"].as_str() {
+                eprintln!("deep-app: {name}: {reading}");
+            }
+            std::fs::write(dir.join(crate::panel_rules::RECORD), record.to_string())
+                .map_err(|e| e.to_string())?;
             crate::mount_panel(runtime, &dir, window, cx).map_err(|e| format!("{e:#}"))
         });
         match mounted {

@@ -21,6 +21,7 @@ import { fixtures as contractFixtures } from '../../../packages/contracts/src/in
 import { openEvidenceStore } from '../../../packages/evidence/src/index.ts';
 import { openRecord, type Connection, type Event, type RecordStore } from '../../../packages/record/src/index.ts';
 import { openSupervisor, type Supervisor } from '../../../packages/supervisor/src/index.ts';
+import { withDeclared } from '../declared.ts';
 
 export const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 export const DAY = 86_400_000;
@@ -86,7 +87,7 @@ export async function openWorld(): Promise<World> {
   mkdirSync(deepHome, { recursive: true });
   const evidence = await openEvidenceStore({ root: join(dir, 'evidence') });
   const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now, evidence });
-  const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+  const asks = withDeclared(await openAsks({ record, now: Date.now, deliver: () => undefined }));
   const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } } });
   const { openTrust } = await host();
   const trust = await openTrust({ record, now: Date.now });

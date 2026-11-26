@@ -94,7 +94,7 @@ export async function extendPreview(o: { root: string; record: RecordStore; asks
   if (!(later >= 1 && later <= 2)) throw Error(`${o.entry}: ${o.decide_by} isn't 1 or 2 releases after its decide_by ${from}, and an extension moves it at most 2`);
   const key = createHash('sha256').update(`contract.extension:${o.entry}:${from}:${o.decide_by}`).digest('hex');
   const ask = await o.asks.raise({ writer: 'core', actor: 'you', scope: 'you' }, 'contract.extension', {
-    kind: 'authority', question: `Extend the preview ${o.entry} from ${from} to ${o.decide_by}? ${o.reason}`,
+    kind: 'authority', may_answer: 'trusted_path', question: `Extend the preview ${o.entry} from ${from} to ${o.decide_by}? ${o.reason}`,
     options: [{ id: 'approve', label: `Extend it to ${o.decide_by}`, decision: 'allow' }, { id: 'decline', label: `Keep ${from}`, decision: 'deny' }],
     recommended: null, deadline: Date.now() + 86_400_000, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
     pinned_to: { kind: 'evidence', ref: key },

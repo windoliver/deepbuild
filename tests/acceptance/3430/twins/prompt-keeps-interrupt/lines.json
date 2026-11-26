@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/status.ts": [
+    {
+      "find": [
+        "    (instr(json_extract(r.data, '$.reading'), ': you interrupted this turn') > 0 AND instr(json_extract(r.data, '$.reading'), ': you interrupted this turn') = instr(json_extract(r.data, '$.reading'), ': ') AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = r.session_id AND (a.kind = 'user.ask' OR (a.kind = 'session.activity' AND json_extract(a.data, '$.activity') = 'turn_start')) AND a.log_pos > r.log_pos)) AS interrupted"
+      ],
+      "wrong": [
+        "    (instr(json_extract(r.data, '$.reading'), ': you interrupted this turn') > 0 AND instr(json_extract(r.data, '$.reading'), ': you interrupted this turn') = instr(json_extract(r.data, '$.reading'), ': ') AND NOT EXISTS (SELECT 1 FROM events a WHERE a.session_id = r.session_id AND a.kind = 'user.ask' AND a.log_pos > r.log_pos)) AS interrupted"
+      ]
+    }
+  ]
+}
