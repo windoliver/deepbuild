@@ -664,16 +664,6 @@ export function answeredFailures(windows: readonly Node[], ask: Ask, asks: reado
   return out;
 }
 
-/**
- * The pixel half, for the list only: of the lines left of the list's edge (`edgePx`, in the picture's pixels), at most one
- * draws the answered ask's row (`drawsRow`), and it reads "Answered". The page's lines are left to the tree reading.
- */
-export function answeredListLineFailures(lines: readonly Line[], ask: Ask, edgePx: number): string[] {
-  const drawn = lines.filter((l) => (l.box[0] ?? 0) + (l.box[2] ?? 0) / 2 < edgePx && drawsRow([l], ask.question));
-  if (drawn.length > 1) return [`the list's pixels draw answered ${ask.handle}'s row on ${drawn.length} lines: they read ${sees(drawn)}`];
-  return drawn.filter((l) => !ANSWERED_WORD.test(l.text)).map((l) => `the list's pixels still draw answered ${ask.handle}'s row as open, with no "Answered" on its line: "${l.text}"`);
-}
-
 /** `askRowFailures` for the wanted asks; every other ask (AC2's answered one) is judged by `answeredFailures`. */
 export function askRowFailuresKept(windows: readonly Node[], asks: readonly Ask[], wanted: readonly Ask[], tasks: readonly string[]): string[] {
   const out: string[] = [];
@@ -688,11 +678,54 @@ export function askRowFailuresKept(windows: readonly Node[], asks: readonly Ask[
   return out;
 }
 
+// ---- A Needs you row on the pixels once its time is kept (REDRAFT.md, Ninth redraft). Added beside the judges above,
+// which stay as they were.
+
 /**
- * `shellFailuresCard`, with an answered ask judged by `askRowFailuresKept` and `answeredListLineFailures`: its list row
- * may keep its slot drawn answered, and its page may say it was answered. Everything else is `shellFailuresCard`'s own.
+ * One OCR line draws an ask row: it holds a fixture ask's whole question, or an ellipsis that ends a question's start
+ * (any length, none at all included; a mark before it is not a letter or digit) and is followed by the row's right slots
+ * (some letter or digit after it). #1808: "A title that doesn't fit its slot ends in an ellipsis at a whole character";
+ * #3282 (owner, 2026-11-19): "An ask row's time beats #1808's 12-character title floor", leaving "about 50 px at 260",
+ * so a right row may draw no title character at all. Which ask a row is, the tree says (README item 2).
  */
-export async function shellFailuresKept(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
+export function askRowLine(text: string, asks: readonly Ask[]): boolean {
+  if (asks.some((a) => squash(text).includes(squash(a.question)))) return true;
+  return [...text.matchAll(/…|\.{2,}/g)].some((m) => {
+    const before = squash(text.slice(0, m.index));
+    return squash(text.slice(m.index! + m[0].length)).length > 0 && asks.some((a) => squash(a.question).startsWith(before));
+  });
+}
+
+/** The list's right edge in a capture's pixels, from `listEdge` and the window's frame; `null` with no session row. */
+export function listEdgePx(roots: readonly Node[], tasks: readonly string[], frame: readonly number[], pictureWidth: number): number | null {
+  const edge = listEdge(roots, tasks);
+  return edge === null || !frame[2] ? null : (edge - frame[0]!) * pictureWidth / frame[2];
+}
+
+/** The lines left of `edgePx` (every line when `null`: a window that is all list) that draw an ask row (`askRowLine`). */
+export const askRowLines = (lines: readonly Line[], asks: readonly Ask[], edgePx: number | null): Line[] =>
+  lines.filter((l) => (edgePx === null || (l.box[0] ?? 0) + (l.box[2] ?? 0) / 2 < edgePx) && askRowLine(l.text, asks));
+
+/**
+ * The list's ask rows on the pixels, counted: exactly `open` rows that don't read answered (one per wanted ask; none seen
+ * fails), and at most `kept` that read answered (#1461's kept row, one per answered ask).
+ */
+export function rowLineFailures(lines: readonly Line[], asks: readonly Ask[], edgePx: number | null, want: { open: number; kept: number }): string[] {
+  const rows = askRowLines(lines, asks, edgePx);
+  const kept = rows.filter((l) => ANSWERED_WORD.test(l.text));
+  const open = rows.filter((l) => !ANSWERED_WORD.test(l.text));
+  const out: string[] = [];
+  if (open.length !== want.open) out.push(`the list's pixels draw ${open.length} open ask row(s), not ${want.open}: of its lines, these draw a row ${sees(open)}; all read ${sees(lines)}`);
+  if (kept.length > want.kept) out.push(`the list's pixels draw ${kept.length} answered ask row(s), more than ${want.kept}: ${sees(kept)}`);
+  return out;
+}
+
+/**
+ * `shellFailuresCard`, with the tree judged by `askRowFailuresKept` (an answered ask may keep a list row and a page,
+ * each drawn answered) and the rows on the pixels counted by `rowLineFailures` in the list's region instead of each ask's
+ * title read by `drawsRow`. The count and the menu bar are judged as there.
+ */
+export async function shellFailuresDrawn(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
   const out: string[] = [];
   const tree = await app.tree();
   const main = tree.windows.flatMap((w) => nodes(w.tree));
@@ -711,12 +744,9 @@ export async function shellFailuresKept(world: World, app: App, want: { rows: re
   const roots = tree.windows.map((w) => w.tree);
   const tasks = world.sessions.map((s) => s.task);
   out.push(...askRowFailuresKept(roots, world.asks, want.rows, tasks));
-  const edge = listEdge(roots, tasks);
-  for (const ask of world.asks) {
-    if (want.rows.includes(ask)) {
-      if (!drawsRow(lines, ask.question)) out.push(`the window's pixels lack ${ask.handle}'s row with its question, whole or cut by an ellipsis after its first ${ROW_START} letters and digits: they read ${sees(lines)}`);
-    } else if (edge !== null && win.frame[2]) out.push(...answeredListLineFailures(lines, ask, (edge - win.frame[0]!) * picture.width / win.frame[2]));
-  }
+  const px = listEdgePx(roots, tasks, win.frame, picture.width);
+  if (px === null) out.push(`can't find the list on the pixels: no session row ${JSON.stringify(tasks)} is on the tree`);
+  else out.push(...rowLineFailures(lines, world.asks, px, { open: want.rows.length, kept: world.asks.length - want.rows.length }));
   const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
   for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
   const menu = menuCount(tree);

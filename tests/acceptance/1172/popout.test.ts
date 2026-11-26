@@ -12,11 +12,11 @@
 // pop-out, an ask may keep on the main window only its open card's share, and nothing once its card is gone, so a row
 // that stays fails whatever card is open. Before the press the same reading finds the heading and every row: on the tree
 // a node named with its whole question (AC3: "each Needs you row shows its ask's question"; README item 2), on the pixels
-// the question as a row under the design draws it, whole or cut by an ellipsis after at least its first ROW_START letters
-// and digits (`drawsRow`, REDRAFT.md's third redraft). So a reading that sees nothing can't pass, and the new window must
+// one ask row per ask in the list's region, its title whole or cut to an ellipsis however short (`askRowLines`,
+// REDRAFT.md's ninth redraft; #3282 lets an ask row's time take its title's room). So a reading that sees nothing can't pass, and the new window must
 // hold and draw them the same way, so a view that merely disappears can't either.
 import { describe, expect, it } from 'vitest';
-import { App, appBinary, blocked, captureWindow, drawsRow, makeWorld, nodes, ocr, reads, ROW_START, settled, sees, sleep, tempDir, useCleanup, type Ask, type FixtureSession, type Line, type Node, type Win } from './helpers.ts';
+import { App, appBinary, askRowLines, blocked, captureWindow, listEdgePx, makeWorld, nodes, ocr, reads, ROW_START, settled, sees, sleep, tempDir, useCleanup, type Ask, type FixtureSession, type Line, type Node, type Win } from './helpers.ts';
 
 useCleanup();
 const MINUTES = 60_000;
@@ -38,20 +38,20 @@ interface Seen {
   headingLines: number;
   /** Per ask: outermost tree nodes holding its whole question. */
   rows: Map<Ask, number>;
-  /** Per ask: whether one pixel line draws its row's question, whole or cut by an ellipsis after its first ROW_START letters and digits. */
-  drawn: Map<Ask, boolean>;
+  /** Lines in the list's region that draw an ask row (`askRowLines`, REDRAFT.md's ninth redraft): a title may be cut to its ellipsis. */
+  rowLines: number;
   /** Per ask: pixel lines holding its question's first ROW_START letters and digits, the least a drawn row shows. */
   starts: Map<Ask, number>;
   lines: Line[];
 }
-function seen(tree: Node, lines: Line[], asks: readonly Ask[]): Seen {
+function seen(tree: Node, lines: Line[], asks: readonly Ask[], edgePx: number | null): Seen {
   const start = (a: Ask): string => squash(a.question).slice(0, ROW_START);
   return {
     tree,
     headingNodes: nodes(tree).filter((n) => n.name === HEADING).length,
     headingLines: lines.filter((l) => /^needsyou\d*$/.test(squash(l.text))).length,
     rows: new Map(asks.map((a) => [a, outermost(tree, a.question).length])),
-    drawn: new Map(asks.map((a) => [a, drawsRow(lines, a.question)])),
+    rowLines: askRowLines(lines, asks, edgePx).length,
     starts: new Map(asks.map((a) => [a, lines.filter((l) => squash(l.text).includes(start(a))).length])),
     lines,
   };
@@ -63,8 +63,8 @@ function lacks(where: string, s: Seen, asks: readonly Ask[]): string[] {
   if (!s.headingLines) out.push(`${where}'s pixels don't draw the "${HEADING}" heading: they read ${sees(s.lines)}`);
   for (const a of asks) {
     if (!s.rows.get(a)) out.push(`${where}'s tree has no row for ${a.handle} ("${a.question}")`);
-    if (!s.drawn.get(a)) out.push(`${where}'s pixels don't draw ${a.handle}'s row with its question "${a.question}", whole or cut by an ellipsis after its first ${ROW_START} letters and digits: they read ${sees(s.lines)}`);
   }
+  if (s.rowLines !== asks.length) out.push(`${where}'s pixels draw ${s.rowLines} ask row(s) in the list, not ${asks.length}: they read ${sees(s.lines)}`);
   return out;
 }
 
@@ -96,7 +96,12 @@ describe('#1172 a popped-out view leaves the main window', () => {
         const ax = (await app.tree()).windows.find((w) => w.frame.every((v, i) => Math.abs(v - win.frame[i]!) < 2));
         return ax?.tree ?? blocked(`the tree has no window at ${JSON.stringify(win.frame)}`);
       };
-      const look = async (win: Win, name: string): Promise<Seen> => seen(await axOf(win), await ocr(await captureWindow(win.id, `${dir}/${name}.png`)), asks);
+      // The list's region: left of the session rows' right edge; a window with no session row (the popped view) is all list.
+      const look = async (win: Win, name: string): Promise<Seen> => {
+        const tree = await axOf(win);
+        const picture = await captureWindow(win.id, `${dir}/${name}.png`);
+        return seen(tree, await ocr(picture), asks, listEdgePx([tree], world.sessions.map((s) => s.task), win.frame, picture.width));
+      };
 
       // 1. The list as launched, and an ask with none of its card on the main window: the one to select.
       let launched: Seen | undefined;
@@ -136,6 +141,7 @@ describe('#1172 a popped-out view leaves the main window', () => {
         const out: string[] = keeps('after the pop-out, the main window', after, world.sessions);
         if (after.headingNodes >= before!.headingNodes) out.push(`the main window's tree still holds the "${HEADING}" heading (${after.headingNodes} node(s), ${before!.headingNodes} before)`);
         if (after.headingLines >= before!.headingLines) out.push(`the main window still draws the "${HEADING}" heading on its pixels: they read ${sees(after.lines)}`);
+        if (after.rowLines) out.push(`the main window still draws ${after.rowLines} ask row(s) in its list: they read ${sees(after.lines)}`);
         for (const a of asks) {
           // The selected ask's card may stay (the decision), so its share may; a row's never does.
           const card = a === selected && cardOpen(after.tree, a);

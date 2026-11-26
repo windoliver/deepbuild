@@ -2,7 +2,7 @@
 // judge AC1, AC2, AC4 and AC5 lean on must pass a right reading and fail the wrong ones, so a failure on the real app is
 // the app's, not the judge's.
 import { describe, expect, it } from 'vitest';
-import { answeredFailures, answeredListLineFailures, askRowFailures, drawsRow, gridLaw, groundAndInk, hex, type Ask, type Line, type Node, type Picture, type Rgb } from './helpers.ts';
+import { answeredFailures, askRowFailures, askRowLine, drawsRow, rowLineFailures, gridLaw, groundAndInk, hex, type Ask, type Line, type Node, type Picture, type Rgb } from './helpers.ts';
 
 const GROUND: Rgb = [255, 255, 255];
 const FIVE: Rgb = [216, 27, 154];
@@ -154,14 +154,17 @@ describe('#1172 (judges) an answered ask: its list row drawn answered and its pa
   const win = (...children: Node[]): Node => node([0, 0, 1512, 982], 'AXWindow', '', ...children);
   const judge = (w: Node): string => answeredFailures([w], first, asks, tasks).join('\n');
   const lines = (...texts: [string, number][]): Line[] => texts.map(([text, x]) => ({ text, box: [x, 0, 200, 20] }));
+  /** The two open rows as the R4b Mac run drew them (ninth redraft), beside the answered ask's lines. */
+  const OPEN: [string, number][] = [['... How it looks tomorrow 16:49', 10], ['• ... How it looks tomorrow 16:49', 10]];
+  const pixels = (...texts: [string, number][]): string => rowLineFailures(lines(...OPEN, ...texts), asks, 520, { open: 2, kept: 1 }).join('\n');
 
   it('control: the list row kept drawn answered and the page\'s closed card saying it was answered pass (the review\'s right program)', () => {
     expect(judge(win(list(row(first, 'Answered'), row(second), row(third)), receipt(first)))).toBe('');
   });
   it('control: a list row whose state word is a lower-case "answered", beside the page\'s closed card, passes (eighth redraft)', () => {
     expect(judge(win(list(row(first, 'answered'), row(second), row(third)), receipt(first)))).toBe('');
-    const read = lines(['• Which header co... answered', 10], ['Which header colour on the login page? Answered "Blue header" at 12:12 from deep inbox. Nothing is left to answe…', 700]);
-    expect(answeredListLineFailures(read, first, 520)).toEqual([]);
+    expect(pixels(['• Which header co... answered', 10], ['Which header colour on the login page? Answered "Blue header" at 12:12 from deep inbox. Nothing is left to answe…', 700])).toBe('');
+    expect(pixels(['• ... answered 12:12', 10])).toBe('');
   });
   it('control: the page alone saying it was answered, the row gone, passes; so does nothing at all', () => {
     expect(judge(win(list(row(second), row(third)), receipt(first)))).toBe('');
@@ -186,17 +189,71 @@ describe('#1172 (judges) an answered ask: its list row drawn answered and its pa
     expect(answeredFailures([win(row(first, 'Answered'))], first, asks, tasks).join('\n')).toMatch(/can't tell the list from the page/);
   });
   it('control: on the pixels, the list row cut and drawn answered and the page\'s receipt line pass', () => {
-    const read = lines(['Which header co… Answered 12:12', 10], ['Which header colour on the login page? Answered "Blue header" at 12:12 from deep inbox. Nothing is left to answe…', 700]);
-    expect(answeredListLineFailures(read, first, 520)).toEqual([]);
+    expect(pixels(['Which header co… Answered 12:12', 10], ['Which header colour on the login page? Answered "Blue header" at 12:12 from deep inbox. Nothing is left to answe…', 700])).toBe('');
   });
   it('wrong program: on the pixels, the list row still drawn open fails, though the page says answered', () => {
-    const read = lines(['• Which header co... How it looks', 10], ['Which header colour on the login page? Answered "Blue header"', 700]);
-    expect(answeredListLineFailures(read, first, 520).join('\n')).toMatch(/still draw answered ask:01's row as open/);
+    expect(pixels(['• Which header co... How it looks', 10], ['Which header colour on the login page? Answered "Blue header"', 700])).toMatch(/3 open ask row\(s\), not 2/);
   });
   it.each([['Not answered'], ['unanswered'], ['not yet answered']])('wrong program: on the pixels, a list line reading "%s" fails', (word) => {
-    expect(answeredListLineFailures(lines([`Which header co… ${word}`, 10]), first, 520).join('\n')).toMatch(/still draw answered ask:01's row as open/);
+    expect(pixels([`Which header co… ${word}`, 10])).toMatch(/3 open ask row\(s\), not 2/);
   });
   it('wrong program: on the pixels, two list lines drawing the answered row fail', () => {
-    expect(answeredListLineFailures(lines(['Which header co… Answered', 10], ['Which header co… Answered', 10]), first, 520).join('\n')).toMatch(/on 2 lines/);
+    expect(pixels(['Which header co… Answered', 10], ['Which header co… Answered', 10])).toMatch(/2 answered ask row\(s\), more than 1/);
+  });
+});
+
+describe('#1172 (judges) Needs you rows on the pixels once an ask row keeps its time (Ninth redraft)', () => {
+  const ask = (n: number, question: string): Ask => ({ handle: `ask:0${n}`, question, option: { id: 'one', label: 'a' }, other: 'b', session: 's', task: 't' });
+  const asks = [ask(1, 'Which header colour on the login page?'), ask(2, 'Which font for the printed receipt?'), ask(3, 'Which layout for the changelog?')];
+  const line = (text: string, x = 10): Line => ({ text, box: [x, 0, 200, 20] });
+  /** The R4b Mac run's list (main 02ee0dff4, with #3282's kept time): every title cut to its ellipsis. */
+  const R4B = ['Needs you', '... How it looks tomorrow 16:49', '• ... How it looks tomorrow 16:49', '• ... How it looks tomorrow 16:49', 'Tasks', 'Cart totals', 'Release notes'].map((t) => line(t));
+  const judge = (ls: readonly Line[], open = 3, kept = 0): string => rowLineFailures(ls, asks, 520, { open, kept }).join('\n');
+
+  it('control: the R4b reading, three rows each cut to an ellipsis before its kind and time, passes', () => {
+    expect(judge(R4B)).toBe('');
+  });
+  it.each([
+    ['the third redraft\'s reading, a title cut after 15 characters', 'Which header co... How it looks'],
+    ['a title cut after "Which"', '• Which… How it looks tomorrow 16:49'],
+    ['a title cut after "Wh"', 'Wh… How it looks in 1 d'],
+    ['the whole question', 'Which header colour on the login page? How it looks'],
+  ])('control: a row line with %s draws a row', (_, text) => {
+    expect(askRowLine(text, asks)).toBe(true);
+  });
+  it.each([
+    ['the ask\'s handle, cut', 'ask:01MCBHM3… How it looks'],
+    ['the ask\'s kind alone, no ellipsis', 'How it looks tomorrow 16:49'],
+    ['an ellipsis with nothing after it (no right slots)', '• Which header co…'],
+    ['a title clipped at the edge with no ellipsis', 'Which header colour on the lo'],
+    ['an ellipsis after text that isn\'t a question\'s start', 'Header colour on the login... How it looks'],
+    ['a session row', 'Cart totals Working 2m'],
+    ['the heading', 'Needs you'],
+  ])('wrong program: a line with %s draws no row', (_, text) => {
+    expect(askRowLine(text, asks)).toBe(false);
+  });
+  it('wrong program: nothing seen fails, never a pass', () => {
+    expect(judge([])).toMatch(/0 open ask row\(s\), not 3/);
+  });
+  it('wrong program: a row missing from the list fails, naming the count', () => {
+    expect(judge(R4B.slice(0, 3))).toMatch(/2 open ask row\(s\), not 3/);
+  });
+  it('wrong program: handle rows draw no row, so the list counts none', () => {
+    expect(judge(['ask:01MCBHM300GP83QANM5WDCWNNP How it looks', 'ask:02MCBHM300GP83QANM5WDCWNNQ How it looks', 'ask:03MCBHM300GP83QANM5WDCWNNR How it looks'].map((t) => line(t)))).toMatch(/0 open ask row\(s\), not 3/);
+  });
+  it('wrong program: rows drawn only on the page, right of the list\'s edge, don\'t count', () => {
+    expect(judge(R4B.map((l) => ({ ...l, box: [700, 0, 200, 20] })))).toMatch(/0 open ask row\(s\), not 3/);
+  });
+  it('control: a window that is all list (no edge, the popped view) counts every line', () => {
+    expect(rowLineFailures(R4B.map((l) => ({ ...l, box: [700, 0, 200, 20] })), asks, null, { open: 3, kept: 0 })).toEqual([]);
+  });
+  it('AC2: after the answer, two open rows and the answered row drawn answered pass; the answered row still open fails', () => {
+    const two = R4B.slice(0, 3);
+    expect(judge([...two, line('• ... answered 12:12')], 2, 1)).toBe('');
+    expect(judge(two, 2, 1)).toBe('');
+    expect(judge([...two, line('• ... How it looks tomorrow 16:49')], 2, 1)).toMatch(/3 open ask row\(s\), not 2/);
+  });
+  it('AC5: after the pop-out, a main window still drawing a row in its list fails', () => {
+    expect(rowLineFailures([line('Tasks'), line('Cart totals'), line('• ... How it looks tomorrow 16:49')], asks, 520, { open: 0, kept: 0 }).join('\n')).toMatch(/1 open ask row\(s\), not 0/);
   });
 });

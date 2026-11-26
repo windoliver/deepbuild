@@ -8,6 +8,7 @@ Fifth redraft (2026-11-24), of the fourth at c6bdfac2f, for a review's dispute t
 Sixth redraft (2026-11-25), of the fifth at 766efa508, for a dispute from a Mac run on AC2's answered row (below, Sixth redraft).
 Seventh redraft (2026-11-25), of the sixth at 3e7cd3fea, for a review's dispute that a right page fails the sixth (below, Seventh redraft).
 Eighth redraft (2026-11-25), of the seventh at 78c912ece, for a review's dispute on the word's case (below, Eighth redraft).
+Ninth redraft (2026-11-25), of the eighth at fa5de8990, for a Mac run's dispute that rows keeping their time draw no title (below, Ninth redraft).
 
 ## Why
 
@@ -471,3 +472,66 @@ Every other expectation and wrong program of the seventh stands.
 
 `npx vitest run --root tests/acceptance/1172 judges`: 1 file, 51 passed (46 before, 5 new). `npx tsc -p tests/acceptance/1172/tsconfig.json
 --noEmit`: clean. `shell.test.ts` AC2 was not run (it needs the Mac).
+
+## Ninth redraft (2026-11-25)
+
+Redrafted blind on fa5de8990 from #1172, the design, README, this folder and the text of #3282, #1808 and #1461; no
+implementation code and no PR was read.
+
+### The dispute
+
+Mac run R4b at fa5de8990 (main 02ee0dff4, which holds #3282's fix): AC1's main test timed out at 480 s, its mutant failed
+the same way, and AC2's precondition failed: `the window's pixels lack ask:…'s row with its question, whole or cut by an
+ellipsis after its first 10 letters and digits: they read ["Needs you","... How it looks tomorrow 16:49","• ... How it
+looks tomorrow 16:49",…]`. The rows are drawn; each title is cut to its ellipsis because the row now keeps its time.
+
+### Ruling: a row's title may be cut to nothing; the pixels count rows, the tree names them
+
+- #1808: "A title that doesn't fit its slot ends in an ellipsis at a whole character … The whole title is the row's
+  accessible name"; its 12-character floor ("At a 260-wide list every state word leaves at least 12 characters of title").
+- #3282, owner decision of 2026-11-19: "An ask row's time beats #1808's 12-character title floor; session rows keep 12";
+  its review: "Today's words leave about 50 px at 260". The R4b capture shows that leaves no title character at all.
+- So the third redraft's floor (`ROW_START`, 10 letters and digits, its "Still not settled 1") demands what the owner gave
+  away. And the fixture's three questions all start "Which", so a few characters couldn't tell asks apart anyway.
+
+Which ask a row belongs to is the tree's job (README item 2: each row one node whose name holds its whole question;
+#1808: the whole title is the accessible name), as AC1 to AC5 already judge it there. The pixels prove the rows are drawn,
+by count, in the list's region.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `askRowLine`: a line draws an ask row when it holds a fixture ask's whole question, or an ellipsis whose text before it (letters and digits only, so a mark is ignored) starts a question, any length including none, followed by some letter or digit (the right slots) | #1808's ellipsis; #3282; the design's row: "mark, title, then state word and time at the right edge" |
+| `listEdgePx`, `askRowLines`: only lines left of the list's edge count (the seventh's `listEdge` mapped into the capture by the window's frame); a window with no session row, the popped view, is all list | Design's two regions; #1461 "the list on the left"; the page's card draws its question whole and must not count |
+| `rowLineFailures`: exactly one open row line per wanted ask (zero lines fail), and at most one line reading answered per answered ask | AC1 "Needs you with 3 rows", AC2 "read 2", #1461's kept row; invariant 2 |
+| `shellFailuresDrawn`: `shellFailuresCard`'s checks with the seventh's tree judge (`askRowFailuresKept`) and this pixel count. `shell.test.ts`: AC1's main, spike and proof tests and AC2 before and after the answer all call it | As above |
+| `popout.test.ts`: `Seen.drawn` (per-ask `drawsRow`) becomes `rowLines`; `lacks` wants one row line per ask in the list's region (main window at launch and before the press; the whole popped window); after the pop-out the main window's list must draw none. The per-ask `starts` and card-share checks stay | As above; the owner decision of 2026-11-21 (the card stays on the page, outside the list) |
+| The seventh's `answeredListLineFailures` and `shellFailuresKept` are removed (no caller); their judge cases now read through `rowLineFailures`. Against main, `helpers.ts` still only adds lines; `drawsRow`, `ROW_START` and the older judges stay for other readers | AGENTS.md |
+| `judges.test.ts`: 19 new cases (51 before, 70 now), the R4b lines as controls | AGENTS.md, Proof |
+
+### Which wrong programs fail
+
+On the pixels: nothing seen; a row missing from the list (2 of 3); handle rows (`ask:01MC… How it looks`: not a
+question's start); a kind or time with no ellipsis; an ellipsis with nothing after it; a title clipped with no ellipsis;
+an ellipsis after text that isn't a question's start; rows drawn only right of the list's edge; AC2's answered row still
+drawn open (3 open, not 2), or reading "Not answered", "unanswered", "not yet answered"; two answered lines; AC5's main
+window still drawing a row in its list.
+
+Now resting on the tree alone: a row drawing another ask's question, or the right row under the wrong ask (the pixels
+can't tell "Which…" rows apart); which ask an answered line belongs to.
+
+### Still not settled
+
+1. **OCR splitting a row.** A row read as two lines (`…` alone, then `How it looks tomorrow 16:49`) counts as none and
+   fails. R4b read each row as one line.
+2. **The list's edge** (seventh, item 2), and the popped window counted whole: a popped view that also drew a card would
+   count its question line.
+3. **AC1's 480 s timeout.** The judge's `settled` gives up after 12 s, so the timeout isn't the pixel reading's; not
+   diagnosed here.
+4. Earlier items: the row leaving eventually (#1461), the page's wording, the menu bar.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 70 passed. `npx tsc -p tests/acceptance/1172/tsconfig.json
+--noEmit`: clean. `shell.test.ts` and `popout.test.ts` were not run (they need the Mac).
