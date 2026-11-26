@@ -1,0 +1,12 @@
+{
+  "scripts/proof-guard.mjs": [
+    {
+      "find": [
+        "      if (row(text) || /^#+ /.test(text)) edits.push({ line: newStart + index, detail: `${file.path}:${newStart + index}: ${row(text) ? what : `a heading under ${heading.slice(3)}`} added` });"
+      ],
+      "wrong": [
+        "      if (row(text) || /^#+ /.test(text)) edits.push({ hard: true, line: newStart + index, detail: `${file.path}:${newStart + index}: ${row(text) ? what : `a heading under ${heading.slice(3)}`} added` });"
+      ]
+    }
+  ]
+}
