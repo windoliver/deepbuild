@@ -1609,3 +1609,9 @@ timed.push('tests/acceptance/2750/budgets.test.ts');
 // only; its blind redraft, which runs the merge base's program beside the checkout's, runs in its place.
 Object.assign(redrafted, { 'tests/acceptance/3461/once.test.ts': 'tests/acceptance/3461-redraft-once/' });
 byHand.push('tests/acceptance/3461/once.test.ts');
+// #1828's AC3 runs as its blind redraft, 1828/redraft/: since #2062 a provider row that keeps no digest serves no use
+// that states one, and the first draft's acme/feed keeps none while acme/board states one, so its setup refuses to
+// install on main with or without the fix (tests/acceptance/1828/redraft/DISPUTE.md). update.test.ts is kept as
+// written, by hand only.
+Object.assign(redrafted, { 'tests/acceptance/1828/update.test.ts': 'tests/acceptance/1828/redraft/' });
+byHand.push('tests/acceptance/1828/update.test.ts');
