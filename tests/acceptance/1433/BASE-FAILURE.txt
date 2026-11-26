@@ -1,63 +1,69 @@
 #1433 acceptance tests at the base a1ef97760cbcc9935b8fdadd4a7bef586969ef4d (origin/main when the suite was written;
-its last merge is #3457), 2026-11-24, macOS, Node 24.22.0. Each test file was run alone, through the machine's
-throttle, in a checkout of the base with this folder added and nothing else: no build, no node_modules, no window, no
-GPU. Each grant came at once. A failure below is trimmed to its assertion: its diff and its stack are left out.
+its last merge is #3457), macOS, Node 24.22.0: the suite as redrafted on 2026-11-25 for the issue's new `Runs on:`
+line (README: Redraft, November 25). Each test file was run alone, once, through the machine's throttle, in a checkout
+of the base with this folder added and nothing else: no build, no node_modules, no window, no GPU. The Mac was the one
+the issue now names (Mac17,10, macOS build 26B8119), shared with other sessions. A first attempt at each file, with
+`--wait 60`, got no test grant in its wait and ran nothing; each was then asked once more with `--wait 480`, and
+those are the runs below. validate.test.mjs was asked at 21:57 UTC on 2026-11-25 and ran once its grant came, about
+2 h 45 min later; record.test.mjs was asked at 00:42 UTC on 2026-11-26 and ran about 10 min later. The
+one-minute load stood between 16.14 and 45.65 at the commands' starts and ends; no test here reads the machine or
+the clock. A failure below is trimmed to its assertion: its diff and its stack are left out.
 
-$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/1433/record.test.mjs   (exit 1)
+$ node scripts/throttle.mjs test --wait 480 -- node --test tests/acceptance/1433/record.test.mjs   (exit 1)
 test at tests/acceptance/1433/record.test.mjs:26:1
-✖ AC1 #1433.c0b58a25 canvas handoff: the slots show in the candidate's window with a translucent fixture and the #140 colour check, at under 1 ms at 1936 × 1584 over five runs, matching the headless canvas (3.15ms)
+✖ AC1 #1433.c0b58a25 canvas handoff: the slots show in the candidate's window with a translucent fixture and the #140 colour check, at under 1 ms at 1936 × 1584 over five runs, matching the headless canvas (1.440792ms)
   AssertionError [ERR_ASSERTION]: AC1 #1433.c0b58a25:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:28:1
-✖ AC2 #1433.8f63851f idle: the same window under canvas-idle has 0 frames and at most 1 wakeup over five runs (0.491209ms)
+✖ AC2 #1433.8f63851f idle: the same window under canvas-idle has 0 frames and at most 1 wakeup over five runs (0.13125ms)
   AssertionError [ERR_ASSERTION]: AC2 #1433.8f63851f:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:30:1
-✖ AC3 #1433.450e5804 long list and transcript: the 1,000-row list plus a streaming transcript, in a real window, in paired alternating runs, meets the 4 ms update budget at p99 and #337's cold-start, idle, memory and size numbers, for the candidate and for gpui-fast (0.39925ms)
+✖ AC3 #1433.450e5804 long list and transcript: the 1,000-row list plus a streaming transcript, in a real window, in paired alternating runs, meets the 4 ms update budget at p99 and #337's cold-start, idle, memory and size numbers, for the candidate and for gpui-fast (0.077542ms)
   AssertionError [ERR_ASSERTION]: AC3 #1433.450e5804:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:32:1
-✖ AC4 #1433.9d8646d2 a person types Pinyin, Kotoeri, dictation and the emoji picker into a text area with no lost composition, wrong commit or misplaced candidate window (0.384792ms)
+✖ AC4 #1433.9d8646d2 a person types Pinyin, Kotoeri, dictation and the emoji picker into a text area with no lost composition, wrong commit or misplaced candidate window (0.0595ms)
   AssertionError [ERR_ASSERTION]: AC4 #1433.9d8646d2:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:34:1
-✖ AC5 #1433.27d27bbc a person walks the window with VoiceOver, and deep-live finds its tree node-for-node equal to the headless dump (0.379542ms)
+✖ AC5 #1433.27d27bbc a person walks the window with VoiceOver, and deep-live finds its tree node-for-node equal to the headless dump (0.062166ms)
   AssertionError [ERR_ASSERTION]: AC5 #1433.27d27bbc:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:36:1
-✖ AC6 #1433.f1fbb5d2 a question card built with trusted_input.rs and the status item beside the candidate's window shell: nothing covers it, and a hardware press is told from a synthetic one (0.374416ms)
+✖ AC6 #1433.f1fbb5d2 a question card built with trusted_input.rs and the status item beside the candidate's window shell: nothing covers it, and a hardware press is told from a synthetic one (0.047875ms)
   AssertionError [ERR_ASSERTION]: AC6 #1433.f1fbb5d2:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:38:1
-✖ AC7 #1433.08e2511c claude-code/main.js loads through a shim and reaches panel-tree parity within the 4 ms update budget (0.208375ms)
+✖ AC7 #1433.08e2511c claude-code/main.js loads through a shim and reaches panel-tree parity within the 4 ms update budget (0.046708ms)
   AssertionError [ERR_ASSERTION]: AC7 #1433.08e2511c:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:40:1
-✖ AC8 #1433.1ed927b2 the record names, for every gate, the reading, its machine and its load, as its raw readings give them, and ends in one line per arm: fallback, or closed with the failed gate; an unrun gate leaves it INCONCLUSIVE (0.220542ms)
+✖ AC8 #1433.1ed927b2 the record names, for every gate, the reading, its machine and its load, as its raw readings give them, and ends in one line per arm: fallback, or closed with the failed gate; an unrun gate leaves it INCONCLUSIVE (0.056791ms)
   AssertionError [ERR_ASSERTION]: AC8 #1433.1ed927b2:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:44:1
-✖ AC9 #1433.ff47ac97 the gpui-fast arm's record names its version and every carried hunk, and a reading taken through the replica reads INCONCLUSIVE (0.494292ms)
+✖ AC9 #1433.ff47ac97 the gpui-fast arm's record names its version and every carried hunk, and a reading taken through the replica reads INCONCLUSIVE (0.0675ms)
   AssertionError [ERR_ASSERTION]: AC9 #1433.ff47ac97:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:48:1
-✖ AC10 #1433.667977ab with retention on and off, a recorded journey's frames in a real window are byte-equal (0.394708ms)
+✖ AC10 #1433.667977ab with retention on and off, a recorded journey's frames in a real window are byte-equal (0.084667ms)
   AssertionError [ERR_ASSERTION]: AC10 #1433.667977ab:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:50:1
-✖ AC10 #1433.667977ab a planted glyph page retired under a retained view fails the same check, naming the view (0.272125ms)
+✖ AC10 #1433.667977ab a planted glyph page retired under a retained view fails the same check, naming the view (0.0625ms)
   AssertionError [ERR_ASSERTION]: AC10 #1433.667977ab:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:52:1
-✖ AC11 #1433.5aa9696a a still window on the gpui-fast arm reads no GPU work on a ledger that counts every command buffer (0.145958ms)
+✖ AC11 #1433.5aa9696a a still window on the gpui-fast arm reads no GPU work on a ledger that counts every command buffer (0.045875ms)
   AssertionError [ERR_ASSERTION]: AC11 #1433.5aa9696a:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:54:1
-✖ AC11 #1433.5aa9696a a planted ledger that counts only the main render fails the same check (0.102958ms)
+✖ AC11 #1433.5aa9696a a planted ledger that counts only the main render fails the same check (0.042042ms)
   AssertionError [ERR_ASSERTION]: AC11 #1433.5aa9696a:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 test at tests/acceptance/1433/record.test.mjs:56:1
-✖ AC12 #1433.e587284a the gpui-fast arm gives its list reading for both state shapes, and one label changing at 1,000 and 3,000 live rows as views rendered, elements laid out and CPU, with retention on and off (0.09225ms)
+✖ AC12 #1433.e587284a the gpui-fast arm gives its list reading for both state shapes, and one label changing at 1,000 and 3,000 live rows as views rendered, elements laid out and CPU, with retention on and off (0.036792ms)
   AssertionError [ERR_ASSERTION]: AC12 #1433.e587284a:
   no spike record at docs/spikes/1433/record.json: the spike hasn't been recorded
 ℹ tests 14
@@ -67,91 +73,93 @@ test at tests/acceptance/1433/record.test.mjs:56:1
 All 14 fail at their own assertion, node:assert's deepEqual at record.test.mjs:16 (in `spike()`), for the reason each
 criterion names: the base holds no docs/spikes/1433/record.json, so no gate has a reading, the record has no lines and
 neither planted run is kept. None fails at load, in a helper's throw or at a deadline; none is skipped; none passes.
+record.test.mjs is byte for byte the earlier draft's, and these are the 14 failures its run of 2026-11-24 gave, each
+test's time aside; the validate.mjs and gates.json it loads are the redrafted ones.
 
-$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/1433/validate.test.mjs   (exit 0; the suite's own check of its validators: no test in it carries a criterion's ID)
-✔ validator: the well-formed spike passes every check, and each planted run fails its gate's own (1443.141625ms)
-✔ validator: the design's rule for five runs, the nearest rank and an arm's line (0.480417ms)
+$ node scripts/throttle.mjs test --wait 480 -- node --test tests/acceptance/1433/validate.test.mjs   (exit 0; the suite's own check of its validators: no test in it carries a criterion's ID)
+✔ validator: the well-formed spike passes every check, and each planted run fails its gate's own (602.517917ms)
+✔ validator: the design's rule for five runs, the nearest rank and an arm's line (0.181292ms)
 ▶ validator: each gate's check reads a wrong reading as its criterion says
-  ✔ candidate.canvas-handoff: a 1.25 ms handoff reads fail (52.550708ms)
-  ✔ candidate.canvas-handoff: a handoff of exactly 1 ms in one run reads inconclusive (63.005209ms)
-  ✔ candidate.canvas-handoff: a status swatch one code value off reads fail (12.561292ms)
-  ✔ candidate.canvas-handoff: no swatch for one status reads inconclusive (17.037792ms)
-  ✔ candidate.canvas-handoff: a slot that differs from the headless canvas reads fail (16.726084ms)
-  ✔ candidate.canvas-handoff: an opaque fixture reads inconclusive (19.087167ms)
-  ✔ candidate.canvas-handoff: a handoff at another size reads inconclusive (18.454583ms)
-  ✔ candidate.canvas-handoff: 299 frames a run reads inconclusive (14.102083ms)
-  ✔ candidate.canvas-handoff: four runs reads inconclusive (11.786375ms)
-  ✔ candidate.canvas-handoff: a reading on another reference Mac reads inconclusive (12.995083ms)
-  ✔ candidate.canvas-handoff: a load at the core count reads inconclusive (12.546875ms)
-  ✔ candidate.canvas-handoff: a reading on battery reads inconclusive (166.329667ms)
-  ✔ candidate.canvas-handoff: a thermal state of fair reads inconclusive (13.484041ms)
-  ✔ candidate.canvas-handoff: a debug build reads inconclusive (13.199125ms)
-  ✔ candidate.canvas-handoff: a run outside the resource lease reads inconclusive (11.730292ms)
-  ✔ candidate.canvas-handoff: a window AppKit never showed reads inconclusive (12.562292ms)
-  ✔ candidate.idle: a frame drawn while still reads fail (13.020833ms)
-  ✔ candidate.idle: a frame drawn while still, under load reads fail (12.093708ms)
-  ✔ candidate.idle: three wakeups a run reads fail (221.386708ms)
-  ✔ candidate.idle: a 5 s hold reads inconclusive (19.403084ms)
-  ✔ candidate.list-transcript: a 6 ms update at p99 reads fail (70.108708ms)
-  ✔ candidate.list-transcript: one 9 ms update in 200 reads pass (16.101167ms)
-  ✔ candidate.list-transcript: a 1.2 s cold start reads fail (18.652ms)
-  ✔ gpui-fast.list-transcript: idle CPU at 1.5% reads fail (12.837833ms)
-  ✔ candidate.list-transcript: 250 MB of memory reads fail (147.048166ms)
-  ✔ candidate.list-transcript: a 70 MB app reads fail (11.558208ms)
-  ✔ candidate.list-transcript: a 999-row list reads inconclusive (61.996958ms)
-  ✔ candidate.list-transcript: no transcript streaming reads inconclusive (15.95275ms)
-  ✔ candidate.list-transcript: the candidate first in every pair reads inconclusive (15.1865ms)
-  ✔ gpui-fast.list-transcript: another transcript than the other arm's reads inconclusive (12.083833ms)
-  ✔ candidate.list-transcript: no run of the other arm to pair with reads inconclusive (36.66375ms)
-  ✔ gpui-fast.list-transcript: no run of a closed arm to pair with reads pass (13.015167ms)
-  ✔ gpui-fast.list-transcript: the list in the shape the app doesn't ship reads inconclusive (40.770917ms)
-  ✔ candidate.text-input: a wrong commit with Kotoeri reads fail (13.36875ms)
-  ✔ candidate.text-input: dictation never tried reads inconclusive (16.7865ms)
-  ✔ candidate.text-input: typing no person did reads inconclusive (14.7535ms)
-  ✔ candidate.accessibility: a node whose bounds differ reads fail (17.986833ms)
-  ✔ candidate.accessibility: a headless dump one node short reads fail (13.858041ms)
-  ✔ candidate.accessibility: a tree read with VoiceOver off reads inconclusive (174.285959ms)
-  ✔ candidate.accessibility: a tree deep-live didn't read reads inconclusive (150.159417ms)
-  ✔ candidate.question-card: a window over the card reads fail (17.0655ms)
-  ✔ candidate.question-card: a synthetic press told as hardware reads fail (22.576375ms)
-  ✔ candidate.question-card: no hardware press reads inconclusive (18.06075ms)
-  ✔ candidate.question-card: a card built with another trusted_input.rs reads inconclusive (14.205542ms)
-  ✔ candidate.question-card: no status item reads inconclusive (21.260542ms)
-  ✔ candidate.panel: a panel tree with one prop changed reads fail (27.186084ms)
-  ✔ candidate.panel: an edited panel reads inconclusive (16.277166ms)
-  ✔ candidate.panel: an 8 ms panel update reads fail (25.078375ms)
-  ✔ gpui-fast.retention-frames: a frame that differs under retention reads fail (18.549583ms)
-  ✔ gpui-fast.retention-frames: a frame fewer with retention on reads fail (16.997833ms)
-  ✔ gpui-fast.retention-frames: retention on, with no view drawn again reads inconclusive (18.265417ms)
-  ✔ gpui-fast.retention-frames: retention off, with views drawn again reads inconclusive (19.701417ms)
-  ✔ gpui-fast.retention-frames: retention off by another switch reads inconclusive (11.539875ms)
-  ✔ gpui-fast.retention-frames: another journey with retention off reads inconclusive (76.657125ms)
-  ✔ gpui-fast.retention-frames: frames taken through the replica reads inconclusive (13.333041ms)
-  ✔ gpui-fast.still-ledger: a command buffer while still reads fail (14.093084ms)
-  ✔ gpui-fast.still-ledger: a ledger that misses a layer path's buffer reads fail (51.462375ms)
-  ✔ gpui-fast.still-ledger: no layer path before the window went still reads inconclusive (14.953917ms)
-  ✔ gpui-fast.still-ledger: no still vsync reads inconclusive (17.1765ms)
-  ✔ gpui-fast.list-shapes: the own shape with one holder of state reads inconclusive (20.007208ms)
-  ✔ gpui-fast.list-shapes: no label reading at 3,000 live rows reads inconclusive (21.941208ms)
-  ✔ gpui-fast.list-shapes: a label frame with no element count reads inconclusive (30.236541ms)
-  ✔ gpui-fast.list-shapes: a list reading with retention off that drew views again reads inconclusive (28.5905ms)
-  ✔ gpui-fast.list-shapes: a list reading at a load of 9 reads inconclusive (50.901166ms)
-  ✔ gpui-fast.list-shapes: a list reading at a load just under the cores reads pass (24.651875ms)
-✔ validator: each gate's check reads a wrong reading as its criterion says (2232.412625ms)
-✔ validator: a gate that isn't decided is INCONCLUSIVE, a person's gate nobody took is BLOCKED, and neither passes (777.015125ms)
-✔ validator: a failed gate is the spike's result: it holds when the record ends the arm closed with it, and the gates left unread hold with it (720.24175ms)
-✔ validator: the record is held to what is kept: its readings, its cited files, the gates fixed first and its folder (2690.141541ms)
-✔ validator: a planted run that doesn't fail its gate's check, or fails it without naming its view, proves nothing (669.359208ms)
-✔ AC8 rejects a planted wrong record: a gate left without its reading (157.373875ms)
-✔ AC8 rejects a planted wrong record: a gate left without its machine (141.9755ms)
-✔ AC8 rejects a planted wrong record: a gate left without its load (94.7085ms)
-✔ AC8 rejects a planted wrong record: an arm that ends fallback with a gate unrun, which leaves it INCONCLUSIVE (182.733958ms)
-✔ AC8 rejects a planted wrong record: an arm that ends fallback with a gate failed, which closes it with that gate (209.30525ms)
-✔ AC9 rejects a planted wrong record: a gpui-fast arm that leaves out its version (149.742333ms)
-✔ AC9 rejects a planted wrong record: a gpui-fast arm that leaves out a carried hunk (170.168417ms)
-✔ AC9 rejects a planted wrong record: a replica's reading taken as the window's, which reads INCONCLUSIVE (630.325ms)
-✔ AC12 rejects a planted wrong record: a list reading with one state shape, which reads INCONCLUSIVE for the list (311.689917ms)
-✔ AC12 rejects a planted wrong record: a list reading from a bench whose panels each own their state, which reads INCONCLUSIVE for the list (270.092875ms)
+  ✔ candidate.canvas-handoff: a 1.25 ms handoff reads fail (8.456417ms)
+  ✔ candidate.canvas-handoff: a handoff of exactly 1 ms in one run reads inconclusive (5.814292ms)
+  ✔ candidate.canvas-handoff: a status swatch one code value off reads fail (6.097625ms)
+  ✔ candidate.canvas-handoff: no swatch for one status reads inconclusive (5.831167ms)
+  ✔ candidate.canvas-handoff: a slot that differs from the headless canvas reads fail (5.90675ms)
+  ✔ candidate.canvas-handoff: an opaque fixture reads inconclusive (6.400333ms)
+  ✔ candidate.canvas-handoff: a handoff at another size reads inconclusive (4.993ms)
+  ✔ candidate.canvas-handoff: 299 frames a run reads inconclusive (10.328ms)
+  ✔ candidate.canvas-handoff: four runs reads inconclusive (9.533667ms)
+  ✔ candidate.canvas-handoff: a reading on another reference Mac reads inconclusive (6.277ms)
+  ✔ candidate.canvas-handoff: a load at the core count reads inconclusive (4.963042ms)
+  ✔ candidate.canvas-handoff: a reading on battery reads inconclusive (5.240375ms)
+  ✔ candidate.canvas-handoff: a thermal state of fair reads inconclusive (5.131625ms)
+  ✔ candidate.canvas-handoff: a debug build reads inconclusive (6.21125ms)
+  ✔ candidate.canvas-handoff: a run outside the resource lease reads inconclusive (5.458417ms)
+  ✔ candidate.canvas-handoff: a window AppKit never showed reads inconclusive (6.156917ms)
+  ✔ candidate.idle: a frame drawn while still reads fail (5.865042ms)
+  ✔ candidate.idle: a frame drawn while still, under load reads fail (6.095583ms)
+  ✔ candidate.idle: three wakeups a run reads fail (5.966334ms)
+  ✔ candidate.idle: a 5 s hold reads inconclusive (5.949625ms)
+  ✔ candidate.list-transcript: a 6 ms update at p99 reads fail (5.945792ms)
+  ✔ candidate.list-transcript: one 9 ms update in 200 reads pass (6.075291ms)
+  ✔ candidate.list-transcript: a 1.2 s cold start reads fail (5.859041ms)
+  ✔ gpui-fast.list-transcript: idle CPU at 1.5% reads fail (6.589458ms)
+  ✔ candidate.list-transcript: 250 MB of memory reads fail (5.802542ms)
+  ✔ candidate.list-transcript: a 70 MB app reads fail (6.081042ms)
+  ✔ candidate.list-transcript: a 999-row list reads inconclusive (5.236583ms)
+  ✔ candidate.list-transcript: no transcript streaming reads inconclusive (5.274958ms)
+  ✔ candidate.list-transcript: the candidate first in every pair reads inconclusive (6.629583ms)
+  ✔ gpui-fast.list-transcript: another transcript than the other arm's reads inconclusive (6.635667ms)
+  ✔ candidate.list-transcript: no run of the other arm to pair with reads inconclusive (5.779667ms)
+  ✔ gpui-fast.list-transcript: no run of a closed arm to pair with reads pass (6.108042ms)
+  ✔ gpui-fast.list-transcript: the list in the shape the app doesn't ship reads inconclusive (5.277666ms)
+  ✔ candidate.text-input: a wrong commit with Kotoeri reads fail (6.369708ms)
+  ✔ candidate.text-input: dictation never tried reads inconclusive (5.138583ms)
+  ✔ candidate.text-input: typing no person did reads inconclusive (7.578042ms)
+  ✔ candidate.accessibility: a node whose bounds differ reads fail (6.716333ms)
+  ✔ candidate.accessibility: a headless dump one node short reads fail (6.611ms)
+  ✔ candidate.accessibility: a tree read with VoiceOver off reads inconclusive (6.513417ms)
+  ✔ candidate.accessibility: a tree deep-live didn't read reads inconclusive (6.169417ms)
+  ✔ candidate.question-card: a window over the card reads fail (6.773208ms)
+  ✔ candidate.question-card: a synthetic press told as hardware reads fail (6.203875ms)
+  ✔ candidate.question-card: no hardware press reads inconclusive (5.901792ms)
+  ✔ candidate.question-card: a card built with another trusted_input.rs reads inconclusive (5.607583ms)
+  ✔ candidate.question-card: no status item reads inconclusive (5.468459ms)
+  ✔ candidate.panel: a panel tree with one prop changed reads fail (6.018542ms)
+  ✔ candidate.panel: an edited panel reads inconclusive (6.296541ms)
+  ✔ candidate.panel: an 8 ms panel update reads fail (6.107959ms)
+  ✔ gpui-fast.retention-frames: a frame that differs under retention reads fail (5.773667ms)
+  ✔ gpui-fast.retention-frames: a frame fewer with retention on reads fail (6.010125ms)
+  ✔ gpui-fast.retention-frames: retention on, with no view drawn again reads inconclusive (5.963458ms)
+  ✔ gpui-fast.retention-frames: retention off, with views drawn again reads inconclusive (6.04775ms)
+  ✔ gpui-fast.retention-frames: retention off by another switch reads inconclusive (6.163375ms)
+  ✔ gpui-fast.retention-frames: another journey with retention off reads inconclusive (5.182667ms)
+  ✔ gpui-fast.retention-frames: frames taken through the replica reads inconclusive (5.167833ms)
+  ✔ gpui-fast.still-ledger: a command buffer while still reads fail (6.523542ms)
+  ✔ gpui-fast.still-ledger: a ledger that misses a layer path's buffer reads fail (6.491875ms)
+  ✔ gpui-fast.still-ledger: no layer path before the window went still reads inconclusive (5.443ms)
+  ✔ gpui-fast.still-ledger: no still vsync reads inconclusive (5.391125ms)
+  ✔ gpui-fast.list-shapes: the own shape with one holder of state reads inconclusive (5.531ms)
+  ✔ gpui-fast.list-shapes: no label reading at 3,000 live rows reads inconclusive (5.090208ms)
+  ✔ gpui-fast.list-shapes: a label frame with no element count reads inconclusive (7.078375ms)
+  ✔ gpui-fast.list-shapes: a list reading with retention off that drew views again reads inconclusive (7.884166ms)
+  ✔ gpui-fast.list-shapes: a list reading at a load of 19 reads inconclusive (5.984ms)
+  ✔ gpui-fast.list-shapes: a list reading at a load just under the cores reads pass (8.09175ms)
+✔ validator: each gate's check reads a wrong reading as its criterion says (407.066958ms)
+✔ validator: a gate that isn't decided is INCONCLUSIVE, a person's gate nobody took is BLOCKED, and neither passes (136.702625ms)
+✔ validator: a failed gate is the spike's result: it holds when the record ends the arm closed with it, and the gates left unread hold with it (102.075167ms)
+✔ validator: the record is held to what is kept: its readings, its cited files, the gates fixed first and its folder (354.534292ms)
+✔ validator: a planted run that doesn't fail its gate's check, or fails it without naming its view, proves nothing (124.05825ms)
+✔ AC8 rejects a planted wrong record: a gate left without its reading (19.809667ms)
+✔ AC8 rejects a planted wrong record: a gate left without its machine (19.750125ms)
+✔ AC8 rejects a planted wrong record: a gate left without its load (19.012042ms)
+✔ AC8 rejects a planted wrong record: an arm that ends fallback with a gate unrun, which leaves it INCONCLUSIVE (39.861584ms)
+✔ AC8 rejects a planted wrong record: an arm that ends fallback with a gate failed, which closes it with that gate (39.818791ms)
+✔ AC9 rejects a planted wrong record: a gpui-fast arm that leaves out its version (37.897417ms)
+✔ AC9 rejects a planted wrong record: a gpui-fast arm that leaves out a carried hunk (37.434041ms)
+✔ AC9 rejects a planted wrong record: a replica's reading taken as the window's, which reads INCONCLUSIVE (99.744333ms)
+✔ AC12 rejects a planted wrong record: a list reading with one state shape, which reads INCONCLUSIVE for the list (36.509875ms)
+✔ AC12 rejects a planted wrong record: a list reading from a bench whose panels each own their state, which reads INCONCLUSIVE for the list (37.765667ms)
 ℹ tests 82
 ℹ pass 82
 ℹ fail 0
@@ -164,15 +172,21 @@ All 82 pass at the base, 17 tests and the 65 cases under the third, and each sho
   copies of the same synthetic spike. Each passes when the check its criterion's test in record.test.mjs runs fails
   the planted record, naming what the criterion names. They read no spike either.
 
-One finding of these runs, and its fix. The first run of validate.test.mjs at the base (the same command, exit 0, 82
-of 82) showed ten tests passing there under a criterion's ID: `AC8 #1433.1ed927b2 rejects a planted wrong record: …`
-(5), `AC9 #1433.ff47ac97 rejects a planted wrong record: …` (3) and `AC12 #1433.e587284a rejects a planted wrong
-record: …` (2). A test that carries a criterion's ID is that criterion's proof to the lanes, and one that passes on the
-merge base, with no twin and no mutant to fail it, fails the before lane ("passed on the merge base",
-scripts/proof-runs.mjs). These ten read no spike, so no work could make them fail there. The ID was taken out of those
-ten names, which now start `AC8 rejects`, `AC9 rejects` and `AC12 rejects`; no assertion, no validator and no other
-test changed. validate.test.mjs was then run once more, and the lines above are that run's. Criteria 8, 9 and 12 keep
-their tests in record.test.mjs, which fail at the base as listed.
+What the redraft changed in this run, against the earlier draft's of 2026-11-24. The synthetic spike is one read on
+the Mac17,10 under the redrafted gates, and seven cases plant another wrong record than they did, each still failing
+the check its well-formed twin passes:
+- `a reading on another reference Mac` is now one on the Air (Mac15,12), a machine the `Runs on:` line doesn't name,
+  and reads inconclusive as "read off the reference MacBook Pro"; the test of a gate that isn't decided reads one on
+  the design's other MacBook Pro (Mac15,7) the same way.
+- `a load at the core count` is 18, and reads inconclusive as "at or above the MacBook Pro's 18 cores";
+  `a list reading at a load of 19` was `at a load of 9`; `a list reading at a load just under the cores` is 17.9,
+  above the 8 cores the earlier gates named, and passes.
+- The record whose machine isn't its raw reading's is told that reading's Mac17,10; the reading under other gates is
+  stamped with the earlier gates.json's sha256, and is refused.
+One test's name differs, the case at a load of 19; no other name and no result does, and no finding came of these
+runs: no test, validator, fixture or gates file was changed for them or after them. The earlier draft's finding
+stands as fixed there: the ten `AC8`, `AC9` and `AC12` tests above carry no criterion's ID, since they pass on the
+merge base.
 
 Not run: the proof lanes themselves. scripts/proof-change.mjs imports typescript, and this checkout holds no
 node_modules, so what the before lane says of a tagged test that passes on the merge base is read from its source,

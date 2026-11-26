@@ -1,14 +1,15 @@
 // A synthetic well-formed spike for #1433, in the formats README.md gives: the record, its copy of the gates and
-// every raw reading, as a right spike on the reference Air would keep them. It is the worked example of each format
-// and the well-formed input validate.test.mjs alters into each planted wrong record. Nothing here is a reading of
-// anything: every number is made up, and chosen so the reading a record names can be written down by hand.
+// every raw reading, as a right spike on the reference MacBook Pro (Mac17,10) would keep them. It is the worked
+// example of each format and the well-formed input validate.test.mjs alters into each planted wrong record. Nothing
+// here is a reading of anything: every number is made up, and chosen so the reading a record names can be written
+// down by hand; the machine is the one the gates name, with a macOS build such a Mac runs.
 // What it takes from this checkout is read at BASE, the commit the suite was written on.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { carriedAt, fileAt, GATES, GATES_SHA256, ISSUE, lockedAt, lookAt, sha256, SPIKE } from './validate.mjs';
 
 export const BASE = 'a1ef97760cbcc9935b8fdadd4a7bef586969ef4d';
-export const AIR = { model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 17179869184, power: 'ac', lowPowerMode: false, thermalState: 'nominal', macosBuild: '24G90' };
+export const PRO = { model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 68719476736, power: 'ac', lowPowerMode: false, thermalState: 'nominal', macosBuild: '26B8119' };
 const HARNESS = { candidate: sha256('the candidate arm\'s harness binary'), 'gpui-fast': sha256('the gpui-fast arm\'s harness binary') };
 const SWITCH = GATES.gates['retention-frames'].off_switch;
 const T0 = Date.parse('2026-11-26T09:00:00.000Z');
@@ -20,7 +21,7 @@ const runs = (n, each = () => ({}), at = (i) => i * 120) => Array.from({ length:
 /** What every raw reading says of itself, then the gate's own fields. */
 const raw = (arm, gate, body) => ({
   spike: ISSUE, arm, gate, gates: GATES_SHA256, harness: HARNESS[arm], profile: 'release',
-  command: `scripts/lease ./harness --arm ${arm} --gate ${gate}`, machine: { ...AIR }, surface: 'window', ...body,
+  command: `scripts/lease ./harness --arm ${arm} --gate ${gate}`, machine: { ...PRO }, surface: 'window', ...body,
 });
 
 // 200 updates whose 99th percentile by nearest rank is 2 ms while the slowest took 3.
@@ -101,7 +102,7 @@ export function wellFormed() {
     'raw/gpui-fast-still-ledger.planted.json': { ...raw('gpui-fast', 'still-ledger', { runs: runs(1, () => ({ vsyncs: vsyncs([false, 1, 1, 1], [true, 0, 1, 0]) })) }), harness: sha256('the harness built with the planted ledger'), planted: 'ledger-main-only' },
     'raw/gpui-fast-list-shapes.json': raw('gpui-fast', 'list-shapes', { subject: 'list', ships: 'shared', runs: runs(8, (i) => CELLS[i]) }),
   };
-  const gate = (status, reading, file, more = {}) => ({ status, reading, machine: { ...AIR }, load: 1.75, raw: { file }, ...more });
+  const gate = (status, reading, file, more = {}) => ({ status, reading, machine: { ...PRO }, load: 1.75, raw: { file }, ...more });
   const record = {
     spike: ISSUE,
     base: BASE,

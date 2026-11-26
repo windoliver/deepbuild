@@ -1,7 +1,7 @@
 {
   "issue": 1433,
   "what": "The gates of the spike, fixed before the first run: each is a criterion of the issue with the issue's and the design's values. The spike keeps a byte-for-byte copy as docs/spikes/1433/gates.json, and every raw reading names this file's sha256.",
-  "runs_on": { "model": "Mac15,12", "chip": "Apple M3", "memoryBytes": 17179869184, "cores": 8 },
+  "runs_on": { "model": "Mac17,10", "chip": "Apple M5 Max", "memoryBytes": 68719476736, "cores": 18 },
   "conditions": { "power": "ac", "lowPowerMode": false, "thermalState": "nominal" },
   "runs": 5,
   "arms": {

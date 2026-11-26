@@ -81,8 +81,8 @@ const READINGS = [
   ['a handoff at another size', 'candidate.canvas-handoff', 'inconclusive', /slot\.size_px is \[1512,982\], not 1936 × 1584/, (raw) => { raw.slot.size_px = [1512, 982]; }],
   ['299 frames a run', 'candidate.canvas-handoff', 'inconclusive', /at least 300 frames/, (raw) => all(raw, (run) => { run.frame_ms.pop(); })],
   ['four runs', 'candidate.canvas-handoff', 'inconclusive', /the reading holds 4 runs; a limit is judged on 5/, (raw) => { raw.runs.pop(); }],
-  ['a reading on another reference Mac', 'candidate.canvas-handoff', 'inconclusive', /read off the reference Air \(model "Mac17,10"/, (raw) => Object.assign(raw.machine, { model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 64 * 2 ** 30 })],
-  ['a load at the core count', 'candidate.canvas-handoff', 'inconclusive', /is a reading, not a result: a one-minute load of 8 at a run's start or end is at or above the Air's 8 cores/, (raw) => { raw.runs[3].load.end = 8; }],
+  ['a reading on another reference Mac', 'candidate.canvas-handoff', 'inconclusive', /read off the reference MacBook Pro \(model "Mac15,12", chip "Apple M3", memoryBytes 17179869184; the issue runs on Mac17,10, Apple M5 Max, 68719476736 bytes\)/, (raw) => Object.assign(raw.machine, { model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30 })],
+  ['a load at the core count', 'candidate.canvas-handoff', 'inconclusive', /is a reading, not a result: a one-minute load of 18 at a run's start or end is at or above the MacBook Pro's 18 cores/, (raw) => { raw.runs[3].load.end = 18; }],
   ['a reading on battery', 'candidate.canvas-handoff', 'inconclusive', /power is "battery", not "ac"/, (raw) => { raw.machine.power = 'battery'; }],
   ['a thermal state of fair', 'candidate.canvas-handoff', 'inconclusive', /thermalState is "fair", not "nominal"/, (raw) => { raw.machine.thermalState = 'fair'; }],
   ['a debug build', 'candidate.canvas-handoff', 'inconclusive', /only a release build is timed/, (raw) => { raw.profile = 'debug'; }],
@@ -135,8 +135,8 @@ const READINGS = [
   ['no label reading at 3,000 live rows', 'gpui-fast.list-shapes', 'inconclusive', /no run for one label changing at 3000 live rows with retention off/, (raw) => { raw.runs = raw.runs.filter((r) => !(r.kind === 'label' && r.live_rows === 3000 && r.retention === 'off')); }],
   ['a label frame with no element count', 'gpui-fast.list-shapes', 'inconclusive', /one label changing at 1000 live rows with retention on: each frame gives rendered/, (raw) => { delete raw.runs.find((r) => r.kind === 'label' && r.live_rows === 1000 && r.retention === 'on').frames[3].elements; }],
   ['a list reading with retention off that drew views again', 'gpui-fast.list-shapes', 'inconclusive', /the list in the shared shape .* with retention off: 12 views were drawn again/, (raw) => { raw.runs.find((r) => r.kind === 'list' && r.shape === 'shared' && r.retention === 'off').reused = 12; }],
-  ['a list reading at a load of 9', 'gpui-fast.list-shapes', 'inconclusive', /its update times and CPU are readings, not results: a one-minute load of 9/, (raw) => { raw.runs[0].load.start = 9; }],
-  ['a list reading at a load just under the cores', 'gpui-fast.list-shapes', 'pass', null, (raw) => { raw.runs[0].load.start = 7.9; }],
+  ['a list reading at a load of 19', 'gpui-fast.list-shapes', 'inconclusive', /its update times and CPU are readings, not results: a one-minute load of 19/, (raw) => { raw.runs[0].load.start = 19; }],
+  ['a list reading at a load just under the cores', 'gpui-fast.list-shapes', 'pass', null, (raw) => { raw.runs[0].load.start = 17.9; }],
 ];
 test('validator: each gate\'s check reads a wrong reading as its criterion says', async (t) => {
   for (const [name, at, status, pattern, mutate] of READINGS) {
@@ -157,8 +157,8 @@ test('validator: a gate that isn\'t decided is INCONCLUSIVE, a person\'s gate no
   const record = on(honest, recordProblems);
   assert.equal(record.length, 1, record.join('\n'));
   assert.match(record[0], /^INCONCLUSIVE: the candidate arm ends "INCONCLUSIVE: accessibility, panel": accessibility \(no person has taken it .*\); panel \(unrun: the shim isn't written\)$/);
-  rejects(on((record, files) => { files[RAW['candidate.idle']].machine.model = 'Mac17,10'; Object.assign(record.arms.candidate.gates.idle, { status: 'inconclusive', why: 'read off the Air', machine: files[RAW['candidate.idle']].machine }); record.lines.candidate = 'INCONCLUSIVE: idle'; },
-    (record, dir) => gateProblems('idle', record, dir).problems), /^INCONCLUSIVE: candidate idle: read off the reference Air \(model "Mac17,10"/);
+  rejects(on((record, files) => { Object.assign(files[RAW['candidate.idle']].machine, { model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30 }); Object.assign(record.arms.candidate.gates.idle, { status: 'inconclusive', why: 'read on the design\'s other MacBook Pro', machine: files[RAW['candidate.idle']].machine }); record.lines.candidate = 'INCONCLUSIVE: idle'; },
+    (record, dir) => gateProblems('idle', record, dir).problems), /^INCONCLUSIVE: candidate idle: read off the reference MacBook Pro \(model "Mac15,7", chip "Apple M3 Pro", memoryBytes 38654705664; the issue runs on Mac17,10/);
 });
 
 test('validator: a failed gate is the spike\'s result: it holds when the record ends the arm closed with it, and the gates left unread hold with it', () => {
@@ -178,12 +178,13 @@ test('validator: a failed gate is the spike\'s result: it holds when the record 
 test('validator: the record is held to what is kept: its readings, its cited files, the gates fixed first and its folder', () => {
   rejects(on((record) => { record.arms.candidate.gates.idle.reading.wakeups = [0, 0, 0, 0, 0]; }, recordProblems), /candidate\.idle: reading is \{"frames":\[0,0,0,0,0\],"wakeups":\[0,0,0,0,0\]\}; its raw reading gives \{"frames":\[0,0,0,0,0\],"wakeups":\[0,1,0,0,1\]\}/);
   rejects(on((record) => { record.arms.candidate.gates.idle.load = 0.4; }, recordProblems), /candidate\.idle: load is 0\.4; its raw reading gives 1\.75/);
-  rejects(on((record) => { record.arms['gpui-fast'].gates['still-ledger'].machine.model = 'Mac15,7'; }, recordProblems), /gpui-fast\.still-ledger: machine is .*"Mac15,7".*; its raw reading gives .*"Mac15,12"/);
+  rejects(on((record) => { record.arms['gpui-fast'].gates['still-ledger'].machine.model = 'Mac15,7'; }, recordProblems), /gpui-fast\.still-ledger: machine is .*"Mac15,7".*; its raw reading gives .*"Mac17,10"/);
   rejects(on(() => {}, recordProblems, (root) => appendFileSync(join(root, RAW['candidate.idle']), ' ')), /BLOCKED: candidate\.idle: sha256 of raw\/candidate-idle\.json is not what the record says/);
   rejects(on((record, files) => { files[RAW['candidate.panel']] = null; }, recordProblems), /BLOCKED: candidate\.panel: raw\/candidate-panel\.json is not kept with the spike/);
   rejects(on((record) => { record.arms.candidate.gates.idle.raw.file = '../1477/record.json'; }, recordProblems), /is not a path inside docs\/spikes\/1433\//);
   rejects(on((record, files) => { files['gates.json'] = files['gates.json'].replace('"frame_ms_under": 1,', '"frame_ms_under": 2,'); }, recordProblems), /docs\/spikes\/1433\/gates\.json is not tests\/acceptance\/1433\/gates\.json byte for byte: the gates are fixed before the first run/);
-  rejects(on((record, files) => { files[RAW['candidate.idle']].gates = '0'.repeat(64); }, recordProblems), /candidate\.idle: raw\/candidate-idle\.json wasn't read under the gates fixed before the first run/);
+  // The sha256 of gates.json as drafted on 2026-11-24, for the Air: a reading stamped with it was read under other gates.
+  rejects(on((record, files) => { files[RAW['candidate.idle']].gates = '2bdeff35b4c39b62f485761451cf497842dc0f5a77c663f40026e0559a1a3888'; }, recordProblems), /candidate\.idle: raw\/candidate-idle\.json wasn't read under the gates fixed before the first run \(gates is "2bdeff35b4c39b62f485761451cf497842dc0f5a77c663f40026e0559a1a3888", not the sha256 of gates\.json\)/);
   rejects(on((record, files) => { files[RAW['candidate.idle']].harness = '1'.repeat(64); }, recordProblems), /candidate\.idle: raw\/candidate-idle\.json was taken by another binary than the arm's harness/);
   rejects(on((record, files) => { files[RAW['candidate.idle']].gate = 'panel'; }, recordProblems), /candidate\.idle: raw\/candidate-idle\.json is a reading of "candidate" "panel"/);
   rejects(on(() => {}, recordProblems, (root) => writeFileSync(join(root, 'harness.rs'), 'fn main() {}\n')), /docs\/spikes\/1433\/harness\.rs is neither the record, the gates nor a file the record cites/);

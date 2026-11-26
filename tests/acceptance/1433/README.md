@@ -1,9 +1,9 @@
 # Acceptance tests for #1433: a second toolkit and gpui-kit's fast backend against the app's must-haves
 
 Written first, blind, from issue #1433 (its body; it has no comments), the design sections it links and those they
-lean on, and base commit `a1ef97760` (origin/main, last merge #3457), by a job that never saw the work; none existed.
-The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job
-(design: Dogfooding).
+lean on, and base commit `a1ef97760` (origin/main, last merge #3457), by a job that never saw the work: none existed
+when the suite was drafted on 2026-11-24, and the redraft of 2026-11-25 saw none either. The implementing agent
+doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job (design: Dogfooding).
 
 The issue is a spike. It adds nothing to main but what it keeps in `docs/spikes/1433/`: a record, the gates it fixed
 and the raw readings the record cites. These tests check what is kept there and nothing else. They take no reading
@@ -11,9 +11,56 @@ and run no harness: each gate's verdict, each reading the record names and each 
 the kept raw readings and compared with the record (invariant 1). The harness is throwaway and outside the checkout,
 so no test can see it.
 
+## Redraft, November 25: the machine the issue runs on
+
+On 2026-11-25 the owner changed one line of the issue and nothing else:
+
+```
+before: **Runs on:** Mac only, on the reference Air.
+after:  **Runs on:** Mac only, on the reference MacBook Pro (Mac17,10, M5 Max).
+```
+
+The twelve criteria are word for word what they were, so their IDs are the same. The suite of 2026-11-24 read the old
+line. This redraft settles again, from the new line and the design (The reference Macs; Every task carries its own
+budgets; `docs/parallel-proof.md` sections 6 and 12a), what the old line had settled, and changes nothing else:
+
+- **The machine a reading counts on** is the third of the design's reference Macs: `Mac17,10`, `Apple M5 Max`,
+  68,719,476,736 bytes (was `Mac15,12`, `Apple M3`, 17,179,869,184). `gates.json`'s `runs_on` says so, and no other
+  byte of that file changed. A reading on the Air now reads `inconclusive`, as one on the Mac15,7 does: the line names
+  one Mac (reading 3).
+- **The load bound** is that Mac's 18 cores (was the Air's 8), `runs_on.cores`: a one-minute load at or above 18 at a
+  timed run's start or end makes it a reading. The rule, 12a's "at or above the cores", is unchanged.
+- **The gates' sha256** is therefore new: `985cbda74da94b32847f9f9cd45361969781911fc321eed08a5e27d29c536e92` (was
+  `2bdeff35b4c39b62f485761451cf497842dc0f5a77c663f40026e0559a1a3888`). The spike's copy of `gates.json`, the record's
+  `gates.sha256` and every raw reading's `gates` are held to the new one. A raw reading stamped with the earlier one
+  doesn't count: its gate's test and criterion 8's fail, saying it "wasn't read under the gates fixed before the first
+  run". Those gates counted a reading on the Air only, so nothing read under them counts on the Mac the issue now
+  names. A reading is taken again under these gates; a test can't tell that from the old file with a new stamp
+  (reading 2).
+- **The words.** The checks say `read off the reference MacBook Pro (…)` and `at or above the MacBook Pro's 18 cores`
+  where they said "the reference Air" and "the Air's 8 cores". In this suite "the MacBook Pro" is always the Mac17,10,
+  never the design's other 16-inch MacBook Pro, the Mac15,7.
+- **What follows from those.** `fixture.mjs`'s machine (its export `AIR` is now `PRO`, with a macOS build such a Mac
+  runs). Seven cases of `validate.test.mjs`: the other reference Mac is the Air, and the Mac15,7 where a gate's test
+  reads one; the loads are 18, 19 and 17.9 where they were 8, 9 and 7.9; the record that disagrees with its raw
+  reading is told that reading's `Mac17,10`; the reading under other gates carries the earlier sha256. This README's
+  examples, "What counts", reading 3 and criterion 1's row. `BASE-FAILURE.txt`, from the redraft's own runs (below).
+  And where this README (twice) and `validate.mjs` (once) said the gates were written before the work, they say by a
+  job that never saw it: a redraft can vouch for that, not for what was run before it.
+
+Unchanged: `record.test.mjs`, byte for byte; every folder, file, field, arm, gate, format and limit of the surface
+under test; every other reading below. The limits are the issue's and the design's values, and a budget set on one
+reference Mac is met on the others or it is not met (design: The reference Macs), so none moved with the machine.
+
+Run at the base, each file once through the machine's throttle (`BASE-FAILURE.txt`): `validate.test.mjs` passes, 82
+of 82, and all 14 tests of `record.test.mjs` fail at their own assertion, no spike record. A first attempt at each,
+with a 60-minute wait, got no test grant and ran nothing; the runs came with a wait of 480 minutes, and no test,
+validator, fixture or gates file changed between the redraft and them.
+
 ## What was read
 
-- Issue #1433; #241 (its epic); #337, #1425 and #1546 (it depends on them); #1426, #140, #1482 and #1551, which its
+- Issue #1433 as it reads since 2026-11-25, and its body as it read before, to see that the `Runs on:` line is all
+  that changed; #241 (its epic); #337, #1425 and #1546 (it depends on them); #1426, #140, #1482 and #1551, which its
   Scope names or takes words from.
 - `docs/technical-design.md`: Decided (The app's toolkit, The canvas's GPU layer, Where agent-built panels run, What a
   speed claim needs, Clicks on the question card); How we know version 0 works (Criteria to tests, Criteria in a
@@ -81,9 +128,9 @@ node -e "import('./tests/acceptance/1433/fixture.mjs').then((f) => f.write(proce
 ### `gates.json`: the gates, fixed before the first run
 
 `tests/acceptance/1433/gates.json` is the gates: each criterion that is a gate, the arms it is a gate of, and the
-issue's and the design's values. It was written with this suite, before the work. The spike keeps a copy and every raw
-reading names its sha256 (`gates`), which is how a kept reading shows the gates it was read under. The checks judge
-against this suite's file, never the copy.
+issue's and the design's values. It was written with this suite, by a job that never saw the work, and its `runs_on`
+again in the redraft. The spike keeps a copy and every raw reading names its sha256 (`gates`), which is how a kept
+reading shows the gates it was read under. The checks judge against this suite's file, never the copy.
 
 | Arm **(mine)** | Gates, in order **(mine)** |
 |---|---|
@@ -105,7 +152,7 @@ against this suite's file, never the copy.
         "canvas-handoff": {
           "status": "pass",
           "reading": { "frame_ms": [0.75, 0.8125, 0.875, 0.78125, 0.84375] },
-          "machine": { "model": "Mac15,12", "chip": "Apple M3", "memoryBytes": 17179869184, "power": "ac", "lowPowerMode": false, "thermalState": "nominal", "macosBuild": "24G90" },
+          "machine": { "model": "Mac17,10", "chip": "Apple M5 Max", "memoryBytes": 68719476736, "power": "ac", "lowPowerMode": false, "thermalState": "nominal", "macosBuild": "26B8119" },
           "load": 1.75,
           "raw": { "file": "raw/candidate-canvas-handoff.json", "sha256": "<sha256>" }
         },
@@ -121,7 +168,7 @@ against this suite's file, never the copy.
         "retention-frames": {
           "status": "pass",
           "reading": { "frames": 3, "first_difference": null },
-          "machine": { "model": "Mac15,12", "chip": "Apple M3", "memoryBytes": 17179869184, "power": "ac", "lowPowerMode": false, "thermalState": "nominal", "macosBuild": "24G90" },
+          "machine": { "model": "Mac17,10", "chip": "Apple M5 Max", "memoryBytes": 68719476736, "power": "ac", "lowPowerMode": false, "thermalState": "nominal", "macosBuild": "26B8119" },
           "load": 1.75,
           "raw": { "file": "raw/gpui-fast-retention-frames.json", "sha256": "<sha256>" },
           "journey": { "file": "raw/journey.jsonl", "sha256": "<sha256>" },
@@ -165,7 +212,7 @@ One JSON file per gate and arm, holding all its runs. Every one says of itself *
   "harness": "<sha256 of the arm's harness binary>",
   "profile": "release",
   "command": "scripts/lease ./harness --arm candidate --gate idle",
-  "machine": { "model": "Mac15,12", "chip": "Apple M3", "memoryBytes": 17179869184, "power": "ac", "lowPowerMode": false, "thermalState": "nominal", "macosBuild": "24G90" },
+  "machine": { "model": "Mac17,10", "chip": "Apple M5 Max", "memoryBytes": 68719476736, "power": "ac", "lowPowerMode": false, "thermalState": "nominal", "macosBuild": "26B8119" },
   "surface": "window",
   "runs": [{ "started": "2026-11-26T09:00:00.000Z", "load": { "start": 1.5, "end": 1.75 }, "window": { "state": "shown" }, "seconds": 60, "frames": 0, "wakeups": 0 }]
 }
@@ -204,13 +251,13 @@ page retired under a retained view, and the name of that view; `arms["gpui-fast"
 
 ## What counts, and what each test does with a verdict
 
-- **A reading counts** only when it was taken through `scripts/lease`, on the reference Air (`Mac15,12`, `Apple M3`,
-  17,179,869,184 bytes) with its macOS build named, in a real window AppKit showed (every gate but `panel`), and, for
-  a person's gate, by a person. A time, a CPU share, memory or wakeups (`canvas-handoff`, `idle`, `list-transcript`,
-  `panel`, `list-shapes`) also needs mains power, Low Power Mode off, a nominal thermal state, a release build, and a
-  one-minute load below the Air's 8 cores at each run's start and end. Anything else is a reading, and the gate reads
-  `inconclusive`. A count or an equality that fails needs none of the timing conditions: a frame drawn while still, a
-  swatch off, trees or frames that differ, a missed command buffer.
+- **A reading counts** only when it was taken through `scripts/lease`, on the reference MacBook Pro (`Mac17,10`,
+  `Apple M5 Max`, 68,719,476,736 bytes) with its macOS build named, in a real window AppKit showed (every gate but
+  `panel`), and, for a person's gate, by a person. A time, a CPU share, memory or wakeups (`canvas-handoff`, `idle`,
+  `list-transcript`, `panel`, `list-shapes`) also needs mains power, Low Power Mode off, a nominal thermal state, a
+  release build, and a one-minute load below the MacBook Pro's 18 cores at each run's start and end. Anything else is
+  a reading, and the gate reads `inconclusive`. A count or an equality that fails needs none of the timing conditions:
+  a frame drawn while still, a swatch off, trees or frames that differ, a missed command buffer.
 - **A limit** is judged on five runs by the design's rule: pass when all five are within it, fail when all five are
   over it by more than the margin (the larger of 5% and the five runs' spread), otherwise `inconclusive`.
 - **A gate that passed** holds. **A gate that failed** is the spike's result, not the suite's failure: its test holds
@@ -226,7 +273,7 @@ page retired under a retained view, and the name of that view; `arms["gpui-fast"
 
 | Criterion | Test | What it asserts | Fails on |
 |---|---|---|---|
-| AC1 `#1433.c0b58a25` Canvas handoff | `record.test.mjs` AC1 | `candidate` `canvas-handoff`: a slot of 1936 × 1584 with translucent pixels, shown; every status swatch of the look at `base` read back as its 8-bit values; the slot's pixel hash equal to the headless canvas's; five runs of at least 300 frames, each run's mean under 1 ms | the base (no record). `validate.test.mjs`: 1.25 ms, a swatch one code off, a slot unlike the headless canvas fail; an opaque fixture, another size, 299 frames, four runs, another Mac, a load of 8, battery, a debug build, no lease, a covered window read INCONCLUSIVE |
+| AC1 `#1433.c0b58a25` Canvas handoff | `record.test.mjs` AC1 | `candidate` `canvas-handoff`: a slot of 1936 × 1584 with translucent pixels, shown; every status swatch of the look at `base` read back as its 8-bit values; the slot's pixel hash equal to the headless canvas's; five runs of at least 300 frames, each run's mean under 1 ms | the base (no record). `validate.test.mjs`: 1.25 ms, a swatch one code off, a slot unlike the headless canvas fail; an opaque fixture, another size, 299 frames, four runs, another reference Mac, a load of 18, battery, a debug build, no lease, a covered window read INCONCLUSIVE |
 | AC2 `#1433.8f63851f` Idle | AC2 | `candidate` `idle`, by the same harness: five runs of 60 s, 0 frames in each, wakeups at most 1 | the base. A frame while still fails at any load; three wakeups fail; a 5 s hold reads INCONCLUSIVE |
 | AC3 `#1433.450e5804` Long list and transcript | AC3 | `list-transcript` for both arms: 1,000 rows, a transcript streaming, the same one for both; five runs an arm, paired, the arm that runs first alternating; each run's update p99 within 4 ms, cold start under 1,000 ms, idle CPU under 1%, memory under 200,000,000 bytes, the app under 60,000,000; `gpui-fast` in the shape the app ships, retention on | the base. 6 ms at p99, a 1.2 s start, 1.5% CPU, 250 MB, a 70 MB app fail; 999 rows, no stream, one arm first in every pair, another transcript, no partner runs, the other shape read INCONCLUSIVE |
 | AC4 `#1433.9d8646d2` A person types | AC4 | `candidate` `text-input`, taken by a person: no fault seen in any of the four ways of typing | the base. A wrong commit fails; a way never tried reads INCONCLUSIVE; no person is BLOCKED |
@@ -248,13 +295,20 @@ of the criterion's text as `scripts/proof-change.mjs`'s `criterionId` reads it; 
    gate closes the question for the candidate"). Criterion 3 names `gpui-fast` too, and criteria 10, 11 and 12 are
    what that arm must hold, so they are its gates: criterion 8 gives every arm a line that is `fallback` or `closed`
    with a failed gate. Criteria 8 and 9 are about the record and are no gate.
-2. **Fixed before the first run.** The gates are this suite's `gates.json`, written before the work. The spike keeps a
-   copy, byte for byte, and each raw reading names its sha256. A test can't see when a run was taken; it can see that
-   every kept reading was stamped with gates this suite wrote first.
-3. **The reference Air only.** The `Runs on:` line names the Air, so a reading on another reference Mac reads
-   INCONCLUSIVE, for every gate. Timing conditions are the design's (The reference Macs). The load rule is
-   `docs/parallel-proof.md` 12a's, "at or above the cores", not `judgeLimit`'s "above": section 6 has a timed grant
-   wait for a load below the core count. The cores are the Air's 8, not the machine the tests run on.
+2. **Fixed before the first run.** The gates are this suite's `gates.json`, written by a job that never saw the work.
+   The spike keeps a copy, byte for byte, and each raw reading names its sha256. A test can't see when a run was
+   taken; it can see that every kept reading was stamped with the gates as this suite fixes them, so a run stamped
+   with the gates of the draft before the redraft isn't one of them.
+3. **The reference MacBook Pro only.** The `Runs on:` line names one Mac, the reference MacBook Pro (Mac17,10, M5
+   Max): the third of the design's reference Macs, by the fingerprint `scripts/benchmark.mjs`'s `references` gives it
+   (model, chip, memory). The design counts a budget on any of the three; the issue's line is narrower, so a reading
+   on another reference Mac, the Air (Mac15,12) or the other MacBook Pro (Mac15,7), reads INCONCLUSIVE, for every
+   gate. Timing conditions are the design's (The reference Macs). The load rule is `docs/parallel-proof.md` 12a's,
+   "at or above the cores", not `judgeLimit`'s "above": section 6 has a timed grant wait for a load below the core
+   count. The cores are that Mac's 18, as the design and `references` give them, read from `gates.json` and not from
+   the machine the tests run on. That Mac is shared with other sessions: its one-minute load stood near 32, above its
+   cores, when the redraft was written. A time read at such a load is a reading, its gate INCONCLUSIVE and never a
+   pass, while a count or an equality that fails still closes the arm.
 4. **"Under", "within", "at most".** Under 1 ms and #337's four limits are strict; within the 4 ms budget and at most
    1 wakeup include the bound.
 5. **The handoff's time** is each run's mean over its frames, as the design's 0.7 to 0.9 ms is an average, over at

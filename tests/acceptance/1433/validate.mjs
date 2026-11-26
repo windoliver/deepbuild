@@ -14,7 +14,7 @@ export const ISSUE = 1433;
 export const SPIKE = `docs/spikes/${ISSUE}`;
 export const sha256 = (data) => createHash('sha256').update(data).digest('hex');
 
-// The gates, fixed before the first run: this suite's own file, written before the work. Every value a check judges
+// The gates, fixed before the first run: this suite's own file, written blind to the work. Every value a check judges
 // against is read from it, and it holds only the issue's and the design's values (README: Criteria to tests).
 const GATES_BYTES = readFileSync(new URL('./gates.json', import.meta.url));
 export const GATES = JSON.parse(GATES_BYTES.toString('utf8'));
@@ -152,10 +152,10 @@ function readRaw(dir, cite, at) {
 
 // ------------------------------------------------------------------ what counts
 
-/** Why a machine is not the one the issue's `Runs on:` line names, the reference Air. Empty when it is. */
-function offTheAir(machine) {
+/** Why a machine is not the one the issue's `Runs on:` line names, the reference MacBook Pro (Mac17,10, M5 Max). Empty when it is. */
+function offThePro(machine) {
   const keys = ['model', 'chip', 'memoryBytes'];
-  const off = keys.every((key) => machine?.[key] === GATES.runs_on[key]) ? [] : [`read off the reference Air (${keys.map((key) => `${key} ${json(machine?.[key])}`).join(', ')}; the issue runs on ${GATES.runs_on.model}, ${GATES.runs_on.chip}, ${GATES.runs_on.memoryBytes} bytes)`];
+  const off = keys.every((key) => machine?.[key] === GATES.runs_on[key]) ? [] : [`read off the reference MacBook Pro (${keys.map((key) => `${key} ${json(machine?.[key])}`).join(', ')}; the issue runs on ${GATES.runs_on.model}, ${GATES.runs_on.chip}, ${GATES.runs_on.memoryBytes} bytes)`];
   if (!nonEmpty(machine?.macosBuild)) off.push('the macOS build is missing');
   return off;
 }
@@ -165,7 +165,7 @@ function untimed(raw) {
   if (raw.profile !== 'release') off.push(`profile is ${json(raw.profile)}: only a release build is timed`);
   const loads = list(raw.runs).flatMap((r) => [r?.load?.start, r?.load?.end]);
   const high = loads.filter((l) => amount(l) && l >= GATES.runs_on.cores);
-  if (high.length) off.push(`a one-minute load of ${Math.max(...high)} at a run's start or end is at or above the Air's ${GATES.runs_on.cores} cores`);
+  if (high.length) off.push(`a one-minute load of ${Math.max(...high)} at a run's start or end is at or above the MacBook Pro's ${GATES.runs_on.cores} cores`);
   return off;
 }
 /**
@@ -455,7 +455,7 @@ function evaluateGate(record, dir, arm, gate, planted = false) {
   const uncounted = [];
   if (!planted) {
     if (!/(^|[\s/])scripts\/lease(\s|$)/.test(raw.command ?? '')) uncounted.push('not taken under the repo\'s resource lease: command doesn\'t run through scripts/lease');
-    uncounted.push(...offTheAir(raw.machine));
+    uncounted.push(...offThePro(raw.machine));
     if (task && raw.taken_by !== 'person') { out.blocked = true; uncounted.push(`no person took it: taken_by is ${json(raw.taken_by)} (${task})`); }
     if (FIVE.has(gate) && runs.length !== GATES.runs) uncounted.push(`the reading holds ${runs.length} runs; a limit is judged on ${GATES.runs} after warm-up`);
   }
