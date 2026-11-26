@@ -269,8 +269,6 @@ interface Guard { match?: unknown; scope?: unknown; mode?: unknown; reason?: unk
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
   private readonly conns = new Set<Conn>();
-  /** The waiter refusals the hub's output has said (#1851): each once, and at most a thousand kept. */
-  private readonly waiterRefusals = new Set<string>();
   /** The connection that last reported the app's notification setting. */
   private notifier: Conn | undefined;
   private readonly subs = new Map<string, Sub>();
@@ -1206,10 +1204,7 @@ class Hub {
       if (!this.coreUp) void asked.then(bind);
       return conn.write({ role: conn.name });
     }
-    // deep-hook's waiter (#1851): bound to its session by the agent process it runs under, with no token.
-    if (value.hello === 'waiter') return waiterHello(conn, value, (request) => this.core.request(request), this.waiterRefusals);
-    conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli, mcp or waiter.', value.hello) });
-    conn.end();
+    return waiterHello(conn, value, (request) => this.core.request(request)); // deep-hook's waiter (#1851); any other hello is refused
   }
 
   private method(given: Conn, value: Obj): void {

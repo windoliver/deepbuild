@@ -6,11 +6,18 @@ import { refusal } from './wire.js';
 
 type Bound = { session: string; parent?: { pid: number; start: string } } | { refused: string; retryable?: true };
 
+/** The waiter refusals the hub's output has said, each once and at most a thousand kept: one hub runs per process. */
+const said = new Set<string>();
+
 /**
- * Binds `conn` as the waiter of the session its hello names, or refuses it. A refusal is said once in the hub's output
- * too (`said` keeps those said, at most a thousand): the waiter asks again quietly, and its stderr becomes a wake's prompt.
+ * Binds `conn` as the waiter of the session its hello names, or refuses it; a hello of no role at all is refused too. A
+ * refusal is said once in the hub's output: the waiter asks again quietly, and its stderr becomes a wake's prompt.
  */
-export async function waiterHello(conn: Conn, value: Record<string, unknown>, request: (request: CoreRequest) => Promise<unknown>, said: Set<string>): Promise<void> {
+export async function waiterHello(conn: Conn, value: Record<string, unknown>, request: (request: CoreRequest) => Promise<unknown>): Promise<void> {
+  if (value.hello !== 'waiter') {
+    conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli, mcp or waiter.', value.hello) });
+    return conn.end();
+  }
   const session = typeof value.session === 'string' ? value.session : '';
   // A session's ID as its hooks carry it, and short: nothing else costs the hub a look at processes.
   if (!/^[\w.:-]{1,128}$/.test(session)) {
