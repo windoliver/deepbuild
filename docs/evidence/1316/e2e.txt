@@ -1,0 +1,35 @@
+== 181583513: deep-gpu: planted environment_texture_race brings back #1316's race; twins
+
+ RUN  v5.0.5 <checkout>/docs/evidence/1316
+
+stdout | e2e.mts > #1316 e2e: the default path is byte-identical across fresh processes; the planted race is not
+machine: Mac18,1 / Apple M6
+
+stdout | e2e.mts > #1316 e2e: the default path is byte-identical across fresh processes; the planted race is not
+SheenChair: 3 fresh processes, 1 distinct final and 1 distinct linear targets at frame 0
+SheenChair default: byte-identical; final frames: 20412580da64d2c9027153c3f0dcb89a6a584e0adc95283a79d9c058a09ea769.png
+SheenChair (planted environment_texture_race): 3 fresh processes, 3 distinct final and 3 distinct linear targets at frame 0
+SheenChair planted: SheenChair at frame 0 is not byte-identical across 3 fresh deep-gpu run processes (3 distinct final, 3 distinct linear targets):
+  SheenChair: run 2's final target (67249a0ee718) differs from run 1's (e52517bf6e8d): 37 of 1024000 pixels differ
+  SheenChair: run 2's linear target (c17b6864196f) differs from run 1's (038732e03a26): 90 of 1024000 pixels differ, worst 9.260% relative at (215, 550) channel 0: 0.1070556640625 vs 0.11798095703125
+  SheenChair: run 3's final target (2ce9c2c066f9) differs from run 1's (e52517bf6e8d): 40 of 1024000 pixels differ
+  SheenChair: run 3's linear target (5add710e2e83) differs from run 1's (038732e03a26): 90 of 1024000 pixels differ, worst 9.260% relative at (215, 550) channel 0: 0.1070556640625 vs 0.11798095703125
+
+stdout | e2e.mts > #1316 e2e: the default path is byte-identical across fresh processes; the planted race is not
+DispersionTest: 3 fresh processes, 1 distinct final and 1 distinct linear targets at frame 0
+DispersionTest default: byte-identical; final frames: b2f743ebe8b6aa9110891b6e7205b20ca041f6505d6e1eb82791ce04036edebc.png
+DispersionTest (planted environment_texture_race): 3 fresh processes, 3 distinct final and 3 distinct linear targets at frame 0
+DispersionTest planted: DispersionTest at frame 0 is not byte-identical across 3 fresh deep-gpu run processes (3 distinct final, 3 distinct linear targets):
+  DispersionTest: run 2's final target (b7a0b5833b67) differs from run 1's (0a1c1fa8df15): 9 of 1024000 pixels differ
+  DispersionTest: run 2's linear target (143d7957b065) differs from run 1's (eb8e2f5617d8): 21 of 1024000 pixels differ, worst 25.657% relative at (753, 544) channel 2: 0.1624755859375 vs 0.12078857421875
+  DispersionTest: run 3's final target (ca27f38074ef) differs from run 1's (0a1c1fa8df15): 49 of 1024000 pixels differ
+  DispersionTest: run 3's linear target (eefcc57cbdd5) differs from run 1's (eb8e2f5617d8): 119 of 1024000 pixels differ, worst 12.794% relative at (823, 687) channel 2: 0.2171630859375 vs 0.2490234375
+
+ ✓ e2e.mts > #1316 e2e: the default path is byte-identical across fresh processes; the planted race is not 10766ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:57:27
+   Duration  61.44s (tests 100%)
+
+exit 0
