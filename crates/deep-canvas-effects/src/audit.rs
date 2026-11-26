@@ -54,11 +54,31 @@ struct Read {
 pub fn frames(lowered: &Value, input: &Value, drawn: &[Frame]) -> Report {
     let mut out = Report::default();
     let items = rule::items(lowered);
+    // Nothing it reads is nothing proven: a deliverable without a particles@1 item, the one kind
+    // it reads, is blocked, naming any other effect it holds.
+    if items.is_empty() {
+        let others: Vec<&str> = lowered["items"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(_, it)| {
+                it["kind"]
+                    .as_str()
+                    .is_some_and(|k| k.starts_with("particles"))
+            })
+            .map(|(id, _)| id.as_str())
+            .collect();
+        out.blocked.push(
+            json!({"code": UNREAD, "reason": "no_effect", "kind": KIND, "ids": others,
+            "why": "the deliverable holds no particles@1 item, the only kind it reads"}),
+        );
+        return out;
+    }
     let Some(reads) = readings(lowered, &items) else {
         for (id, _) in &items {
             out.blocked.push(
                 json!({"code": UNREAD, "reason": "not_bounded", "kind": KIND, "ids": [id],
-                "why": format!("its span isn't finite or runs past {MAX_FRAMES} frames")}),
+                "why": format!("its span can't be read, isn't finite or runs past {MAX_FRAMES} frames")}),
             );
         }
         return out;
@@ -143,7 +163,7 @@ fn readings(lowered: &Value, items: &[(&String, &Value)]) -> Option<Vec<Read>> {
                     Err(e) => {
                         r.refused = Some(
                             json!({"code": UNREAD, "reason": "not_baked", "kind": KIND, "ids": [id],
-                            "reason": e.code, "path": e.path, "at": t}),
+                            "refusal": e.code, "path": e.path, "at": t}),
                         );
                         continue;
                     }
@@ -221,11 +241,12 @@ fn times(doc: &Value, items: &[(&String, &Value)]) -> Option<Vec<f64>> {
             .map(|s| s.span + s.life[1])
             .fold(0.0, f64::max)
     };
-    // Without a span, its emission and one life after it, as far as 10 s, as its anchors read.
-    let end = doc
-        .pointer("/transport/span")
-        .and_then(|v| deep_canvas::document::duration(doc, v).ok())
-        .map_or_else(|| emits().min(10.0), |f| f as f64 / FLICKS);
+    // Without a span, its emission and one life after it, as far as 10 s, as its anchors read; a
+    // span it can't read bounds nothing.
+    let end = match doc.pointer("/transport/span") {
+        None => emits().min(10.0),
+        Some(v) => deep_canvas::document::duration(doc, v).ok()? as f64 / FLICKS,
+    };
     let n = (end / step).ceil().max(1.0);
     if !n.is_finite() || n > MAX_FRAMES as f64 {
         return None;
@@ -449,7 +470,11 @@ fn judge(limits: &Limits, id: &str, it: &Value, r: &Read, drawn: &[Frame], out: 
             .filter_map(|fr| fr.passes.get(id).and_then(f))
             .reduce(f64::max)
     };
-    let (overdraw, gpu_ms) = (most(|p| p.overdraw), most(|p| p.gpu_ms));
+    // A pass timed at zero, from timestamps that read nothing, is no time read.
+    let (overdraw, gpu_ms) = (
+        most(|p| p.overdraw),
+        most(|p| p.gpu_ms.filter(|ms| *ms > 0.0)),
+    );
     let unread: Vec<&str> = [("overdraw", overdraw), ("gpu_ms", gpu_ms)]
         .iter()
         .filter(|(_, v)| v.is_none())
@@ -694,5 +719,44 @@ mod tests {
             &drawn("drift", 1.0, 0.1),
         );
         assert_eq!(codes(&r), [BOUNDS], "{:?}", r.blocked);
+    }
+
+    #[test]
+    fn a_deliverable_with_no_particles_item_is_blocked_not_passed() {
+        let mut d = doc("sparks", 64, 1.0, None);
+        d["items"].as_object_mut().expect("items").remove("sparks");
+        let r = frames(&d, &input(json!({})), &drawn("sparks", 1.0, 0.1));
+        assert!(r.raised.is_empty());
+        assert_eq!(r.blocked.len(), 1, "{:?}", r.blocked);
+        assert_eq!(
+            (
+                r.blocked[0]["code"].as_str(),
+                r.blocked[0]["reason"].as_str()
+            ),
+            (Some(UNREAD), Some("no_effect"))
+        );
+        assert_eq!(issues(&d, &input(json!({})))[0].1.code, UNREAD);
+    }
+
+    #[test]
+    fn a_gpu_time_read_as_zero_is_unread_not_a_pass() {
+        let input = input(json!({"gpu_ms": 0.0001}));
+        let r = frames(
+            &doc("flare", 256, 1.0, None),
+            &input,
+            &drawn("flare", 1.0, 0.0),
+        );
+        assert!(r.raised.is_empty());
+        assert_eq!(r.blocked.len(), 1, "{:?}", r.blocked);
+        assert_eq!(r.blocked[0]["unread"], json!(["gpu_ms"]));
+    }
+
+    #[test]
+    fn a_span_that_cant_be_read_is_not_bounded_not_cut_short() {
+        let mut d = doc("sparks", 64, 1.0, None);
+        d["transport"]["span"] = json!("forever");
+        let r = frames(&d, &input(json!({})), &drawn("sparks", 1.0, 0.1));
+        assert!(r.raised.is_empty());
+        assert_eq!(r.blocked[0]["reason"], "not_bounded", "{:?}", r.blocked);
     }
 }
