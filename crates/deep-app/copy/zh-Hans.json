@@ -567,6 +567,30 @@
     "text": "它的检查退回了它的声明，第 {0} 轮，共 {1} 轮",
     "source": "df500220c7d48e3722c4d0fa84b913864c03bec2bab63311a45a07e2ef05cc9f"
   },
+  "hub.state_blocked": {
+    "text": "无法检查：检查所需的东西缺失",
+    "source": "07da23063c0c9c601a39c9e82c71264b86a38f8537364742aeb92ee50776f6b7"
+  },
+  "hub.state_inconclusive": {
+    "text": "无法判断：有一项检查没有跑完，或者缺少一个回答",
+    "source": "10394301bc98d8b916ba1a93450b2b607cb07c5fb2e66fbbe7eaab463b90cb1c"
+  },
+  "hub.state_invalid": {
+    "text": "不能算数：给出的证明不成立",
+    "source": "c21a6f0f0c1e13c19bb9959bdec6c31d0eaa56ce7c8862c9686f58a3a7062146"
+  },
+  "hub.state_pass": {
+    "text": "已完成，检查也认可",
+    "source": "be810ecdeaa2dbdb39e914a9998a38b95dee58d0480c993036ac7a1b38ef092d"
+  },
+  "hub.state_sent_back": {
+    "text": "还没完成：有一项检查没有得到预期的结果，智能体正在修复",
+    "source": "3389eac409e5387ca213806e5b752f862524a1356c10ead179a0a3ccfb07750b"
+  },
+  "hub.state_stale": {
+    "text": "检查过，但之后有了改动",
+    "source": "ed5bba65d42657c90d410577bc18ede04447a1de1a79125b28850923e2c7a18b"
+  },
   "hub.task_queued": {
     "text": "它的任务在排队，它的智能体还没有开始",
     "source": "2bdd453afb1e5e8f8f4656b26955e1482daf9b284a67c324bfdea01be3325437"

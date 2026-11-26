@@ -131,6 +131,9 @@ export type Plant =
   // #2018's: a `--why` built from a reading of its own, a BLOCKED row that names no one and no evidence, and a
   // reading that tries the stale row before needs you.
   | 'why-second-reading' | 'blocked-bare' | 'stale-before-ask'
+  // #3495's: a `deep` that prints each row's word with no sentence before it, one that prints a sentence before working,
+  // and a `deep status --json` whose BLOCKED row's word holds its sentence.
+  | 'print-word-alone' | 'working-has-sentence' | 'word-holds-sentence'
   // #2019's: a reading that never reads a model-call retry, a FAIL read as sent back with no hold delivered, and a repeat
   // detector keyed on the command alone, one that notifies at every repeat, and one that raises an ask.
   | 'retry-reads-working' | 'sent-back-without-hold' | 'repeat-by-command' | 'repeat-notifies-each' | 'repeat-raises-ask'
@@ -397,6 +400,7 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak', 'inbox-labels-only', 'needs-you-counts-defaulted',
   'why-second-reading', 'blocked-bare', 'stale-before-ask',
+  'print-word-alone', 'working-has-sentence', 'word-holds-sentence',
   'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',

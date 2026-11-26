@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { call, clock, notAnswering, notAnsweringSince, Unanswered } from './client.js';
 import { StaleHub } from './generations.js';
 import { controlToken, hubAddress, installedRoot, rootOf } from './paths.js';
+import { sentenceOf } from './plain-states.js';
 import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
 import type { Row, Why } from './rows.js';
@@ -45,6 +46,8 @@ function planted(rows: Row[]): Row[] {
   if (plant === 'status-unread-flipped') return rows.map((r) => ({ ...r, unread: !r.unread }));
   // #2018's: a BLOCKED row that names neither whom it waits for nor the evidence it leaves open.
   if (plant === 'blocked-bare') return rows.map((r) => (r.word === 'BLOCKED' ? { ...r, why: '', waits_on: null } : r));
+  // #3495's: a BLOCKED row whose word holds its sentence, where the word is the state's code.
+  if (plant === 'word-holds-sentence') return rows.map((r) => (r.word === 'BLOCKED' ? { ...r, word: `${sentenceOf(r.word)} · ${r.word}` } : r));
   return rows;
 }
 
@@ -77,7 +80,12 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
     // read the same as, and a verdict that isn't PASS or FAIL says whom it waits for and its evidence after its word.
     // Its one flag beside its word (#2019), with the fix where one clears it.
     const flag = r.flag ? `${r.flag.code}: ${r.flag.text}${r.flag.fix ? `. ${r.flag.fix}` : ''}` : '';
-    out.push(`  ${r.title}  ${r.agent ?? 'agent'}  ${[r.word, flag, r.why].filter(Boolean).join(' · ')}${age(r)}`);
+    // `deep` alone is a plain surface (#3495): a state that has a sentence leads with it, then its word. `deep status`
+    // is detail, and reads the word as before. The planted wrong programs print the word alone, as the merge base
+    // did, or a sentence of their own before working, which has none.
+    const plant = activePlant();
+    const sentence = o.detail || plant === 'print-word-alone' ? undefined : plant === 'working-has-sentence' && r.word === 'working' ? 'the agent is at work' : sentenceOf(r.word);
+    out.push(`  ${r.title}  ${r.agent ?? 'agent'}  ${[sentence, r.word, flag, r.why].filter(Boolean).join(' · ')}${age(r)}`);
     const d = o.detail?.[r.id];
     if (!d) continue;
     for (const line of [d.note, ...(d.readings ?? [])]) if (line) out.push(`      ${line}`);
@@ -224,7 +232,7 @@ export async function listCommand(args: readonly string[], detail: boolean, setU
     }
     const rows = planted(read.rows);
     if (json) process.stdout.write(`${JSON.stringify({ log_pos: read.log_pos, rows, ...(read.paused ? { paused: read.paused } : {}) })}\n`);
-    else process.stdout.write(listText(rows, { ...(read.detail ? { detail: read.detail } : {}), ...(read.paused ? { paused: read.paused } : {}), ...(read.down !== undefined ? { down: hubDown(read.down) } : {}) }));
+    else process.stdout.write(listText(rows, { ...(detail ? { detail: read.detail ?? {} } : {}), ...(read.paused ? { paused: read.paused } : {}), ...(read.down !== undefined ? { down: hubDown(read.down) } : {}) }));
   };
   // A clone of a project this machine joined reads that project's hub over the network (#1338), as its person.
   const { joinedFor, remoteCall } = await import('./remote.js');

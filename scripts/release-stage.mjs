@@ -133,7 +133,7 @@ for (const dir of workspaces) {
 }
 
 // The root folders the workspaces read by relative path.
-for (const file of ['README.md', 'LICENSE', 'adapters', 'packs', 'skills/deepbuild', 'skills/deepbuild-canvas', 'crates/deep-hook/default-rules.json', 'contracts/setup-steps.json', 'brand/png/favicon-32.png']) copy(join(REPO, file), join(pkg, file));
+for (const file of ['README.md', 'LICENSE', 'adapters', 'packs', 'skills/deepbuild', 'skills/deepbuild-canvas', 'crates/deep-hook/default-rules.json', 'contracts/setup-steps.json', 'contracts/plain-states.json', 'brand/png/favicon-32.png']) copy(join(REPO, file), join(pkg, file));
 
 // Third-party packages, bundled: what they don't load at run time is left out. SQLite's native module is in the
 // platform package, which the launcher links in.

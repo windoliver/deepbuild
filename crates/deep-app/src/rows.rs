@@ -322,6 +322,9 @@ pub(crate) struct RowDrawn {
     twin: Option<(String, String)>,
     word: String,
     drawn_word: String,
+    /// The sentence its state reads as on a plain surface (#3495), whole, and as its slot draws it once the list's
+    /// width is known: what fits between the title and the word, cut from its end; none where no character fits.
+    sentence: Option<(String, Option<String>)>,
     flag: Option<(String, String)>,
     time: String,
     second: Option<String>,
@@ -380,6 +383,17 @@ impl RowDrawn {
         };
         // The state word the hub wrote, in the language shown (#2403).
         let word = states::shown(&row.word);
+        // The list's rows are a plain surface (#3495): a state that has a sentence leads with it, then its word. The
+        // planted view writes a sentence of its own for BLOCKED, where the one table's goes.
+        let sentence = if row.word == "BLOCKED" && crate::plain::planted("view-own-sentence") {
+            Some("its checks couldn't run".to_owned()) // copy-exception: planted wrong program
+        } else {
+            states::sentence(&row.word)
+        };
+        let said = match &sentence {
+            Some(sentence) => format!("{sentence} · {word}"),
+            None => word.to_owned(),
+        };
         let name = if ask {
             if reach.not_notified(&row.id) {
                 copy::fill("views.not_notified", &[&title])
@@ -394,14 +408,14 @@ impl RowDrawn {
             // A verdict that isn't PASS or FAIL never reads as the bare word (#2018): the row is one line, so its name
             // holds whom it waits for and the evidence it leaves open.
             format!(
-                "{} {title} · {word} · {}",
+                "{} {title} · {said} · {}",
                 states::glyph(row.entry),
                 copy::hub(&row.why)
             )
         } else if let Some(line) = &line {
-            format!("{} {title} · {word} · {line}", states::glyph(row.entry))
+            format!("{} {title} · {said} · {line}", states::glyph(row.entry))
         } else {
-            format!("{} {title} · {word}", states::glyph(row.entry))
+            format!("{} {title} · {said}", states::glyph(row.entry))
         };
         // Its one flag beside its word (#2019), with what it says: the row is one line, so its name holds the rest.
         let name = match &row.flag {
@@ -493,6 +507,27 @@ impl RowDrawn {
                 None => fitted(window, &title, room, weight),
             })
         };
+        // The sentence takes the room between the title and the word (#3495): what the title as drawn leaves, less the
+        // step before it, cut from its end where that is less than it needs. Where no character fits, none is drawn.
+        let sentence = sentence.map(|sentence| {
+            let fits = roomy.zip(cut.as_deref()).and_then(|((_, room), cut)| {
+                let short = (twin.as_ref()).map_or(px(0.), |(_, short)| wide(short, weight).ceil());
+                let left = room - wide(cut, weight).ceil() - short - s.space(1);
+                let fits = fitted(window, &sentence, left, FontWeight::NORMAL);
+                (fits != "…").then_some(fits)
+            });
+            (sentence, fits)
+        });
+        // #3495's planted row makes room for a sentence that doesn't fit whole by cutting its state word.
+        let drawn_word = match &sentence {
+            Some((whole, fits))
+                if fits.as_deref() != Some(whole.as_str())
+                    && crate::plain::planted("row-cuts-word") =>
+            {
+                format!("{}…", drawn_word.chars().take(4).collect::<String>())
+            }
+            _ => drawn_word,
+        };
         RowDrawn {
             id,
             ask,
@@ -507,6 +542,7 @@ impl RowDrawn {
             twin,
             word: word.to_owned(),
             drawn_word,
+            sentence,
             flag: (row.flag.as_ref()).map(|flag| (flag.code.clone(), flag.text.clone())),
             time,
             second,
@@ -603,8 +639,11 @@ pub(crate) fn row_element(
         .child(
             // Each slot the row's full height, so the slots read in the row's order, left to right.
             row_slot(id, "title", title.clone())
-                .flex_1()
-                .min_w_0()
+                // Beside a sentence that is drawn the title is as wide as its words, and the sentence takes the rest.
+                .map(|slot| match &drawn.sentence {
+                    Some((_, Some(_))) => slot.flex_none(),
+                    _ => slot.flex_1().min_w_0(),
+                })
                 .h_full()
                 .flex()
                 .items_center()
@@ -639,6 +678,25 @@ pub(crate) fn row_element(
                     (None, false) => fit(slot, title, drawn.cut.clone()),
                 }),
         )
+        // The sentence its state reads as on a plain surface (#3495), between the title and the word, in the word's
+        // ink: what fits of it. Where nothing of it does, its slot stays in the tree with no width.
+        .children(drawn.sentence.as_ref().map(|(sentence, fits)| {
+            let slot = row_slot(id, "sentence", sentence.clone())
+                .h_full()
+                .flex()
+                .items_center()
+                .text_color(chrome.ink_secondary);
+            match fits {
+                Some(fits) => slot
+                    .flex_1()
+                    .min_w_0()
+                    .pl(s.space(1))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .child(fits.clone()),
+                None => slot.flex_none().w(px(0.)).overflow_hidden(),
+            }
+        }))
         .child(
             row_slot(id, "word", drawn.word.clone())
                 .flex_none()

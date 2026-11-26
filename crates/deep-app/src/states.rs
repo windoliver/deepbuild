@@ -82,6 +82,28 @@ pub fn shown(word: &str) -> &str {
     }
 }
 
+/// The sentence a state reads as on a plain surface (#3495), in the language shown: what
+/// `contracts/plain-states.json`, the one closed table, gives the state `word` names; none for a state that reads as
+/// it is. The hub's `deep` reads the same file, so no surface writes a sentence of its own, and nothing decides a
+/// state from one: the word stays the state's code.
+pub fn sentence(word: &str) -> Option<String> {
+    static SENTENCES: OnceLock<Value> = OnceLock::new();
+    let table = SENTENCES.get_or_init(|| {
+        serde_json::from_str(include_str!("../../../contracts/plain-states.json"))
+            .expect("contracts/plain-states.json is JSON")
+    });
+    table["states"][word].as_str().map(copy::hub)
+}
+
+/// What a plain surface reads for a state (#3495): the sentence of the state `word` names, where it has one, then
+/// `words`, the word as that surface writes it.
+pub fn plain(word: &str, words: &str) -> String {
+    match sentence(word) {
+        Some(sentence) => format!("{sentence} · {words}"),
+        None => words.to_owned(),
+    }
+}
+
 /// Which table a state's words come from: the language shown, or English for what DeepBuild sends to an agent (#2403).
 #[derive(Clone, Copy)]
 enum Said {

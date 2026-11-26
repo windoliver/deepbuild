@@ -44,7 +44,7 @@ const root = readJson(REPO);
 const binRel = root.bin?.deep;
 if (!binRel || !existsSync(join(REPO, binRel))) fail(`the root's bin ${binRel} is not built; run npm run build first`);
 rmSync(tree, { recursive: true, force: true });
-for (const file of ['package.json', 'README.md', 'LICENSE', 'adapters', 'packs', 'contracts/setup-steps.json', 'crates/deep-hook/default-rules.json', 'brand/png/favicon-32.png']) copy(join(REPO, file), join(tree, file));
+for (const file of ['package.json', 'README.md', 'LICENSE', 'adapters', 'packs', 'contracts/setup-steps.json', 'contracts/plain-states.json', 'crates/deep-hook/default-rules.json', 'brand/png/favicon-32.png']) copy(join(REPO, file), join(tree, file));
 
 // The packages the bin loads, by Node's lookup from each package's folder up to the checkout: a workspace by its
 // real folder under packages/, a third-party package where node_modules holds it.

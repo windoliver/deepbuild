@@ -501,7 +501,8 @@ fn openings(event: &Value) -> Vec<(String, String)> {
     }
 }
 
-/// The notification a session's state posts: DeepBuild and the session's task, then its mark and its state's words.
+/// The notification a session's state posts: DeepBuild and the session's task, then its mark and its state's words,
+/// led by the state's sentence where it has one (#3495).
 pub fn notification_text(table: &Table, session: &str, now: u64) -> String {
     match table.open_asks(Some(session)).first() {
         Some(ask) => ask_text(table, ask, now),
@@ -511,7 +512,7 @@ pub fn notification_text(table: &Table, session: &str, now: u64) -> String {
                 "{}\n{} {}",
                 title(table, session),
                 states::glyph(state.entry()),
-                state.text(now)
+                states::plain(state.word(), &state.text(now))
             )
         }
     }
@@ -523,8 +524,9 @@ pub fn carries(text: &str, question: &str) -> bool {
     !question.is_empty() && text.contains(&crate::question::visible(question))
 }
 
-/// The run's end notice (#1348), in plain words: its tasks have stopped, and how many each state holds, such as
-/// "DeepBuild\nAll 2 tasks have stopped: 1 PASS, 1 needs you."
+/// The run's end notice (#1348), in plain words: its tasks have stopped, and how many each state holds, each state
+/// led by its sentence where it has one (#3495), such as
+/// "DeepBuild\nAll 2 tasks have stopped: 1 done, and the checks agree · PASS, 1 needs you."
 pub fn end_notice(table: &Table, sessions: &[String]) -> String {
     let mut counts: Vec<(&'static str, usize)> = Vec::new();
     for session in sessions {
@@ -538,7 +540,8 @@ pub fn end_notice(table: &Table, sessions: &[String]) -> String {
     let counts: Vec<String> = counts
         .iter()
         .map(|(word, count)| {
-            copy::count("notify.state_count", *count as u64, &[&states::shown(word)])
+            let said = states::plain(word, states::shown(word));
+            copy::count("notify.state_count", *count as u64, &[&said])
         })
         .collect();
     copy::fill(
@@ -802,5 +805,26 @@ mod tests {
         let posted = notifier.due(&view(std::slice::from_ref(&ask)), 5_000, None, false);
         let asks: Vec<Option<&str>> = posted.iter().map(|n| n.ask.as_deref()).collect();
         assert_eq!(asks, [Some("ask:a1")], "{posted:?}");
+    }
+
+    #[test]
+    fn a_state_that_has_a_sentence_leads_its_notification_and_the_end_notice_with_it() {
+        // #3495: a notification and the run's end notice are plain surfaces, so PASS reads its sentence, then its word.
+        let events = [
+            json!({"kind": "claim.made", "writer": "core", "session": "s1", "id": "c1", "log_pos": 1, "ts": 1, "data": {}}),
+            json!({"kind": "verdict.made", "writer": "core", "session": "s1", "id": "v1", "log_pos": 2, "ts": 2,
+                   "data": {"claim": "claim:c1", "verdict": "verdict:v1", "outcome": "PASS"}}),
+        ];
+        let view = view(&events);
+        let text = notification_text(&view.table(), "s1", 1_000);
+        assert!(
+            text.ends_with("✓ done, and the checks agree · PASS"),
+            "{text}"
+        );
+        let notice = end_notice(&view.table(), &["s1".to_owned()]);
+        assert!(
+            notice.ends_with(": 1 done, and the checks agree · PASS."),
+            "{notice}"
+        );
     }
 }
