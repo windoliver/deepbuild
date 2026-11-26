@@ -22,6 +22,7 @@ import type { Connection, Event, RecordStore } from '../../../packages/record/sr
 import { openAsks, askSources, type Asks, type Card, type Delivery, type InboxRow, type PlanInput, type Resolver } from '../../../packages/asks/src/index.ts';
 import { resolverDecisions } from '../../../packages/resolver-decisions/src/index.ts';
 import type { Line } from '../16/helpers.ts';
+import { withDeclared } from '../declared.ts';
 
 export type Obj = Record<string, unknown>;
 export const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -130,7 +131,7 @@ export async function openWorld(plant: Planting = {}, dir = mkdtempSync(join(tmp
   const clock = makeClock();
   const record = await openRecord({ path: join(dir, 'record.db'), now: clock.now });
   const deliveries: Delivered[] = [];
-  const opened = await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(structuredClone(d) as Delivered); } });
+  const opened = withDeclared(await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(structuredClone(d) as Delivered); } }));
   const w = { clock, record, deliveries, dir } as World;
   w.asks = plant.asks ? plant.asks(opened, w) : opened;
   const real = resolverDecisions({ record });
@@ -221,7 +222,7 @@ export async function seedInSessions(root: string, asks: { session: string; sour
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const now = () => Date.now();
   const record = await openRecord({ path: join(root, 'ledger.db'), now });
-  const asksCore = await openAsks({ record, now, deliver: () => undefined });
+  const asksCore = withDeclared(await openAsks({ record, now, deliver: () => undefined }));
   const out: SeededAsk[] = [];
   for (const { session, source, ask } of asks) {
     const row = askSources().find((r) => r.source === source);

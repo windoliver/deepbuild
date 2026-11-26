@@ -1,0 +1,12 @@
+{
+  "scripts/issue-time.mjs": [
+    {
+      "find": [
+        "    quality: { merged: prs.length, reverts: prs.filter((pr) => /^Revert/.test(pr.title ?? '')).length, failures: Object.keys(known.failures ?? {}).length, failures_added: added.length, skips: (known.skips ?? []).length },"
+      ],
+      "wrong": [
+        "    quality: { merged: prs.length, reverts: prs.filter((pr) => /revert/i.test(pr.title ?? '')).length, failures: Object.keys(known.failures ?? {}).length, failures_added: added.length, skips: (known.skips ?? []).length },"
+      ]
+    }
+  ]
+}

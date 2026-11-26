@@ -90,7 +90,7 @@ if (op === 'seed') {
   const key = randomBytes(32).toString('hex');
   const connection = { writer: 'core', actor: 'you', scope: 'you', session: a.session, project: a.project };
   const ask = await asks.raise(connection, 'effect.push', {
-    kind: 'authority', question: a.question, options: [{ id: 'approve', label: 'Push it', decision: 'allow' }, { id: 'decline', label: 'Hold the push', decision: 'deny' }],
+    kind: 'authority', may_answer: 'trusted_path', question: a.question, options: [{ id: 'approve', label: 'Push it', decision: 'allow' }, { id: 'decline', label: 'Hold the push', decision: 'deny' }],
     recommended: null, deadline: Date.now() + DAY, default: 'decline', fallback: 'you', provisional: false, owner: 'you', key, pinned_to: a.pinned_to,
   }, a.plan);
   const [row] = await w.record.raw(`SELECT data FROM events WHERE kind = 'plan.proposed' AND writer = 'core' AND json_extract(data, '$.ask') = ? ORDER BY log_pos LIMIT 1`, [ask]);

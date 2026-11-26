@@ -4,6 +4,7 @@
 // only on a reference Mac (Every task carries its own budgets); elsewhere it's a reading. A save's size is read only
 // when the play interface names a save action, and game.play@1 names none yet, so the save limit reads nothing.
 import { spawnSync } from 'node:child_process';
+import { startOf } from './judge.ts';
 import type { PlayAnswer } from './types.ts';
 
 export interface Window { window: number; from: number; to: number; memory: number; p99_ms: number }
@@ -17,11 +18,16 @@ function p99(ns: number[]): number {
   return sorted[Math.min(sorted.length - 1, Math.ceil(0.99 * sorted.length) - 1)]! / 1e6;
 }
 
-/** The soak's windows from its run, each with its logic memories' size and its p99 step time. Window n, from 1, holds steps (n − 1) × every to n × every − 1, each measure read at its last step. */
+/**
+ * The soak's windows from its run, each with its logic memories' size and its p99 step time. Window n, from 1, holds
+ * steps (n − 1) × every to n × every − 1 of the run, each measure read at its last step; (#1047) a run from a save
+ * counts them on from the save's step.
+ */
 export function windowsOf(answer: PlayAnswer, every: number): Window[] {
+  const at = startOf(answer);
   return (answer.memory ?? []).map((m, w) => {
     const from = w * every;
-    return { window: w + 1, from, to: m.step, memory: m.bytes, p99_ms: p99(answer.step_times.slice(from, m.step + 1)) };
+    return { window: w + 1, from: at + from, to: m.step, memory: m.bytes, p99_ms: p99(answer.step_times.slice(from, m.step - at + 1)) };
   });
 }
 

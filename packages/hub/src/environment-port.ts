@@ -1,5 +1,6 @@
 // Stack/resource contracts used by the hub's lease and execution policies. Implementations live outside Core.
 import type { ResourceKind, Host } from '@deepbuild/supervisor';
+import type { ExtensionHost } from '@deepbuild/extension-host';
 import type { LeaseTable } from '@deepbuild/leases';
 import type { RunFacts } from '@deepbuild/gate';
 
@@ -64,6 +65,8 @@ export interface StackEnvironment {
   warm(options: { take: Take; scrub: (values: string[]) => void }): WarmStack;
   wanted(folder: string): boolean;
   keys(folder: string): Promise<Keys>;
+  /** Whether an extension's environment@1 provider started the run, outside the supervisor (#2315). */
+  foreign?(run: string): boolean;
 }
 export type ComposeResource = ResourceKind & { dir: string; guarded: string[]; docker?: string };
 export interface EnvironmentProvider {
@@ -71,6 +74,6 @@ export interface EnvironmentProvider {
   readonly leaseKinds: Parameters<LeaseTable['declare']>[1][];
   readonly sessionKinds: readonly string[];
   newRun(at?: number): string;
-  stacks(options: { host(): Host; compose(): ComposeResource | undefined; products: WarmProducts; plant: string | undefined }): StackEnvironment;
+  stacks(options: { host(): Host; compose(): ComposeResource | undefined; products: WarmProducts; plant: string | undefined; extensions(): ExtensionHost | undefined }): StackEnvironment;
   host(local: Host, module: string): Promise<Host>;
 }
