@@ -2,7 +2,7 @@
 // ~/.deepbuild/throttle/, whatever HOME says, that grants build, bay pair, test and timed by class, so a neighbour's build never runs
 // while a budget is timed. `throttle.mjs <class> [--wait <min> | --stall <min>] -- <command>` acquires, runs, releases and exits
 // with the child's status, or ends a command held past its `--hold` bound while another request waits; acquire and release serve the scripts that hold a grant themselves. `throttle.mjs window`
-// opens a budget window (section 12a): a timed grant that waits for every slot to empty, around budget-window.mjs.
+// asks for a budget window (section 12a): once one is due, a timed grant that waits for every slot to empty, around budget-window.mjs.
 // `throttle.mjs load [--report]` reads the machine's load by who made it (#3067), its GPU time and the cores idle beside
 // the requests in line (#3240), and the threads under each grant (#3550): a sample a minute, and their table.
 // An affected.mjs run's test grant is its admission, and its jobs take turns on one pool of job tokens (#3221).
@@ -478,6 +478,57 @@ export const holds = (cls, { window = false } = {}) => locked((table, procs) => 
 /** Whether process `pid` waits in the table, for a grant or a turn: what it was asked to run hasn't started. */
 export const asking = (pid) => locked((table) => table.requests.some((request) => request.pid === pid));
 
+// A window is asked each hour and joins the line only once it is due (section 12a, #3551), by how long ago the last
+// one closed: 6 hours on it opens when no grant is held, and 12 hours on it waits every held grant out. Both drafted.
+const APART_MIN = 6 * 60, OVERDUE_MIN = 12 * 60;
+/**
+ * A window's case, asked `since` minutes after the last one closed while `held` grants are in the table: `overdue`
+ * once the overdue span has passed, `empty` with no grant held once the apart span has, `not yet` otherwise.
+ */
+export function windowCase(held, since, [apart, overdue] = [APART_MIN, OVERDUE_MIN]) {
+  if (since >= overdue) return 'overdue';
+  return !held && since >= apart ? 'empty' : 'not yet';
+}
+/**
+ * What a window asked now does: `leave`, the words it leaves with, having joined no line, or `wait`, the minutes it
+ * waits for its grant, a held grant's bound when it is overdue; and `waited`, the grants it waits on, by class. The
+ * last window closed at the newest window-close in the log, and with none the window is overdue; a log that can't be
+ * read throws. Another window in the table, asked or open, is the machine's window, so this one leaves. Only a test's
+ * own table reads the spans DEEP_WINDOW_APART_MIN and DEEP_WINDOW_OVERDUE_MIN name, in minutes, and one it doesn't
+ * name is none, since its log is as old as its test.
+ */
+function due() {
+  const spans = own() ? [process.env.DEEP_WINDOW_APART_MIN, process.env.DEEP_WINDOW_OVERDUE_MIN].map((minutes) => Number(minutes ?? 0)) : undefined;
+  const file = join(folder(), 'log');
+  let lines = Buffer.alloc(0), closed = -Infinity;
+  try {
+    lines = readFileSync(file);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw Error(`${file} can't be read (${error.message})`);
+  }
+  for (let at = lines.indexOf('window-close'); at >= 0; at = lines.indexOf('window-close', at + 1)) {
+    const end = lines.indexOf('\n', at);
+    try {
+      const entry = JSON.parse(lines.subarray(lines.lastIndexOf('\n', at) + 1, end < 0 ? lines.length : end));
+      if (entry.event === 'window-close' && Date.parse(entry.at) > closed) closed = Date.parse(entry.at);
+    } catch {
+      // A line a full disk cut short names no close.
+    }
+  }
+  return locked((table, procs) => {
+    const other = [...table.grants, ...table.requests].find((entry) => entry.window);
+    if (other) return { leave: `another window, asked by pid ${other.pid}, ${table.grants.includes(other) ? 'is open' : 'waits for its grant'}` };
+    // A turn is a job of a run whose grant is held, and counts under it.
+    const held = blockers(table, procs, { pid: process.pid, window: true }).filter((grant) => grant.class !== 'turn');
+    const waited = {};
+    for (const grant of held) waited[grant.class] = (waited[grant.class] ?? 0) + 1;
+    const since = (Date.now() - closed) / 60_000;
+    const state = windowCase(held.length, since, spans);
+    if (state !== 'not yet') return { wait: state === 'overdue' ? HOLD : 60, waited };
+    return { leave: `${held.length} grants held; the last window closed ${(since / 60).toFixed(1)} h ago` };
+  });
+}
+
 /**
  * Gives a grant back; a passed-through one is its ancestor's to release. A release the table can't take is tried for
  * two seconds, then thrown: a holder that can't give timed back must not run on holding it, and its exit frees it.
@@ -881,12 +932,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   const args = process.argv.slice(2);
   const split = args.indexOf('--');
   const [named, ...options] = split < 0 ? args : args.slice(0, split);
-  // A window is a measured run's top-level timed, with its wait.
+  // A window is a top-level timed, asked only once it is due (#3551).
   const window = named === 'window' && split < 0;
   const cls = window ? 'timed' : named;
   const command = window ? [process.execPath, fileURLToPath(new URL('budget-window.mjs', import.meta.url))] : split < 0 ? [] : args.slice(split + 1);
   const given = new Map(Array.from({ length: options.length / 2 | 0 }, (_, k) => [options[2 * k], Number(options[2 * k + 1])]));
-  const wait = given.get('--wait') ?? (window ? 60 : 30), stall = given.get('--stall'), hold = given.get('--hold') ?? HOLD;
+  const stall = given.get('--stall'), hold = given.get('--hold') ?? HOLD;
+  let wait = given.get('--wait') ?? 30;
   const flags = window ? ['--wait'] : ['--wait', '--stall', '--hold', '--turns'];
   if (!LIMITS[cls] || !command.length || options.length !== 2 * given.size || (given.has('--wait') && given.has('--stall')) || ![...given].every(([flag, value]) => flags.includes(flag) && value >= 0)) {
     console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min> | --stall <min>] [--hold <min>] [--turns 0] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
@@ -899,9 +951,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
     console.log(`BLOCKED throttle: DEEP_THROTTLE_RUN is the free disk a run's shards need, in bytes, not ${JSON.stringify(admits)}`);
     process.exit(2);
   }
-  let grant;
+  let grant, plan;
+  const asked = Date.now();
   try {
-    grant = acquire(cls, { wait, stall, window, run, turns: given.get('--turns') !== 0 });
+    if (window) {
+      plan = due();
+      wait = given.get('--wait') ?? plan.wait;
+    }
+    if (!plan?.leave) grant = acquire(cls, { wait, stall, window, run, turns: given.get('--turns') !== 0 });
   } catch (error) {
     // A wait that ran out on a full disk is no grant (#2869).
     if (error.waited) grant = null;
@@ -911,6 +968,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
       process.exit(2);
     }
   }
+  // A window that isn't due has joined no line and stopped no grant; the next hour asks again.
+  if (plan?.leave) {
+    console.log(`INCONCLUSIVE window: ${plan.leave}\n  Fix: None is needed: the next hour asks again, and a window waits every held grant out once it is overdue.`);
+    process.exit(3);
+  }
   if (!grant) {
     // The marker a job's report reads by: its output is the test run's too, so a line there proves nothing.
     const none = stall === undefined ? `no ${cls} grant came within ${wait} min` : `no ${cls} grant changed hands within ${stall} min`;
@@ -919,6 +981,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
     console.log(`INCONCLUSIVE no grant: ${none}${why}\n  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.`);
     process.exit(3);
   }
+  // A window's record holds how long its grant took and the grants it waited on (#3551).
+  const drained = window && JSON.stringify({ drain: Date.now() - asked, waited: plan.waited });
   if (window) log({ event: 'window-open', id: grant.id, pid: process.pid });
   // A turn's command gets a jobserver of its own, lent from the pool (#3221).
   let pipe = null;
@@ -933,7 +997,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
     }
   }
   // A window's record names its grant, as the log's window-open and window-close lines do (#2674).
-  const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env: { ...env, DEEP_THROTTLE: grant.token, ...window && { DEEP_WINDOW: grant.id }, ...pipe && { CARGO_MAKEFLAGS: pipe.flags } } });
+  const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env: { ...env, DEEP_THROTTLE: grant.token, ...window && { DEEP_WINDOW: grant.id, DEEP_WINDOW_DRAIN: drained }, ...pipe && { CARGO_MAKEFLAGS: pipe.flags } } });
   // A terminal's SIGINT reaches the whole group, the command too, so it isn't sent again; a SIGTERM or SIGHUP sent to
   // this process alone is passed on.
   process.on('SIGINT', () => {});
