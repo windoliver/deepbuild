@@ -106,6 +106,19 @@ export const slow = [
   'tests/acceptance/965/grace.test.ts', 'tests/acceptance/965/starts.test.ts', 'tests/acceptance/992/agree.test.ts',
   'tests/live-instancers.test.ts', 'tests/scene3d-interface.test.ts', 'tests/acceptance/2648/instructions.test.ts', 'tests/acceptance/2648/seen.test.ts',
   ...['held', 'judged', 'restart', 'plants', 'heap'].map((f) => `tests/acceptance/2653/${f}.test.ts`),
+  // Added 2026-11-26 (#3512): the fastest of two or more passing runs the worktrees' caches hold is over two minutes.
+  'packages/checks/test/catalog.test.ts', 'tests/acceptance/1325/gate-secret.test.ts', 'tests/acceptance/1457/release.test.ts',
+  'tests/acceptance/1480/upload.test.ts', 'tests/acceptance/1634/key-lights.test.ts', 'tests/acceptance/1634/no-pipeline.test.ts',
+  'tests/acceptance/1662/ac2-symbols.test.ts', 'tests/acceptance/191/ac9-trial.test.ts', 'tests/acceptance/1918/ac2-rigid-fixtures.test.ts',
+  'tests/acceptance/1918/ac3-column-view.test.ts', 'tests/acceptance/1921/ac5-seek-columns.test.ts', 'tests/acceptance/1937/estimate.test.ts',
+  'tests/acceptance/1937/fix.test.ts', 'tests/acceptance/1941/fix.test.ts', 'tests/acceptance/2013/ac2-rest-on.test.ts',
+  'tests/acceptance/2018/states.test.ts', 'tests/acceptance/2977/extension-host.test.ts', 'tests/acceptance/33/failure-modes.test.ts',
+  'tests/acceptance/33/rows.test.ts', 'tests/acceptance/399/kit.test.ts', 'tests/acceptance/425/climb.test.ts',
+  'tests/acceptance/425/hold.test.ts', 'tests/acceptance/449/ac3-turbulence-table.test.ts', 'tests/acceptance/46/unguarded.test.ts',
+  'tests/acceptance/485/registries.test.ts', 'tests/acceptance/509-oracle/transcriber.test.ts', 'tests/acceptance/522-oracle/snapshot-roundtrip.test.ts',
+  'tests/acceptance/522/ac3-module-inputs.test.ts', 'tests/acceptance/522/ac7-late-joint.test.ts', 'tests/acceptance/524/ac4-skins.test.ts',
+  'tests/acceptance/524/ac6-soft-cube.test.ts', 'tests/acceptance/824/leftovers.test.ts', 'tests/acceptance/824/planted.test.ts',
+  'tests/acceptance/980/ac10-taste.test.ts',
 ];
 /**
  * Folders and files the alone block runs with nothing beside them, not even another shard: #16's and #315's files start
