@@ -725,11 +725,14 @@ function crates(bay, paths) {
 export function claimPair(root, print) {
   const refused = refusal(root);
   if (refused) return { refused };
-  // The claim keeps its place while bay-pair grants change hands, and leaves the line once none has for 720 minutes, a
-  // hung holder's bound (#3590); DEEP_TEST_GRANT_STALL sets the bound in minutes, for tests.
+  // A claim under no grant keeps its place while bay-pair grants change hands, and leaves the line once none has for 720
+  // minutes, a hung holder's bound (#3590); DEEP_TEST_GRANT_STALL sets the bound in minutes, for tests. One nested in a
+  // grant of its caller's (a lane command's build grant, the preflight's timed one) holds that slot while it waits, so
+  // it waits 30 minutes at most, as before.
+  const nested = ['build', 'test', 'timed'].some((cls) => holds(cls));
   const stall = Number(process.env.DEEP_TEST_GRANT_STALL ?? '720');
-  const grant = acquire('bay-pair', { stall });
-  if (!grant) return { blocked: `INCONCLUSIVE no grant: no bay pair changed hands within ${stall} min` };
+  const grant = acquire('bay-pair', nested ? { wait: 30 } : { stall });
+  if (!grant) return { blocked: nested ? 'INCONCLUSIVE no grant: no bay pair came within 30 min' : `INCONCLUSIVE no grant: no bay pair changed hands within ${stall} min` };
   try {
     return new Pair(root, grant, print);
   } catch (error) {
@@ -947,7 +950,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2);
   }
   if (pair.blocked?.startsWith('INCONCLUSIVE')) {
-    say(`${pair.blocked}\n  Fix: No pair changed hands for the whole bound, so a holder may be hung: check the bay-pair grants in the throttle's table, then run again.`);
+    say(`${pair.blocked}\n  Fix: Check the bay-pair grants in the throttle's table: wait for the other sessions' proofs, or for a hung holder's bound, then run again.`);
     process.exit(3);
   }
   if (pair.blocked) {
