@@ -315,6 +315,10 @@ pub enum Planted {
     ClaimsMsaaOverSingleSample,
     PuffBlockCopy,
     ResolveAccumulatesFrames,
+    /// #1316's wrong program (tests/acceptance/1316/README.md): the geometry pass draws one sample
+    /// a pixel, where environment-lit glTF frames still differ between fresh processes; #1173's
+    /// 4x MSAA pass (7caeca140) is where they stopped differing.
+    EnvironmentTextureRace,
     /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
     /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
     /// whatever its spike record says; each sector of a group composited on its own.
@@ -820,6 +824,7 @@ impl Planted {
             "claims_msaa_over_single_sample" => Planted::ClaimsMsaaOverSingleSample,
             "puff_block_copy" => Planted::PuffBlockCopy,
             "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
+            "environment_texture_race" => Planted::EnvironmentTextureRace,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
             "grid_keeps_previous_step" => Planted::GridKeepsPreviousStep,
             "grid_role_before_rebuild" => Planted::GridRoleBeforeRebuild,
