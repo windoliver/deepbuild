@@ -1,0 +1,14 @@
+{
+  "packages/hub/src/mcp-operations.ts": [
+    {
+      "find": [
+        "    const provisional = kind !== 'unblock' && raised.recommended !== null && raised.recommended !== undefined && !(await this.options.services.sessionStarts.inWorkRun(session));"
+      ],
+      "wrong": [
+        "    // The twin never-provisional (tests/acceptance/3243-redraft/README.md): no ask goes on provisionally, so a choice",
+        "    // with a recommendation waits on you even in a session no work run started (#84's rule broken).",
+        "    const provisional = false;"
+      ]
+    }
+  ]
+}
