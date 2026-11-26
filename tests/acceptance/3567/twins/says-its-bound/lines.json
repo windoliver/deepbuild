@@ -1,0 +1,13 @@
+{
+  "scripts/affected.mjs": [
+    {
+      "find": [
+        "  if (held) writeFileSync(held.marker, '');"
+      ],
+      "wrong": [
+        "  if (held) writeFileSync(held.marker, '');",
+        "  console.log(`BOUND the run ends within ${BOUND_MIN} min`);"
+      ]
+    }
+  ]
+}

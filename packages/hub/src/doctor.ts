@@ -17,11 +17,14 @@ import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, t
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
-import { hubAddress, installedRoot, rootOf, underTemp } from './paths.js';
+import { addedHosts } from './host-sessions.js';
+import { controlToken, hubAddress, installedRoot, underTemp } from './paths.js';
+import { majorsApart, outsideContract } from './wire.js';
 import { activePlant as plant } from './plant.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
+import { PROOFS, proofsProblem } from './guards.js';
 import { claudeHomes, denyHolds, homeMods, loginPlan, managedSettings, overrideWords } from './mods.js';
 import { probeSignIn } from './sign-in.js';
 import { lostIn } from './rule-load.js';
@@ -95,6 +98,11 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
     // Before setup, `deep hub start` would start a hub that no hook reaches: setup adds the hooks and starts it.
     else add('hub.socket', 'deepbuild', 'hub_unreachable', 'fail', `no hub answers at unix:${socket}`, installed(root) ? 'Run `deep hub start`; deep setup installs it as a login service.' : 'Run `deep setup`, which adds the hooks and starts the hub at login.');
   }
+  // Each added host's deep-hook (#999): within the hub's contract it records, whatever its version; a major apart, its hooks send nothing.
+  for (const [host, h] of Object.entries(addedHosts(root))) {
+    if (majorsApart(h.contract, h.hubContract)) add('host.hook', 'deepbuild', 'hook_outside_contract', 'fail', outsideContract(host, h.version, h.contract!, h.hubVersion, h.hubContract), `Run \`deep host add ${host}\`, which installs the deep-hook this hub's contract speaks; sessions running there keep running.`);
+    else add('host.hook', 'deepbuild', 'healthy', 'ok', `${host}'s deep-hook ${h.version ?? 'of no version it reports'} speaks contract ${h.contract ?? 'none it reports'}, within the hub's ${h.hubContract} (hub ${h.hubVersion})`, 'Nothing to do.');
+  }
   // Linux's trusted path (#70): polkit knows the action only from a root-owned file, and without it nothing you confirm counts.
   if (process.platform === 'linux') {
     const known = await new Promise<boolean>((done) => { execFile('/usr/bin/pkaction', ['--action-id', 'dev.deepbuild.confirm'], { timeout: 5000 }, (error) => done(!error)); });
@@ -105,7 +113,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   // The hub's background jobs (#909): one failing at its third run in a row or later, each with when the row began.
   if (answering) {
     try {
-      const reply = await call(socket, readFileSync(rootOf(root).token, 'utf8').trim(), 'hub.health', {});
+      const reply = await call(socket, controlToken(socket), 'hub.health', {});
       if ('error' in reply) throw Error(`${reply.error.code}: ${reply.error.remediation}`);
       const jobs = isObj(reply.result.jobs) ? reply.result.jobs : {};
       const failing = Object.entries(jobs).flatMap(([name, job]) => {
@@ -124,7 +132,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
       const refused = packs.filter((p) => p.state === 'refused');
       const unchecked = packs.filter((p) => p.state === 'not_checked');
       for (const p of refused) add('canvas.packs', 'deepbuild', 'pack_refused', 'fail', `the release's pack ${named(p)} failed the pack check, so it isn't installed: ${JSON.stringify(p.issues).slice(0, 600)}`, `Fix packs/${String(p.folder)} so it passes the pack check, or reinstall DeepBuild; then restart the hub.`);
-      if (!refused.length && unchecked.length) add('canvas.packs', 'deepbuild', 'not_checked', 'skip', `the canvas core hasn't checked ${unchecked.map(named).join(', ')} since the hub started`, 'Show a document or run deep_kinds once, then `deep doctor` again.');
+      if (!refused.length && unchecked.length) add('canvas.packs', 'deepbuild', 'not_checked', 'skip', `the canvas core hasn't checked ${unchecked.map(named).join(', ')} since the hub started`, 'Run deep_kinds once, or show a document that names a pack, then `deep doctor` again.');
       if (!refused.length && !unchecked.length) add('canvas.packs', 'deepbuild', 'healthy', 'ok', `the release's ${packs.length} packs passed the pack check and are installed`, 'Nothing to do.');
       // What macOS says of the app's notifications (#994): only the app can read it, so with no reading it isn't checked.
       const setting = reply.result.notifications;
@@ -174,6 +182,10 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   const shadows = plant() === 'statusline-user-settings-only' ? [] : shadowedBy(repo);
   for (const s of shadows) add('claude.statusline_shadowed', 'claude-code', 'statusline_shadowed', 'warn', `${s.file} sets ${s.key}, which Claude Code runs instead of the forwarder in ${repo}, so no plan window is read there`, `Take ${s.key} out of ${s.file}, or run your status line from statusline.yours in ~/.deepbuild/config.json, which the forwarder runs after it reads the windows.`);
   items.push(...rulesItems(repo));
+  // The guard entries' planted calls and twins (#2695): deep-hook never reads them, so its guards hold without them.
+  const proofs = proofsProblem(root);
+  if (proofs) add('guards.proofs', 'deepbuild', 'proofs_unreadable', 'warn', `${proofs.why}; deep-hook's guards hold without it, but the rules page names a guard as enforcing a rule only by its proof${proofs.unreadable ? ', and every install is refused while it can\'t be read, the product store\'s guard at each hub start included' : ''}`, `${proofs.unreadable ? `Make ${join(root, PROOFS)} readable JSON again, or remove it and run` : 'Run'} \`deep setup\`, which writes the shipped entries' proofs again; add your own entries again with \`deep guard add\`.`);
+  else if (existsSync(join(root, PROOFS)) && isObj(readJson(join(root, 'rules.json'))?.entries)) add('guards.proofs', 'deepbuild', 'healthy', 'ok', `the proof of every shipped guard entry rules.json has is held, in ${join(root, PROOFS)} or rules.json`, 'Nothing to do.');
 
   // Each agent's binary, version, sign-in and billing; Claude Code's token lifetime, test prompt and jobs' binary.
   const path = env.PATH ?? '';

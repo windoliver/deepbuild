@@ -82,7 +82,7 @@ it('hands back each teardown task that took its default, once, and no other', as
     const core = { writer: 'core', actor: 'you', scope: 'you', session: SESSION, agent: 'claude-code' };
     expect(await w.teardowns.defaulted()).toEqual([]);
     const id = ulid(Date.now());
-    await w.record.append(core, { v: 3, id, kind: 'ask.created', ts: Date.now(), data: { ...w.asks[0], deadline: Date.now() + 1000 } as never });
+    await w.record.append(core, { v: 6, id, kind: 'ask.created', ts: Date.now(), data: { ...w.asks[0], deadline: Date.now() + 1000 } as never });
     await w.record.append(core, { v: 1, id: ulid(Date.now() + 1), kind: 'ask.defaulted', ts: Date.now(), subject: `ask:${id}`, data: (fixtures('ask.defaulted@1')[0] as { data: never }).data });
     const first = await w.teardowns.defaulted();
     expect(first.map((d) => d.resource.key)).toEqual(['a1']);

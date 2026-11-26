@@ -23,6 +23,7 @@ pub mod tables;
 use std::sync::Arc;
 
 use deep_canvas::color::srgb_decode;
+use deep_canvas_marks::grid_image::Drawn;
 use deep_canvas_marks::paint::{self, Adjust, Extend, Geometry, Ramp};
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{Blend, Fill, ImageSampling, Line, Rgb, Scope};
@@ -62,6 +63,40 @@ pub trait Canvas {
     );
     fn pop_layer(&mut self);
     fn set_aliasing_threshold(&mut self, threshold: Option<u8>);
+    /// #269: the image of grid image `item`'s grid at `size` px, where the canvas rebuilds it
+    /// itself (Vello GPU's, on the GPU); `None` takes the CPU's rebuild.
+    fn grid_source(&mut self, _item: &str, _grid: &Drawn, _size: [u16; 2]) -> Option<ImageSource> {
+        None
+    }
+}
+
+/// #269: grid image `item`'s grid drawn over `bounds` (u), one image px a device px at `zoom`:
+/// rebuilt by the canvas where it rebuilds grids, else by the CPU.
+pub fn grid(ctx: &mut impl Canvas, item: &str, grid: &Drawn, bounds: [f64; 4], zoom: f64) {
+    let px = |u: f64| (u * zoom).round().clamp(1.0, f64::from(u16::MAX)) as u16;
+    let size = [px(bounds[2]), px(bounds[3])];
+    let image = match ctx.grid_source(item, grid, size) {
+        Some(source) => source,
+        None => {
+            let pixels = grid.pixels([u32::from(size[0]), u32::from(size[1])]);
+            let meta = PixelMetadata {
+                may_have_transparency: true,
+                alpha_type: ImageAlphaType::AlphaPremultiplied,
+            };
+            ImageSource::Pixmap(Arc::new(Pixmap::from_parts(pixels, size[0], size[1], meta)))
+        }
+    };
+    let sampler = sampler(ImageSampling::Nearest);
+    ctx.set_paint(Image { image, sampler }.into());
+    let k = [
+        bounds[2] / f64::from(size[0]),
+        bounds[3] / f64::from(size[1]),
+    ];
+    ctx.set_paint_transform(
+        Affine::translate((bounds[0], bounds[1])) * Affine::scale_non_uniform(k[0], k[1]),
+    );
+    ctx.fill_rect(&rect(bounds));
+    ctx.reset_paint_transform();
 }
 
 impl Canvas for RenderContext {

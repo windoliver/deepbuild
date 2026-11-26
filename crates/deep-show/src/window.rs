@@ -53,22 +53,29 @@ enum Entry {
         panel: [f64; 4],
         name: Option<String>,
         button: Option<[f64; 4]>,
-        /// #552: the app's own Join prompt over the panel while no one has clicked Join: its
-        /// words (a piece that reads `match.me` adds the courtesy line) and its button.
-        join: Option<(String, [f64; 4])>,
+        /// The app's own prompt over the panel, never the piece's: its words, its button's word
+        /// and its button. #552's Join while no one has clicked it (a piece that reads `match.me`
+        /// adds the courtesy line), or #278's Start while the first player may press it.
+        prompt: Option<(String, &'static str, [f64; 4])>,
     },
     Card,
 }
 
-/// The Join prompt's widest card, in points.
-const JOIN_WIDTH: f32 = 520.;
+/// The prompt's widest card, in points.
+const PROMPT_WIDTH: f32 = 520.;
 
-/// The Join prompt's words as the window lays them out in its card.
-fn join_label(text: &str) -> Label {
-    Label {
-        width: Some(JOIN_WIDTH - 32.),
-        ..Label::new(text.to_string())
-    }
+/// The prompt's words as the window lays them out in its card, and its button's word.
+fn prompt_labels(text: &str, word: &str) -> [Label; 2] {
+    [
+        Label {
+            width: Some(PROMPT_WIDTH - 32.),
+            ..Label::new(text.to_string())
+        },
+        Label {
+            weight: 600,
+            ..Label::new(word.to_string())
+        },
+    ]
 }
 
 struct Scene {
@@ -91,12 +98,11 @@ impl Scene {
             .collect();
         for e in &self.entries {
             if let Entry::Layer {
-                join: Some((text, _)),
+                prompt: Some((text, word, _)),
                 ..
             } = e
             {
-                out.push(join_label(text));
-                out.push(Label::new(String::from("Join")));
+                out.extend(prompt_labels(text, word));
             }
         }
         if let Some((question, options, _)) = &self.card {
@@ -121,7 +127,7 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
             panel,
             name,
             button,
-            join,
+            prompt,
         } => {
             let panel = bounds(*panel);
             window.with_content_mask(Some(ContentMask { bounds: panel }), |w| {
@@ -152,8 +158,8 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
                 if let Some(b) = button {
                     full_screen_button(scene, bounds(*b), w);
                 }
-                if let Some((text, b)) = join {
-                    join_prompt(scene, text, *b, w);
+                if let Some((text, word, b)) = prompt {
+                    prompt_card(scene, text, word, *b, w);
                 }
             });
         }
@@ -210,15 +216,18 @@ fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
     }
 }
 
-/// #552: the Join prompt the app draws over a panel, never the piece: a ground card of its words
-/// above its Join button, both outlined in ink.
-fn join_prompt(scene: &Scene, text: &str, b: [f64; 4], window: &mut Window) {
-    let words = join_label(text);
+/// The app's own prompt over a panel (#552's Join, #278's Start), never the piece's: a ground
+/// card of its words above its button, both outlined in ink, the button's word centred in it.
+fn prompt_card(scene: &Scene, text: &str, word: &str, b: [f64; 4], window: &mut Window) {
+    let [words, word] = prompt_labels(text, word);
     let height = f32::from(deep_text_gpui::measure(&words).height) + 32.;
     let centre = (b[0] + b[2] / 2.) as f32;
     let card = Bounds {
-        origin: point(px(centre - JOIN_WIDTH / 2.), px(b[1] as f32 - 12. - height)),
-        size: size(px(JOIN_WIDTH), px(height)),
+        origin: point(
+            px(centre - PROMPT_WIDTH / 2.),
+            px(b[1] as f32 - 12. - height),
+        ),
+        size: size(px(PROMPT_WIDTH), px(height)),
     };
     for (r, radius) in [(card, 8.), (bounds(b), 6.)] {
         window.paint_quad(quad(
@@ -236,13 +245,9 @@ fn join_prompt(scene: &Scene, text: &str, b: [f64; 4], window: &mut Window) {
         hsla(scene.ink),
         window,
     );
-    let join = Label {
-        weight: 600,
-        ..Label::new(String::from("Join"))
-    };
-    let w = f32::from(deep_text_gpui::measure(&join).width);
+    let w = f32::from(deep_text_gpui::measure(&word).width);
     let at = point(px(centre - w / 2.), px(b[1] as f32 + 8.));
-    deep_text_gpui::paint_label(at, &join, hsla(scene.ink), window);
+    deep_text_gpui::paint_label(at, &word, hsla(scene.ink), window);
 }
 
 /// The full-screen button (#383): a ground square outlined in muted, four ink corner ticks.
@@ -337,7 +342,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                     .current(doc)
                     .expect("a layer on screen has a current revision")
                     .doc;
-                hub.arranged(doc, current)
+                crate::hub::only_layer(&hub.arranged(doc, current), &row.layer)
                     .as_object()
                     .expect("a revision is an object")
                     .clone()
@@ -357,8 +362,10 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
             },
         };
         let size = crate::snapshot::px([panel[2] * scale, panel[3] * scale]);
-        // A document a session holds draws from it at `t` (its tables and vectors inlined, #1162).
-        let session_drawn = if hub.shown(doc).is_none() {
+        // A document a session holds draws from it at `t` (its tables and vectors inlined, #1162);
+        // one of several writers' layers draws as a shared document's does.
+        let alone = |r: &crate::hub::Row| r.doc["layers"].as_object().is_none_or(|l| l.len() < 2);
+        let session_drawn = if hub.shown(doc).is_none() && hub.current(doc).is_some_and(alone) {
             hub.window_drawn(doc, &panel_id, t)
         } else {
             None
@@ -377,15 +384,6 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
             Some((Value::Object(form), at)) => (form, at),
             _ => (stamped, t),
         };
-        // #552: the app's own Join prompt, in window points, while no one has clicked Join.
-        let prompt = hub.join_prompt(&panel_id);
-        let join = (prompt["state"] == "open").then(|| {
-            let b: Vec<f64> = (prompt["button"].as_array().into_iter().flatten())
-                .filter_map(Value::as_f64)
-                .collect();
-            let text = prompt["text"].as_str().unwrap_or_default().to_string();
-            (text, [panel[0] + b[0], panel[1] + b[1], b[2], b[3]])
-        });
         let rgba = if deep_canvas_scene3d::scene::has_3d(&Value::Object(stamped.clone())) {
             // A 3D writer layer draws natively on the GPU (#378), its frame scaled to fit the
             // panel from the top left as a 2D layer's is.
@@ -399,13 +397,13 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 return refused("unsupported_platform");
             }
             // #1729: its assets and maps from the evidence store, as render-back reads them.
-            let Ok((scene, look)) = hub.evaluate3d(&Value::Object(stamped.clone()), t, drawn_size)
-            else {
+            let Ok(frame) = hub.evaluate3d(&Value::Object(stamped.clone()), t, drawn_size) else {
                 continue;
             };
-            let Some(mut drawn) = hub.gpu3().and_then(|g| g.draw(&scene, &look)) else {
+            let Some(mut drawn) = hub.gpu3().and_then(|g| g.draw(&frame)) else {
                 continue;
             };
+            let scene = frame.staged.scene;
             for (id, b) in scene.boxes() {
                 let b = b.map(|v| v / scale);
                 let at = [panel[0] + b[0], panel[1] + b[1], b[2], b[3]];
@@ -480,6 +478,12 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
         let name = (row.band == Band::Agent && row.outline)
             .then(|| row.name.clone())
             .flatten();
+        // The app's own prompt, its button in window points: #552's Join while no one has
+        // clicked it, or #278's Start while the first player may press it.
+        let prompt = hub.window_prompt(&panel_id).map(|(text, word, b)| {
+            let at = [panel[0] + b[0], panel[1] + b[1], b[2], b[3]];
+            (text, word, at)
+        });
         keyed.push((
             key,
             Entry::Layer {
@@ -487,7 +491,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 panel,
                 name,
                 button,
-                join,
+                prompt,
             },
         ));
     }

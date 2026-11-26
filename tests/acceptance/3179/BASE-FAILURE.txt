@@ -1,0 +1,49 @@
+# #3179 blind suite on the base: sha ab84620ff34d00a78eb8ac2483fbadd00c006471; node v24.22.0; 2026-11-23T03:37:23Z; load at launch { 129.67 115.77 88.50 }; 8 cores
+# command: node --test tests/acceptance/3179/guard.test.mjs
+[3179] program under test: /private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-issue-1873-listed-failures-end-e755e5/c9d62289-670b-4ea1-bc59-e9a0d141d254/scratchpad/clone; node v24.22.0; load (1/5/15 min) at suite start 129.67 115.77 88.50
+[3179 guard] exit 0
+wall 267.8 s; git processes started 1972 (1912 git cat-file blob; 51 git -c core.quotePath=false; 5 git ls-tree -r; 3 git grep -l; 1 git remote get-url); load (1/5/15 min) at start 60.06 99.10 86.38, at end 60.35 79.72 81.10
+stdout:
+PASS guard: scripts/proof-approvals.mjs: the proof lanes' own code changed, by approved proposal (commit 121029241adb)
+PASS guard: tests/acceptance/3163/BASE-FAILURE.txt: deleted (criterion #3163.9c395067, #3163.d0eabe65), by approved proposal (commit 018f61ab3e4c)
+PASS guard: tests/acceptance/3163/README.md: deleted (criterion #3163.9c395067, #3163.d0eabe65), by approved proposal (commit 018f61ab3e4c)
+PASS guard: tests/acceptance/3163/guard.test.mjs › #3163.9c395067 on PR #3093's branch in a fresh GitHub clone, node scripts/proof.mjs guard finishes in under 60 s wall, with the load at start and end recorded, and starts no more than 200 git processes: deleted (criterion #3163.9c395067), by approved proposal (commit 018f61ab3e4c)
+PASS guard: tests/acceptance/3163/guard.test.mjs › #3163.d0eabe65 on that same clone and commit, node scripts/proof.mjs guard prints the same verdict lines as before the change, ignoring the proof: wall time line, and exits with the same code: deleted (criterion #3163.d0eabe65), by approved proposal (commit 018f61ab3e4c)
+PASS guard: scripts/proof-approvals.mjs: the proof lanes' own code changed, by approved proposal (commit ab84620ff34d)
+PASS guard: 5 commits checked: no guarded edit lacks its own approved proposal
+proof: wall time 266.6 s
+
+stderr:
+
+[3179] load (1/5/15 min) at suite end 55.17 77.68 80.35
+✖ #3179.381b8671 on PR #3177's branch in a fresh GitHub clone with origin/main pinned to its merge base, node scripts/proof.mjs guard finishes in under 60 s wall, with the load at start and end recorded, and starts no more than 200 git processes (267764.656959ms)
+✔ #3179.2db877e7 on that same clone and commit, node scripts/proof.mjs guard prints the same verdict lines as before the change, ignoring the proof: wall time line, and exits with the same code (1.760459ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 417364.909458
+
+✖ failing tests:
+
+test at tests/acceptance/3179/guard.test.mjs:113:1
+✖ #3179.381b8671 on PR #3177's branch in a fresh GitHub clone with origin/main pinned to its merge base, node scripts/proof.mjs guard finishes in under 60 s wall, with the load at start and end recorded, and starts no more than 200 git processes (267764.656959ms)
+  AssertionError [ERR_ASSERTION]: the guard took 267.8 s wall (limit under 60 s) and started 1972 git processes (limit 200)
+  exit 0
+  wall 267.8 s; git processes started 1972 (1912 git cat-file blob; 51 git -c core.quotePath=false; 5 git ls-tree -r; 3 git grep -l; 1 git remote get-url); load (1/5/15 min) at start 60.06 99.10 86.38, at end 60.35 79.72 81.10
+      at TestContext.<anonymous> (file:///private/tmp/claude-501/-Users-<name>-private-deepbuild-core--claude-worktrees-issue-1873-listed-failures-end-e755e5/c9d62289-670b-4ea1-bc59-e9a0d141d254/scratchpad/clone/tests/acceptance/3179/guard.test.mjs:116:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+# exit 1 at 2026-11-23T03:44:21Z; load { 55.17 77.68 80.35 }

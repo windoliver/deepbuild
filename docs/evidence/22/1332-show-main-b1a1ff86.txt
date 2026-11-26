@@ -1,0 +1,33 @@
+
+ RUN  v5.0.5 /home/<user>/deepbuild-base-22
+
+ ❯ tests/acceptance/1332/show.test.ts (2 tests | 1 failed) 4850482ms
+   × AC6 #1332.479b1c3f An issue whose `Runs on:` names a machine the host can't serve starts nothing and reads what it waits for 2422754ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1332/show.test.ts > AC6 #1332.479b1c3f An issue whose `Runs on:` names a machine the host can't serve starts nothing and reads what it waits for
+AssertionError: the run serves the Mac's issue: #100 landed: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1332/show.test.ts:56:75
+     54|   const { w, asked } = await (shared ??= scene());
+     55|   expect(asked.code, `deep work "${SCOPE}" raises the run's one approv…
+     56|   expect(w.merged(MAC), `the run serves the Mac's issue: #${MAC} lande…
+       |                                                                           ^
+     57|   expect(w.on(SPARK).map((l) => `${l.agent} at ${new Date(l.started).t…
+     58|   expect((await w.events()).filter((e) => e.kind === 'start.started' &…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  14:58:05
+   Duration  4851.11s (tests 100%)
+

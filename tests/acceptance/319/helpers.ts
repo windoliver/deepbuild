@@ -14,6 +14,7 @@ import { askSources, draftAskSettings, openAsks } from '../../../packages/asks/s
 import type { AskKind, Asks, Delivery, InboxRow } from '../../../packages/asks/src/index.ts';
 import { withPlans } from '../plans.ts';
 import { bare, makeClock, T0, ulid, type Clock, type Obj } from './data.ts';
+import { withDeclared } from '../declared.ts';
 
 export * from './data.ts';
 
@@ -88,7 +89,7 @@ export async function openWorld(options: WorldOptions): Promise<World> {
   const open = async () => {
     real = await openRecord({ path: join(dir, 'record.db'), now: clock.now });
     w.record = plant.record ? plant.record(real) : real;
-    const asks = withPlans(await openAsks({ record: w.record, now: clock.now, deliver: (d) => { deliveries.push(d); }, home: plant.home ? plant.home(w) : home }));
+    const asks = withDeclared(withPlans(await openAsks({ record: w.record, now: clock.now, deliver: (d) => { deliveries.push(d); }, home: plant.home ? plant.home(w) : home })));
     w.asks = plant.asks ? plant.asks(asks, w) : asks;
   };
   const events = async (kind?: string): Promise<Event[]> => {
@@ -167,6 +168,8 @@ export function repoWith(dir: string, doneYaml: string): string {
 const REFERENCE_MACS = [
   { model: 'Mac15,7', chip: 'Apple M3 Pro', gib: 36 },
   { model: 'Mac15,12', chip: 'Apple M3', gib: 16 },
+  { model: 'Mac17,10', chip: 'Apple M5 Max', gib: 64 },
+  { model: 'Mac18,1', chip: 'Apple M6', gib: 32 },
 ];
 const read = (cmd: string, ...args: string[]): string => execFileSync(cmd, args, { encoding: 'utf8' }).trim();
 /** Why a timing here is only a reading, or null on a reference Mac on mains power, Low Power Mode off, thermal state nominal. */

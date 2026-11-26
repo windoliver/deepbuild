@@ -14,6 +14,7 @@ const SOURCE: &str = include_str!("sway.wgsl");
 /// Vertices a workgroup moves.
 const WORKGROUP: u32 = 64;
 
+deep_gpu::paired! { params: "sway.wgsl", Params;
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Params {
@@ -23,6 +24,7 @@ struct Params {
     sway: [f32; 4],
     time: [f32; 4],
     counts: [u32; 4],
+}
 }
 
 /// One swaying solid's buffers: its params, and the gust the pass last used.

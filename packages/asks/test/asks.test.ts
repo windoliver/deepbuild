@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import type { JsonValue } from '@deepbuild/contracts';
-import { openRecord, RecordError, type Connection, type Event, type RecordStore } from '@deepbuild/record';
+import { openRecord, RecordError, testStorage, type Connection, type Event, type RecordStore } from '@deepbuild/record';
 import { openAsks, type Asks, type Delivery } from '../src/index.js';
 
 type Obj = { [key: string]: JsonValue };
@@ -31,7 +31,7 @@ const id = (ms: number): string => {
 };
 
 const taste = (subject: string, over: Obj = {}): Obj => ({
-  kind: 'taste', question: `Which ${subject}?`,
+  kind: 'taste', may_answer: 'verified_channel', question: `Which ${subject}?`,
   options: [{ id: 'blue', label: 'Blue', decision: 'none' }, { id: 'green', label: 'Green', decision: 'none' }],
   recommended: 'blue', deadline: T0 + 72 * HOUR, fallback: 'you', default: 'blue', provisional: false, owner: 'you',
   key: sha(`taste:${subject}`), pinned_to: { kind: 'evidence', ref: sha(subject) }, ...over,
@@ -201,7 +201,7 @@ describe('an option ID no command line carries (#2563)', () => {
 
 describe('a block someone else owns (#320)', () => {
   const block = (subject: string, over: Obj = {}): Obj => ({
-    kind: 'unblock', question: `Renew ${subject}?`,
+    kind: 'unblock', may_answer: 'verified_channel', question: `Renew ${subject}?`,
     options: [{ id: 'done', label: 'I did it', decision: 'none' }, { id: 'wait', label: 'Leave it blocked', decision: 'none' }],
     recommended: 'done', deadline: T0 + 48 * HOUR, fallback: 'you', default: 'wait', provisional: false, owner: 'sam',
     key: sha(`unblock:${subject}`), pinned_to: { kind: 'evidence', ref: sha(subject) },
@@ -365,6 +365,26 @@ describe('the resolver gate reads every decision the record holds, however it wa
     expect(await outcome(open)).toBe('answered');
   });
 
+  it('forgets a session whose process went with no SessionEnd as an ended one, but not one that hooks again (#1866)', async () => {
+    const died = (session: string) => append({ ...core, session }, 'session.gone', { pid: 4242, start: 'Mon Nov  2 23:00:00 2026' }, `session:${letters(session)}`);
+    const asked = async (session: string): Promise<string> => {
+      await start(session, `T${session}`);
+      const ask = await asks.raise(agent(session), 'deep_ask.taste', taste(session.toLowerCase()));
+      await asks.answer(card, ask, { option: 'green' });
+      await died(session);
+      return ask;
+    };
+    const [gone, back] = [await asked('SGONE'), await asked('SBACK')];
+    await append(hook('SBACK'), 'tool.before', { kind: 'read', paths: ['src/a.ts'], command: null });
+    for (let i = 0; i < 64; i++) {
+      await start(`E${i}`, `E${i}`);
+      await died(`E${i}`);
+    }
+    expect((await asks.inbox()).map((row) => row.ask)).toEqual([back]);
+    await expect(asks.card(gone)).rejects.toThrow('is no ask');
+    expect(await outcome(gone), "the record's answer stands").toBe('answered');
+  });
+
   it('keeps a session\'s decision past 64 newer ended sessions: resumed, it is never asked the same question again (#824)', async () => {
     await start('SRES', 'TRES');
     const first = await asks.raise(agent('SRES'), 'deep_ask.taste', taste('header'));
@@ -413,7 +433,7 @@ describe('the resolver gate reads every decision the record holds, however it wa
 
   it('a decision saved from an ask that left memory still carries the size bound of that ask\'s change (#824)', async () => {
     const merge = (lines: number): Obj => ({
-      kind: 'authority', question: 'Merge the fix?', options: [{ id: 'merge', label: 'Merge', decision: 'allow' }, { id: 'hold', label: 'Hold', decision: 'deny' }],
+      kind: 'authority', may_answer: 'trusted_path', question: 'Merge the fix?', options: [{ id: 'merge', label: 'Merge', decision: 'allow' }, { id: 'hold', label: 'Hold', decision: 'deny' }],
       recommended: null, deadline: T0 + 24 * HOUR, fallback: 'you', default: 'hold', provisional: false, owner: 'you',
       subject: { effect: 'merge', target: { kind: 'pr', ref: 'pr:1', owner: 'thread:TOTHER' }, change: { kind: 'fix', lines, paths: ['src/a.ts'] } },
       pinned_to: { kind: 'commit', ref: sha(`pr 1 ${lines}`).slice(0, 40) },
@@ -445,5 +465,100 @@ describe('the resolver gate reads every decision the record holds, however it wa
     } finally {
       off();
     }
+  });
+});
+
+describe('an answer that saves a decision (#319.43d13eb3, #22)', () => {
+  it('syncs the record once: the answer and its decision are durable together, before the agent hears it', async () => {
+    await record.close();
+    const storage = testStorage();
+    const path = join(dir, 'synced.db');
+    record = await openRecord({ path, now: () => now, storage });
+    const heard: string[] = [];
+    asks = await openAsks({ record, now: () => now, deliver: (d) => { if (d.option !== null) heard.push(`${d.ask} ${storage.syncs().length}`); } });
+    await start('S1', 'T1');
+    const handle = await asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
+    const before = storage.syncs().length;
+    await asks.answer(card, handle, { option: 'green' });
+    expect(storage.syncs().slice(before), 'one FULL commit for the answer and the decision it saves').toEqual([{ file: path, mode: 'full' }]);
+    expect(heard, 'the agent hears the answer once it is durable').toEqual([`${handle} ${before + 1}`]);
+    storage.cutPower();
+    record = await openRecord({ path, now: () => now, storage });
+    expect((await events('ask.answered')).map((e) => e.subject), 'the answer survives a power cut').toEqual([handle]);
+    expect((await events('decision.created')).map((e) => (e.data as Obj).answer), 'and so does its decision').toEqual(['green']);
+  });
+
+  it('saves no decision when the record would refuse the answer: words over the answer\'s limit are refused first', async () => {
+    await start('S1', 'T1');
+    const handle = await asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
+    for (const refused of [{ words: 'w'.repeat(8193) }, { words: 'half a pair \uD83D' }, { token: 't'.repeat(8193) }, { token: '\uD83D' }]) {
+      await expect(asks.answer(card, handle, { option: 'green', ...refused }), Object.keys(refused)[0]).rejects.toThrow();
+      expect(await events('ask.answered'), 'the ask is not answered').toEqual([]);
+      expect(await events('decision.created'), 'so no decision is saved for the next ask of its kind').toEqual([]);
+    }
+    await asks.answer(card, handle, { option: 'green', words: 'w'.repeat(8192) });
+    expect((await events('decision.created')).map((e) => (e.data as Obj).answer), 'words at the limit answer as before').toEqual(['green']);
+  });
+
+  it('settles only once the decision it saves is written, even when the record refuses the answer itself', async () => {
+    await start('S1', 'T1');
+    const handle = await asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
+    let letGo!: () => void;
+    const held = new Promise<void>((done) => { letGo = done; });
+    const real = record;
+    // The record refuses the answer at once and takes the decision only when let go.
+    const refusing = new Proxy(real, {
+      get(target, key) {
+        if (key === 'append') {
+          return (c: Parameters<typeof real.append>[0], e: Parameters<typeof real.append>[1]) => e.kind === 'ask.answered' ? Promise.reject(Error('refused')) : e.kind === 'decision.created' ? held.then(() => real.append(c, e)) : real.append(c, e);
+        }
+        const value = Reflect.get(target, key) as unknown;
+        return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+    asks = await openAsks({ record: refusing, now: () => now, deliver: () => undefined });
+    let settled = false;
+    const answering = asks.answer(card, handle, { option: 'green' }).finally(() => { settled = true; });
+    answering.catch(() => undefined);
+    await new Promise((done) => setTimeout(done, 50));
+    expect(settled, 'the answer holds the asks until the decision it saves is through').toBe(false);
+    letGo();
+    await expect(answering).rejects.toThrow('refused');
+  });
+
+  it('an overrule settles only once the decision it overrules is written, even when the record refuses its new decision', async () => {
+    const session = 'claude0003abcd';
+    await start(session, 'T1');
+    const decisionId = id(now);
+    await record.append({ writer: 'core', ...who, session }, { v: 1, id: decisionId, kind: 'decision.created', ts: now, data: { key: sha('taste:header'), scope: `session:${session}`, answer: 'green', ask: `ask:${id(now)}` } });
+    const off = asks.registerResolver('test/resolver', () => ({ answer: 'green', because: `decision:${decisionId}` }));
+    let handle: string;
+    try {
+      handle = await asks.raise(agent(session), 'deep_ask.taste', taste('header'));
+      expect(await outcome(handle)).toBe('decided_for_you');
+    } finally {
+      off();
+    }
+    let letGo!: () => void;
+    const held = new Promise<void>((done) => { letGo = done; });
+    const real = record;
+    // The record refuses the new decision at once and takes the overruling only when let go.
+    const refusing = new Proxy(real, {
+      get(target, key) {
+        if (key === 'append') {
+          return (c: Parameters<typeof real.append>[0], e: Parameters<typeof real.append>[1]) => e.kind === 'decision.created' ? Promise.reject(Error('refused')) : e.kind === 'decision.overruled' ? held.then(() => real.append(c, e)) : real.append(c, e);
+        }
+        const value = Reflect.get(target, key) as unknown;
+        return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+    asks = await openAsks({ record: refusing, now: () => now, deliver: () => undefined });
+    let settled = false;
+    const overruling = asks.overrule(card, handle, { option: 'blue' }).finally(() => { settled = true; });
+    overruling.catch(() => undefined);
+    await new Promise((done) => setTimeout(done, 50));
+    expect(settled, 'the overrule holds the asks until the overruling it writes is through').toBe(false);
+    letGo();
+    await expect(overruling).rejects.toThrow('refused');
   });
 });

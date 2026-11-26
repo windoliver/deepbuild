@@ -27,6 +27,8 @@ pub mod goldens;
 mod gpu;
 pub(crate) mod instance;
 mod interface;
+mod laws;
+pub mod lease;
 pub mod ledger;
 pub mod manifest;
 mod migration;
@@ -161,6 +163,7 @@ impl KitCall {
                     && x != REGISTRY_PART
                     && x != REFERENCES_PART
                     && x != SANDBOX_PART
+                    && x != laws::PART
                     && !CONTROL_PARTS.contains(&x.as_str())
             })
         }) {
@@ -402,7 +405,8 @@ impl<'a> Hub<'a> {
             return self.registry_kit(registries);
         }
         let gpu = call.backends.iter().any(|b| b == "gpu");
-        let lease = gpu.then(goldens::GpuLease::take);
+        let planted = self.scenario.module_planted.clone();
+        let lease = gpu.then(|| lease::kit(planted.as_deref()));
         let mut manifest = manifest::Manifest::of(self);
         if !call.twins.is_empty() {
             manifest.fixtures.retain_mut(|f| {
@@ -440,7 +444,7 @@ impl<'a> Hub<'a> {
             for part in PARTS
                 .into_iter()
                 .chain(INTERFACE_PARTS)
-                .chain([REGISTRY_PART, REFERENCES_PART, SANDBOX_PART])
+                .chain([REGISTRY_PART, REFERENCES_PART, SANDBOX_PART, laws::PART])
                 .chain(CONTROL_PARTS)
             {
                 if !call.runs(part) {
@@ -505,12 +509,12 @@ impl<'a> Hub<'a> {
                 let _ = std::fs::write(path, text);
             }
         }
-        drop(lease);
+        // The lease is let go once the reply that names it is made.
         json!({
             "verdict": overall.name(),
             "seed": call.seed,
             "backends": call.backends,
-            "lease": {"gpu": gpu},
+            "lease": lease.as_ref().map_or(json!({"gpu": false}), lease::GpuLease::reply),
             "modules": modules,
             "corpus": corpus_files,
             "criteria": criteria,
@@ -539,6 +543,7 @@ impl<'a> Hub<'a> {
             REGISTRY_PART => self.registries_part(ctx.module),
             REFERENCES_PART => fixtures::references(self, ctx),
             SANDBOX_PART => sandbox_part(ctx.module),
+            laws::PART => laws::run(self, ctx),
             _ if CONTROL_PARTS.contains(&part) => self.control_part(part, ctx.module),
             _ => None,
         }

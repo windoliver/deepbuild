@@ -1,0 +1,21 @@
+{
+  "packages/hub/src/plant.ts": [
+    {
+      "find": [
+        "  if (!value) return undefined;"
+      ],
+      "wrong": [
+        "  // The twin wake-assumed (tests/acceptance/3178/README.md): the hub acts as this plant whatever DEEP_HUB_PLANT says.",
+        "  if (value !== 'wake-assumed') return 'wake-assumed';"
+      ]
+    },
+    {
+      "find": [
+        "export const activePlant = (): string | undefined => process.env.DEEP_HUB_PLANT || undefined;"
+      ],
+      "wrong": [
+        "export const activePlant = (): string | undefined => 'wake-assumed';"
+      ]
+    }
+  ]
+}

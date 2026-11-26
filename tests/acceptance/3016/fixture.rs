@@ -97,10 +97,10 @@ pub fn glb(k: usize, [cols, rows]: [u32; 2]) -> Vec<u8> {
         "scene": 0,
     });
     let mut json = serde_json::to_vec(&doc).expect("JSON");
-    while json.len() % 4 != 0 {
+    while !json.len().is_multiple_of(4) {
         json.push(b' ');
     }
-    while bin.len() % 4 != 0 {
+    while !bin.len().is_multiple_of(4) {
         bin.push(0);
     }
     let total = 12 + 8 + json.len() + 8 + bin.len();

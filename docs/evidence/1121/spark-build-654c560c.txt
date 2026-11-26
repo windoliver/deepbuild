@@ -1,0 +1,1109 @@
+start 2026-11-22T03:34:44-08:00 commit 654c560c1468816186f16ab34830840b96746f0c Linux aarch64 load 6.59 8.74 11.24
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+host: aarch64-unknown-linux-gnu
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling proc-macro2 v1.0.107
+   Compiling serde_core v1.0.229
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling serde v1.0.229
+   Compiling libm v0.2.16
+   Compiling syn v3.0.9
+   Compiling syn v2.0.119
+   Compiling allocator-api2 v0.2.21
+   Compiling foldhash v0.2.0
+   Compiling equivalent v1.0.3
+   Compiling memchr v2.8.3
+   Compiling autocfg v1.5.1
+   Compiling log v0.4.34
+   Compiling either v1.19.0
+   Compiling hashbrown v0.17.1
+   Compiling crossbeam-utils v0.8.23
+   Compiling num-traits v0.2.19
+   Compiling crossbeam-epoch v0.9.21
+   Compiling jobserver v0.1.35
+   Compiling find-msvc-tools v0.1.15
+   Compiling shlex v2.0.1
+   Compiling typenum v1.20.1
+   Compiling cc v1.9.0
+   Compiling bitflags v2.13.2
+   Compiling serde_derive v1.0.229
+   Compiling crossbeam-deque v0.8.8
+   Compiling once_cell v1.21.4
+   Compiling rayon-core v1.13.0
+   Compiling version_check v0.9.5
+   Compiling subtle v2.6.1
+   Compiling thiserror v2.0.21
+   Compiling thiserror-impl v2.0.21
+   Compiling rayon v1.12.0
+   Compiling bytemuck_derive v1.12.1
+   Compiling itoa v1.0.18
+   Compiling bytemuck v1.25.2
+   Compiling stable_deref_trait v1.2.1
+   Compiling indexmap v2.14.2
+   Compiling generic-array v0.14.7
+   Compiling zmij v1.0.23
+   Compiling zerocopy v0.8.63
+   Compiling smallvec v1.16.3
+   Compiling arrayvec v0.7.8
+   Compiling zerocopy-derive v0.8.63
+   Compiling synstructure v0.14.0
+   Compiling serde_json v1.0.154
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling zeroize_derive v1.5.0
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling zerofrom v0.1.8
+   Compiling zeroize v1.9.1
+   Compiling cobs v0.3.0
+   Compiling cpufeatures v0.2.17
+   Compiling yoke v0.8.3
+   Compiling postcard v1.1.3
+   Compiling displaydoc v0.2.7
+   Compiling zerovec-derive v0.11.6
+   Compiling pin-project-lite v0.2.17
+   Compiling fnv v1.0.7
+   Compiling tinyvec v1.13.3
+   Compiling arrayref v0.3.9
+   Compiling rand_core v0.10.1
+   Compiling zerovec v0.11.8
+   Compiling writeable v0.6.4
+   Compiling digest v0.10.7
+   Compiling litemap v0.8.3
+   Compiling regex-syntax v0.8.11
+   Compiling siphasher v1.0.4
+   Compiling scopeguard v1.2.0
+   Compiling half v2.7.1
+   Compiling tinystr v0.8.4
+   Compiling zerotrie v0.2.5
+   Compiling icu_locale_core v2.3.0
+   Compiling potential_utf v0.1.6
+   Compiling utf8_iter v1.0.4
+   Compiling rustc-hash v2.1.3
+   Compiling icu_collections v2.3.0
+   Compiling icu_properties_data v2.3.0
+   Compiling sha2 v0.10.9
+   Compiling icu_provider v2.3.1
+   Compiling aho-corasick v1.1.5
+   Compiling icu_normalizer_data v2.3.0
+   Compiling utf_types v1.0.0
+   Compiling icu_properties v2.3.0
+   Compiling write16 v1.0.0
+   Compiling utf16_iter v1.1.0
+   Compiling unicode-normalization v0.1.26
+   Compiling icu_normalizer v2.3.0
+   Compiling crc32fast v1.5.2
+   Compiling winnow v1.0.4
+   Compiling polycool v0.4.0
+   Compiling kurbo v0.13.1
+   Compiling lock_api v0.4.14
+   Compiling toml_datetime v1.1.2+spec-1.1.0
+   Compiling core_maths v0.1.1
+   Compiling parking_lot_core v0.9.12
+   Compiling euclid v0.22.14
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling parking v2.2.1
+   Compiling slab v0.4.12
+   Compiling unicode-segmentation v1.13.3
+   Compiling memmap2 v0.9.11
+   Compiling icu_locale_fallback_data v2.3.0
+   Compiling rustix v1.1.6
+   Compiling toml_edit v0.25.17+spec-1.1.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling hybrid-array v0.4.15
+   Compiling blake3 v1.5.5
+   Compiling proc-macro-crate v3.5.0
+   Compiling slotmap v1.1.1
+   Compiling adler2 v2.0.1
+   Compiling unicode-script v0.5.8
+   Compiling simd-adler32 v0.3.10
+   Compiling icu_locale_fallback v2.3.0
+   Compiling hashbrown v0.16.1
+   Compiling libloading v0.8.9
+   Compiling constant_time_eq v0.3.1
+   Compiling futures-core v0.3.34
+   Compiling event-listener v5.4.2
+   Compiling deep-canvas v0.0.0 (<clone>/crates/deep-canvas)
+   Compiling linebender_resource_handle v0.1.1
+   Compiling event-listener-strategy v0.5.4
+   Compiling icu_segmenter_data v2.3.0
+   Compiling bytes v1.12.1
+   Compiling num-complex v0.4.6
+   Compiling pkg-config v0.3.34
+   Compiling tracing-core v0.1.36
+   Compiling tracing-attributes v0.1.31
+   Compiling cfg_aliases v0.2.2
+   Compiling icu_segmenter v2.3.0
+   Compiling tracing v0.1.44
+   Compiling crypto-common v0.2.2
+   Compiling parking_lot v0.12.5
+   Compiling miniz_oxide v0.9.1
+   Compiling zlib-rs v0.6.8
+   Compiling unicode-width v0.2.2
+   Compiling font-types v0.12.7
+   Compiling cmov v0.5.4
+   Compiling ctutils v0.4.8
+   Compiling read-fonts v0.41.0
+   Compiling regex-automata v0.4.18
+   Compiling flate2 v1.1.10
+   Compiling heck v0.5.0
+   Compiling futures-io v0.3.34
+   Compiling same-file v1.0.6
+   Compiling walkdir v2.5.0
+   Compiling color v0.3.3
+   Compiling peniko v0.6.1
+   Compiling async-lock v3.4.2
+   Compiling block-buffer v0.12.1
+   Compiling guillotiere v0.7.0
+   Compiling const-oid v0.10.2
+   Compiling semver v1.0.28
+   Compiling rustc_version v0.4.1
+   Compiling miniz_oxide v0.8.9
+   Compiling static_assertions v1.1.0
+   Compiling simdutf8 v0.1.5
+   Compiling anyhow v1.0.104
+   Compiling rustversion v1.0.23
+   Compiling percent-encoding v2.3.2
+   Compiling fastrand v2.5.0
+   Compiling form_urlencoded v1.2.2
+   Compiling fdeflate v0.3.7
+   Compiling idna_adapter v1.2.2
+   Compiling ppv-lite86 v0.2.21
+   Compiling ryu v1.0.23
+   Compiling paste v1.0.15
+   Compiling idna v1.1.0
+   Compiling digest v0.11.3
+   Compiling deep-canvas-seams v0.0.0 (<clone>/crates/deep-canvas-seams)
+   Compiling convert_case v0.11.0
+   Compiling skrifa v0.44.0
+   Compiling zune-core v0.5.3
+   Compiling base64 v0.22.1
+   Compiling zune-jpeg v0.5.15
+   Compiling url v2.5.8
+   Compiling profiling-procmacros v1.0.18
+   Compiling num-integer v0.1.47
+   Compiling mio v1.2.4
+   Compiling getrandom v0.4.3
+   Compiling fearless_simd v0.7.0
+   Compiling profiling v1.0.18
+   Compiling pulp v0.22.3
+   Compiling itertools v0.14.0
+   Compiling bumpalo v3.20.3
+   Compiling quick-error v2.0.1
+   Compiling weezl v0.1.12
+   Compiling pxfm v0.1.30
+   Compiling rustc-hash v1.1.0
+   Compiling bit-vec v0.9.1
+   Compiling vello_common v0.3.0
+   Compiling parlance v0.1.1
+   Compiling fontique v0.12.0
+   Compiling glifo v0.4.0
+   Compiling harfrust v0.12.0
+   Compiling png v0.18.1
+   Compiling futures-lite v2.6.1
+   Compiling zune-inflate v0.2.54
+   Compiling parley_data v0.12.0
+   Compiling concurrent-queue v2.5.0
+   Compiling raw-window-handle v0.6.2
+   Compiling color_quant v1.1.0
+   Compiling parley_emoji v0.12.0
+   Compiling pulp-wasm-simd-flag v0.1.1
+   Compiling futures-sink v0.3.34
+   Compiling reborrow v0.5.5
+   Compiling byteorder-lite v0.1.0
+   Compiling image-webp v0.2.4
+   Compiling parley_engine v0.12.0
+   Compiling gif v0.14.2
+   Compiling moxcms v0.8.1
+   Compiling num-bigint v0.4.8
+   Compiling regex v1.13.1
+   Compiling codespan-reporting v0.13.1
+   Compiling enumflags2_derive v0.7.12
+   Compiling cpufeatures v0.3.1
+   Compiling lebe v0.5.3
+   Compiling fax v0.2.7
+   Compiling bit_field v0.10.3
+   Compiling exr v1.74.2
+   Compiling tiff v0.11.3
+   Compiling parley v0.12.0
+   Compiling vello_cpu v0.3.0
+   Compiling zvariant_utils v4.2.0
+   Compiling unicode-security v0.1.3
+   Compiling qoi v0.4.1
+   Compiling ordered-float v5.5.0
+   Compiling async-task v4.7.1
+   Compiling deep-text v0.0.0 (<clone>/crates/deep-text)
+   Compiling image v0.25.10
+   Compiling zvariant_derive v5.15.1
+   Compiling http v1.5.0
+   Compiling phf_shared v0.11.3
+   Compiling quickjs-jit-sys v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling tokio-macros v2.7.2
+   Compiling roxmltree v0.21.1
+   Compiling socket2 v0.6.5
+   Compiling getrandom v0.3.4
+   Compiling float-cmp v0.9.0
+   Compiling atomic-waker v1.1.2
+   Compiling endi v1.1.1
+   Compiling strict-num v0.1.1
+   Compiling tokio v1.54.1
+   Compiling futures-channel v0.3.34
+   Compiling async-channel v2.5.0
+   Compiling deep-canvas-drawn v0.0.0 (<clone>/crates/deep-canvas-drawn)
+   Compiling taffy v0.14.0
+   Compiling dlib v0.5.3
+   Compiling ttf-parser v0.25.1
+   Compiling getrandom v0.2.17
+   Compiling roxmltree v0.20.0
+   Compiling fontconfig-parser v0.5.8
+   Compiling deep-canvas-marks v0.0.0 (<clone>/crates/deep-canvas-marks)
+   Compiling wayland-sys v0.31.11
+   Compiling spirv v0.4.0+sdk-1.4.341.0
+   Compiling futures-macro v0.3.34
+   Compiling byteorder v1.5.0
+   Compiling futures-task v0.3.34
+   Compiling futures-util v0.3.34
+   Compiling rand_core v0.9.5
+   Compiling fontdb v0.23.0
+   Compiling polling v3.11.0
+   Compiling async-trait v0.1.92
+   Compiling unicode-xid v0.2.6
+   Compiling ash v0.38.0+1.3.281
+   Compiling unicode-bidi v0.3.18
+   Compiling web-time v1.1.0
+   Compiling unicode-ccc v0.4.0
+   Compiling lazy_static v1.5.1
+   Compiling glob v0.3.4
+   Compiling unicode-bidi-mirroring v0.4.0
+   Compiling sha1_smol v1.0.1
+   Compiling unicode-properties v0.1.3
+   Compiling xmlwriter v0.1.0
+   Compiling rustybuzz v0.20.1
+   Compiling uuid v1.28.0
+   Compiling rand_chacha v0.9.0
+   Compiling enumflags2 v0.7.12
+   Compiling zcheapstr v1.1.0
+   Compiling svgtypes v0.16.1
+   Compiling spin v0.9.9
+   Compiling simplecss v0.2.2
+   Compiling async-io v2.6.0
+   Compiling data-url v0.3.2
+   Compiling fixedbitset v0.5.7
+   Compiling imagesize v0.14.0
+   Compiling new_debug_unreachable v1.0.6
+   Compiling unicode-vo v0.1.0
+   Compiling bitflags v1.3.2
+   Compiling pico-args v0.5.0
+   Compiling zvariant v5.15.1
+   Compiling rand v0.9.5
+   Compiling hash32 v0.3.1
+   Compiling phf_shared v0.13.1
+   Compiling target-lexicon v0.13.5
+   Compiling presser v0.3.1
+   Compiling phf_generator v0.13.1
+   Compiling zbus_names v4.3.5
+   Compiling piper v0.2.5
+   Compiling convert_case v0.10.0
+   Compiling font-types v0.11.3
+   Compiling serde_bytes v0.11.19
+   Compiling errno v0.3.14
+   Compiling foldhash v0.1.5
+   Compiling winnow v0.7.15
+   Compiling gpu-allocator v0.28.0
+   Compiling renderdoc-sys v1.1.0
+   Compiling toml_write v0.1.2
+   Compiling arbitrary v1.5.0
+   Compiling relative-path v2.0.2
+   Compiling precomputed-hash v0.1.1
+   Compiling quickjs-jit-core v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling hashbrown v0.15.5
+   Compiling signal-hook-registry v1.4.8
+   Compiling derive_more-impl v2.1.1
+   Compiling blocking v1.7.0
+   Compiling phf_macros v0.13.1
+   Compiling rustls-pki-types v1.15.1
+   Compiling ident_case v1.0.1
+   Compiling base64 v0.23.1
+   Compiling cpubits v0.1.1
+   Compiling quickjs-jit-macro v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling phf v0.13.1
+   Compiling async-signal v0.2.14
+   Compiling sha2 v0.11.1
+   Compiling bincode v1.3.3
+   Compiling wayland-backend v0.3.17
+   Compiling ring v0.17.14
+   Compiling bstr v1.13.1
+   Compiling async-process v2.5.0
+   Compiling quickjs-jit v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling http-body v1.1.0
+   Compiling async-executor v1.14.0
+   Compiling num-rational v0.4.2
+   Compiling encoding_rs v0.8.42
+   Compiling serde_repr v0.1.21
+   Compiling quick-xml v0.41.0
+   Compiling downcast-rs v1.2.1
+   Compiling thiserror v1.0.69
+   Compiling scoped-tls v1.0.1
+   Compiling time-core v0.1.9
+   Compiling num-conv v0.2.2
+   Compiling litrs v1.0.1
+   Compiling wayland-client v0.31.15
+   Compiling base64ct v1.8.3
+   Compiling pem-rfc7468 v1.0.0
+   Compiling wayland-scanner v0.31.11
+   Compiling document-features v0.2.12
+   Compiling time-macros v0.2.32
+   Compiling rquickjs v0.12.9 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling zbus_macros v5.19.0
+   Compiling deep-canvas-motion v0.0.0 (<clone>/crates/deep-canvas-motion)
+   Compiling async-broadcast v0.7.2
+   Compiling ordered-stream v0.2.0
+   Compiling async-recursion v1.2.0
+   Compiling der_derive v0.8.0
+   Compiling thiserror-impl v1.0.69
+   Compiling multiversion_no_op v1.0.0
+   Compiling hex v0.4.3
+   Compiling untrusted v0.9.0
+   Compiling deranged v0.5.9
+   Compiling powerfmt v0.2.1
+   Compiling bit-vec v0.8.0
+   Compiling hashbrown v0.14.5
+   Compiling option-ext v0.2.0
+   Compiling time v0.3.55
+   Compiling bit-set v0.8.0
+   Compiling zbus v5.19.0
+   Compiling der v0.8.2
+   Compiling llrt_utils v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling globset v0.4.20
+   Compiling bit-set v0.10.0
+   Compiling lyon_geom v1.0.19
+   Compiling chacha20 v0.10.2
+   Compiling serde_spanned v1.1.2
+   Compiling enumn v0.1.14
+   Compiling quick-xml v0.42.0
+   Compiling rand_core v0.6.4
+   Compiling linked-hash-map v0.5.6
+   Compiling rustls v0.23.46
+   Compiling object v0.37.3
+   Compiling toml_writer v1.1.3+spec-1.1.0
+   Compiling pollster v0.4.0
+   Compiling ref-cast v1.0.27
+   Compiling anstyle v1.0.14
+   Compiling toml v1.1.8+spec-1.1.0
+   Compiling annotate-snippets v0.12.17
+   Compiling yaml-rust v0.4.5
+   Compiling rand v0.8.8
+   Compiling plist v1.10.3
+   Compiling accesskit v0.24.1
+   Compiling rand v0.10.3
+   Compiling lyon_path v1.0.19
+   Compiling rustls-webpki v0.103.16
+   Compiling fancy-regex v0.16.2
+   Compiling futures-executor v0.3.34
+   Compiling tiny-skia-path v0.11.4
+   Compiling ref-cast-impl v1.0.27
+   Compiling pin-project-internal v1.1.13
+   Compiling serde_derive_internals v0.30.0
+   Compiling heapless v0.9.3
+   Compiling wasmtime-internal-core v49.0.5
+   Compiling gpui-pre-ztracing v0.3.9
+   Compiling unicase v2.10.0
+   Compiling gimli v0.32.3
+   Compiling pin-project v1.1.13
+   Compiling schemars_derive v1.2.3
+   Compiling addr2line v0.25.1
+   Compiling futures v0.3.34
+   Compiling syntect v5.3.0
+   Compiling phf_generator v0.11.3
+   Compiling embed-resource v3.0.12
+   Compiling spki v0.8.1
+   Compiling crypto-bigint v0.7.11
+   Compiling png v0.17.16
+   Compiling tempfile v3.27.0
+   Compiling serde_urlencoded v0.7.1
+   Compiling naga v29.0.4
+   Compiling smol_str v0.3.6
+   Compiling wait-timeout v0.2.1
+   Compiling httparse v1.10.1
+   Compiling dyn-clone v1.0.20
+   Compiling float_next_after v1.0.0
+   Compiling bit-vec v0.10.1
+   Compiling iana-time-zone v0.1.65
+   Compiling quick-error v1.2.3
+   Compiling cranelift-srcgen v0.136.5
+   Compiling gpui-pre-ztracing-macro v0.3.9
+   Compiling rustc-demangle v0.1.28
+   Compiling cranelift-assembler-x64-meta v0.136.5
+   Compiling rusty-fork v0.3.1
+   Compiling backtrace v0.3.76
+   Compiling chrono v0.4.45
+   Compiling bit-set v0.11.1
+   Compiling lyon_tessellation v1.0.22
+   Compiling schemars v1.2.3
+   Compiling tiny-skia v0.11.4
+   Compiling gpui-pre v0.3.9 (<clone>/vendor/gpui-pre)
+   Compiling two-face v0.4.5
+   Compiling usvg v0.46.0
+   Compiling lyon_algorithms v1.0.21
+   Compiling zbus_xml v5.2.1
+   Compiling flume v0.12.0
+   Compiling bit-set v0.9.1
+   Compiling naga-types v30.0.1
+   Compiling proptest-macro v0.6.0
+   Compiling gpui-pre-util v0.3.9
+   Compiling strum_macros v0.28.0
+   Compiling naga v30.0.1
+   Compiling rand_xorshift v0.5.0
+   Compiling rgb v0.8.53
+   Compiling gpui-pre-derive-refineable v0.3.9
+   Compiling crossbeam-queue v0.3.14
+   Compiling svg_fmt v0.4.5
+   Compiling atomic v0.5.3
+   Compiling core_detect v1.0.0
+   Compiling link-section v0.19.3
+   Compiling linktime-proc-macro v0.2.3
+   Compiling pollster v0.2.5
+   Compiling hexf-parse v0.2.1
+   Compiling crunchy v0.2.4
+   Compiling unarray v0.1.4
+   Compiling khronos-egl v6.0.0
+   Compiling proptest v1.12.0
+   Compiling ctor v1.0.13
+   Compiling postage v0.5.0
+   Compiling gpui-pre-refineable v0.3.9
+   Compiling etagere v0.2.15
+   Compiling strum v0.28.0
+   Compiling resvg v0.46.0
+   Compiling gpui-pre-collections v0.3.9
+   Compiling zbus-lockstep v0.5.2
+   Compiling gpui-pre-scheduler v0.3.9
+   Compiling lyon v1.0.19
+   Compiling gpui-pre-sum-tree v0.3.9
+   Compiling gpui-pre-shared-string v0.3.9
+   Compiling gpui-pre-http-client v0.3.9
+   Compiling pkcs8 v0.11.0
+   Compiling phf_codegen v0.11.3
+   Compiling string_cache_codegen v0.5.4
+   Compiling futures-concurrency v7.7.1
+   Compiling wayland-protocols v0.32.13
+   Compiling derive_more v2.1.1
+   Compiling hdrhistogram v7.6.0
+   Compiling wgpu-types v29.0.4
+   Compiling hmac v0.13.0
+   Compiling gpui-pre-macros v0.3.9
+   Compiling wgpu-hal v29.0.4
+   Compiling taffy v0.13.0
+   Compiling spin v0.10.1
+   Compiling ff v0.14.0
+   Compiling gpu-descriptor-types v0.2.0
+   Compiling pulley-macros v49.0.5
+   Compiling num_cpus v1.17.0
+   Compiling inventory v0.3.25
+   Compiling tiny-keccak v2.0.2
+   Compiling waker-fn v1.2.0
+   Compiling unsafe-libyaml v0.2.11
+   Compiling mac v0.1.1
+   Compiling seahash v4.1.0
+   Compiling futf v0.1.5
+   Compiling gpu-descriptor v0.3.2
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling wgpu-naga-bridge v29.0.4
+   Compiling markup5ever v0.12.1
+   Compiling cranelift-bitset v0.136.5
+   Compiling ignore v0.4.33
+   Compiling zbus-lockstep-macros v0.5.2
+   Compiling wgpu-types v30.0.1
+   Compiling arc-swap v1.9.3
+   Compiling pathfinder_simd v0.5.6
+   Compiling llrt_build v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wgpu-hal v30.0.1
+   Compiling freetype-sys v0.20.1
+   Compiling yeslogic-fontconfig-sys v6.0.1
+   Compiling block-padding v0.4.2
+   Compiling block-padding v0.3.3
+   Compiling mime v0.3.17
+   Compiling utf-8 v0.7.6
+   Compiling leb128fmt v0.1.0
+   Compiling glow v0.17.0
+   Compiling cranelift-isle v0.136.5
+   Compiling cranelift-isle v0.116.1
+   Compiling tendril v0.4.3
+   Compiling inout v0.1.4
+   Compiling inout v0.2.5
+   Compiling atspi-common v0.13.0
+   Compiling wgpu-naga-bridge v30.0.1
+   Compiling globwalk v0.8.1
+   Compiling pulley-interpreter v49.0.5
+   Compiling group v0.14.0
+   Compiling mime_guess v2.0.5
+   Compiling deep-canvas-scene3d v0.0.0 (<clone>/crates/deep-canvas-scene3d)
+   Compiling dirs-sys v0.5.0
+   Compiling async-fs v2.2.0
+   Compiling string_cache v0.8.9
+   Compiling read-fonts v0.37.0
+   Compiling phf v0.11.3
+   Compiling signature v3.0.0
+   Compiling toml_datetime v0.6.11
+   Compiling serde_spanned v0.6.9
+   Compiling wgpu-core v29.0.4
+   Compiling float-cmp v0.10.0
+   Compiling unicode-linebreak v0.1.5
+   Compiling cranelift-codegen-shared v0.136.5
+   Compiling base16ct v1.0.0
+   Compiling cranelift-codegen-shared v0.116.1
+   Compiling openssl-probe v0.2.1
+   Compiling arraydeque v0.5.1
+   Compiling granit-parser v1.3.0
+   Compiling rustls-native-certs v0.8.5
+   Compiling cranelift-codegen-meta v0.116.1
+   Compiling sec1 v0.8.1
+   Compiling cranelift-codegen-meta v0.136.5
+   Compiling toml_edit v0.22.27
+   Compiling encoding_rs_io v0.1.8
+   Compiling dirs v6.0.0
+   Compiling wgpu-core-deps-windows-linux-android v29.0.4
+   Compiling const-random-macro v0.1.16
+   Compiling cipher v0.4.4
+   Compiling cranelift-entity v0.136.5
+   Compiling hkdf v0.13.0
+   Compiling ashpd v0.13.13
+   Compiling cranelift-assembler-x64 v0.136.5
+   Compiling llrt_hooking v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling dirs-sys v0.4.1
+   Compiling webpki-roots v1.0.10
+   Compiling async-net v2.0.0
+   Compiling wasmparser v0.258.3
+   Compiling num-iter v0.1.46
+   Compiling wgpu v29.0.4
+   Compiling wgpu-core v30.0.1
+   Compiling zstd-sys v2.1.2+zstd.1.5.7
+   Compiling gimli v0.33.0
+   Compiling phf_shared v0.14.0
+   Compiling hmac v0.12.1
+   Compiling cranelift-bitset v0.116.1
+   Compiling ahash v0.8.12
+   Compiling html5ever v0.27.0
+   Compiling xim-parser v0.2.2
+   Compiling base62 v2.2.6
+   Compiling zed-font-kit v0.14.1-zed
+   Compiling xcursor v0.3.11
+   Compiling zeno v0.3.3
+   Compiling inotify-sys v0.1.8
+   Compiling nohash-hasher v0.2.0
+   Compiling yazi v0.2.1
+   Compiling as-raw-xcb-connection v1.0.1
+   Compiling num-bigint-dig v0.9.1
+   Compiling swash v0.2.10
+   Compiling serde-saphyr v1.3.0
+   Compiling triomphe v0.1.17
+   Compiling cranelift-entity v0.116.1
+   Compiling phf_generator v0.14.0
+   Compiling smol v2.0.2
+   Compiling webpki-roots v0.26.11
+   Compiling dirs v5.0.1
+   Compiling cranelift-codegen v0.116.1
+   Compiling elliptic-curve v0.14.1
+   Compiling cranelift-bforest v0.136.5
+   Compiling cranelift-codegen v0.136.5
+   Compiling wgpu-core-deps-windows-linux-android v30.0.1
+   Compiling rust-embed-utils v8.13.0
+   Compiling pathfinder_geometry v0.5.1
+   Compiling const-random v0.1.18
+   Compiling shellexpand v3.1.2
+   Compiling toml v0.8.23
+   Compiling harfrust v0.5.2
+   Compiling skrifa v0.40.0
+   Compiling atspi-proxies v0.13.0
+   Compiling cipher v0.5.2
+   Compiling primefield v0.14.0
+   Compiling accesskit_consumer v0.38.0
+   Compiling llrt_context v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling gethostname v1.1.0
+   Compiling wgpu v30.0.1
+   Compiling sha1 v0.10.7
+   Compiling is-docker v0.2.0
+   Compiling itertools v0.11.0
+   Compiling rangemap v1.8.0
+   Compiling vsimd v0.8.0
+   Compiling data-encoding v2.11.1
+   Compiling float-ord v0.3.2
+   Compiling sys-locale v0.3.2
+   Compiling self_cell v1.3.0
+   Compiling gpui-kit-assets v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling outref v0.5.2
+   Compiling normpath v1.5.2
+   Compiling x11rb-protocol v0.13.2
+   Compiling rust-i18n-support v4.2.4
+   Compiling cosmic-text v0.19.0
+   Compiling tungstenite v0.29.0
+   Compiling is-wsl v0.4.0
+   Compiling llrt_timers v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling accesskit_atspi_common v0.19.1
+   Compiling wnaf v0.14.1
+   Compiling atspi v0.29.0
+   Compiling x11rb v0.13.2
+   Compiling rust-embed-impl v8.13.0
+   Compiling phf_macros v0.14.0
+   Compiling cranelift-bforest v0.116.1
+   Compiling hkdf v0.12.4
+   Compiling pbkdf2 v0.12.2
+   Compiling wasm-encoder v0.258.3
+   Compiling num v0.4.3
+   Compiling xim-ctext v0.3.0
+   Compiling llrt_async_hooks v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling cbc v0.1.2
+   Compiling aes v0.8.4
+   Compiling xml5ever v0.18.1
+   Compiling rust-i18n v4.2.4
+   Compiling llrt_encoding v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling rfc6979 v0.6.0
+   Compiling llrt_exceptions v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_events v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling regalloc2 v0.11.2
+   Compiling cranelift-control v0.116.1
+   Compiling cranelift-control v0.136.5
+   Compiling fluent-uri v0.1.4
+   Compiling calloop v0.14.5
+   Compiling regalloc2 v0.15.2
+   Compiling curve25519-dalek v5.0.0
+   Compiling md-5 v0.10.6
+   Compiling gimli v0.31.1
+   Compiling zstd-safe v7.4.0
+   Compiling alloc-no-stdlib v2.0.4
+   Compiling str_indices v0.4.4
+   Compiling xkeysym v0.2.1
+   Compiling unicode-id v0.3.7
+   Compiling markdown v1.0.0
+   Compiling xkbcommon v0.8.0
+   Compiling ropey v2.0.0-beta.1
+   Compiling alloc-stdlib v0.2.4
+   Compiling oo7 v0.6.0
+   Compiling calloop-wayland-source v0.4.1
+   Compiling lsp-types v0.97.0
+   Compiling llrt_abort v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling ecdsa v0.17.0
+   Compiling markup5ever_rcdom v0.3.0
+   Compiling zed-xim v0.4.0-zed
+   Compiling inotify v0.11.5
+   Compiling phf v0.14.0
+   Compiling rust-embed v8.13.0
+   Compiling gpui-pre-wgpu v0.3.9
+   Compiling accesskit_unix v0.22.1
+   Compiling primeorder v0.14.0
+   Compiling open v5.4.4
+   Compiling rust-i18n-macro v4.2.4
+   Compiling hex-simd v0.8.0
+   Compiling base64-simd v0.8.0
+   Compiling wayland-cursor v0.31.14
+   Compiling wayland-protocols-wlr v0.3.12
+   Compiling wayland-protocols-plasma v0.3.12
+   Compiling notify-rust v4.18.2
+   Compiling filedescriptor v0.8.3
+   Compiling tokio-util v0.7.20
+   Compiling universal-hash v0.6.1
+   Compiling halfbrown v0.4.0
+   Compiling notify-types v2.1.0
+   Compiling enum-iterator-derive v1.5.0
+   Compiling approx v0.5.1
+   Compiling itertools v0.13.0
+   Compiling instant v0.1.13
+   Compiling gpui-component v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling termcolor v1.4.1
+   Compiling io-lifetimes v2.0.4
+   Compiling io-lifetimes v3.0.1
+   Compiling try-lock v0.2.5
+   Compiling gpui-base v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling want v0.3.2
+   Compiling wasmprinter v0.258.3
+   Compiling enum-iterator v2.3.0
+   Compiling notify v8.2.0
+   Compiling value-trait v0.12.2
+   Compiling h2 v0.4.20
+   Compiling gpui-pre-linux v0.3.9
+   Compiling polyval v0.7.3
+   Compiling llrt_stream_web v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling brotli-decompressor v5.0.3
+   Compiling llrt_json v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling crc32c v0.6.8
+   Compiling gpui-component-macros v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling similar v2.7.0
+   Compiling object v0.40.0
+   Compiling wasmtime-internal-versioned-export-macros v49.0.5
+   Compiling io-extras v0.19.0
+   Compiling tower-service v0.3.3
+   Compiling deep-gpu v0.0.0 (<clone>/crates/deep-gpu)
+   Compiling object v0.36.7
+   Compiling wasmtime-internal-unwinder v49.0.5
+   Compiling wasmtime-internal-component-util v49.0.5
+   Compiling brotli v8.0.4
+   Compiling llrt_buffer v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wasmtime-environ v49.0.5
+   Compiling hyper v1.12.0
+   Compiling gpui-pre-platform v0.3.9
+   Compiling zstd v0.13.4
+   Compiling ghash v0.6.0
+   Compiling simd-json v0.18.1
+   Compiling ctr v0.10.1
+   Compiling aes v0.9.3
+   Compiling ed25519 v3.0.0
+   Compiling aead v0.6.1
+   Compiling crypto-primes v0.7.2
+   Compiling pkcs1 v0.8.0
+   Compiling ipnet v2.12.2
+   Compiling wasmtime-internal-cranelift v49.0.5
+   Compiling cap-primitives v4.0.3
+   Compiling rsa v0.10.0
+   Compiling aes-gcm v0.11.1
+   Compiling ed25519-dalek v3.0.0
+   Compiling aes-kw v0.3.1
+   Compiling fs-set-times v0.20.3
+   Compiling llrt_compression v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling hyper-util v0.1.21
+   Compiling gpui-kit v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling wasmtime v49.0.5
+   Compiling x25519-dalek v3.0.0
+   Compiling p521 v0.14.0
+   Compiling p384 v0.14.0
+   Compiling p256 v0.14.0
+   Compiling cranelift-frontend v0.136.5
+   Compiling cranelift-native v0.136.5
+   Compiling cranelift-module v0.116.1
+   Compiling cbc v0.2.1
+   Compiling deep-canvas-effects v0.0.0 (<clone>/crates/deep-canvas-effects)
+   Compiling wasm-encoder v0.263.0
+   Compiling tokio-rustls v0.26.6
+   Compiling quickjs-jit-runtime v0.12.11 (<clone>/vendor/quickjs-jit-runtime)
+   Compiling deep-images v0.0.0 (<clone>/crates/deep-images)
+   Compiling sha1 v0.11.0
+   Compiling md-5 v0.11.0
+   Compiling pbkdf2 v0.13.0
+   Compiling deep-canvas-cells v0.0.0 (<clone>/crates/deep-canvas-cells)
+   Compiling rustix-linux-procfs v0.1.1
+   Compiling sync_wrapper v1.0.2
+   Compiling cap-std v4.0.3
+   Compiling ambient-authority v0.0.2
+   Compiling tower-layer v0.3.3
+   Compiling maybe-owned v0.3.4
+   Compiling tower v0.5.3
+   Compiling llrt_crypto v0.9.0-beta (<clone>/vendor/llrt_crypto)
+   Compiling hyper-rustls v0.27.10
+   Compiling wast v263.0.0
+   Compiling cranelift-object v0.116.1
+   Compiling llrt_zlib v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling cranelift-native v0.116.1
+   Compiling cranelift-frontend v0.116.1
+   Compiling deep-canvas-sandbox v0.0.0 (<clone>/crates/deep-canvas-sandbox)
+   Compiling addr2line v0.26.1
+   Compiling wasmtime-internal-jit-icache-coherence v49.0.5
+   Compiling llrt_url v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_path v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling tokio-socks v0.5.3
+   Compiling http-body-util v0.1.5
+   Compiling rustls-pemfile v2.2.0
+   Compiling memfd v0.6.6
+   Compiling sysinfo v0.37.2
+   Compiling filetime v0.2.29
+   Compiling tar v0.4.46
+   Compiling gpui-fps v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling gpui-pre-reqwest v0.12.15
+   Compiling quickjs-jit-stdlib v0.12.7 (https://github.com/longbridge/quickjs-jit?rev=605da483611a3548edb8c33fdff602e3f5f42076#605da483)
+   Compiling wat v1.263.0
+   Compiling clang-sys v1.9.1
+   Compiling deep-catalog v0.0.0 (<clone>/crates/deep-catalog)
+   Compiling fs2 v0.4.3
+   Compiling prettyplease v0.2.37
+   Compiling deep-sandbox-wasmtime v0.0.0 (<clone>/crates/deep-sandbox-wasmtime)
+   Compiling deep-text-gpui v0.0.0 (<clone>/crates/deep-text-gpui)
+vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5: warning: unused variable: `diagnostic_key`: help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+vendor/quickjs-jit-runtime/src/lib.rs:1387:4: warning: function `apply_stress_gc_after_validation` is never used
+vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5: warning: field `machine_disassembly` is never read
+   Compiling deep-marks-gpui v0.0.0 (<clone>/crates/deep-marks-gpui)
+   Compiling ptr_meta_derive v0.3.2
+   Compiling gpui-shell v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling lexical-util v1.0.7
+   Compiling ptr_meta v0.3.2
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+   Compiling minimal-lexical v0.2.1
+   Compiling nom v7.1.3
+   Compiling rancor v0.1.3
+   Compiling deep-logic v0.0.0 (<clone>/crates/deep-logic)
+   Compiling deep-marks-vello v0.0.0 (<clone>/crates/deep-marks-vello)
+   Compiling keccak v0.1.6
+   Compiling bytecheck_derive v0.8.3
+   Compiling term v1.2.1
+   Compiling proc-macro-hack v0.5.20+deprecated
+   Compiling fearless_simd v0.4.1
+   Compiling ascii-canvas v4.0.0
+   Compiling sha3 v0.10.9
+   Compiling deep-marks-raster v0.0.0 (<clone>/crates/deep-marks-raster)
+   Compiling cexpr v0.6.0
+   Compiling lexical-write-integer v1.0.6
+   Compiling lexical-parse-integer v1.0.6
+   Compiling deep-app v0.0.0 (<clone>/crates/deep-app)
+   Compiling deep-canvas-input v0.0.0 (<clone>/crates/deep-canvas-input)
+crates/deep-app/src/gpu_view.rs:12:5: warning: unused import: `gpui_kit`
+crates/deep-app/src/footprint.rs:15:8: warning: static `GLYPHS` is never used
+crates/deep-app/src/footprint.rs:22:8: warning: static `SPRITES` is never used
+crates/deep-app/src/footprint.rs:29:8: warning: static `TARGETS` is never used
+crates/deep-app/src/footprint.rs:36:8: warning: static `INSTANCES` is never used
+crates/deep-app/src/footprint.rs:43:8: warning: static `DRAWABLES` is never used
+   Compiling petgraph v0.7.1
+   Compiling lalrpop-util v0.22.2
+   Compiling ena v0.14.4
+   Compiling matrixmultiply v0.3.11
+   Compiling shlex v1.3.0
+   Compiling unic-langid-impl v0.9.6
+   Compiling lalrpop v0.22.2
+warning: `deep-app` (lib) generated 6 warnings
+   Compiling lexical-write-float v1.0.6
+   Compiling lexical-parse-float v1.0.6
+   Compiling logos-codegen v0.16.1
+   Compiling wide v1.7.1
+   Compiling rawpointer v0.2.1
+   Compiling hayro-ccitt v0.4.0
+   Compiling fearless_simd v1.2.0
+   Compiling hayro-jbig2 v0.3.1
+   Compiling simba v0.10.2
+   Compiling wgsl-parse v0.4.0
+   Compiling logos-derive v0.16.1
+   Compiling unic-langid-macros-impl v0.9.6
+   Compiling lexical-core v1.0.6
+   Compiling hayro-jpeg2000 v0.3.5
+   Compiling glam v0.33.12
+   Compiling ecow v0.2.6
+   Compiling munge_macro v0.4.7
+   Compiling nalgebra-macros v0.3.0
+   Compiling icu_collator_data v2.3.0
+   Compiling icu_locale_data v2.3.0
+   Compiling portable-atomic v1.15.0
+   Compiling hayro-ccitt v0.3.0
+   Compiling hayro-syntax v0.7.2
+   Compiling nalgebra v0.35.0
+   Compiling munge v0.4.7
+   Compiling unic-langid-macros v0.9.6
+   Compiling lexical v7.0.5
+   Compiling logos v0.16.1
+   Compiling wgsl-types v0.4.0
+   Compiling deep-replica v0.0.0 (<clone>/crates/deep-replica)
+crates/deep-replica/src/drive/memory.rs:11:13: warning: unused import: `Fail`
+crates/deep-replica/src/drive/mod.rs:217:5: warning: field `pasted` is never read
+   Compiling strum_macros v0.27.2
+   Compiling rkyv_derive v0.8.18
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling unscanny v0.1.0
+   Compiling typst-utils v0.15.1
+   Compiling wasmparser v0.239.0
+   Compiling heapless v0.8.0
+   Compiling ciborium-io v0.2.2
+   Compiling ciborium-ll v0.2.2
+   Compiling enum-ordinalize v4.4.2
+   Compiling strum v0.27.2
+   Compiling glamx v0.3.1
+   Compiling unic-langid v0.9.6
+   Compiling symphonia-core v0.6.1
+   Compiling wesl-macros v0.4.0
+   Compiling serde_arrays v0.2.0
+   Compiling serde_path_to_error v0.1.20
+   Compiling num-derive v0.5.1
+   Compiling wasmi_core v1.1.0
+   Compiling object v0.39.1
+   Compiling thin-vec v0.2.21
+   Compiling codex v0.3.0
+   Compiling chinese-variant v1.1.6
+   Compiling by_address v1.2.1
+   Compiling rust_decimal v1.43.0
+   Compiling unicode-math-class v0.1.0
+   Compiling roman-numerals-rs v3.1.0
+   Compiling downcast-rs v2.0.2
+   Compiling biblatex v0.12.0
+   Compiling palette_derive v0.7.7
+   Compiling chinese-number v0.7.8
+   Compiling wasmi_ir v1.1.0
+   Compiling citationberg v0.7.0 (https://github.com/typst/citationberg?rev=06a591e2f237d25e1dfdedac3f3d1494c496c52d#06a591e2)
+   Compiling wesl v0.4.0
+   Compiling icu_locale v2.3.1
+   Compiling icu_collator v2.3.1
+warning: `deep-replica` (lib) generated 2 warnings (run `cargo fix --lib -p deep-replica` to apply 1 suggestion)
+   Compiling ciborium v0.2.2
+   Compiling rand_chacha v0.3.1
+   Compiling read-fonts v0.39.2
+   Compiling tiny-skia-path v0.12.0
+   Compiling typst-timing v0.15.1
+   Compiling comemo-macros v0.5.1
+   Compiling csv-core v0.1.13
+   Compiling palette_math v0.7.7
+   Compiling regex-lite v0.1.9
+   Compiling wasmi_collections v1.1.0
+   Compiling hayro-postscript v0.2.0
+   Compiling robust v1.2.0
+   Compiling bindgen v0.72.1
+   Compiling mutate_once v0.1.2
+   Compiling kamadak-exif v0.6.2
+   Compiling spade v2.15.1
+   Compiling skrifa v0.42.1
+   Compiling hayro-cmap v0.1.1
+   Compiling wasmi v1.1.0
+   Compiling symphonia-metadata v0.6.1
+   Compiling palette v0.7.7
+   Compiling csv v1.4.0
+   Compiling comemo v0.5.1
+   Compiling typst-syntax v0.15.1
+   Compiling usvg v0.47.0
+   Compiling lipsum v0.9.1
+   Compiling hayagriva v0.10.1
+   Compiling rstar v0.13.1
+   Compiling vello_gpu_shaders v0.3.0
+   Compiling bytecheck v0.8.3
+   Compiling deep-canvas-media v0.0.0 (<clone>/crates/deep-canvas-media)
+   Compiling typst-macros v0.15.1
+   Compiling meshopt v0.7.0
+   Compiling typst-assets v0.15.1
+   Compiling rustix v0.38.44
+   Compiling bindgen v0.71.1
+   Compiling typed-arena v2.0.2
+   Compiling glidesort v0.1.2
+   Compiling az v1.3.0
+   Compiling typst-library v0.15.1
+   Compiling rend v0.5.4
+   Compiling ar_archive_writer v0.5.3
+   Compiling parry3d v0.31.1
+   Compiling symphonia-common v0.6.1
+   Compiling hayro-interpret v0.7.0
+   Compiling parry2d v0.31.1
+   Compiling vello_common v0.0.8
+   Compiling deep-canvas-vector v0.0.0 (<clone>/crates/deep-canvas-vector)
+   Compiling deep-canvas-graph v0.0.0 (<clone>/crates/deep-canvas-graph)
+   Compiling deep-physics-rapier v0.0.0 (<clone>/crates/deep-physics-rapier)
+   Compiling beef v0.5.2
+   Compiling linux-raw-sys v0.4.15
+   Compiling logos-codegen v0.14.4
+   Compiling basisu_c_sys v0.9.1
+   Compiling vello_cpu v0.0.8
+   Compiling rapier2d v0.36.1
+   Compiling rapier3d v0.36.1
+   Compiling psm v0.1.32
+   Compiling rkyv v0.8.18
+   Compiling wgpu-profiler v0.28.0
+   Compiling deep-relay v0.0.0 (<clone>/crates/deep-relay)
+   Compiling pic-scale v0.7.12
+   Compiling deep-canvas-physics v0.0.0 (<clone>/crates/deep-canvas-physics)
+   Compiling icu_provider_blob v2.3.0
+   Compiling memoffset v0.9.1
+   Compiling hypher v0.1.8
+   Compiling home v0.5.12
+   Compiling which v6.0.3
+   Compiling typst-layout v0.15.1
+   Compiling thorvg-sys v0.4.0+thorvg-1.1.2
+   Compiling hayro v0.7.1
+   Compiling deep-scene3d-render v0.0.0 (<clone>/crates/deep-scene3d-render)
+   Compiling mitex-spec v0.2.7 (<clone>/vendor/mitex-spec)
+vendor/mitex-spec/src/lib.rs:235:37: warning: missing documentation for a struct field
+vendor/mitex-spec/src/lib.rs:298:37: warning: missing documentation for a struct field
+warning: `mitex-spec` (lib) generated 2 warnings
+warning: `mitex-spec` (lib) generated 2 warnings (2 duplicates)
+   Compiling vello_gpu v0.3.0
+   Compiling logos-derive v0.14.4
+   Compiling hayro-svg v0.7.0
+   Compiling symphonia-codec-vorbis v0.6.1 (<clone>/vendor/symphonia-codec-vorbis)
+   Compiling symphonia-codec-alac v0.6.1
+   Compiling symphonia-bundle-mp3 v0.6.1
+   Compiling stacker v0.1.25
+   Compiling spin v0.12.3
+   Compiling symphonia v0.6.1
+   Compiling typst-svg v0.15.1
+   Compiling logos v0.14.4
+   Compiling deep-marks-render v0.0.0 (<clone>/crates/deep-marks-render)
+   Compiling mitex-spec-gen v0.2.7 (<clone>/vendor/mitex-spec-gen)
+crates/deep-marks-render/src/lib.rs:103:5: warning: fields `t`, `view`, `record`, `frames`, and `look` are never read
+crates/deep-marks-render/src/lib.rs:113:9: warning: multiple fields are never read
+crates/deep-marks-render/src/lib.rs:132:9: warning: fields `look`, `steps`, `store`, and `switch_rebuilds` are never read
+crates/deep-marks-render/src/lib.rs:140:9: warning: multiple fields are never read
+crates/deep-marks-render/src/lib.rs:156:10: warning: field `0` is never read
+crates/deep-marks-render/src/lib.rs:158:9: warning: multiple fields are never read
+crates/deep-marks-render/src/lib.rs:179:9: warning: fields `0` and `1` are never read
+crates/deep-marks-render/src/lib.rs:180:11: warning: field `0` is never read
+crates/deep-marks-render/src/lib.rs:185:5: warning: multiple fields are never read
+warning: `deep-marks-render` (lib) generated 9 warnings
+   Compiling deep-canvas-sheet v0.0.0 (<clone>/crates/deep-canvas-sheet)
+   Compiling deep-canvas-record v0.0.0 (<clone>/crates/deep-canvas-record)
+   Compiling opus-rs v0.1.42
+   Compiling rusty_aac v2.0.1
+   Compiling text-size v1.1.1
+   Compiling countme v3.0.1
+   Compiling deep-contracts v0.0.0 (<clone>/crates/deep-contracts)
+   Compiling rowan v0.15.19
+   Compiling deep-codecs v0.0.0 (<clone>/crates/deep-codecs)
+crates/deep-codecs/src/export.rs:12:5: warning: unused import: `std::cell::RefCell`
+crates/deep-codecs/src/export.rs:16:5: warning: unused import: `std::rc::Rc`
+crates/deep-codecs/src/stream.rs:8:5: warning: unused import: `std::collections::BTreeMap`
+crates/deep-codecs/src/stream.rs:17:56: warning: unused import: `track_color`
+crates/deep-codecs/src/export.rs:625:13: warning: unused variable: `key`: help: if this is intentional, prefix it with an underscore: `_key`
+crates/deep-codecs/src/export.rs:111:4: warning: function `quality` is never used
+crates/deep-codecs/src/export.rs:126:7: warning: constant `STARVED` is never used
+crates/deep-codecs/src/export.rs:436:4: warning: function `hash_file` is never used
+crates/deep-codecs/src/export.rs:908:4: warning: function `flatten` is never used
+crates/deep-codecs/src/export.rs:950:4: warning: function `without_sei` is never used
+crates/deep-codecs/src/mov.rs:143:15: warning: function `planted_timescale` is never used
+crates/deep-codecs/src/stream.rs:174:5: warning: fields `bgra`, `matrix`, `range`, and `blocked` are never read
+crates/deep-codecs/src/stream.rs:196:8: warning: method `frame` is never used
+   Compiling typst-html v0.15.1
+   Compiling mitex-lexer v0.2.7 (https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d#51f7210e)
+   Compiling deep-effects-render v0.0.0 (<clone>/crates/deep-effects-render)
+   Compiling deep-net v0.0.0 (<clone>/crates/deep-net)
+   Compiling mitex-glob v0.2.7 (https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d#51f7210e)
+   Compiling mitex-parser v0.2.7 (https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d#51f7210e)
+   Compiling deep-show v0.0.0 (<clone>/crates/deep-show)
+   Compiling deep-hook v0.0.0 (<clone>/crates/deep-hook)
+   Compiling deep-play v0.0.0 (<clone>/crates/deep-play)
+   Compiling deep-groups-render v0.0.0 (<clone>/crates/deep-groups-render)
+   Compiling typst-realize v0.15.1
+   Compiling typst-eval v0.15.1
+   Compiling thorvg v0.6.0
+   Compiling deep-panel-host v0.0.0 (<clone>/crates/deep-panel-host)
+warning: `deep-codecs` (lib) generated 13 warnings (run `cargo fix --lib -p deep-codecs` to apply 5 suggestions)
+   Compiling deep-canvas-loop v0.0.0 (<clone>/crates/deep-canvas-loop)
+   Compiling deep-gpu-layer v0.0.0 (<clone>/crates/deep-gpu-layer)
+   Compiling deep-lottie-reader v0.0.0 (<clone>/crates/deep-lottie-reader)
+   Compiling typst v0.15.1
+   Compiling mitex v0.2.7 (https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d#51f7210e)
+   Compiling deep-canvas-export v0.0.0 (<clone>/crates/deep-canvas-export)
+   Compiling deep-pptx-reader v0.0.0 (<clone>/crates/deep-pptx-reader)
+   Compiling deep-typeset v0.0.0 (<clone>/crates/deep-typeset)
+crates/deep-gpu-layer/src/window.rs:10:27: warning: unused import: `Instant`
+crates/deep-gpu-layer/src/window.rs:12:5: warning: unused import: `deep_gpu::ring::SlotState`
+crates/deep-gpu-layer/src/envelope.rs:1161:9: warning: variable does not need to be mutable
+   Compiling deep-player v0.0.0 (<clone>/crates/deep-player)
+crates/deep-player/src/net.rs:92:9: error[E0432]: unresolved import `wasm_bindgen`: use of unresolved module or unlinked crate `wasm_bindgen`
+crates/deep-player/src/net.rs:93:15: error[E0433]: cannot find module or crate `js_sys` in this scope: use of unresolved module or unlinked crate `js_sys`
+crates/deep-player/src/net.rs:94:18: error[E0433]: cannot find module or crate `js_sys` in this scope: use of unresolved module or unlinked crate `js_sys`
+crates/deep-player/src/net.rs:97:23: error[E0433]: cannot find module or crate `js_sys` in this scope: use of unresolved module or unlinked crate `js_sys`
+crates/deep-player/src/net.rs:94:40: error[E0433]: cannot find module or crate `js_sys` in this scope: use of unresolved module or unlinked crate `js_sys`
+crates/deep-player/src/net.rs:98:36: error[E0433]: cannot find module or crate `js_sys` in this scope: use of unresolved module or unlinked crate `js_sys`
+error: could not compile `deep-player` (lib) due to 6 previous errors
+warning: build failed, waiting for other jobs to finish...
+crates/deep-show/src/export/program.rs:44:9: warning: field `before_hash` is never read
+crates/deep-show/src/export/tools.rs:38:9: warning: field `surface` is never read
+crates/deep-show/src/net/live.rs:347:19: warning: method `window_prompt` is never used
+crates/deep-show/src/picks.rs:804:19: warning: method `window_drawn` is never used
+crates/deep-show/src/stepped.rs:159:12: warning: method `behind` is never used
+crates/deep-show/src/device.rs:16:7: warning: constant `TARGET` is never used
+crates/deep-show/src/device.rs:18:7: warning: constant `CHUNK` is never used
+crates/deep-show/src/device.rs:22:12: warning: struct `Ring` is never constructed
+crates/deep-show/src/device.rs:38:12: warning: associated items `new`, `free`, `push`, `pull`, and `counts` are never used
+crates/deep-show/src/device.rs:128:7: warning: constant `LIVE` is never used
+crates/deep-show/src/device.rs:129:7: warning: constant `LIVE_BUFFER` is never used
+crates/deep-show/src/device.rs:131:7: warning: constant `BLOCK` is never used
+   Compiling deep-text-render v0.0.0 (<clone>/crates/deep-text-render)
+crates/deep-text-render/src/main.rs:85:5: warning: multiple fields are never read
+crates/deep-text-render/src/main.rs:97:5: warning: multiple fields are never read
+warning: `deep-text-render` (bin "deep-text-render") generated 2 warnings
+   Compiling deep-synth-job v0.0.0 (<clone>/crates/deep-synth-job)
+   Compiling deep-input v0.0.0 (<clone>/crates/deep-input)
+   Compiling deep-canvas-test-modules v0.0.0 (<clone>/crates/deep-canvas-test-modules)
+   Compiling deep-motion v0.0.0 (<clone>/crates/deep-motion)
+   Compiling deep-lottie v0.0.0 (<clone>/crates/deep-lottie)
+warning: `deep-show` (bin "deep-show") generated 12 warnings
+warning: `deep-gpu-layer` (bin "deep-gpu") generated 3 warnings (run `cargo fix --bin "deep-gpu" -p deep-gpu-layer` to apply 3 suggestions)
+EXIT 101 2026-11-22T03:43:23-08:00

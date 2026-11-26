@@ -269,7 +269,7 @@ export class Sends {
     const what = `${f.piece} sends ${m.kind} ${m.key} to ${m.to.join(', ')}${f.schedule ? ` from the schedule ${f.schedule}` : ''}`;
     const input: PlanInput = { steps: [{ does: `${what}: ${differs.join(' | ')}`, changes: [...m.to, ...(f.schedule ? [f.schedule] : [])], undo: null, public: false, cost: 0 }], diff: plan };
     return this.o.asks.raise(CORE, 'action.send', {
-      kind: 'authority', question: `Let ${what}? It differs from your rules: ${differs.join('; ')}.`,
+      kind: 'authority', may_answer: 'trusted_path', question: `Let ${what}? It differs from your rules: ${differs.join('; ')}.`,
       options: [{ id: 'approve', label: 'Send it', decision: 'allow' }, { id: 'decline', label: 'Don\'t', decision: 'deny' }],
       recommended: null, deadline: Math.max(f.until, this.o.now() + 1000), fallback: 'you', default: 'decline', provisional: false, owner: 'you',
       key: sha256Hex(canonicalize({ send: f.piece, key: m.key, plan })), pinned_to: { kind: 'evidence', ref: plan },

@@ -12,6 +12,7 @@ pub const HDR_PASS: &str = "scene3d.hdr";
 /// The HDR surface's format.
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
+deep_gpu::paired! { params: "hdr.wgsl", Hdr { _pad: _ };
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, PartialEq)]
 struct Params {
@@ -20,7 +21,8 @@ struct Params {
     scale: [f32; 2],
     /// A planted wrong pass (hdr.wgsl), 0 for none.
     plant: u32,
-    _pad: [u32; 3],
+    _pad: u32,
+}
 }
 
 /// The pass, built the first time a view presents HDR.
@@ -109,7 +111,7 @@ impl HdrPass {
             tolerance: deband.ceil() + 1.0,
             scale,
             plant,
-            _pad: [0; 3],
+            _pad: 0,
         };
         if self.written != Some(params) {
             device

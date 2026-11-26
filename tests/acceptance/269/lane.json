@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU; each file builds deep-show or deep-gpu and #544's assembler with cargo, ac3, ac5 and ac6 draw on the Metal device through deep-gpu, ac3 hashes deep-show's renders on it, and ac6 is a timed budget" }

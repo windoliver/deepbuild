@@ -1,0 +1,11 @@
+{
+  "#1881.6ee547f4": [
+    "scope-id-lookup"
+  ],
+  "#1881.5d46b7e2": [
+    "no-remote-asks-by-scope-id"
+  ],
+  "#1881.e56f5a3e": [
+    "no-remote-reads-as-none"
+  ]
+}

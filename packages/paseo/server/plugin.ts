@@ -171,11 +171,15 @@ export function contribute(server: Server): () => void {
       const a = agentOf(agent, context);
       later(() => hook(a, 'agent.turn.before', { turn_id: turnId ?? '' }));
     },
-    'agent.turn.after': ({ agent, turnId, outcome }: { agent: HookAgent; turnId: string | null; outcome: { kind: string; error?: { message?: string } } }, context) => {
+    'agent.turn.after': ({ agent, turnId, outcome }: { agent: HookAgent; turnId: string | null; outcome: { kind: string; error?: { message?: string }; reason?: string } }, context) => {
       const a = agentOf(agent, context);
       if (plant === 'idle-guess') place(a, true);
       later(async () => {
-        const reply = await hook(a, 'agent.turn.after', { turn_id: turnId ?? '', outcome: outcome.kind === 'completed' ? 'finished' : 'failed', ...(outcome.error?.message ? { error: outcome.error.message } : {}) });
+        // paseo's outcome as paseo gave it (#3430): completed, failed with its error, or canceled with its reason. The
+        // facts read each, and mark a kind they don't list unverified.
+        const reply = await hook(a, 'agent.turn.after', {
+          turn_id: turnId ?? '', outcome: outcome.kind, ...(outcome.error?.message ? { error: outcome.error.message } : {}), ...(typeof outcome.reason === 'string' ? { reason: outcome.reason } : {}),
+        });
         if (!reply || a.owner || reply.decision !== 'block' || typeof reply.reason !== 'string') return;
         // The planted wrong program drops the hub's send-back.
         if (plant === 'drops-send-back') return;

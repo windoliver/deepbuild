@@ -466,7 +466,7 @@ export class Jobs {
   private async askSend(sha: string, where: string, tool: string, kind: string, pair: string): Promise<string> {
     const ref = sha256Hex(new TextEncoder().encode(pair));
     const ask = await this.d.raise('job.send', {
-      kind: 'authority', question: `Send the file ${sha}, which an agent put in the evidence store, to ${where} for ${tool} (${kind})?`,
+      kind: 'authority', may_answer: 'trusted_path', question: `Send the file ${sha}, which an agent put in the evidence store, to ${where} for ${tool} (${kind})?`,
       options: [{ id: 'send', label: 'Send it', decision: 'allow' }, { id: 'decline', label: "Don't send it", decision: 'deny' }],
       recommended: null, deadline: this.d.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key: ref, pinned_to: { kind: 'evidence', ref: sha },
     }, { steps: [{ does: `Send the file ${sha}, which an agent put in the evidence store, to ${where}, where ${tool} runs, for this and every later job there`, changes: [], undo: null, public: false, cost: 0 }], diff: ref });
@@ -480,7 +480,7 @@ export class Jobs {
     if (!ask) {
       const ref = sha256Hex(new TextEncoder().encode(id));
       ask = await this.d.raise('job.unblock', {
-        kind: 'unblock', question: a.question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', deadline: this.d.now() + DAY,
+        kind: 'unblock', may_answer: 'verified_channel', question: a.question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', deadline: this.d.now() + DAY,
         steps: a.steps, where: a.where, why: a.why, unblocks: [`req:${ref.slice(0, 16)}`], proves: a.proves,
         fallback: 'you', provisional: false, owner: 'you', key: ref, pinned_to: { kind: 'evidence', ref },
       });
@@ -490,7 +490,7 @@ export class Jobs {
   }
   private async ask(kind: string, tool: string, usd: number, key: string): Promise<string> {
     const ask = await this.d.raise('job.paid', {
-      kind: 'authority', question: `Run ${tool} for ${kind} once, at $${usd} a run?`,
+      kind: 'authority', may_answer: 'trusted_path', question: `Run ${tool} for ${kind} once, at $${usd} a run?`,
       options: [{ id: 'run', label: 'Run it once', decision: 'allow' }, { id: 'decline', label: "Don't run it", decision: 'deny' }],
       recommended: null, deadline: this.d.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: key },
     }, { steps: [{ does: `Run the paid tool ${tool} once for ${kind}, at $${usd}`, changes: [], undo: null, public: false, cost: usd }], diff: key });

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: app.test.ts builds deep-app's acceptance_1583 test target with cargo, under env-plants, which no DEEP_BIN_DIR holds, and runs it from target/; channel.test.ts starts a hub" }

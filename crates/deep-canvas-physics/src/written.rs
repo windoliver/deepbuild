@@ -4,10 +4,13 @@
 //! instanced draw. Its bake goes into the form's `arrays` as the core's column view takes a
 //! world's array, each step with the rows it changed; a frame folds them at its time by Physics
 //! output's rule (positions lerp and rotations nlerp between the two buffered steps, or the
-//! earlier with `hold`), from the bake alone, so a seek writes what play does.
+//! earlier with `hold`), from the bake alone, so a seek writes what play does. #2288: an instancer
+//! that is moved or turned holds each pose in its own frame, taken back through the inverse of
+//! its world transform at t = 0, which the bake answers as its `frames`.
 
 use serde_json::{json, Map, Value};
 
+use crate::backend::{product, rotate};
 use crate::doc::World;
 use crate::module::changed;
 use crate::occurrence::step_flicks;
@@ -27,6 +30,27 @@ fn element_ids(scene: &Value, item: &str) -> Vec<String> {
             .map(|r| r.to_string())
             .collect(),
     }
+}
+
+/// #2288: `state`'s `part` (`pos` or `rot`) in `frame` (`{pos, rot}`, an instancer's world
+/// transform), each number an f32: taken back through the frame's inverse; as it is without one.
+fn local(state: &Value, part: &str, frame: &Value) -> Value {
+    let numbers =
+        |v: &Value| -> Option<Vec<f64>> { v.as_array()?.iter().map(Value::as_f64).collect() };
+    let (Some(at), Some(q), Some(x)) = (
+        numbers(&frame["pos"]),
+        numbers(&frame["rot"]),
+        numbers(&state[part]),
+    ) else {
+        return state[part].clone();
+    };
+    let back = [-q[0], -q[1], -q[2], q[3]];
+    let v: Vec<f64> = match (part, x.as_slice()) {
+        ("pos", [a, b, c]) => rotate(back, [a - at[0], b - at[1], c - at[2]]).to_vec(),
+        (_, [a, b, c, d]) => product(back, [*a, *b, *c, *d]).to_vec(),
+        _ => return state[part].clone(),
+    };
+    json!(v.iter().map(|c| f64::from(*c as f32)).collect::<Vec<_>>())
 }
 
 /// #2248: the array an output to a readout writes, named `<world>.<output>.value`: the value it
@@ -55,8 +79,9 @@ fn readout(o: &crate::doc::Output, frames: &[Value], every: i64) -> Value {
 
 /// The arrays world `id`'s outputs write in `scene` from its bake's `reply`: each `<body>#*`
 /// output's, named `<world>.<output>.pos` and `.rot`, from `bodies` (each body's state after each
-/// step from step 0, `pos` and `rot`); and (#2248) each output's to a readout, an item its `to`
-/// names by its ID, from what the output writes at each frame.
+/// step from step 0, `pos` and `rot`), in its instancer's frame (#2288: `frames`); and (#2248)
+/// each output's to a readout, an item its `to` names by its ID, from what the output writes at
+/// each frame.
 pub fn arrays(id: &str, w: &World, scene: &Value, reply: &Value) -> Map<String, Value> {
     let bodies = &reply["bodies"];
     let mut out = Map::new();
@@ -79,10 +104,11 @@ pub fn arrays(id: &str, w: &World, scene: &Value, reply: &Value) -> Map<String, 
             .filter_map(|e| bodies[format!("{body}#{e}")].as_array())
             .collect();
         let count = rows.iter().map(|s| s.len()).min().unwrap_or(0);
+        let frame = &reply["frames"][item];
         for (part, ty, _) in COLUMNS {
             let (mut prev, mut steps) = (Vec::new(), Vec::new());
             for k in 0..count {
-                let now: Vec<Value> = rows.iter().map(|s| s[k][part].clone()).collect();
+                let now: Vec<Value> = rows.iter().map(|s| local(&s[k], part, frame)).collect();
                 let ranges = changed(&prev, &now);
                 if !ranges.is_empty() {
                     let values: Vec<Value> = ranges

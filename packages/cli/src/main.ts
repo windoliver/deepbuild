@@ -130,12 +130,13 @@ async function telemetryItems() {
 // (#34's slice of #19's bundle).
 async function debugBundle(): Promise<number> {
   const { scrubText } = await import('@deepbuild/evidence');
+  const { activePlant, rootOf, rootToken } = await import('@deepbuild/hub');
   const root = join(homedir(), '.deepbuild');
-  const token = existsSync(join(root, 'control.token')) ? readFileSync(join(root, 'control.token'), 'utf8').trim() : '';
+  let token = '';
+  try { token = rootToken(rootOf(root)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   // The values the hub holds by handle, as a test names them (DEEP_HUB_TEST_HELD), are scrubbed here too.
   const held = [token, ...(process.env.DEEP_HUB_TEST_HELD && existsSync(process.env.DEEP_HUB_TEST_HELD) ? readFileSync(process.env.DEEP_HUB_TEST_HELD, 'utf8').split('\n').map((v) => v.trim()) : [])].filter(Boolean);
   // The planted wrong program copies the logs as they are.
-  const { activePlant } = await import('@deepbuild/hub');
   const scrubLogs = process.env.DEEP_CLI_PLANT === 'bundle-raw-logs' || activePlant() === 'bundle-raw-logs' ? (text: string) => text : (text: string) => scrubText(text, { held });
   const scrub = (text: string) => scrubText(text, { held });
   const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).flatMap((name) => {
@@ -187,7 +188,7 @@ const usage = [
   'deep explain <recorded session folder> [--json]',
   'deep run --result <run.finished event file>',
   'deep run follow <run>   a run\'s output from its start, then as it comes, until it ends',
-  'deep host run <ask> | changes <host> | remove <host> | list | facts <host> [--refresh]   run a root plan you said yes to, in this terminal; list a host\'s changes with their undo; undo them, yours as you and root\'s as one root plan; or the hosts your SSH config names, and one\'s facts',
+  'deep host run <ask> | changes <host> | remove <host> | list | facts <host> [--refresh] | add <host>   run a root plan you said yes to, in this terminal; list a host\'s changes with their undo; undo them, yours as you and root\'s as one root plan; the hosts your SSH config names, and one\'s facts; or install deep-hook and the agents\' hooks on one, so its sessions record here under its name',
   'deep hub run [--safe] | start | status [--root <folder>]   status prints the hub\'s health as JSON, a developer\'s command',
   'deep hub stop [--root <folder>]',
   'deep hub use --root <folder>   this worktree\'s sessions to a dev hub, once the OS confirms you',
@@ -195,7 +196,7 @@ const usage = [
   'deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes one at a time in the order they came',
   'deep work "<scope>" [--repo <checkout>] [--json]   one approval for a run over the issues your words name, or a standing run over a rule on labels, milestone or epic that new issues join; show prints each one\'s state word and what it waits for, pause stops new starts',
   'deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set: an earlier PR joins as its issue\'s attempt',
-  'deep workspace new <topic> [--folder <path>] | task <id> <title> --criterion <text> [--blocked-by <n>] | move <id> <folder | repo checkout> | revert <id> [<commit>] | diff <id> | drift <id> [--json]   a home for work outside a repo, its tasks in the record',
+  'deep workspace new <topic> [--folder <path>] | task <id> <title> --criterion <text> ... [--blocked-by <n> ...] | move <id> <folder | repo checkout> | revert <id> [<commit>] | diff <id> | drift <id> [--json]   a home for work outside a repo, its tasks in the record',
   'deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you',
   'deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins\' actions',
   'deep env up | down [--root <folder>] [--json]   this worktree\'s stack, through the hub',
@@ -255,6 +256,58 @@ const groups: [string, string[]][] = [
 const groupOf = (line: string): number => {
   const at = groups.findIndex(([, names]) => names.includes(commandsOf(line)[0]!));
   return at < 0 ? groups.length - 1 : at;
+};
+// A flag that takes a value, given twice where no form of its command shows it repeating, fits none of the command's
+// forms (#3461): one reading for every command, so none takes the first or the last value. Each flag of a form is read
+// from its usage line, up to the description: a flag followed by a value, then `...` where it repeats. A flag with no
+// value, such as --json, is read by its command as before. The forms read are those whose leading words fit the
+// arguments' (`deep start approve` or `deep start`), else all of the command's. Returned: each value flag and whether it
+// repeats, and the flags whose value may be left out (`--slice [<cursor>]`).
+const valueFlags = (args: readonly string[]): [Map<string, boolean>, Set<string>] => {
+  const repeats = new Map<string, boolean>();
+  const optional = new Set<string>();
+  const lines = usage.filter((one) => commandsOf(one).includes(args[0] ?? ''));
+  const formOf = (line: string) => line.split(/\s{2,}/)[0]!.split(' ').slice(2);
+  const fits = (line: string) => {
+    const words = formOf(line);
+    const open = words.findIndex((word) => /^[-[<"|]/.test(word));
+    const lead = open < 0 ? words : words.slice(0, open);
+    return lead.every((word, at) => args[at + 1] === word);
+  };
+  const fitting = lines.filter(fits);
+  for (const line of fitting.length ? fitting : lines) {
+    const words = formOf(line);
+    words.forEach((token, at) => {
+      const flag = token.replace(/^\[/, '');
+      if (!/^--[a-z][a-z-]*$/.test(flag) || words[at + 1] === undefined || /^(-|\||\.\.\.|\[-)/.test(words[at + 1]!)) return;
+      // The value runs to the word that closes its last <, as in <doc ID>.
+      let end = at + 1;
+      const value = (upTo: number) => words.slice(at + 1, upTo + 1).join(' ');
+      while (end + 1 < words.length && (value(end).match(/</g) ?? []).length > (value(end).match(/>/g) ?? []).length) end++;
+      repeats.set(flag, (repeats.get(flag) ?? false) || /^\.\.\.\]*$/.test(words[end + 1] ?? ''));
+      if (words[at + 1]!.startsWith('[')) optional.add(flag);
+    });
+  }
+  return [repeats, optional];
+};
+/**
+ * The first flag `args` gives twice that its command's usage shows once, if any. A flag's value is the next word, as
+ * each command reads it, even one that looks like a flag; an optional value only when it doesn't start with -. After
+ * --, the next word is a handle, a query or an option, never a flag; flags may follow it, as deep find reads them.
+ */
+const givenTwice = (args: readonly string[]): string | undefined => {
+  const [flags, optional] = valueFlags(args);
+  const seen = new Set<string>();
+  const own = args.slice(1);
+  for (let at = 0; at < own.length; at++) {
+    const flag = own[at]!;
+    if (flag === '--') at++;
+    if (!flags.has(flag)) continue;
+    if (seen.has(flag) && !flags.get(flag)) return flag;
+    seen.add(flag);
+    if (!optional.has(flag) || !(own[at + 1] ?? '-').startsWith('-')) at++;
+  }
+  return undefined;
 };
 // The one exit table every command keeps (#1812, exit.code@1), at the foot of `deep --help`.
 const EXITS = 'Exit codes, the same for every command but deep lease and deep mcp-exec, which end with their program\'s own:\n  0 done\n  1 failed or refused\n  2 not understood, nothing ran\n  3 not decided or not checked';
@@ -323,6 +376,9 @@ const hubCommands = {
 
 if (help) {
   printHelp();
+} else if (givenTwice(args) !== undefined) {
+  console.error(usageOf(args[0]!));
+  process.exitCode = 2;
 } else if (args.length === 0) {
   // `deep` alone is the list (#1463): the rows and the one count the app shows, and nothing after them.
   const { listCommand } = await import('@deepbuild/hub');
@@ -398,8 +454,15 @@ if (help) {
   });
 } else if (args[0] === 'read' || args[0] === 'find') {
   // Read-only over the hub's root (#63), with or without the hub running.
-  const { findCommand, readCommand } = await import('@deepbuild/reading');
-  process.exitCode = await (args[0] === 'read' ? readCommand : findCommand)(args.slice(1));
+  const { findCommand, NotFound, readCommand } = await import('@deepbuild/reading');
+  // A started session's sandbox closes the evidence store (#3229), so its reads by handle go to the hub.
+  const { activePlant, handleRead } = await import('@deepbuild/hub');
+  const hub = async (root: string, params: Record<string, unknown>): Promise<unknown> => {
+    const answer = await handleRead(root, params);
+    if (answer && 'refused' in answer) throw new NotFound(String(answer.refused));
+    return answer;
+  };
+  process.exitCode = await (args[0] === 'read' ? readCommand(args.slice(1), hub, activePlant() === 'answers-variant-bytes') : findCommand(args.slice(1), hub));
 } else if (args.length === 2 && args[0] === 'update' && args[1] === '--check') {
   process.exitCode = await updateCheck();
 } else if (args.length === 2 && args[0] === 'debug' && args[1] === 'bundle') {

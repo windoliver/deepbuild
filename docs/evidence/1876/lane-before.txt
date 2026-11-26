@@ -1,0 +1,19 @@
+# At b48a47db7 (main before this change, the merge base): git archive of AGENTS.md, scripts/, docs/*.md and
+# the files the checks read into a scratch folder, this change's scripts/design-links.mjs and scripts/design-drift.mjs
+# laid over it, and the open issues as gh listed them on November 24 (1,160).
+$ DEEP_OPEN_ISSUES=open-issues.json node scripts/design-links.mjs
+FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 0 principles findings, 12 places where the design is behind main
+  docs/technical-design.md:510 the CLI row doesn't name `deep host`, which `deep --help` lists (packages/cli/src/main.ts)
+  docs/technical-design.md:510 the CLI row doesn't name `deep land`, which `deep --help` lists (packages/cli/src/main.ts)
+  docs/technical-design.md:510 the CLI row doesn't name `deep work`, which `deep --help` lists (packages/cli/src/main.ts)
+  docs/technical-design.md:510 the CLI row doesn't name `deep person`, which `deep --help` lists (packages/cli/src/main.ts)
+  docs/technical-design.md:510 the CLI row doesn't name `deep library`, which `deep --help` lists (packages/cli/src/main.ts)
+  docs/technical-design.md:510 the CLI row doesn't name `deep pack`, which `deep --help` lists (packages/cli/src/main.ts)
+  docs/technical-design.md:510 the CLI row doesn't name `deep job`, which `deep --help` lists (packages/cli/src/main.ts)
+  docs/technical-design.md:377 the Extension API block doesn't name `deep.schedule.read`, which packages/contracts/extension-api.json publishes
+  docs/technical-design.md:377 the Extension API block doesn't name `deep.source.ask`, which packages/contracts/extension-api.json publishes
+  docs/technical-design.md:712 says a complete game takes the engine project route as its only route: "A complete game goes through an engine project instead, which DeepBuild creates, builds, drives and proves through the g…"
+  docs/canvas-primitives.md:10263 says a complete game takes the engine project route as its only route: "A bounded game takes the physics module's character body, a navigation graph a job bakes and the piece's own logic searc…"
+  docs/technical-design.md:121 the events table doesn't name the column `host`, which packages/record/src/index.ts creates
+  Fix: state in the design what main holds at each line named above, in the change that moves main.
+exit 1

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the GPU; ac3, ac5 and ac8 draw on the Metal device through deep-gpu, ac1, ac3, ac5 and ac8 also build the merge base's deep-gpu, every file builds deep-gpu with cargo, and ac7 times the decode worker in release" }

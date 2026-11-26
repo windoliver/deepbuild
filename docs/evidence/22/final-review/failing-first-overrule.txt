@@ -1,0 +1,34 @@
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ packages/asks/test/asks.test.ts (33 tests | 1 failed | 32 skipped) 315ms
+   ❯ an answer that saves a decision (#319.43d13eb3, #22) (4)
+     × an overrule settles only once the decision it overrules is written, even when the record refuses its new decision 193ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/asks/test/asks.test.ts > an answer that saves a decision (#319.43d13eb3, #22) > an overrule settles only once the decision it overrules is written, even when the record refuses its new decision
+AssertionError: the overrule holds the asks until the overruling it writes is through: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/asks/test/asks.test.ts:540:94
+    538|     overruling.catch(() => undefined);
+    539|     await new Promise((done) => setTimeout(done, 50));
+    540|     expect(settled, 'the overrule holds the asks until the overruling …
+       |                                                                                              ^
+    541|     letGo();
+    542|     await expect(overruling).rejects.toThrow('refused');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 32 skipped (33)
+   Start at  22:13:42
+   Duration  742ms (tests 65%, import 17%, transform 16%, setup 2%, worker 1%)
+

@@ -29,9 +29,10 @@ import { homedir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
 import type { PlanInput } from '@deepbuild/asks';
 import { call, notAnswered, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
-import { activePlant, refusal, Refused, ulid, type Plant } from './wire.js';
+import { deepHook, hubControl } from './paths.js';
+import { activePlant, contractOf, refusal, Refused, ulid, type Plant } from './wire.js';
 import { shellQuote as q } from './shell.js';
+import { HostSessions } from './host-sessions.js';
 
 type Obj = Record<string, unknown>;
 /** How long a follower may go without a byte, output or heartbeat, before its connection counts as stalled; a new one may take longer for its first. */
@@ -163,7 +164,30 @@ export interface Reading { value: unknown; as_of: number }
 export interface Declared { does: string; changes: string[]; undo: string | null }
 export interface RemoteSpec { host: string; run: string; token: string; argv: string[]; cwd?: string; env: Record<string, string>; adopt?: boolean; changes?: Declared[]; output: { stdout(chunk: Buffer): void; stderr(chunk: Buffer): void } }
 export interface RemoteEnd { code: number | null; signal?: string; failed?: string }
-interface Ran { code: number | null; stdout: string; stderr: string }
+export interface Ran { code: number | null; stdout: string; stderr: string }
+/** Your SSH config, the one file that names hosts. */
+export const sshConfig = (): string => join(homedir(), '.ssh', 'config');
+/** ssh's options for every call to a host: your config file, a connection of its own, and a dead link noticed within 15 s. */
+export const sshOptions = (): string[] => ['-F', sshConfig(), '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=3', '-o', 'ConnectTimeout=30'];
+/** One ssh call on a connection of its own: the script on its stdin, run by `sh -s` with `args`. */
+export function sshScript(host: string, args: string[], script: string): ChildProcess {
+  const child = spawn('ssh', [...sshOptions(), '--', host, ['sh', '-s', '--', ...args].map(q).join(' ')], { stdio: ['pipe', 'pipe', 'pipe'] });
+  child.stdin!.on('error', () => undefined);
+  // Braced, so the shell has read all of it before any of it runs.
+  child.stdin!.end(`{\n${script}\n}\n`);
+  return child;
+}
+/** An ssh call's end: its exit code, and what it wrote. */
+export function sshEnded(child: ChildProcess): Promise<Ran> {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    child.stdout!.setEncoding('utf8').on('data', (d: string) => (stdout += d));
+    child.stderr!.setEncoding('utf8').on('data', (d: string) => (stderr += d));
+    child.on('error', (error) => resolve({ code: null, stdout, stderr: error.message }));
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+  });
+}
 /** A step of a root plan as the agent gives it: a package step names the package file on the host. */
 interface RootStep { does: string; changes: string[]; undo: string | null; package?: string | null }
 type Fingerprint = { target: string; sha256: string | null }[];
@@ -186,6 +210,10 @@ interface HostsOptions {
   put(bytes: Uint8Array, kind: string, source: string): Promise<string>;
   /** Reads the record. */
   raw(query: string, params: readonly string[]): Promise<unknown[]>;
+  /** What a host's sessions need of the core (#999; host-sessions.ts): a spool folder replayed as that host's hooks, and a session marked unknown. */
+  replay(host: string, dir: string): Promise<void>;
+  unknown(session: string, agent: string): Promise<void>;
+  on(session: string, host: string): void;
 }
 
 export class Hosts {
@@ -199,9 +227,13 @@ export class Hosts {
   private readonly lingered = new Map<string, Promise<string | undefined>>();
   /** A run waiting on a root plan for lingering, by the plan's ask: told when it ran, or when you said no. */
   private readonly waiting = new Map<string, (ran: boolean) => void>();
-  constructor(private readonly o: HostsOptions) {}
+  /** Sessions on a host (#999): `deep host add`, the host's link coming and going, and its spool. */
+  readonly sessions: HostSessions;
+  constructor(private readonly o: HostsOptions) {
+    this.sessions = new HostSessions({ root: o.root, contract: contractOf(o.plant), hook: deepHook, hosts: this, append: (kind, data) => o.append(kind, data, {}), raw: o.raw, replay: o.replay, on: o.on, unknown: o.unknown });
+  }
 
-  private get config(): string { return join(homedir(), '.ssh', 'config'); }
+  private get config(): string { return sshConfig(); }
   /** The hosts your SSH config names: each name a Host line gives that is no pattern, through its Include lines. */
   names(file = this.config, seen = new Set<string>()): string[] {
     if (seen.has(file)) return [];
@@ -225,27 +257,22 @@ export class Hosts {
     throw new Refused(refusal('not_found', '/params/host', `${String(host)} isn't a host your SSH config (~/.ssh/config) names, so DeepBuild won't contact it. ${names.length ? `Name one of: ${names.join(', ')}.` : 'It names no host.'}`, host));
   }
 
-  /** One ssh call on a connection of its own: the script on its stdin, run by `sh -s` with `args`. */
   private ssh(host: string, args: string[], script: string): ChildProcess {
-    const child = spawn('ssh', ['-F', this.config, '-o', 'BatchMode=yes', '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=3', '-o', 'ConnectTimeout=30', '--', host, ['sh', '-s', '--', ...args].map(q).join(' ')], { stdio: ['pipe', 'pipe', 'pipe'] });
-    child.stdin!.on('error', () => undefined);
-    // Braced, so the shell has read all of it before any of it runs.
-    child.stdin!.end(`{\n${script}\n}\n`);
-    return child;
+    return sshScript(host, args, script);
   }
-  private exec(host: string, args: string[], script: string): Promise<Ran> {
-    return new Promise((resolve) => {
-      const child = this.ssh(host, args, script);
-      let stdout = '';
-      let stderr = '';
-      child.stdout!.setEncoding('utf8').on('data', (d: string) => (stdout += d));
-      child.stderr!.setEncoding('utf8').on('data', (d: string) => (stderr += d));
-      child.on('error', (error) => resolve({ code: null, stdout, stderr: error.message }));
-      child.on('close', (code) => resolve({ code, stdout, stderr }));
-    });
+  /** Writes a file under your home on the host, whole or not at all: its bytes on ssh's stdin, moved into place once all are there (#999). */
+  put(host: string, path: string, bytes: Uint8Array, mode: string): Promise<Ran> {
+    const write = 'umask 077; f="$HOME/$1"; mkdir -p "$(dirname "$f")" && cat > "$f.part" && chmod "$2" "$f.part" && mv "$f.part" "$f"';
+    const child = spawn('ssh', [...sshOptions(), '--', host, ['sh', '-c', write, 'sh', path, mode].map(q).join(' ')], { stdio: ['pipe', 'pipe', 'pipe'] });
+    child.stdin!.on('error', () => undefined);
+    child.stdin!.end(bytes);
+    return sshEnded(child);
+  }
+  exec(host: string, args: string[], script: string): Promise<Ran> {
+    return sshEnded(this.ssh(host, args, script));
   }
   /** A read: tried again on its own while the link fails (ssh's 255), up to a few minutes. */
-  private async read(host: string, args: string[], script: string): Promise<Ran> {
+  async read(host: string, args: string[], script: string): Promise<Ran> {
     for (let wait = 250, until = this.o.now() + 180_000; ; wait = Math.min(wait * 2, 10_000)) {
       const r = await this.exec(host, args, script);
       if (r.code !== 255 || this.o.now() > until) return r;
@@ -293,7 +320,7 @@ export class Hosts {
       open = { answer, done };
       this.asking.set(host, open);
       open.ask = await this.o.raise('host.change', {
-        kind: 'authority', question: `Let DeepBuild start runs as you on ${host}, as user services under your user there?`,
+        kind: 'authority', may_answer: 'trusted_path', question: `Let DeepBuild start runs as you on ${host}, as user services under your user there?`,
         options: [{ id: 'allow', label: `Allow on ${host}`, decision: 'allow' }, { id: 'decline', label: "Don't", decision: 'deny' }],
         recommended: null, deadline: this.o.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: key },
       }, { steps: [{ does: `Start runs on ${host} as you: user services under your user, their files under ~/.deepbuild/runs there, never as root`, changes: [`${host}: user services deep-<run token>`], undo: `Stop them with systemctl --user stop on ${host}`, public: false, cost: 0 }], diff: key })
@@ -377,6 +404,8 @@ export class Hosts {
       you = this.undid(mine, r.stdout, `the link to ${host} ended before the undo did (ssh exit ${String(r.code)}: ${r.stderr.trim().slice(-200)}); what's left is read again on the next Remove it`);
       await this.recordUndone(host, 'you', you, null);
     }
+    // With what `deep host add` installed undone, the host's sessions record here no more (#999).
+    if (!you?.stopped) this.sessions.forget(host);
     if (you?.stopped || !roots.length) return { host, you: you ?? null, root: null };
     const wrote = await this.writeScript(host, `#!/bin/sh\n# DeepBuild's Remove it on ${host}: the undos of ${roots.length} change${roots.length === 1 ? '' : 's'} made as root, newest first.\n${this.undoScript(roots, `/var/lib/deepbuild/backups/${ulid(this.o.now())}`)}\n`);
     if (!wrote.path) throw new Refused(refusal('unavailable', '/params/host', `BLOCKED: Remove it's root plan couldn't be written on ${host}: ${wrote.why}`, host, true));
@@ -421,7 +450,7 @@ export class Hosts {
     await this.o.put(bytes, 'root-plan.script', `${host}:${script}`);
     const question = own?.question ?? `Run this root plan on ${host} as root? ${steps.length} step${steps.length === 1 ? '' : 's'}, from the script ${script} (sha256 ${locked.slice(0, 12)}); only you run it, with deep host run in your own terminal.`;
     const ask = await this.o.raise('host.root_plan', {
-      kind: 'authority', question,
+      kind: 'authority', may_answer: 'trusted_path', question,
       options: [{ id: 'approve', label: 'Run it as root', decision: 'allow' }, { id: 'decline', label: "Don't run it", decision: 'deny' }],
       recommended: null, deadline: this.o.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you',
       key: sha(`host.root_plan:${host}:${script}:${locked}`), pinned_to: { kind: 'evidence', ref: locked },
@@ -631,8 +660,8 @@ export class Hosts {
 
 /** `deep run follow <run>`: the run's stdout from its start, then as it comes, until it has ended. */
 export async function followCommand(run: string): Promise<number> {
-  let token: string | undefined;
-  const output = async (from: number) => call(hubAddress().path, token ??= readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'run.output', { run, from });
+  let hub: { path: string; token: string } | undefined;
+  const output = async (from: number) => { hub ??= hubControl(); return call(hub.path, hub.token, 'run.output', { run, from }); };
   for (let from = 0; ;) {
     let reply: Reply;
     try {
@@ -660,12 +689,15 @@ export const isRoot = (argv: string[]): boolean => ['sudo', 'su', 'doas', 'pkexe
  * `deep host changes <host>`: each change the record holds for a host, with its undo.
  * `deep host list`: the hosts your SSH config names, one a line. `deep host facts <host> [--refresh]`: one's facts as
  * one line of JSON, each with when it was read; `--refresh` reads them over SSH now.
+ * `deep host add <host>` (#999): deep-hook and the agents' hooks installed there as you, and the host's link opened, so
+ * its sessions record into this hub under its name; 3 when the link isn't up yet.
  */
 export async function hostCommand(args: string[]): Promise<number> {
   type Answer = { result?: Obj; error?: { remediation: string }; exit?: number };
   const hub = async (method: string, params: Obj): Promise<Answer> => {
     try {
-      return await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), method, params) as Answer;
+      const { path: socket, token } = hubControl();
+      return await call(socket, token, method, params) as Answer;
     } catch (error) {
       return { exit: await notAnswered(error) };
     }
@@ -703,6 +735,14 @@ export async function hostCommand(args: string[]): Promise<number> {
     if (root) await say(`${args[1]}: ${root.changes.length} change${root.changes.length === 1 ? '' : 's'} made as root come as one root plan, ${root.ask}: read it, answer it (deep inbox answer ${root.ask} approve), then run deep host run ${root.ask} in your own terminal`);
     return you?.stopped ? 3 : 0;
   }
+  if (args[0] === 'add' && args.length === 2 && !args[1]!.startsWith('-')) {
+    const reply = await hub('host.add', { host: args[1] });
+    if (!reply.result) return failed(reply);
+    const r = reply.result as { host: string; version: string | null; changed: number; link: string };
+    await say(`${r.host}: deep-hook${r.version ? ` ${r.version}` : ''} and Claude Code's hook entries are installed there (${r.changed} change${r.changed === 1 ? '' : 's'} recorded; deep host changes ${r.host} lists each with its undo)`);
+    await say(r.link === 'up' ? `${r.host}: its link is up, and its sessions record into this hub under its name` : `${r.host}: its link isn't up: ${r.link}. The hub keeps trying, and deep-hook there spools until it is`);
+    return r.link === 'up' ? 0 : 3;
+  }
   if (args[0] === 'list' && args.length === 1) {
     const reply = await hub('host.list', {});
     if (!reply.result) return failed(reply);
@@ -716,7 +756,7 @@ export async function hostCommand(args: string[]): Promise<number> {
     return 0;
   }
   if (args[0] !== 'run' || args.length !== 2 || args[1]!.startsWith('-')) {
-    await say('Usage: deep host run <ask>\n       deep host changes <host>\n       deep host remove <host>\n       deep host list\n       deep host facts <host> [--refresh]', process.stderr);
+    await say('Usage: deep host run <ask>\n       deep host changes <host>\n       deep host remove <host>\n       deep host list\n       deep host facts <host> [--refresh]\n       deep host add <host>', process.stderr);
     return 2;
   }
   const reply = await hub('host.plan', { ask: args[1] });

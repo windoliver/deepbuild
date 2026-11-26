@@ -1,0 +1,16 @@
+{
+  "issue": 1219,
+  "criterion": "#1219.9c284fc3",
+  "verdict": "looks_right",
+  "who": "The implementing agent (model Claude Fable 5.2), on the owner’s delegation in the session (\"validate for me and close the gaps\", Nov 22, 2026); not the owner’s own call, which can overrule it",
+  "when": "2026-11-23T01:24:03-08:00",
+  "screenshots": {
+    "hall-hip-ridge.png": "8d75be833ec593e5a9241a43af892d39a397856bb03250d4a7aec402b5585589",
+    "hall-hip-gable.png": "45b8eae586c5001d451d87954b763879d4479bd1879c543e47258eb560306509",
+    "hall-overhang-gable.png": "af6719d0d5813d95aecf8a6e5a04e5a3e263a290469dd1c18d3aa5928abeefb7",
+    "hall-flush-gable.png": "474ecece11a294f13fafeeddfc77d2fd2aa1749c9a5cd6e8644468e97e3ac804",
+    "hall-pyramid.png": "bba3a508d41c0cee765c5702ef79ac99549c0bb84adb82ea8539be8cfee96a1f",
+    "folded-beside-straight.png": "5c3fbcc8c4327fb5f3f182bd2096cd63458c5041f0672707c703b9cc7fcf71c9"
+  },
+  "note": "Looked at all six at the reference window, and at the eave corners and gable ends at full size. Each reads as a seven-bay timber hall under its roof type: hip_ridge with a main ridge and four hip ridges, hip_gable with a gable over a hip skirt at each end, overhang_gable passing the end columns, flush_gable ending on them, and a long pyramid to one peak. The folded profile curves, steeper toward the ridge, beside the straight one, and every eave turns up at its corners. What a person may dislike: the roof’s purlins and rafter ends draw in the roof’s tile material, not timber, since a roof item takes one material; tile rows on a hip’s end slope run down the slope, as on the base’s hip roof; a gable’s board draws as tiles; and at a risen corner the eave tiles stand a little clear of the rafter ends under them."
+}

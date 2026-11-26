@@ -442,10 +442,14 @@ pub fn mapped(read: &Read, array: &Value, t: i64, last: Option<&Mapped>) -> Opti
         }
     }
     // A linear array's rows that step k changed blend every frame of its step, from their value
-    // before it: a frame reads a linear write one step late.
+    // before it: a frame reads a linear write one step late. #2035: a row its cut marks on that
+    // step shows the step's value with no blend.
     let mut blending = BTreeSet::new();
     if linear {
-        rows_of(at(k).map_or(&Value::Null, |s| &s["changed"]), &mut blending);
+        let (mut cut, s) = (BTreeSet::new(), at(k));
+        rows_of(s.map_or(&Value::Null, |s| &s["changed"]), &mut blending);
+        rows_of(s.map_or(&Value::Null, |s| &s["cut"]), &mut cut);
+        blending.retain(|r| !cut.contains(r));
     }
     let a = (t - k * every) as f64 / every as f64;
     m.step = k;
@@ -559,6 +563,15 @@ fn excursions_of(column: &Value) -> Vec<(i64, usize, f64)> {
 /// #537: every step at which a row of `array` (baked), as `read` takes it, begins to hide, by
 /// the rule alone, with the value that hides it: `(step, row, value)`.
 pub fn excursions(read: &Read, array: &Value) -> Vec<(i64, usize, f64)> {
+    excursions_by(array, |e| read.hiding(e))
+}
+
+/// #538, #269: [`excursions`] by a reader's own rule, `hiding`: a row's element's value where it
+/// hides, else `None`.
+pub fn excursions_by(
+    array: &Value,
+    hiding: impl Fn(&[f64]) -> Option<f64>,
+) -> Vec<(i64, usize, f64)> {
     let (Some(n), Some(w)) = (
         array["count"].as_u64(),
         array["type"].as_str().and_then(width),
@@ -598,7 +611,7 @@ pub fn excursions(read: &Read, array: &Value) -> Vec<(i64, usize, f64)> {
             touched.into_iter().collect()
         };
         for row in rows {
-            let hiding = read.hiding(&raw[row * w..(row + 1) * w]);
+            let hiding = hiding(&raw[row * w..(row + 1) * w]);
             if let Some(value) = hiding.filter(|_| !hidden[row]) {
                 out.push((step, row, value));
             }
@@ -1003,6 +1016,20 @@ mod tests {
         let mid = map(&column, 15, None, false).expect("a map");
         let played = map(&column, 20, Some(&mid), false).expect("a map");
         assert_eq!(played.values[0], 8.0);
+    }
+
+    /// #2035: a row the step's `cut` marks shows that step's value with no blend, seeked or
+    /// played from the frame before, while an unmarked row of the same step still blends.
+    #[test]
+    fn a_cut_row_jumps_while_the_rest_blend() {
+        let column = json!({"type": "f64", "count": 2, "every": 10, "linear": true, "as": "f64",
+            "steps": [{"step": 0, "changed": [[0, 2]], "values": [[0, [19.9, 4.0]]]},
+                      {"step": 1, "changed": [[0, 2]], "values": [[0, [0.0, 8.0]]], "cut": [[0, 1]]}]});
+        let seeked = map(&column, 15, None, false).expect("a map");
+        assert_eq!(seeked.values, vec![0.0, 6.0]);
+        let before = map(&column, 9, None, false).expect("a map");
+        let played = map(&column, 15, Some(&before), false).expect("a map");
+        assert_eq!(played.values, vec![0.0, 6.0]);
     }
 
     /// #537: a vec3 array read whole as f32 narrows every part; a row whose y is NaN hides, its
