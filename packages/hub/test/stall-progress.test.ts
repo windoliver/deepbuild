@@ -49,7 +49,7 @@ async function setup() {
       task, rounds: count.rounds, last: { items: count.last!.items, passing: [] }, seen: [], stalled: count.stalled!,
     } });
   };
-  const ask = () => asks.raise(core, 'claim.stalled', { action: { kind: 'claim.stalled', task }, kind: 'exception', question: 'Split, fund, or accept?', options: ['split', 'fund', 'accept'].map((id) => ({ id, label: id, decision: 'none' })), recommended: 'split', default: 'split', deadline: now() + 86_400_000, fallback: 'you', provisional: false, owner: 'you', key: 'a'.repeat(64), pinned_to: { kind: 'evidence', ref: 'a'.repeat(64) } });
+  const ask = () => asks.raise(core, 'claim.stalled', { action: { kind: 'claim.stalled', task }, kind: 'exception', may_answer: 'trusted_path', question: 'Split, fund, or accept?', options: ['split', 'fund', 'accept'].map((id) => ({ id, label: id, decision: 'none' })), recommended: 'split', default: 'split', deadline: now() + 86_400_000, fallback: 'you', provisional: false, owner: 'you', key: 'a'.repeat(64), pinned_to: { kind: 'evidence', ref: 'a'.repeat(64) } });
   return { dir, now, record, core, task, asks, judging, meta, claim, stalled, ask };
 }
 

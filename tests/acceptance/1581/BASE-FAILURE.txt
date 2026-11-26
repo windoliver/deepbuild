@@ -1,0 +1,28 @@
+Acceptance tests for #1581 on the base ebf1e7f44 (origin/main when this suite was written), run by the parent on
+2026-11-24 with Node v24.22.2 on macOS 27.2, with the suite uncommitted, once, inside one test grant of the machine's
+throttle, at a 1-minute load of about 61 on 18 cores, after `npm run build --workspaces` and
+`cargo build --locked -q -p deep-hook` on the same base. Trimmed to each test's result, each failure's message and its
+frame in the test's own file. The checkout's path is made relative and every home folder is `~`.
+
+AC1 and AC2 fail and AC3 passes, as the README expects: the base takes chat's "apply" for the proposal as an answer
+(`ask.answered`, `via: channel`) and drew the card with two buttons, and its example asks carry no declaration.
+
+== node node_modules/vitest/vitest.mjs run --testTimeout=600000 --no-file-parallelism --root tests/acceptance/1581   (exit 1)
+
+ ❯ proposal.test.ts (2 tests | 1 failed) 11806ms
+   ❯ AC1 #1581.e1bcacd3 A proposal answered through a linked chat account is refused, naming the trusted path, and arrives there with no buttons. The merge base accepts it (1)
+     × AC1 #1581.e1bcacd3 chat's "apply" to an agent's deep_propose is refused naming the trusted path, counts as nothing, and the card chat got had no answer buttons 7935ms
+ ❯ declaration.test.ts (1 test | 1 failed) 93ms
+   × AC2 #1581.124656c7 An ask raised with no declaration fails its schema, naming the raiser 91ms
+
+ FAIL  declaration.test.ts > AC2 #1581.124656c7 An ask raised with no declaration fails its schema, naming the raiser
+AssertionError: deep_propose.choice's example ask carries a declaration of what may answer it beyond the base's fields (it carries none): expected [] to not deeply equal []
+ ❯ declaration.test.ts:20:140
+
+ FAIL  proposal.test.ts > AC1 #1581.e1bcacd3 A proposal answered through a linked chat account is refused, naming the trusted path, and arrives there with no buttons. The merge base accepts it > AC1 #1581.e1bcacd3 chat's "apply" to an agent's deep_propose is refused naming the trusted path, counts as nothing, and the card chat got had no answer buttons
+AssertionError: the hub took chat's "apply" for the proposal ask:01M87QC3WQZ2J3HS4C5SX8TWTE as an answer (ask.answered@23 {"answer":"apply","option":"apply","plan_hash":null,"decision":"none","via":"channel","verified":true,"on":{"kind":"commit","ref":"3abb8681f0f2e965f6d125fd9200654b8af36c38"},"token":null,"words":null,"image":null}); the card chat showed carried answer, 2 buttons, "Apply this change an agent proposed to wiki:repos/api#start-port? api starts on port 3002": expected [ { v: 6, …(11) } ] to deeply equal []
+ ❯ proposal.test.ts:24:162
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 1 passed (3)
+   Duration  15.05s

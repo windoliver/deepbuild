@@ -322,7 +322,7 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
           if (((await record.raw("SELECT 1 FROM events WHERE kind = 'ask.created' AND json_extract(data, '$.key') = ? LIMIT 1", [key])) as unknown[]).length) continue;
           const ts = now();
           await o.asks.raise(o.core, 'wiki.merge', {
-            kind: 'exception',
+            kind: 'exception', may_answer: 'trusted_path',
             question: `Setup found two folders named ${basename(g.cwd)}: ${g.cwd}, which is no longer on disk, and ${x.cwd}. Are they one repo? Until you say, their pages stay apart.`,
             options: [{ id: 'apart', label: 'Keep them apart', decision: 'none' }, { id: 'same', label: 'Same repo', decision: 'none' }, { id: 'later', label: 'Not now', decision: 'none' }],
             recommended: 'apart', deadline: ts + 2 * 86_400_000, fallback: 'you', default: 'later', provisional: false, owner: o.core.actor,

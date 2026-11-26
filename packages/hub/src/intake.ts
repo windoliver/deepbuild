@@ -159,7 +159,7 @@ export class Intake implements IntakeService {
       heading = f.heading;
       if (this.o.plant === 'asks-which-home') {
         await this.o.asks().raise(YOU, 'question.choice', {
-          kind: 'choice', question: `Should "${f.heading}" live in a folder of its own or in a code project?`,
+          kind: 'choice', may_answer: 'verified_channel', question: `Should "${f.heading}" live in a folder of its own or in a code project?`,
           options: [{ id: 'folder', label: 'A folder of its own', decision: 'none' }, { id: 'code', label: 'A code project', decision: 'none' }],
           recommended: null, deadline: this.o.now() + DAY, fallback: 'you', default: 'folder', provisional: false, owner: 'you', key: sha256(`home:${key}`), pinned_to: { kind: 'evidence', ref: key },
         });
@@ -202,7 +202,7 @@ export class Intake implements IntakeService {
         read: sources.filter((s) => s.at !== WORDS).map((s) => ({ name: s.at.startsWith('/') ? basename(s.at) : s.at, text: s.text })),
       });
       const ask = await this.o.asks().raise(YOU, 'brief.approve', {
-        kind: 'authority', question: card.question, options: card.options, recommended: null, deadline: this.o.now() + 7 * DAY,
+        kind: 'authority', may_answer: 'trusted_path', question: card.question, options: card.options, recommended: null, deadline: this.o.now() + 7 * DAY,
         fallback: 'you', default: 'deny', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: pinned },
       }, { steps: card.steps, diff: key });
       this.cards.set(ask, key);
@@ -619,7 +619,7 @@ export class Intake implements IntakeService {
   private async hold(f: Fold, i: number, h: Held): Promise<void> {
     const step = { does: heldWords(h), changes: ['outside DeepBuild: money, a booking or a message'], undo: null, public: true, cost: h.usd };
     const ask = await this.o.asks().raise(YOU, 'brief.held', {
-      kind: 'authority', question: `${heldWords(h)}. It's due now for "${f.heading}". Your yes to its brief didn't cover it, so nothing is bought, booked, posted or sent until you say so here; you pay or send it yourself.`,
+      kind: 'authority', may_answer: 'trusted_path', question: `${heldWords(h)}. It's due now for "${f.heading}". Your yes to its brief didn't cover it, so nothing is bought, booked, posted or sent until you say so here; you pay or send it yourself.`,
       options: [{ id: 'allow', label: 'Go ahead', decision: 'allow' }, { id: 'deny', label: 'Not now', decision: 'deny' }],
       recommended: null, deadline: this.o.now() + 7 * DAY, fallback: 'you', default: 'deny', provisional: false, owner: 'you',
       key: sha256(`held:${f.key}:${i}`), pinned_to: { kind: 'evidence', ref: f.key },
