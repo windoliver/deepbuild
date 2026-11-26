@@ -48,7 +48,7 @@ import { badDeadline, checkHost, type Host as RunHost, type Supervisor } from '@
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
-import { botOf, canonical, playInput, runSeed, unpaired, type PlayInput, type Played } from './plays.js';
+import { botOf, canonical, lackOf, playInput, runSeed, startedAt, unpaired, type PlayInput, type Played } from './plays.js';
 import type { BuildPlant, HeldJobs, JobBytes, JobCall, JobCounter, Weight } from './job-kinds.js';
 import { Jobs, JobTools, type Answer, type JobListing } from './jobs.js';
 export type { JobListing } from './jobs.js';
@@ -1814,7 +1814,7 @@ class Host implements ExtensionHost {
         }
         // #556: an array recorded only at the steps it changed is read as surely as one read at every step.
         const values = [reply.values, reply.changes].some((r) => isPlain(r) && Object.values(r).some((v) => Array.isArray(v) && v.length > 0));
-        running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values, ...(off ? { off: off.row as number } : {}) });
+        running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values, ...(off ? { off: off.row as number } : {}), ...startedAt(r, reply) });
         if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
         // #1048: a probe's track for each copy that trapped or broke a range, the run's recorded entries and what it
         // put, which the check plays again in a fresh replica.
@@ -2392,7 +2392,7 @@ class Host implements ExtensionHost {
   /**
    * What a passed run of a check whose input gives a seed lacks (Check input: plug-in reads, #184): each run its input
    * asks (each bot's run i, at hash(seed, i)) played, its track's hash in the evidence and values read, and testsRun
-   * counting them all; each lack names the run and its seed.
+   * counting them all; each lack names the run and its seed, and (#1047) the step of a run that started elsewhere.
    */
   private unplayed(ext: Ext, result: CheckResult): string[] {
     const running = this.plays.get(ext);
@@ -2411,8 +2411,8 @@ class Host implements ExtensionHost {
         const seed = runSeed(input.seed as number, i);
         const name = `${bots.length > 1 || bot !== undefined ? `bot ${b} ` : ''}run ${i} (seed ${seed})`;
         const plays = running.played.filter((p) => p.seed === seed && (bot === undefined || p.bot === bot));
-        if (!plays.length) lacks.push(`${name}: it was never played`);
-        else if (!plays.some((p) => p.values)) lacks.push(`${name}'s values: its play read none`);
+        const lack = lackOf(plays, input);
+        if (lack) lacks.push(`${name}${lack}`);
         else byTrack.set(plays[0]!.track, [...(byTrack.get(plays[0]!.track) ?? []), name]);
       }
     });
