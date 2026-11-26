@@ -5,8 +5,7 @@
   ],
   "#3064.1c658f8a": [
     "skips-named",
-    "skips-edited",
-    "skips-own-package"
+    "skips-edited"
   ],
   "#3064.a5a02f7e": [
     "nine-runs",
