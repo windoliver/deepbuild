@@ -20,7 +20,7 @@ import type { EnvironmentProvider, ComposeResource } from './environment-port.js
 import { memFree, openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/gate';
 import { availableMb } from './admission.js';
 
-import { MEM_KEPT_MB, openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
+import { MEM_KEPT_MB, openLeases, SLOW_SLOT, slowSlots, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
 import { Landing } from './landing.js';
 import { openRunner, type Agent, type JobRecord, type JobSpec, type Runner } from '@deepbuild/runner';
@@ -506,7 +506,7 @@ export class Core {
       checkouts: () => this.checkouts, invalid: (claim, commit, reason, outcome) => this.judging.invalid(claim, commit, reason, outcome), stopping: () => this.stopping,
       stoodIn: (r) => this.tasks.stoodIn(this.connection('core'), r),
       kept: async (evidence) => (await Promise.all(evidence.map((sha) => this.store.get(sha)))).every(Boolean),
-      slots: () => ({ free: Math.max(0, Math.max(1, Math.floor(CORES / 2)) - this.runs.size) }),
+      slots: () => { const pool = Math.max(1, Math.floor(CORES / 2)); return { free: Math.max(0, pool - this.runs.size), slow: slowSlots(pool) }; },
       capped: (session, checks) => void this.judging.backgroundCapped(session, checks).catch(() => undefined), plant: options.plant, load: machineLoad,
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
