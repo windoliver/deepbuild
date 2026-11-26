@@ -1,0 +1,444 @@
+Acceptance tests for #1876 on the base 9e77c2ad6c0ff460dcff6905a161adee490536aa ("Merge pull request #3450 …",
+origin/main, with none of the nine checks), run on 2026-11-24 by the blind test job in its git worktree of that
+commit, on macOS (arm64), Node v24.22.2, nothing built and no node_modules:
+
+  node --test 'tests/acceptance/1876/*.test.mjs'
+
+Exit 1: all twelve tests fail, each at its own node:assert assertion in its test file, for the reason its criterion
+names. None passes on the base, and none fails at load or in a helper.
+
+- The lane has none of the nine checks. On each scratch copy the control passes (the unplanted copy exits 0), and
+  then the lane passes the plant too: every test says "the lane passed a planted …", with the lane's one line.
+- The design is behind main in three places, which the first tests of criteria 1, 2 and 8 report as well, from their
+  own reading of the checkout: the CLI row doesn't name seven commands `deep --help` lists; the Extension API block
+  doesn't name two methods of extension-api.json; and line 708 still says a complete game goes through an engine
+  project instead. Every other fact the tests read of the tree holds on the base.
+
+The base's lane by itself, on the checkout, with the open issues saved for this job (1,160 of them, handed over in
+DEEP_OPEN_ISSUES), passes, exit 0:
+
+  node scripts/design-links.mjs
+  design links and names: 4189 links checked from 2 docs and 1160 open issues, each landing on a heading or an <a
+  id>; 336 `deep` commands and agent tools named, each in the design or planned (1 planned); the design's principles
+  hold
+
+Trimmed: Node's own stack frames and the assertion's fields are dropped, so each test keeps its message and the frame
+that threw; long lines are folded. The checkout's path is written as <checkout>. Timings on this shared machine are
+not evidence.
+
+ℹ tests 12
+ℹ suites 0
+ℹ pass 0
+ℹ fail 12
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4514.720958
+
+✖ failing tests:
+
+test at tests/acceptance/1876/ac1-cli-row.test.mjs:12:1
+✖ AC1 #1876.eb3b3c11 the CLI row names every command `deep --help` lists, and a planted usage line for a command the
+  design lacks fails the design links lane, naming it (2937.259209ms)
+  AssertionError [ERR_ASSERTION]: the CLI row (docs/technical-design.md:506) doesn't name 7 of the commands `deep
+    --help` lists in packages/cli/src/main.ts: host, land, work, person, library, pack, job
+
+  the lane passed a planted usage line for `deep ghost` in packages/cli/src/main.ts, a command the CLI row doesn't
+    name: exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac1-cli-row.test.mjs:28:31)
+
+test at tests/acceptance/1876/ac1-cli-row.test.mjs:40:1
+✖ AC1 #1876.eb3b3c11 the CLI row names no `claim`, and a planted copy of the row that names it fails the design links
+  lane, naming `claim` (835.449583ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the CLI row that names `claim`
+    (docs/technical-design.md:506): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac1-cli-row.test.mjs:55:31)
+
+test at tests/acceptance/1876/ac2-extension-api.test.mjs:9:1
+✖ AC2 #1876.4ae35244 the Extension API block names every method of packages/contracts/extension-api.json, and a
+  planted `deep.ghost` entry fails the design links lane, naming it (3022.106042ms)
+  AssertionError [ERR_ASSERTION]: the Extension API block (docs/technical-design.md:376 to 455) doesn't name 2 of the
+    methods in packages/contracts/extension-api.json: deep.schedule.read, deep.source.ask
+
+  the lane passed a planted `deep.ghost` entry in packages/contracts/extension-api.json: exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac2-extension-api.test.mjs:24:31)
+
+test at tests/acceptance/1876/ac3-hub-slots.test.mjs:10:1
+✖ AC3 #1876.93b6ae42 the Hub slots table has a row for every method and variant of packages/contracts/hub-slots.json,
+  and a planted row for `deep.registerGhost` fails the design links lane, naming it (2916.660916ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a planted row for `deep.registerGhost` in
+    packages/contracts/hub-slots.json: exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac3-hub-slots.test.mjs:28:31)
+
+test at tests/acceptance/1876/ac4-codex-flag.test.mjs:11:1
+✖ AC4 #1876.281ab39b the Codex flag in the DeepBuild's own jobs line equals the `-s` value of readOnlyJob.args in
+  adapters/codex.facts.json, and a planted facts file with `-s read-only` fails the design links lane, naming the flag
+  (2893.921833ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a planted adapters/codex.facts.json whose launch.readOnlyJob.args
+    has `-s read-only`: exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac4-codex-flag.test.mjs:29:31)
+
+test at tests/acceptance/1876/ac5-proof-kind.test.mjs:11:1
+✖ AC5 #1876.8616fced the Proof check kind names `lake comparator` and Kani, and a planted copy of the bullet without
+  Kani fails the design links lane, naming the bullet (2884.708875ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the Proof bullet without Kani
+    (docs/technical-design.md:840): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac5-proof-kind.test.mjs:27:31)
+
+test at tests/acceptance/1876/ac6-lifecycles.test.mjs:13:1
+✖ AC6 #1876.19d18fbd the Lifecycles list names exactly the objects with a `*.machine@*.json` table in
+  packages/contracts/schemas, and a planted `ghost.machine@1.json` fails the design links lane, naming `ghost`
+  (2918.017875ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a planted packages/contracts/schemas/ghost.machine@1.json: exit 0,
+    output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac6-lifecycles.test.mjs:38:31)
+
+test at tests/acceptance/1876/ac7-blockers.test.mjs:16:1
+✖ AC7 #1876.a2923be3 the two ready rules both say a blocker on the baseline list of issues closed before the gate
+  satisfies a blocked-by link, and a planted copy of line 40 without it fails the design links lane, naming the bullet
+  (2912.361541ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the bullet that starts "- In R6: playbooks ("
+    without the baseline list (docs/technical-design.md:57): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac7-blockers.test.mjs:35:31)
+
+test at tests/acceptance/1876/ac8-game-route.test.mjs:14:1
+✖ AC8 #1876.23de0760 no line of the design says a complete game takes the engine project route as its only route, and
+  a planted copy of line 2092's old sentence fails the design links lane, naming the line (2925.161375ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md:708 says a complete game takes the engine project route as
+    its only route: "complete game goes through an engine project instead"
+
+  the lane passed a planted copy of line 2092's old sentence, "Complete games take the engine project route …"
+    (docs/technical-design.md:2162): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac8-game-route.test.mjs:28:31)
+
+test at tests/acceptance/1876/ac8-game-route.test.mjs:34:1
+✖ AC8 #1876.23de0760 the Decided row for bounded games names the canvas game shell, and a planted copy of the row
+  without it fails the design links lane (854.484833ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the Decided row "Bounded games on the canvas" that
+    names no game shell (docs/technical-design.md:2940): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac8-game-route.test.mjs:47:31)
+
+test at tests/acceptance/1876/ac9-events-hook.test.mjs:12:1
+✖ AC9 #1876.6bec2ce3 the events table names every column packages/record/src/index.ts creates, and a planted column in
+  the record's table fails the design links lane, naming it (2873.655917ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a planted column `ghost` in the events table
+    packages/record/src/index.ts creates: exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac9-events-hook.test.mjs:28:31)
+
+test at tests/acceptance/1876/ac9-events-hook.test.mjs:31:1
+✖ AC9 #1876.6bec2ce3 the hook protocol's ack and reply carry `v`, and a planted copy of the ack, or of the reply,
+  without it fails the design links lane (1093.014333ms)
+  AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the hook protocol's ack without `v`
+    (docs/technical-design.md:359: { "ack": "01K74FKZVK8Q2X5R7M3N9P4T6W", "hold_until_ms": null }): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+
+  the lane passed a planted copy of the hook protocol's reply without `v` (docs/technical-design.md:362: { "exit": 0,
+    "stdout": "{\"hookSpecificOutput\":{…}}", "stderr": "" }): exit 0, output:
+  design links and names: 176 links checked from 2 docs and 0 open issues, each landing on a heading or an <a id>; 0
+    `deep` commands and agent tools named, each in the design or planned (0 planned); the design's principles hold
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/1876/ac9-events-hook.test.mjs:48:31)
+
+## The stand-in lane and its wrong programs (in a scratch tree, never in this checkout)
+
+A scratch tree outside the checkout held what the suite's scratch copy holds, plus this folder. A stand-in, written
+by this job for the purpose and from no implementation, added twelve checks to the base's scripts/design-links.mjs,
+one for each test, each printing `docs/technical-design.md:<n> <problem>` with the name its criterion gives, among
+the lane's other findings. The tree's design was caught up in the three places above: the CLI row got the seven
+commands, the Extension API block a line for each of the two methods, and line 708 read "A complete game can stay on
+the canvas through the game shell, or go through an engine project as one optional route". The stand-in is not the
+issue's work and is not part of the suite.
+
+  node --test '<scratch tree>/tests/acceptance/1876/*.test.mjs'
+
+12 lines start ✔, none ✖
+ℹ tests 12
+ℹ pass 12
+ℹ fail 0
+
+Then one change at a time, with STANDIN_OFF naming what the stand-in leaves out. Each run lists the tests that
+failed and each failing assertion's first line:
+
+- a check left out ("cli", "claim", "api", "slots", "flag", "proof", "lifecycles", "blockers", "route", "decided",
+  "columns", "hook"): exactly that check's test fails, "the lane passed a planted …";
+- "ack" or "reply": the hook check reads only the other line, and criterion 9's second test fails on the one it skips;
+- "names": every finding is printed as "docs/technical-design.md and a file on main differ", so the lane fails each
+  plant and names nothing. The ten tests that ask for a name fail; the two that ask for none (criterion 8's Decided
+  row, criterion 9's ack and reply) pass;
+- "verdict": the lane throws on a finding, so it exits 1 with a stack trace and no FAIL line. All twelve fail, "with
+  no line that starts FAIL, so it judged nothing".
+
+== without the "cli" check: exit 1, 11 pass, 1 fail
+  ✖ AC1 #1876.eb3b3c11 the CLI row names every command `deep --help` lists
+    AssertionError [ERR_ASSERTION]: the lane passed a planted usage line for `deep ghost` in packages/cli/src/main.ts,
+      a command the CLI row doesn't name
+== without the "claim" check: exit 1, 11 pass, 1 fail
+  ✖ AC1 #1876.eb3b3c11 the CLI row names no `claim`
+    AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the CLI row that names `claim`
+      (docs/technical-design.md:508)
+== without the "api" check: exit 1, 11 pass, 1 fail
+  ✖ AC2 #1876.4ae35244 the Extension API block names every method of packages/contracts/extension-api.json
+    AssertionError [ERR_ASSERTION]: the lane passed a planted `deep.ghost` entry in
+      packages/contracts/extension-api.json
+== without the "slots" check: exit 1, 11 pass, 1 fail
+  ✖ AC3 #1876.93b6ae42 the Hub slots table has a row for every method and variant of packages/contracts/hub-slots.json
+    AssertionError [ERR_ASSERTION]: the lane passed a planted row for `deep.registerGhost` in
+      packages/contracts/hub-slots.json
+== without the "flag" check: exit 1, 11 pass, 1 fail
+  ✖ AC4 #1876.281ab39b the Codex flag in the DeepBuild's own jobs line equals the `-s` value of readOnlyJob.args in
+    adapters/codex.facts.json
+    AssertionError [ERR_ASSERTION]: the lane passed a planted adapters/codex.facts.json whose launch.readOnlyJob.args
+      has `-s read-only`
+== without the "proof" check: exit 1, 11 pass, 1 fail
+  ✖ AC5 #1876.8616fced the Proof check kind names `lake comparator` and Kani
+    AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the Proof bullet without Kani
+      (docs/technical-design.md:842)
+== without the "lifecycles" check: exit 1, 11 pass, 1 fail
+  ✖ AC6 #1876.19d18fbd the Lifecycles list names exactly the objects with a `*.machine@*.json` table in
+    packages/contracts/schemas
+    AssertionError [ERR_ASSERTION]: the lane passed a planted packages/contracts/schemas/ghost.machine@1.json
+== without the "blockers" check: exit 1, 11 pass, 1 fail
+  ✖ AC7 #1876.a2923be3 the two ready rules both say a blocker on the baseline list of issues closed before the gate
+    satisfies a blocked-by link
+    AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the bullet that starts "- In R6: playbooks ("
+      without the baseline list (docs/technical-design.md:57)
+== without the "route" check: exit 1, 11 pass, 1 fail
+  ✖ AC8 #1876.23de0760 no line of the design says a complete game takes the engine project route as its only route
+    AssertionError [ERR_ASSERTION]: the lane passed a planted copy of line 2092's old sentence, "Complete games take
+      the engine project route …" (docs/technical-design.md:2164)
+== without the "decided" check: exit 1, 11 pass, 1 fail
+  ✖ AC8 #1876.23de0760 the Decided row for bounded games names the canvas game shell
+    AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the Decided row "Bounded games on the canvas"
+      that names no game shell (docs/technical-design.md:2942)
+== without the "columns" check: exit 1, 11 pass, 1 fail
+  ✖ AC9 #1876.6bec2ce3 the events table names every column packages/record/src/index.ts creates
+    AssertionError [ERR_ASSERTION]: the lane passed a planted column `ghost` in the events table
+      packages/record/src/index.ts creates
+== without the "hook" check: exit 1, 11 pass, 1 fail
+  ✖ AC9 #1876.6bec2ce3 the hook protocol's ack and reply carry `v`
+    AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the hook protocol's ack without `v`
+      (docs/technical-design.md:359: { "ack": "01K74FKZVK8Q2X5R7M3N9P4T6W", "hold_until_ms": null })
+== without the "ack" check: exit 1, 11 pass, 1 fail
+  ✖ AC9 #1876.6bec2ce3 the hook protocol's ack and reply carry `v`
+    AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the hook protocol's ack without `v`
+      (docs/technical-design.md:359: { "ack": "01K74FKZVK8Q2X5R7M3N9P4T6W", "hold_until_ms": null })
+== without the "reply" check: exit 1, 11 pass, 1 fail
+  ✖ AC9 #1876.6bec2ce3 the hook protocol's ack and reply carry `v`
+    AssertionError [ERR_ASSERTION]: the lane passed a planted copy of the hook protocol's reply without `v`
+      (docs/technical-design.md:362: { "exit": 0, "stdout": "{\"hookSpecificOutput\":{…}}", "stderr": "" })
+== without the "names" check: exit 1, 2 pass, 10 fail
+  ✖ AC1 #1876.eb3b3c11 the CLI row names every command `deep --help` lists
+  ✖ AC1 #1876.eb3b3c11 the CLI row names no `claim`
+  ✖ AC2 #1876.4ae35244 the Extension API block names every method of packages/contracts/extension-api.json
+  ✖ AC3 #1876.93b6ae42 the Hub slots table has a row for every method and variant of packages/contracts/hub-slots.json
+  ✖ AC4 #1876.281ab39b the Codex flag in the DeepBuild's own jobs line equals the `-s` value of readOnlyJob.args in
+    adapters/codex.facts.json
+  ✖ AC5 #1876.8616fced the Proof check kind names `lake comparator` and Kani
+  ✖ AC6 #1876.19d18fbd the Lifecycles list names exactly the objects with a `*.machine@*.json` table in
+    packages/contracts/schemas
+  ✖ AC7 #1876.a2923be3 the two ready rules both say a blocker on the baseline list of issues closed before the gate
+    satisfies a blocked-by link
+  ✖ AC8 #1876.23de0760 no line of the design says a complete game takes the engine project route as its only route
+  ✖ AC9 #1876.6bec2ce3 the events table names every column packages/record/src/index.ts creates
+    AssertionError [ERR_ASSERTION]: on a planted usage line for `deep ghost` in packages/cli/src/main.ts, a command
+      the CLI row doesn't name, the lane failed without naming `ghost`
+    AssertionError [ERR_ASSERTION]: on a planted copy of the CLI row that names `claim`
+      (docs/technical-design.md:508), the lane failed without naming `claim`
+    AssertionError [ERR_ASSERTION]: on a planted `deep.ghost` entry in packages/contracts/extension-api.json, the lane
+      failed without naming `deep.ghost`
+    AssertionError [ERR_ASSERTION]: on a planted row for `deep.registerGhost` in packages/contracts/hub-slots.json,
+      the lane failed without naming `deep.registerGhost`
+    AssertionError [ERR_ASSERTION]: on a planted adapters/codex.facts.json whose launch.readOnlyJob.args has `-s
+      read-only`, the lane failed without naming the flag, `-s` or its planted value `read-only`
+    AssertionError [ERR_ASSERTION]: on a planted copy of the Proof bullet without Kani (docs/technical-design.md:842),
+      the lane failed without naming the bullet
+    AssertionError [ERR_ASSERTION]: on a planted packages/contracts/schemas/ghost.machine@1.json, the lane failed
+      without naming `ghost`
+    AssertionError [ERR_ASSERTION]: on a planted copy of the bullet that starts "- In R6: playbooks (" without the
+      baseline list (docs/technical-design.md:57), the lane failed without naming the bullet
+    AssertionError [ERR_ASSERTION]: on a planted copy of line 2092's old sentence, "Complete games take the engine
+      project route …" (docs/technical-design.md:2164), the lane failed without naming the line
+    AssertionError [ERR_ASSERTION]: on a planted column `ghost` in the events table packages/record/src/index.ts
+      creates, the lane failed without naming `ghost`
+== without the "verdict" check: exit 1, 0 pass, 12 fail
+  ✖ AC1 #1876.eb3b3c11 the CLI row names every command `deep --help` lists
+  ✖ AC1 #1876.eb3b3c11 the CLI row names no `claim`
+  ✖ AC2 #1876.4ae35244 the Extension API block names every method of packages/contracts/extension-api.json
+  ✖ AC3 #1876.93b6ae42 the Hub slots table has a row for every method and variant of packages/contracts/hub-slots.json
+  ✖ AC4 #1876.281ab39b the Codex flag in the DeepBuild's own jobs line equals the `-s` value of readOnlyJob.args in
+    adapters/codex.facts.json
+  ✖ AC5 #1876.8616fced the Proof check kind names `lake comparator` and Kani
+  ✖ AC6 #1876.19d18fbd the Lifecycles list names exactly the objects with a `*.machine@*.json` table in
+    packages/contracts/schemas
+  ✖ AC7 #1876.a2923be3 the two ready rules both say a blocker on the baseline list of issues closed before the gate
+    satisfies a blocked-by link
+  ✖ AC8 #1876.23de0760 no line of the design says a complete game takes the engine project route as its only route
+  ✖ AC8 #1876.23de0760 the Decided row for bounded games names the canvas game shell
+  ✖ AC9 #1876.6bec2ce3 the events table names every column packages/record/src/index.ts creates
+  ✖ AC9 #1876.6bec2ce3 the hook protocol's ack and reply carry `v`
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted usage line for `deep ghost` in
+      packages/cli/src/main.ts, a command the CLI row doesn't name with no line that starts FAIL, so it judged nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted copy of the CLI row that names `claim`
+      (docs/technical-design.md:508) with no line that starts FAIL, so it judged nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted `deep.ghost` entry in
+      packages/contracts/extension-api.json with no line that starts FAIL, so it judged nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted row for `deep.registerGhost` in
+      packages/contracts/hub-slots.json with no line that starts FAIL, so it judged nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted adapters/codex.facts.json whose
+      launch.readOnlyJob.args has `-s read-only` with no line that starts FAIL, so it judged nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted copy of the Proof bullet without Kani
+      (docs/technical-design.md:842) with no line that starts FAIL, so it judged nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted packages/contracts/schemas/ghost.machine@1.json
+      with no line that starts FAIL, so it judged nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted copy of the bullet that starts "- In R6: playbooks
+      (" without the baseline list (docs/technical-design.md:57) with no line that starts FAIL, so it judged nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted copy of line 2092's old sentence, "Complete games
+      take the engine project route …" (docs/technical-design.md:2164) with no line that starts FAIL, so it judged
+      nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted copy of the Decided row "Bounded games on the
+      canvas" that names no game shell (docs/technical-design.md:2942) with no line that starts FAIL, so it judged
+      nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted column `ghost` in the events table
+      packages/record/src/index.ts creates with no line that starts FAIL, so it judged nothing
+    AssertionError [ERR_ASSERTION]: the lane exited 1 on a planted copy of the hook protocol's ack without `v`
+      (docs/technical-design.md:359: { "ack": "01K74FKZVK8Q2X5R7M3N9P4T6W", "hold_until_ms": null }) with no line that
+      starts FAIL, so it judged nothing
+
+The stand-in lane on the base's own design, nothing caught up: all twelve tests fail at the control, each with the
+lane's output, which names the seven commands, the two methods and line 708.
+
+ℹ tests 12
+ℹ pass 0
+ℹ fail 12
+  AssertionError [ERR_ASSERTION]: the unplanted scratch copy already fails the design links and names lane, so a
+    planted failure would prove nothing: exit 1, output:
+  FAIL 0 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 10
+    principles findings
+    docs/technical-design.md:506 the CLI row doesn't name `deep host`, which `deep --help` lists
+      (packages/cli/src/main.ts)
+    docs/technical-design.md:506 the CLI row doesn't name `deep land`, which `deep --help` lists
+      (packages/cli/src/main.ts)
+    docs/technical-design.md:506 the CLI row doesn't name `deep work`, which `deep --help` lists
+      (packages/cli/src/main.ts)
+    docs/technical-design.md:506 the CLI row doesn't name `deep person`, which `deep --help` lists
+      (packages/cli/src/main.ts)
+    docs/technical-design.md:506 the CLI row doesn't name `deep library`, which `deep --help` lists
+      (packages/cli/src/main.ts)
+    docs/technical-design.md:506 the CLI row doesn't name `deep pack`, which `deep --help` lists
+      (packages/cli/src/main.ts)
+    docs/technical-design.md:506 the CLI row doesn't name `deep job`, which `deep --help` lists
+      (packages/cli/src/main.ts)
+    docs/technical-design.md:376 the Extension API block doesn't name `deep.schedule.read`
+      (packages/contracts/extension-api.json)
+    docs/technical-design.md:376 the Extension API block doesn't name `deep.source.ask`
+      (packages/contracts/extension-api.json)
+    docs/technical-design.md:708 says a complete game takes the engine project route as its only route
+    Fix: keep Principles to 8 to 12 one-sentence lines of at most 160 characters, each linking the design and naming a
+      check that exists; edit its first four lines with AGENTS.md's invariants; open the canvas conventions with a
+      link to it.
+
+## The judges on hand-written lane output
+
+Each judge was given stand-in output written by hand: the lane's `FAIL <counts>` line and one finding. "accepts"
+means the judge found the name on the finding's line; "refuses" means it didn't, and the test would fail.
+
+  node <scratch>/judges-probe.mjs tests/acceptance/1876/helpers.mjs
+
+-- a planted run fails only with a non-zero exit and a line that starts FAIL
+ok  refuses (exit 0 with the pass line): design links and names: 176 links checked …
+ok  refuses (exit 1, INCONCLUSIVE): INCONCLUSIVE could not fetch the open issues: gh: not found
+ok  refuses (exit 1, a crash with a stack trace): at file:///repo/scripts/design-links.mjs:90:3
+ok  accepts (exit 1, FAIL and a finding): docs/technical-design.md:506 a finding
+-- AC1: the planted command `ghost`
+ok  accepts (`deep ghost` in code): docs/technical-design.md:506 the CLI row doesn't name `deep ghost`, which `deep
+  --help` lists (packages/cli/src/main.ts)
+ok  accepts (the bare word ghost): the CLI row lacks ghost
+ok  refuses (a count and no name): docs/technical-design.md:506 the CLI row doesn't name 1 command `deep --help` lists
+ok  refuses (ghosts): the CLI row doesn't name `deep ghosts`
+-- AC1: `claim`
+ok  accepts (`claim` in code): docs/technical-design.md:506 the CLI row names `claim`, which no command builds
+ok  refuses (deep_claim only): docs/technical-design.md:506 the CLI row names a command `deep_claim` stands for
+ok  refuses (a count and no name): docs/technical-design.md:506 the CLI row names 1 command no usage line leads with
+-- a Fix line names nothing: the lane prints it the same whatever it found
+ok  refuses (`claim` in a Fix line only): Fix: name each command `deep --help` lists in the CLI row, and take `claim`
+  out of it
+ok  refuses (Proof in a Fix line only): Fix: name `lake comparator` and Kani in the Proof check kind
+ok  refuses (`-s` in a Fix line only): Fix: give DeepBuild's own jobs the `-s` value adapters/codex.facts.json has
+-- AC2: `deep.ghost`
+ok  accepts (`deep.ghost` in code): docs/technical-design.md:376 the Extension API block doesn't name `deep.ghost`
+  (packages/contracts/extension-api.json)
+ok  accepts (deep.ghost at a sentence end): the Extension API block lacks deep.ghost.
+ok  refuses (deep.ghost.read): the Extension API block doesn't name `deep.ghost.read`
+ok  refuses (a count and no name): docs/technical-design.md:376 the Extension API block doesn't name 1 method
+-- AC3: `deep.registerGhost`
+ok  accepts (`deep.registerGhost` in code): docs/technical-design.md:898 the Hub slots table has no row for
+  `deep.registerGhost` (packages/contracts/hub-slots.json)
+ok  refuses (the interface only): docs/technical-design.md:898 the Hub slots table has no row for `ghost@1`
+-- AC4: the flag
+ok  accepts (both flags in code): docs/technical-design.md:2343 DeepBuild's own jobs gives Codex `-s
+  danger-full-access`; adapters/codex.facts.json starts it with `-s read-only`
+ok  accepts (the planted value alone): docs/technical-design.md:2343 says danger-full-access where
+  adapters/codex.facts.json says read-only
+ok  accepts (`-s` alone): docs/technical-design.md:2343 the Codex `-s` value isn't the one in
+  adapters/codex.facts.json
+ok  refuses (no flag and no value): docs/technical-design.md:2343 the Codex flag isn't the one in
+  adapters/codex.facts.json
+ok  refuses (another flag): docs/technical-design.md:2343 adapters/codex.facts.json has --skip-git-repo-check
+-- AC5: the Proof bullet, at line 840
+ok  accepts (file and line): docs/technical-design.md:840 the Proof check kind doesn't name Kani
+ok  accepts (file, the word line and the number): technical-design.md line 840 doesn't name Kani
+ok  accepts (its first 30 characters, rendered): "Proof. A property of the code is proved" names no Kani
+ok  accepts (the bold lead Proof as a word): the Proof check kind doesn't name Kani
+ok  refuses (another line of the file): docs/technical-design.md:84 doesn't name Kani
+ok  refuses (a longer number): docs/technical-design.md:8401 doesn't name Kani
+ok  refuses (no line, no lead): docs/technical-design.md: a check kind doesn't name Kani
+ok  refuses (proof in lower case): a proof bullet lacks Kani
+-- AC6: the object `ghost`
+ok  accepts (`ghost` in code): docs/technical-design.md:978 the Lifecycles list doesn't name `ghost`, which has a
+  table in packages/contracts/schemas
+ok  accepts (the table file): packages/contracts/schemas/ghost.machine@1.json has no object in the Lifecycles list
+ok  refuses (a count and no name): docs/technical-design.md:978 the Lifecycles list lacks 1 object with a table
+-- AC7: the R6 bullet, at line 57
+ok  accepts (file and line): docs/technical-design.md:57 doesn't say a blocker on the baseline list of issues closed
+  before the gate satisfies a blocked-by link
+ok  accepts (its opening words): the bullet "In R6: playbooks …" lacks the baseline list
+ok  refuses (the heading only): Later, as extensions: a ready rule doesn't name the baseline list
+ok  refuses (the other bullet (line 59)): docs/technical-design.md:59 doesn't say it
+-- AC8: the planted line, at line 2162
+ok  accepts (file and line): docs/technical-design.md:2162 says a complete game takes the engine project route as its
+  only route
+ok  accepts (the old sentence quoted): "Complete games take the engine project route, through the game project
+  blueprint" makes the engine project the only route
+ok  accepts (the first words of the line): "Complete-game kits beyond the grid core" says the engine project route is
+  the only route
+ok  refuses (no line): a line of the design says a complete game takes the engine project route as its only route
+ok  refuses (another line): docs/technical-design.md:708 says a complete game takes the engine project route as its
+  only route
+-- AC9: the column `ghost`
+ok  accepts (`ghost` in code): docs/technical-design.md:118 the events table doesn't name the column `ghost`
+  packages/record/src/index.ts creates
+ok  refuses (a count and no name): docs/technical-design.md:118 the events table doesn't name 1 column
+
+every judgement is as expected

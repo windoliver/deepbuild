@@ -1,0 +1,129 @@
+Issue: #3256
+Base: 303bb6d73d6673b6268f496a81c3a9f6062fb130 (main; its last merge is #3331), this suite laid beside it, uncommitted.
+Acceptance tests: blind draft from the issue, the design and the base.
+IDs: criterionId of scripts/proof-change.mjs over the issue body's seven criterion lines:
+     b135fea1 7baa6339 3bfcdd46 d9954e62 6145ab27 57afe6d0 029810e0.
+Machine: Mac17,10 (18 cores), macOS 27.2 (26B8119), Node v24.22.0, cargo 1.99.1, rustc 1.99.1. Shared with other
+         sessions: one-minute load 19 to 51 while the runs below waited (2026-11-24, 02:01 to 03:29).
+The base build (the caller's, build-base.log), in this checkout, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0:
+  cargo test --locked -j 8 --no-run -p deep-scene3d-render -p deep-gpu-layer -p deep-groups-render
+  exited 0 at 01:56:23 and made 20 test targets (16 of deep-scene3d-render, 3 of deep-gpu-layer, 1 of deep-groups-render).
+
+== The result: NEITHER TEST FILE RAN AT THE BASE
+
+No test of this suite was started at the base, and no `cargo test` of the suite ran there. Nothing in this file is a
+test's result by cargo. What follows is what was asked for, why it didn't run, and what was read of the base by hand.
+
+1. layout.test.mjs (AC1 to AC6): INCONCLUSIVE, no grant.
+   $ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3256/layout.test.mjs
+   02:01:15 to 03:01:15 (load 41 at the start, 34 at the end), exit 3:
+     INCONCLUSIVE no grant: no test grant came within 60 min
+       Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+   The throttle never started the command. Not asked for again (no loop).
+
+2. ac7-budget.test.mjs (AC7): unrun; stopped by this job while it still waited for its grant.
+   $ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3256/ac7-budget.test.mjs
+   Started 03:01:47 (load 29). At 03:28:59, 27 minutes in and with no grant yet, this job stopped the throttle process
+   it had started (kill -TERM of that one PID; exit 143), because the checkout's target/ was gone by then (3, below):
+   had the grant come, the test's cargo call would have compiled every crate again. The command never started.
+
+3. The checkout's target/ went missing during phase 2, and this job did not remove it.
+   It was there at 03:09:59, when the last of the base's test binaries answered `--list` (below). The checkout's root
+   folder was last changed at 03:12:34. At 03:25:50 no file under target/ could be started (ENOENT), and
+   `ls target` says there is no such folder; it was still missing at 11:30. Between 03:09:59 and 03:25:50 this job
+   wrote nothing in the checkout but two edits of this folder's README.md, and started nothing there: the throttle
+   process of 2 was waiting, and scripts/throttle.mjs names no target folder. Who removed it is not known to this job,
+   which reads only this checkout and its inputs folder.
+   So neither file can be run here now without building the three crates' test targets again, which is not this
+   job's to start. The two runs above are what is unrun; a run needs the base built again and a test grant.
+
+== What each test is written to meet at the base (expected, NOT observed with cargo)
+
+Every test first asks that the lane is there (helpers.mjs, `ran`), before any other assertion and before the suite's
+own Rust target or the feature build is asked for. With no test of the three crates named shader_layout it fails there:
+
+  AssertionError [ERR_ASSERTION]: no test in the unit lanes of deep-scene3d-render, deep-gpu-layer,
+  deep-groups-render has shader_layout in its name: the lane isn't there (cargo test --locked -p deep-scene3d-render
+  -p deep-gpu-layer -p deep-groups-render --lib --bins --tests --no-fail-fast -- shader_layout --show-output ran 0 tests)
+      at ran (tests/acceptance/3256/helpers.mjs)
+
+  AC1 #3256.b135fea1  layout.test.mjs      expected: fails at that assertion
+  AC2 #3256.7baa6339  layout.test.mjs      expected: fails at that assertion (twin_shaders.rs's target is not asked for)
+  AC3 #3256.3bfcdd46  layout.test.mjs      expected: fails at that assertion
+  AC4 #3256.d9954e62  layout.test.mjs      expected: fails at that assertion (the feature build is not asked for)
+  AC5 #3256.6145ab27  layout.test.mjs      expected: fails at that assertion
+  AC6 #3256.57afe6d0  layout.test.mjs      expected: fails at that assertion
+  AC7 #3256.029810e0  ac7-budget.test.mjs  expected: fails at that assertion (no time is read)
+
+No test is expected to pass at the base, and none was seen to.
+
+What stands behind "expected", each read by hand and none of it a run of the suite:
+
+a. The base's test binaries hold no test with shader_layout in its name. Each of the 20 binaries the base build made
+   was asked for its list (`<binary> --list`, which runs no test), 03:09:47 to 03:09:59:
+       20 tests, 0 with shader_layout in its name: src/main.rs (deep_gpu, deep-gpu-layer's binary)
+        2, 0: tests/ambient_class.rs      2, 0: tests/drawn_live.rs
+        2, 0: src/lib.rs (deep_groups_render)
+       32, 0: src/lib.rs (deep_scene3d_render)
+        1, 0: acceptance/2657/casters.rs  1, 0: 2657/copies.rs  3, 0: 2657/ensure_casters.rs  1, 0: 2657/maps_lookup.rs
+        1, 0: 2657/side_meshes.rs         3, 0: 2657/sway.rs    1, 0: 3016/heap.rs            3, 0: 3016-redraft-3169/metal.rs
+        4, 0: 3016/noop.rs                8, 0: 3016-redraft-3169/views.rs                    1, 0: 3024/heap.rs
+        2, 0: 3024/pixels.rs              2, 0: tests/evaluate_alloc.rs  3, 0: tests/held_memory.rs  2, 0: tests/hidden_view_290.rs
+     94 tests in the base's targets of the three crates, 0 with shader_layout in its name
+b. The suite reads libtest's own output as it reads the planted ones. A test binary built with `rustc --test` alone
+   (three tests named shader_layout_…: one passing and printing listing lines, one printing and then panicking on
+   several lines, one failing an assert_eq!) was run with `shader_layout --show-output`, and its output, under a
+   Running line, went through helpers.mjs's `read`: 3 tests, 1 passed and 2 FAIL by cargoResults with none outside a
+   test, the four listing lines read, each failed test's message whole and without its listing line, its
+   `panicked at` line or libtest's note, `finished in 0.00s` read, and AC3's and AC5's judges failing at their
+   assertions on it, naming what their criteria name.
+c. The lanes name the base's targets. scripts/lanes.mjs's `crates` (one `cargo metadata --no-deps --format-version 1
+   --offline`, the call the suite makes) gave 54 crates, and each of the 20 `Executable … (target/debug/deps/<name>-<hash>)`
+   lines of build-base.log, read as the `Running` line a test run prints, was named by the arguments that rerun it
+   (`cargo -p deep-scene3d-render --lib`, `cargo -p deep-gpu-layer --bin deep-gpu`, `cargo -p deep-groups-render
+   --lib`, and the 17 `--test` targets), with no failure.
+d. Phase 1's dry run of both files against a stand-in for cargo that prints a base-shaped run (0 tests in each
+   target, exit 0): all seven tests failed at the AssertionError above.
+
+Not observed, and so not known: that the lane's cargo call finds every unit of the base build fresh and compiles
+nothing; that it exits 0 with `running 0 tests` under each target; what cargo itself prints around libtest's lines
+for that call; how long the call takes.
+
+== Unrun at the base, and why
+
+- twin_shaders.rs as a cargo target. A `[[test]]` entry in crates/deep-scene3d-render/Cargo.toml is the implementer's
+  to add (README.md), so `--test acceptance_3256_twin_shaders` names no target at the base, and no Cargo.toml was
+  edited. It links std, naga and serde_json alone, which the base has, and no name of deep-scene3d-render, so it would
+  build and pass there once registered. That was checked by hand, with rustc and no cargo, against the rlibs the base
+  build made (02:16, before target/ went missing), from the checkout's root:
+    $ CARGO_MANIFEST_DIR=<checkout>/crates/deep-scene3d-render rustc --edition 2021 --test \
+        tests/acceptance/3256/twin_shaders.rs --crate-name acceptance_3256_twin_shaders -C debuginfo=0 \
+        -L dependency=target/debug/deps --extern naga=target/debug/deps/libnaga-efb6946f97065970.rlib \
+        --extern serde_json=target/debug/deps/libserde_json-8fe4fb70ed76d629.rlib -o <scratch>/phase2/twin_shaders
+    exit 0, no warning, no workspace crate compiled.
+    $ RUST_BACKTRACE=0 <scratch>/phase2/twin_shaders --show-output
+    running 1 test
+    test the_frame_twin_validates_at_the_size_frame_uniform_is ... ok
+    ---- the_frame_twin_validates_at_the_size_frame_uniform_is stdout ----
+    #3256.7baa6339 twin frame-fields-swapped: naga validates the scene's module with sky_top and sky_low swapped in Frame; its Frame is 352 bytes, FrameUniform 352; sky_low@144 sky_top@160
+    #3256.7baa6339 twin frame-fields-swapped: naga validates the scene's module as the checkout holds it; its Frame is 352 bytes; sky_top@144 sky_low@160
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+  It passes at the base, and it should: it shows what criterion 2 says of the twin shader (naga validates it, and its
+  Frame is the size FrameUniform is), which is true of the base's shader with the twin's lines laid, lane or no lane.
+  It is no test of the lane; AC2's test, which runs it, fails at the base on the lane's absence before it asks for it.
+  The same file under clippy-driver (`-W clippy::all -D warnings`, the same rlibs): exit 0, no finding.
+  Two naga builds were in target/debug/deps; the one linked here holds the WGSL front end and is the larger. Which of
+  the two cargo gives deep-scene3d-render's dev-dependency was not checked.
+- The planted comparison's build (`--features deep-groups-render/plant-3256-host-sizes`). The base has no such feature,
+  AC4's test is written to fail before it asks for it, and the call was not made.
+- The twins. No crate was built with a twin laid: that compiles the crate again. Every edit of every twin matches the
+  base's file at exactly one place (phase 1, by the lane's own rule). The two shader twins are valid shaders at the
+  base: frame-fields-swapped by the run above; uniform-struct-unnamed by a probe built the same way, which had naga
+  parse and validate print.wgsl with every flag and no capability, as print::tests::the_print_shader_validates does:
+    crates/deep-scene3d-render/src/print.wgsl: naga parses and validates it; Unnamed3256 bound as var<uniform>: false
+    <scratch>/laid/uniform-struct-unnamed/crates/deep-scene3d-render/src/print.wgsl: naga parses and validates it; Unnamed3256 bound as var<uniform>: true
+  The four Rust twins (ao-opts-retyped, ao-field-added, solid-fields-swapped, host-struct-unlisted) were not compiled;
+  README.md gives why each should build.
+- AC7's time. Never read: the test didn't start, and at this load it would have read INCONCLUSIVE before timing.
+
+<checkout> is this checkout's root; <scratch> is the job's scratch folder beside its inputs, which is not kept.

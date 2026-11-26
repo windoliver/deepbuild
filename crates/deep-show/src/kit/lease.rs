@@ -54,6 +54,25 @@ pub fn unleased() -> bool {
     UNLEASED.load(Ordering::Relaxed)
 }
 
+/// #231: set while the kit's laws part exports under the lease the kit holds: an export's lease
+/// is then the kit's, so it never waits for its own process.
+static WITHIN: AtomicBool = AtomicBool::new(false);
+
+/// Until it is dropped, an export of this process draws under the kit's own lease.
+pub struct Within(());
+
+/// The kit's lease covers the exports made until the answer is dropped.
+pub fn within() -> Within {
+    WITHIN.store(true, Ordering::Relaxed);
+    Within(())
+}
+
+impl Drop for Within {
+    fn drop(&mut self) {
+        WITHIN.store(false, Ordering::Relaxed);
+    }
+}
+
 /// The kit's GPU lease, shared, for `wait`: while it isn't held, `unleased` says so.
 pub fn kit(planted: Option<&str>) -> GpuLease {
     let lease = GpuLease::take(Mode::Shared, "deep-show kit", Some(KIT_WAIT), planted);
@@ -84,6 +103,8 @@ enum Held {
     Nothing { why: String },
     /// The planted program that takes `DEEP_LEASED` at its word and holds nothing.
     Trusted,
+    /// #231: the kit's lease, which this process holds already.
+    Within,
     /// Let go.
     Released,
 }
@@ -93,17 +114,18 @@ impl GpuLease {
     pub fn take(mode: Mode, what: &str, wait: Option<Duration>, planted: Option<&str>) -> GpuLease {
         let asked = now_ms();
         let deadline = wait.map(|w| Instant::now() + w);
-        let held =
-            if planted == Some(TRUSTS_ENVIRONMENT) && std::env::var_os("DEEP_LEASED").is_some() {
-                Held::Trusted
-            } else {
-                let hub = (planted != Some(FILE_BESIDE_HUB)).then(Hub::find).flatten();
-                // A hub that can't lease the GPU, or that stops answering, leaves the file as the lease.
-                match hub.map(|h| table(h, mode, what, deadline)) {
-                    Some(Ok(held)) => held,
-                    _ => file(deadline),
-                }
-            };
+        let held = if WITHIN.load(Ordering::Relaxed) {
+            Held::Within
+        } else if planted == Some(TRUSTS_ENVIRONMENT) && std::env::var_os("DEEP_LEASED").is_some() {
+            Held::Trusted
+        } else {
+            let hub = (planted != Some(FILE_BESIDE_HUB)).then(Hub::find).flatten();
+            // A hub that can't lease the GPU, or that stops answering, leaves the file as the lease.
+            match hub.map(|h| table(h, mode, what, deadline)) {
+                Some(Ok(held)) => held,
+                _ => file(deadline),
+            }
+        };
         GpuLease { held, asked }
     }
 
@@ -123,6 +145,7 @@ impl GpuLease {
             }
             Held::File { .. } => json!({"gpu": true, "from": "file"}),
             Held::Trusted => json!({"gpu": true, "from": "environment"}),
+            Held::Within => json!({"gpu": true, "from": "kit"}),
             Held::Nothing { why } => json!({"gpu": false, "why": why}),
             Held::Released => json!({"gpu": false}),
         }
@@ -161,6 +184,7 @@ impl GpuLease {
                 own("file", acquired)
             }
             Held::Trusted => own("environment", now_ms()),
+            Held::Within => own("kit", asked),
             Held::Nothing { .. } | Held::Released => json!({"from": "none"}),
         }
     }

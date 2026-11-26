@@ -1,0 +1,163 @@
+Base run of tests/acceptance/3150 at 8c984adb9 (origin/main, unmodified), this Mac, Node 24, rustc 1.99.1 aarch64.
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/3150 --no-file-parallelism --testTimeout=3600000, then tsc -p tests/acceptance/3150/tsconfig.json.
+ANSI colors stripped, home folder written ~.
+
+base: 8c984adb9 Merge pull request #3376 from windoliver/claude/issue-2401-left-to-1796
+load:  2:50  up  6:17, 2 users, load averages: 47.69 60.88 143.35
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3150
+
+ ❯ check.test.ts (2 tests | 2 failed) 12106ms
+   ❯ #3150.3f890426 a cut.words@1 keep holding a value neither form takes is refused at check, naming the form (2)
+     × #3150.3f890426 keep [[0, 1, 2]], a three-number entry, is refused at check naming [index | [first: index, last: index]] 7575ms
+     × #3150.3f890426 keep [0, "two"], a string entry, is refused at check naming [index | [first: index, last: index]] 955ms
+ ❯ kinds.test.ts (2 tests | 2 failed) 11576ms
+   ❯ #3150.b8d82393 deep_kinds prints both cut.words@1 forms (2)
+     × #3150.b8d82393 deep_kinds prints cut.words@1.recording's form, name 6979ms
+     × #3150.b8d82393 deep_kinds prints cut.words@1.keep's form, [index | [first: index, last: index]] 1004ms
+ ❯ known-failures.test.ts (1 test | 1 failed) 9ms
+   ❯ #3150.6627b6c0 the test's known-failures entry is gone (1)
+     × #3150.6627b6c0 scripts/known-failures.json lists no entry for deep-show's kinds::tests::every_structured_field_prints_forms_that_take_its_own_values 8ms
+ ❯ unit.test.ts (1 test | 1 failed) 10547ms
+   ❯ #3150.c7594389 deep-show's every-structured-field test passes (1)
+     × #3150.c7594389 deep-show's kinds::tests::every_structured_field_prints_forms_that_take_its_own_values passes 10545ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  check.test.ts > #3150.3f890426 a cut.words@1 keep holding a value neither form takes is refused at check, naming the form > #3150.3f890426 keep [[0, 1, 2]], a three-number entry, is refused at check naming [index | [first: index, last: index]]
+AssertionError: #3150.3f890426: keep [[0,1,2]] is refused at check by an error at items/cut/params/keep naming the form [index | [first: index, last: index]]; the errors at keep were []; every issue: [{"check":"document.validate","code":"unknown_asset","severity":"error","ids":["cut"],"path":"items/cut/params/recording","actual":{"code":"unknown_asset","asset":"80a0dc6abfc95dbe174afbabbb892986cfdf73146f6e50b8d2f9fea90277c8a1"},"what":"the recording `rec` can't be read","fix":"See the issue."}]: expected 0 to be greater than 0
+ ❯ refusedNamingTheForm check.test.ts:27:5
+
+ ❯ check.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  check.test.ts > #3150.3f890426 a cut.words@1 keep holding a value neither form takes is refused at check, naming the form > #3150.3f890426 keep [0, "two"], a string entry, is refused at check naming [index | [first: index, last: index]]
+AssertionError: #3150.3f890426: keep [0,"two"] is refused at check by an error at items/cut/params/keep naming the form [index | [first: index, last: index]]; the errors at keep were []; every issue: [{"check":"document.validate","code":"unknown_asset","severity":"error","ids":["cut"],"path":"items/cut/params/recording","actual":{"code":"unknown_asset","asset":"80a0dc6abfc95dbe174afbabbb892986cfdf73146f6e50b8d2f9fea90277c8a1"},"what":"the recording `rec` can't be read","fix":"See the issue."}]: expected 0 to be greater than 0
+ ❯ refusedNamingTheForm check.test.ts:27:5
+
+ ❯ check.test.ts:37:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  kinds.test.ts > #3150.b8d82393 deep_kinds prints both cut.words@1 forms > #3150.b8d82393 deep_kinds prints cut.words@1.recording's form, name
+AssertionError: #3150.b8d82393: the forms deep_kinds prints for cut.words@1.recording: expected [] to deeply equal [ 'name' ]
+
+- Expected
++ Received
+
+- [
+-   "name",
+- ]
++ []
+
+ ❯ kinds.test.ts:25:94
+     23| describe(`${ID} deep_kinds prints both cut.words@1 forms`, () => {
+     24|   it(`${ID} deep_kinds prints cut.words@1.recording's form, name`, () …
+     25|     expect(printed('recording'), `${ID}: the forms deep_kinds prints f…
+       |                                                                                              ^
+     26|   }, 3_600_000);
+     27|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  kinds.test.ts > #3150.b8d82393 deep_kinds prints both cut.words@1 forms > #3150.b8d82393 deep_kinds prints cut.words@1.keep's form, [index | [first: index, last: index]]
+AssertionError: #3150.b8d82393: the forms deep_kinds prints for cut.words@1.keep: expected [] to deeply equal [ Array(1) ]
+
+- Expected
++ Received
+
+- [
+-   "[index | [first: index, last: index]]",
+- ]
++ []
+
+ ❯ kinds.test.ts:29:84
+     27|
+     28|   it(`${ID} deep_kinds prints cut.words@1.keep's form, [index | [first…
+     29|     expect(printed('keep'), `${ID}: the forms deep_kinds prints for ${…
+       |                                                                                    ^
+     30|   }, 3_600_000);
+     31| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  known-failures.test.ts > #3150.6627b6c0 the test's known-failures entry is gone > #3150.6627b6c0 scripts/known-failures.json lists no entry for deep-show's kinds::tests::every_structured_field_prints_forms_that_take_its_own_values
+AssertionError: #3150.6627b6c0: the entries of scripts/known-failures.json naming kinds::tests::every_structured_field_prints_forms_that_take_its_own_values: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "cargo -p deep-show --bin deep-show › kinds::tests::every_structured_field_prints_forms_that_take_its_own_values",
++ ]
+
+ ❯ known-failures.test.ts:21:92
+     19|     const failures = (file as Record<string, JsonValue>)['failures'] a…
+     20|     const named = Object.keys(failures).filter((key) => key.includes(U…
+     21|     expect(named, `${ID}: the entries of scripts/known-failures.json n…
+       |                                                                                            ^
+     22|   });
+     23| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  unit.test.ts > #3150.c7594389 deep-show's every-structured-field test passes > #3150.c7594389 deep-show's kinds::tests::every_structured_field_prints_forms_that_take_its_own_values passes
+AssertionError: #3150.c7594389: cargo test ran kinds::tests::every_structured_field_prints_forms_that_take_its_own_values and it passed (exit 101):
+---- kinds::tests::every_structured_field_prints_forms_that_take_its_own_values stdout ----
+
+thread 'kinds::tests::every_structured_field_prints_forms_that_take_its_own_values' (2475045) panicked at crates/deep-show/src/kinds/tests.rs:64:5:
+cut.words@1.recording: `asset name` doesn't read: `asset name` is no type the form language names
+cut.words@1.keep: `[word index | [first, last]]` doesn't read: `word index` is no type the form language names
+"cut.words@1"."recording": prints no form
+"cut.words@1"."keep": prints no form
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+: expected '\nrunning 1 test\ntest kinds::tests::…' to contain 'test kinds::tests::every_structured_f…'
+
+- Expected
++ Received
+
+- test kinds::tests::every_structured_field_prints_forms_that_take_its_own_values ... ok
++
++ running 1 test
++ test kinds::tests::every_structured_field_prints_forms_that_take_its_own_values ... FAILED
++
++ failures:
++
++ ---- kinds::tests::every_structured_field_prints_forms_that_take_its_own_values stdout ----
++
++ thread 'kinds::tests::every_structured_field_prints_forms_that_take_its_own_values' (2475045) panicked at crates/deep-show/src/kinds/tests.rs:64:5:
++ cut.words@1.recording: `asset name` doesn't read: `asset name` is no type the form language names
++ cut.words@1.keep: `[word index | [first, last]]` doesn't read: `word index` is no type the form language names
++ "cut.words@1"."recording": prints no form
++ "cut.words@1"."keep": prints no form
++ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
++
++
++ failures:
++     kinds::tests::every_structured_field_prints_forms_that_take_its_own_values
++
++ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 63 filtered out; finished in 0.68s
++
++
+
+ ❯ unit.test.ts:17:123
+     15|     const out = r.stdout;
+     16|     const failed = out.match(/---- [\s\S]*?(?=\n\nfailures:|\n\ntest r…
+     17|     expect(out, `${ID}: cargo test ran ${UNIT_TEST} and it passed (exi…
+       |                                                                                                                           ^
+     18|     expect(out, `${ID}: the run's result is one test passed, none fail…
+     19|     expect(r.status, `${ID}: cargo test exits 0`).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  6 failed (6)
+   Start at  02:50:49
+   Duration  35.22s (tests 99%)
+
+vitest exit 1
+tsc exit 0
+RUN done

@@ -365,6 +365,26 @@ describe('the resolver gate reads every decision the record holds, however it wa
     expect(await outcome(open)).toBe('answered');
   });
 
+  it('forgets a session whose process went with no SessionEnd as an ended one, but not one that hooks again (#1866)', async () => {
+    const died = (session: string) => append({ ...core, session }, 'session.gone', { pid: 4242, start: 'Mon Nov  2 23:00:00 2026' }, `session:${letters(session)}`);
+    const asked = async (session: string): Promise<string> => {
+      await start(session, `T${session}`);
+      const ask = await asks.raise(agent(session), 'deep_ask.taste', taste(session.toLowerCase()));
+      await asks.answer(card, ask, { option: 'green' });
+      await died(session);
+      return ask;
+    };
+    const [gone, back] = [await asked('SGONE'), await asked('SBACK')];
+    await append(hook('SBACK'), 'tool.before', { kind: 'read', paths: ['src/a.ts'], command: null });
+    for (let i = 0; i < 64; i++) {
+      await start(`E${i}`, `E${i}`);
+      await died(`E${i}`);
+    }
+    expect((await asks.inbox()).map((row) => row.ask)).toEqual([back]);
+    await expect(asks.card(gone)).rejects.toThrow('is no ask');
+    expect(await outcome(gone), "the record's answer stands").toBe('answered');
+  });
+
   it('keeps a session\'s decision past 64 newer ended sessions: resumed, it is never asked the same question again (#824)', async () => {
     await start('SRES', 'TRES');
     const first = await asks.raise(agent('SRES'), 'deep_ask.taste', taste('header'));

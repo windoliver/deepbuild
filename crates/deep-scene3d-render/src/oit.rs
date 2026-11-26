@@ -10,6 +10,17 @@ use deep_gpu::device::Device;
 /// Bytes a fragment takes: premultiplied RGBA as halves, its depth and the next node.
 pub const NODE: u64 = 16;
 
+deep_gpu::paired! { oit_info: "scene3d.wgsl", OitInfo;
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct OitInfo {
+    count: u32,
+    capacity: u32,
+    width: u32,
+    pad: u32,
+}
+}
+
 /// The lists' buffers and how much room they hold.
 pub struct Oit {
     pub heads: wgpu::Buffer,
@@ -92,16 +103,16 @@ impl Oit {
         // A storage binding holds no more than the device allows.
         let limit = d.limits().max_storage_buffer_binding_size / NODE;
         self.cap = cap.max(asked).min(limit.max(1));
-        let info = [
-            0u32,
-            self.capacity.min(u64::from(u32::MAX)) as u32,
-            self.width,
-            0,
-        ];
+        let info = OitInfo {
+            count: 0,
+            capacity: self.capacity.min(u64::from(u32::MAX)) as u32,
+            width: self.width,
+            pad: 0,
+        };
         deep_gpu::alloc::outside(|| {
             device
                 .queue
-                .write_buffer(&self.info, 0, bytemuck::cast_slice(&info))
+                .write_buffer(&self.info, 0, bytemuck::bytes_of(&info))
         });
         remade
     }

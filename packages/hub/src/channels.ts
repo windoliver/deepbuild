@@ -17,6 +17,7 @@ import type { SecretStore } from '@deepbuild/extension-host';
 import { enter, hold, hubSecrets, namesToken, refusedFile, valueOf, type Named } from './held.js';
 import type { Devices } from './trusted.js';
 import { writeAtomic } from './vfs.js';
+import { visible } from './visible.js';
 
 type Obj = Record<string, unknown>;
 type Kind = 'device' | 'chat' | 'email' | 'text';
@@ -96,11 +97,13 @@ function duration(text: string | undefined): number | undefined {
 const minuteOf = (text: string): number | undefined => { const m = /^(\d\d):(\d\d)$/.exec(text); return m ? Number(m[1]) * 60 + Number(m[2]) : undefined; };
 /**
  * A summary carries no secret, code or evidence: the question's first line, scrubbed as evidence is, with any long
- * hex run (a hash, a handle's digest) left out.
+ * hex run (a hash, a handle's digest) left out. Each control, invisible or direction-changing character is written
+ * as its escape, as `deep inbox` writes it (#1583), after the cut and by whole characters, so no escape and no
+ * character is cut in half: the card hash, and a paired device's signature over it, covers the text as shown.
  */
 function summaryOf(question: string): string {
   const line = question.split('\n')[0]!.trim();
-  return scrubText(line).replace(/(sha256:)?[0-9a-f]{16,}/gi, '[hash]').slice(0, 300);
+  return visible([...scrubText(line).replace(/(sha256:)?[0-9a-f]{16,}/gi, '[hash]')].slice(0, 300).join(''));
 }
 
 /** A channel's token (#1606): channels.json names it `secret:channels/<name>`, kept under `deepbuild/channels/<name>`. */

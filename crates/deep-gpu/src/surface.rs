@@ -8,6 +8,15 @@ use crate::device::Device;
 /// The format every slot holds: BGRA8, premultiplied, its values sRGB-encoded.
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
+/// #231: each four-byte pixel's red and blue bytes swapped in place, RGBA8 to BGRA8 or back. An
+/// export does it to every frame it draws through memory, so it lives where every profile
+/// builds at release speed.
+pub fn swap_red_blue(px: &mut [u8]) {
+    for p in px.as_chunks_mut::<4>().0 {
+        p.swap(0, 2);
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Path {
     ZeroCopy,
@@ -404,6 +413,34 @@ pub(crate) mod macos {
             CVPixelBufferGetIOSurface(Some(&self.buffer)).map_or(std::ptr::null_mut(), |s| {
                 CFRetained::as_ptr(&s).as_ptr().cast()
             })
+        }
+
+        /// #231: takes a frame from `from`, the buffer its BGRA8 rows were hashed in, by a copy
+        /// on the GPU, and waits for that work and every submission before it.
+        pub fn take(&self, device: &Device, from: &wgpu::Buffer) {
+            let [w, h] = self.size;
+            let mut encoder = device.device.create_command_encoder(&Default::default());
+            encoder.copy_buffer_to_texture(
+                wgpu::TexelCopyBufferInfo {
+                    buffer: from,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(w * 4),
+                        rows_per_image: Some(h),
+                    },
+                },
+                self.texture.as_image_copy(),
+                wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+            );
+            let sent = device.queue.submit([encoder.finish()]);
+            let _ = device.device.poll(wgpu::PollType::Wait {
+                submission_index: Some(sent),
+                timeout: None,
+            });
         }
 
         /// Writes a frame's BGRA8 rows into the slot on the GPU and waits for that work, and so

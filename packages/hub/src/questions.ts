@@ -133,6 +133,8 @@ export class Questions {
   private readonly once = new Map<string, Set<string>>();
   constructor(private readonly o: QuestionOptions) {}
 
+  /** The core forgot the session (#1866). */
+  forget(session: string): void { this.once.delete(session); }
   private first(session: string, text: string): boolean {
     let seen = this.once.get(session);
     if (!seen) this.once.set(session, seen = new Set());

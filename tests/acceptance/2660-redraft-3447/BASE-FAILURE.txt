@@ -1,0 +1,39 @@
+#2660.1b678fb1 (AC2), as #3447's first criterion keeps it: a one-item change on a document with 2,000 text items,
+taken by the fast path, allocates under 64 KB
+
+Base 015b665a0 (origin/main), built on 2026-11-24 on Linux aarch64, rustc 1.99.1 (58cf8f9c3 2026-10-13).
+
+The wrong program is the base itself with the target's path as it is, `../2660/fast_path.rs`: the target doesn't
+compile, so the criterion's test never runs (invariant 2: nothing unrun passes). Run in the worktree, in a user unit
+capped at 24G of memory with CARGO_BUILD_JOBS=2:
+
+$ cargo test --locked -p deep-marks-render --test acceptance_2660_fast_path --no-run
+
+The build's `Compiling` lines and the nine dead-code warnings of the `deep-marks-render` lib, which are not this
+target's, are left out. The rest, from the error to the end, as cargo printed it:
+
+error[E0061]: this method takes 4 arguments but 3 arguments were supplied
+    --> crates/deep-marks-render/../../tests/acceptance/2660/fast_path.rs:93:22
+     |
+  93 |                 live.revise_items(&mut s, &doc, &[&id]).is_some(),
+     |                      ^^^^^^^^^^^^---------------------- argument #4 of type `&[&str]` is missing
+     |
+note: method defined here
+    --> crates/deep-canvas/src/schedule/mod.rs:1676:12
+     |
+1676 |     pub fn revise_items(
+     |            ^^^^^^^^^^^^
+help: provide the argument
+     |
+  93 |                 live.revise_items(&mut s, &doc, &[&id], /* &[&str] */).is_some(),
+     |                                                       +++++++++++++++
+
+For more information about this error, try `rustc --explain E0061`.
+error: could not compile `deep-marks-render` (test "acceptance_2660_fast_path") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+
+cargo exited 101. No test binary was built and no test ran.
+
+This redraft, tests/acceptance/2660-redraft-3447/fast_path.rs, was not built or run by this job: it is not a
+target until the owner swaps the path in (README.md, Registration). Its compiling and passing on the change is
+still to be shown.

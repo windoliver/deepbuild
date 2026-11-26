@@ -129,6 +129,29 @@ pub struct Media {
         std::collections::BTreeMap<String, std::sync::Arc<deep_canvas_scene3d::light::Texels>>,
     /// #1801: each asset's size as its file gave it, by SHA-256; `None` for one with none.
     pub(crate) sizes: std::collections::BTreeMap<String, Option<deep_canvas::cost::AssetSize>>,
+    /// #231: each asset the decode worker decoded for this process, in order: the asset and the
+    /// seconds its decode took; and their sum.
+    pub(crate) decodes: Vec<(String, f64)>,
+    pub(crate) decoding: std::time::Duration,
+    /// #231: the export that is running's `readings`: the record's changes on the film's clock,
+    /// each `{t, handle, value?, state?, as_of?}`; and, planted, the time past which its frames
+    /// read none of them.
+    pub(crate) readings: Vec<Value>,
+    pub(crate) readings_until: Option<i64>,
+    /// #231: whether this process has begun an export: its first one's `wall` counts from the
+    /// process's start.
+    pub(crate) exported: bool,
+}
+
+/// #231: the asset a decode worker's job reads: its SHA-256 when its path is the evidence
+/// store's (`<2 hex>/<62 hex>`), else the path.
+fn asset_of(job: &Value) -> String {
+    let path = job["path"].as_str().unwrap_or_default();
+    let mut parts = path.rsplit('/');
+    match (parts.next(), parts.next()) {
+        (Some(rest), Some(head)) if head.len() == 2 && rest.len() == 62 => format!("{head}{rest}"),
+        _ => path.to_string(),
+    }
 }
 
 /// #503: a worker's refusal answers with its `code` and what it names at the reply's top level
@@ -283,7 +306,17 @@ impl Hub<'_> {
             }
         }
         let h = slot.as_mut().expect("started");
-        (h.ask(&job), h.pid)
+        let at = std::time::Instant::now();
+        let answered = (h.ask(&job), h.pid);
+        // #231: an asset's decode is reported, with the time it took.
+        if role == DECODE_WORKER && matches!(job["op"].as_str(), Some("decode" | "transcode")) {
+            let took = at.elapsed();
+            self.media
+                .decodes
+                .push((asset_of(&job), took.as_secs_f64()));
+            self.media.decoding += took;
+        }
+        answered
     }
 
     /// #1488: the still at `path` converted at intake by the decode worker: the PNG it wrote and

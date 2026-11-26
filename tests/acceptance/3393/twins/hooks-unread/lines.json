@@ -1,0 +1,8 @@
+{
+  "packages/conformance/runtime/check-kind/reporter.mjs": [
+    {
+      "find": ["      failureType: text(error?.failureType ?? null),"],
+      "wrong": ["      failureType: error?.failureType === 'hookFailed' ? 'subtestsFailed' : text(error?.failureType ?? null),"]
+    }
+  ]
+}

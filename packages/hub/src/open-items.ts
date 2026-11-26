@@ -212,6 +212,8 @@ export class OpenItems {
     }
     this.waiting.set(c.task, true);
   }
+  /** A claim on the task was let go (#1866): whether the task waits is read from the record again. */
+  letGo(task: string): void { this.waiting.delete(task); }
   /** Closes each item a pending claim's verdict opened (`verdict`) that its newest verdict no longer waits for (#82). */
   async settled(c: { session: string; agent: string; task: string }, needs: readonly string[]): Promise<void> {
     // Read from the record once per task after a start; known none open, there is nothing to read.

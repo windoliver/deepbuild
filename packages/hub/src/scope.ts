@@ -38,6 +38,8 @@ interface ScopeOptions {
   evidence: string;
   /** The changes you accepted, from DEEP_HUB_TEST_ACCEPTED; only tests set it. Without it, the repo's own history. */
   accepted: string | undefined;
+  /** Whether a session runs on a host (#999): its folder is there, so its stops aren't measured here. */
+  onHost?(session: string): boolean;
 }
 /** One change you accepted: its repo, its kind, and its commit with the base it was made on. */
 interface Accepted { repo: string; kind: string; base: string; commit: string; accepted_at: number }
@@ -129,6 +131,7 @@ export class SizeScope {
    * thing over or outside the plan, or undefined. What was sent back and is still there comes to you as one taste call.
    */
   async atStop(s: AtStop): Promise<string | undefined> {
+    if (this.o.onHost?.(s.session)) return undefined;
     const { kind, plan } = await this.o.scopeOf(s.task);
     const m = await measure(s.cwd, s.base);
     const usual = await this.usual(s.cwd, kind, s.base);

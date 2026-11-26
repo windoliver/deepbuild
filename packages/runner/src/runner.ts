@@ -212,7 +212,8 @@ class LocalRunner implements Runner {
           }
           break;
         case 'ask.created': {
-          if (d.kind !== 'unblock' && d.kind !== 'authority') break;
+          // The runner's asks and the ledger's are the core's: what a session raised is none of theirs (#1866).
+          if ((d.kind !== 'unblock' && d.kind !== 'authority') || e.session !== undefined) break;
           this.waiting.add(`ask:${e.id}`);
           // The runner's own asks are found again by their key: one per account without a reading, one per agent's smoke tests.
           if (typeof d.key === 'string') this.keys.set(d.key, `ask:${e.id}`);
