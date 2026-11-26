@@ -1,6 +1,6 @@
-// @deepbuild/asks: the asks core (#318). An ask is raised only from a place in ask.sources@1, holds to
-// ask.created@1 (@2 for a taste call that names the near copies it dropped, #394), and ends: answered on
-// the trusted path, superseded, moot, or defaulted at its deadline.
+// @deepbuild/asks: the asks core (#318). An ask is raised only from a place in ask.sources@2, holds to
+// ask.created@6, where it declares what may answer it (#1581), and ends: answered on the trusted path or, when
+// it declared so, on a channel you verified, superseded, moot, or defaulted at its deadline.
 //
 // Its state is a function of the record: every method first reads what the log gained, then appends what
 // that state calls for (a supersede, a moot, a typed answer, a default, the fold's exception), so a core
@@ -53,7 +53,8 @@ import { askSources, doneYamlAsks, over, readJson } from './settings.js';
 export { askSources, draftAskSettings } from './settings.js';
 import { blockText, chatThread, CONTINUE_WINDOW, isTheirs, MOOT_V2, newer, shippedErrorTurnHook, SIGN_IN, signInProbe, signInSignature, signInText, TRANSIENT, type Continued, type Stop } from './stops.js';
 export { signInAgentOf, signInSignature } from './stops.js';
-import { ANSWER_ALONE, ANSWER_FIELDS, docOf, isAgent, picturesOf, PROVISIONAL_KINDS, SHA256, TRUSTED, TYPED_KINDS } from './answers.js';
+import { ANSWER_FIELDS, channelMayAnswer, docOf, isAgent, picturesOf, PROVISIONAL_KINDS, SHA256, TRUSTED, TYPED_KINDS } from './answers.js';
+export { channelMayAnswer, type MayAnswer } from './answers.js';
 import { markStep, sameStep } from './steps.js';
 import { changedSince, type GitSaid } from './changes.js';
 
@@ -221,7 +222,7 @@ class AsksCore implements Asks {
     return this.exclusive(async () => {
       await this.sync();
       const row = askSources().find((r) => r.source === source);
-      if (!row) throw new AskRefused(`${source} has no row in ask.sources@1, so it can't raise an ask`, { source });
+      if (!row) throw new AskRefused(`${source} has no row in ask.sources@2, so it can't raise an ask`, { source });
       const now = this.options.now();
       const given = this.fill(connection.session, raised, now);
       // Every task that reaches you can be answered "the agent can do it" in one tap (#84), whatever raised it.
@@ -231,15 +232,14 @@ class AsksCore implements Asks {
       const id = ulid(now);
       // An ask that names its subject is keyed from the subject alone: whatever key its raiser gave is replaced.
       const input = isObj(filled) && isObj(filled.subject) && SUBJECT_KINDS.has(String(filled.kind)) ? { ...filled, key: subjectKey(filled, this.threadOf(connection.session)) } : filled;
-      const subjected = isObj(input) && 'subject' in input;
-      // An unblock task is held to @3: at least one step and one thing it unblocks, and its price when you pay one.
-      // An ask that names its subject is held to @4; a core-owned done-gate action is recorded with it at @5.
-      const v = isObj(input) && 'action' in input ? 5 : subjected ? 4 : isObj(input) && input.kind === 'unblock' ? 3 : isObj(input) && 'dropped' in input ? 2 : 1;
+      // Every ask is held to @6 (#1581): what each kind's newest earlier version holds it to, and the declaration of
+      // what may answer it, which has no default, so one raised without it is refused, naming its raiser.
+      const v = 6;
       const event = { v, id, kind: 'ask.created', writer: connection.writer, actor: connection.actor, scope: connection.scope, ts: now, data: input as JsonValue };
       const checked = validate(`ask.created@${v}`, event);
       if (!checked.ok) {
         const [first] = checked.issues;
-        throw new AskRefused(`ask.created@${v} refuses the ask at ${first!.path}: ${first!.remediation}`, { field: first!.path });
+        throw new AskRefused(`ask.created@${v} refuses ${source}'s ask at ${first!.path}: ${first!.remediation}`, { field: first!.path, source });
       }
       const data = input as Obj;
       const options = data.options as Option[];
@@ -362,7 +362,7 @@ class AsksCore implements Asks {
       const now = this.options.now();
       if (via === 'channel') {
         if (ask.closed) throw new AskRefused(`${ask.handle} closed as ${ask.closed.outcome}`, { ask: ask.handle, outcome: ask.closed.outcome });
-        if (ANSWER_ALONE.has(ask.data.kind as string) === false) throw new AskRefused(`${ask.handle} is a ${String(ask.data.kind)} ask, which a channel's account link can't answer: it counts only on the trusted path`, { field: 'writer' });
+        if (!channelMayAnswer(ask.data)) throw new AskRefused(`${ask.handle} is a ${String(ask.data.kind)} ask, which a channel's account link can't answer: it counts only on the trusted path`, { field: 'writer' });
         const picked = ask.options.find((o) => o.id === option);
         if (picked && picked.decision !== 'none') throw new AskRefused(`${ask.handle}'s ${picked.id} decides ${picked.decision}, which counts only on the trusted path`, { field: 'writer' });
         if (token !== undefined || steps !== undefined || planHash !== undefined) throw new AskRefused('a channel answer approves nothing', { field: 'token' });
@@ -747,9 +747,9 @@ class AsksCore implements Asks {
         unblocks: [unblocks], proves: signInProbe(agent),
       }, now) as Obj;
       const id = ulid(now);
-      const checked = validate('ask.created@3', { v: 3, id, kind: 'ask.created', writer: 'core', actor: connection.actor, scope: connection.scope, ts: now, data });
-      if (!checked.ok) throw new AskRefused(`ask.created@3 refuses the sign-in task at ${checked.issues[0]!.path}: ${checked.issues[0]!.remediation}`, { field: checked.issues[0]!.path, source: BLOCK_SOURCE });
-      await this.options.record.append({ ...CORE, actor: connection.actor, scope: connection.scope }, { v: 3, id, kind: 'ask.created', ts: now, data });
+      const checked = validate('ask.created@6', { v: 6, id, kind: 'ask.created', writer: 'core', actor: connection.actor, scope: connection.scope, ts: now, data });
+      if (!checked.ok) throw new AskRefused(`ask.created@6 refuses the sign-in task at ${checked.issues[0]!.path}: ${checked.issues[0]!.remediation}`, { field: checked.issues[0]!.path, source: BLOCK_SOURCE });
+      await this.options.record.append({ ...CORE, actor: connection.actor, scope: connection.scope }, { v: 6, id, kind: 'ask.created', ts: now, data });
       await this.sync();
       await this.settle();
       return `ask:${id}`;
@@ -793,7 +793,7 @@ class AsksCore implements Asks {
     const { again: ask, key } = check;
     const now = this.options.now();
     const raised = await this.raise({ ...CORE, ...ask.who, ...(ask.session ? { session: ask.session } : {}) }, OUTSIDE_SOURCE, {
-      kind: 'authority', question: `The run ${ask.handle} approved would also: ${step.does}. Your yes didn't cover it. Let it?`.slice(0, 8192),
+      kind: 'authority', may_answer: 'trusted_path', question: `The run ${ask.handle} approved would also: ${step.does}. Your yes didn't cover it. Let it?`.slice(0, 8192),
       options: ask.options.map((o) => ({ ...o })), recommended: null, deadline: now + ask.wait, fallback: ask.data.fallback!,
       default: ask.options.find((o) => o.decision === 'deny')!.id, provisional: false, owner: ask.data.owner!, key, pinned_to: ask.data.pinned_to!,
     }, { steps: [step], diff: sha256Hex(canonicalize({ outside: ask.handle, key })) });
@@ -1856,7 +1856,7 @@ class AsksCore implements Asks {
   }
 
   /**
-   * The task for a stop's block, from ask.sources@1's stop.block row: keyed on the block's signature, pinned to it,
+   * The task for a stop's block, from ask.sources@2's stop.block row: keyed on the block's signature, pinned to it,
    * owned by the person it stopped, unblocking the session, proved by the block's check. With a task of the same block
    * open, the session's joins it (superseded by it as soon as it's recorded). The deadline comes from your settings, as
    * for any unblock; with none declared the task is BLOCKED (false, the stop kept for the next tick the hub owes) and
@@ -1880,9 +1880,9 @@ class AsksCore implements Asks {
       throw error;
     }
     const id = ulid(now);
-    const checked = validate('ask.created@3', { v: 3, id, kind: 'ask.created', writer: 'core', actor: stop.who.actor, scope: stop.who.scope, ts: now, data });
-    if (!checked.ok) throw new AskRefused(`ask.created@3 refuses the block's task at ${checked.issues[0]!.path}: ${checked.issues[0]!.remediation}`, { field: checked.issues[0]!.path, source: BLOCK_SOURCE });
-    await this.options.record.append({ ...CORE, ...stop.who, session: stop.session }, { v: 3, id, kind: 'ask.created', ts: now, data });
+    const checked = validate('ask.created@6', { v: 6, id, kind: 'ask.created', writer: 'core', actor: stop.who.actor, scope: stop.who.scope, ts: now, data });
+    if (!checked.ok) throw new AskRefused(`ask.created@6 refuses the block's task at ${checked.issues[0]!.path}: ${checked.issues[0]!.remediation}`, { field: checked.issues[0]!.path, source: BLOCK_SOURCE });
+    await this.options.record.append({ ...CORE, ...stop.who, session: stop.session }, { v: 6, id, kind: 'ask.created', ts: now, data });
     await this.sync();
     return true;
   }
@@ -1989,7 +1989,7 @@ class AsksCore implements Asks {
     const changed = await changedSince(ask.data.pinned_to as Obj, this.sessions.get(ask.session)?.worktree);
     if (!changed?.files.some((file) => ask.decided.has(file))) return false;
     const data: Obj = { ...ask.data, pinned_to: { kind: 'commit', ref: changed.to } };
-    await this.options.record.append(as, { v: 1, id: ulid(now), kind: 'ask.created', ts: now, data });
+    await this.options.record.append(as, { v: 'may_answer' in data ? 6 : 1, id: ulid(now), kind: 'ask.created', ts: now, data }); // as it was raised: @6 with its declaration, or as before it
     return true;
   }
 
@@ -2005,7 +2005,7 @@ class AsksCore implements Asks {
     const data: Obj = { ...template, question, deadline: block.data.deadline!, owner: block.who.actor, key: requestKey(block), pinned_to: block.data.pinned_to! };
     const who = { ...CORE, ...block.who, ...(block.session ? { session: block.session } : {}) };
     const id = ulid(now);
-    await this.options.record.append(who, { v: 1, id, kind: 'ask.created', subject: block.handle, ts: now, data });
+    await this.options.record.append(who, { v: 6, id, kind: 'ask.created', subject: block.handle, ts: now, data });
     // Sending it leaves the machine, so it shows its plan: the one message, which can't be unsent (#69).
     const steps = [{ does: `Send ${String(block.data.owner)} the request: ${String(block.data.question)}`.slice(0, 8192), changes: [`a message to ${String(block.data.owner)}`], undo: CANT_UNDO, public: true, cost: 0 }];
     const diff = sha256Hex(canonicalize({ request: block.handle }));
@@ -2018,7 +2018,7 @@ class AsksCore implements Asks {
     const template = askSources().find((r) => r.source === FOLD_SOURCE)!.fixture.ask as Obj;
     const now = this.options.now();
     const data: Obj = { ...template, deadline, key: foldKey(thread), pinned_to: { kind: 'evidence', ref: sha256Hex(canonicalize(holds)) } };
-    await this.options.record.append({ ...CORE, ...who, ...(session ? { session } : {}) }, { v: 1, id: ulid(now), kind: 'ask.created', ts: now, data });
+    await this.options.record.append({ ...CORE, ...who, ...(session ? { session } : {}) }, { v: 6, id: ulid(now), kind: 'ask.created', ts: now, data });
     await this.sync();
   }
 }

@@ -266,7 +266,7 @@ export class OpenItems {
   }
   private async ask(c: ClaimRead, item: string, question: string, close: { id: string; label: string }): Promise<void> {
     const raised = {
-      kind: 'exception', question, recommended: 'keep', default: 'keep', fallback: 'you', provisional: false, owner: 'you', key: waiverKey(item), pinned_to: await this.o.pin(c.cwd, question),
+      kind: 'exception', may_answer: 'trusted_path', question, recommended: 'keep', default: 'keep', fallback: 'you', provisional: false, owner: 'you', key: waiverKey(item), pinned_to: await this.o.pin(c.cwd, question),
       options: [{ ...close, decision: 'none' }, { id: 'keep', label: 'Keep it open', decision: 'none' }],
     };
     // Raised by the core, bound to no session: the stop doesn't wait on it, and your answer is never the agent's to read.

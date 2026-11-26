@@ -251,7 +251,7 @@ export class Siblings {
       ? `Sessions ${names} started ${count} of ${short(meta.session)}'s turns with each other's messages in the last 10 minutes, with no prompt from you. Let them go on?`
       : `Session ${names} had ${count} turns started by another session's messages in the last 10 minutes, with no prompt from you. Let it go on?`;
     held.ask = await this.o.ask(meta.session, meta.agent, meta.cwd, 'session.loop', {
-      kind: 'exception', question,
+      kind: 'exception', may_answer: 'trusted_path', question,
       options: [{ id: 'go-on', label: 'Let them go on', decision: 'none' }, { id: 'hold', label: 'Hold them until I prompt them', decision: 'none' }],
       recommended: 'hold', default: 'hold', fallback: 'you', provisional: false, owner: 'you', key: `loop:${[...held.pair].sort().join(':')}:${held.at}`,
     });
@@ -561,7 +561,7 @@ export class Siblings {
     const pair = [other, m];
     const question = `Sessions ${pair.map((s) => `${s.id} (${s.agent})`).join(' and ')} both work on issue #${m.issue} in ${basename(dirname(m.common))}. Keep which?`;
     await this.o.ask(m.id, m.agent, m.cwd, 'issue.twice', {
-      kind: 'choice', question,
+      kind: 'choice', may_answer: 'verified_channel', question,
       options: [...pair.map((s, i) => ({ id: `keep-${i}`, label: `Keep ${short(s.id)} (${s.agent}), stop the other`, decision: 'none' })), { id: 'keep-both', label: 'Keep both', decision: 'none' }],
       recommended: 'keep-both', default: 'keep-both', fallback: 'you', provisional: false, owner: 'you',
       key: `issue.twice:${m.common}:${m.issue}`,

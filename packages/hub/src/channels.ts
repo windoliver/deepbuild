@@ -3,13 +3,14 @@
 // routes by kind and urgency, quiet hours), renders each open ask as one item per channel, one thread per ask on every
 // channel, sends it, and keeps it current: a refusal comes back to its thread, an answer anywhere closes it everywhere.
 // Each answer a channel returns is checked here, never taken on the channel's word: a paired device's signature over
-// the card it showed, which is the trusted path, or an account link you made, which counts for "I did it", a taste
-// call or a choice, answering that ask alone. Every channel runs its own passes, so one that stalls holds up no other.
+// the card it showed, which is the trusted path, or an account link you made, which counts only for an ask raised
+// declaring that a channel you verified may answer it (#1581), answering that ask alone. Every channel runs its own
+// passes, so one that stalls holds up no other.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
-import { duration as askDuration } from '@deepbuild/asks';
+import { channelMayAnswer, duration as askDuration } from '@deepbuild/asks';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { SecretStore } from '@deepbuild/extension-host';
@@ -34,11 +35,12 @@ interface ChannelReceived { answers: ChannelAnswer[]; seen: string[]; conflict: 
 interface Route { kinds: string[]; to: string[]; urgent?: boolean; next?: string[]; unseen?: string }
 interface Settings { channels: Record<string, Obj>; routes: Route[]; quiet: { from: string; to: string } | null }
 /**
- * An ask as the channels render it: its kind, words and options, where it is in its life, the plan its yes approves,
- * and its card's revision, which rises when the plan changes and on Take over (#1580).
+ * An ask as the channels render it: its kind, what it declared may answer it (#1581), its words and options, where it
+ * is in its life, the plan its yes approves, and its card's revision, which rises when the plan changes and on Take
+ * over (#1580).
  */
 export interface ChannelAsk {
-  handle: string; kind: string; question: string; options: { id: string; label: string }[]; status: string; outcome: string; answer: string | null;
+  handle: string; kind: string; may_answer: string | null; question: string; options: { id: string; label: string }[]; status: string; outcome: string; answer: string | null;
   plan: CardPlan | null; revision: number;
 }
 /** What the hub gives the channels: its clock and root, the loaded channels, the asks, the record and the answer path. */
@@ -65,11 +67,11 @@ interface ChannelDeps {
 
 /** The words a card that can't be answered here carries. */
 const WHERE = 'answer in the app or on your paired phone';
-const TRUSTED = 'an answer with authority, or one saved as a decision, counts only on the trusted path: the DeepBuild app, deep inbox answer once the OS confirms you, or your paired phone, which signs it';
+const TRUSTED_PATH = 'the trusted path: the DeepBuild app, deep inbox answer once the OS confirms you, or your paired phone, which signs it';
+const TRUSTED = `an answer with authority, or one saved as a decision, counts only on ${TRUSTED_PATH}`;
 const TICK_MS = 250;
 const RECEIVE_MS = 1000;
 const FETCH_MS = 5000;
-const NEEDS_TRUSTED = new Set(['authority', 'exception', 'definition']);
 const LIVE = new Set(['shown', 'held']);
 
 /**
@@ -316,7 +318,7 @@ export class Channels {
     const question = summaryOf(ask.question);
     // A card with a plan is answered only where its steps are drawn, and carries them with their hash (#1580).
     const answerable = (this.deps.plant === 'buttons-for-authority' && c.kind === 'chat')
-      || ((c.kind === 'device' || (!NEEDS_TRUSTED.has(ask.kind) && (this.linked[c.name] ?? []).length > 0)) && (!ask.plan || c.steps));
+      || ((c.kind === 'device' || (channelMayAnswer(ask) && (this.linked[c.name] ?? []).length > 0)) && (!ask.plan || c.steps));
     if (!answerable) return { ...base, summary: `${question} (${WHERE})`, answerable: 'view', options: [], refused };
     const plan = ask.plan && c.steps ? { plan: ask.plan } : {};
     return { ...base, summary: question, answerable: 'answer', options: ask.options.map((o) => ({ id: o.id, label: summaryOf(o.label) })), ...plan, refused };
@@ -381,7 +383,7 @@ export class Channels {
       return refuse(`the answer carries neither a paired device's signature nor an account link you made, so it counts for nothing; ${TRUSTED}`);
     }
     if (!ask) return refuse(`${thread} is no ask this hub holds`, 'ask');
-    if (proof === 'account_link' && NEEDS_TRUSTED.has(ask.kind)) return refuse(`${thread} is ${ask.kind === 'authority' ? 'an authority ask' : `a ${ask.kind}`}, and ${TRUSTED}`);
+    if (proof === 'account_link' && !channelMayAnswer(ask)) return refuse(`${thread} is ${ask.kind === 'authority' ? 'an authority ask' : `a ${ask.kind}`} raised to be answered only on ${TRUSTED_PATH}`);
     try {
       await this.deps.answer(thread, answer, { channel: c.name, proof, plan_hash: plan });
     } catch (e) {

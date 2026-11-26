@@ -31,7 +31,7 @@ const id = (ms: number): string => {
 };
 
 const taste = (subject: string, over: Obj = {}): Obj => ({
-  kind: 'taste', question: `Which ${subject}?`,
+  kind: 'taste', may_answer: 'verified_channel', question: `Which ${subject}?`,
   options: [{ id: 'blue', label: 'Blue', decision: 'none' }, { id: 'green', label: 'Green', decision: 'none' }],
   recommended: 'blue', deadline: T0 + 72 * HOUR, fallback: 'you', default: 'blue', provisional: false, owner: 'you',
   key: sha(`taste:${subject}`), pinned_to: { kind: 'evidence', ref: sha(subject) }, ...over,
@@ -201,7 +201,7 @@ describe('an option ID no command line carries (#2563)', () => {
 
 describe('a block someone else owns (#320)', () => {
   const block = (subject: string, over: Obj = {}): Obj => ({
-    kind: 'unblock', question: `Renew ${subject}?`,
+    kind: 'unblock', may_answer: 'verified_channel', question: `Renew ${subject}?`,
     options: [{ id: 'done', label: 'I did it', decision: 'none' }, { id: 'wait', label: 'Leave it blocked', decision: 'none' }],
     recommended: 'done', deadline: T0 + 48 * HOUR, fallback: 'you', default: 'wait', provisional: false, owner: 'sam',
     key: sha(`unblock:${subject}`), pinned_to: { kind: 'evidence', ref: sha(subject) },
@@ -413,7 +413,7 @@ describe('the resolver gate reads every decision the record holds, however it wa
 
   it('a decision saved from an ask that left memory still carries the size bound of that ask\'s change (#824)', async () => {
     const merge = (lines: number): Obj => ({
-      kind: 'authority', question: 'Merge the fix?', options: [{ id: 'merge', label: 'Merge', decision: 'allow' }, { id: 'hold', label: 'Hold', decision: 'deny' }],
+      kind: 'authority', may_answer: 'trusted_path', question: 'Merge the fix?', options: [{ id: 'merge', label: 'Merge', decision: 'allow' }, { id: 'hold', label: 'Hold', decision: 'deny' }],
       recommended: null, deadline: T0 + 24 * HOUR, fallback: 'you', default: 'hold', provisional: false, owner: 'you',
       subject: { effect: 'merge', target: { kind: 'pr', ref: 'pr:1', owner: 'thread:TOTHER' }, change: { kind: 'fix', lines, paths: ['src/a.ts'] } },
       pinned_to: { kind: 'commit', ref: sha(`pr 1 ${lines}`).slice(0, 40) },

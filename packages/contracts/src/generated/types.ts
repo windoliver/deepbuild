@@ -5707,6 +5707,181 @@ export interface AskCreatedV5 {
   evidence?: Array<string>;
 }
 
+export type AskCreatedV6MayAnswer = "trusted_path" | "verified_channel";
+
+export type AskCreatedV6PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+export type AskCreatedV6Options = Array<{
+  id: string;
+  label: string;
+  decision: "allow" | "deny" | "none";
+}>;
+
+export type AskCreatedV6SubjectEffect = {
+  effect: string;
+  target: {
+    kind: string;
+    ref: string;
+    owner: string;
+  };
+  change: {
+    kind: string;
+    lines: number;
+    paths: Array<string>;
+  } | null;
+};
+
+export type AskCreatedV6SubjectTaste = {
+  screen: string;
+  element: string;
+};
+
+export type AskCreatedV6SubjectPoint = {
+  point: string;
+};
+
+/** ask.created@6 */
+export interface AskCreatedV6 {
+  v: 6;
+  id: string;
+  kind: "ask.created";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "authority";
+    may_answer: AskCreatedV6MayAnswer;
+    question: string;
+    options: AskCreatedV6Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV6PinnedTo;
+    subject?: AskCreatedV6SubjectEffect;
+    action?: {
+      kind: "budget.issue";
+      scope: {
+        kind: "issue";
+        ref: string;
+      };
+      runs: number;
+      cap_usd: number;
+      ends: number;
+    };
+  } | {
+    kind: "unblock";
+    may_answer: AskCreatedV6MayAnswer;
+    question: string;
+    options: AskCreatedV6Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV6PinnedTo;
+    steps: Array<string>;
+    where: string;
+    why: string;
+    unblocks: Array<string>;
+    proves: string;
+    cost_usd?: number;
+    thread?: {
+      link: string;
+      expect: string;
+    };
+  } | {
+    kind: "taste";
+    may_answer: AskCreatedV6MayAnswer;
+    question: string;
+    options: AskCreatedV6Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV6PinnedTo;
+    dropped?: Array<{
+      option: string;
+      same_as: string;
+    }>;
+    subject?: AskCreatedV6SubjectTaste;
+  } | {
+    kind: "exception";
+    may_answer: AskCreatedV6MayAnswer;
+    question: string;
+    options: AskCreatedV6Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV6PinnedTo;
+    action?: {
+      kind: "claim.stalled";
+      task: string;
+    } | {
+      kind: "switch.off";
+      repo: string;
+      name: string;
+      deployed: string;
+      task: string;
+      issue: number;
+    };
+  } | {
+    kind: "choice";
+    may_answer: AskCreatedV6MayAnswer;
+    question: string;
+    options: AskCreatedV6Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV6PinnedTo;
+    subject?: AskCreatedV6SubjectPoint;
+  } | {
+    kind: "definition";
+    may_answer: AskCreatedV6MayAnswer;
+    question: string;
+    options: AskCreatedV6Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV6PinnedTo;
+    subject?: AskCreatedV6SubjectPoint;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.defaulted@1 */
 export interface AskDefaulted {
   v: 1;
@@ -5924,6 +6099,122 @@ export type AskSources = Array<{
   kind: "authority" | "unblock" | "taste" | "exception" | "choice" | "definition";
   fixture: {
     ask: AskSourcesAsk;
+    at_deadline: {
+      decision: "allow" | "deny" | "none";
+    };
+  };
+}>;
+
+export type AskSourcesV2MayAnswer = "trusted_path" | "verified_channel";
+
+export type AskSourcesV2PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+export type AskSourcesV2Options = Array<{
+  id: string;
+  label: string;
+  decision: "allow" | "deny" | "none";
+}>;
+
+export type AskSourcesV2Ask = {
+  kind: "authority";
+  may_answer: AskSourcesV2MayAnswer;
+  question: string;
+  options: AskSourcesV2Options;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesV2PinnedTo;
+} | {
+  kind: "unblock";
+  may_answer: AskSourcesV2MayAnswer;
+  question: string;
+  options: AskSourcesV2Options;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesV2PinnedTo;
+  steps: Array<string>;
+  where: string;
+  why: string;
+  unblocks: Array<string>;
+  proves: string;
+} | {
+  kind: "taste";
+  may_answer: AskSourcesV2MayAnswer;
+  question: string;
+  options: AskSourcesV2Options;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesV2PinnedTo;
+} | {
+  kind: "exception";
+  may_answer: AskSourcesV2MayAnswer;
+  question: string;
+  options: AskSourcesV2Options;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesV2PinnedTo;
+} | {
+  kind: "choice";
+  may_answer: AskSourcesV2MayAnswer;
+  question: string;
+  options: AskSourcesV2Options;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesV2PinnedTo;
+} | {
+  kind: "definition";
+  may_answer: AskSourcesV2MayAnswer;
+  question: string;
+  options: AskSourcesV2Options;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesV2PinnedTo;
+};
+
+/** ask.sources@2 */
+export type AskSourcesV2 = Array<{
+  source: string;
+  kind: "authority" | "unblock" | "taste" | "exception" | "choice" | "definition";
+  fixture: {
+    ask: AskSourcesV2Ask;
     at_deadline: {
       decision: "allow" | "deny" | "none";
     };

@@ -6,9 +6,10 @@ import { askSources } from '../../../packages/asks/src/index.ts';
 import { openWorld, type Planting, type World } from './helpers.ts';
 import { copiesDecision, fallbackInLiveTable, infersYes, keyedOnSession, lateAllowAnswered, paidGenerationAsChoice } from './plants.ts';
 import { foldAcrossClear, lateAllow, pushAnsweredInWords, rebuildFromLog, sourcesTable, supersedeAcrossCompact } from './scenarios.ts';
+import { withDeclared } from '../declared.ts';
 
 async function onPlant(plant: Planting, scenario: (w: World) => Promise<void>, named: RegExp): Promise<void> {
-  const w = await openWorld(plant);
+  const w = await openWorld({ ...plant, asks: (asks, world) => withDeclared(plant.asks ? plant.asks(asks, world) : asks) });
   try {
     await expect(scenario(w)).rejects.toThrow(named);
   } finally {

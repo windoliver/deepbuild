@@ -168,7 +168,7 @@ export class Questions {
       : opens?.kind === 'sign_in' ? [`Run ${opens.command} in your own terminal`]
       : [step.replace(/[a-z][a-z0-9+.-]*:\/\/([^/\s]+)\S*/gi, '$1')];
     const ask = {
-      kind: 'unblock', question: step, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', steps,
+      kind: 'unblock', may_answer: 'verified_channel', question: step, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', steps,
       where: opens?.kind === 'secret' ? "the secret's entry field" : opens?.kind === 'sign_in' ? 'your own terminal' : 'where the step says',
       why: 'The agent stopped on it', unblocks: [`session:${meta.session.replace(/[^0-9A-Za-z]/g, '')}`], proves: check,
       fallback: 'you', provisional: false, owner: 'you', key: this.key({ kind: 'unblock', session: meta.session, proves: check, opens: opens ?? null, steps: steps.length }), pinned_to: await this.o.pin(meta.cwd, step),
@@ -183,7 +183,7 @@ export class Questions {
     const options = c.options.filter((o) => !struck(o.label, reach));
     const recommended = options.some((o) => o.id === c.recommended) ? c.recommended : null;
     const ask = {
-      kind: 'choice', question: c.question, options: options.map((o) => ({ ...o, decision: 'none' })), recommended, default: recommended ?? options[0]!.id,
+      kind: 'choice', may_answer: 'verified_channel', question: c.question, options: options.map((o) => ({ ...o, decision: 'none' })), recommended, default: recommended ?? options[0]!.id,
       fallback: 'you', provisional: recommended !== null, owner: 'you', key: this.key({ kind: 'choice', about }), subject: { point: about }, pinned_to: await this.o.pin(meta.cwd, c.question),
     };
     return this.o.asks().raise(this.o.connection(meta.session, meta.agent), 'question.choice', ask);

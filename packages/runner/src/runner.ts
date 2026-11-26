@@ -781,7 +781,7 @@ class LocalRunner implements Runner {
     const facts = this.facts(agent);
     const now = this.o.now();
     const ask = await this.o.asks.raise(CORE, 'runner.smoke', {
-      kind: 'authority',
+      kind: 'authority', may_answer: 'trusted_path',
       question: `${facts.agent} updated to a version its facts don't cover. Run its live smoke test through the runner whenever that happens, inside your plan reserve?`,
       options: [{ id: 'allow', label: 'Run its smoke tests', decision: 'allow' }, { id: 'deny', label: "Don't run them", decision: 'deny' }],
       recommended: null, deadline: now + this.o.settings.asks.unblock.deadline_ms, fallback: 'you', default: 'deny', provisional: false, owner: 'you',
@@ -829,7 +829,7 @@ class LocalRunner implements Runner {
   private async askWindow(account: string, job: Job): Promise<void> {
     const now = this.o.now();
     const handle = await this.o.asks.raise(CORE, 'runner.window', {
-      kind: 'unblock',
+      kind: 'unblock', may_answer: 'verified_channel',
       question: `No window reading for account ${account} for 30 minutes, so its jobs can't check your plan reserve. How should its jobs run?`,
       options: [{ id: 'run', label: `Run without a reading, at most ${NO_READING_PER_DAY} jobs a day`, decision: 'none' }, { id: 'connect', label: 'Connect a CLI that reports windows', decision: 'none' }],
       recommended: 'connect', deadline: now + this.o.settings.asks.unblock.deadline_ms, fallback: 'you', default: 'connect', provisional: false, owner: 'you',
