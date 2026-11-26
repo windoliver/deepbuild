@@ -2,7 +2,7 @@
   "spike": 1433,
   "arm": "gpui-fast",
   "gate": "retention-frames",
-  "gates": "2bdeff35b4c39b62f485761451cf497842dc0f5a77c663f40026e0559a1a3888",
+  "gates": "985cbda74da94b32847f9f9cd45361969781911fc321eed08a5e27d29c536e92",
   "harness": "f0f1497ff72e57a2d70aeaa017925f48e1aa9d3aad8249c39f8a74747cd229a7",
   "profile": "release",
   "command": "scripts/lease node run.mjs --gate retention-frames --fast ./gpui-fast/harness",
@@ -11,17 +11,17 @@
     "chip": "Apple M5 Max",
     "memoryBytes": 68719476736,
     "power": "ac",
-    "lowPowerMode": true,
+    "lowPowerMode": false,
     "thermalState": "nominal",
     "macosBuild": "26B8119"
   },
   "surface": "window",
   "runs": [
     {
-      "started": "2026-11-25T14:03:51.654Z",
+      "started": "2026-11-26T04:08:00.394Z",
       "load": {
-        "start": 10.98779296875,
-        "end": 10.98779296875
+        "start": 21.08935546875,
+        "end": 21.08935546875
       },
       "window": {
         "state": "shown"
@@ -405,10 +405,10 @@
       "journey": "de706786c5e1a25e8947861a41ea3cfd300acd6334dc6b84d03c9738bfb86153"
     },
     {
-      "started": "2026-11-25T14:03:54.602Z",
+      "started": "2026-11-26T04:08:03.108Z",
       "load": {
-        "start": 10.98779296875,
-        "end": 10.82861328125
+        "start": 21.08935546875,
+        "end": 21.5625
       },
       "window": {
         "state": "shown"

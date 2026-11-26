@@ -1,0 +1,88 @@
+{
+  "spike": 1433,
+  "arm": "candidate",
+  "gate": "idle",
+  "gates": "985cbda74da94b32847f9f9cd45361969781911fc321eed08a5e27d29c536e92",
+  "harness": "1177d5d1833fcb86a581862d82b13f8c732765123a95305254446e92bb4332ef",
+  "profile": "release",
+  "command": "scripts/lease node run.mjs --gate idle --candidate ./candidate/harness",
+  "machine": {
+    "model": "Mac17,10",
+    "chip": "Apple M5 Max",
+    "memoryBytes": 68719476736,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "nominal",
+    "macosBuild": "26B8119"
+  },
+  "surface": "window",
+  "runs": [
+    {
+      "started": "2026-11-26T04:46:21.299Z",
+      "load": {
+        "start": 13.822265625,
+        "end": 17.412109375
+      },
+      "window": {
+        "state": "not read"
+      },
+      "unread": "exit 0: first-frame-ms 99.5"
+    },
+    {
+      "started": "2026-11-26T04:47:25.952Z",
+      "load": {
+        "start": 16.658203125,
+        "end": 17.181640625
+      },
+      "window": {
+        "state": "not read"
+      },
+      "unread": "exit 0: first-frame-ms 105.2"
+    },
+    {
+      "started": "2026-11-26T04:49:38.524Z",
+      "load": {
+        "start": 21.1708984375,
+        "end": 21.1220703125
+      },
+      "window": {
+        "state": "not shown"
+      },
+      "seconds": 60,
+      "frames": 2,
+      "frames_at_the_hold_edges": 1,
+      "slot_frames_drawn": 1,
+      "wakeups": 0
+    },
+    {
+      "started": "2026-11-26T04:52:41.380Z",
+      "load": {
+        "start": 17.91748046875,
+        "end": 20.27978515625
+      },
+      "window": {
+        "state": "not shown"
+      },
+      "seconds": 60,
+      "frames": 1,
+      "frames_at_the_hold_edges": 1,
+      "slot_frames_drawn": 1,
+      "wakeups": 0
+    },
+    {
+      "started": "2026-11-26T04:55:44.344Z",
+      "load": {
+        "start": 22.07421875,
+        "end": 19.693359375
+      },
+      "window": {
+        "state": "shown"
+      },
+      "seconds": 60,
+      "frames": 0,
+      "frames_at_the_hold_edges": 1,
+      "slot_frames_drawn": 1,
+      "wakeups": 0
+    }
+  ]
+}

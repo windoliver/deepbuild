@@ -3,7 +3,7 @@
   "base": "a1ef97760cbcc9935b8fdadd4a7bef586969ef4d",
   "gates": {
     "file": "gates.json",
-    "sha256": "2bdeff35b4c39b62f485761451cf497842dc0f5a77c663f40026e0559a1a3888"
+    "sha256": "985cbda74da94b32847f9f9cd45361969781911fc321eed08a5e27d29c536e92"
   },
   "arms": {
     "candidate": {
@@ -14,20 +14,124 @@
         }
       },
       "harness": {
-        "sha256": "76c99de54bbadc7298a4416f791108d9270b3a097767d6478b87b1f46b888095"
+        "sha256": "1177d5d1833fcb86a581862d82b13f8c732765123a95305254446e92bb4332ef"
       },
       "gates": {
         "canvas-handoff": {
           "status": "inconclusive",
-          "why": "not read yet"
+          "raw": {
+            "file": "raw/candidate-canvas-handoff.json",
+            "sha256": "84f82ad04677e58aac3fcda56eecd41d487834d218dfa50899408a928f82114b"
+          },
+          "reading": {
+            "frame_ms": [
+              1.3503867900000002,
+              1.5426045700000002,
+              1.1093305199999992,
+              1.1245719733333333,
+              1.1264558433333327
+            ]
+          },
+          "machine": {
+            "model": "Mac17,10",
+            "chip": "Apple M5 Max",
+            "memoryBytes": 68719476736,
+            "power": "ac",
+            "lowPowerMode": false,
+            "thermalState": "nominal",
+            "macosBuild": "26B8119"
+          },
+          "load": 13.822265625,
+          "why": "frame ms a run, on average [1.3503867900000002,1.5426045700000002,1.1093305199999992,1.1245719733333333,1.1264558433333327] against under 1: the five runs are neither all within it nor all over it by more than the margin"
         },
         "idle": {
           "status": "inconclusive",
-          "why": "not read yet"
+          "raw": {
+            "file": "raw/candidate-idle.json",
+            "sha256": "ffc4471f3f6662d207facd64826e3069efecdb0b14d718d67d47ba6863359f93"
+          },
+          "reading": {
+            "frames": [
+              null,
+              null,
+              2,
+              1,
+              0
+            ],
+            "wakeups": [
+              null,
+              null,
+              0,
+              0,
+              0
+            ]
+          },
+          "machine": {
+            "model": "Mac17,10",
+            "chip": "Apple M5 Max",
+            "memoryBytes": 68719476736,
+            "power": "ac",
+            "lowPowerMode": false,
+            "thermalState": "nominal",
+            "macosBuild": "26B8119"
+          },
+          "load": 22.07421875,
+          "why": "run 1's window was \"not read\", not shown; each run holds the still window 60 s, as canvas-idle does; frames [null,null,2,1,0]: each run gives the frames it presented while still; wakeups [null,null,0,0,0] against at most 1: a limit is judged on 5 runs after warm-up"
         },
         "list-transcript": {
           "status": "inconclusive",
-          "why": "not read yet"
+          "raw": {
+            "file": "raw/candidate-list-transcript.json",
+            "sha256": "da560fa1190cadc42b7e96708d7bdf4c10f90007b7ea92934f785eb8e269f279"
+          },
+          "reading": {
+            "update_p99_ms": [
+              1.1004999999999998,
+              1.086792,
+              1.835,
+              1.063666,
+              2.225
+            ],
+            "coldStartMs": [
+              121.6,
+              110.8,
+              116.2,
+              130.2,
+              113.2
+            ],
+            "idleCpuPercent": [
+              0,
+              0,
+              0.05,
+              0.2,
+              0.3
+            ],
+            "memoryBytes": [
+              113508352,
+              112328704,
+              112181248,
+              114573312,
+              114950144
+            ],
+            "appBytes": [
+              28004632,
+              28004632,
+              28004632,
+              28004632,
+              28004632
+            ]
+          },
+          "machine": {
+            "model": "Mac17,10",
+            "chip": "Apple M5 Max",
+            "memoryBytes": 68719476736,
+            "power": "ac",
+            "lowPowerMode": false,
+            "thermalState": "nominal",
+            "macosBuild": "26B8119"
+          },
+          "load": 19.61572265625,
+          "why": "run 3's window was \"not shown\", not shown; update ms at p99 [1.1004999999999998,1.086792,1.835,1.063666,2.225] against at most 4 is a reading, not a result: a one-minute load of 19.61572265625 at a run's start or end is at or above the MacBook Pro's 18 cores; coldStartMs [121.6,110.8,116.2,130.2,113.2] against under 1000 is a reading, not a result: a one-minute load of 19.61572265625 at a run's start or end is at or above the MacBook Pro's 18 cores; idleCpuPercent [0,0,0.05,0.2,0.3] against under 1 is a reading, not a result: a one-minute load of 19.61572265625 at a run's start or end is at or above the MacBook Pro's 18 cores; memoryBytes [113508352,112328704,112181248,114573312,114950144] against under 200000000 is a reading, not a result: a one-minute load of 19.61572265625 at a run's start or end is at or above the MacBook Pro's 18 cores; appBytes [28004632,28004632,28004632,28004632,28004632] against under 60000000 is a reading, not a result: a one-minute load of 19.61572265625 at a run's start or end is at or above the MacBook Pro's 18 cores"
         },
         "text-input": {
           "status": "inconclusive",
@@ -42,8 +146,31 @@
           "why": "no person has taken it (a person presses the question card with hardware input)"
         },
         "panel": {
-          "status": "inconclusive",
-          "why": "not read yet"
+          "status": "pass",
+          "raw": {
+            "file": "raw/candidate-panel.json",
+            "sha256": "36fb5cf604b8516657e6b233e28366de698fc91bbeede14e9d8639b4da930103"
+          },
+          "reading": {
+            "parity": true,
+            "update_p99_ms": [
+              1.635917,
+              1.231666,
+              1.188,
+              1.120583,
+              1.1668749999999999
+            ]
+          },
+          "machine": {
+            "model": "Mac17,10",
+            "chip": "Apple M5 Max",
+            "memoryBytes": 68719476736,
+            "power": "ac",
+            "lowPowerMode": false,
+            "thermalState": "nominal",
+            "macosBuild": "26B8119"
+          },
+          "load": 16.0361328125
         }
       }
     },
@@ -1281,17 +1408,73 @@
       "gates": {
         "list-transcript": {
           "status": "inconclusive",
-          "why": "not read yet"
+          "raw": {
+            "file": "raw/gpui-fast-list-transcript.json",
+            "sha256": "1144be83b0ef35a338ab0d4c4fb96f5d4cc7d594d5f3745792dce663fb3d59d4"
+          },
+          "reading": {
+            "update_p99_ms": [
+              0.7722910000000001,
+              0.77875,
+              0.802333,
+              0.7445839999999999,
+              null
+            ],
+            "coldStartMs": [
+              222.2,
+              191.2,
+              191.8,
+              194.9,
+              171.4
+            ],
+            "idleCpuPercent": [
+              0,
+              0.1,
+              0,
+              0,
+              0
+            ],
+            "memoryBytes": [
+              122322944,
+              122634240,
+              121012224,
+              121225216,
+              121208832
+            ],
+            "appBytes": [
+              35704120,
+              35704120,
+              35704120,
+              35704120,
+              35704120
+            ]
+          },
+          "machine": {
+            "model": "Mac17,10",
+            "chip": "Apple M5 Max",
+            "memoryBytes": 68719476736,
+            "power": "ac",
+            "lowPowerMode": false,
+            "thermalState": "nominal",
+            "macosBuild": "26B8119"
+          },
+          "load": 20.99755859375,
+          "why": "run 5's window was \"not shown\", not shown; update ms at p99 [0.7722910000000001,0.77875,0.802333,0.7445839999999999,null] against at most 4: a limit is judged on 5 runs after warm-up; coldStartMs [222.2,191.2,191.8,194.9,171.4] against under 1000 is a reading, not a result: a one-minute load of 20.99755859375 at a run's start or end is at or above the MacBook Pro's 18 cores; idleCpuPercent [0,0.1,0,0,0] against under 1 is a reading, not a result: a one-minute load of 20.99755859375 at a run's start or end is at or above the MacBook Pro's 18 cores; memoryBytes [122322944,122634240,121012224,121225216,121208832] against under 200000000 is a reading, not a result: a one-minute load of 20.99755859375 at a run's start or end is at or above the MacBook Pro's 18 cores; appBytes [35704120,35704120,35704120,35704120,35704120] against under 60000000 is a reading, not a result: a one-minute load of 20.99755859375 at a run's start or end is at or above the MacBook Pro's 18 cores"
         },
         "retention-frames": {
-          "status": "inconclusive",
+          "status": "pass",
           "raw": {
             "file": "raw/gpui-fast-retention-frames.json",
-            "sha256": "9aa731b04e5687d3ae5bb5071c49bf128c6465dcd9bad07802521099f006fe26"
+            "sha256": "4815e2876926c506e2f7e9818bfa4efc744677413b78d98fc69ca08f4d495d48"
           },
           "journey": {
             "file": "raw/journey.jsonl",
             "sha256": "de706786c5e1a25e8947861a41ea3cfd300acd6334dc6b84d03c9738bfb86153"
+          },
+          "planted": {
+            "file": "raw/gpui-fast-retention-frames.planted.json",
+            "sha256": "95277947b5032293dbfb62a984ccf504045139a3a529b8121ad4ea4c7506c0b8",
+            "view": "row-0"
           },
           "reading": {
             "frames": 12,
@@ -1302,22 +1485,21 @@
             "chip": "Apple M5 Max",
             "memoryBytes": 68719476736,
             "power": "ac",
-            "lowPowerMode": true,
+            "lowPowerMode": false,
             "thermalState": "nominal",
             "macosBuild": "26B8119"
           },
-          "load": 10.98779296875,
-          "why": "read off the reference Air (model \"Mac17,10\", chip \"Apple M5 Max\", memoryBytes 68719476736; the issue runs on Mac15,12, Apple M3, 17179869184 bytes)"
+          "load": 21.5625
         },
         "still-ledger": {
-          "status": "inconclusive",
+          "status": "pass",
           "raw": {
             "file": "raw/gpui-fast-still-ledger.json",
-            "sha256": "76d99dfc3ed301e7b8cafa65cadbe64c3fd2d72af851dc51fc394fcb6a4bef5b"
+            "sha256": "1e6bcc47ea116cc77a48ac53763d1db7b5eca6d35a9b18a498b956157dc44092"
           },
           "planted": {
             "file": "raw/gpui-fast-still-ledger.planted.json",
-            "sha256": "5b925359bb961d8f7d7bcd504dff0e31adea60c36031cd5736427a265de9d246"
+            "sha256": "8d824e95fba4876b6dd54c3f06b30b41d2118ca9f24be94f39b635dac70e2ac8"
           },
           "reading": {
             "still_vsyncs": 150,
@@ -1330,29 +1512,28 @@
             "chip": "Apple M5 Max",
             "memoryBytes": 68719476736,
             "power": "ac",
-            "lowPowerMode": true,
+            "lowPowerMode": false,
             "thermalState": "nominal",
             "macosBuild": "26B8119"
           },
-          "load": 10.82861328125,
-          "why": "read off the reference Air (model \"Mac17,10\", chip \"Apple M5 Max\", memoryBytes 68719476736; the issue runs on Mac15,12, Apple M3, 17179869184 bytes)"
+          "load": 22.23779296875
         },
         "list-shapes": {
           "status": "inconclusive",
           "raw": {
             "file": "raw/gpui-fast-list-shapes.json",
-            "sha256": "c979560ceafa80324dcdabd8fadf34cae2d0d56274af566b71ec1e96f8dfb778"
+            "sha256": "b04f03fa01a939bd3033520a0a58eddbde6491f5593634237fbb9945c8fee488"
           },
           "reading": {
             "ships": "shared",
             "list": {
               "shared": {
-                "on": 0.346125,
-                "off": 0.376583
+                "on": null,
+                "off": 0.39183399999999996
               },
               "own": {
-                "on": 0.341167,
-                "off": 0.398167
+                "on": 0.37220899999999996,
+                "off": 0.367959
               }
             },
             "label": {
@@ -1360,28 +1541,28 @@
                 "on": {
                   "views_rendered": 1,
                   "elements_laid_out": 3,
-                  "cpu_ms_p50": 1.3734169999999892,
-                  "cpu_ms_p95": 1.4924159999999915
+                  "cpu_ms_p50": 1.174999999999983,
+                  "cpu_ms_p95": 1.3088340000000471
                 },
                 "off": {
                   "views_rendered": 1008,
                   "elements_laid_out": 3023,
-                  "cpu_ms_p50": 2.6124169999999367,
-                  "cpu_ms_p95": 3.1010840000000144
+                  "cpu_ms_p50": 2.084791999999993,
+                  "cpu_ms_p95": 2.328958
                 }
               },
               "3000": {
                 "on": {
                   "views_rendered": 1,
                   "elements_laid_out": 3,
-                  "cpu_ms_p50": 3.801458000000025,
-                  "cpu_ms_p95": 4.138292000000092
+                  "cpu_ms_p50": 3.34533399999998,
+                  "cpu_ms_p95": 3.6727920000000154
                 },
                 "off": {
                   "views_rendered": 3008,
                   "elements_laid_out": 9023,
-                  "cpu_ms_p50": 7.255999999999972,
-                  "cpu_ms_p95": 7.837500000000091
+                  "cpu_ms_p50": 5.680667000000085,
+                  "cpu_ms_p95": 6.243249999999989
                 }
               }
             }
@@ -1391,18 +1572,18 @@
             "chip": "Apple M5 Max",
             "memoryBytes": 68719476736,
             "power": "ac",
-            "lowPowerMode": true,
+            "lowPowerMode": false,
             "thermalState": "nominal",
             "macosBuild": "26B8119"
           },
-          "load": 13.23681640625,
-          "why": "read off the reference Air (model \"Mac17,10\", chip \"Apple M5 Max\", memoryBytes 68719476736; the issue runs on Mac15,12, Apple M3, 17179869184 bytes); its update times and CPU are readings, not results: lowPowerMode is true, not false; a one-minute load of 13.23681640625 at a run's start or end is at or above the Air's 8 cores"
+          "load": 25.17724609375,
+          "why": "run 1's window was \"not shown\", not shown; its update times and CPU are readings, not results: a one-minute load of 25.17724609375 at a run's start or end is at or above the MacBook Pro's 18 cores; INCONCLUSIVE for the list: the list in the shared shape (rows told by one shared model) with retention on gives no update_ms"
         }
       }
     }
   },
   "lines": {
-    "candidate": "INCONCLUSIVE: canvas-handoff, idle, list-transcript, text-input, accessibility, question-card, panel",
-    "gpui-fast": "INCONCLUSIVE: list-transcript, retention-frames, still-ledger, list-shapes"
+    "candidate": "INCONCLUSIVE: canvas-handoff, idle, list-transcript, text-input, accessibility, question-card",
+    "gpui-fast": "INCONCLUSIVE: list-transcript, list-shapes"
   }
 }

@@ -2,7 +2,7 @@
   "spike": 1433,
   "arm": "gpui-fast",
   "gate": "still-ledger",
-  "gates": "2bdeff35b4c39b62f485761451cf497842dc0f5a77c663f40026e0559a1a3888",
+  "gates": "985cbda74da94b32847f9f9cd45361969781911fc321eed08a5e27d29c536e92",
   "harness": "82c974f45df3344facfafb21ec0e3dbe1c5a3b19a26e419770622dcf90d10356",
   "profile": "release",
   "command": "scripts/lease node run.mjs --gate still-ledger --fast ./gpui-fast/harness",
@@ -11,18 +11,18 @@
     "chip": "Apple M5 Max",
     "memoryBytes": 68719476736,
     "power": "ac",
-    "lowPowerMode": true,
+    "lowPowerMode": false,
     "thermalState": "nominal",
     "macosBuild": "26B8119"
   },
   "surface": "window",
-  "planted": "a",
+  "planted": "a ledger that counts only the main render",
   "runs": [
     {
-      "started": "2026-11-25T14:04:12.118Z",
+      "started": "2026-11-26T04:08:18.531Z",
       "load": {
-        "start": 10.5087890625,
-        "end": 9.9873046875
+        "start": 22.939453125,
+        "end": 23.921875
       },
       "window": {
         "state": "shown"
@@ -38,7 +38,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 354958
+            "gpu_ns": 356167
           }
         },
         {
@@ -49,183 +49,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 380917
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 384750
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 384542
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 382833
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 385500
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 697542
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 382958
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 1
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 382500
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 384125
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 384375
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 383250
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 384000
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 383083
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 384375
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 383375
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 687750
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 384375
+            "gpu_ns": 1093458
           }
         },
         {
@@ -247,7 +71,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 384750
+            "gpu_ns": 383583
           }
         },
         {
@@ -258,51 +82,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 384000
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 383250
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 383500
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 384917
-          }
-        },
-        {
-          "still": false,
-          "committed": {
-            "main": 1,
-            "layers": 0
-          },
-          "ledger": {
-            "committed": 1,
-            "gpu_ns": 382542
+            "gpu_ns": 383125
           }
         },
         {
@@ -324,7 +104,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 384000
+            "gpu_ns": 382583
           }
         },
         {
@@ -335,7 +115,84 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 463208
+            "gpu_ns": 974750
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 1
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 380958
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 382417
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 382917
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 403958
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383750
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 380875
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 381333
           }
         },
         {
@@ -357,7 +214,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 382875
+            "gpu_ns": 653875
           }
         },
         {
@@ -368,7 +225,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 384417
+            "gpu_ns": 383833
           }
         },
         {
@@ -379,7 +236,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 384417
+            "gpu_ns": 382375
           }
         },
         {
@@ -390,7 +247,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 383375
+            "gpu_ns": 532625
           }
         },
         {
@@ -401,7 +258,29 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 384250
+            "gpu_ns": 698250
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 377917
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383000
           }
         },
         {
@@ -423,7 +302,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 383708
+            "gpu_ns": 383417
           }
         },
         {
@@ -434,7 +313,7 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 383625
+            "gpu_ns": 974875
           }
         },
         {
@@ -445,7 +324,106 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 381958
+            "gpu_ns": 383417
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383500
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 384000
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 427250
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383375
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383667
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 383333
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 381875
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 386875
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 977542
           }
         },
         {
@@ -467,7 +445,29 @@
           },
           "ledger": {
             "committed": 1,
-            "gpu_ns": 383250
+            "gpu_ns": 381583
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 382125
+          }
+        },
+        {
+          "still": false,
+          "committed": {
+            "main": 1,
+            "layers": 0
+          },
+          "ledger": {
+            "committed": 1,
+            "gpu_ns": 443375
           }
         },
         {
