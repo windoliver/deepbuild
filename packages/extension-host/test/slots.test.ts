@@ -320,7 +320,7 @@ export default async function (deep: any): Promise<void> {
     const you: Connection = { writer: 'mcp:S-hang', actor: 'you', scope: 'you', session: 'S-hang' };
     await record.append({ writer: 'hook', actor: 'you', scope: 'you', session: 'S-hang' }, { v: 1, id: '01K7HANG00000000000000000A', kind: 'session.start', ts: Date.now(), data: { agent: 'claude-code', worktree: temp(), branch: 'main', thread: 'T' } });
     const handle = await asks.raise(you, 'deep_ask.taste', {
-      kind: 'taste', question: 'Which colour?', options: [{ id: 'blue', label: 'Blue', decision: 'none' }, { id: 'green', label: 'Green', decision: 'none' }],
+      kind: 'taste', may_answer: 'verified_channel', question: 'Which colour?', options: [{ id: 'blue', label: 'Blue', decision: 'none' }, { id: 'green', label: 'Green', decision: 'none' }],
       recommended: 'blue', deadline: Date.now() + 3_600_000, fallback: 'you', default: 'blue', provisional: false, owner: 'you',
       key: 'a'.repeat(64), pinned_to: { kind: 'evidence', ref: 'b'.repeat(64) },
     });

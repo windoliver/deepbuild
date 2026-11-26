@@ -15,6 +15,7 @@ import { openAsks } from '../../../packages/asks/src/index.ts';
 import type { Asks, PlanInput } from '../../../packages/asks/src/index.ts';
 import { withPlans } from '../plans.ts';
 import { askData, childEnv, CLI, DAY, NODE, own, PROJECT, REPO, rootOf, sourceOf, ulid } from '../24/helpers.ts';
+import { withDeclared } from '../declared.ts';
 
 export { cleanup, events, startHub, stopHub, tempDir, type Ev, type Hub } from '../24/helpers.ts';
 
@@ -57,7 +58,7 @@ export async function seed(home: string, fill: (s: Seeding) => Promise<void>, st
   mkdirSync(rootOf(home), { recursive: true, mode: 0o700 });
   let now = start;
   const record = await openRecord({ path: join(rootOf(home), 'ledger.db'), now: () => now });
-  const asks = withPlans(await openAsks({ record, now: () => now, deliver: () => undefined }));
+  const asks = withDeclared(withPlans(await openAsks({ record, now: () => now, deliver: () => undefined })));
   try {
     await fill({ record, asks, at: (ms) => { now = ms; } });
   } finally {

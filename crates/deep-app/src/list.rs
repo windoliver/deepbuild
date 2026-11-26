@@ -35,6 +35,7 @@ pub struct Ask {
 pub struct Session {
     pub id: String,
     pub title: String,
+    /// The name its heading carries: its project's, or its host's for a session on another machine (#999).
     pub project: Option<String>,
     /// The state word, and the status-map entry its mark draws.
     pub word: String,
@@ -501,7 +502,10 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                     hooks: table.hooks(&session),
                     id: text(row, "session"),
                     title: crate::question::visible(&text(row, "title")),
-                    project: row["project"].as_str().map(str::to_owned),
+                    project: row["host"]
+                        .as_str()
+                        .or(row["project"].as_str())
+                        .map(str::to_owned),
                     word,
                     entry,
                     since: row["since"].as_u64(),
@@ -855,6 +859,31 @@ mod tests {
         };
         assert_eq!(folded.title, "2 quiet sessions");
         assert_eq!(folded.address.to_string(), "project/shop");
+    }
+
+    #[test]
+    fn a_session_on_a_host_is_listed_under_the_hosts_name() {
+        let mut view = crate::record::View::default();
+        for (id, host) in [("a", None), ("b", Some("gpu-box"))] {
+            let mut row = serde_json::json!({"id": format!("session:{id}"), "listed": true, "order": id, "session": id,
+                "title": format!("Task {id}"), "project": "shop", "word": "working", "entry": "running"});
+            if let Some(host) = host {
+                row["host"] = host.into();
+            }
+            view.apply(serde_json::json!({"kind": "row.set", "writer": "core", "data": row}));
+        }
+        let (asks, sessions) = read(&view, 0);
+        let items = build(&asks, &sessions);
+        assert_eq!(
+            ids(&items),
+            [
+                "heading:needs-you",
+                "heading:gpu-box",
+                "session:b",
+                "heading:shop",
+                "session:a"
+            ]
+        );
     }
 
     #[test]
