@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/core.ts": [
+    {
+      "find": [
+        "      ...(this.options.plant === 'host-without-asks' ? {} : { asks: this.asks }),"
+      ],
+      "wrong": [
+        "      ...({ asks: this.asks }),"
+      ]
+    }
+  ]
+}
