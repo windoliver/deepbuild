@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { duration, openAsks, type Asks, type InboxRow } from '@deepbuild/asks';
 import { openRecord, type Connection, type RecordStore } from '@deepbuild/record';
+import { withDeclared } from '../../declared.ts';
 
 export type Variant = 'hub' | 'waits-for-next-batch';
 
@@ -37,7 +38,7 @@ const batchEvery = (home: string): number => {
 
 export async function startHub(home: string, time: Clock, variant: Variant = 'hub'): Promise<Hub> {
   const record: RecordStore = await openRecord({ path: join(home, 'ledger.db'), now: time.now, commitEach: true });
-  const open = () => openAsks({ record, now: time.now, deliver: () => undefined, home });
+  const open = async () => withDeclared(await openAsks({ record, now: time.now, deliver: () => undefined, home }));
   let asks: Asks | undefined;
   let beat: NodeJS.Timeout | undefined;
   if (variant === 'hub') {

@@ -1,0 +1,31 @@
+#2750's five planted wrong readers through real hubs, on head e67eb7e46 (with the suite's blind redraft), 2026-11-25
+13:33-13:34 UTC. Each twin's file was laid over packages/readings/src/index.ts, the package rebuilt, and its
+criterion's test file run: each fails at an assertion in the test file. The right file was then put back and rebuilt
+(git status clean). The same five failed the same way on the first merge with main (head 7b12880db), before the redraft.
+
+AC1 twin squash-takes-head-verdict on landed.test.ts: Tests 1 failed (1)
+  387e42c05c40 (the squash whose tree no snapshot matches, its branch's head PASS) reads {"judged":"PASS"}; it must 
+  read none (tree not judged, naming PASS on 5ffcc54d5edb: cause "tree"), verdict_commit 
+  5ffcc54d5edbef5a97d6e90e1ba11f004a178376 (wrong: judged)
+  the reading is 7 PASS, 1 FAIL and 2 none: it lists 10 of the 10 commits the default branch gained, 8 of 10 judged; 
+  the fixture is 6 PASS, 1 FAIL and 3 none
+
+AC1 twin lists-only-judged on landed.test.ts: Tests 1 failed (1)
+  820740c0759e (the squash whose tree no snapshot matches, its branch's head PASS) has no row: it must read none 
+  (tree not judged, naming PASS on fc191bb5cfad: cause "tree")
+  the reading is 6 PASS, 1 FAIL and 0 none: it lists 7 of the 10 commits the default branch gained, 7 of 7 judged; 
+  the fixture is 6 PASS, 1 FAIL and 3 none
+
+AC2 twin revert-as-escape on revert.test.ts: Tests 1 failed (1)
+  escapes after PASS: 1, not zero: 56c7513a6471, counting the revert 56c7513a6471 of e143e6177a55, a commit that read 
+  none (gate off)
+  the revert 56c7513a6471 of e143e6177a55, a commit that read none (gate off), is counted "escape", an escape after 
+  PASS; it must be counted "never_judged", apart from the escapes
+
+AC3 twin uncovered-as-zero on missing.test.ts: Tests 1 failed (1)
+  the reading says missing for no date; the forge refused the push readings for 2026-11-19 to 2026-11-21 (3 dates): 
+  that span reads as zero unjudged commits, not as missing
+
+AC5 twin status-on-unjudged on quiet.test.ts: Tests 1 failed (1)
+  the forge received POST /repos/acme/shop/statuses/6e6f3bfa62996fb847c3706e7ca17fc1ab281659 (answered 201): a status 
+  posted on the unjudged commit 6e6f3bfa6299

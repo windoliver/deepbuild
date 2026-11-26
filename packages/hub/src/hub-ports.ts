@@ -207,6 +207,7 @@ export interface SessionStatePort {
   endedOrder: Set<string>;
   projects: Map<string, string>;
   sessionPeople: Map<string, string>;
+  sessionHosts: Map<string, string>;
   entered: Map<string, string>;
   tails: Map<string, UsageTail>;
   turnsStarted: Map<string, string>;
@@ -241,7 +242,8 @@ export interface SessionStatePort {
   childOf(session: Session, agent: string): Promise<void>;
   whose(meta: HookMeta, seq: string | undefined): Promise<{ job?: string; wait?: string; reading?: { job: string; text: string } }>;
   park(job: string): Promise<void>;
-  startOf(pid: number, fresh?: boolean): Promise<string | undefined>;
+  startOf(pid: number, fresh?: boolean, host?: string): Promise<string | undefined>;
+  head(session: string, cwd: string): Promise<{ sha: string; branch: string | null } | undefined>;
   verify(meta: HookMeta): Promise<boolean>;
   forgetEnded(): void;
   waiterHello(fd: number | undefined, session: string, at: number): Promise<{ session: string; parent?: { pid: number; start: string } } | { refused: string }>;

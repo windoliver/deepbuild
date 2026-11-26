@@ -230,15 +230,22 @@ export function installedPrograms(root: string): { deep: string; hook: string } 
   const bin = join(root, 'versions', 'current', 'bin');
   return existsSync(bin) ? { deep: join(bin, 'deep'), hook: join(bin, 'deep-hook') } : undefined;
 }
-/** deep-hook as npm installs it (#41): this platform's optional package beside `deepbuild`; else this checkout's build. */
-export function deepHook(): string {
+/** The target a Linux host's deep-hook is built for (scripts/release-stage.mjs), by Node's name for its architecture. */
+const LINUX_TARGETS: Record<string, string> = { arm64: 'aarch64-unknown-linux-musl', x64: 'x86_64-unknown-linux-musl' };
+/**
+ * deep-hook as npm installs it (#41): this platform's optional package beside `deepbuild`; else this checkout's build.
+ * With `linux`, the one a Linux host of that architecture runs (#999): its package, else this checkout's build for it.
+ */
+export function deepHook(linux?: string): string {
   const repo = fileURLToPath(new URL('../../../', import.meta.url));
   try {
-    const pkg = createRequire(join(repo, 'package.json')).resolve(`@deepbuild/deep-hook-${process.platform}-${process.arch}/package.json`);
+    const pkg = createRequire(join(repo, 'package.json')).resolve(`@deepbuild/deep-hook-${linux ? `linux-${linux}` : `${process.platform}-${process.arch}`}/package.json`);
     const hook = join(dirname(pkg), 'bin', 'deep-hook');
     if (existsSync(hook)) return hook;
   } catch { /* not installed from npm: a checkout */ }
-  const built = ['release', 'debug'].map((p) => join(repo, 'target', p, 'deep-hook')).filter((p) => existsSync(p));
+  const target = linux ? join(repo, 'target', LINUX_TARGETS[linux] ?? linux) : join(repo, 'target');
+  const built = ['release', 'debug'].map((p) => join(target, p, 'deep-hook')).filter((p) => existsSync(p));
+  if (!built.length && linux) throw Error(`no deep-hook for a linux-${linux} host is built under ${target}; build it for that target first, as scripts/release-stage.mjs does`);
   if (!built.length) throw Error(`no deep-hook is built under ${join(repo, 'target')}; run cargo build -p deep-hook first`);
   return built.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]!;
 }

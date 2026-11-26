@@ -21,6 +21,7 @@ import { askSources } from '../../../packages/asks/src/index.ts';
 import { openAsks } from '../../../packages/asks/src/index.ts';
 import { withPlans } from '../plans.ts';
 import { Conn, ulid } from '../24/helpers.ts';
+import { withDeclared } from '../declared.ts';
 
 export const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
@@ -310,7 +311,7 @@ export async function seedAsks(rig: Rig, subjects: readonly string[]): Promise<s
   const now = Date.now();
   const record = await openRecord({ path: join(rootOf(rig), 'ledger.db'), now: () => now });
   try {
-    const asks = withPlans(await openAsks({ record, now: () => now, deliver: () => undefined }));
+    const asks = withDeclared(withPlans(await openAsks({ record, now: () => now, deliver: () => undefined })));
     await record.append({ writer: 'hook', ...who, session: SESSION, project: PROJECT, agent: 'claude-code' }, { v: 1, id: ulid(now), kind: 'session.start', ts: now, data: { agent: 'claude-code', worktree: rig.worktree, branch: 'main', thread: SESSION } });
     const source = askSources().find((row) => row.kind === 'authority')!.source;
     const handles: string[] = [];

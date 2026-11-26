@@ -11,6 +11,7 @@ import type { ExtensionHost, ProjectTrust, ReleaseEntry } from '../../../package
 import { openExtensionHost, openTrust, packageDigest } from '../../../packages/extension-host/src/index.ts';
 import { openRecord, type RecordStore } from '../../../packages/record/src/index.ts';
 import { openSupervisor, type Supervisor } from '../../../packages/supervisor/src/index.ts';
+import { withDeclared } from '../declared.ts';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 for (const key of Object.keys(process.env)) if (key.startsWith('CLAUDE') || key.startsWith('DEEP_')) delete process.env[key];
@@ -48,7 +49,7 @@ const worlds: World[] = [];
 export async function openWorld(packages: string[]): Promise<World> {
   const dir = tempDir();
   const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
-  const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+  const asks = withDeclared(await openAsks({ record, now: Date.now, deliver: () => undefined }));
   const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 2 * 86_400_000 } } } });
   const trust = await openTrust({ record, now: Date.now });
   const home = join(dir, 'deepbuild');

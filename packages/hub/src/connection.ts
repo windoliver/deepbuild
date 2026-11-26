@@ -21,6 +21,8 @@ export class Conn {
    * hello first, with a credential bound to that key, or it gets nothing.
    */
   remote: { key: string | undefined } | undefined;
+  /** The host whose link the connection came in on (#999): its hooks' events carry it. */
+  host: string | undefined;
   /** A network connection that carries hooks its machine spooled while the link was down (#1338), one per line. */
   spool = false;
   first = true;
