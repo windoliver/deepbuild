@@ -184,7 +184,7 @@ export function readIssue(root, change) {
 const EXTENSIONS = ['.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs', '.jsx'];
 const SOURCES = { '.js': ['.ts', '.tsx'], '.mjs': ['.mts'], '.cjs': ['.cts'], '.jsx': ['.tsx'] };
 const sources = (path) => {
-  const extension = path.match(/\.[cm]?jsx?$/)?.[0];
+  const extension = path.match(/\.(?:[cm]?js|jsx)$/)?.[0];
   return extension ? SOURCES[extension].map((source) => path.slice(0, -extension.length) + source) : [];
 };
 export const resolveModule = (root, rev, path) => [path, ...sources(path), ...EXTENSIONS.map((extension) => path + extension), ...EXTENSIONS.map((extension) => `${path}/index${extension}`)]
