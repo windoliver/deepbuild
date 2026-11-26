@@ -15,6 +15,10 @@ What was read:
   `packages/hub/test/gate-runner.test.ts` (`repo`, `checkoutsOf`, `runner`), `packages/hub/test/shared-runs.test.ts`
   (a run record that reaches PASS), `scripts/proof-change.mjs` (`criterionId`), and the blind suites
   `tests/acceptance/997`, `2647` (`gate.ts`) and `33` for format.
+- Redraft, at the base `30ca494db`: one finding of `scripts/wait-ratchet.mjs` (the bench polled and slept on timers),
+  that script's header, and `GateOptions.judged` in `packages/hub/src/gate-runner.ts` with the places the gate calls it
+  (after a fast or slow run of the claim has ended). Only how the bench waits changed; criteria, tests, expected values
+  and the judge are the first draft's.
 
 What the base does (measured, BASE-FAILURE.txt): `changesOf` reads `git diff --name-only --no-renames <base>`,
 `git ls-files --others --exclude-standard` and `git ls-files` split on newlines, under git's default `core.quotePath`.
@@ -49,6 +53,9 @@ Stand-ins, at the calls the gate makes of the hub:
   worktree.
 - **the run service:** `start` hands out a run ID. `ended` records and keys one passed run, whose output is digested and
   whose `read` list the test sets.
+- **the verdict's moment:** `GateOptions.judged`, which the gate calls once a run of the claim has ended and its
+  verdict as it now stands can be read. The bench reads `verdictOf` when that call comes, and waits for nothing else;
+  a 10 s deadline only turns a gate that never judges the claim into a `BLOCKED` failure instead of a hang.
 
 The claim has one check, `unit-tests`: approved, from the task's definition, covering R1 at unit depth. It has no
 requirements, so the check counted as the agent's own reads INCONCLUSIVE and the check counted as approved reads PASS.

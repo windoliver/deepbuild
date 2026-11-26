@@ -6,7 +6,8 @@
 // worktree's tree written into an index of its own, as packages/hub/test/gate-runner.test.ts's `checkoutsOf` does; the
 // checkout is the worktree itself), and the run service (`start` gets a run handle; `ended` records and keys the run
 // as packages/hub/src/runs.ts does at a run's end, with the files the test says it read). The run passed, with
-// digested output. Nothing here knows what a verdict should be.
+// digested output. The verdict is read once the gate calls `judged` for the claim, which it does after the run has ended;
+// a timer only bounds that wait. Nothing here knows what a verdict should be.
 //
 // Safety: every folder is under the system temp dir (`dh3114-*`), removed after each test; the only process started
 // is git, each run to its end; no network, no model.
@@ -73,7 +74,11 @@ export async function judge(o: { base: Record<string, string>; claim: Record<str
   const runs: string[][] = [];
   const keys = new Map<string, RunKey | undefined>();
   let n = 0;
+  // The gate calls `judged` once a run of the claim has ended and its verdict as it now stands can be read.
+  let judged!: () => void;
+  const verdictReady = new Promise<void>((done) => { judged = done; });
   const gate: GateRunner = new GateRunner({
+    judged: async (claim) => { if (claim === 'claim:3114') judged(); },
     raw: async () => [], now: () => Date.now(), core: {} as GateOptions['core'], append: async () => undefined,
     start: async (r) => { const run = `run:${++n}`; keys.set(run, r.key); return run; },
     ended: async (run) => {
@@ -91,8 +96,12 @@ export async function judge(o: { base: Record<string, string>; claim: Record<str
     stopping: () => false, stoodIn: async () => undefined, kept: async () => true,
   });
   await gate.stop({ session: 'S3114', claim: 'claim:3114', task: 'task:3114', cwd: dir, base, requirements: [], checks: [CHECK], stopAt: Date.now() });
-  for (let i = 0; i < 100 && runs.length === 0; i++) await new Promise((r) => setTimeout(r, 20));
-  await new Promise((r) => setTimeout(r, 100));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const hung = new Promise<never>((_, fail) => {
+    // deadline: a gate that never judges the claim fails the test as BLOCKED instead of hanging it; the wait is for `judged`.
+    timer = setTimeout(() => fail(Error(`BLOCKED: the gate never judged claim:3114 within 10 s (runs started: ${runs.length})`)), 10_000);
+  });
+  try { await Promise.race([verdictReady, hung]); } finally { clearTimeout(timer); }
   const v = gate.verdictOf('claim:3114');
   return { outcome: v?.outcome, reasons: v?.reasons ?? [], check: v?.checks.find((c) => c.check === CHECK.check)?.outcome, runs };
 }

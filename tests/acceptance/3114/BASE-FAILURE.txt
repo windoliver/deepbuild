@@ -1,25 +1,27 @@
-Base commit: 654c560c1 (Merge pull request #3089 from windoliver/claude/issue-2960-hybrid-counter)
+Base commit: 30ca494db (Merge pull request #3451 from windoliver/claude/fix-scene3d-post-borrow)
 Command: NO_COLOR=1 npx vitest run tests/acceptance/3114
-  after npm ci and npm run build --workspaces (exit 0), in a systemd user unit with MemoryMax=24G
-Date: 2026-11-22  Node v24.22.0  linux
+  after npm ci, npm run build --workspaces and cargo build --locked -p deep-hook (exit 0), in a copy of a fresh clone
+Date: 2026-11-26  Node v24.22.0  linux  (1-minute load 260 at the time)
 Type check: npx tsc -p tests/acceptance/3114/tsconfig.json exits 0 at the base.
+Wait ratchet: node scripts/wait-ratchet.mjs in the same tree prints no line for tests/acceptance/3114 (it exits 1 at
+  the base on other files' findings only). The bench reads the verdict when the gate calls GateOptions.judged.
 
 AC1 and both AC2 tests fail at their first assertion: the claim edited the approved check's own file under a name git
 quotes, and the base reads PASS with no line saying the check counts as the agent's own. The AC1 control (the same
 claim on the plain name test/e.test.js) and AC3 pass on the base.
 
 
- RUN  v5.0.5 ~/deepbuild/.claude/worktrees/stoic-kowalevski-fdf15e
+ RUN  v5.0.5 /var/tmp/i3114/redraft10/tree
 
- ❯ tests/acceptance/3114/quoted-paths.test.ts (5 tests | 3 failed) 781ms
+ ❯ tests/acceptance/3114/quoted-paths.test.ts (5 tests | 3 failed) 586ms
    ❯ #3114.1c2cb3dd a claim that edits an approved check's tracked test file test/é.test.js, which its run read and passed (2)
-     × #3114.1c2cb3dd does not read PASS, and the check's line says it counts as the agent's own, naming test/é.test.js 148ms
-     ✓ #3114.1c2cb3dd (control) the same claim on a plain name, test/e.test.js, reads the same on this bench 150ms
+     × #3114.1c2cb3dd does not read PASS, and the check's line says it counts as the agent's own, naming test/é.test.js 134ms
+     ✓ #3114.1c2cb3dd (control) the same claim on a plain name, test/e.test.js, reads the same on this bench 114ms
    ❯ #3114.e80ac3c7 a new, untracked test file whose name holds a `"` or a tab, which the run read (2)
-     × #3114.e80ac3c7 "test/a\"b.test.js": the claim does not read PASS, and the check's line says it counts as the agent's own, naming the file 141ms
-     × #3114.e80ac3c7 "test/a\tb.test.js": the claim does not read PASS, and the check's line says it counts as the agent's own, naming the file 141ms
+     × #3114.e80ac3c7 "test/a\"b.test.js": the claim does not read PASS, and the check's line says it counts as the agent's own, naming the file 74ms
+     × #3114.e80ac3c7 "test/a\tb.test.js": the claim does not read PASS, and the check's line says it counts as the agent's own, naming the file 101ms
    ✓ #3114.86767b02 a claim that changes no file under such a name (1)
-     ✓ #3114.86767b02 edits only the code under test while the check's test file is test/é.test.js, and still passes 145ms
+     ✓ #3114.86767b02 edits only the code under test while the check's test file is test/é.test.js, and still passes 69ms
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
 
@@ -65,7 +67,7 @@ AssertionError: #3114.e80ac3c7 the claim edited "test/a\tb.test.js", the approve
 
  Test Files  1 failed (1)
       Tests  3 failed | 2 passed (5)
-   Start at  03:10:36
-   Duration  1.62s (tests 51%, transform 41%, import 7%, setup 1%)
+   Start at  02:29:07
+   Duration  5.29s (transform 83%, tests 11%, import 5%)
 
 vitest-exit=1
