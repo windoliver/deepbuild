@@ -1,0 +1,59 @@
+{
+ "config": {"slots":4},
+ "sessions": [
+  {
+   "id": "person",
+   "agent": "claude",
+   "checks": [
+    {"id":"check-1m","on_base":"passes","inputs":["src/**"],"expected_ms":60000,"took_ms":60000},
+    {"id":"check-5m","on_base":"passes","inputs":["src/**"],"expected_ms":300000,"took_ms":300000},
+    {"id":"check-20m","on_base":"passes","inputs":["src/**"],"expected_ms":1200000,"took_ms":1200000}
+   ],
+   "events": [
+    {"at":0,"kind":"prompt","origin":"human"},
+    {"at":45000,"kind":"stop","snapshot":"person-01","changed":["src/person.ts"]},
+    {"at":120000,"kind":"prompt","origin":"human"},
+    {"at":200000,"kind":"stop","snapshot":"person-02","changed":["src/person.ts"]}
+   ]
+  },
+  {
+   "id": "other-1",
+   "agent": "claude",
+   "checks": [
+    {"id":"check-1m","on_base":"passes","inputs":["src/**"],"expected_ms":60000,"took_ms":60000},
+    {"id":"check-5m","on_base":"passes","inputs":["src/**"],"expected_ms":300000,"took_ms":300000},
+    {"id":"check-20m","on_base":"passes","inputs":["src/**"],"expected_ms":1200000,"took_ms":1200000}
+   ],
+   "events": [
+    {"at":0,"kind":"prompt","origin":"scheduled"},
+    {"at":5000,"kind":"stop","snapshot":"other-1-01","changed":["src/other-1.ts"]}
+   ]
+  },
+  {
+   "id": "other-2",
+   "agent": "claude",
+   "checks": [
+    {"id":"check-1m","on_base":"passes","inputs":["src/**"],"expected_ms":60000,"took_ms":60000},
+    {"id":"check-5m","on_base":"fails","inputs":["src/**"],"expected_ms":300000,"took_ms":300000},
+    {"id":"check-20m","on_base":"passes","inputs":["src/**"],"expected_ms":1200000,"took_ms":1200000}
+   ],
+   "events": [
+    {"at":0,"kind":"prompt","origin":"scheduled"},
+    {"at":60000,"kind":"stop","snapshot":"other-2-01","changed":["src/other-2.ts"]}
+   ]
+  },
+  {
+   "id": "other-3",
+   "agent": "claude",
+   "checks": [
+    {"id":"check-20m","on_base":"passes","inputs":["src/**"],"expected_ms":1200000,"took_ms":1200000},
+    {"id":"check-5m","on_base":"passes","inputs":["src/**"],"expected_ms":300000,"took_ms":300000},
+    {"id":"check-1m","on_base":"passes","inputs":["src/**"],"expected_ms":60000,"took_ms":60000}
+   ],
+   "events": [
+    {"at":0,"kind":"prompt","origin":"continuation"},
+    {"at":50000,"kind":"stop","snapshot":"other-3-01","changed":["src/other-3.ts"]}
+   ]
+  }
+ ]
+}
