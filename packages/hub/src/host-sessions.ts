@@ -72,13 +72,19 @@ for p; do f=$(realpath -e -- "$r/$p" 2>/dev/null) && case "$f" in "$r"/*) [ -f "
  * What a folder there changed against a commit (#3511), as claim-changes reads it here: the files that differ from it,
  * the untracked ones and the tracked ones with their index flags, each list in base64 with its paths unquoted, then
  * package.json as the commit and the folder hold it. Each git read ends within `$3` seconds; one that fails says so
- * on a line of its own, with its exit status.
+ * on a line of its own, with its exit status. The folder's own git settings can't stand in for a file's bytes: replace
+ * refs are off and a file's times are compared in full, and a work tree set elsewhere, or a tracked file git reads
+ * through a filter program, says so on a line of its own.
  */
 const CHANGES = String.raw`cd -- "$1" || { printf 'unread\t%s\n' "$(printf 'the folder %s could not be entered' "$1" | base64 -w0)"; echo read; exit 0; }
-g() { LC_ALL=C timeout -k 1 "$S" git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.quotePath=false "$@" 2>/dev/null; }
-one() { n=$1; shift; if o=$(g "$@"); then printf '%s\t%s\n' "$n" "$(printf '%s' "$o" | base64 -w0)"; else x=$?; printf 'unread\t%s\n' "$(printf 'git %s exited %s' "$*" "$x" | base64 -w0)"; fi; }
-S=$3; one diff diff --name-only --no-renames "$2"; one others ls-files --others --exclude-standard; one tracked ls-files -v
-one has ls-tree --name-only "$2" -- package.json; if [ -n "$(g ls-tree --name-only "$2" -- package.json)" ]; then one was show "$2:package.json"; fi
+g() { LC_ALL=C GIT_NO_REPLACE_OBJECTS=1 timeout -k 1 "$S" git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.quotePath=false -c core.trustctime=true -c core.checkStat=default "$@" 2>/dev/null; }
+say() { printf 'unread\t%s\n' "$(printf "$@" | base64 -w0)"; }
+one() { n=$1; shift; if o=$(g "$@"); then printf '%s\t%s\n' "$n" "$(printf '%s' "$o" | base64 -w0)"; else say 'git %s exited %s' "$*" "$?"; fi; }
+S=$3; [ -z "$(g config --get core.worktree)" ] || say 'git there is set to read another folder as its work tree (core.worktree)'
+f=$(g ls-files -z | g check-attr --stdin -z filter | tr '\0' '\n' | awk 'NR % 3 == 1 { p = $0 } NR % 3 == 0 && $0 != "unspecified" && $0 != "unset" { n++; if (n == 1) q = p } END { if (n) printf "%d\t%s", n, q }')
+[ -z "$f" ] || say 'git reads %s tracked file(s) through a filter program (%s), so their bytes are not compared' "${f%%	*}" "${f#*	}"
+one diff diff --name-only --no-renames "$2"; one others ls-files --others --exclude-standard; one tracked ls-files -v
+if p=$(g ls-tree --name-only "$2" -- package.json); then [ -z "$p" ] || one was show "$2:package.json"; else say 'git ls-tree %s exited %s' "$2" "$?"; fi
 [ -f package.json ] && printf 'now\t%s\n' "$(head -c 1048576 package.json | base64 -w0)"; echo read`;
 /** A prompt's own entry in a session's transcript there, among its last 4 MiB, as turn-loops' turnFrom finds one here. */
 const PROMPT = String.raw`[ -f "$1" ] && tail -c 4194304 -- "$1" | grep -F -- "$2" | grep -F -m 1 '"promptId"'; true`;

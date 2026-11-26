@@ -93,6 +93,35 @@ describe('what a claim on a host changed (#3511)', () => {
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git compares 1 file with nothing \(tests\/price_test\.sh\)/));
   }, 60_000);
 
+  it('a test file the index is told to skip, edited, never reads as no change', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: (git) => { git('update-index', '--skip-worktree', 'tests/price_test.sh'); writeFileSync(join(dirs.at(-1)!, 'tests/price_test.sh'), 'nothing\n'); } });
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git compares 1 file with nothing \(tests\/price_test\.sh\)/));
+  }, 60_000);
+
+  it('a base replaced, in the folder\'s own git, by a commit that holds the edited test file still lists the file', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n', 'tests/price_test.sh': 'nothing\n' }, there: (git) => {
+      const base = git('rev-parse', 'HEAD');
+      git('add', '-A');
+      const edited = git('commit-tree', git('write-tree'), '-m', 'edited');
+      git('reset', '-q');
+      git('replace', base, edited);
+    } });
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/price_test\.sh,/));
+  }, 60_000);
+
+  it('a test file git reads through a filter program never reads as unchanged', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n', 'tests/price_test.sh': 'nothing\n' }, there: (git) => {
+      writeFileSync(join(dirs.at(-1)!, '.git', 'info', 'attributes'), 'tests/price_test.sh filter=x\n');
+      git('config', 'filter.x.clean', `git cat-file blob ${git('rev-parse', 'HEAD')}:tests/price_test.sh`);
+    } });
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git reads 1 tracked file\(s\) through a filter program \(tests\/price_test\.sh\)/));
+  }, 60_000);
+
+  it('a changed test file whose name git still quotes is no change set: nothing is known of it', async () => {
+    const v = await claimed({ base: { ...BASE, 'tests/a"b.sh': 'compare\n' }, head: { 'tests/a"b.sh': 'nothing\n' } });
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git names a path it can't list plainly/));
+  }, 60_000);
+
   it('an edited test file whose name git would quote is named plainly, and counts', async () => {
     const v = await claimed({ base: { ...BASE, 'tests/prix_é.sh': 'compare\n' }, head: { 'tests/prix_é.sh': 'nothing\n' } });
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/prix_é\.sh,/));
