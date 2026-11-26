@@ -1,6 +1,7 @@
 // The verdict in the chat and status from the record (#83; design: The verdict in the chat). A claim's line is read
 // from the record's claims, verdicts and runs tables, never from the agent's words; a status question typed into a
 // session is answered from the same tables and the session's row, with no model call.
+import { SLOT_WAIT } from '@deepbuild/readings';
 import { LINE_WIDTH, verdictLine, type LineRequirement, type LineState, type Outcome, type Result } from '@deepbuild/verdicts';
 import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
@@ -29,9 +30,10 @@ const framesOf = (points: string | null): string | null => {
 /**
  * A claim's state from the record: its newest verdict in force, with its requirements; with no verdict, what its
  * runs show (each check that passed counts once, each with any run counts once); the runs still going, each with
- * the time `expected` gives it.
+ * the time `expected` gives it. `starting` are its checks the gate has taken off the queue whose run isn't in the
+ * record yet: a stop's reply no longer waits for that start (#3562), so each reads as running.
  */
-export async function claimState(query: Query, id: string, expected: ReadonlyMap<string, number>): Promise<ClaimState | undefined> {
+export async function claimState(query: Query, id: string, expected: ReadonlyMap<string, number>, starting: readonly string[] = []): Promise<ClaimState | undefined> {
   const [claim] = (await query(`SELECT id, session_id, subject_ref, commit_sha, created, round FROM claims WHERE id = '${sql(id)}'`)) as { id: string; session_id: string | null; subject_ref: string; commit_sha: string | null; created: number; round: number | null }[];
   if (!claim) return undefined;
   const [definition] = (await query(`SELECT requirements, base_commit FROM definitions WHERE task_ref = '${sql(claim.subject_ref)}'`)) as { requirements: string | null; base_commit: string | null }[];
@@ -41,14 +43,21 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
   const stoodIn = new Set(requirements.filter((r) => typeof r.check === 'string' && r.stand_in).map((r) => String(r.check)));
   const runs = (await query(`SELECT id, check_id, commit_sha, ended, outcome, tests_run FROM runs WHERE claim_id = '${sql(id)}' ORDER BY started`)) as { id: string; check_id: string; commit_sha: string | null; ended: number | null; outcome: string | null; tests_run: number | null }[];
   const [verdict] = (await query(`SELECT outcome, requirements, smallest, points_to, created FROM verdicts WHERE claim_id = '${sql(id)}' AND stale = 0 ORDER BY created DESC LIMIT 1`)) as { outcome: string; requirements: string; smallest: string | null; points_to: string | null; created: number }[];
-  const running = runs.filter((r) => r.ended === null).map((r) => ({ check: r.check_id, about_s: expected.get(`run:${r.id}`) ?? null }));
-  // Its checks held for a loop (#965): the newest record of each place, while it neither started nor gave way.
+  const going = runs.filter((r) => r.ended === null).map((r) => ({ check: r.check_id, about_s: expected.get(`run:${r.id}`) ?? null }));
+  const running = [...going, ...starting.filter((check) => !going.some((r) => r.check === check)).map((check) => ({ check, about_s: null }))];
+  // Its checks held in their places (#965): the newest record of each place, while it neither started nor gave way.
   const places = new Map<string, Obj>();
   for (const row of (await query(`SELECT data FROM events WHERE kind = 'check.held' AND subject = 'claim:${sql(id)}' ORDER BY log_pos`)) as { data: string | Obj }[]) {
     const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
     places.set(`${String(d.check)}\0${String(d.snapshot)}`, d);
   }
-  const held = [...places.values()].filter((d) => d.started_at === null && d.replaced_by === null).map((d) => ({ check: String(d.check), reason: String(d.reason) }));
+  const waiting = [...places.values()].filter((d) => d.started_at === null && d.replaced_by === null);
+  const held = waiting.filter((d) => d.reason !== SLOT_WAIT).map((d) => ({ check: String(d.check), reason: String(d.reason) }));
+  // Those that wait for a slot are queued (#3562), each with the time its requirement says it took when drafted.
+  const queued = waiting.filter((d) => d.reason === SLOT_WAIT).map((d) => {
+    const ms = requirements.find((r) => r.check === d.check)?.expected_ms;
+    return { check: String(d.check), about_s: typeof ms === 'number' ? ms / 1000 : null };
+  });
   // A fix check's run on the merge base (#31), its definition's base commit, beside its run on the claim's snapshot, is
   // its proof, not its result: a fix check with none that finished stays unproved. The snapshot of a worktree with
   // changes is another commit than the claim's, and its runs are the claim's own (#325).
@@ -69,11 +78,11 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
     const reqs = (JSON.parse(verdict.requirements) as Obj[]).map((r): LineRequirement => ({ req: String(r.req), outcome: r.outcome as Result, smallest: typeof r.smallest === 'string' ? r.smallest : null, points_to: typeof r.points_to === 'string' ? r.points_to : null }));
     // A check that covers no requirement, as a review's, fails the claim with the verdict's own cause (#1537).
     const cause = verdict.smallest || verdict.points_to ? { cause: { smallest: verdict.smallest, points_to: framesOf(verdict.points_to) } } : {};
-    state = { outcome: verdict.outcome as Outcome, requirements: reqs, round: claim.round ?? 1, running, ...(held.length ? { held } : {}), ...(tests ? { tests } : {}), ...cause };
+    state = { outcome: verdict.outcome as Outcome, requirements: reqs, round: claim.round ?? 1, running, ...(queued.length ? { queued } : {}), ...(held.length ? { held } : {}), ...(tests ? { tests } : {}), ...cause };
   } else {
     const seen = new Set(own.map((r) => r.check_id));
     const passed = new Set(checks.filter((c) => c.outcome === 'passed' && !unproved.has(c.check)).map((c) => c.check));
-    state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running, ...(held.length ? { held } : {}), ...(tests ? { tests } : {}) };
+    state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running, ...(queued.length ? { queued } : {}), ...(held.length ? { held } : {}), ...(tests ? { tests } : {}) };
   }
   // A person's call answered where none of the pictures it judges was drawn reads so beside it (#3234).
   if (verdict) state.unseen = await unseenCalls(query, JSON.parse(verdict.requirements) as Obj[]);
