@@ -5,6 +5,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Push feature/login to origin?",
         "options": [
           {
@@ -41,6 +42,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Open a pull request from this branch?",
         "options": [
           {
@@ -77,6 +79,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Commit this?",
         "options": [
           {
@@ -113,6 +116,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Merge PR 42 into main?",
         "options": [
           {
@@ -149,6 +153,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Dispatch the release workflow?",
         "options": [
           {
@@ -185,6 +190,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Send the release notes to the team list?",
         "options": [
           {
@@ -221,6 +227,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Delete the branch old/spike?",
         "options": [
           {
@@ -257,6 +264,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "The run you approved would also delete the branch release-1.3, which your yes did not cover. Let it?",
         "options": [
           {
@@ -293,6 +301,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Allow the agent to run the migration script?",
         "options": [
           {
@@ -329,6 +338,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Load the changed MCP tool db.write?",
         "options": [
           {
@@ -365,6 +375,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Raise the project's budget from 20 to 40 USD?",
         "options": [
           {
@@ -401,6 +412,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Run a cleanup script whose reach can't be worked out?",
         "options": [
           {
@@ -437,6 +449,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Write the schema change to production?",
         "options": [
           {
@@ -473,6 +486,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Run this root plan on build-01? It installs nvidia-driver-550 and enables lingering for your user.",
         "options": [
           {
@@ -509,6 +523,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Open the preview server beyond localhost?",
         "options": [
           {
@@ -545,6 +560,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Generate the hero video for 3.20 USD?",
         "options": [
           {
@@ -581,6 +597,7 @@
     "fixture": {
       "ask": {
         "kind": "unblock",
+        "may_answer": "verified_channel",
         "question": "Sign in to GitHub in your own terminal?",
         "options": [
           {
@@ -621,6 +638,7 @@
     "fixture": {
       "ask": {
         "kind": "unblock",
+        "may_answer": "verified_channel",
         "question": "run:01K74FKZVK8Q2X5R7M3N9P4T6W's cleanup couldn't release phone:+15550100. Release it yourself?",
         "options": [
           {
@@ -667,6 +685,7 @@
     "fixture": {
       "ask": {
         "kind": "unblock",
+        "may_answer": "verified_channel",
         "question": "Sign in again? The sign-in the sessions used was revoked.",
         "options": [
           {
@@ -718,6 +737,7 @@
     "fixture": {
       "ask": {
         "kind": "unblock",
+        "may_answer": "verified_channel",
         "question": "No window reading for account 0a0a0a0a-1111-4222-8333-444444444444 for 30 minutes, so its jobs can't check your plan reserve. How should its jobs run?",
         "options": [
           {
@@ -764,6 +784,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Claude Code is at 2.1.999, which its facts don't cover. Run its live smoke test through the runner whenever it updates, inside your plan reserve?",
         "options": [
           {
@@ -800,6 +821,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Let DeepBuild start sessions without your Send on /Users/you/src/shop, for issue 41? claude-code in default, its mode that asks before acting, in ~/.claude. At most 1 at once, up to 50% of each plan window, with no end. Each in its own worktree from the default branch; commands reach no host beside the agent's own API. claude-code 2.1.308's own sandbox holds writes, credentials, network.",
         "options": [
           {
@@ -836,6 +858,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "# Plan a five-day trip for four people under $4,000\n\n**What it makes:** a plan, in a folder of its own.\n\n**Tasks:**\n1. Draft the day-by-day route\n2. Price every day (after Draft the day-by-day route)\n\n**Held for you, asked when it is due:**\n- Book the rail passes ($1240.00), after Price every day\n",
         "options": [
           {
@@ -877,6 +900,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Buy four Lisboa Cards, for $240 at https://shop.example/buy, due 2026-11-20T10:00:00.000Z. It's due now for \"plan a five-day trip to Lisbon\". Your yes to its brief didn't cover it, so nothing is bought, booked, posted or sent until you say so here; you pay or send it yourself.",
         "options": [
           {
@@ -913,6 +937,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "Issue #104's last 3 attempts were replaced: attempt 1: claude-code, its default model, crashed or interrupted; attempt 2: codex, its default model, stalled; attempt 3: claude-code, its default model, sent back past its rounds, FAIL: R2 FAIL. Start another attempt, or leave it waiting?",
         "options": [
           {
@@ -949,6 +974,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "The standing run ask:01JQ4N1TZ6M5V0YB8K2D3F7G9H is paused: the last 5 attempts in a row ended without a landing: #104 attempt 1 in Claude Code, stalled; #105 attempt 1 in Claude Code, stalled; #106 attempt 1 in Codex, crashed or interrupted; #104 attempt 2 in Codex, stalled; #107 attempt 1 in Claude Code, sent back past its rounds. Go on, or keep it paused?",
         "options": [
           {
@@ -985,6 +1011,7 @@
     "fixture": {
       "ask": {
         "kind": "taste",
+        "may_answer": "verified_channel",
         "question": "Is \"the look of #100's change is right to you\" true of #100's change? Before: main at 0123456789ab; after: PR #7 at 89abcdef0123, which lands now and Send back reverts.",
         "options": [
           {
@@ -1021,6 +1048,7 @@
     "fixture": {
       "ask": {
         "kind": "taste",
+        "may_answer": "verified_channel",
         "question": "Which header colour?",
         "options": [
           {
@@ -1057,6 +1085,7 @@
     "fixture": {
       "ask": {
         "kind": "choice",
+        "may_answer": "verified_channel",
         "question": "Keep the store on SQLite or plain files?",
         "options": [
           {
@@ -1093,6 +1122,7 @@
     "fixture": {
       "ask": {
         "kind": "choice",
+        "may_answer": "trusted_path",
         "question": "Apply this change an agent proposed to wiki:repos/api#start-port? api starts on port 3002",
         "options": [
           {
@@ -1129,6 +1159,7 @@
     "fixture": {
       "ask": {
         "kind": "definition",
+        "may_answer": "trusted_path",
         "question": "Should done include the offline mode?",
         "options": [
           {
@@ -1165,6 +1196,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Send sam this request? The staging database refuses the release job: its credentials expired. Renew them?",
         "options": [
           {
@@ -1201,6 +1233,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "This session keeps asking: answer its asks together, pause it, or leave them to their defaults?",
         "options": [
           {
@@ -1242,6 +1275,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "A key was pasted into this session's chat (message m3), so the agent and its provider have seen it. Rotate it?",
         "options": [
           {
@@ -1278,6 +1312,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "The dispute on tests/acceptance/42/widget.test.mjs in #42 can't settle by itself: no draft meets the base rule. The first draft is run:01K74G3A5C7E9G1J3M5P7R9T1V. Keep the test as it stands?",
         "options": [
           {
@@ -1314,6 +1349,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "A send DeepBuild denied ran anyway: chat post_message (call toolu_01ABCDEF), approved past the deny by approve-all. It may already have left. Check whether it went out?",
         "options": [
           {
@@ -1350,6 +1386,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "Setup found two folders named shop, /work/old/shop (no longer on disk) and /work/new/shop. Are they one repo? Until you say, their pages stay apart.",
         "options": [
           {
@@ -1386,6 +1423,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Add the dependency left-pad (npm install left-pad)? No plan names it.",
         "options": [
           {
@@ -1422,6 +1460,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Create a cloud resource in AWS account 111122223333 (aws kms create-key --profile shop-prod)? No plan names it.",
         "options": [
           {
@@ -1458,6 +1497,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Install acme/acme 2.0.0? It no longer provides ext.acme.prices@1, which acme/stocks uses, and keeps no adapter for it.",
         "options": [
           {
@@ -1494,6 +1534,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Remove acme/ci? acme/brief needs its ext.ci.status@1, and no other piece provides it.",
         "options": [
           {
@@ -1530,6 +1571,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Let this session change your data with acme/stocks's ext.stocks.set_alert, given {\"symbol\":\"NVDA\",\"above\":200}?",
         "options": [
           {
@@ -1566,6 +1608,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Let this session send with acme/stocks's ext.stocks.send_digest, given {\"to\":\"you@example.invalid\"}?",
         "options": [
           {
@@ -1602,6 +1645,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "Close this open item of task:01K74FX2B4D6F8H0K2M4P6R8T0 without evidence, as a waiver? The agent's final message left it: \u201ctimeout after 5000 ms in /tmp/t-81f2 (pid 4242) at 12:00:01\u201d",
         "options": [
           {
@@ -1638,6 +1682,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "acme/shop#7's definition has 3 paid checks, $12.00 in all. Approve a budget of $12.00 for 3 runs until Nov 10?",
         "options": [
           {
@@ -1674,6 +1719,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Fetch oak-chair from ext.shelf.library: 1,276 bytes in 2 files, under CC-BY-4.0 (credit: Ana Ruiz, Shelf)?",
         "options": [
           {
@@ -1710,6 +1756,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Run upper-paid@1.0.0 for test.upper once, at $0.02 a run?",
         "options": [
           {
@@ -1746,6 +1793,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Let DeepBuild start runs as you on build-01, as user services under your user there?",
         "options": [
           {
@@ -1782,6 +1830,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Send the file 9f2c4e1a7b3d5f6e8a0c2b4d6f8e1a3c5b7d9f0e2a4c6b8d1f3e5a7c9b0d2f4e, which an agent put in the evidence store, to 127.0.0.1:41873 for hosted-a@1.0.0 (test.hosted)?",
         "options": [
           {
@@ -1818,6 +1867,7 @@
     "fixture": {
       "ask": {
         "kind": "unblock",
+        "may_answer": "verified_channel",
         "question": "open-a@1.0.0 can't run on 127.0.0.1:41873: its weight file model.safetensors there is 7c1e3a5b9d2f4e6a8c0b1d3f5e7a9c2b4d6f8e0a1c3b5d7f9e2a4c6b8d0f1e3a, and open-a@1.0.0 declares 2a4c6e8b0d1f3a5c7e9b1d3f5a7c9e0b2d4f6a8c1e3b5d7f9a0c2e4b6d8f1a3c. Put that file on the host?",
         "options": [
           {
@@ -1859,6 +1909,7 @@
     "fixture": {
       "ask": {
         "kind": "unblock",
+        "may_answer": "verified_channel",
         "question": "ext.shelf.library can't fetch shelf-armchair: its license, LicenseRef-shelf-standard, is one DeepBuild doesn't know. Read its terms?",
         "options": [
           {
@@ -1900,6 +1951,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "The claim on acme/shop#7 stalled: R2 and R3 came back unchanged on two stops in a row. Split the issue, fund the live runs it needs, or accept what's proven?",
         "options": [
           {
@@ -1941,6 +1993,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "The change ships behind reject_expired, which is off where it's deployed. Does it stay off for now?",
         "options": [
           {
@@ -1977,6 +2030,7 @@
     "fixture": {
       "ask": {
         "kind": "choice",
+        "may_answer": "verified_channel",
         "question": "Sessions 3f2a9c1e (claude-code) and 7b0d4e22 (codex) both work on issue #77. Keep which?",
         "options": [
           {
@@ -2018,6 +2072,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
+        "may_answer": "trusted_path",
         "question": "Sessions 3f2a9c1e and 7b0d4e22 started 21 of each other's turns in 10 minutes with no prompt from you. Let them go on?",
         "options": [
           {
@@ -2054,6 +2109,7 @@
     "fixture": {
       "ask": {
         "kind": "taste",
+        "may_answer": "verified_channel",
         "question": "task:01K74G1Z3X5V7T9R1P3N5M7K9J is still past its usual size after one send-back: 191 lines over 12 files against a usual 17 over 3. Keep it as it is, or have it cut?",
         "options": [
           {
@@ -2090,6 +2146,7 @@
     "fixture": {
       "ask": {
         "kind": "choice",
+        "may_answer": "verified_channel",
         "question": "The plan for task:01K74G1Z3X5V7T9R1P3N5M7K9J is marked large and touches 12 files against a usual 3. Approve it, shrink it or split the issue?",
         "options": [
           {
@@ -2131,6 +2188,7 @@
     "fixture": {
       "ask": {
         "kind": "unblock",
+        "may_answer": "verified_channel",
         "question": "Sign in to GitHub in your own terminal?",
         "options": [
           {
@@ -2171,6 +2229,7 @@
     "fixture": {
       "ask": {
         "kind": "choice",
+        "may_answer": "verified_channel",
         "question": "Keep the store on SQLite or plain files?",
         "options": [
           {
@@ -2207,6 +2266,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Sync the MCP server forge (stdio, every repo, its secrets FORGE_TOKEN by handle through deep mcp-exec)? It writes ~/.claude.json, which Claude Code reads. It writes ~/.codex/config.toml, which Codex reads. DeepBuild writes only its own entries, at user level; deep undo sync:01K9F2W3X4Y5Z6A7B8C9D0E1F0 takes them out.",
         "options": [
           {
@@ -2243,6 +2303,7 @@
     "fixture": {
       "ask": {
         "kind": "choice",
+        "may_answer": "verified_channel",
         "question": "~/.codex/config.toml changed while sync:01K9F2W3X4Y5Z6A7B8C9D0E1F0 was writing it, and the change means: ~/.codex/config.toml holds your own forge, which DeepBuild's entry would replace. DeepBuild left it as you have it. Write DeepBuild's entry over it, or keep yours?",
         "options": [
           {
@@ -2279,6 +2340,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Restart Codex's daemon (pid 4100) with `codex app-server daemon restart`? It interrupts the sessions it serves: 019a0000-0000-7000-8000-000000000001, 019a0000-0000-7000-8000-000000000002, which then start with the new set of MCP servers and hooks.",
         "options": [
           {
@@ -2315,6 +2377,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Remove DeepBuild from Codex? Codex's hooks.json and config.toml go back to how they were before setup, as deep setup --undo leaves them; Claude Code and the hub stay.",
         "options": [
           {
@@ -2351,6 +2414,7 @@
     "fixture": {
       "ask": {
         "kind": "choice",
+        "may_answer": "verified_channel",
         "question": "Evaluation 1829617: 688 jobs newly fail with merge 3b4545497180. Fix them, revert the merge, or leave them failing?",
         "options": [
           {
@@ -2392,6 +2456,7 @@
     "fixture": {
       "ask": {
         "kind": "authority",
+        "may_answer": "trusted_path",
         "question": "Extend the preview api:deep.on from R4 to R6? Its replacement lands in R6.",
         "options": [
           {
@@ -2428,6 +2493,7 @@
     "fixture": {
       "ask": {
         "kind": "choice",
+        "may_answer": "trusted_path",
         "question": "The agent's promised check is BLOCKED (promised 4 times; owner: service): \"I'll check the deploy again in 20 minutes.\" Do the check yourself, or drop it?",
         "options": [
           {

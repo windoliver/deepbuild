@@ -1,0 +1,12 @@
+{
+  "scripts/issue-time.mjs": [
+    {
+      "find": [
+        "    const grants = events.filter((row) => row.event === 'granted' && row.class === cls && row.grant === 'top-level');"
+      ],
+      "wrong": [
+        "    const grants = events.filter((row) => row.event === 'granted' && row.class === cls);"
+      ]
+    }
+  ]
+}

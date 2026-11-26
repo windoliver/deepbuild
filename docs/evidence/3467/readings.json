@@ -1,0 +1,220 @@
+{
+ "at": "2026-11-25T19:49:56.688Z",
+ "load": [
+  45.60791015625,
+  34.7763671875,
+  37.2646484375
+ ],
+ "binaries": {
+  "change": {
+   "deep-canvas-render": "5b4daede66aaeefc1e2c6cfe2fde60f4db61596b130219bc14cf3a7fae1ec583",
+   "deep-show": "ba691399e44e5324cf600f5b2c30d588c3dd98ce9efb2037224a2c8fd1f43b71"
+  },
+  "base": {
+   "deep-canvas-render": "718dc9ebbb7856f5a87cf803676a63e00bc67680f13c0e0ea8e07410d4841fe7",
+   "deep-show": "e543ad451d5e2dad0fac8dbf84f7be361f8cb1b20faba6550479d55be5785289"
+  }
+ },
+ "readings": {
+  "AC1 #3467.261c442a": {
+   "change idle 10 s": {
+    "judge": null,
+    "samples": {
+     "requests": 250,
+     "sum": 250,
+     "most": 2
+    },
+    "shown": 250,
+    "ms": 11577
+   },
+   "change session, 250 steps": {
+    "judge": null,
+    "samples": {
+     "requests": 250,
+     "sum": 250,
+     "most": 2
+    },
+    "ms": 962
+   },
+   "base idle 10 s": {
+    "judge": "248 of the 248 `decodes` rows of idle's players.rec hold no `samples`, the whole number of samples the worker decoded for that request: decodes[0] is {\"at_ms\":0,\"frame\":0}",
+    "samples": "248 of the 248 `decodes` rows of idle's players.rec hold no `samples`, the whole number of samples the worker decoded for that request: decodes[0] is {\"at_ms\":0,\"frame\":0}",
+    "shown": 237,
+    "ms": 12438
+   },
+   "base session, 250 steps": {
+    "judge": "session's answer holds no `players` block, so it has no `decodes` row and none holds `samples` (it holds ok, steps, backends)",
+    "samples": "session's answer holds no `players` block, so it has no `decodes` row and none holds `samples` (it holds ok, steps, backends)",
+    "ms": 5288
+   },
+   "change session, 250 steps, planted keeps_base_start_rule": {
+    "judge": "the `samples` of the 250 requests sum to 10789, over the 250 samples the recording holds: played forward, each sample is decoded once",
+    "samples": {
+     "requests": 250,
+     "sum": 10789,
+     "most": 248
+    },
+    "ms": 5520
+   }
+  },
+  "AC2 #3467.6bd8eb71": {
+   "canonical decode": {
+    "frames": 250,
+    "distinct": 250,
+    "the change gives the merge base's hashes": true
+   },
+   "change session, 200 jumps": {
+    "failures": 0,
+    "equal": 200,
+    "back": 104,
+    "samples": {
+     "requests": 399,
+     "sum": 17189,
+     "most": 230
+    },
+    "ms": 8296
+   },
+   "change session, 200 jumps, planted answers_picture_kept_for_another": {
+    "failures": 121,
+    "first": "jump 1, to 5105937219 flicks (7.2363 s): the item shows source frame 219, not source frame 217, the frame at that time as the canonical decode gives it",
+    "samples": {
+     "requests": 399,
+     "sum": 17189,
+     "most": 230
+    },
+    "ms": 7595
+   },
+   "change session, 200 jumps, planted keeps_base_start_rule": {
+    "failures": 0,
+    "first": null,
+    "samples": {
+     "requests": 399,
+     "sum": 25462,
+     "most": 248
+    },
+    "ms": 10935
+   },
+   "base session, 200 jumps": {
+    "judge": "session's answer holds no `players` block, so it has no `shown` row to name the frame on screen (it holds ok, steps, backends)"
+   }
+  },
+  "AC3 #3467.f53de7f6": {
+   "change": {
+    "judge": null,
+    "requests": [
+     "29: 30",
+     "30: 1",
+     "1515: 16",
+     "1516: 1"
+    ],
+    "ms": 297
+   },
+   "change, planted keeps_base_start_rule": {
+    "judge": "the jump from frame 30 to frame 1515 decoded 1485 samples, more than 16",
+    "requests": [
+     "29: 30",
+     "30: 1",
+     "1515: 1485",
+     "1516: 1"
+    ],
+    "ms": 886
+   },
+   "base": {
+    "judge": "session's answer holds no `players` block, so it has no `decodes` row and none holds `samples` (it holds ok, steps, backends)",
+    "requests": "session's answer holds no `players` block, so it has no `decodes` row and none holds `samples` (it holds ok, steps, backends)",
+    "ms": 899
+   }
+  },
+  "AC4 #3467.4c4b1527": {
+   "change": {
+    "judge": [],
+    "forward": {
+     "sum": 92,
+     "frames": 92
+    },
+    "jump back to 47": 18,
+    "ms": 416
+   },
+   "change, planted starts_every_request_at_key_frame": {
+    "judge": [
+     "played forward, the 92 requests for frames 0 to 91 decoded 1398 samples, not one a frame (92)"
+    ],
+    "forward": {
+     "sum": 1398,
+     "frames": 92
+    },
+    "jump back to 47": 18,
+    "ms": 917
+   },
+   "change, planted keeps_base_start_rule": {
+    "judge": [],
+    "forward": {
+     "sum": 92,
+     "frames": 92
+    },
+    "jump back to 47": 18,
+    "ms": 400
+   },
+   "base": {
+    "judge": [
+     "session's answer holds no `players` block, so it has no `decodes` row and none holds `samples` (it holds ok, steps, backends)"
+    ],
+    "forward": null,
+    "jump back to 47": "session's answer holds no `players` block, so it has no `decodes` row and none holds `samples` (it holds ok, steps, backends)",
+    "ms": 363
+   }
+  },
+  "AC5 #3467.1a19a5d4": {
+   "change": {
+    "judge": null,
+    "frame_bytes": {
+     "app": 691200,
+     "worker": 691200
+    },
+    "samples": {
+     "requests": 250,
+     "sum": 250,
+     "most": 2
+    },
+    "ms": 1784
+   },
+   "change, planted keeps_every_picture": {
+    "judge": "the app and the worker together held 87782400 bytes of frames (the app 691200, the worker 87091200), not under 8000000",
+    "frame_bytes": {
+     "app": 691200,
+     "worker": 87091200
+    },
+    "samples": {
+     "requests": 250,
+     "sum": 250,
+     "most": 2
+    },
+    "ms": 1743
+   },
+   "change, planted keeps_base_start_rule": {
+    "judge": null,
+    "frame_bytes": {
+     "app": 691200,
+     "worker": 345600
+    },
+    "samples": {
+     "requests": 250,
+     "sum": 10789,
+     "most": 248
+    },
+    "ms": 48923
+   },
+   "base": {
+    "judge": "session's answer holds no `players` block, so no item's `frame_bytes` can be read (it holds ok, steps, backends)",
+    "frame_bytes": "session's answer holds no `players` block, so no item's `frame_bytes` can be read (it holds ok, steps, backends)",
+    "samples": "session's answer holds no `players` block, so it has no `decodes` row and none holds `samples` (it holds ok, steps, backends)",
+    "ms": 50015
+   }
+  }
+ },
+ "loadAfter": [
+  43.4150390625,
+  49.99560546875,
+  44.298828125
+ ]
+}

@@ -1,0 +1,12 @@
+{
+  "scripts/issue-time.mjs": [
+    {
+      "find": [
+        "  return { row: { issue, pr: pr.number, first_prompt: new Date(first).toISOString(), merged: new Date(merged).toISOString(), minutes: Math.round((merged - first) / MINUTE), causes, person: whole(Object.fromEntries(PERSON.map((kind) => [kind, ms[kind]])), causes.person), prompts: prompts.length - 1 }, hooks };"
+      ],
+      "wrong": [
+        "  return { row: { issue, pr: pr.number, first_prompt: new Date(first).toISOString(), merged: new Date(merged).toISOString(), minutes: Math.round((merged - first) / MINUTE), causes, person: whole(Object.fromEntries(PERSON.map((kind) => [kind, ms[kind]])), causes.person), prompts: prompts.length }, hooks };"
+      ]
+    }
+  ]
+}

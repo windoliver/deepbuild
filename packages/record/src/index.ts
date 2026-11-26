@@ -23,6 +23,7 @@ import { metaOf, RecordError } from './meta.js';
 export { compareReplay, foldText, parseClaimLine, planHash, PROJECTIONS, testStorage, ulid };
 export type { FoundMessage };
 export { openTrust, type ProjectTrust } from './trust.js';
+export { recordSize } from './storage.js';
 export { RecordError, writerGeneration, type RecordErrorCode } from './meta.js';
 export type { Comparison, Measure, MeasureResult, ReplayPlan, ReplayResult, ReplayRun, TaskPair, Variant } from './replay.js';
 export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
@@ -35,6 +36,8 @@ export interface Connection {
   session?: string;
   project?: string;
   agent?: string;
+  /** The host whose forwarded socket the connection came over (#999); none for this machine. */
+  host?: string;
   run?: { env?: Readonly<Record<string, string>>; held?: readonly string[] };
   /** False when the event claims a session the hub couldn't check it against; the event keeps that mark. */
   verified?: boolean;
@@ -67,6 +70,7 @@ export interface Event {
   session?: string;
   project?: string;
   agent?: string;
+  host?: string;
   /** Set when the hub recorded the event as unverified: it claims a session it couldn't be checked against. */
   unverified?: true;
 }
@@ -245,11 +249,17 @@ CREATE TABLE IF NOT EXISTS events (
   data        TEXT NOT NULL,
   evidence    TEXT,
   hash        TEXT NOT NULL,
-  unverified  INTEGER NOT NULL DEFAULT 0
+  unverified  INTEGER NOT NULL DEFAULT 0,
+  host        TEXT
 ) STRICT;
 CREATE INDEX IF NOT EXISTS events_session ON events (session_id, log_pos);
 CREATE INDEX IF NOT EXISTS events_session_bounds ON events (session_id, log_pos) WHERE kind IN ('session.start', 'session.end');
 CREATE INDEX IF NOT EXISTS events_kind ON events (kind, log_pos);
+CREATE INDEX IF NOT EXISTS events_session_gone ON events (session_id, log_pos) WHERE kind = 'session.gone';
+CREATE INDEX IF NOT EXISTS events_run_key ON events (json_extract(data, '$.key.id')) WHERE kind = 'run.finished';
+CREATE INDEX IF NOT EXISTS events_run_stem ON events (json_extract(data, '$.key.stem')) WHERE kind = 'run.finished';
+CREATE INDEX IF NOT EXISTS events_delivery ON events (json_extract(data, '$.delivery'), log_pos) WHERE kind = 'delivery.outcome';
+CREATE INDEX IF NOT EXISTS events_reading ON events (json_extract(data, '$.reading')) WHERE kind = 'reading.recorded';
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no UPDATE'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no DELETE'); END;
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
@@ -288,6 +298,7 @@ interface Prepared {
   session: string | null;
   project: string | null;
   agent: string | null;
+  host: string | null;
   seq: bigint | null;
   data: JsonValue;
   evidence: string[];
@@ -365,6 +376,8 @@ class SqliteRecord implements RecordStore {
     // A record made before events kept the unverified mark gains the column, every event in it unmarked.
     const columns = this.db.prepare("SELECT name FROM pragma_table_info('events')").all() as { name: string }[];
     if (columns.length && !columns.some((c) => c.name === 'unverified')) this.db.exec('ALTER TABLE events ADD COLUMN unverified INTEGER NOT NULL DEFAULT 0');
+    // One made before events named their host (#999) gains the column, every event in it from this machine.
+    if (columns.length && !columns.some((c) => c.name === 'host')) this.db.exec('ALTER TABLE events ADD COLUMN host TEXT');
     this.db.exec(DDL);
     this.projector = new Projector(this.db, options.plant);
     this.stale = this.projector.ensure();
@@ -502,6 +515,12 @@ class SqliteRecord implements RecordStore {
     }
   }
 
+  /** The host a session is on, as its first hook's connection named it; with no session, the one that made the claim `subject` names. */
+  private hostOf(session: string | undefined, subject: string | undefined): string | null {
+    const id = session ?? (subject?.startsWith('claim:') ? (this.stmt('SELECT session_id FROM claims WHERE id = ?').get(subject.slice('claim:'.length)) as { session_id: string | null } | undefined)?.session_id : undefined);
+    return id ? (this.stmt('SELECT host FROM sessions WHERE id = ?').get(id) as { host: string | null } | undefined)?.host ?? null : null;
+  }
+
   // ---- Append.
 
   /** The synchronous part of an append: what the connection supplies, the forged fields, the writer rule and the schema. */
@@ -540,6 +559,8 @@ class SqliteRecord implements RecordStore {
     const prepared: Prepared = {
       input, writer: connection.writer, actor: connection.actor, scope: connection.scope,
       session: connection.session ?? null, project: connection.project ?? null, agent: connection.agent ?? null,
+      // A hook's host is its connection's. The core's own events about a session on a host, or a claim one made, carry that host too (#999).
+      host: connection.host ?? (connection.writer === 'core' ? this.hostOf(connection.session, input.subject) : null),
       seq: input.seq === undefined ? null : BigInt(input.seq), data, evidence: [...(input.evidence ?? [])], unverified: connection.verified === false, hash: '',
     };
     if (whole !== undefined) prepared.whole = whole;
@@ -551,7 +572,7 @@ class SqliteRecord implements RecordStore {
     p.hash = sha256Hex(canonicalize({
       v: p.input.v, kind: p.input.kind, subject: p.input.subject ?? null, ts: p.input.ts, seq: p.input.seq ?? null, data: p.data, evidence: p.evidence,
       writer: p.writer, actor: p.actor, scope: p.scope, session: p.session, project: p.project, agent: p.agent,
-      ...(p.unverified ? { unverified: true } : {}),
+      ...(p.unverified ? { unverified: true } : {}), ...(p.host ? { host: p.host } : {}),
     }));
     return p;
   }
@@ -834,7 +855,7 @@ class SqliteRecord implements RecordStore {
       // Each event, and a move.refused for each object it could move.
       this.reserve(items.reduce((n, p) => n + 1 + movable(p.input.kind, p.data), 0));
       const existing = this.stmt('SELECT log_pos, hash FROM events WHERE id = ?');
-      const insert = this.stmt('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash, unverified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      const insert = this.stmt('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash, unverified, host) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       const write = (work: () => void) => (mode === 'full' ? this.full(work) : this.backend.commit(this.db, 'normal', work));
       write(() => {
         for (const p of items) {
@@ -846,7 +867,7 @@ class SqliteRecord implements RecordStore {
           }
           const put = (q: Prepared): { log_pos: number; refused: Refusal[] } => {
             const log_pos = this.next++;
-            insert.run(q.input.id, log_pos, q.input.v, q.input.ts, q.project, q.session, q.seq, q.agent, q.writer, q.actor, q.scope, q.input.kind, q.input.subject ?? null, JSON.stringify(q.data), q.evidence.length ? JSON.stringify(q.evidence) : null, q.hash, q.unverified ? 1 : 0);
+            insert.run(q.input.id, log_pos, q.input.v, q.input.ts, q.project, q.session, q.seq, q.agent, q.writer, q.actor, q.scope, q.input.kind, q.input.subject ?? null, JSON.stringify(q.data), q.evidence.length ? JSON.stringify(q.evidence) : null, q.hash, q.unverified ? 1 : 0, q.host);
             return { log_pos, refused: this.projector.apply(this.projected(q, log_pos)) };
           };
           const { log_pos, refused } = put(p);
@@ -878,7 +899,7 @@ class SqliteRecord implements RecordStore {
 
   private projected(p: Prepared, log_pos: number): Projected {
     return {
-      id: p.input.id, v: p.input.v, kind: p.input.kind, ts: p.input.ts, seq: p.seq, log_pos, session: p.session, project: p.project, agent: p.agent,
+      id: p.input.id, v: p.input.v, kind: p.input.kind, ts: p.input.ts, seq: p.seq, log_pos, session: p.session, project: p.project, agent: p.agent, host: p.host,
       writer: p.writer, actor: p.actor, scope: p.scope, subject: p.input.subject ?? null, data: this.migrate(p.input.kind, p.input.v, p.data), evidence: p.evidence,
     };
   }
@@ -938,7 +959,7 @@ class SqliteRecord implements RecordStore {
           for (const row of rows) {
             const e = toEvent(row);
             this.projector.apply({
-              id: e.id, v: e.v, kind: e.kind, ts: e.ts, seq: e.seq ?? null, log_pos: e.log_pos, session: e.session ?? null, project: e.project ?? null, agent: e.agent ?? null,
+              id: e.id, v: e.v, kind: e.kind, ts: e.ts, seq: e.seq ?? null, log_pos: e.log_pos, session: e.session ?? null, project: e.project ?? null, agent: e.agent ?? null, host: e.host ?? null,
               writer: e.writer, actor: e.actor, scope: e.scope, subject: e.subject ?? null, data: this.migrate(e.kind, e.v, e.data), evidence: e.evidence,
             }, e.log_pos >= from);
             after = e.log_pos;
@@ -1117,7 +1138,7 @@ class SqliteRecord implements RecordStore {
 
 interface StoredRow {
   id: string; log_pos: bigint; v: bigint; ts: bigint; project_id: string | null; session_id: string | null; seq: bigint | null; agent: string | null;
-  writer: string; actor: string; scope: string; kind: string; subject: string | null; data: string; evidence: string | null; hash: string; unverified: bigint;
+  writer: string; actor: string; scope: string; kind: string; subject: string | null; data: string; evidence: string | null; hash: string; unverified: bigint; host: string | null;
 }
 function toEvent(row: StoredRow): Event {
   const event: Event = {
@@ -1129,6 +1150,7 @@ function toEvent(row: StoredRow): Event {
   if (row.session_id !== null) event.session = row.session_id;
   if (row.project_id !== null) event.project = row.project_id;
   if (row.agent !== null) event.agent = row.agent;
+  if (row.host !== null) event.host = row.host;
   if (row.unverified) event.unverified = true;
   return event;
 }

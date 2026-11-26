@@ -235,7 +235,7 @@ export class HumanAnswers {
     if (!cwd || pinned?.kind !== 'commit') return;
     const git = (...args: string[]) => new Promise<string>((done) => execFile('git', ['-C', cwd, ...args], { timeout: 2000 }, (_, out) => done(String(out ?? '').trim())));
     const commits = (await git('rev-list', '--reverse', `${pinned.ref}..HEAD`)).split('\n').filter(Boolean);
-    this.options.delivery().switches.set(handle.slice(4), commits.map((c) => c.slice(0, 7)));
+    this.options.delivery().switches.set(handle.slice(4), { session, commits: commits.map((c) => c.slice(0, 7)) });
     const head = await git('rev-parse', 'HEAD^{tree}');
     await this.options.events.appendReading(session, this.options.state().sessions.get(session)!.agent, `Switched ${handle}: tree ${head}`);
   }
@@ -298,7 +298,7 @@ export class HumanAnswers {
     }
     const reasons = [`${name} still fails after your "I did it"${findings.length ? `: ${findings.join('; ')}` : ''}`];
     const fields = ['kind', 'question', 'options', 'recommended', 'default', 'steps', 'where', 'why', 'unblocks', 'proves', 'cost_usd', 'fallback', 'provisional', 'owner', 'pinned_to'];
-    const again = { ...Object.fromEntries(fields.filter((f) => f in data).map((f) => [f, data[f]])), key: sha256Hex(canonicalize({ again: handle, key: data.key ?? null } as JsonValue)) };
+    const again = { ...Object.fromEntries(fields.filter((f) => f in data).map((f) => [f, data[f]])), may_answer: 'verified_channel', key: sha256Hex(canonicalize({ again: handle, key: data.key ?? null } as JsonValue)) };
     await this.raiseTask(session, agent, again);
     if (!resource) await this.options.services.asks.stillFails(name, reasons);
   }
@@ -354,9 +354,9 @@ export class HumanAnswers {
     return { answer: first.answer, where: by ? `on the ${by.channel} channel` : first.via === 'inbox' ? 'from deep inbox' : first.via === 'session' ? 'in the session' : 'in the app' };
   }
 
-  /** The asks as the channels render them (#65): the inbox's state of each, with its words, options and answer. */
+  /** The asks as the channels render them (#65): the inbox's state of each, with what it declared may answer it (#1581), its words, options and answer. */
   async channelAsks(): Promise<ChannelAsk[]> {
-    const rows = (await this.options.services.record.raw('SELECT id, question, options, answer FROM asks')) as { id: string; question: string | null; options: string | null; answer: string | null }[];
+    const rows = (await this.options.services.record.raw(`SELECT a.id AS id, a.question AS question, a.options AS options, a.answer AS answer, json_extract(e.data, '$.may_answer') AS may_answer FROM asks a JOIN events e ON e.id = a.id`)) as { id: string; question: string | null; options: string | null; answer: string | null; may_answer: string | null }[];
     const texts = new Map(rows.map((r) => [`ask:${r.id}`, r]));
     const cards = await this.cards();
     return (await this.options.services.asks.inbox()).map((row) => {
@@ -365,7 +365,7 @@ export class HumanAnswers {
       let answer: string | null = null;
       try { answer = t?.answer ? String(JSON.parse(t.answer)) : null; } catch { answer = t?.answer ?? null; }
       const card = cards.get(row.ask);
-      return { handle: row.ask, kind: row.kind, question: t?.question ?? '', options, status: row.status, outcome: row.outcome, answer, plan: card?.plan ?? null, revision: card?.revision ?? 1 };
+      return { handle: row.ask, kind: row.kind, may_answer: t?.may_answer ?? null, question: t?.question ?? '', options, status: row.status, outcome: row.outcome, answer, plan: card?.plan ?? null, revision: card?.revision ?? 1 };
     });
   }
 

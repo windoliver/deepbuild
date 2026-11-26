@@ -31,23 +31,25 @@ export interface Row {
   doing?: Doing;
   /** A session row's one flag beside its word (#2019): row.set@4. */
   flag?: RowFlag;
+  /** The host a session on another machine runs on, as your SSH config names it (#999): row.set@5. Every reader lists it under that name. */
+  host?: string;
 }
 /** A flag as a row carries it: the reading's, less the facts it read. */
 export type RowFlag = Omit<Flag, 'facts'>;
-/** The row.set version a session's or an ask's row needs: @4 with a flag, @3 with what its turn is doing, else @1. */
-export const rowVersion = (row: Row): number => (row.flag ? 4 : row.doing ? 3 : 1);
+/** The row.set version a session's or an ask's row needs: @5 on a host, @4 with a flag, @3 with what its turn is doing, else @1. */
+export const rowVersion = (row: Row): number => (row.host ? 5 : row.flag ? 4 : row.doing ? 3 : 1);
 /** A row with its place in the list: every reader sorts by `order`'s bytes. */
 export interface Placed { order: string; row: Row }
 
 /**
  * Where a row sits: the sessions first, by section, then by project, then by state, then by since; then the running
  * jobs, oldest first; then the asks, oldest first, as the app's window draws its sidebar and then Needs you. The one
- * order every reader has.
+ * order every reader has. A host's sessions (#999) sit under the host's name, where this machine's sit under their project's.
  */
 export function orderOf(row: Row): string {
   const state = row.word as Reading['state'];
   if (row.id.startsWith('job:')) return `0|4|${pad(row.since)}|${row.id}`;
-  return row.id.startsWith('ask:') ? `1|${pad(row.since)}|${row.id}` : `0|${SECTION[row.word] ?? 1}|${row.project ?? '~'}|${RANK[state] ?? 9}|${pad(row.since)}|${row.id}`;
+  return row.id.startsWith('ask:') ? `1|${pad(row.since)}|${row.id}` : `0|${SECTION[row.word] ?? 1}|${row.host ?? row.project ?? '~'}|${RANK[state] ?? 9}|${pad(row.since)}|${row.id}`;
 }
 
 /** A running job (#1925): what runs it, since when, and its tool's newest counter with when it came. */
@@ -88,7 +90,7 @@ export function jobRow(job: RunningJob): Row {
 }
 
 /** Each state of the one reading, with the states table's word and status-map entry (crates/deep-app/src/states.rs: TABLE). */
-const ENTRY: Record<Reading['state'], string> = {
+export const ENTRY: Record<Reading['state'], string> = {
   'needs you': 'needs_you', stuck: 'blocked', flagged: 'fail', 'sent back': 'fail', BLOCKED: 'blocked', INVALID: 'invalid', INCONCLUSIVE: 'inconclusive', stale: 'stale',
   'says done': 'running', working: 'running', queued: 'idle', PASS: 'pass', finished: 'idle', quiet: 'idle',
 };
@@ -139,6 +141,11 @@ async function sessionNames(query: Query, ids: readonly string[]): Promise<Map<s
   return names;
 }
 
+/** What comes before a session's short ID in its row's title. */
+export const SHORT = ' · ';
+const shortId = (id: string): string => id.slice('session:'.length, 'session:'.length + 8);
+/** A session row's name, less the short ID its title may end in. */
+export const nameIn = (row: Row): string => (row.title.endsWith(`${SHORT}${shortId(row.id)}`) ? row.title.slice(0, -(SHORT.length + shortId(row.id).length)) : row.title);
 /**
  * Each session row's title as it's shown, by row ID, from every session row's name: the name, with the session's
  * short ID after it only where another session's row would otherwise read the same (#2018).
@@ -146,7 +153,7 @@ async function sessionNames(query: Query, ids: readonly string[]): Promise<Map<s
 export function distinctTitles(names: ReadonlyMap<string, string>): Map<string, string> {
   const count = new Map<string, number>();
   for (const name of names.values()) count.set(name, (count.get(name) ?? 0) + 1);
-  return new Map([...names].map(([id, name]) => [id, count.get(name)! > 1 ? `${name} · ${id.slice('session:'.length, 'session:'.length + 8)}` : name]));
+  return new Map([...names].map(([id, name]) => [id, count.get(name)! > 1 ? `${name}${SHORT}${shortId(id)}` : name]));
 }
 
 const quote = (v: string): string => `'${v.replace(/'/g, "''")}'`;
@@ -184,7 +191,7 @@ export async function buildRows(query: Query, readings: readonly Reading[], open
       id: `session:${r.id}`, address: `session/${r.id}`, title: titles.get(r.id) ?? AGENTS[r.agent ?? ''] ?? r.agent ?? 'agent', project, session: r.id, agent: r.agent,
       entry: ENTRY[r.state], word: r.state, why: [r.plain, unread.get(r.id)].filter(Boolean).join(' · '), waits_on: r.waits_on,
       since: r.since, actions: [], unread: FIRST_UNREAD.has(r.cause) || FIRST_UNREAD.has(r.state),
-      ...(doing.has(r.id) ? { doing: doing.get(r.id)! } : {}),
+      ...(doing.has(r.id) ? { doing: doing.get(r.id)! } : {}), ...(r.host ? { host: r.host } : {}),
     };
     if (r.flag) { const { facts: _facts, ...flag } = r.flag; row.flag = flag; }
     return row;

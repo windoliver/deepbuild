@@ -1,0 +1,15 @@
+{
+  "crates/deep-scene3d-render/src/scene3d.wgsl": [
+    {
+      "find": [
+        "    sky_top: vec4<f32>,",
+        "    sky_low: vec4<f32>,"
+      ],
+      "wrong": [
+        "    // #3256's planted wrong program: sky_top and sky_low swapped; the struct's size is as it was.",
+        "    sky_low: vec4<f32>,",
+        "    sky_top: vec4<f32>,"
+      ]
+    }
+  ]
+}
