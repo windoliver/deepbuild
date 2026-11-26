@@ -218,6 +218,9 @@ describe('#1172 (judges) Needs you rows on the pixels once an ask row keeps its 
     ['a title cut after "Which"', '• Which… How it looks tomorrow 16:49'],
     ['a title cut after "Wh"', 'Wh… How it looks in 1 d'],
     ['the whole question', 'Which header colour on the login page? How it looks'],
+    ['its mark read by OCR as "o"', 'o ... How it looks tomorrow 16:49'],
+    ['its mark read by OCR as "·"', '· … How it looks'],
+    ['its mark read by OCR as "0", before a cut title', '0 Which hea… How it looks'],
   ])('control: a row line with %s draws a row', (_, text) => {
     expect(askRowLine(text, asks)).toBe(true);
   });
@@ -229,8 +232,13 @@ describe('#1172 (judges) Needs you rows on the pixels once an ask row keeps its 
     ['an ellipsis after text that isn\'t a question\'s start', 'Header colour on the login... How it looks'],
     ['a session row', 'Cart totals Working 2m'],
     ['the heading', 'Needs you'],
+    ['a session row cut by an ellipsis', 'Release no… Working'],
+    ['a one-letter token that isn\'t a lone mark, glued to its title', 'oRelease no… Working'],
   ])('wrong program: a line with %s draws no row', (_, text) => {
     expect(askRowLine(text, asks)).toBe(false);
+  });
+  it('control: the R4b reading with each mark OCR\'d as a letter or glyph still counts three rows', () => {
+    expect(judge(['Needs you', 'o ... How it looks tomorrow 16:49', 'e ... How it looks tomorrow 16:49', '° ... How it looks tomorrow 16:49', 'Release no… Working'].map((t) => line(t)))).toBe('');
   });
   it('wrong program: nothing seen fails, never a pass', () => {
     expect(judge([])).toMatch(/0 open ask row\(s\), not 3/);

@@ -535,3 +535,21 @@ can't tell "Which…" rows apart); which ask an answered line belongs to.
 
 `npx vitest run --root tests/acceptance/1172 judges`: 1 file, 70 passed. `npx tsc -p tests/acceptance/1172/tsconfig.json
 --noEmit`: clean. `shell.test.ts` and `popout.test.ts` were not run (they need the Mac).
+
+### Hardening (2026-11-25, on b7983949a)
+
+A review found nothing blocking and asked for one hardening:
+
+- **A mark OCR'd as a letter.** OCR may read a row's mark as `o`, `e`, `0`, `·` or `°`. `askRowLine` now drops one leading
+  token of a single character followed by a space before checking that the text before the ellipsis starts a question, so
+  `o ... How it looks tomorrow 16:49` and `· … How it looks` count. A cut session row, `Release no… Working`, still
+  doesn't (its first token is a word, and `releaseno` starts no question). Judge cases pin both, and the R4b reading with
+  each mark read as a letter (76 judges pass).
+- **Not done: an OCR-split row.** Joining a lone `…` line with the next line at the same left edge would need the kind
+  words, which no source lists for the fixture, and line adjacency OCR doesn't promise. Left as item 1 above.
+- **Still not settled:** a `… 2 more` line (a fold or overflow) would count as a row: no source names such a line, so
+  there is nothing to exclude it by. Beside all its rows it fails by count (a false failure); in place of a missing
+  row it would make the count on the pixels, and only the tree's row count (one node per wanted ask) would catch it. Multi-character mark junk such as `0O0 D` before an ellipsis isn't dropped and fails the row.
+- **`shellFailuresCard`** (fourth redraft) now has no caller in this folder; it stays because `helpers.ts` changes by added
+  lines only (other issues' tests read it). The same holds for `shellFailures`, `shellFailuresCut`, `drawsRow` and
+  `ROW_START` where unused here.

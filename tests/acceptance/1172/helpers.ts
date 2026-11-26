@@ -691,7 +691,8 @@ export function askRowFailuresKept(windows: readonly Node[], asks: readonly Ask[
 export function askRowLine(text: string, asks: readonly Ask[]): boolean {
   if (asks.some((a) => squash(text).includes(squash(a.question)))) return true;
   return [...text.matchAll(/…|\.{2,}/g)].some((m) => {
-    const before = squash(text.slice(0, m.index));
+    // The row's mark may come through OCR as one character ("o", "e", "0", "·", "°"), a token of its own before the title.
+    const before = squash(text.slice(0, m.index).replace(/^\s*\S\s+/, ''));
     return squash(text.slice(m.index! + m[0].length)).length > 0 && asks.some((a) => squash(a.question).startsWith(before));
   });
 }
