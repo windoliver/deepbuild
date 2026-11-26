@@ -1,0 +1,112 @@
+# Base run of tests/acceptance/3587 at b48a47db729e513bcd2f1f6f5c76baca5a44e73a, macOS, Node 24.22.0
+# node --test --test-concurrency=1 tests/acceptance/3587/*.test.mjs (load at start 9.25, 12 cores)
+
+✔ #3587.4323e662 a budget whose allowance is not a whole number of milliseconds still runs and times the checks: no BLOCKED check workload line, and checks that pass read as passed (808.947833ms)
+✖ #3587.f9f3205c a check that never ends, with a child that never ends, is stopped at the allowance: preflight exits non-zero within it plus 30 s, says so with the allowance, and neither is left alive (36528.237209ms)
+✖ #3587.ba427c00 in that run the output holds exactly one FAIL preflight budget line, no "checks took" line, and BLOCKED perf (0.405834ms)
+✖ #3587.1c61ab9b in that run the throttle log records the preflight's timed grant and its release, and the table holds none of its grants or requests afterwards (0.475625ms)
+✔ #3587.62b7650e a SIGINT to the preflight's process group while a never-ending check and its child run ends it within 30 s with exit 130, neither left alive, timed released (1450.395958ms)
+✖ #3587.c4fdbceb when the process scripts/preflight becomes is SIGKILLed while the checks run, and the checks then end and pass, scripts/perf.mjs never starts (1290.151167ms)
+✔ #3587.4d67f808 checks that end past the budget but within the allowance are not stopped: their output is complete, with a "checks took" budget FAIL and no "were stopped" line (4460.441417ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 3
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 195621.84075
+
+✖ failing tests:
+
+test at tests/acceptance/3587/hung.test.mjs:28:1
+✖ #3587.f9f3205c a check that never ends, with a child that never ends, is stopped at the allowance: preflight exits non-zero within it plus 30 s, says so with the allowance, and neither is left alive (36528.237209ms)
+  AssertionError [ERR_ASSERTION]: the preflight hung: it was still running 36 s after its timed grant, waiting on checks that never end, with no timeout at the allowance of 6.00 s. exit {"code":null,"signal":"SIGKILL","at":36285.406958}; output:
+  Warming builds (not timed)
+  check started
+  
+      at TestContext.<anonymous> (file://~/mac-runs/blind-3587/tests/acceptance/3587/hung.test.mjs:31:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3587/hung.test.mjs:38:1
+✖ #3587.ba427c00 in that run the output holds exactly one FAIL preflight budget line, no "checks took" line, and BLOCKED perf (0.405834ms)
+  AssertionError [ERR_ASSERTION]: expected exactly one FAIL preflight budget line, got 0: []; exit {"code":null,"signal":"SIGKILL","at":36285.406958}; output:
+  Warming builds (not timed)
+  check started
+  
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (file://~/mac-runs/blind-3587/tests/acceptance/3587/hung.test.mjs:40:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3587/hung.test.mjs:45:1
+✖ #3587.1c61ab9b in that run the throttle log records the preflight's timed grant and its release, and the table holds none of its grants or requests afterwards (0.475625ms)
+  AssertionError [ERR_ASSERTION]: the preflight never ended by itself, so it never gave back its timed grant 2e2abb88cacef230 (pid 4749)
+      at TestContext.<anonymous> (file://~/mac-runs/blind-3587/tests/acceptance/3587/hung.test.mjs:49:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3587/supervisor.test.mjs:26:1
+✖ #3587.c4fdbceb when the process scripts/preflight becomes is SIGKILLed while the checks run, and the checks then end and pass, scripts/perf.mjs never starts (1290.151167ms)
+  AssertionError [ERR_ASSERTION]: scripts/perf.mjs started after its supervising preflight was SIGKILLed, through scripts/lease: the work went on with no one watching. Output:
+  Warming builds (not timed)
+  check started
+  check passed
+  perf ran
+  SKIP copy: it spends plan usage, so only the release preflight runs it
+  SKIP closed issues: it spends plan usage, so only the release preflight runs it
+  SKIP release budgets: it spends plan usage, so only the release preflight runs it
+  SKIP hub churn: it spends plan usage, so only the release preflight runs it
+  SKIP hub sessions: it spends plan usage, so only the release preflight runs it
+  SKIP ecosystem corpus: it spends plan usage, so only the release preflight runs it
+  SKIP operator calibration: it spends plan usage, so only the release preflight runs it
+  SKIP spine checkpoint: it spends plan usage, so only the release preflight runs it
+  SKIP setup checkpoint: it spends plan usage, so only the release preflight runs it
+  SKIP done gate checkpoint: it spends plan usage, so only the release preflight runs it
+  SKIP risky calls checkpoint: it spends plan usage, so only the release preflight runs it
+  SKIP spine exit: it spends plan usage, so only the release preflight runs it
+  SKIP claude code adapter live: it spends plan usage, so only the release preflight runs it
+  SKIP parity suite release: it spends plan usage, so only the release preflight runs it
+  SKIP gpu validation: it spends plan usage, so only the release preflight runs it
+  Checks elapsed: 0.31 s (budget: <600 s); preflight elapsed: 0.43 s
+  
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file://~/mac-runs/blind-3587/tests/acceptance/3587/supervisor.test.mjs:40:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
