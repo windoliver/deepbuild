@@ -1,0 +1,13 @@
+{
+  "scripts/proof-guard.mjs": [
+    {
+      "find": [
+        "    const touched = removed.length ? removed.map((_, index) => oldStart + index) : [oldStart];"
+      ],
+      "wrong": [
+        "    const touched = removed.length ? removed.map((_, index) => oldStart + index) : [oldStart];",
+        "    if (!removed.length && row(lines[oldStart - 1] ?? '')) continue;"
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 // #45 AC16 on the record #965's gate runner writes: one `check.held@1` per held place, appended again, whole, each time
 // it changes, so the newest record for a check and snapshot stands.
 import { describe, expect, it } from 'vitest';
-import { loopHolds, type RecordEvent } from '../src/index.js';
+import { loopHolds, SLOT_WAIT, type RecordEvent } from '../src/index.js';
 
 const MIN = 60_000;
 let n = 0;
@@ -32,5 +32,14 @@ describe('checks held for a loop, from check.held as the gate runner appends it'
     expect(s?.places_taken).toBe(0);
     expect(s?.runs_started).toBe(1);
     expect(s?.starts).toEqual([{ check: 'e2e', claim: 'claim:A', by: 'words', waited_ms: 30_000 }]);
+  });
+
+  it('a place that waits for a slot is held for no loop: neither its start nor the snapshot that took it counts (#3562)', () => {
+    const slot: Place = { claim: 'claim:A', check: 'journey', snapshot: 'a', held_at: 0, reason: SLOT_WAIT, started_at: null, started_by: null, replaced_by: null };
+    const next: Place = { ...slot, claim: 'claim:B', snapshot: 'b', held_at: MIN };
+    const loop: Place = { claim: 'claim:C', check: 'e2e', snapshot: 'c', held_at: 0, reason: 'cron', started_at: null, started_by: null, replaced_by: null };
+    expect(loopHolds([held(0, slot), held(MIN, { ...slot, replaced_by: 'b' }), held(MIN, next), held(2 * MIN, { ...next, started_at: 2 * MIN, started_by: 'slot' })]).sessions).toEqual([]);
+    const [s] = loopHolds([held(0, slot), held(0, loop), held(MIN, { ...slot, started_at: MIN, started_by: 'slot' })]).sessions;
+    expect([s?.places_taken, s?.runs_started]).toEqual([0, 0]);
   });
 });

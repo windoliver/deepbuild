@@ -119,6 +119,8 @@ export const slow = [
   'tests/acceptance/522/ac3-module-inputs.test.ts', 'tests/acceptance/522/ac7-late-joint.test.ts', 'tests/acceptance/524/ac4-skins.test.ts',
   'tests/acceptance/524/ac6-soft-cube.test.ts', 'tests/acceptance/824/leftovers.test.ts', 'tests/acceptance/824/planted.test.ts',
   'tests/acceptance/980/ac10-taste.test.ts',
+  // #3562's README: order.test.ts makes 20 runs on one hub, and unchanged.test.ts runs #907's and #965's files.
+  'tests/acceptance/3562/order.test.ts', 'tests/acceptance/3562/unchanged.test.ts',
 ];
 /**
  * Folders and files the alone block runs with nothing beside them, not even another shard: #16's and #315's files start
