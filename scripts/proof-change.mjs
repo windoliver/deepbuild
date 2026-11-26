@@ -179,9 +179,15 @@ export function readIssue(root, change) {
   return { number, word, criteria };
 }
 
-// A module path as vite and node resolve it: as written, with a script extension, or a folder's index.
+// A module path as vite and node resolve it: as written, a script name's TypeScript sources (helpers.js names
+// helpers.ts or helpers.tsx, as TS ESM imports them, #3585), with a script extension, or a folder's index.
 const EXTENSIONS = ['.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs', '.jsx'];
-export const resolveModule = (root, rev, path) => [path, ...EXTENSIONS.map((extension) => path + extension), ...EXTENSIONS.map((extension) => `${path}/index${extension}`)]
+const SOURCES = { '.js': ['.ts', '.tsx'], '.mjs': ['.mts'], '.cjs': ['.cts'], '.jsx': ['.tsx'] };
+const sources = (path) => {
+  const extension = path.match(/\.[cm]?jsx?$/)?.[0];
+  return extension ? SOURCES[extension].map((source) => path.slice(0, -extension.length) + source) : [];
+};
+export const resolveModule = (root, rev, path) => [path, ...sources(path), ...EXTENSIONS.map((extension) => path + extension), ...EXTENSIONS.map((extension) => `${path}/index${extension}`)]
   .find((candidate) => show(root, rev, candidate) !== null) ?? path;
 
 /**
