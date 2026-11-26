@@ -77,36 +77,36 @@ for p; do f=$(realpath -e -- "$r/$p" 2>/dev/null) && case "$f" in "$r"/*) [ -f "
  * base64: the repo's top, the changed files, the added ones, every file either names, and package.json as the commit
  * and the folder hold it, paths from the top. Each git call ends within `$3` seconds, and one that fails, a repo
  * whose top isn't the folder's, or a `.git` between the two, says so on a line of its own: then nothing is known of
- * what changed.
+ * what changed; so does any step that fails, as the script then ends with no `read` line.
  */
-const CHANGES = String.raw`say() { printf 'unread\t%s\n' "$(printf "$@" | base64 -w0)"; }
-cd -- "$1" || { say 'the folder %s could not be entered' "$1"; echo read; exit 0; }
+const CHANGES = String.raw`set -e
+say() { printf 'unread\t%s\n' "$(printf "$@" | base64 -w0)"; }
+cd -- "$1"
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_NOSYSTEM GIT_ATTR_SOURCE GIT_GRAFT_FILE GIT_SHALLOW_FILE GIT_REPLACE_REF_BASE GIT_CEILING_DIRECTORIES GIT_DISCOVERY_ACROSS_FILESYSTEM
 export GIT_NO_REPLACE_OBJECTS=1
 B=$2; S=$3; RE=$4; T=$(printf '\t')
-g() { LC_ALL=C timeout -k 1 "$S" git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.quotePath=false -c core.commitGraph=false -c core.ignorecase=false "$@" 2>/dev/null; }
+g() { LC_ALL=C timeout -k 1 "$S" git -c core.quotePath=false -c core.commitGraph=false -c core.ignorecase=false "$@" 2>/dev/null; }
 run() { f=$1; shift; g "$@" > "$f" || { say 'git %s exited %s' "$*" "$?"; return 1; }; }
 out() { printf '%s\t%s\n' "$1" "$(base64 -w0 < "$2")"; }
-d=$(mktemp -d) || { say 'no temporary folder could be made there'; echo read; exit 0; }
+d=$(mktemp -d)
 trap 'rm -rf "$d"' EXIT
-here=$(pwd -P); top=$(g rev-parse --show-toplevel); gd=$(g rev-parse --absolute-git-dir)
-[ -n "$top" ] && [ -n "$gd" ] || { say 'git there finds no repo for the folder'; echo read; exit 0; }
+here=$(pwd -P); top=$(g rev-parse --show-toplevel) || top=; gd=$(g rev-parse --absolute-git-dir) || gd=
 case "$here/" in "$top"/*) ;; *) say 'git there takes %s for the work tree, not the folder' "$top"; echo read; exit 0 ;; esac
 p=$here; while [ "$p" != "$top" ] && [ "$p" != / ]; do [ -e "$p/.git" ] && { say 'git there takes %s for the work tree, though %s holds a .git of its own' "$top" "$p"; echo read; exit 0; }; p=$(dirname -- "$p"); done
-[ -e "$top/.git" ] || { say 'git there takes %s for the work tree, which holds no .git' "$top"; echo read; exit 0; }
+[ -n "$top" ] && [ -e "$top/.git" ] || { say 'git there finds no work tree holding a .git for the folder (it takes "%s")' "$top"; echo read; exit 0; }
 export GIT_DIR="$gd" GIT_WORK_TREE="$top"; cd -- "$top" || exit 0
 # The commit and every tree the read walks, packed and named again from their bytes: an object the folder's own store
-# forged has another name. The list is the read's own, so no lookup shortcut git takes can check one set and read another.
-ok=n; { echo "$B"; g rev-parse "$B^{tree}"; g ls-tree -r -t -d "$B" | cut -f1 | cut -d' ' -f3; } | sort -u > "$d/objs" && [ "$(wc -l < "$d/objs")" -ge 2 ] && g pack-objects --stdout -q < "$d/objs" > "$d/p.pack" && g index-pack -o "$d/p.idx" "$d/p.pack" > /dev/null && g show-index < "$d/p.idx" | cut -d' ' -f2 | sort > "$d/named" && cmp -s "$d/objs" "$d/named" && ok=y
+# forged has another name, and the read's trees are read from that pack alone, so no other copy git finds can stand in.
+ok=n; { echo "$B"; g rev-parse "$B^{tree}"; g ls-tree -r -t -d "$B" | awk '$2 == "tree" { print $3 }'; } | sort -u > "$d/objs" && [ "$(wc -l < "$d/objs")" -ge 2 ] && mkdir -p "$d/o/pack" && g pack-objects --stdout -q < "$d/objs" > "$d/o/pack/p.pack" && g index-pack -o "$d/o/pack/p.idx" "$d/o/pack/p.pack" > /dev/null && g show-index < "$d/o/pack/p.idx" | cut -d' ' -f2 | sort > "$d/named" && cmp -s "$d/objs" "$d/named" && ok=y
 if [ $ok = n ]; then say 'the commit %s or a tree it holds there is not the object its id names' "$B"
-elif run "$d/tree" ls-tree -r "$B" && run "$d/listed" ls-files --cached --others --exclude-standard && run "$d/diffed" diff --name-only --no-renames "$B"; then
+elif (export GIT_OBJECT_DIRECTORY="$d/o"; run "$d/tree" ls-tree -r "$B") && run "$d/listed" ls-files --cached --others --exclude-standard && run "$d/diffed" diff --name-only --no-renames "$B"; then
   if grep -q "$T\"" "$d/tree" || grep -q '^"' "$d/listed"; then say "git names a path it can't list plainly"
   else
     cut -f2 "$d/tree" > "$d/paths"
     # Each own-by-name file the commit holds, by what lies at its path now: a file of the same kind and execute bit is
     # hashed, a link's text is hashed, and anything else is changed.
     RE=$RE awk -F "$T" 'BEGIN { re = ENVIRON["RE"] } $2 ~ re' "$d/tree" > "$d/own"
-    cut -f2 "$d/own" | LC_ALL=C xargs -r -d '\n' stat --printf '%F\t%a\t%n\n' -- > "$d/stat" 2> /dev/null
+    cut -f2 "$d/own" | LC_ALL=C xargs -r -d '\n' stat --printf '%F\t%a\t%n\n' -- > "$d/stat" 2> /dev/null || :
     : > "$d/hash"; : > "$d/oids"; : > "$d/links"; : > "$d/changed"
     H=$d/hash O=$d/oids L=$d/links C=$d/changed awk -F "$T" '
       BEGIN { h = ENVIRON["H"]; o = ENVIRON["O"]; l = ENVIRON["L"]; c = ENVIRON["C"] }
@@ -114,10 +114,9 @@ elif run "$d/tree" ls-tree -r "$B" && run "$d/listed" ls-files --cached --others
       { split($1, m, " "); p = $2
         if ((m[1] == "100644" || m[1] == "100755") && k[p] ~ /^regular (empty )?file$/ && x[p] == (m[1] == "100755")) { print p > h; print m[3] > o }
         else if (m[1] == "120000" && k[p] == "symbolic link") print m[3] "\t" p > l
-        else print p > c }' "$d/stat" "$d/own" || { say 'the files there could not be sorted by kind'; echo read; exit 0; }
-    [ $(( $(wc -l < "$d/hash") + $(wc -l < "$d/links") + $(wc -l < "$d/changed") )) -eq "$(wc -l < "$d/own")" ] || { say 'the files there could not all be sorted by kind'; echo read; exit 0; }
+        else print p > c }' "$d/stat" "$d/own"
     while IFS="$T" read -r o p; do [ "$({ readlink -- "$p"; printf .; } | head -c -2 | g hash-object --stdin)" = "$o" ] || printf '%s\n' "$p" >> "$d/changed"; done < "$d/links"
-    if run "$d/hashes" hash-object --no-filters --stdin-paths < "$d/hash" && [ "$(wc -l < "$d/hashes")" -eq "$(wc -l < "$d/hash")" ]; then
+    if run "$d/hashes" hash-object --no-filters --stdin-paths < "$d/hash"; then
       paste "$d/oids" "$d/hashes" "$d/hash" | awk -F "$T" '$1 != $2 { print $3 }' >> "$d/changed"
       cat "$d/diffed" >> "$d/changed"
       awk 'FILENAME == ARGV[1] { t[$0]; next } !($0 in t)' "$d/paths" "$d/listed" > "$d/added"
