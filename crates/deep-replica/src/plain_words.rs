@@ -109,7 +109,7 @@ mod lane {
         let (handle, _) = cx.update(|cx| open_shell(&layout, cx, |_, _| {}));
         let page = draw(&mut cx, handle);
         let sessions = table.sessions().to_vec();
-        let rows = rows(&page, &table, &sessions, now);
+        let rows = rows(&page, &sessions);
         for node in page.flatten() {
             let Some(text) = node.name.clone().filter(|text| !text.trim().is_empty()) else {
                 continue;
@@ -266,23 +266,16 @@ mod lane {
     }
 
     /// Each session's row on the page: its session, the top and bottom of what it draws, and its left edge, in device
-    /// pixels. A row starts at the node named for its task and runs to the next row's.
-    fn rows(
-        page: &Snapshot,
-        table: &deep_app::states::Table,
-        sessions: &[String],
-        now: u64,
-    ) -> Vec<(String, i64, i64, i64)> {
+    /// pixels. A row starts at the node that carries its session's ID (#1459), whatever its name leads with (#3495),
+    /// and runs to the next row's.
+    fn rows(page: &Snapshot, sessions: &[String]) -> Vec<(String, i64, i64, i64)> {
         let nodes = page.flatten();
         let mut rows: Vec<(String, i64, i64, i64)> = sessions
             .iter()
             .filter_map(|session| {
-                let name = format!("{} · {}", table.title(session), table.row(session, now).0);
+                let id = format!("session:{session}");
                 let node = nodes.iter().find(|node| {
-                    node.name
-                        .as_deref()
-                        .is_some_and(|text| text.ends_with(name.as_str()))
-                        && node.bounds[0] < sidebar_px()
+                    node.id.as_deref() == Some(id.as_str()) && node.bounds[0] < sidebar_px()
                 })?;
                 Some((session.clone(), node.bounds[1], line_top(), node.bounds[0]))
             })

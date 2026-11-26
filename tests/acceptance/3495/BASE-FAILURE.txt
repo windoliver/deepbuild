@@ -1,0 +1,192 @@
+#3495's acceptance suite at the base f08a77068af2962911c4504751f1ccf0370a4dd0: main at 5a81b58de merged with the
+branch that holds the design text #3472 decided. No implementation.
+
+In every line below a session's ID reads <id>, the agent's name reads <agent>, a home folder reads ~ and a temp
+folder reads <tmp>.
+
+== What ran
+
+The caller built the base in this checkout, 2026-11-26 02:51:59 to 02:57:16, one build at a time:
+  npm run build --workspaces
+  cargo build --locked -j 8 -p deep-replica --bin deep-drive --features env-plants
+  cargo build --locked -j 8 -p deep-replica --bin deep-drive -p deep-hook --bin deep-hook
+and then ran the suite's two files, unchanged, once each, with the README's own commands, inside a test grant of the
+machine's throttle (node scripts/throttle.mjs test --wait 5 -- ...), with DS3495_SHOWN set to a folder of its own:
+  2026-11-26 02:57:17
+    NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/3495/check.test.ts --no-file-parallelism --testTimeout=600000
+    Test Files 1 failed (1); Tests 4 failed (4); exit 1; 0.3 s
+  2026-11-26 02:57:18
+    NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/3495/rows.test.ts --no-file-parallelism --testTimeout=600000
+    Test Files 1 failed (1); Tests 10 failed | 4 passed (14); exit 1; 10.0 s
+Machine: a reference Mac (Mac17,10), Node v24.22.0, vitest 5.0.5. Load averages at the start 234.53 170.97 142.17. No
+test reads a time.
+
+The blind job reran neither file: no test needed a change, so the caller's run is the base run. It ran one probe of
+its own at the base, 2026-11-26 03:50, through the throttle (node scripts/throttle.mjs test --wait 60 -- ...): the
+suite's own world and readers, printing what the base shows where the logs don't (the last section). A second probe,
+of the two planted replica readers, got no test grant within 60 minutes and did not run.
+
+== The fixture
+
+Each of the fourteen sessions read its state in deep status --json, with its word's entry of the design's table: no
+test read BLOCKED on the fixture, and AC6's test of --json passed. No line deep printed held a flag, and in the probe's
+world, the same fixture, no row of --json carried one.
+
+== check.test.ts: 4 failed, as a test of a table and a check the base doesn't have
+
+x AC5 #3495.7faace76: the table holds a row for each word of States people see, the design's sentence for six and the
+  word as it is for nine, and the lint lane's check passes it
+    AssertionError: the repo holds no table at contracts/plain-states.json, beside contracts/plain-words.json
+
+x AC5 #3495.7faace76 wrong program: a planted table with no row for INVALID fails, naming the state
+x AC5 #3495.7faace76 wrong program: a planted sentence that holds "passed" for PASS fails, naming the word
+x AC5 #3495.7faace76 wrong program: a planted sentence that holds "verdict" fails for any state, naming the word
+  each:
+    AssertionError: the check passes the shipped table, which each planted table must fail:
+    the check exits null, not 0: exit null, stdout "", stderr "the repo holds no check at scripts/plain-states-check.mjs"
+    the check prints no line starting "PASS plain states": exit null, stdout "", stderr "the repo holds no check at scripts/plain-states-check.mjs"
+
+== rows.test.ts: 10 failed, 4 passed
+
+x AC1 #3495.ce97e581: on a record with one session in each of the six states, deep with no arguments prints each row's
+  sentence, then its word, then the row's own sentence as before
+    AssertionError: each of the six rows in what deep prints:
+    what deep prints reads row session:<id> ("Cart totals"), PASS, as its word alone: "PASS · its claim passed its checks, 4h" has no sentence before PASS; the table's is "done, and the checks agree"
+    what deep prints reads row session:<id> ("Tax"), sent back, as its word alone: "sent back · its checks sent its claim back, round 1 of 3, 3h" has no sentence before sent back; the table's is "not done yet: a check didn't get what it expected, and the agent is fixing it"
+    what deep prints reads row session:<id> ("Publish check"), BLOCKED, as its word alone: "BLOCKED · waits for you: a run of publish-check.sh, 2h" has no sentence before BLOCKED; the table's is "couldn't be checked: something a check needs is missing"
+    what deep prints reads row session:<id> ("Search index"), INVALID, as its word alone: "INVALID · waits for you: a run of index-check.sh that reads this change, 2h" has no sentence before INVALID; the table's is "can't be counted: the proof offered doesn't hold"
+    what deep prints reads row session:<id> ("Login page"), INCONCLUSIVE, as its word alone: "INCONCLUSIVE · waits for you: a run of login-check.sh that finishes, 1h" has no sentence before INCONCLUSIVE; the table's is "couldn't tell: a check didn't finish, or an answer is missing"
+    what deep prints reads row session:<id> ("Release notes"), stale, as its word alone: "stale · its verdict is on a commit that has moved since, 1h" has no sentence before stale; the table's is "checked, and changed since"
+
+x AC1 #3495.ce97e581 wrong program: a planted print that shows the word alone fails, naming the row and its state
+    AssertionError: the shipped print passes the judge its planted print must fail:
+    the same six findings. The base is the program that prints the word alone, so the test stops on it before it
+    reaches the plant.
+
+x AC2 #3495.7db893a8: in a replica on the same record, the list's row reads the same sentence and word for each of the
+  six as deep prints
+    AssertionError: each of the six rows in the app's list:
+    the list's row reads row session:<id> ("Cart totals"), PASS, as its word alone: "PASS" has no sentence before PASS; the table's is "done, and the checks agree"
+    the list's row reads row session:<id> ("Tax"), sent back, as its word alone: "sent back" has no sentence before sent back; the table's is "not done yet: a check didn't get what it expected, and the agent is fixing it"
+    the list's row reads row session:<id> ("Publish check"), BLOCKED, as its word alone: "BLOCKED · waits for you: a run of publish-check.sh" has no sentence before BLOCKED; the table's is "couldn't be checked: something a check needs is missing"
+    the list's row reads row session:<id> ("Search index"), INVALID, as its word alone: "INVALID · waits for you: a run of index-check.sh that reads this change" has no sentence before INVALID; the table's is "can't be counted: the proof offered doesn't hold"
+    the list's row reads row session:<id> ("Login page"), INCONCLUSIVE, as its word alone: "INCONCLUSIVE · waits for you: a run of login-check.sh that finishes" has no sentence before INCONCLUSIVE; the table's is "couldn't tell: a check didn't finish, or an answer is missing"
+    the list's row reads row session:<id> ("Release notes"), stale, as its word alone: "stale" has no sentence before stale; the table's is "checked, and changed since"
+
+x AC2 #3495.7db893a8: with the project's page open, each of the six reads the same sentence and word beside it as deep
+  prints, and the page's own region shows none of the six words without its sentence
+    AssertionError: the project's page project/shop:
+    the project's page, in the row beside it, reads row session:<id> ("Cart totals"), PASS, as its word alone: "PASS" has no sentence before PASS; the table's is "done, and the checks agree"
+    and the same finding for the other five rows beside the page, as in the test above. No finding names the page's
+    own region: at the base it holds none of the six words.
+
+x AC2 #3495.7db893a8 wrong program: a planted view that writes a sentence of its own fails, naming the view and the state
+    AssertionError: the shipped list passes the judge its planted view must fail:
+    the six findings of the list's row, as above. The planted build was not started.
+
+v AC3 #3495.0c4822f4: deep prints a row in each of the seven such states it gives a row of its own, with its word and
+  no sentence before it
+    Passes, as it should: the criterion keeps what the base does. The base prints each of the seven with its word
+    first after its title and its agent (the print is in the last section).
+
+v AC3 #3495.0c4822f4: in the list, a row in each of the nine states reads its word and no sentence before it
+    Passes, as it should: the base's rows read the word first after the title, the folded quiet row and the fed
+    running job's row among them.
+
+x AC3 #3495.0c4822f4 wrong program: a planted sentence for working fails, naming the state
+    Error: BLOCKED: DEEP_HUB_PLANT=working-has-sentence changed nothing: deep printed the working row with no sentence before its word: exit 0, stdout "docs\n  API guide  <agent>  needs you · an ask open, 30m\n ... \n  Search box  <agent>  working · at work, 2m\n ... 14 sessions\n1 ask needs you\n", stderr "" (README, Pinned 6), so the planted program isn't there to fail
+    BLOCKED, as it should be: the base passes the judge, and no such plant exists there.
+
+x AC4 #3495.a6932d9f: at the list's narrowest width the sent back row shows its word and its time whole, its sentence
+  is cut from its end, and its accessible name holds the whole sentence
+    AssertionError: the sent back row at the list's narrowest width:
+    row session:<id> ("Tax") draws no start of its sentence "not done yet: a check didn't get what it expected, and the agent is fixing it" cut from its end: beside its word and its time it draws ["Tax"]
+    row session:<id> ("Tax") has the accessible name "✗ Tax · sent back", which doesn't hold its whole sentence "not done yet: a check didn't get what it expected, and the agent is fixing it"
+    No finding on the word or the time: the base draws both whole at that width, as the fixture means it to.
+
+x AC4 #3495.a6932d9f wrong program: a planted row that cuts the word fails, naming the row
+    AssertionError: the shipped row passes the judge its planted row must fail:
+    the same two findings. The planted build was not started.
+
+v AC6 #3495.66e86bd1: on the same record deep status reads each state's word as on the merge base, and deep status
+  --json holds the same word and entry for each row
+    Passes, as it should: this is the merge base. Each of the fourteen sessions and the one open ask is in --json
+    once with its word and entry, deep status prints each word first after the title and the agent, and it holds
+    none of the six sentences.
+
+v AC6 #3495.66e86bd1: on the same record a session's page reads each of the six states' word as on the merge base
+    Passes, as it should: each page holds its title, " · ", then its word, and none of the six sentences.
+
+x AC6 #3495.66e86bd1 wrong program: a planted row whose word holds the sentence fails, naming the row
+    Error: BLOCKED: DEEP_HUB_PLANT=word-holds-sentence changed nothing: deep status --json held each row's word and entry as shipped (README, Pinned 6), so the planted program isn't there to fail
+    BLOCKED, as it should be: the base passes the judge, and no such plant exists there.
+
+x AC7 #3495.f4a87a07: the check run writes the six rows in the list, on the page and in what deep prints, before and
+  after, and reads INCONCLUSIVE unless a recorded taste call on exactly these rows says they read right
+    AssertionError: INCONCLUSIVE: AC7: no taste call is recorded for these rows (TASTE.json holds none); this is not a pass
+    It wrote shown.txt, SHA-256 5877ae3c90ca6692172dc19874ce626675536ddec31ae33dc7c7e26b75d2e804. At the base each
+    row's before and after are the same line, since nothing reads a sentence, and the page's own region has no line
+    for any of the six.
+
+== What the base shows of the fixture (the run's output and the probe)
+
+deep, with no arguments:
+  docs
+    API guide  <agent>  needs you · an ask open, 30m
+    Sign-up form  <agent>  stuck · blocked on something only you or a service can clear, 1m
+    Image upload  <agent>  flagged · its turn ended failed, with no claim, 1m
+  shop
+    Publish check  <agent>  BLOCKED · waits for you: a run of publish-check.sh, 2h
+    Search index  <agent>  INVALID · waits for you: a run of index-check.sh that reads this change, 2h
+    Login page  <agent>  INCONCLUSIVE · waits for you: a run of login-check.sh that finishes, 1h
+    Release notes  <agent>  stale · its verdict is on a commit that has moved since, 1h
+  Working:
+  docs
+    Checkout page  <agent>  says done · it says done, and its checks have given no verdict yet, 50m
+    Search box  <agent>  working · at work, 2m
+    Price list  <agent>  queued · its task is queued, and its agent hasn't started it, 10m
+  shop
+    Tax  <agent>  sent back · its checks sent its claim back, round 1 of 3, 3h
+  Finished:
+  docs
+    Footer links  <agent>  finished · its turn stopped, 40m
+  shop
+    Cart totals  <agent>  PASS · its claim passed its checks, 4h
+  1 quiet, by repo: docs 1
+  Needs you
+    Which accent colour for the headings?  needs you  docs, 30m
+  14 sessions
+  1 ask needs you
+
+The list's rows, each by its accessible name and its value:
+  ! API guide · needs you (needs_you)                      ■ Publish check · BLOCKED · waits for you: a run of publish-check.sh (blocked)
+  ■ Sign-up form · stuck (blocked)                         ⊘ Search index · INVALID · waits for you: a run of index-check.sh that reads this change (invalid)
+  ✗ Image upload · flagged (fail)                          ? Login page · INCONCLUSIVE · waits for you: a run of login-check.sh that finishes (inconclusive)
+  ↻ Checkout page · says done (running)                    ◇ Release notes · stale (stale)
+  ↻ Search box · working · Running npm · 2 min (running)   ✗ Tax · sent back (fail)
+  ○ Price list · queued (idle)                             ✓ Cart totals · PASS (pass)
+  ○ Footer links · finished (idle)
+  ○ 1 quiet session · quiet (idle), the row quiet:docs
+  ↻ encode · running 12 s (running), the fed job's row
+
+The project's page, project/shop: the nodes home-title "shop", home-needs-you "1 ask needs you" and the box. The window
+draws no node and no string outside the list and the page.
+
+A session's page, session/<id>, for Cart totals; the other five alike:
+  session-title "Session Cart totals"; session-why "PASS: its claim passed its checks";
+  line-status "✓ Cart totals · PASS" (pass); return-card "✓ Cart totals · PASS" (pass)
+
+The list at its narrowest width: a window 848 by 982 points holds the node list at 207 points (list_min is 208), and
+each row is 191 wide. In points from the window's left edge:
+  Tax, sent back        title slot 40 to 91, drawing "Tax" 21 wide; word slot 91 to 159, "sent back" whole;
+                        time slot 159 to 191, "3 h" whole. So 30 points lie between the title's text and the word slot.
+  Cart totals, PASS     title slot 40 to 118, "Cart totals" whole; word slot 118 to 159; time slot 159 to 191, "4 h" whole.
+  Publish check, BLOCKED; Search index, INVALID; Login page, INCONCLUSIVE; Release notes, stale
+                        the time slot is 0 wide and draws nothing; "Publish ch…" and "Login…" are cut. These four rows
+                        are not judged at that width.
+
+== Not run at the base
+
+The two planted replica readers (the env-plants build with view-own-sentence, and with row-cuts-word at the narrow
+width). Each starts only once the shipped window passes its judge, which it can't at the base, and the probe that
+would have started them there got no test grant within 60 minutes.

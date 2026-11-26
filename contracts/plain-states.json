@@ -1,0 +1,19 @@
+{
+  "states": {
+    "queued": null,
+    "working": null,
+    "says done": null,
+    "PASS": "done, and the checks agree",
+    "sent back": "not done yet: a check didn't get what it expected, and the agent is fixing it",
+    "BLOCKED": "couldn't be checked: something a check needs is missing",
+    "INVALID": "can't be counted: the proof offered doesn't hold",
+    "INCONCLUSIVE": "couldn't tell: a check didn't finish, or an answer is missing",
+    "needs you": null,
+    "stale": "checked, and changed since",
+    "quiet": null,
+    "stuck": null,
+    "flagged": null,
+    "finished": null,
+    "running": null
+  }
+}
