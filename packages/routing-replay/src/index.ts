@@ -26,7 +26,7 @@ export const SNAPSHOT = '4901b0250363cba72ec8ddc553f547904af03a85d0fc0c121781dc9
 const DAY = 86_400_000;
 /** Every ask waits 14 days (#1980). */
 const WAIT = 14 * DAY;
-/** The ask.sources@1 row the router raises under. */
+/** The ask.sources@2 row the router raises under. */
 const SOURCE = 'replay.routing';
 /** Who a routed ask falls back to past its deadline: the jobset's queue, never a person. */
 const FALLBACK = 'queue:nixpkgs-unstable';
@@ -147,7 +147,7 @@ export async function replay(options: ReplayOptions): Promise<Replay> {
       // Each cause is a thread of its own, so one owner's asks never fold into another's.
       const thread = `routing${key.slice(0, 20)}`;
       const handle = await asks.raise(as(thread), SOURCE, {
-        kind: 'choice',
+        kind: 'choice', may_answer: 'verified_channel',
         question: `Evaluation ${evaluation.id}: ${named} newly fail with merge ${merge.commit.slice(0, 12)}. Fix them, revert the merge, or leave them failing?`,
         options: OPTIONS.map((o) => ({ ...o })),
         recommended: 'fix',

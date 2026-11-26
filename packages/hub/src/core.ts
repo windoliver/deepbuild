@@ -536,7 +536,7 @@ export class Core {
       }),
       stopping: () => this.stopping, session: (id) => this.state.sessions.get(id),
       pending: (worktree) => this.gate.pendingIn(worktree), idle: (session) => this.state.live.get(session)?.state !== 'working',
-      plantedAsk: async (session, question) => { await this.control.raiseTask(session, this.state.sessions.get(session)?.agent ?? 'claude-code', { kind: 'unblock', question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', steps: [question], where: 'your terminal', why: 'The pool is full', unblocks: [`session:${letters(session)}`], proves: 'stack.slot', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(new TextEncoder().encode(question)), pinned_to: { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(question)) } }); },
+      plantedAsk: async (session, question) => { await this.control.raiseTask(session, this.state.sessions.get(session)?.agent ?? 'claude-code', { kind: 'unblock', may_answer: 'verified_channel', question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', steps: [question], where: 'your terminal', why: 'The pool is full', unblocks: [`session:${letters(session)}`], proves: 'stack.slot', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(new TextEncoder().encode(question)), pinned_to: { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(question)) } }); },
     });
     this.teardowns = new Teardowns({
       raw: this.raw, held: options.held, append: (session, agent, kind, data) => this.appendSession(session, agent, kind, data),
@@ -1777,7 +1777,7 @@ export class Core {
     if (send) {
       const question = `A send DeepBuild denied ran anyway: ${denial.label.slice(0, 1000)} (call ${call})${by}. It may already have left. Check whether it went out?`;
       const options = [{ id: 'checked', label: 'I checked it', decision: 'none' }, { id: 'later', label: 'Not now', decision: 'none' }];
-      const raised = { kind: 'exception', question, options, recommended: 'checked', deadline: this.now() + 2 * 86_400_000, fallback: 'you', default: 'later', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'guard.overridden', session: meta.session, call } as JsonValue)), pinned_to: await this.mcp.pinOf(meta.cwd, question) };
+      const raised = { kind: 'exception', may_answer: 'trusted_path', question, options, recommended: 'checked', deadline: this.now() + 2 * 86_400_000, fallback: 'you', default: 'later', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'guard.overridden', session: meta.session, call } as JsonValue)), pinned_to: await this.mcp.pinOf(meta.cwd, question) };
       await this.asks.raise(this.connection('core', { session: meta.session, agent: meta.agent }), 'guard.overridden', raised);
     }
   }
