@@ -9,6 +9,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { runKit } from '@deepbuild/conformance';
 import { pieces, playtestKit, reachKit, reachPieces } from '../playtest/kit.ts';
 import { outcomeOf } from '../playtest/judge.ts';
+import { windowsOf } from '../playtest/soak.ts';
 import type { Play, PlayAnswer } from '../playtest/types.ts';
 
 const REPO = join(import.meta.dirname, '..', '..', '..');
@@ -19,27 +20,39 @@ afterAll(() => {
   rmSync(out, { recursive: true, force: true });
 });
 
-/** One deep-drive process per plant, its plays one at a time. */
+/** deep-drive renders the replica on macOS only (crates/deep-replica/src/deep_drive.rs): elsewhere a play is unrun. */
+function needsMac(): void {
+  if (process.platform !== 'darwin') expect.fail(`BLOCKED: deep-drive renders the replica on macOS only; this is ${process.platform}; this is not a pass`);
+}
+
+/** One deep-drive process per plant, its plays one at a time; a play still waiting when the process exits fails. */
 function drive(plant: string | null): (line: Record<string, unknown>) => Promise<Record<string, unknown>> {
   const env = { ...process.env, ...(plant ? { DEEP_DRIVE_PLANT: plant } : {}) };
   const child = spawn(join(REPO, 'target', 'debug', 'deep-drive'), ['--out', join(out, plant ?? 'clean')], { env, stdio: ['pipe', 'pipe', 'inherit'] });
   started.push(child);
   let buffer = '';
-  const waiting: ((v: Record<string, unknown>) => void)[] = [];
+  let exited: Error | null = null;
+  const waiting: { done(v: Record<string, unknown>): void; fail(e: Error): void }[] = [];
   child.stdout.setEncoding('utf8').on('data', (d: string) => {
     buffer += d;
     for (let at = buffer.indexOf('\n'); at >= 0; at = buffer.indexOf('\n')) {
       const line = buffer.slice(0, at);
       buffer = buffer.slice(at + 1);
-      waiting.shift()?.(JSON.parse(line) as Record<string, unknown>);
+      waiting.shift()?.done(JSON.parse(line) as Record<string, unknown>);
     }
   });
-  let chain: Promise<unknown> = new Promise((done) => waiting.push(done));
+  child.on('exit', (code, signal) => {
+    exited = Error(`deep-drive${plant ? ` (${plant})` : ''} exited ${signal ?? code} before replying`);
+    for (const w of waiting.splice(0)) w.fail(exited);
+  });
+  const reply = (send?: string) => new Promise<Record<string, unknown>>((done, fail) => {
+    if (exited) return fail(exited);
+    waiting.push({ done, fail });
+    if (send) child.stdin.write(send);
+  });
+  let chain: Promise<unknown> = reply();
   return (line) => {
-    const next = chain.then(() => new Promise<Record<string, unknown>>((done) => {
-      waiting.push(done);
-      child.stdin.write(`${JSON.stringify(line)}\n`);
-    }));
+    const next = chain.then(() => reply(`${JSON.stringify(line)}\n`));
     chain = next;
     return next;
   };
@@ -56,7 +69,24 @@ describe('the playtest kit', () => {
     expect(outcomeOf(play({ trap: { step: 2 }, bot_trap: { step: 5 } }), [], undefined).kind).toBe('invalid');
   });
 
+  // #1047: a run from a save lists what it recorded from the save's step, which its first checkpoint names.
+  it('judges a run from a save by the piece\'s own steps', () => {
+    const play = (o: Partial<PlayAnswer>): PlayAnswer => ({
+      steps: 6, step: 1, track: '', entries: [], values: { pos: [[0, 0], [1, 0], [1, 0], [1, 0], [1, 0], [2, 0]] }, trap: null, bot_trap: null, step_times: [], fuel: {}, ceilings: {},
+      checkpoints: [{ step: 1800, hash: '' }], final: '', frames: [], ...o,
+    });
+    const stuck = { measure: 'pos', by: 1, within: 3 };
+    expect(outcomeOf(play({}), [], stuck)).toMatchObject({ kind: 'stuck', from_step: 1801, step: 1804 });
+    expect(outcomeOf(play({ trap: { step: 1802 } }), [], stuck)).toMatchObject({ kind: 'trap', step: 1802 });
+    expect(outcomeOf(play({ fuel: { maze: [1, 9, 9] }, ceilings: { maze: 5 } }), [], undefined)).toMatchObject({ kind: 'over_budget', step: 1801 });
+    expect(outcomeOf(play({}), [{ name: 'far', at: (values, k) => (values['pos']?.[k] as number[])[0] === 2 }], undefined)).toEqual({ kind: 'reached', step: 1805 });
+    expect(outcomeOf(play({}), [], undefined)).toEqual({ kind: 'ended', step: 1806 });
+    const soak = play({ step_times: [1e6, 2e6, 3e6, 9e6, 5e6, 6e6], memory: [{ step: 1802, bytes: 65_536 }, { step: 1805, bytes: 131_072 }] });
+    expect(windowsOf(soak, 3)).toEqual([{ window: 1, from: 1800, to: 1802, memory: 65_536, p99_ms: 3 }, { window: 2, from: 1803, to: 1805, memory: 131_072, p99_ms: 9 }]);
+  });
+
   it('passes the clean maze, fails each twin with its code, and catches each planted runner', async () => {
+    needsMac();
     const built = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive', '--features', 'env-plants'], { cwd: REPO, stdio: 'inherit' });
     expect(built.status, 'deep-drive builds').toBe(0);
     const mazes = pieces();
@@ -86,6 +116,7 @@ describe('the playtest kit', () => {
 
   // #556: grid.reach's kit, each planted runner caught by its fixture: opens-locks by the key inside its own vault.
   it('passes grid.reach\'s clean fixtures and catches each planted runner', async () => {
+    needsMac();
     const built = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive', '--features', 'env-plants'], { cwd: REPO, stdio: 'inherit' });
     expect(built.status, 'deep-drive builds').toBe(0);
     const kitPieces = reachPieces();

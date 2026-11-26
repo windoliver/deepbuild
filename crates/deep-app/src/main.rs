@@ -159,7 +159,8 @@ fn main() {
     }
     if mode == Mode::HubCheck {
         let mut reader = deep_app::record::RecordReader::unopened_folded(&deep_app::hub::address());
-        match reader.check() {
+        let (checked, greeted) = reader.check();
+        match checked {
             Err(deep_app::hub::HubError::Older(screen)) => println!("{screen}"),
             Err(
                 error @ (deep_app::hub::HubError::Io(_) | deep_app::hub::HubError::Protocol(_)),
@@ -167,6 +168,18 @@ fn main() {
                 eprintln!(
                     "deep-app: the hub at {} didn't answer: {error:?}",
                     deep_app::hub::address().display()
+                );
+                std::process::exit(1);
+            }
+            // A hello the hub refused (#3481): no call was made, so the check fails, naming the refusal.
+            Err(deep_app::hub::HubError::Refused(refusal)) if !greeted => {
+                let field = |key: &str| refusal[key].as_str().unwrap_or("unknown").to_owned();
+                eprintln!(
+                    "deep-app: the hub at {} refused the app's hello: {} at {}: {}",
+                    deep_app::hub::address().display(),
+                    field("code"),
+                    field("path"),
+                    field("remediation")
                 );
                 std::process::exit(1);
             }

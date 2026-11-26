@@ -14,6 +14,7 @@ import type { Connection, Event, RecordStore } from '../../../packages/record/sr
 import { AskRefused, draftAskSettings, openAsks } from '../../../packages/asks/src/index.ts';
 import type { Asks, Card, Delivery, InboxRow, PlanStep } from '../../../packages/asks/src/index.ts';
 import { makeClock, type Clock, type Plan } from './data.ts';
+import { withDeclared } from '../declared.ts';
 
 export * from './data.ts';
 export { toJson } from '../../../packages/record/src/index.ts';
@@ -57,7 +58,7 @@ export async function openWorld(plant: Planting = {}, dir = mkdtempSync(join(tmp
   const w = { clock, dir, evidence, deliveries } as World;
   const record = plant.record ? plant.record(real, w) : real;
   w.record = record;
-  const asks = await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(d); }, home });
+  const asks = withDeclared(await openAsks({ record, now: clock.now, deliver: (d) => { deliveries.push(d); }, home }));
   w.asks = plant.asks ? plant.asks(asks, w) : asks;
   Object.assign(w, {
     events: async (kind?: string): Promise<Event[]> => {

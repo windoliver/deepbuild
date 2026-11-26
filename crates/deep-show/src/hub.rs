@@ -1988,14 +1988,24 @@ impl<'a> Hub<'a> {
                     }
                 };
                 // #1801: an item the revision leaves out that rows still name: its refusal lists
-                // every one of them.
-                let removed: Vec<&str> = current_doc
-                    .as_ref()
-                    .and_then(|c| c.get("items")?.as_object())
-                    .into_iter()
-                    .flat_map(|items| items.keys())
-                    .filter(|id| doc["items"].get(id.as_str()).is_none())
-                    .map(String::as_str)
+                // every one of them. #3379: so does a control the revision leaves out.
+                let gone = |map: &str| -> Vec<String> {
+                    current_doc
+                        .as_ref()
+                        .and_then(|c| c.get(map)?.as_object())
+                        .into_iter()
+                        .flat_map(|entries| entries.keys())
+                        .filter(|id| doc[map].get(id.as_str()).is_none())
+                        .cloned()
+                        .collect()
+                };
+                let removed: Vec<deep_canvas::refs::Name> = (gone("items").into_iter())
+                    .map(deep_canvas::refs::Name::Item)
+                    .chain(
+                        gone("controls")
+                            .into_iter()
+                            .map(deep_canvas::refs::Name::Control),
+                    )
                     .collect();
                 let planted = self.scenario.planted;
                 crate::shared::name_referrers(

@@ -75,8 +75,12 @@ mod replica {
                 eprintln!("usage: deep-replica --panel-kit <dir>");
                 return 2;
             };
-            let verdict = deep_replica::kit::panel(std::path::Path::new(&dir));
-            println!("{}", verdict.to_json());
+            let dir = std::path::Path::new(&dir);
+            let verdict = deep_replica::kit::panel(dir);
+            // The kit revision the panel was held to (#3233), which the hub keeps beside the verdict.
+            let mut line = verdict.to_json();
+            line["revision"] = serde_json::json!(deep_app::panel_rules::held_to(dir));
+            println!("{line}");
             return i32::from(!verdict.pass);
         }
         // Issue #1459: `--view-kit needs-you@1 <dir>`, the kit of the view a package replaces, for `deep install`, and

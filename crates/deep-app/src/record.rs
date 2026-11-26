@@ -446,6 +446,7 @@ impl View {
     }
 }
 
+#[derive(Default)]
 pub struct RecordReader {
     socket: PathBuf,
     /// The token file it presents; `None` for the hub's own, picked again at each connect (#2958).
@@ -460,12 +461,18 @@ pub struct RecordReader {
     owed: bool,
     /// Whether it checks the hub's hello covers the app before any call (#41), as the window's reader does.
     checks: bool,
+    /// Whether the hub has taken the app's hello on any connect so far (#3481).
+    greeted: bool,
 }
 
 impl RecordReader {
     /// A reader that hasn't tried the hub yet: its first [`poll`](RecordReader::poll) connects.
     pub fn unopened(socket: &Path, token_file: &Path) -> RecordReader {
-        RecordReader::new(socket, Some(token_file.to_path_buf()), false)
+        RecordReader {
+            socket: socket.to_path_buf(),
+            token_file: Some(token_file.to_path_buf()),
+            ..RecordReader::default()
+        }
     }
 
     /// Issue #1172: as [`RecordReader::unopened`], for the window: its sidebar and session pages read the folded
@@ -473,19 +480,11 @@ impl RecordReader {
     /// calls nothing on a hub whose hello doesn't cover what the app calls. Issue #2958: it presents the token of the
     /// hub at `socket`, picked at each connect, so a hub started after the app is answered too.
     pub fn unopened_folded(socket: &Path) -> RecordReader {
-        RecordReader::new(socket, None, true)
-    }
-
-    fn new(socket: &Path, token_file: Option<PathBuf>, window: bool) -> RecordReader {
         RecordReader {
             socket: socket.to_path_buf(),
-            token_file,
-            client: None,
-            view: View::default(),
-            setting: None,
-            folds: window,
-            owed: false,
-            checks: window,
+            folds: true,
+            checks: true,
+            ..RecordReader::default()
         }
     }
 
@@ -498,7 +497,11 @@ impl RecordReader {
 
     /// As [`RecordReader::open`], folded as [`RecordReader::unopened_folded`] is.
     pub fn open_folded(socket: &Path, token_file: &Path) -> Result<RecordReader, HubError> {
-        let mut reader = RecordReader::new(socket, Some(token_file.to_path_buf()), true);
+        let mut reader = RecordReader {
+            folds: true,
+            checks: true,
+            ..RecordReader::unopened(socket, token_file)
+        };
         reader.connect()?;
         Ok(reader)
     }
@@ -520,10 +523,10 @@ impl RecordReader {
         }
     }
 
-    /// `deep-app --hub-check` (#41): connects as the window does, once, making the calls it makes on connect.
-    pub fn check(&mut self) -> Result<(), HubError> {
-        self.connect()?;
-        self.fold()
+    /// `deep-app --hub-check` (#41): connects as the window does, once, making the calls it makes on connect. It also
+    /// says whether the hub took the app's hello, so a refused hello isn't read as a refused call (#3481).
+    pub fn check(&mut self) -> (Result<(), HubError>, bool) {
+        (self.connect().and_then(|()| self.fold()), self.greeted)
     }
 
     /// Folds the record before the newest read into a table of its own, which the views then read in place of the
@@ -610,6 +613,7 @@ impl RecordReader {
             covered?;
         }
         client.hello_app(token.trim())?;
+        self.greeted = true;
         let start = client.hello["start"]
             .as_str()
             .unwrap_or_default()
