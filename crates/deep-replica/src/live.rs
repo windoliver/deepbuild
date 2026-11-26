@@ -20,6 +20,62 @@ fn main() {
     }
 }
 
+/// Whether deep-live may capture now: the window is key, as both GPUI and AppKit say, and AppKit's focused element is the
+/// one the app focused. AppKit reports no focused element for a window that isn't key, and GPUI learns that the window
+/// left key a task later than AppKit does, so a capture taken on either's word alone could record no focus where the
+/// window has one (#2690's retake under load, #3488's review). `Err` says what it waits for.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn ready(active: bool, key: bool, appkit: Option<&str>, app: Option<&str>) -> Result<(), String> {
+    if !(active && key) {
+        return Err(format!(
+            "the window to be key (GPUI says active {active}, AppKit says key {key})"
+        ));
+    }
+    if appkit != app {
+        return Err(format!(
+            "AppKit's focused element ({appkit:?}) to be the one the app focused ({app:?})"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ready;
+
+    #[test]
+    fn captures_only_a_key_window_whose_focus_appkit_reports_as_the_apps() {
+        assert_eq!(
+            ready(true, true, Some("card-option:yes"), Some("card-option:yes")),
+            Ok(())
+        );
+        assert_eq!(
+            ready(true, true, None, None),
+            Ok(()),
+            "a window that focused nothing is captured as it is"
+        );
+        for (active, key) in [(false, true), (true, false), (false, false)] {
+            assert!(
+                ready(
+                    active,
+                    key,
+                    Some("card-option:yes"),
+                    Some("card-option:yes")
+                )
+                .is_err(),
+                "GPUI says active {active}, AppKit says key {key}"
+            );
+        }
+        let none =
+            ready(true, true, None, Some("card-option:yes")).expect_err("AppKit reports no focus");
+        assert!(
+            none.contains("card-option:yes"),
+            "the wait names the app's focus: {none}"
+        );
+        assert!(ready(true, true, Some("session:01A"), Some("card-option:yes")).is_err());
+    }
+}
+
 #[cfg(target_os = "macos")]
 mod live {
     use std::path::PathBuf;
@@ -37,11 +93,13 @@ mod live {
     use serde_json::Value;
 
     const FRAMES: usize = 8;
-    /// Frames to wait past `FRAMES` for the window to become key, asking to be activated again every
-    /// `REACTIVATE` of them: AppKit reports no focused element for a window that isn't key, so a capture
-    /// taken before then would record no focus, not the window's (#2690's retake under load).
-    const KEY_FRAMES: usize = 1200;
+    /// Past `FRAMES`, the window is asked to be activated again every `REACTIVATE` frames until `ready` holds. A watch
+    /// on the clock, not on frames, ends the run after `WAIT`: a window that is covered or on a locked screen gets no
+    /// frames at all.
     const REACTIVATE: usize = 60;
+    const WAIT: std::time::Duration = std::time::Duration::from_secs(120);
+    /// What the last frame past `FRAMES` waited for, for the watch to say.
+    static WAITING: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
     pub fn run() -> i32 {
         let (view, out, ..) = match deep_replica::view_args("deep-live", "file", false) {
@@ -57,6 +115,20 @@ mod live {
         }
         deep_app::views::set_state(deep_replica::load_state());
         let layout = Layout::shipped(&view);
+        std::thread::spawn(|| {
+            std::thread::sleep(WAIT);
+            let waiting = WAITING.lock().map(|w| w.clone()).unwrap_or_default();
+            let waiting = if waiting.is_empty() {
+                "its first frames".to_owned()
+            } else {
+                waiting
+            };
+            eprintln!(
+                "deep-live: no capture in {} s, still waiting for {waiting}; bring the window to the front on an unlocked screen and run again",
+                WAIT.as_secs()
+            );
+            std::process::exit(1);
+        });
         gpui_kit::application().run(move |cx| {
             gpui_kit::init(cx);
             deep_app::init(cx);
@@ -89,22 +161,37 @@ mod live {
             }
             activate_accessibility();
         }
-        let waiting_for_key = frame >= FRAMES && !window.is_window_active();
-        if waiting_for_key && frame >= FRAMES + KEY_FRAMES {
-            eprintln!(
-                "deep-live: the window never became key in {KEY_FRAMES} frames, so AppKit reports no focus for it; bring it to the front and run again"
-            );
-            std::process::exit(1);
-        }
-        if frame < FRAMES || waiting_for_key {
-            if waiting_for_key && (frame - FRAMES) % REACTIVATE == 0 {
-                cx.activate(true);
+        let waiting = if frame < FRAMES {
+            None
+        } else {
+            let (ns_window, view) = content_view().unwrap_or_else(|error| {
+                eprintln!("deep-live: {error}");
+                std::process::exit(1)
+            });
+            let (appkit, app) = (focused_identifier(&view), deep_app::views::focus_id(window));
+            super::ready(
+                window.is_window_active(),
+                ns_window.isKeyWindow(),
+                appkit.as_deref(),
+                app.as_deref(),
+            )
+            .err()
+        };
+        if frame < FRAMES || waiting.is_some() {
+            if let Some(waiting) = waiting {
+                if let Ok(mut last) = WAITING.lock() {
+                    *last = waiting;
+                }
+                if (frame - FRAMES) % REACTIVATE == 0 {
+                    cx.activate(true);
+                }
             }
             deep_app::canvas::clear_items();
             window.refresh();
             window.on_next_frame(move |window, cx| settle(window, cx, out, frame + 1));
             return;
         }
+        eprintln!("deep-live: captured at settle frame {frame}");
         match capture(window) {
             Ok(snapshot) => {
                 if let Some(parent) = out.parent() {

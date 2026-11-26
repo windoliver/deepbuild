@@ -1,0 +1,16 @@
+...
+...
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 21m 02s
+     Running unittests src/live.rs (target/debug/deps/deep_live-6eadcde16ce3eaad)
+running 1 test
+test tests::captures_only_a_key_window_whose_focus_appkit_reports_as_the_apps ... FAILED
+failures:
+---- tests::captures_only_a_key_window_whose_focus_appkit_reports_as_the_apps stdout ----
+thread 'tests::captures_only_a_key_window_whose_focus_appkit_reports_as_the_apps' (1587758) panicked at crates/deep-replica/src/live.rs:42:13:
+GPUI says active false, AppKit says key true
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+failures:
+    tests::captures_only_a_key_window_whose_focus_appkit_reports_as_the_apps
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p deep-replica --bin deep-live`
+EXIT=101
