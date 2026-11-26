@@ -1,0 +1,61 @@
+The blind suite's six files at the base 390c3f39067e7520ca7d2405d86578d17fe4f668, before the spike existed: a detached
+checkout holding tests/acceptance/3444/ and nothing else of this change. Taken 2026-11-25, 08:32 to 08:43 local, on
+the Mac17,10, each through the machine's throttle. The suite's own BASE-FAILURE.txt was written the evening before,
+when the throttle gave no test grant in 60 minutes, and says these runs were still to make. Stack traces left out.
+
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac1-pipeline-table.test.mjs
+✖ AC1 #3444.2cc7fe69 the report's pipeline table lists every pipeline the every-pass scene makes on a cold start, and its times sum to within 10% of the time the same run spends inside pipeline creation, read around the calls; a pipeline left out is named
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: BLOCKED: AC1 #3444.2cc7fe69: no spike record at docs/spikes/3444/record.json: the spike hasn't been recorded
+exit 1 at 08:42:23
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac2-split-module.test.mjs
+✖ AC2 #3444.441f7ad4 the split-module branch draws the every-pass scene to the same pixel hashes as main, and the report gives both columns; a branch whose frame differs is a reading, never the result
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: BLOCKED: AC2 #3444.441f7ad4: no spike record at docs/spikes/3444/record.json: the spike hasn't been recorded
+exit 1 at 08:43:27
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac3-indirect.test.mjs
+✖ AC3 #3444.f25f18de the indirect readings are from five runs a side in alternated rounds on one Mac, with the flag's state read back from the instance in each run; a side whose flag was not what its column says fails, naming the run
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: BLOCKED: AC3 #3444.f25f18de: no spike record at docs/spikes/3444/record.json: the spike hasn't been recorded
+exit 1 at 08:43:27
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac4-query-sets.test.mjs
+✖ AC4 #3444.05638bf4 the count of live timestamp query sets is read from the device's own counters in each of the three states, and the one-more-than-32 run reports what the device did: created, refused with the device kept, or lost; a run on the app's own device fails the lane
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: BLOCKED: AC4 #3444.05638bf4: no spike record at docs/spikes/3444/record.json: the spike hasn't been recorded
+exit 1 at 08:43:27
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/ac5-thresholds.test.mjs
+✖ AC5 #3444.f6f69d8c the report states, with its readings, whether translation is more than a fifth of the time to the first settled frame, whether validation is more than 5% of the geometry pass on the forest, and whether any state holds more than 16 live sets, and a task is filed for each that does
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: BLOCKED: AC5 #3444.f6f69d8c: no spike record at docs/spikes/3444/record.json: the spike hasn't been recorded
+exit 1 at 08:43:27
+$ node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3444/validate.test.mjs
+✔ validator: a well-formed spike passes every check
+✔ validator: a report's tables and numbers are read as written
+✔ validator: with no spike, the record is BLOCKED, never a pass
+✔ wrong program, criterion 1: a table that leaves a pipeline out fails, naming it
+✔ validator: criterion 1's check fails a table its run doesn't give, and reads a run that isn't there as not passed
+✔ wrong program, criterion 2: a split-module column whose frame differs, taken as the result, fails
+✔ validator: a split-module column whose frame differs, headed as a reading, is INCONCLUSIVE, never a pass
+✔ validator: criterion 2's check fails a branch that isn't the kept patch, isn't split, or isn't in the report
+✔ wrong program, criterion 3: a side whose flag was not what its column says fails, naming the run
+✔ validator: criterion 3's check fails readings that aren't five runs a side, alternated, on one Mac, of indirect draws
+✔ wrong program, criterion 4: a one-more-than-32 run on the app's own device fails the lane
+✔ wrong program, criterion 4: a count that isn't the device's own fails, naming the state
+✔ validator: criterion 4's check reads a state that wasn't read as BLOCKED, and fails a run that doesn't show what the device did
+✔ wrong program, criterion 5: a report that says a threshold wasn't passed when its own readings pass it fails
+✔ wrong program, criterion 5: a report that files no task for a threshold its readings pass fails
+✔ validator: criterion 5's check recomputes each threshold from the kept runs
+ℹ tests 16
+ℹ pass 16
+ℹ fail 0
+exit 0 at 08:43:31

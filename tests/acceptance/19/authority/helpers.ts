@@ -21,6 +21,7 @@ import type { Connection } from '../../../../packages/record/src/index.ts';
 import { askSources, openAsks } from '../../../../packages/asks/src/index.ts';
 import type { AskKind } from '../../../../packages/asks/src/index.ts';
 import { withPlans } from '../../plans.ts';
+import { withDeclared } from '../../declared.ts';
 
 export const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
 export const CLI = join(REPO, 'packages/cli/dist/main.js');
@@ -681,7 +682,7 @@ export async function seedAuthorityAsk(home: string, s: Session, subject: string
   mkdirSync(rootOf(home), { recursive: true, mode: 0o700 });
   const now = Date.now();
   const record = await openRecord({ path: join(rootOf(home), 'ledger.db'), now: () => now });
-  const asks = withPlans(await openAsks({ record, now: () => now, deliver: () => undefined }));
+  const asks = withDeclared(withPlans(await openAsks({ record, now: () => now, deliver: () => undefined })));
   try {
     await record.append({ writer: 'hook', ...who, session: s.id, project: 'shop', agent: 'claude-code' }, { v: 1, id: ulid(now), kind: 'session.start', ts: now, data: { agent: 'claude-code', worktree: s.cwd, branch: 'main', thread: s.id } });
     const core: Connection = { writer: 'core', ...who, session: s.id, project: 'shop' };

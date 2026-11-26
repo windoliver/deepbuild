@@ -1,0 +1,12 @@
+{
+  "scripts/issue-time.mjs": [
+    {
+      "find": [
+        "const CONFLICT = /^\\s*(?:[*-]\\s*)?Merge conflicts\\s+Resolve the merge conflicts before this can merge\\./;"
+      ],
+      "wrong": [
+        "const CONFLICT = /merge conflicts/i;"
+      ]
+    }
+  ]
+}

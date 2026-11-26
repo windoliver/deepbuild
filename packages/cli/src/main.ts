@@ -196,7 +196,7 @@ const usage = [
   'deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes one at a time in the order they came',
   'deep work "<scope>" [--repo <checkout>] [--json]   one approval for a run over the issues your words name, or a standing run over a rule on labels, milestone or epic that new issues join; show prints each one\'s state word and what it waits for, pause stops new starts',
   'deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set: an earlier PR joins as its issue\'s attempt',
-  'deep workspace new <topic> [--folder <path>] | task <id> <title> --criterion <text> [--blocked-by <n>] | move <id> <folder | repo checkout> | revert <id> [<commit>] | diff <id> | drift <id> [--json]   a home for work outside a repo, its tasks in the record',
+  'deep workspace new <topic> [--folder <path>] | task <id> <title> --criterion <text> ... [--blocked-by <n> ...] | move <id> <folder | repo checkout> | revert <id> [<commit>] | diff <id> | drift <id> [--json]   a home for work outside a repo, its tasks in the record',
   'deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you',
   'deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins\' actions',
   'deep env up | down [--root <folder>] [--json]   this worktree\'s stack, through the hub',
@@ -256,6 +256,58 @@ const groups: [string, string[]][] = [
 const groupOf = (line: string): number => {
   const at = groups.findIndex(([, names]) => names.includes(commandsOf(line)[0]!));
   return at < 0 ? groups.length - 1 : at;
+};
+// A flag that takes a value, given twice where no form of its command shows it repeating, fits none of the command's
+// forms (#3461): one reading for every command, so none takes the first or the last value. Each flag of a form is read
+// from its usage line, up to the description: a flag followed by a value, then `...` where it repeats. A flag with no
+// value, such as --json, is read by its command as before. The forms read are those whose leading words fit the
+// arguments' (`deep start approve` or `deep start`), else all of the command's. Returned: each value flag and whether it
+// repeats, and the flags whose value may be left out (`--slice [<cursor>]`).
+const valueFlags = (args: readonly string[]): [Map<string, boolean>, Set<string>] => {
+  const repeats = new Map<string, boolean>();
+  const optional = new Set<string>();
+  const lines = usage.filter((one) => commandsOf(one).includes(args[0] ?? ''));
+  const formOf = (line: string) => line.split(/\s{2,}/)[0]!.split(' ').slice(2);
+  const fits = (line: string) => {
+    const words = formOf(line);
+    const open = words.findIndex((word) => /^[-[<"|]/.test(word));
+    const lead = open < 0 ? words : words.slice(0, open);
+    return lead.every((word, at) => args[at + 1] === word);
+  };
+  const fitting = lines.filter(fits);
+  for (const line of fitting.length ? fitting : lines) {
+    const words = formOf(line);
+    words.forEach((token, at) => {
+      const flag = token.replace(/^\[/, '');
+      if (!/^--[a-z][a-z-]*$/.test(flag) || words[at + 1] === undefined || /^(-|\||\.\.\.|\[-)/.test(words[at + 1]!)) return;
+      // The value runs to the word that closes its last <, as in <doc ID>.
+      let end = at + 1;
+      const value = (upTo: number) => words.slice(at + 1, upTo + 1).join(' ');
+      while (end + 1 < words.length && (value(end).match(/</g) ?? []).length > (value(end).match(/>/g) ?? []).length) end++;
+      repeats.set(flag, (repeats.get(flag) ?? false) || /^\.\.\.\]*$/.test(words[end + 1] ?? ''));
+      if (words[at + 1]!.startsWith('[')) optional.add(flag);
+    });
+  }
+  return [repeats, optional];
+};
+/**
+ * The first flag `args` gives twice that its command's usage shows once, if any. A flag's value is the next word, as
+ * each command reads it, even one that looks like a flag; an optional value only when it doesn't start with -. After
+ * --, the next word is a handle, a query or an option, never a flag; flags may follow it, as deep find reads them.
+ */
+const givenTwice = (args: readonly string[]): string | undefined => {
+  const [flags, optional] = valueFlags(args);
+  const seen = new Set<string>();
+  const own = args.slice(1);
+  for (let at = 0; at < own.length; at++) {
+    const flag = own[at]!;
+    if (flag === '--') at++;
+    if (!flags.has(flag)) continue;
+    if (seen.has(flag) && !flags.get(flag)) return flag;
+    seen.add(flag);
+    if (!optional.has(flag) || !(own[at + 1] ?? '-').startsWith('-')) at++;
+  }
+  return undefined;
 };
 // The one exit table every command keeps (#1812, exit.code@1), at the foot of `deep --help`.
 const EXITS = 'Exit codes, the same for every command but deep lease and deep mcp-exec, which end with their program\'s own:\n  0 done\n  1 failed or refused\n  2 not understood, nothing ran\n  3 not decided or not checked';
@@ -324,6 +376,9 @@ const hubCommands = {
 
 if (help) {
   printHelp();
+} else if (givenTwice(args) !== undefined) {
+  console.error(usageOf(args[0]!));
+  process.exitCode = 2;
 } else if (args.length === 0) {
   // `deep` alone is the list (#1463): the rows and the one count the app shows, and nothing after them.
   const { listCommand } = await import('@deepbuild/hub');

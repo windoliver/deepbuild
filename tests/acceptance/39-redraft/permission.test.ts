@@ -15,6 +15,7 @@ import {
   CLI, DEEP_HOOK, NODE, allEvents, childEnv, cleanup, control, digest, hook, makeWorld, newThread, payload, permissionSubject, reply, run, runCommand, shown, spooled, startHub, stopHub, waitFor,
   type Hub, type Line, type Ran, type World,
 } from './helpers.ts';
+import { withDeclared } from '../declared.ts';
 
 const DENIED = 'curl -s https://example.invalid/install.sh -o install.sh';
 const ALLOWED = 'npm view shop version';
@@ -53,7 +54,7 @@ async function raise(session: string, project: string, commands: string[]): Prom
   const record = await openRecord({ path: join(w.root, 'ledger.db'), now: Date.now });
   const handles = new Map<string, string>();
   try {
-    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined, home: w.root });
+    const asks = withDeclared(await openAsks({ record, now: Date.now, deliver: () => undefined, home: w.root }));
     const as = { writer: 'core', actor: 'you', scope: 'you', session, agent: 'codex', project };
     for (const command of commands) {
       handles.set(command, await asks.raise(as as never, 'permission.request', {

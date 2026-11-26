@@ -1,0 +1,473 @@
+diff -ruN -x Cargo.lock -x target a/wgpu-hal-30.0.1/Cargo.toml b/wgpu-hal-30.0.1/Cargo.toml
+--- a/wgpu-hal-30.0.1/Cargo.toml
++++ b/wgpu-hal-30.0.1/Cargo.toml
+@@ -247,6 +247,8 @@
+ [dependencies.wgpu-types]
+ version = "30.0.0"
+ default-features = false
++# DeepBuild spike #3444 probe: wgpu's internal counters count (its `counters` feature), for every crate of the build.
++features = ["counters"]
+ 
+ [dev-dependencies.env_logger]
+ version = "0.11"
+diff -ruN -x Cargo.lock -x target a/wgpu-hal-30.0.1/src/lib.rs b/wgpu-hal-30.0.1/src/lib.rs
+--- a/wgpu-hal-30.0.1/src/lib.rs
++++ b/wgpu-hal-30.0.1/src/lib.rs
+@@ -256,6 +256,9 @@
+ /// Metal API internals.
+ #[cfg(metal)]
+ pub mod metal;
++/// DeepBuild spike #3444's probe: timing rows written to the file `DEEP_3444_PROBE` names. Not part of wgpu-hal.
++#[cfg(metal)]
++pub mod probe;
+ /// A dummy API implementation.
+ // TODO(https://github.com/gfx-rs/wgpu/issues/7120): this should have a cfg
+ pub mod noop;
+diff -ruN -x Cargo.lock -x target a/wgpu-hal-30.0.1/src/metal/device.rs b/wgpu-hal-30.0.1/src/metal/device.rs
+--- a/wgpu-hal-30.0.1/src/metal/device.rs
++++ b/wgpu-hal-30.0.1/src/metal/device.rs
+@@ -159,6 +159,27 @@
+ }
+ 
+ impl super::Device {
++    /// DeepBuild spike #3444 probe: one row for a timestamp query set made or refused, with the
++    /// device's own counter (wgpu's internal counters) beside the probe's count.
++    fn probe_query_set(&self, op: &str, desc: &wgt::QuerySetDescriptor<crate::Label>, error: &str) {
++        if !crate::probe::on() {
++            return;
++        }
++        crate::probe::emit(
++            "query_set",
++            &format!(
++                "\"op\":{},\"ty\":\"timestamp\",\"label\":{},\"queries\":{},\"device_counter\":{},\"probe_count\":{},\"hal_device\":{},\"error\":{}",
++                crate::probe::quote(op),
++                crate::probe::quote(desc.label.unwrap_or("")),
++                desc.count,
++                self.counters.query_sets.read(),
++                crate::probe::TIMESTAMP_SETS.load(core::sync::atomic::Ordering::Relaxed),
++                Arc::as_ptr(&self.shared) as usize,
++                crate::probe::quote(error),
++            ),
++        );
++    }
++
+     fn load_shader(
+         &self,
+         stage: &crate::ProgrammableStage<super::ShaderModule>,
+@@ -170,6 +191,8 @@
+         match stage.module.source {
+             ShaderModuleSource::Naga(ref naga_shader) => {
+                 let stage_bit = map_naga_stage(naga_stage);
++                // DeepBuild spike #3444 probe: naga's override step, timed.
++                let probe_started = crate::probe::now_ns();
+                 let (module, module_info) = naga::back::pipeline_constants::process_overrides(
+                     &naga_shader.module,
+                     &naga_shader.info,
+@@ -179,6 +202,7 @@
+                 .map_err(|e| {
+                     crate::PipelineError::PipelineConstants(stage_bit, format!("MSL: {e:?}"))
+                 })?;
++                let probe_override_ns = crate::probe::now_ns() - probe_started;
+ 
+                 let ep_resources = &layout.per_stage_map[naga_stage];
+ 
+@@ -254,6 +278,8 @@
+                     binding_array_length_map: layout.binding_array_length_map.clone(),
+                 };
+ 
++                // DeepBuild spike #3444 probe: the Metal source writer, timed.
++                let probe_started = crate::probe::now_ns();
+                 let (source, info) = naga::back::msl::write_string(
+                     &module,
+                     &module_info,
+@@ -261,6 +287,7 @@
+                     &pipeline_options,
+                 )
+                 .map_err(|e| crate::PipelineError::Linkage(stage_bit, format!("MSL: {e:?}")))?;
++                let probe_msl_ns = crate::probe::now_ns() - probe_started;
+ 
+                 log::debug!(
+                     "Naga generated shader for entry point '{}' and stage {:?}\n{}",
+@@ -277,6 +304,24 @@
+                     options.setPreserveInvariance(true);
+                 }
+ 
++                // DeepBuild spike #3444 probe: the source as naga wrote it, kept as a file when asked.
++                crate::probe::keep_source(
++                    match naga_stage {
++                        naga::ShaderStage::Vertex => "vertex",
++                        naga::ShaderStage::Fragment => "fragment",
++                        naga::ShaderStage::Compute => "compute",
++                        _ => "other",
++                    },
++                    stage.entry_point,
++                    &source,
++                );
++                // DeepBuild spike #3444 probe: a source the system has kept no compile of, when asked.
++                let source = match crate::probe::unkept() {
++                    Some(line) => format!("{source}\n// {line}\n"),
++                    None => source,
++                };
++                // DeepBuild spike #3444 probe: Metal's compile of the source, timed, and the row.
++                let probe_started = crate::probe::now_ns();
+                 let library = self
+                     .shared
+                     .device
+@@ -288,6 +333,39 @@
+                         log::debug!("Naga generated shader:\n{source}");
+                         crate::PipelineError::Linkage(stage_bit, format!("Metal: {err}"))
+                     })?;
++                let probe_metal_ns = crate::probe::now_ns() - probe_started;
++                if crate::probe::on() {
++                    crate::probe::emit(
++                        "stage",
++                        &format!(
++                            "\"stage\":{},\"entry\":{},\"override_ns\":{},\"msl_ns\":{},\"metal_ns\":{},\"untouched\":{},\"module_entry_points\":[{}],\"module_overrides\":{},\"module_functions\":{},\"kept_functions\":{},\"constants\":{},\"msl_bytes\":{},\"unkept\":{}",
++                            crate::probe::quote(match naga_stage {
++                                naga::ShaderStage::Vertex => "vertex",
++                                naga::ShaderStage::Fragment => "fragment",
++                                naga::ShaderStage::Compute => "compute",
++                                _ => "other",
++                            }),
++                            crate::probe::quote(stage.entry_point),
++                            probe_override_ns,
++                            probe_msl_ns,
++                            probe_metal_ns,
++                            matches!(module, alloc::borrow::Cow::Borrowed(_)),
++                            naga_shader
++                                .module
++                                .entry_points
++                                .iter()
++                                .map(|ep| crate::probe::quote(&ep.name))
++                                .collect::<Vec<_>>()
++                                .join(","),
++                            naga_shader.module.overrides.len(),
++                            naga_shader.module.functions.len(),
++                            module.functions.len(),
++                            stage.constants.len(),
++                            source.len(),
++                            crate::probe::unkept().is_some(),
++                        ),
++                    );
++                }
+ 
+                 let ep_index = module
+                     .entry_points
+@@ -1334,6 +1412,8 @@
+             super::PipelineCache,
+         >,
+     ) -> Result<super::RenderPipeline, crate::PipelineError> {
++        // DeepBuild spike #3444 probe: the whole call, and Metal's making of the pipeline state.
++        let probe_started = crate::probe::now_ns();
+         autoreleasepool(|_| {
+             enum MetalGenericRenderPipelineDescriptor {
+                 Standard(Retained<MTLRenderPipelineDescriptor>),
+@@ -1744,6 +1824,7 @@
+             }
+ 
+             // Create the pipeline from descriptor
++            let probe_state_started = crate::probe::now_ns();
+             let raw = match descriptor {
+                 MetalGenericRenderPipelineDescriptor::Standard(d) => self
+                     .shared
+@@ -1764,6 +1845,18 @@
+                     format!("new_render_pipeline_state: {e:?}"),
+                 )
+             })?;
++            if crate::probe::on() {
++                let now = crate::probe::now_ns();
++                crate::probe::emit(
++                    "hal_pipeline",
++                    &format!(
++                        "\"kind\":\"render\",\"label\":{},\"hal_ns\":{},\"state_ns\":{}",
++                        crate::probe::quote(desc.label.unwrap_or("")),
++                        now - probe_started,
++                        now - probe_state_started,
++                    ),
++                );
++            }
+ 
+             self.counters.render_pipelines.add(1);
+ 
+@@ -1803,6 +1896,8 @@
+             super::PipelineCache,
+         >,
+     ) -> Result<super::ComputePipeline, crate::PipelineError> {
++        // DeepBuild spike #3444 probe: the whole call, and Metal's making of the pipeline state.
++        let probe_started = crate::probe::now_ns();
+         autoreleasepool(|_| {
+             let descriptor = MTLComputePipelineDescriptor::new();
+ 
+@@ -1855,6 +1950,7 @@
+                 descriptor.setLabel(Some(&NSString::from_str(name)));
+             }
+ 
++            let probe_state_started = crate::probe::now_ns();
+             let raw = self
+                 .shared
+                 .device
+@@ -1871,6 +1967,18 @@
+                         format!("new_compute_pipeline_state: {e:?}"),
+                     )
+                 })?;
++            if crate::probe::on() {
++                let now = crate::probe::now_ns();
++                crate::probe::emit(
++                    "hal_pipeline",
++                    &format!(
++                        "\"kind\":\"compute\",\"label\":{},\"hal_ns\":{},\"state_ns\":{}",
++                        crate::probe::quote(desc.label.unwrap_or("")),
++                        now - probe_started,
++                        now - probe_state_started,
++                    ),
++                );
++            }
+ 
+             self.counters.compute_pipelines.add(1);
+ 
+@@ -1969,11 +2077,16 @@
+                             Ok(buffer) => buffer,
+                             Err(err) => {
+                                 log::error!("Failed to create counter sample buffer: {err:?}");
++                                // DeepBuild spike #3444 probe: Metal refused a counter sample buffer.
++                                self.probe_query_set("refused", desc, &format!("{err:?}"));
+                                 return Err(crate::DeviceError::Unexpected);
+                             }
+                         };
+ 
+                     self.counters.query_sets.add(1);
++                    // DeepBuild spike #3444 probe: a timestamp query set was made.
++                    crate::probe::TIMESTAMP_SETS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
++                    self.probe_query_set("create", desc, "");
+ 
+                     Ok(super::QuerySet {
+                         raw_buffer: destination_buffer,
+@@ -1990,6 +2103,25 @@
+ 
+     unsafe fn destroy_query_set(&self, _set: super::QuerySet) {
+         self.counters.query_sets.sub(1);
++        // DeepBuild spike #3444 probe: a query set was dropped; a timestamp one holds a counter sample buffer.
++        if crate::probe::on() {
++            let timestamp = _set.counter_sample_buffer.is_some();
++            if timestamp {
++                crate::probe::TIMESTAMP_SETS.fetch_sub(1, core::sync::atomic::Ordering::Relaxed);
++            }
++            crate::probe::emit(
++                "query_set",
++                &format!(
++                    "\"op\":\"destroy\",\"ty\":{},\"device_counter\":{},\"probe_count\":{},\"hal_device\":{}",
++                    crate::probe::quote(if timestamp { "timestamp" } else { "occlusion" }),
++                    self.counters.query_sets.read(),
++                    crate::probe::TIMESTAMP_SETS.load(core::sync::atomic::Ordering::Relaxed),
++                    Arc::as_ptr(&self.shared) as usize,
++                ),
++            );
++        } else if _set.counter_sample_buffer.is_some() {
++            crate::probe::TIMESTAMP_SETS.fetch_sub(1, core::sync::atomic::Ordering::Relaxed);
++        }
+     }
+ 
+     unsafe fn create_fence(&self) -> DeviceResult<super::Fence> {
+diff -ruN -x Cargo.lock -x target a/wgpu-hal-30.0.1/src/metal/mod.rs b/wgpu-hal-30.0.1/src/metal/mod.rs
+--- a/wgpu-hal-30.0.1/src/metal/mod.rs
++++ b/wgpu-hal-30.0.1/src/metal/mod.rs
+@@ -734,6 +734,18 @@
+                 }
+             }
+ 
++            // DeepBuild spike #3444 probe: each command buffer's label, read before the last one is
++            // relabelled as the submission's signal.
++            let probe_labels: Vec<String> = if crate::probe::on() {
++                let label = |c: &&CommandBuffer| c.raw.label().map(|l| l.to_string());
++                command_buffers
++                    .iter()
++                    .map(|c| label(c).unwrap_or_default())
++                    .collect()
++            } else {
++                Vec::new()
++            };
++
+             let extra_command_buffer = {
+                 let fence_sync = Arc::clone(&signal_fence.sync);
+                 let block = block2::RcBlock::new(move |_cmd_buf| {
+@@ -781,7 +793,41 @@
+                 }
+             };
+ 
+-            for cmd_buffer in command_buffers {
++            for (probe_at, cmd_buffer) in command_buffers.iter().enumerate() {
++                // DeepBuild spike #3444 probe: each command buffer's time on the GPU, by Metal's own clock.
++                if let Some(label) = probe_labels.get(probe_at).cloned() {
++                    let seq = crate::probe::COMMAND_BUFFERS.fetch_add(1, atomic::Ordering::Relaxed);
++                    let block = block2::RcBlock::new(
++                        move |done: NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
++                            // SAFETY: Metal hands the handler the live command buffer it completed,
++                            // and each of the four selectors returns a CFTimeInterval, a double.
++                            let done = unsafe { done.as_ref() };
++                            let time = |at: usize| -> f64 {
++                                unsafe {
++                                    match at {
++                                        0 => objc2::msg_send![done, GPUStartTime],
++                                        1 => objc2::msg_send![done, GPUEndTime],
++                                        2 => objc2::msg_send![done, kernelStartTime],
++                                        _ => objc2::msg_send![done, kernelEndTime],
++                                    }
++                                }
++                            };
++                            crate::probe::emit(
++                                "command_buffer",
++                                &format!(
++                                    "\"seq\":{},\"label\":{},\"gpu_start_s\":{},\"gpu_end_s\":{},\"kernel_start_s\":{},\"kernel_end_s\":{}",
++                                    seq,
++                                    crate::probe::quote(&label),
++                                    time(0),
++                                    time(1),
++                                    time(2),
++                                    time(3),
++                                ),
++                            );
++                        },
++                    );
++                    unsafe { cmd_buffer.raw.addCompletedHandler(block2::RcBlock::as_ptr(&block)) };
++                }
+                 cmd_buffer.raw.commit();
+                 // One command buffer per `end_encoding` call moves from the
+                 // "created but not yet submitted" bucket into the submitted
+diff -ruN -x Cargo.lock -x target a/wgpu-hal-30.0.1/src/probe.rs b/wgpu-hal-30.0.1/src/probe.rs
+--- a/wgpu-hal-30.0.1/src/probe.rs
++++ b/wgpu-hal-30.0.1/src/probe.rs
+@@ -0,0 +1,134 @@
++//! DeepBuild spike #3444's probe. Not part of wgpu-hal.
++//!
++//! Rows of timing and counts, one JSON object a line, appended to the file the environment
++//! variable `DEEP_3444_PROBE` names. With the variable unset no row is made and nothing is
++//! written: every hook first asks [`on`].
++//!
++//! A row's `call` is the number of the `wgpu::Device::create_*` call it was made inside, on the
++//! same thread, or 0 outside any: the wgpu crate's hooks open and close a call, wgpu-core's and
++//! this crate's rows land between them. `t_ns` is nanoseconds since the probe's first use, on the
++//! monotonic clock, and `unix_ms` the wall clock.
++
++use alloc::string::String;
++use core::cell::Cell;
++use core::sync::atomic::{AtomicI64, AtomicU64, Ordering};
++use std::io::Write as _;
++use std::sync::{Mutex, OnceLock};
++use std::time::Instant;
++
++static SINK: OnceLock<Option<Mutex<std::fs::File>>> = OnceLock::new();
++static START: OnceLock<Instant> = OnceLock::new();
++static NEXT: AtomicU64 = AtomicU64::new(1);
++/// The command buffers committed so far: each one's place in the order they were committed.
++pub static COMMAND_BUFFERS: AtomicU64 = AtomicU64::new(0);
++/// The timestamp query sets alive, counted by the probe itself beside the device's own counter.
++pub static TIMESTAMP_SETS: AtomicI64 = AtomicI64::new(0);
++
++std::thread_local! {
++    static CURRENT: Cell<u64> = const { Cell::new(0) };
++}
++
++fn sink() -> Option<&'static Mutex<std::fs::File>> {
++    SINK.get_or_init(|| {
++        let path = std::env::var_os("DEEP_3444_PROBE")?;
++        let file = std::fs::OpenOptions::new()
++            .create(true)
++            .append(true)
++            .open(path)
++            .ok()?;
++        let _ = START.get_or_init(Instant::now);
++        Some(Mutex::new(file))
++    })
++    .as_ref()
++}
++
++/// Whether rows are being written.
++pub fn on() -> bool {
++    sink().is_some()
++}
++
++/// Nanoseconds since the probe's first row.
++pub fn now_ns() -> u64 {
++    START.get_or_init(Instant::now).elapsed().as_nanos() as u64
++}
++
++/// Opens a `create_*` call on this thread and returns its number.
++pub fn begin() -> u64 {
++    let id = NEXT.fetch_add(1, Ordering::Relaxed);
++    CURRENT.with(|c| c.set(id));
++    id
++}
++
++/// Closes this thread's call.
++pub fn end() {
++    CURRENT.with(|c| c.set(0));
++}
++
++/// A JSON string.
++pub fn quote(s: &str) -> String {
++    let mut out = String::with_capacity(s.len() + 2);
++    out.push('"');
++    for ch in s.chars() {
++        match ch {
++            '"' => out.push_str("\\\""),
++            '\\' => out.push_str("\\\\"),
++            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
++            c => out.push(c),
++        }
++    }
++    out.push('"');
++    out
++}
++
++/// The indirect-call validation flag the environment asks for, read as wgpu's own
++/// `InstanceFlags::with_env` reads `WGPU_VALIDATION_INDIRECT_CALL`: unset leaves the flag as the
++/// instance's descriptor has it, `0` turns it off, anything else turns it on. The app's instance
++/// never calls `with_env`, so without this hook the variable does nothing.
++pub fn indirect_call_validation() -> Option<bool> {
++    std::env::var("WGPU_VALIDATION_INDIRECT_CALL")
++        .ok()
++        .map(|v| v != "0")
++}
++
++/// A line for the end of each Metal source, when `DEEP_3444_UNKEPT` names one. The system keeps
++/// what Metal compiled, by its source, for every later process of the user; a comment no earlier
++/// run wrote makes the source new to it, so the compile is made again, as on a machine that has
++/// never compiled these shaders. Unset, the source goes to Metal as naga wrote it.
++pub fn unkept() -> Option<&'static str> {
++    static LINE: OnceLock<Option<String>> = OnceLock::new();
++    LINE.get_or_init(|| std::env::var("DEEP_3444_UNKEPT").ok().filter(|v| !v.is_empty()))
++        .as_deref()
++}
++
++/// Keeps a Metal source as a file of its own in the folder `DEEP_3444_MSL_DIR` names, when it
++/// names one: `<n>-<stage>-<entry>.metal`, `n` counting the sources in the order they were written.
++pub fn keep_source(stage: &str, entry: &str, source: &str) {
++    static KEPT: AtomicU64 = AtomicU64::new(0);
++    if let Some(dir) = std::env::var_os("DEEP_3444_MSL_DIR") {
++        let n = KEPT.fetch_add(1, Ordering::Relaxed);
++        let file = std::path::Path::new(&dir).join(format!("{n:03}-{stage}-{entry}.metal"));
++        let _ = std::fs::write(file, source);
++    }
++}
++
++/// One row: `fields` is the inside of a JSON object, after the probe's own fields.
++pub fn emit(ev: &str, fields: &str) {
++    let Some(sink) = sink() else { return };
++    let thread = std::thread::current();
++    let unix_ms = std::time::SystemTime::now()
++        .duration_since(std::time::UNIX_EPOCH)
++        .map_or(0, |d| d.as_millis());
++    let line = format!(
++        "{{\"ev\":{},\"t_ns\":{},\"unix_ms\":{},\"pid\":{},\"thread\":{},\"call\":{}{}{}}}\n",
++        quote(ev),
++        now_ns(),
++        unix_ms,
++        std::process::id(),
++        quote(thread.name().unwrap_or("")),
++        CURRENT.with(Cell::get),
++        if fields.is_empty() { "" } else { "," },
++        fields,
++    );
++    let mut file = sink.lock().unwrap_or_else(|e| e.into_inner());
++    let _ = file.write_all(line.as_bytes());
++}

@@ -14,6 +14,7 @@ import { openRecord } from '../../../packages/record/src/index.ts';
 import type { Connection, Event, RecordStore } from '../../../packages/record/src/index.ts';
 import { openAsks } from '../../../packages/asks/src/index.ts';
 import type { Asks, Delivery } from '../../../packages/asks/src/index.ts';
+import { withDeclared } from '../declared.ts';
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
@@ -173,7 +174,7 @@ export async function openWorld(): Promise<World> {
   const now = (): number => T0;
   const record = await openRecord({ path: join(dir, 'record.db'), now });
   const deliveries: Delivery[] = [];
-  const asks = await openAsks({ record, now, deliver: (d) => { deliveries.push(d); } });
+  const asks = withDeclared(await openAsks({ record, now, deliver: (d) => { deliveries.push(d); } }));
   return {
     record,
     asks,
