@@ -343,11 +343,13 @@ struct Session {
     /// reports them (#140: the app and headless shape the same runs).
     texts: Map<String, Value>,
     /// #499: each video image item's player, the document time its next source frame starts at
-    /// on screen, whether the next frame shown names its planes, and the run's clock.
+    /// on screen, whether the next frame shown names its planes, and the run's clock; and the
+    /// planted decode worker a `session` asked for (#3467).
     players: BTreeMap<String, crate::video::Player>,
     video_until: Option<i64>,
     hash_next: bool,
     run_start: Option<Instant>,
+    worker: Option<&'static str>,
     /// #1489: the revision's animated image items and what the presented frame did with them.
     anim: animated::Anims,
 }
@@ -1012,8 +1014,8 @@ impl Renderer {
                 look,
                 steps,
                 store,
-                switch_rebuilds,
-            } => self.session(look, steps, store, switch_rebuilds),
+                planted,
+            } => self.session(look, steps, store, planted),
             Request::Idle {
                 doc,
                 look,
@@ -1980,9 +1982,10 @@ impl Renderer {
                     b.and_then(|b| b.get(k)?.as_f64())
                         .map_or(0, |v| ((v * zoom).round() as usize).max(2))
                 };
-                let store = session.store.clone().unwrap_or_default();
-                let mut player = crate::video::Player::start(&store.join(sha), (side(2), side(3)))
-                    .map_err(|_| {
+                let file = session.store.clone().unwrap_or_default().join(sha);
+                let size = (side(2), side(3));
+                let mut player =
+                    crate::video::Player::start(&file, size, session.worker).map_err(|_| {
                         refused("asset_undecodable", &format!("items/{id}/params/asset"))
                     })?;
                 let doc_v = Value::Object(doc.clone());
@@ -2105,6 +2108,7 @@ impl Renderer {
             video_until: None,
             hash_next: true,
             run_start: None,
+            worker: None,
             anim: animated::Anims::default(),
         }
     }
@@ -2245,22 +2249,7 @@ impl Renderer {
                 v.4 = after.wakeups - v.4;
             }
             let cpu_ms = (after.cpu_ns - before.cpu_ns) as f64 / 1e6;
-            let players: Map<String, Value> = session
-                .players
-                .iter()
-                .map(|(id, p)| {
-                    let shown: Vec<Value> = p.log.shown.iter().map(|s| {
-                        json!({"at_ms": s.at_ms, "t": s.t, "frame": s.frame, "planes": s.planes})
-                    }).collect();
-                    let decodes: Vec<Value> = p
-                        .log
-                        .decodes
-                        .iter()
-                        .map(|(at_ms, k)| json!({"at_ms": at_ms, "frame": k}))
-                        .collect();
-                    (id.clone(), json!({"shown": shown, "decodes": decodes}))
-                })
-                .collect();
+            let players = crate::video::report(&mut session.players);
             let views: Vec<Value> = views
                 .iter()
                 .map(|(rect, from, to, frames, wakeups)| {
@@ -2523,10 +2512,13 @@ impl Renderer {
         mut look: Look,
         steps: Vec<Step>,
         store: Option<PathBuf>,
-        switch_rebuilds: bool,
+        planted: Option<&'static str>,
     ) -> Value {
         let mut session = Self::new_session();
         session.store = store;
+        // The wrong program asked for is #417 AC2's look switch, or a decode worker's (#3467).
+        let switch_rebuilds = planted == Some("look_switch_rebuilds");
+        session.worker = planted.filter(|_| !switch_rebuilds);
         let none = crate::asset::Plant::None;
         crate::asset::images().configure(deep_images::BUDGET, deep_images::ENTRIES, none);
         let mut doc = Map::new();
@@ -2567,6 +2559,8 @@ impl Renderer {
                         || session.valid_until.is_some_and(|v| v <= t)
                         || session.stale_at.is_some_and(|s| s <= t);
                     if armed {
+                        // #3467: a session reads no time, so each video frame it shows is named.
+                        session.hash_next = true;
                         self.present(&mut session, &doc, &look, view, &record, t, false, f > 0)?;
                     }
                 }
@@ -2585,9 +2579,12 @@ impl Renderer {
             }
             Ok(())
         })();
+        let players = crate::video::report(&mut session.players);
         self.close(session);
         match result {
-            Ok(()) => json!({"ok": true, "steps": out, "backends": crate::backends(false)}),
+            Ok(()) => {
+                json!({"ok": true, "steps": out, "players": players, "backends": crate::backends(false)})
+            }
             Err(refusal) => refusal,
         }
     }

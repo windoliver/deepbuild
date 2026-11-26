@@ -25,7 +25,7 @@
 // whose acknowledgement carries a hold (hold_until_ms) is left out: the overhead budget is "except holds".
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -469,12 +469,12 @@ function day(calls, s) {
 
 /** A record grown past `bytes` through @deepbuild/record, before the hub starts: one session's shell calls, ~7 KB each. */
 async function seed(path, bytes) {
-  const { openRecord } = await import(join(REPO, 'packages/record/dist/index.js'));
+  const { openRecord, recordSize } = await import(join(REPO, 'packages/record/dist/index.js'));
   let now = Date.now() - 86_400_000;
   const record = await openRecord({ path, now: () => now });
   const conn = { writer: 'hook', actor: 'you', scope: 'you', session: 'bench-572', agent: 'claude-code' };
   const command = 'npm test -- src/cart/checkout.test.ts --reporter verbose '.repeat(120);
-  const size = () => ['', '-wal'].reduce((sum, f) => sum + (existsSync(path + f) ? statSync(path + f).size : 0), 0);
+  const size = () => recordSize(path);
   let n = 0;
   try {
     while (size() < bytes) {
