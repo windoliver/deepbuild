@@ -1,10 +1,11 @@
 import type { Connection, EventInput } from '@deepbuild/record';
 import type { Obj } from './hub-shared.js';
+import type { ReadingCode } from './reading-codes.js';
 
 /** The record's writer identity and ordered appends, shared by hub domains. */
 export interface HubEvents {
   appendSession(session: string, agent: string, kind: string, data: Obj): Promise<void>;
-  appendReading(session: string, agent: string, reading: string, hook?: string): Promise<void>;
+  appendReading(session: string, agent: string, reading: string, hook?: string, code?: ReadingCode): Promise<void>;
   connection(writer: string, extra?: Partial<Connection>): Connection;
   append(connection: Connection, input: EventInput, backfill?: boolean): Promise<void>;
   appendCore(kind: string, data: Obj, extra?: { subject?: string; evidence?: string[]; v?: number }): Promise<void>;

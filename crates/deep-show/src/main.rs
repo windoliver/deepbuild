@@ -1331,7 +1331,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #1967's wrong programs live in the cells module's playback and conversion, #194's in the catalog job.
                 || deep_canvas_cells::recording::PLANTED.contains(p) || deep_codecs::catalog::PLANTED.contains(p)
                 || deep_canvas_export::lottie::PLANTED.contains(p)
-                || deep_canvas_input::rows::PLANTED.contains(p)
+                || deep_canvas_input::rows::PLANTED.contains(p) || deep_canvas_marks::data::holds::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
                 || deep_canvas_input::point::PLANTED.contains(p)
                 // #542's in the text field and the scroll control's router.
@@ -1360,7 +1360,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
-                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p)
+                || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p) || packs::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -2894,6 +2894,13 @@ fn main() {
             }
             let _ = writeln!(out, "{line}");
             let _ = out.flush();
+            // #3356: stderr names the refusal too, so a caller that shows only stderr reads why.
+            eprintln!(
+                "deep-show: seal_refused ({}): modules [{}]: {}",
+                err.code,
+                err.modules.join(", "),
+                err.what
+            );
             std::process::exit(2);
         }
     };

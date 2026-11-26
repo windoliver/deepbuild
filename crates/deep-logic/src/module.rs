@@ -24,6 +24,7 @@ use std::sync::OnceLock;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas::kinds::{Entry as KindEntry, Param, ParamType, Version};
+use deep_canvas::refs::{self, Decl, Holds};
 use deep_canvas::registry::{
     Dependency, Equivalence, Implementation, Manifest, Module, Pin, Raised, Range, Registrar,
     Report, Semver, StateClass, StepInput, Stepper,
@@ -188,6 +189,12 @@ fn kind() -> KindEntry {
 fn register(r: &mut Registrar) {
     // The kind keeps the module's name, as the design writes it.
     r.kind(kind(), &[], "");
+    // #3379: the controls an item reads, so refs_to lists each read and a removed control's
+    // reads are refused at check.
+    r.refs(&[
+        Decl::new("params/reads", Holds::Control, refs::kind::CONTROL),
+        Decl::new("params/preview/reads", Holds::Control, refs::kind::CONTROL),
+    ]);
     r.array(STATE, "logic.state", "document", "time", "simulate");
     r.carried("checkpoint", STATE, 4 << 20);
     r.operator("step", "simulate", &["refs"], &[STATE])
@@ -220,10 +227,15 @@ fn register(r: &mut Registrar) {
         json!({"checks": [{"kind": "document.determinism"}], "oracles": ["seek_play"], "codes": [],
                "at_times": ["0s", "1s"], "inputs": [{"step": 20, "kind": "press", "value": 1}]}),
     )
-    .fixture_assets(vec![bytes.clone()]);
-    // #2363: the module's program also supplies real array readers at frame zero.
+    .fixture_assets(vec![bytes]);
+    // #2363: a logic program also supplies real array readers at frame zero.
     // The copies, flip and mark set read the core's view, not a fabricated baked envelope.
-    // With no control read, the fixture program reads the seed at offset zero: keep it zero.
+    // #3360: the counter's program is its own. With no control read, the start of the read
+    // region is the step's seed, a hash and never zero, so the kit program's sum of it isn't.
+    let (sha, bytes) = readers_program();
+    let mut params = json!({"program": sha, "step_rate": 60,
+                            "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}});
+    params["wasm"] = json!(B64.encode(&bytes));
     r.fixture("readers", json!({
         "format": 1, "profile": "board", "title": "Array readers",
         "description": "A counter selects a caption, a row label and a flip child.",
@@ -631,6 +643,11 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
 /// The kit fixture's program, assembled from its text, with its hash.
 fn fixture_program() -> (String, Vec<u8>) {
     let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+    (deep_canvas_sandbox::rewrite::hash(&bytes), bytes)
+}
+
+fn readers_program() -> (String, Vec<u8>) {
+    let bytes = wat::parse_str(include_str!("readers.wat")).expect("the readers program assembles");
     (deep_canvas_sandbox::rewrite::hash(&bytes), bytes)
 }
 

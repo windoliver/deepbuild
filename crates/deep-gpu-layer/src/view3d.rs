@@ -51,7 +51,7 @@ mod reports;
 pub(crate) use parse::*;
 
 use captured::captured;
-use reports::light_reports;
+use reports::{fill_lights, light_reports};
 
 /// #462's planted `status_in_look`: the status map of the look a render draws in, where it has
 /// one of its own; `None` for the shipped program, which draws the document's.
@@ -132,7 +132,7 @@ fn run_view(
             return Ok(());
         };
         let prefix = key.as_ref().map_or_else(String::new, |k| format!("{k}/"));
-        let ms = f.apply(app, profiler, &prefix, bytes, size, keep, true)?;
+        let ms = crate::look_ops::apply(f, app, profiler, &prefix, bytes, size, keep, true)?;
         if let (Some(ms), Some((gpu_ms, passes))) = (ms, timing) {
             *gpu_ms += ms;
             passes.insert(format!("{prefix}look.finish"), ms);
@@ -166,7 +166,7 @@ fn run_view(
     }
     deep_canvas_effects::effect::lower(&mut args.doc);
     crate::physics::bake(&mut args.doc, &call["tracks"], &args.assets)?;
-    crate::particles::refuse(&args.doc, app.planted)?;
+    let operators = crate::particles::refuse(app, call, &mut args.doc)?;
     crate::trails::refuse(&args.doc)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
@@ -219,7 +219,7 @@ fn run_view(
     // Frame history's temporal upscale rebuilds the pixels from one sample each (#173).
     let upscales = args.look.history.mode == deep_canvas_scene3d::history::Mode::Upscale;
     let samples = (upscales && !args.export).then_some(1);
-    let opened = session3::open_doc(app, size, timings, shows, &args.doc, samples)?;
+    let opened = session3::open_doc(app, size, timings, shows, &operators, samples)?;
     session3::surface(app, args.surface)?;
     if args.cull_on_cpu {
         session3::cull_on_cpu(app);
@@ -397,7 +397,7 @@ fn run_view(
             Some(Planted::CreaseBelowAngle) => Some("crease_below_angle"),
             Some(Planted::EdgesDeriveEveryFrame) => Some("edges_derive_every_frame"),
             Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
-            Some(Planted::HiddenLines(name)) => Some(name),
+            Some(Planted::Named(name)) => Some(name),
             _ => None,
         };
         // #1782: the spans this run holds from frame to frame, for what it reports of them.
@@ -686,6 +686,13 @@ fn run_view(
                     Some((w.material.clone(), f))
                 })
                 .flatten();
+            // #3033: the planted sea, then the water's wave table as the receipt lists it.
+            crate::sea::plant(&mut scene, app.planted);
+            if n == args.from {
+                if let Some(table) = crate::sea::table(&scene) {
+                    receipt["water"] = table;
+                }
+            }
             // #2760: the planted rings, then the rings the frame draws, as it lists them.
             crate::touches::plant(&mut scene, app.planted, t, &mut touched);
             let rings = (args.rings).then(|| crate::touches::rows(&scene));
@@ -714,13 +721,7 @@ fn run_view(
             }
             let selected = levels.select(&composed, &scene);
             let settled = levels.settle(&selected);
-            let seeding = match app.planted {
-                Some(Planted::NoiseFromFrameCounter) => {
-                    effects::Seeding::FrameCounter(n - args.from)
-                }
-                Some(Planted::NoiseFromClock) => effects::Seeding::Clock,
-                _ => effects::Seeding::Item,
-            };
+            let seeding = effects::seeding(app.planted, n - args.from);
             // #420 AC1's wrong program steps the operators' clock from the last frame drawn,
             // so a seek starts it again at zero; the shipped one reads t itself.
             let fx_t = match app.planted {
@@ -734,7 +735,7 @@ fn run_view(
                 }
                 _ => n as f64 / args.fps as f64,
             };
-            let settings = effects::settings(
+            let mut settings = effects::settings(
                 &scene,
                 &args.look_json,
                 &args.look,
@@ -743,7 +744,6 @@ fn run_view(
                 doc_seed,
                 seeding,
             );
-            let mut settings = settings;
             // #462: the strokes the frame lays, reported where asked; the planted twin draws and
             // reports them where the previous frame's camera put their anchors.
             let mut stroke_rows = None;
@@ -926,11 +926,13 @@ fn run_view(
                 app.planted == Some(Planted::EdgesSkipDepth),
                 edge_plant,
             );
+            let sea_plant = app.planted;
             let at_time = |tk: i64, labels: &mut Labels| -> Result<Scene, Value> {
                 let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)?;
                 if drops_dispersion {
                     sc.plant_drops_dispersion();
                 }
+                crate::sea::plant(&mut sc, sea_plant);
                 sc.texels.clone_from(&scene.texels);
                 sc.ground = scene.ground;
                 sc.set_cutaway(scene.cutaway.clone());
@@ -1951,16 +1953,7 @@ fn run_view(
                     .chain(op_declared.map(|(k, v)| (k, json!(v))))
                     .collect();
                 frame.insert("declared_ms".into(), Value::Object(declared));
-                // #1634: what the light policy's scoring took and what the fill lights hold, with
-                // the cost model's estimate of the frame, in a scene that holds a fill light.
-                let c = &drawn.counts;
-                if c.lists_bytes > 0 {
-                    let lights = json!({"scoring_ms": c.scoring_ms, "lists_bytes": c.lists_bytes});
-                    frame.insert("lights".into(), lights);
-                    let [gpu_ms, scoring_ms, lists_bytes] = c.light_estimate;
-                    let estimate = json!({"gpu_ms": gpu_ms, "scoring_ms": scoring_ms, "lists_bytes": lists_bytes});
-                    frame.insert("estimate".into(), estimate);
-                }
+                fill_lights(&mut frame, &drawn);
             }
             if !clicks.is_empty() {
                 let ids = drawn.targets.as_ref().map(|(_, ids)| ids.as_slice());
@@ -2088,6 +2081,7 @@ fn run_view(
         "render_targets": render_targets,
         "layers": layers_report(&args.doc, &args.hidden),
     });
+    crate::particles::stepped::report(&args.doc, &mut reply);
     if args.lose_at.is_some() {
         reply["device_losses"] = json!(device_losses);
     }

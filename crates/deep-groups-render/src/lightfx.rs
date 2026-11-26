@@ -96,7 +96,8 @@ pub fn lit_status(
 }
 
 /// #2032: what a light list casts at a zoom, on the device: the lights as drawn, each one's
-/// bins, and the occluders' segments, the bins' words and the bins' bounds, in px.
+/// bins, and the occluders' segments, the bins' words and the bins' bounds (#2844: their zones
+/// by distance), in px.
 struct Cast {
     light: Arc<Light>,
     zoom: f64,
@@ -149,7 +150,7 @@ impl Cast {
         };
         // A binding holds at least one element, though no light casts.
         words.resize(words.len().max(1), 0);
-        bounds.resize(bounds.len().max(1), [0.0_f32; 2]);
+        bounds.resize(bounds.len().max(1), [0.0_f32; 4]);
         let buffer = |contents: &[u8]| {
             device
                 .device

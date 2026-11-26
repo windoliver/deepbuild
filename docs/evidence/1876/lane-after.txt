@@ -1,0 +1,15 @@
+# This change's checkout, with the same open issues.
+$ DEEP_OPEN_ISSUES=open-issues.json node scripts/design-links.mjs
+design links and names: 4195 links checked from 2 docs and 1160 open issues, each landing on a heading or an <a id>; 336 `deep` commands and agent tools named, each in the design or planned (1 planned); the design's principles hold; the design states what main holds in each place scripts/design-drift.mjs compares
+exit 0
+
+# The same checkout with the open issues as gh listed them on November 25. Five issues filed that day link a
+# heading the design doesn't have yet; main at b48a47db7 prints the same five lines without this change.
+$ DEEP_OPEN_ISSUES=open-issues-today.json node scripts/design-links.mjs
+FAIL 5 links into docs/*.md land on no heading, 0 names are not in the design, 0 planned names are stale, 0 principles findings, 0 places where the design is behind main
+  #3499 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+  #3498 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+  #3497 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+  #3496 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+  #3495 https://github.com/windoliver/deepbuild/blob/main/docs/technical-design.md#what-a-person-reads-on-a-plain-surface (no heading or <a id> in docs/technical-design.md is #what-a-person-reads-on-a-plain-surface)
+exit 1

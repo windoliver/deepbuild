@@ -696,7 +696,7 @@ describe('#350 review regressions', () => {
 
   const READER = `export default function (deep: any): void {\n  deep.use('ext.b.feed@1', { optional: true });\n  deep.registerAction('ext.a.read', { declares: 'read', input: { type: 'object' } }, async () => deep.read('ext.b.feed@1'));\n}\n`;
   const reader = () => pkgOf('test/a', READER, { actions: ['ext.a.read'], uses: [{ interface: 'ext.b.feed@1', minor: 0, digest: d1Digest(FEED) }] });
-  const provider = (output: string, also = '') => pkgOf('test/b', `export default async function (deep: any): Promise<void> {\n  deep.provide('ext.b.feed@1', 'reading', ${JSON.stringify(FEED)}, async () => { ${output} });\n  ${also}\n}\n`, { provides: [{ interface: 'ext.b.feed@1', kind: 'reading', minor: 0 }] });
+  const provider = (output: string, also = '') => pkgOf('test/b', `export default async function (deep: any): Promise<void> {\n  deep.provide('ext.b.feed@1', 'reading', ${JSON.stringify(FEED)}, async () => { ${output} });\n  ${also}\n}\n`, { provides: [{ interface: 'ext.b.feed@1', kind: 'reading', minor: 0, digests: { 0: d1Digest(FEED) } }] });
   const read = (h: ExtensionHost) => h.callAction({ action: 'ext.a.read', target: { handle: 'ext:test/a', version: '1.0.0' }, input: {}, caller: YOU });
 
   it('an output is read missing while its provider is still starting', async () => {
@@ -753,7 +753,7 @@ describe('#350 review regressions', () => {
     const mark = join(temp(), 'ran');
     const note = `deep.registerAction('ext.b.note', { declares: 'change', input: { type: 'object' } }, async () => { writeFileSync(${JSON.stringify(mark)}, '1'); return 1; });`;
     const b = pkgOf('test/b', `import { writeFileSync } from 'node:fs';\nexport default async function (deep: any): Promise<void> {\n  deep.provide('ext.b.feed@1', 'reading', ${JSON.stringify(FEED)}, async () => { await new Promise((r) => setTimeout(r, 2000)); return { n: 1 }; });\n  ${note}\n}\n`,
-      { provides: [{ interface: 'ext.b.feed@1', kind: 'reading', minor: 0 }], actions: ['ext.b.note'] });
+      { provides: [{ interface: 'ext.b.feed@1', kind: 'reading', minor: 0, digests: { 0: d1Digest(FEED) } }], actions: ['ext.b.note'] });
     const { h, trust } = await world({ heldTrust: () => { asked++; return gate; }, release: [{ id: 'test/b', version: '1.0.0', digest: packageDigest(b) }] });
     const repo = temp();
     await trust.answer(YOU, repo, true);

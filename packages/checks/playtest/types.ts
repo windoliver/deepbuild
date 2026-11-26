@@ -36,6 +36,8 @@ export interface PlaytestInput {
   goals?: Goal[];
   frames?: { every?: number };
   piece_seed?: 'own' | 'run';
+  /** #1047: a save of the piece, by its asset ID: each run starts at its step, once logic.layout has checked it against the piece. */
+  from?: { save: string };
   /** The play interface `game.play@1`, locked in the brief. */
   play?: PlayIface;
   /** #1048: one long run of a bot as `bots` spells one, read every `every` steps against the brief's limits. */
@@ -66,6 +68,8 @@ export interface PlayAnswer {
 /** `deep.canvas.play`'s run. */
 export interface PlayRun {
   seed: number; piece_seed?: 'own' | 'run'; span?: Span; bot?: Lowered; track?: Record<string, unknown>[]; values: string[]; frames: number[]; play?: PlayIface;
+  /** #1047: the save the play starts from, the input's: its first checkpoint is then the save's step, and what it records for each step starts there. */
+  from?: { save: string };
   /** #556: array paths recorded only at step 0 and at the steps they change, so a grid isn't copied at every step. */
   changes?: string[];
   /** #1048: the run's track played once and, at each step, each test's entries put in a throwaway copy (rules.legal, logic.edges). */

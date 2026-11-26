@@ -3,9 +3,10 @@
 
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { ENDS, KINDS, NOT_DECISIONS, NOT_KINDS, STATES, agent, ask, core, openWorld, refused, sourceOf, type Obj, type World } from './helpers.ts';
+import { withDeclared } from '../declared.ts';
 
 let w: World;
-beforeEach(async () => { w = await openWorld(); });
+beforeEach(async () => { w = await openWorld({ asks: withDeclared }); });
 afterEach(async () => { await w.close(); });
 
 test('#318.b64bd314 the asks core raises an ask of each of the six kinds and refuses any other item, appending nothing', async () => {

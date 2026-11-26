@@ -4,9 +4,10 @@
 import { expect } from 'vitest';
 import { validate as realValidate, type Validation } from '../../../packages/contracts/src/index.ts';
 import {
-  cardIn, core, created, DAY, gitRepo, HOUR, inWorld, raised, requestRow, SAM, T0, task, TASK_PARTS, ulid, UNBLOCK_WAIT, YOU,
+  cardIn, core, created, DAY, gitRepo, HOUR, inWorld, raised, requestRow, SAM, T0, task, TASK_PARTS, ulid, unblockSource, UNBLOCK_WAIT, YOU,
   type Obj, type Planting, type World,
 } from './helpers.ts';
+import { declared } from '../declared.ts';
 
 export type Validate = (name: string, value: unknown) => Validation;
 /** A second teammate, so two blocks owned by two people get two requests. */
@@ -102,7 +103,7 @@ export async function taskSchemaName(w: World): Promise<string> {
 /** An ask.created event carrying this task, as the core writes it. */
 export const taskEvent = (name: string, data: Obj): Obj => ({
   v: Number(name.split('@')[1]), id: ulid(T0), kind: 'ask.created', writer: 'core', actor: YOU, scope: YOU, ts: T0,
-  data: { ...data, deadline: T0 + UNBLOCK_WAIT },
+  data: { ...declared(unblockSource(), data), deadline: T0 + UNBLOCK_WAIT },
 });
 
 /** Each way a task can lack one of its four parts: the part left out, or present and empty. */

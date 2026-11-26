@@ -1,0 +1,11 @@
+{
+  "criterion": "#3033.5c2dc7ad",
+  "by": "you",
+  "screenshots": [
+    "9f4c2412cca48652085c93ed3de547bc2c0d19efb7e7658a06d115e400210c98",
+    "1bf8e70c50e133374b3c247c23c69dcc0637e8144ef190a13f9d5f14c6ab253e"
+  ],
+  "call": "looks_right",
+  "when": "2026-11-23T20:35:00Z",
+  "note": "The owner was shown the still's two pictures in the session, the sea on the left and the same plate with four waves on the right, in a browser preview and as docs/evidence/3033/sea-beside-four-waves-85cf1427b1f0fd9f9afbe046292f1ae2eeffa5e4dc0beb0e25ab48b84a15c109.png, and answered \"Looks right\". The implementing agent typed this file from that answer; an earlier \"validate for me\" was not taken as a call."
+}

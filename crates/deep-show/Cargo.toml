@@ -95,7 +95,7 @@ test-accent = []
 test-threads = []
 # Issue #411: `test.machines`, whose GPU operators write a float array and an exact one, read back
 # by its check kinds.
-test-machines = ["dep:deep-effects-render"]
+test-machines = []
 # Issue #855: a test canvas module whose frame-phase operator writes JSON, which the seal refuses;
 # a build whose Debug text for every typed value differs; and a result digesting its Debug text.
 test-json = []
@@ -114,8 +114,9 @@ test-session-call-decided = []
 # Issue #518: the native test encode tools of the #518 acceptance README, each a tool of the job
 # kind `encode` that encodes only for an export whose brief pins it. Its AV1 tools encode with
 # rav1e (BSD-2-Clause), which the image crate's AVIF writer already brings into the lock; its
-# surface tools hash what they read with the blake3 crate the canvas core hashes with.
-test-encode-tools = ["dep:rav1e", "dep:blake3"]
+# surface tools hash what they read with the blake3 crate the canvas core hashes with, as #231's
+# planted export that hashes on the CPU does in every build.
+test-encode-tools = ["dep:rav1e"]
 # Issue #412: the #412 acceptance README's test canvas modules: a preview kind, a registry of cue
 # kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
 # fixture digests A and B, and a kind whose one-liner overruns the sheet.
@@ -360,13 +361,13 @@ deep-canvas-seams = { path = "../deep-canvas-seams" }
 # Issue #498: the decode worker and the encode tool, which this binary's copies run as.
 deep-codecs = { path = "../deep-codecs" }
 rav1e = { version = "0.8.1", default-features = false, optional = true }
-blake3 = { version = "1", default-features = false, features = ["std"], optional = true }
+blake3 = { version = "1", default-features = false, features = ["std"] }
 # Issue #309: the network seam's macOS backend and relay@1.
 deep-relay = { path = "../deep-relay" }
 # Issue #549: the net module: net@1, a match's copies, the Join prompt and the check kinds.
 deep-net = { path = "../deep-net" }
 deep-gpu = { path = "../deep-gpu" }
-deep-effects-render = { path = "../deep-effects-render", optional = true }
+deep-effects-render = { path = "../deep-effects-render" }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-marks-vello = { path = "../deep-marks-vello" }
 deep-marks-raster = { path = "../deep-marks-raster" }

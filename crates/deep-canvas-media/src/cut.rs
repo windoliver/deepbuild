@@ -773,8 +773,8 @@ pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
         operator: "",
     };
     let fields = [
-        ("recording", "asset name", Value::Null),
-        ("keep", "[word index | [first, last]]", json!([])),
+        ("recording", "name", Value::Null),
+        ("keep", "[index | [first: index, last: index]]", json!([])),
         ("search", "ms", json!(200)),
         (
             "crossfade",

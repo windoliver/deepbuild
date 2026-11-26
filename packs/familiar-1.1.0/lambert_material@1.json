@@ -1,0 +1,101 @@
+{
+  "id": "familiar.lambert_material",
+  "version": "1.0",
+  "title": "Lambert material",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's MeshLambertMaterial: a surface that reflects by its diffuse lobe alone, as material@1 with specular_level 0; Color sRGB to our linear base color, emissive × emissiveIntensity to our emission. A geometry instance wears it by naming `<instance>.material` in its `material`.",
+  "inputs": {
+    "color": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "emissive": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "emissiveIntensity": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "about": ""
+    },
+    "fog": {
+      "type": "bool",
+      "default": true,
+      "about": "true only: the sky's fog reaches every surface"
+    }
+  },
+  "let": {
+    "fog": "fog ? fog : unmapped()",
+    "e0": "(floor(color / 65536) % 256) / 255",
+    "l0": "e0 <= 0.04045 ? e0 / 12.92 : pow((e0 + 0.055) / 1.055, 2.4)",
+    "e1": "(floor(color / 256) % 256) / 255",
+    "l1": "e1 <= 0.04045 ? e1 / 12.92 : pow((e1 + 0.055) / 1.055, 2.4)",
+    "e2": "(color % 256) / 255",
+    "l2": "e2 <= 0.04045 ? e2 / 12.92 : pow((e2 + 0.055) / 1.055, 2.4)",
+    "ee0": "(floor(emissive / 65536) % 256) / 255",
+    "el0": "ee0 <= 0.04045 ? ee0 / 12.92 : pow((ee0 + 0.055) / 1.055, 2.4)",
+    "ee1": "(floor(emissive / 256) % 256) / 255",
+    "el1": "ee1 <= 0.04045 ? ee1 / 12.92 : pow((ee1 + 0.055) / 1.055, 2.4)",
+    "ee2": "(emissive % 256) / 255",
+    "el2": "ee2 <= 0.04045 ? ee2 / 12.92 : pow((ee2 + 0.055) / 1.055, 2.4)"
+  },
+  "steps": {
+    "material": {
+      "op": "item",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          "l0",
+          "l1",
+          "l2",
+          1
+        ],
+        "metallic": 0,
+        "specular_level": 0,
+        "emission": [
+          "el0",
+          "el1",
+          "el2"
+        ],
+        "emission_strength": "emissiveIntensity"
+      }
+    }
+  },
+  "refuses": {
+    "map": "Write the picture on material@1 itself, by its hash, as `maps.base_color`.",
+    "lightMap": "Leave it out: material@1 takes no baked light of its own.",
+    "lightMapIntensity": "Leave it out: material@1 takes no baked light of its own.",
+    "aoMap": "Write the picture on material@1 itself, by its hash, as `maps.occlusion`.",
+    "aoMapIntensity": "Leave it out: `maps.occlusion` shades the ambient light at its full strength.",
+    "emissiveMap": "Write the picture on material@1 itself, by its hash, as `maps.emission`.",
+    "bumpMap": "Write a normal map on material@1 itself, by its hash, as `normal_map`.",
+    "bumpScale": "Write a normal map on material@1 itself, by its hash, as `normal_map`.",
+    "normalMap": "Write the picture on material@1 itself, by its hash, as `normal_map`.",
+    "normalMapType": "Leave it out: `normal_map` is in tangent space.",
+    "normalScale": "Leave it out: `normal_map` is read at its full strength.",
+    "displacementMap": "Leave it out: a material moves no vertex; shape the part with its builder or a modifier.",
+    "displacementScale": "Leave it out: a material moves no vertex; shape the part with its builder or a modifier.",
+    "displacementBias": "Leave it out: a material moves no vertex; shape the part with its builder or a modifier.",
+    "specularMap": "Leave it out: this material has no specular lobe.",
+    "alphaMap": "Write the picture on material@1 itself: the alpha of `maps.base_color`, under `alpha_mode`.",
+    "envMap": "Leave it out: every part takes the document's one environment, sky@1's `environment`.",
+    "envMapRotation": "Leave it out: every part takes the document's one environment, sky@1's `environment`.",
+    "envMapIntensity": "Leave it out: every part takes the document's one environment, sky@1's `environment`.",
+    "combine": "Leave it out: this material has no specular lobe to mix an environment into.",
+    "reflectivity": "Leave it out: this material has no specular lobe to mix an environment into.",
+    "refractionRatio": "Leave it out: this material has no specular lobe to mix an environment into.",
+    "wireframe": "Leave it out: how a surface is rasterized is the renderer's; for its edges alone, draw mark.line@1 items.",
+    "wireframeLinewidth": "Leave it out: how a surface is rasterized is the renderer's; for its edges alone, draw mark.line@1 items.",
+    "wireframeLinecap": "Leave it out: how a surface is rasterized is the renderer's; for its edges alone, draw mark.line@1 items.",
+    "wireframeLinejoin": "Leave it out: how a surface is rasterized is the renderer's; for its edges alone, draw mark.line@1 items.",
+    "flatShading": "Leave it out: a part's normals come from its builder."
+  }
+}

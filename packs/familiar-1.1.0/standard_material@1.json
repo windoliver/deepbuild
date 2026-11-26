@@ -1,0 +1,55 @@
+{
+  "id": "familiar.standard_material",
+  "version": "1.0",
+  "title": "Standard material",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's MeshStandardMaterial: Color sRGB to our linear base color, roughness and metalness kept. A geometry instance wears it by naming `<instance>.material` in its `material`.",
+  "inputs": {
+    "color": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "roughness": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "metalness": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    }
+  },
+  "let": {
+    "e0": "(floor(color / 65536) % 256) / 255",
+    "l0": "e0 <= 0.04045 ? e0 / 12.92 : pow((e0 + 0.055) / 1.055, 2.4)",
+    "e1": "(floor(color / 256) % 256) / 255",
+    "l1": "e1 <= 0.04045 ? e1 / 12.92 : pow((e1 + 0.055) / 1.055, 2.4)",
+    "e2": "(color % 256) / 255",
+    "l2": "e2 <= 0.04045 ? e2 / 12.92 : pow((e2 + 0.055) / 1.055, 2.4)"
+  },
+  "steps": {
+    "material": {
+      "op": "item",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          "l0",
+          "l1",
+          "l2",
+          1
+        ],
+        "roughness": "roughness",
+        "metallic": "metalness"
+      }
+    }
+  }
+}

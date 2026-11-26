@@ -1,5 +1,5 @@
 //! A 3D document's frame as the app's and the web player's scene3d renderers draw it (#378, #172):
-//! the scene evaluated at a time and size, in the look its camera exposes.
+//! the scene evaluated at a time and size, in the look the host gives it, as its camera exposes it.
 
 use deep_canvas_marks::scene::Palette;
 use deep_canvas_scene3d::contributed::Fills;
@@ -7,10 +7,9 @@ use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{evaluate_any, Assets, Labels, Refused, Scene};
 use serde_json::{json, Value};
 
-/// The look a revision draws in here: the palette's roles, exposed as its camera's `exposure`
-/// says, an EV100 (#1938; Camera `camera@1`: lens), else at the unit exposure.
-pub fn look_of(doc: &Value, palette: &Palette) -> Look3 {
-    let mut look = Look3::from_roles(palette.clone());
+/// `look` exposed as `doc`'s camera's `exposure` says, an EV100 (#1938; Camera `camera@1`: lens),
+/// else as the look itself is.
+pub fn exposed(doc: &Value, mut look: Look3) -> Look3 {
     let camera = doc
         .get("camera")
         .and_then(Value::as_str)
@@ -34,8 +33,7 @@ pub fn look_of(doc: &Value, palette: &Palette) -> Look3 {
     look
 }
 
-/// `doc` at `t` on a frame of `size`, its `mesh.asset@1` items read from `assets`: the evaluated
-/// scene a draw reads, and the look it draws in (#427).
+/// [`evaluate_in`] the palette's roles, a drawing look at the unit exposure.
 pub fn evaluate(
     doc: &Value,
     t: i64,
@@ -45,17 +43,44 @@ pub fn evaluate(
     assets: Assets<'_>,
     fills: Fills<'_>,
 ) -> Result<(Scene, Look3), Refused> {
-    let mut doc = doc.clone();
-    if let Some(d) = doc.as_object_mut() {
-        d.insert("size".into(), json!(size));
-    }
+    let look = Look3::from_roles(palette.clone());
+    evaluate_in(doc, t, look, size, labels, assets, fills)
+}
+
+/// `doc` at `t` on a frame of `size`, its `mesh.asset@1` items read from `assets`: the evaluated
+/// scene a draw reads, and the look it draws in, `look` as its camera exposes it (#427, #1719).
+pub fn evaluate_in(
+    doc: &Value,
+    t: i64,
+    look: Look3,
+    size: [u16; 2],
+    labels: &mut Labels,
+    assets: Assets<'_>,
+    fills: Fills<'_>,
+) -> Result<(Scene, Look3), Refused> {
+    // #231: a document that has the frame's size already, and whose worlds write nothing into
+    // it, is read as it stands: an export evaluates it at every frame.
+    let as_is = doc.get("size") == Some(&json!(size));
     #[cfg(feature = "physics")]
-    deep_canvas_physics::skin::write(&mut doc, t);
-    // #2248: and each readout a world's output writes shows that output's value at `t`.
-    #[cfg(feature = "physics")]
-    deep_canvas_physics::written::readouts(&mut doc, t);
-    let look = look_of(&doc, palette);
-    let scene = evaluate_any(&doc, t, &look, labels, Some(assets), fills)?;
+    let as_is = as_is && !deep_canvas_physics::written::writes(doc);
+    let written;
+    let doc = if as_is {
+        doc
+    } else {
+        let mut doc = doc.clone();
+        if let Some(d) = doc.as_object_mut() {
+            d.insert("size".into(), json!(size));
+        }
+        #[cfg(feature = "physics")]
+        deep_canvas_physics::skin::write(&mut doc, t);
+        // #2248: and each readout a world's output writes shows that output's value at `t`.
+        #[cfg(feature = "physics")]
+        deep_canvas_physics::written::readouts(&mut doc, t);
+        written = doc;
+        &written
+    };
+    let look = exposed(doc, look);
+    let scene = evaluate_any(doc, t, &look, labels, Some(assets), fills)?;
     Ok((scene, look))
 }
 

@@ -1,10 +1,10 @@
 // The per-machine throttle table (docs/parallel-proof.md, section 6): a host-local lock table under the user's
 // ~/.deepbuild/throttle/, whatever HOME says, that grants build, bay pair, test and timed by class, so a neighbour's build never runs
-// while a budget is timed. `throttle.mjs <class> [--wait <min>] -- <command>` acquires, runs, releases and exits
+// while a budget is timed. `throttle.mjs <class> [--wait <min> | --stall <min>] -- <command>` acquires, runs, releases and exits
 // with the child's status, or ends a command held past its `--hold` bound while another request waits; acquire and release serve the scripts that hold a grant themselves. `throttle.mjs window`
 // opens a budget window (section 12a): a timed grant that waits for every slot to empty, around budget-window.mjs.
 // `throttle.mjs load [--report]` reads the machine's load by who made it (#3067), its GPU time and the cores idle beside
-// the requests in line (#3240): a sample a minute, and their table.
+// the requests in line (#3240), and the threads under each grant (#3550): a sample a minute, and their table.
 // An affected.mjs run's test grant is its admission, and its jobs take turns on one pool of job tokens (#3221).
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -84,9 +84,9 @@ const ended = (entry) => !alive(processes(), entry) && !alive(processes({ fresh:
 /** This process and its ancestors, nearest first: what a DEEP_THROTTLE or DEEP_PERF_LOCK holder is verified against. */
 export const ancestors = () => chain(processes({ fresh: true }), process.pid);
 /** Every process under `pid` now, by PID and start, so a stop later reaches only these and not a number since taken. */
-export function descendants(pid) {
+export function descendants(...pids) {
   const procs = processes({ fresh: true });
-  return [...procs].filter(([at]) => at !== pid && chain(procs, at).includes(pid)).map(([at, { start }]) => ({ pid: at, start }));
+  return [...procs].filter(([at]) => !pids.includes(at) && chain(procs, at).some((pid) => pids.includes(pid))).map(([at, { start }]) => ({ pid: at, start }));
 }
 /** SIGKILL to each of `tree` still listed with the start it had. */
 export function killTree(tree) {
@@ -348,22 +348,25 @@ function grantable(table, procs, request, seen) {
   return request.nested || loadavg()[0] < cpus().length;
 }
 
-// The holders the last timed request to time out waited on, for its INCONCLUSIVE line.
+// The holders the last timed request to time out waited on, or a stalled one's of its class, for its INCONCLUSIVE line.
 let blocked = [];
 
 /**
  * Takes a grant of `cls`, waiting at most `wait` minutes; null when none came, or an ENOSPC marked `waited` thrown when
- * the wait ran out on a full disk (#2869). A build or test request from a chain
+ * the wait ran out on a full disk (#2869). With `stall`, the wait has no clock: the request keeps its place for as long
+ * as grants of its class change hands, and runs out only once none has for `stall` minutes (#3334). A build or test request from a chain
  * that holds a grant, and a timed request from one that holds timed, passes through: it holds its ancestor's grant
- * and is released with it. The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
+ * and is released with it. With `turns` false it takes no turn of the pool inside an admitted run either, as
+ * scripts/lease asks (#3238). The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
  * run down while a window is open: a window outlasts a wait, and only its end decides when the next build starts.
  */
-export function acquire(cls, { wait = 30, window = false, run } = {}) {
+export function acquire(cls, { wait = 30, stall, window = false, run, turns = true } = {}) {
   if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
   const pid = process.pid;
   // A readings variable the table can't take is refused before anything is asked.
   readings();
-  let deadline = Date.now() + wait * 60_000, polled = Date.now();
+  const bound = (stall ?? wait) * 60_000;
+  let deadline = Date.now() + bound, polled = Date.now(), hands;
   const request = locked((table, procs) => {
     const held = inherited(table, procs, chain(procs, pid));
     const id = randomBytes(8).toString('hex'), start = procs.get(pid).start, seq = () => (table.seq = (table.seq ?? 0) + 1);
@@ -371,7 +374,7 @@ export function acquire(cls, { wait = 30, window = false, run } = {}) {
       // A run asked under a caller's grant is admitted at once, with no slot; inside an admitted run, a request under no
       // turn waits for one (#3221).
       const turn = held.some((grant) => grant.class === 'turn');
-      const admitted = !turn && cls !== 'timed' && held.find((grant) => grant.run === true);
+      const admitted = !turn && turns && cls !== 'timed' && held.find((grant) => grant.run === true);
       if (!turn && !admitted && cls === 'test' && run !== undefined) {
         const entry = { id, class: cls, pid, start, nested: true, run: true, used: 0, at: Date.now() };
         table.grants.push(entry);
@@ -412,6 +415,12 @@ export function acquire(cls, { wait = 30, window = false, run } = {}) {
       const now = Date.now();
       if ([...table.grants, ...table.requests].some((other) => other.window && other.id !== request.id)) deadline += now - polled;
       polled = now;
+      // A grant of the class taken or given back since the last look starts a stall's bound again.
+      if (stall !== undefined) {
+        const held = table.grants.filter((other) => other.class === cls).map((other) => other.id).sort().join();
+        if (held !== hands) deadline = now + bound;
+        hands = held;
+      }
       const seen = pending.class === 'test' ? readings() : undefined;
       if (!grantable(table, procs, pending, seen)) {
         if (now <= deadline) return null;
@@ -419,9 +428,11 @@ export function acquire(cls, { wait = 30, window = false, run } = {}) {
         // A drain that timed out names what it waited on. A top-level one marks it too, so the next drain doesn't stop
         // the machine on it, but only while nothing is marked: a holder that started while drains were off isn't one
         // that blocked a drain, and once the marked ones end, drains stop new grants again.
-        const named = cls === 'timed' ? blockers(table, procs, pending) : [];
+        // A stalled request names the holders of its class, and a timed one, outside its chain.
+        const mine = chain(procs, pid);
+        const named = cls === 'timed' ? blockers(table, procs, pending) : stall !== undefined ? table.grants.filter((grant) => (grant.class === cls || grant.class === 'timed') && !mine.includes(grant.pid)) : [];
         const lines = named.length ? commands(named.map((grant) => grant.pid)) : new Map();
-        if (!pending.window && !pending.nested && !table.grants.some((grant) => grant.blocked)) for (const grant of named) grant.blocked = true;
+        if (cls === 'timed' && !pending.window && !pending.nested && !table.grants.some((grant) => grant.blocked)) for (const grant of named) grant.blocked = true;
         blocked = named.map(({ class: held, id, pid: holder, at }) => ({ class: held, id, pid: holder, at: at ? new Date(at).toISOString() : 'an unknown time', command: lines.get(holder) ?? '' }));
         return 'timeout';
       }
@@ -437,13 +448,13 @@ export function acquire(cls, { wait = 30, window = false, run } = {}) {
       const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now, ...pending.run && { run: true, used: 0 } };
       table.grants.push(entry);
       const load = loadavg()[0], cores = cpus().length;
-      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, wait, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
+      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, ...stall !== undefined ? { stall } : { wait }, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
       return entry;
     });
     if (grant === 'timeout') {
       // The request is out of the table, so a log line a full disk refuses changes nothing.
       try {
-        log({ event: 'timeout', class: cls, id: request.id, pid, wait, ...blocked.length ? { blockers: blocked } : {} });
+        log({ event: 'timeout', class: cls, id: request.id, pid, ...stall !== undefined ? { stall } : { wait }, ...blocked.length ? { blockers: blocked } : {} });
       } catch (error) {
         if (error.code !== 'ENOSPC') throw error;
       }
@@ -575,15 +586,36 @@ function gpuClients() {
 // The GPU clients at the last read made: a client's change is from there, so a read that wasn't made loses nothing.
 let gpuBefore = null;
 
+/**
+ * Each process's threads and how many of them are runnable, by pid: one ps listing of every thread (#3550), a line a
+ * thread, ending with its process's pid and the thread's state, runnable when the state starts with R. Throws, in
+ * this code's words, when the listing can't be made or names no thread.
+ */
+function threadsByProcess() {
+  const listing = spawnSync('ps', ['-A', '-M', '-o', 'pid=,state='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, LC_ALL: 'C' } });
+  if (listing.status !== 0) throw Error(failure('ps', listing));
+  const counts = new Map();
+  for (const line of listing.stdout.split('\n')) {
+    const [, pid, state] = line.match(/\s(\d+)\s+([A-Z]\S*)\s*$/) ?? [];
+    if (!pid) continue;
+    const count = counts.get(Number(pid)) ?? { threads: 0, runnable: 0 };
+    counts.set(Number(pid), { threads: count.threads + 1, runnable: count.runnable + Number(state.startsWith('R')) });
+  }
+  if (!counts.size) throw Error('ps listed no thread');
+  return counts;
+}
+
 /** Each CPU's ticks, busy and in all, as os.cpus() counts them. */
 const ticks = () => cpus().map(({ times }) => ({ busy: times.user + times.nice + times.sys + times.irq, all: times.user + times.nice + times.sys + times.irq + times.idle }));
 
 /**
  * One sample: the load, the cores, and each running process's CPU, by ps, under the outermost held grant whose holder
  * is the process or above it, or else under `outside`; on macOS, each process's GPU time since the read before, by
- * ioreg, under the same; the requests in line by class; and the cores idle and busy over the sample's wait of a second
- * and its reads. A reading that can't be made says `failed`, with no numbers, and a GPU read that can't be made says
- * `gpuUnread`, with no GPU numbers. The reasons are this code's own words, never ps's or ioreg's, so the log holds no path.
+ * ioreg, under the same; its threads and those runnable, by a second ps listing, under the same (#3550); the requests
+ * in line by class; and the cores idle and busy over the sample's wait of a second and its reads. A reading that can't
+ * be made says `failed`, with no numbers, a GPU read that can't be made says `gpuUnread`, with no GPU numbers, and a
+ * thread listing that can't be made says `threadsUnread`, with no thread numbers. The reasons are this code's own
+ * words, never ps's or ioreg's, so the log holds no path.
  */
 function sample() {
   const reading = { at: new Date().toISOString(), load: loadavg()[0], cores: cpus().length };
@@ -627,7 +659,17 @@ function sample() {
   } catch (error) {
     return { ...reading, failed: error.message };
   }
-  const tally = () => ({ ...Object.fromEntries(KINDS.map((name) => [name, 0])), gpu: 0 });
+  // Every thread, once the processes are listed (#3550): where ps -M lists none, or can't, no thread is read.
+  let threads, unlisted;
+  if (process.platform !== 'darwin') unlisted = 'no thread reading on this machine';
+  else {
+    try {
+      threads = threadsByProcess();
+    } catch (error) {
+      unlisted = error.message;
+    }
+  }
+  const tally = () => ({ ...Object.fromEntries(KINDS.map((name) => [name, 0])), gpu: 0, procs: 0, threads: 0, runnable: 0 });
   // A holder of two grants counts under the one it took first; the other still has its entry.
   const entries = held.filter((grant) => procs.get(grant.pid)?.start === grant.start).map((grant) => ({ id: grant.id, class: grant.class, pid: grant.pid, tally: tally() }));
   const grants = new Map([...entries].reverse().map((entry) => [entry.pid, entry]));
@@ -654,17 +696,31 @@ function sample() {
     if (ms && procs.has(pid)) drawn.push({ pid, command: procs.get(pid).command, gpu: ms, ...owner && { grant: owner.id } });
   }
   if (clients) gpuBefore = clients;
+  // Each process the thread listing names goes where its CPU goes, and its runnable threads to its command's entry
+  // under that grant or under none (#3550).
+  const running = new Map();
+  for (const [pid, count] of threads ?? []) {
+    const owner = ownerOf(pid), mine = owner?.tally ?? outside;
+    mine.procs += 1;
+    mine.threads += count.threads;
+    mine.runnable += count.runnable;
+    if (!count.runnable || !procs.has(pid)) continue;
+    const { command } = procs.get(pid), key = `${owner?.id ?? ''} ${command}`;
+    if (!running.has(key)) running.set(key, { command, runnable: 0, ...owner && { grant: owner.id } });
+    running.get(key).runnable += count.runnable;
+  }
   const waiting = Object.fromEntries(CLASSES.map((cls) => [cls, 0]));
   for (const request of requests) if (Object.hasOwn(waiting, request.class) && procs.get(request.pid)?.start === request.start) waiting[request.class] += 1;
   // Each CPU's share of busy ticks over the sample's wait and reads, in thousandths of a core; the rest is idle.
   const busy = Math.round(1000 * ticks().reduce((sum, now, k) => sum + (now.all > first[k].all ? (now.busy - first[k].busy) / (now.all - first[k].all) : 0), 0));
-  const counted = (mine) => ({ ...shares(mine), ...!unread && { gpu: seconds(mine.gpu) } });
+  const counted = (mine) => ({ ...shares(mine), ...!unread && { gpu: seconds(mine.gpu) }, ...threads && { procs: mine.procs, threads: mine.threads, runnable: mine.runnable } });
   return {
     ...reading,
     grants: entries.map(({ tally: mine, ...grant }) => ({ ...grant, ...counted(mine) })),
     outside: counted(outside),
     top: used.sort((a, b) => b.cpu - a.cpu).slice(0, 5).map((proc) => ({ ...proc, cpu: cores(proc.cpu) })),
     ...unread ? { gpuUnread: unread } : { gpuTop: drawn.sort((a, b) => b.gpu - a.gpu).slice(0, 5).map((proc) => ({ ...proc, gpu: seconds(proc.gpu) })) },
+    ...unlisted ? { threadsUnread: unlisted } : { runTop: [...running.values()].sort((a, b) => b.runnable - a.runnable).slice(0, 5) },
     waiting,
     idle: cores(1000 * reading.cores - busy),
     busy: cores(busy),
@@ -678,7 +734,10 @@ function sample() {
  * cores bound, not of the load, so the mean of each is printed beside them, and the commands outside every grant that
  * the samples' `top` named, a process that outlived its parent among them. Then the share of minutes in which a request
  * waited beside two or more idle cores, and, over every sample whose GPU was read, the GPU seconds by class and outside
- * with their shares, and the commands outside every grant that drew the most (#3240).
+ * with their shares, and the commands outside every grant that drew the most (#3240). Last, over the samples whose
+ * threads were read (#3550): the mean runnable threads by class and outside in the minutes above the cores, with
+ * their shares; the median load, the cores and the runnable threads by what was held in the minute; and the commands
+ * outside every grant with the most runnable threads.
  */
 function loadReport(samples, torn) {
   const percent = (tenths) => `${(tenths / 10).toFixed(1)}%`;
@@ -731,6 +790,43 @@ function loadReport(samples, torn) {
     for (const proc of gpuRead.flatMap((entry) => entry.gpuTop ?? [])) if (!proc.grant) ungranted.set(proc.command, (ungranted.get(proc.command) ?? 0) + ms(proc.gpu));
     const named = [...ungranted].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([command, n]) => `${command} ${seconds(n).toFixed(3)} s`);
     if (named.length) lines.push(`GPU top commands under no grant: ${named.join(', ')}`);
+  }
+  // Threads by grant (#3550), over the samples whose threads were read.
+  const listed = samples.filter((entry) => typeof entry.outside?.runnable === 'number');
+  lines.push(`threads read in ${listed.length} of ${samples.length} samples`);
+  if (listed.length) {
+    const mean = (sum, over) => (sum / over.length).toFixed(2);
+    // The runnable threads by class and outside, in the minutes above the cores.
+    const high = listed.filter((entry) => entry.load > entry.cores);
+    const runnable = new Map([...CLASSES.map((cls) => [cls, 0]), ['outside', 0]]);
+    for (const entry of high) {
+      for (const grant of entry.grants) runnable.set(grant.class, runnable.get(grant.class) + grant.runnable);
+      runnable.set('outside', runnable.get('outside') + entry.outside.runnable);
+    }
+    const all = [...runnable.values()].reduce((sum, n) => sum + n, 0);
+    if (all > 0) {
+      const of = apportion(runnable, all);
+      const classes = new Set([...high.flatMap((entry) => entry.grants.map((grant) => grant.class)), 'outside']);
+      for (const [name, n] of runnable) if (classes.has(name)) lines.push(`runnable ${name} ${mean(n, high)}, ${percent(of.get(name).tenths)}`);
+    }
+    // The load by what was held in the minute, above the cores or not: the most minutes first.
+    const held = new Map();
+    for (const entry of listed) {
+      const what = CLASSES.filter((cls) => entry.grants.some((grant) => grant.class === cls)).join(' and ') || 'nothing';
+      held.set(what, [...held.get(what) ?? [], entry]);
+    }
+    const of = apportion(new Map([...held].map(([what, minutes]) => [what, minutes.length])), listed.length);
+    for (const [what, minutes] of [...held].sort((a, b) => b[1].length - a[1].length)) {
+      const loads = minutes.map((entry) => entry.load).sort((a, b) => a - b), middle = loads.length >> 1;
+      const median = loads.length % 2 ? loads[middle] : (loads[middle - 1] + loads[middle]) / 2;
+      const each = (read) => mean(minutes.reduce((sum, entry) => sum + read(entry), 0), minutes);
+      const under = (field) => each((entry) => entry.grants.reduce((sum, grant) => sum + grant[field], 0));
+      lines.push(`held ${what}: ${minutes.length} of ${listed.length} minutes, ${percent(of.get(what).tenths)}, median load ${median.toFixed(2)}, cores busy ${each((entry) => entry.busy)}, idle ${each((entry) => entry.idle)}, under grants ${under('cpu')}, runnable threads under grants ${under('runnable')}, outside ${each((entry) => entry.outside.runnable)}`);
+    }
+    const ungranted = new Map();
+    for (const top of high.flatMap((entry) => entry.runTop)) if (!top.grant) ungranted.set(top.command, (ungranted.get(top.command) ?? 0) + top.runnable);
+    const named = [...ungranted].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([command, n]) => `${command} ${mean(n, high)}`);
+    if (named.length) lines.push(`top commands under no grant, mean runnable threads: ${named.join(', ')}`);
   }
   return lines.join('\n');
 }
@@ -790,10 +886,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   const cls = window ? 'timed' : named;
   const command = window ? [process.execPath, fileURLToPath(new URL('budget-window.mjs', import.meta.url))] : split < 0 ? [] : args.slice(split + 1);
   const given = new Map(Array.from({ length: options.length / 2 | 0 }, (_, k) => [options[2 * k], Number(options[2 * k + 1])]));
-  const wait = given.get('--wait') ?? (window ? 60 : 30), hold = given.get('--hold') ?? HOLD;
-  const flags = window ? ['--wait'] : ['--wait', '--hold'];
-  if (!LIMITS[cls] || !command.length || options.length !== 2 * given.size || ![...given].every(([flag, value]) => flags.includes(flag) && value >= 0)) {
-    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min>] [--hold <min>] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
+  const wait = given.get('--wait') ?? (window ? 60 : 30), stall = given.get('--stall'), hold = given.get('--hold') ?? HOLD;
+  const flags = window ? ['--wait'] : ['--wait', '--stall', '--hold', '--turns'];
+  if (!LIMITS[cls] || !command.length || options.length !== 2 * given.size || (given.has('--wait') && given.has('--stall')) || ![...given].every(([flag, value]) => flags.includes(flag) && value >= 0)) {
+    console.log(`BLOCKED throttle: usage: throttle.mjs <${CLASSES.join('|')}> [--wait <min> | --stall <min>] [--hold <min>] [--turns 0] -- <command>, throttle.mjs window [--wait <min>], or throttle.mjs load [--report]`);
     process.exit(2);
   }
   // A run's admission names the free disk its shards need (#3221); its command doesn't inherit the mark.
@@ -805,7 +901,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   }
   let grant;
   try {
-    grant = acquire(cls, { wait, window, run });
+    grant = acquire(cls, { wait, stall, window, run, turns: given.get('--turns') !== 0 });
   } catch (error) {
     // A wait that ran out on a full disk is no grant (#2869).
     if (error.waited) grant = null;
@@ -817,9 +913,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   }
   if (!grant) {
     // The marker a job's report reads by: its output is the test run's too, so a line there proves nothing.
-    if (process.env.DEEP_PROOF_VITEST_REPORT) appendFileSync(process.env.DEEP_PROOF_VITEST_REPORT, `${JSON.stringify({ type: 'no-grant', message: `no ${cls} grant came within ${wait} min` })}\n`);
+    const none = stall === undefined ? `no ${cls} grant came within ${wait} min` : `no ${cls} grant changed hands within ${stall} min`;
+    if (process.env.DEEP_PROOF_VITEST_REPORT) appendFileSync(process.env.DEEP_PROOF_VITEST_REPORT, `${JSON.stringify({ type: 'no-grant', message: none })}\n`);
     const why = blocked.map((holder) => `; blocked by ${holder.class} grant ${holder.id} held by pid ${holder.pid} since ${holder.at} (${holder.command})`).join('');
-    console.log(`INCONCLUSIVE no grant: no ${cls} grant came within ${wait} min${why}\n  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.`);
+    console.log(`INCONCLUSIVE no grant: ${none}${why}\n  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.`);
     process.exit(3);
   }
   if (window) log({ event: 'window-open', id: grant.id, pid: process.pid });

@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the Lima VMs, since every test starts a hub of its own, runs `deep host add` on this Mac's deep-ubuntu VM and plays a session there, and the VM's one home holds the installed deep-hook, Claude Code's hooks and the spool; each hub runs deep-hook from this checkout's target/" }

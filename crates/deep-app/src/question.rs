@@ -25,6 +25,11 @@ use crate::{
     states,
 };
 
+mod escapes;
+mod faults;
+pub use faults::Faults;
+mod look;
+
 /// The card's least size, in window points, tall enough for a batch of four with its switches (it draws about 525
 /// tall): a slot smaller than this, or than the card as drawn, never arms.
 pub const CARD_SIZE: [i64; 2] = [480, 560];
@@ -48,33 +53,6 @@ pub const LOOK_FIRST: &str = "question.look_first";
 static NEXT_SEQ: AtomicU64 = AtomicU64::new(0);
 /// Whether an OS confirmation ever passed in this process: only the planted reuse reads it.
 static PASSED_ONCE: AtomicBool = AtomicBool::new(false);
-
-/// The wrong programs the criteria name, each a switch (design: Dogfooding, planted twins). All off in the app.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Faults {
-    /// AC1: a card that shows no scope.
-    pub no_scope: bool,
-    /// AC1: a count that follows the record while the card shows.
-    pub count_follows_record: bool,
-    /// AC2: the click mapped to the record's option order, not the drawn one.
-    pub click_by_record_index: bool,
-    /// AC3: a notification action that writes the default as an answer.
-    pub notification_action_answers: bool,
-    /// AC6: a card that leaves out the default.
-    pub no_default: bool,
-    /// AC9: the diff since the pin shown only once answered.
-    pub diff_after_answer: bool,
-    /// AC10: a shell that answers with the default on exit.
-    pub answers_on_exit: bool,
-    /// AC11: the first passed confirmation reused for the next card.
-    pub reuses_confirmation: bool,
-    /// AC13: an app that records only answers.
-    pub records_only_answers: bool,
-    /// AC15: the words answer every open ask with the key.
-    pub answers_second_from_words: bool,
-    /// AC16: a typed "yes" read as the allow option.
-    pub typed_yes_allows: bool,
-}
 
 /// What a press lands on, by the card's draw order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -462,6 +440,9 @@ impl Controller {
             crate::pictures::HALF
         };
         self.now = now;
+        // A frame drawn while nobody can see the window shows you nothing.
+        let none = Default::default();
+        let drawn = if self.machine.seen() { drawn } else { &none };
         self.pictures.frame(drawn, half, now);
         self.lefts() != left
     }
@@ -686,7 +667,7 @@ impl Controller {
 
     /// Everything the card draws, in reading order, each row's words through [`visible`].
     pub fn rows(&self) -> Vec<Row> {
-        self.unmarked_rows().into_iter().map(Row::marked).collect()
+        escapes::drawn(self.model.kind, self.unmarked_rows())
     }
 
     fn unmarked_rows(&self) -> Vec<Row> {
@@ -1244,7 +1225,7 @@ impl Controller {
             return self.took(outcome, now, events, now);
         }
         if let Some(waiting) = self.send_waiting.take() {
-            if confirmed && waiting.seq == self.machine.seq() && self.machine.accepts(now) {
+            if confirmed && self.machine.confirms(waiting.seq) {
                 self.answer_words(now, events, now);
                 return Did::Answered;
             }
