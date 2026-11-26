@@ -14,10 +14,12 @@
 //   2. `person`, a session a person is at, stops green with two slow checks. Both wait.
 //   3. The running check is ended, and then each one that starts, until all four have run.
 //
-// After 1 and after 2 the script waits until the lease table has refused each waiting run three times, then reads
-// whether that stop's `turnEnded` has returned. --out gets each run's events in order and those readings. Which
-// waiting run the table grants a freed slot is decided by when each one's poll lands, so the order the four start in
-// can differ from run to run; `started_as_asked` counts the runs in which it was the order they asked in.
+// After 1 and after 2 the script waits for whichever comes first, that stop's `turnEnded` returning or the lease table
+// refusing each run that waits in `admit` three times, then reads whether `turnEnded` has returned with none of the
+// stop's waiting checks started. A run asks for a slot when the gate runner hands it to the host. Before #3562 that
+// was at the stop, so each waiting run polled the table and a freed slot went to the one whose poll landed first; since
+// #3562 a place leaves the queue only once a slot is free for it. `started_as_asked` counts the runs in which the four
+// started in the order they asked. --out gets each run's events in order and those readings.
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { kept, source } from './load.mjs';
@@ -60,7 +62,6 @@ async function once() {
   const live = new Map();
   const runOf = new Map();
   const holders = new Map();
-  const asked = new Map();
   const started = new Map();
   let n = 0;
   const name = (cwd) => cwd.split('/').at(-1);
@@ -77,7 +78,6 @@ async function once() {
       const run = `run:${ulid(Date.now())}${(++n).toString(36).toUpperCase()}`;
       runOf.set(r.check, run);
       note('asks for a slot', { check: r.check });
-      asked.get(r.check)?.();
       const leases = await admit(table, holders.get(r.claim), run, r.lane);
       let end;
       const done = new Promise((resolve) => { end = resolve; });
@@ -87,8 +87,9 @@ async function once() {
       return run;
     },
     ended: (run) => [...live.entries()].find(([check]) => runOf.get(check) === run)?.[1].done ?? Promise.resolve('missing'),
-    // As core.ts: the pool less the runs that hold a slot.
-    slots: () => ({ free: Math.max(0, 2 - live.size) }),
+    // As core.ts: the pool less the runs that hold a slot, and the one of its two slots slow runs may hold (#3562; a
+    // gate runner from before it reads the first alone).
+    slots: () => ({ free: Math.max(0, 2 - live.size), slow: 1 }),
     budget_ms: 10_000, hold_ms: 60_000, checkouts: () => checkouts, invalid: async () => undefined, stopping: () => false, stoodIn: async () => undefined,
   });
   const check = (id) => ({ check: id, approved: null, command: `sh ${id}`, covers: ['R1'], depth: 'unit', on_base: 'passes', asserts: [], expected_ms: 60_000 });
@@ -102,20 +103,18 @@ async function once() {
   }
 
   const starts = Object.fromEntries(all.map((id) => [id, new Promise((done) => { started.set(id, done); })]));
-  const asks = Object.fromEntries(all.map((id) => [id, new Promise((done) => { asked.set(id, done); })]));
+  const waits = (checks) => checks.every((check) => !events.some((e) => e.what === 'starts' && e.check === check));
   const readings = {};
   try {
     const other = stop('other', 'scheduled', CHECKS.other);
     await starts['other:first'];
-    await asks['other:second'];
-    await refusedThrice(['other:second']);
-    readings.other_turn_end_returned_while_its_second_check_waited = returned.has('other');
-    note("the lease table has refused other:second three times; other's turnEnded has returned", { is: returned.has('other') });
+    await Promise.race([other, refusedThrice(['other:second'])]);
+    readings.other_turn_end_returned_while_its_second_check_waited = returned.has('other') && waits(['other:second']);
+    note("other:second waits; other's turnEnded has returned", { is: returned.has('other') });
     const person = stop('person', 'person', CHECKS.person);
-    await Promise.all([asks['person:first'], asks['person:second']]);
-    await refusedThrice(['other:second', 'person:first', 'person:second']);
-    readings.person_turn_end_returned_while_its_checks_waited = returned.has('person');
-    note("the lease table has refused each of the three waiting runs three times more; the person's turnEnded has returned", { is: returned.has('person') });
+    await Promise.race([person, refusedThrice(['other:second', 'person:first', 'person:second'])]);
+    readings.person_turn_end_returned_while_its_checks_waited = returned.has('person') && waits(CHECKS.person);
+    note("the person's two checks wait; the person's turnEnded has returned", { is: returned.has('person') });
     // Each run that holds the slot is ended once it has started; the next to start is whichever the table grants.
     const pending = new Set(all);
     for (let running = 'other:first'; pending.size;) {

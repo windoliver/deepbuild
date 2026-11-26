@@ -19,6 +19,12 @@ describe('verdictLine', () => {
     expect(verdictLine({ outcome: null, requirements: [], running: [{ check: 'a', about_s: null }] })).toBe('says done · 1 check running · next: DeepBuild');
     expect(verdictLine({ outcome: null, requirements: [], running: [] })).toBe('says done · next: DeepBuild');
   });
+  it('names the checks queued for a slot beside those running, with the longest expected time of each (#3562)', () => {
+    expect(verdictLine({ outcome: null, requirements: [R(1, 'PASS'), R(2, 'pending')], running: [], queued: [{ check: 'journey', about_s: 300 }], tests: 1 }))
+      .toBe('says done 1/2 · 1 check queued · about 5 min · 1 test · next: DeepBuild');
+    expect(verdictLine({ outcome: null, requirements: [], running: [{ check: 'a', about_s: 20 }], queued: [{ check: 'b', about_s: null }, { check: 'c', about_s: null }] }))
+      .toBe('says done · 1 check running · about 20 s · 2 checks queued · next: DeepBuild');
+  });
   it('a send-back carries its round, the smallest case and where it points, and the agent owns the next step', () => {
     expect(verdictLine({ outcome: 'FAIL', round: 1, requirements: [R(1, 'FAIL', { smallest: 'receipt shows $18.00', points_to: 'total.ts:42' }), R(2, 'PASS'), R(3, 'PASS')], running: [] }))
       .toBe('sent back 1/3: receipt shows $18.00 · total.ts:42 · next: agent');

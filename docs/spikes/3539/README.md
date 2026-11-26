@@ -39,7 +39,8 @@ What follows from this is in [What follows](#what-follows): #3562 and #3563 are 
 - `load.mjs`: this checkout's packages loaded from their TypeScript sources, as `scripts/lifecycle-sim.mjs` loads the
   record, so no run reads a stale build.
 - `scripts.mjs`: the scripts, seeded. `run.mjs`: makes each script and runs the harness on it. `scripts/`: each script
-  as it was run. `out/`: each run's output as `harness.mjs` wrote it, and `reply-hold.json`.
+  as it was run. `out/`: each run's output as `harness.mjs` wrote it, `reply-hold.json`, the script's output on the
+  merge base of #3562's change, and `reply-hold.change.json`, its output on that change.
 - `analyze.mjs`: works out `record.json` and this file's tables from `scripts/` and `out/` alone.
 - `reply-hold.mjs`: the hub's gate runner with the real lease table and the gate package's `admit`, to read when
   `turnEnded` returns while slow checks wait for a slot.
@@ -264,7 +265,8 @@ On the one script:
 <!-- /replies -->
 
 `reply-hold.mjs` reads the same on the real lease table, opened at 4 cores, with the gate package's `admit` taking
-each run's slot (`out/reply-hold.json`, 20 runs). A session nobody types in stops with two slow checks; one starts
+each run's slot (`out/reply-hold.json`, 20 runs, taken again on `2a689d81f`, the merge base of #3562's change, and
+reading as it did on `c4b178596`). A session nobody types in stops with two slow checks; one starts
 and one waits. In none of the 20 runs had its `turnEnded` returned once the table had refused the waiting run three
 times; in all 20 it returned when that run started. A person's session then stopped with two slow checks, and in all
 20 its `turnEnded` returned only when the second of them started.
@@ -274,6 +276,12 @@ The four runs asked for a slot in the order `other:first`, `other:second`, `pers
 that asked third, ahead of the one that asked second. `admit` asks again after a wait that doubles from 5 to 50 ms
 (`packages/gate/src/exec.ts:108`), so the longer a run has waited, the less often it asks. Which run wins is a matter
 of timing: an earlier single run of this script, with shorter waits, started them in the order they asked.
+
+**Since #3562.** A place leaves the queue only once a slot is free for a slow run, and `turnEnded` no longer waits
+for a run to start. The same script on that change (`out/reply-hold.change.json`, 20 runs): each stop's `turnEnded`
+had returned while its checks waited in 20 of 20, and the four runs started in the order they asked in 20 of 20.
+The script now waits for whichever comes first, a stop's `turnEnded` returning or three refusals of each run that
+waits in `admit`, since a queued place asks the table for nothing.
 
 What a session sees of this was not run: no hub process was started and no Stop hook was held. The hook's own
 timeout bounds it. Setup needs Claude Code's to be at least 65 s (`packages/hub/src/claude-settings.ts`) and sets
