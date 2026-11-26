@@ -1231,6 +1231,23 @@
       ]
     },
     {
+      "id": "canvas-atlas-slice",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "atlas-slice"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "slice_rows_frame_ms": 0.2
+      },
+      "initialReason": "Issue #2039 first measurement: the merge base reads no slice, draws every free atlas row as one quad of its cell and has no such task. A release deep-show's frames of 500 free rows of one 24 x 24 px atlas cell, 25 across and 20 down, each with slice 8 on each side and its own box 32 to 48 u wide and 32 or 40 u tall, against the same rows with no slice, w and h, each set sliding 15 u a second along x by a keyed channel so each of the 300 frames a side places every row again, five runs after a warm-up one, each a fresh process, the side that goes first alternating; the difference of the sides' median frame time is what slice adds. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2039.2e193c48"
+      ]
+    },
+    {
       "id": "canvas-local-tone-map",
       "command": [
         "node",
