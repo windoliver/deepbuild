@@ -46,6 +46,9 @@ slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
 // which copies the whole tree, runs in their place.
 byHand.push(...['ac1-planted', 'ac2-invariants', 'ac3-checks', 'ac4-canvas'].map((file) => `tests/acceptance/2339/${file}.test.mjs`));
 
+// #3033's folder (blind) runs alone by its lane.json; budgets.test.ts times a sea at 1080p with judgeLimit.
+timed.push('tests/acceptance/3033/budgets.test.ts');
+
 /**
  * Why each `alone` entry is alone (#3066; docs/parallel-proof.md, section 7), one reason an entry: `binary`, a sibling's
  * cargo build rewrites a binary under it (its files start cargo, read target/, or start a hub, which runs deep-hook
