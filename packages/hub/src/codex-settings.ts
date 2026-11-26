@@ -31,6 +31,7 @@ export const hasCodex = (): boolean => existsSync(home());
 export const codexHooks = (): string => join(home(), 'hooks.json');
 export const codexConfig = (): string => join(home(), 'config.toml');
 const recordFile = (root: string): string => join(root, 'codex-hooks.json');
+const intactFile = (root: string): string => join(root, 'codex-hooks.intact.json');
 
 /** The path our entries name, which every update keeps: a link in the root that setup points at the built deep-hook. */
 export function fixedHook(root: string, built: string): string {
@@ -81,7 +82,7 @@ export function recordEntries(root: string, hook: string, server: Server): void 
 }
 /** What setup kept for Codex, gone at undo. */
 export function forgetEntries(root: string): void {
-  for (const file of [recordFile(root), trustFile(root), join(root, 'bin', 'deep-hook')]) rmSync(file, { force: true });
+  for (const file of [recordFile(root), intactFile(root), trustFile(root), join(root, 'bin', 'deep-hook')]) rmSync(file, { force: true });
 }
 /** Where a session's rollouts may sit: the default home, and the one setup wrote in. */
 export function sessionHomes(root: string): string[] {
@@ -335,6 +336,53 @@ export function modified(root: string): string[] {
     if (!found) return [`Codex's ${event} entry was removed from ${file}, so that hook doesn't reach the hub`];
     return JSON.stringify(found) === JSON.stringify(entry) ? [] : [`Codex's ${event} entry was modified in ${file}: it isn't what setup wrote, so Codex asks for trust again and holds may not fit`];
   });
+}
+/** Codex's hooks file in the home setup wrote in, as Codex names it (a link stays one); undefined before setup wrote entries there. */
+export function recordedHooks(root: string): string | undefined {
+  const record = readJson(recordFile(root));
+  return recordedIn(record).length ? join(homeIn(record), 'hooks.json') : undefined;
+}
+/** The hooks file's object: empty for a file that isn't there; undefined for text that is no JSON object, as a file reads while it is written. */
+const hooksOf = (text: string | undefined): Obj | undefined => { const parsed = text === undefined ? { value: {} } : strictObject(text); return 'refused' in parsed ? undefined : parsed.value; };
+/** Each entry of ours `text`, the hooks file's, doesn't hold as setup wrote it, by its event and command; undefined when `text` is no JSON object. */
+export function brokenIn(root: string, text: string | undefined): string[] | undefined {
+  const value = hooksOf(text);
+  return value && recorded(root).filter(({ event, command, entry }) => !entriesFor(value.hooks, event).some((h) => h.command === command && JSON.stringify(h) === JSON.stringify(entry))).map(({ event, command }) => `${event} ${command}`);
+}
+/**
+ * Keeps the hooks file's bytes while it holds every entry of ours as setup wrote it. Codex keeps trust per entry, by
+ * its place in the file and a hash of it, so what goes back is the file whole, as it was: byte for byte, with Codex
+ * asking for nothing again; and a hub that starts on a changed file still has it. With no `bytes`, what was kept goes:
+ * the file was left holding less of ours, as yours, so what was kept is no longer the file before its next change.
+ */
+export function keepIntact(root: string, file: string, bytes: Buffer | undefined): void {
+  if (!bytes) return rmSync(intactFile(root), { force: true });
+  const [kept, text] = [readJson(intactFile(root)), bytes.toString('base64')];
+  if (kept?.file !== file || kept.bytes !== text) writeThrough(intactFile(root), `${JSON.stringify({ file, bytes: text })}\n`);
+}
+/** Those bytes, for the same file, while they hold every entry of ours as setup's record has them now. */
+export function keptIntact(root: string, file: string): Buffer | undefined {
+  const kept = readJson(intactFile(root));
+  if (kept?.file !== file || typeof kept.bytes !== 'string') return undefined;
+  const bytes = Buffer.from(kept.bytes, 'base64');
+  return brokenIn(root, bytes.toString())?.length === 0 ? bytes : undefined;
+}
+/**
+ * `text` with each entry of ours as setup wrote it, for a file no hub has seen whole: one it holds by its command, in
+ * its place; one it doesn't, after yours, as setup adds it. Undefined when `text` is no JSON object, which nothing is
+ * put back into.
+ */
+export function withRecorded(root: string, text: string | undefined): string | undefined {
+  const value = hooksOf(text);
+  if (!value) return undefined;
+  const hooks: Obj = isObj(value.hooks) ? { ...value.hooks } : {};
+  for (const { event, command, entry } of recorded(root)) {
+    const groups = Array.isArray(hooks[event]) ? hooks[event] as unknown[] : [];
+    hooks[event] = present(groups, command)
+      ? groups.map((g) => (isObj(g) && Array.isArray(g.hooks) ? { ...g, hooks: g.hooks.map((h) => (isObj(h) && h.command === command ? entry : h)) } : g))
+      : [...groups, { hooks: [entry] }];
+  }
+  return `${JSON.stringify({ ...value, hooks }, null, 2)}\n`;
 }
 /** The Stop entry's timeout as the file holds it, in seconds; undefined before setup. */
 export function stopTimeoutS(root: string): number | undefined {

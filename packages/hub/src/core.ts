@@ -26,7 +26,8 @@ import { Landing } from './landing.js';
 import { openRunner, type Agent, type JobRecord, type JobSpec, type Runner } from '@deepbuild/runner';
 import { openSupervisor, openUnder, type Host, type Supervisor } from '@deepbuild/supervisor';
 
-import { ClaudeSettings, readJson, STOP_HOLD_MS, words } from './claude-settings.js';
+import { readJson, STOP_HOLD_MS, words } from './claude-settings.js';
+import { EntriesWatch } from './entries-watch.js';
 import { statKey } from './agent-files.js';
 import { Beats } from './beat.js';
 import { Confirmer } from './confirm.js';
@@ -174,7 +175,7 @@ export class Core {
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readjobs = () => this.jobs;
-    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, work: () => this.work, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks, intakeOf: () => this.providers.workspaces.intake }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
+    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, work: () => this.work, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, entries: () => this.entries, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks, intakeOf: () => this.providers.workspaces.intake }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
   }
 
   private transcriptReader!: TranscriptReader;
@@ -334,7 +335,7 @@ export class Core {
   /** Whether appends came back during a replay, so the files it kept are taken again after it. */
   private retake = false;
   private github: ForgeObserver | undefined;
-  private claudeSettings!: ClaudeSettings;
+  private entries!: EntriesWatch;
   /**
    * Claude Code prompts set aside until their transcript entry is written, by session (#567): Claude Code writes a
    * prompt's entry only once its hooks have returned, and the origin joins the prompt to that entry.
@@ -390,7 +391,7 @@ export class Core {
     this.wireHubControl();
     this.root = rootOf(options.root);
     this.people = new People(this.root.dir);
-    this.claudeSettings = new ClaudeSettings({
+    this.entries = new EntriesWatch({
       root: this.root.dir, plant: options.plant, raw: this.raw, queue: (work) => this.queue(work),
       running: () => {
         const now = Date.now();
@@ -1055,9 +1056,8 @@ export class Core {
     this.timers.push(setInterval(() => void this.spaces.driftAll(), DRIFT_MS));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && !this.lost && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
-    // Between session starts, a removed or weakened entry of ours in Claude Code's settings goes back at once.
-    const settingsWatch = this.claudeSettings.watch();
-    if (settingsWatch) this.timers.push(settingsWatch);
+    // Between session starts, a removed or weakened entry of ours in an agent's own file goes back at once.
+    this.timers.push(...this.entries.watch());
     // A sync a stop cut short is recovered from its journal before anything else is synced (#148).
     void this.agents.recoverAtStart().catch((error: unknown) => process.stderr.write(`deep hub: agent syncs not recovered: ${error instanceof Error ? error.message : String(error)}\n`));
     // The promised checks the record still holds wait on, armed again (#120), and your notes no turn carried yet (#1577).
@@ -1845,7 +1845,7 @@ export class Core {
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
-        if (!foreign) await this.claudeSettings.recheck().catch(() => undefined);
+        if (!foreign) await this.entries.recheck(meta.agent).catch(() => undefined);
         if (session) {
           data.thread = session.thread = await this.state.threadOf(session, meta.fields?.source);
           void this.state.childOf(session, live.agent).catch(() => undefined);
@@ -2565,7 +2565,7 @@ export class Core {
     this.pool?.close(true);
     for (const live of this.state.live.values()) clearTimeout(live.quiet);
     for (const p of this.delivery.promises.values()) clearTimeout(p.timer);
-    this.claudeSettings.close();
+    this.entries.close();
     for (const waits of [this.delivery.waiting, this.delivery.settling]) for (const set of [...waits.values()]) for (const wake of set) wake();
     const started = await this.ready.then(() => true, () => false);
     // The job pool a start made after the first pass found none, whether the start finished or failed (#2732).

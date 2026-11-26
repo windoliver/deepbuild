@@ -1,13 +1,15 @@
 // Claude Code's user settings, where DeepBuild's hook entries live in R1 (#18): `deep setup` merges them in beside
-// yours, the timing relations read them (design: Numbers, timing relations), and the core puts a removed or weakened
-// entry of ours back. Our entries are the ones setup recorded in <root>/claude-hooks.json, by their exact command.
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
+// yours, the timing relations read them (design: Numbers, timing relations), and the watch (entries-watch.ts) puts a
+// removed or weakened entry of ours back. Our entries are the ones setup recorded in <root>/claude-hooks.json, by their
+// exact command, with the MCP servers it wrote into ~/.claude.json (#1867).
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { duration } from '@deepbuild/asks/duration';
 import { shellQuote } from './shell.js';
-import { statKey, writeThrough } from './agent-files.js';
-import { activePlant, type Plant } from './plant.js';
+import { writeThrough } from './agent-files.js';
+import { activePlant } from './plant.js';
 import { isRecord as isObj } from '@deepbuild/contracts/json';
 
 type Obj = Record<string, unknown>;
@@ -28,9 +30,12 @@ const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequ
 const TOOL_HOOKS = new Set(['PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure']);
 
 export const claudeSettings = (): string => join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'settings.json');
+/** Claude Code's user-scope state, where its user MCP servers live. */
+export const claudeJson = (): string => join(homedir(), '.claude.json');
 const installedFile = (root: string): string => join(root, 'claude-hooks.json');
 
-interface Installed { hooks: Record<string, Obj[]> }
+/** What setup wrote: our hook groups, and our MCP servers by name (none in a record from before #1867). */
+interface Installed { hooks: Record<string, Obj[]>; servers?: Record<string, Obj> }
 type Group = { matcher?: string; hooks: Obj[] };
 
 export function readJson(file: string): Obj | undefined {
@@ -117,12 +122,12 @@ function without(groups: unknown, ours: Set<string>): Group[] {
 
 /**
  * Our groups merged into `settings` beside yours, replacing what an earlier setup put there; records them as ours in
- * <root>/claude-hooks.json, which the caller writes the settings after.
+ * <root>/claude-hooks.json, with the MCP `servers` setup writes into ~/.claude.json, which the caller writes both after.
  */
-export function withHooks(root: string, settings: Obj, groups: Record<string, Obj[]>): Obj {
+export function withHooks(root: string, settings: Obj, groups: Record<string, Obj[]>, servers: Record<string, Obj>): Obj {
   const before = installed(root);
   const ours = new Set([...(before ? commands(before) : []), ...commands({ hooks: groups })]);
-  const record: Installed = { hooks: groups };
+  const record: Installed = { hooks: groups, servers };
   writeJson(installedFile(root), record as unknown as Obj);
   return merged(settings, record, ours);
 }
@@ -173,93 +178,18 @@ export function restore(record: Installed, flag = false): void {
   writeJson(file, next);
 }
 
-interface ClaudeSettingsOptions {
-  root: string;
-  plant: Plant | undefined;
-  raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
-  queue(work: () => Promise<void>): Promise<void>;
-  /** Calls still running or within the core's recent-call grace period. */
-  running(): { id: string; agent: string; what: string }[];
-  reading(session: string, agent: string, text: string): Promise<void>;
+/** Each MCP server of ours `user`, Claude Code's user config, no longer holds as setup wrote it, by name; none where it can't be read. */
+export function serversChanged(user: Obj | undefined, record: Installed): string[] {
+  const held = user && isObj(user.mcpServers) ? user.mcpServers : {};
+  return user ? Object.entries(record.servers ?? {}).filter(([name, server]) => !isDeepStrictEqual(held[name], server)).map(([name]) => name) : [];
 }
-
-/** The settings watch and session-start recheck, with their readings (#18, #1687). */
-export class ClaudeSettings {
-  private watcher: FSWatcher | undefined;
-  private key = '';
-  readonly readings: string[] = [];
-
-  constructor(private readonly o: ClaudeSettingsOptions) {}
-
-  /** Starts the watch; the core owns the returned poll timer with its other timers. */
-  watch(): NodeJS.Timeout | undefined {
-    if (this.o.plant === 'restores-at-session-start-only') return;
-    const file = claudeSettings();
-    this.key = statKey(file);
-    const check = () => void this.o.queue(() => this.settingsChanged()).catch(() => undefined);
-    try {
-      this.watcher = watch(resolve(file, '..'), (_, name) => { if (!name || String(name) === 'settings.json') check(); });
-      this.watcher.unref();
-    } catch {
-      // No folder yet: the poll finds the file once setup writes it.
-    }
-    return setInterval(check, 500);
-  }
-  /**
-   * The settings changed between session starts: an entry of ours removed or weakened while an agent's call was
-   * running goes back at once, with a reading naming the call; a change with none running is yours, and stays.
-   */
-  private async settingsChanged(): Promise<void> {
-    const file = claudeSettings();
-    const key = statKey(file);
-    if (key === this.key) return;
-    this.key = key;
-    const record = installed(this.o.root);
-    const changed = record ? tampered(readJson(file), record) : [];
-    if (!record || !changed.length) return;
-    const running = this.o.running();
-    if (!running.length) return;
-    restore(record);
-    this.key = statKey(file);
-    for (const r of running) {
-      const text = `DeepBuild's hook entries in ${file} were removed or changed (${changed.join('; ')}) while the ${r.what} was running; they were put back at once.`;
-      this.readings.push(text);
-      await this.o.reading(r.id, r.agent, text).catch(() => undefined);
-    }
-  }
-  /**
-   * The recheck at a session's start: our entries changed, or Claude Code's hooks turned off, by a recorded agent call
-   * that wrote the settings file, is tampering, and goes back with a reading naming the call; a change no recorded
-   * call made is yours, and stays.
-   */
-  async recheck(): Promise<void> {
-    const record = installed(this.o.root);
-    if (!record) return;
-    const file = claudeSettings();
-    const settings = readJson(file);
-    const flag = settings?.disableAllHooks === true;
-    const changed = tampered(settings, record);
-    if (!flag && !changed.length) return;
-    if (this.o.plant === 'restores-at-session-start-only') {
-      if (changed.length) restore(record);
-      return;
-    }
-    const since = Math.floor(statSync(join(this.o.root, 'claude-hooks.json')).mtimeMs) - 1000;
-    const rows = (await this.o.raw(`SELECT id, session_id, agent, data FROM events WHERE kind IN ('tool.before', 'tool.after') AND ts >= ? AND session_id IS NOT NULL AND (instr(data, ?) > 0 OR instr(data, '.claude/settings.json') > 0) ORDER BY log_pos`, [since, file])) as { id: string; session_id: string; agent: string | null; data: string }[];
-    if (!rows.length) return;
-    restore(record, flag);
-    this.key = statKey(file);
-    const what = [flag ? 'turned Claude Code\'s hooks off (disableAllHooks)' : '', changed.length ? `changed DeepBuild's entries (${changed.join('; ')})` : ''].filter(Boolean).join(' and ');
-    for (const session of new Set(rows.map((r) => r.session_id))) {
-      const mine = rows.filter((r) => r.session_id === session);
-      const calls = [...new Set(mine.map((r) => (JSON.parse(r.data) as Obj).call).filter((c): c is string => typeof c === 'string'))];
-      const text = `An agent call ${calls.join(', ') || mine[0]!.id} (events ${mine.map((r) => r.id).join(', ')}) wrote ${file} and ${what}; at this session start DeepBuild put its entries back${flag ? ' and took the flag out' : ''}.`;
-      this.readings.push(text);
-      await this.o.reading(session, mine[0]!.agent ?? 'claude-code', text).catch(() => undefined);
-    }
-  }
-
-  close(): void { this.watcher?.close(); }
+/** Puts our MCP servers back as setup wrote them; yours, and all else Claude Code keeps there, stay. False where the file can't be read. */
+export function restoreServers(record: Installed): boolean {
+  const file = claudeJson();
+  const user = readJson(file);
+  if (!user) return false;
+  writeJson(file, { ...user, mcpServers: { ...(isObj(user.mcpServers) ? user.mcpServers : {}), ...record.servers } });
+  return true;
 }
 
 // ---- Timing relations (design: Numbers version 0 has to hold): each with both values, in the words a person reads.

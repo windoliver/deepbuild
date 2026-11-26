@@ -14,7 +14,8 @@ import { type RecordStore } from '@deepbuild/record';
 import type { ExtensionHost } from '@deepbuild/extension-host';
 
 import { verdict as claimVerdict, verdictLine } from '@deepbuild/verdicts';
-import { ClaudeSettings, relations } from './claude-settings.js';
+import { relations } from './claude-settings.js';
+import { EntriesWatch } from './entries-watch.js';
 
 import { codexRelations, modified, readTrust, trustProblems } from './codex-settings.js';
 
@@ -41,7 +42,7 @@ readonly wikiWritten: KnowledgeProvider['writtenOf'];
 readonly root: Root;
 readonly record: RecordStore;
 readonly asks: Asks;
-readonly claudeSettings: ClaudeSettings;
+readonly entries: EntriesWatch;
 readonly log: LogReads;
 readonly now: () => number;
 readonly durable: Durable;
@@ -115,9 +116,9 @@ export class HubReadings {
   /** `seen` is given for a person's read (#1337): the events they may see, as SQL; they read the sessions with one, and no settings readings. */
   async health(seen?: string): Promise<Obj> {
     const network = Object.values(networkInterfaces()).flat().some((i) => i && !i.internal) ? 'reachable' : 'unreachable';
-    // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
-    const claude = { relations: relations(this.options.services.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), ...(seen === undefined ? { readings: [...this.options.services.claudeSettings.readings] } : {}) };
-    const codex = { relations: codexRelations(this.options.services.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), ...(seen === undefined ? { readings: [...modified(this.options.services.root.dir), ...trustProblems(this.options.services.root.dir).map((p) => `Codex's hook list reports ${p}`)] } : {}), trust: readTrust(this.options.services.root.dir) ?? null };
+    // The timing relations our entries in each agent's settings keep, and what the watch and recheck put back.
+    const claude = { relations: relations(this.options.services.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), ...(seen === undefined ? { readings: [...this.options.services.entries.readings['claude-code']] } : {}) };
+    const codex = { relations: codexRelations(this.options.services.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), ...(seen === undefined ? { readings: [...this.options.services.entries.readings.codex, ...modified(this.options.services.root.dir), ...trustProblems(this.options.services.root.dir).map((p) => `Codex's hook list reports ${p}`)] } : {}), trust: readTrust(this.options.services.root.dir) ?? null };
     // The newest sessions, each closed once an end is on record since its last start (#1023); as `deep status` does, this
     // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
     const sessions = ((await this.options.services.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
