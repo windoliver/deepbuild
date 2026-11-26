@@ -1,0 +1,13 @@
+{
+  "packages/hub/src/mcp-operations.ts": [
+    {
+      "find": [
+        "    const data = { task_ref: args.task_ref, attempt: args.attempt, commit: args.commit, scope: args.scope, predictions };"
+      ],
+      "wrong": [
+        "    if (String(args.commit).length === 40) throw refuse('pattern', '/params/arguments/commit', 'Give commit by its full SHA (^[0-9a-f]{40}$).', args.commit);",
+        "    const data = { task_ref: args.task_ref, attempt: args.attempt, commit: args.commit, scope: args.scope, predictions };"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "packages/hub/src/mcp-operations.ts": [
+    {
+      "find": [
+        "    const pinned = await this.pinOf(s.cwd, question);"
+      ],
+      "wrong": [
+        "    if (kind === 'taste') throw refuse('required', '', 'BLOCKED: you declare a deadline for taste asks (asks.deadline.taste) in the hub\\'s settings or the repo\\'s done.yaml.', null);",
+        "    const pinned = await this.pinOf(s.cwd, question);"
+      ]
+    }
+  ]
+}

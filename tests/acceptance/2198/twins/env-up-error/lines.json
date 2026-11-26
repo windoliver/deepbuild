@@ -1,0 +1,13 @@
+{
+  "packages/hub/src/mcp-operations.ts": [
+    {
+      "find": [
+        "    if (!existsSync(cwd)) throw refuse('not_found', '/params/arguments', `Session ${session}'s worktree ${cwd} doesn't exist; its stack runs from its worktree alone.`, cwd);"
+      ],
+      "wrong": [
+        "    if (!existsSync(cwd)) throw refuse('not_found', '/params/arguments', `Session ${session}'s worktree ${cwd} doesn't exist; its stack runs from its worktree alone.`, cwd);",
+        "    if (action === 'up') throw refuse('unavailable', '', `BLOCKED: the stack in ${cwd} did not come up.`, cwd);"
+      ]
+    }
+  ]
+}
