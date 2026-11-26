@@ -100,6 +100,8 @@ mod live {
     const WAIT: std::time::Duration = std::time::Duration::from_secs(120);
     /// What the last frame past `FRAMES` waited for, for the watch to say.
     static WAITING: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+    /// Set once a capture starts, so the watch never ends a run that is writing its tree.
+    static CAPTURING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
     pub fn run() -> i32 {
         let (view, out, ..) = match deep_replica::view_args("deep-live", "file", false) {
@@ -117,6 +119,9 @@ mod live {
         let layout = Layout::shipped(&view);
         std::thread::spawn(|| {
             std::thread::sleep(WAIT);
+            if CAPTURING.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
             let waiting = WAITING.lock().map(|w| w.clone()).unwrap_or_default();
             let waiting = if waiting.is_empty() {
                 "its first frames".to_owned()
@@ -124,7 +129,7 @@ mod live {
                 waiting
             };
             eprintln!(
-                "deep-live: no capture in {} s, still waiting for {waiting}; bring the window to the front on an unlocked screen and run again",
+                "deep-live: no capture in {} s, still waiting for {waiting}",
                 WAIT.as_secs()
             );
             std::process::exit(1);
@@ -164,18 +169,21 @@ mod live {
         let waiting = if frame < FRAMES {
             None
         } else {
-            let (ns_window, view) = content_view().unwrap_or_else(|error| {
-                eprintln!("deep-live: {error}");
-                std::process::exit(1)
-            });
-            let (appkit, app) = (focused_identifier(&view), deep_app::views::focus_id(window));
-            super::ready(
-                window.is_window_active(),
-                ns_window.isKeyWindow(),
-                appkit.as_deref(),
-                app.as_deref(),
-            )
-            .err()
+            // A window not at the reference size yet, as on a display change, is waited for too.
+            match content_view() {
+                Err(error) => Some(error),
+                Ok((ns_window, view)) => {
+                    let (appkit, app) =
+                        (focused_identifier(&view), deep_app::views::focus_id(window));
+                    super::ready(
+                        window.is_window_active(),
+                        ns_window.isKeyWindow(),
+                        appkit.as_deref(),
+                        app.as_deref(),
+                    )
+                    .err()
+                }
+            }
         };
         if frame < FRAMES || waiting.is_some() {
             if let Some(waiting) = waiting {
@@ -191,17 +199,21 @@ mod live {
             window.on_next_frame(move |window, cx| settle(window, cx, out, frame + 1));
             return;
         }
+        CAPTURING.store(true, std::sync::atomic::Ordering::SeqCst);
         eprintln!("deep-live: captured at settle frame {frame}");
         match capture(window) {
             Ok(snapshot) => {
                 if let Some(parent) = out.parent() {
                     std::fs::create_dir_all(parent).expect("the output directory");
                 }
+                // Written whole or not at all: beside it first, then renamed over it.
+                let partial = out.with_extension("json.partial");
                 std::fs::write(
-                    &out,
+                    &partial,
                     serde_json::to_string_pretty(&snapshot.to_json()).expect("JSON"),
                 )
                 .expect("the live tree is written");
+                std::fs::rename(&partial, &out).expect("the live tree is in place");
                 println!(
                     "live {}: {} nodes, {} canvas items",
                     out.display(),
