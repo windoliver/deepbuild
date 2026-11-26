@@ -14,7 +14,7 @@ it('names each literal Host name, through Include lines, and no pattern', () => 
   mkdirSync(join(dir, 'more'));
   writeFileSync(join(dir, 'more', 'lab'), 'Host gpu-box pi4\n  HostName 10.0.0.4\nHost !nope *.lan\n');
   writeFileSync(join(dir, 'config'), `Include ${join(dir, 'more', 'lab')}\nHost build-01 "lab 2"\n  Port 2222\nHost=eq\nHost *\n  User you\nMatch host x\n`);
-  const hosts = new Hosts({ root: dir, now: Date.now, plant: undefined, raise: () => Promise.reject(Error('no asks')), append: async () => undefined, put: async () => '', raw: async () => [] });
+  const hosts = new Hosts({ root: dir, now: Date.now, plant: undefined, raise: () => Promise.reject(Error('no asks')), append: async () => undefined, put: async () => '', raw: async () => [], replay: async () => undefined, unknown: async () => undefined, on: () => undefined });
   expect(hosts.names(join(dir, 'config')).sort()).toEqual(['build-01', 'eq', 'gpu-box', 'lab 2', 'pi4'].sort());
 });
 

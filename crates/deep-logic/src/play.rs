@@ -19,6 +19,7 @@ use crate::piece::{check_in, h64, History};
 use crate::world::{track_of, Entry, Given, Record, To, World, REWIND};
 use crate::Planted;
 
+mod from;
 mod off;
 
 const F: i64 = 705_600_000;
@@ -201,15 +202,15 @@ fn stamp(t: i64, step: i64) -> i64 {
 /// A policy value's entries on a control: a number's, or a play interface action's gesture.
 type Values<'a> = &'a dyn Fn(&str, &Value) -> Result<Vec<Given>, Value>;
 
-/// The policy's entries over the span, each with the writer `bot`: its keys at their times and
-/// each pick every `every` seconds, drawn by hash(the run's seed, the control, the step). A value
-/// is a number, or (#555) the name of a play interface's action on that control, put as the
-/// entries that action's gesture makes (`values`).
+/// The policy's entries over the span, the steps from `first` up to `end`, each with the writer
+/// `bot`: its keys at their times and each pick every `every` seconds, drawn by hash(the run's
+/// seed, the control, the step). A value is a number, or (#555) the name of a play interface's
+/// action on that control, put as the entries that action's gesture makes (`values`).
 fn policy(
     p: &Value,
     seed: u64,
     step: i64,
-    steps: i64,
+    (first, end): (i64, i64),
     values: Values<'_>,
 ) -> Result<Vec<Entry>, Value> {
     let bad = |what: &str| refused("bad_input", json!(format!("bot.policy: {what}")));
@@ -229,7 +230,7 @@ fn policy(
         }
         Ok(())
     };
-    let end = steps * step;
+    let (begin, end) = (first * step, end * step);
     for (control, keys) in p
         .get("keys")
         .and_then(Value::as_object)
@@ -247,7 +248,7 @@ fn policy(
                 return Err(bad("keys are [t, value] pairs"));
             };
             let t = stamp((t * F as f64).round() as i64, step);
-            if t < end {
+            if (begin..end).contains(&t) {
                 entry(t, control, v)?;
             }
         }
@@ -277,11 +278,13 @@ fn policy(
                 break;
             }
             let k = t / step;
-            entry(
-                t,
-                control,
-                &from[(pick_hash(seed, control, k) % from.len() as u64) as usize],
-            )?;
+            if t >= begin {
+                entry(
+                    t,
+                    control,
+                    &from[(pick_hash(seed, control, k) % from.len() as u64) as usize],
+                )?;
+            }
             n += 1;
         }
     }
@@ -497,16 +500,20 @@ pub fn play(
         Some(o) if o.sha256 == sha => Some(o.bytes.clone()),
         _ => stored(sha),
     };
-    let piece = Rc::new(
+    let checked = |piece: &Value| {
         check_in(
-            &piece,
+            piece,
             &Planted::default(),
             &mut History::new(),
             &swapped,
             &[],
         )
-        .map_err(|r| r.0)?,
-    );
+        .map(Rc::new)
+        .map_err(|r| r.0)
+    };
+    // #1047: the save the run starts from, once logic.layout has checked it against the piece.
+    let from = from::of(call, &piece, &checked, &swapped)?;
+    let piece = checked(&piece)?;
     // #555: the play interface, checked against the piece before any step, and a first-party bot
     // that plays it.
     let iface = call
@@ -522,7 +529,8 @@ pub fn play(
         w.ignores_links = plants.ignores_links;
     }
     // #1048: a model bot's replies so far (the call's `rows`), each a row it chose after a step,
-    // `[step, action, a, b]`; one the piece doesn't list at that step sends no entry.
+    // `[step, action, a, b]`, the run's first step 0; one the piece doesn't list at that step
+    // sends no entry.
     let chosen: BTreeMap<i64, [i32; 3]> = bot
         .filter(|b| b.get("model").is_some())
         .and_then(|_| call.get("rows"))
@@ -565,6 +573,9 @@ pub fn play(
             .and_then(Value::as_i64)
             .ok_or_else(|| refused("bad_input", json!("span: seconds or {steps}")))?,
     };
+    // #1047: the run's first step, the save's when it starts from one, and the step it runs until.
+    let first = from.as_ref().map_or(0, |f| f.step);
+    let until = first + steps;
     // The paths asked for: `<item>.<array>` of the piece's own items, each step's (`values`) or
     // (#556) only the steps it changes at (`changes`), so a grid a check reads per floor isn't
     // copied at every step.
@@ -627,24 +638,27 @@ pub fn play(
                 })?;
             Ok(gesture(&controls, action, [0, 0, 0]))
         };
-        entries.extend(policy(p, seed, step, steps, &values)?);
+        entries.extend(policy(p, seed, step, (first, until), &values)?);
     }
     let rewinds = bot
         .and_then(|b| b.pointer("/policy/rewind"))
-        .map(|r| rewinds_of(r, &piece, seed, step, steps))
+        .map(|r| rewinds_of(r, &piece, seed, step, until))
         .transpose()?;
     let mut rec = Record {
         ns: Some(Vec::new()),
         ..Default::default()
     };
-    let mut world = World::new(
-        piece.clone(),
-        track_of(&entries),
-        false,
-        Planted::default(),
-        &mut rec,
-        None,
-    )?;
+    let mut world = match &from {
+        None => World::new(
+            piece.clone(),
+            track_of(&entries),
+            false,
+            Planted::default(),
+            &mut rec,
+            None,
+        )?,
+        Some(f) => f.world(&piece, bot_i, &entries, &crate::adapter(call), &mut rec)?,
+    };
     if plants.draw_hashes_step {
         world.draw.wrong = crate::draws::Wrong::HashesStep;
     }
@@ -664,14 +678,15 @@ pub fn play(
     // Each play's serial and value as the bot's last step left them: 0 before its first.
     let mut serials = vec![0.0; plays.len()];
     let mut last: Vec<Option<f64>> = vec![None; plays.len()];
-    let mut bot_ran = -1;
-    // #1048: a soak's readings, every `soak.every` steps: the piece's own logic memories' size.
+    let mut bot_ran = bot_i.map_or(-1, |b| world.lives[b].last);
+    // #1048: a soak's readings, every `soak.every` steps of the run: the piece's own logic
+    // memories' size.
     let every = call
         .pointer("/soak/every")
         .and_then(Value::as_i64)
         .filter(|e| *e > 0);
     let mut memory = Vec::new();
-    for k in 0..steps {
+    for k in first..until {
         world.run_through(k * step, &mut rec);
         // A bot step that ran: each play whose serial differs from the step before puts its value
         // on the control as one entry, stamped at the bot's next step.
@@ -718,11 +733,11 @@ pub fn play(
             let row = match walker.as_mut() {
                 Some(b) => b.act(k, &world, iface),
                 None => chosen
-                    .get(&k)
+                    .get(&(k - first))
                     .copied()
                     .filter(|r| iface.listed(&world).contains(r)),
             };
-            if k + 1 < steps {
+            if k + 1 < until {
                 if let Some(row) = row {
                     for value in gesture(&controls, &iface.actions[row[0] as usize], row) {
                         let control = iface.actions[row[0] as usize].control.clone();
@@ -743,7 +758,7 @@ pub fn play(
         }
         // #860: the policy's rewind drawn at this step, when that many stops lie behind the
         // current one within the depth, stamped at the next step.
-        if let Some((draws, depth)) = rewinds.as_ref().filter(|_| k + 1 < steps) {
+        if let Some((draws, depth)) = rewinds.as_ref().filter(|_| k + 1 < until) {
             let behind = world.branches.stops.len().saturating_sub(1) as u64;
             if let Some(&n) = draws
                 .get(&k)
@@ -762,7 +777,7 @@ pub fn play(
             }
         }
         // #552: a piece played alone writes its own bits for each drawn step at the next step.
-        if k + 1 < steps {
+        if k + 1 < until {
             crate::draws::alone(&mut world, &draw_after, (k, step), &mut alone_bits)?;
         }
         let ns: u64 = rec
@@ -803,7 +818,7 @@ pub fn play(
         }
         // The sandbox lets no memory grow, so a memory's size is read as a save keeps it: its
         // 64 KiB pages that hold a nonzero byte.
-        if every.is_some_and(|e| (k + 1) % e == 0 || k + 1 == steps) {
+        if every.is_some_and(|e| (k + 1 - first) % e == 0 || k + 1 == until) {
             let bytes: usize = own
                 .iter()
                 .map(|i| {

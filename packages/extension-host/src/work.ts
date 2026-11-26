@@ -523,7 +523,7 @@ export class WorkSources {
     const plan = sha256Hex(canonicalize({ key: x.key, source: a.source, scope: a.scope, thread: x.thread, text: x.text }));
     const input: PlanInput = { steps: [{ does: `${what}: no standing rule of yours covers deliveries to this source`, changes: [x.thread], undo: null, public: false, cost: 0 }], diff: plan };
     return this.h.asks.raise(CORE, 'action.send', {
-      kind: 'authority', question: `Let DeepBuild ${what}? No standing rule of yours covers it.`,
+      kind: 'authority', may_answer: 'trusted_path', question: `Let DeepBuild ${what}? No standing rule of yours covers it.`,
       options: [{ id: 'approve', label: 'Send it', decision: 'allow' }, { id: 'decline', label: 'Don\'t', decision: 'deny' }],
       recommended: null, deadline: this.h.now() + 86_400_000, fallback: 'you', default: 'decline', provisional: false, owner: 'you',
       key: sha256Hex(canonicalize({ delivery: x.key, plan })), pinned_to: { kind: 'evidence', ref: plan },

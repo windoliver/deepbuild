@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { expect } from 'vitest';
 import type { AsksPlant } from '../../../packages/asks/src/index.ts';
 import type { ExtensionHost } from '../../../packages/extension-host/src/index.ts';
-import { approve, inboxRow, loadInHub, openWorld, pkg, raise, sessionId, startSession, tempDir, YOU, type World } from './helpers.ts';
+import { approve, authorityAsk, inboxRow, loadInHub, openWorld, pkg, raise, sessionId, startSession, tempDir, YOU, type World } from './helpers.ts';
+import { declared } from '../declared.ts';
 
 export interface Play { skip?: boolean; answer?: string; because?: string | null }
 export interface Resolving {
@@ -36,7 +37,7 @@ export async function openResolving(options: { plant?: AsksPlant } = {}): Promis
     async ask(inRepo = repo, source = 'effect.push', ask?) {
       const session = sessionId();
       await startSession(w, session, inRepo);
-      return { session, ask: await raise(w, session, source, ask) };
+      return { session, ask: await raise(w, session, source, declared(source, ask ?? authorityAsk())) };
     },
     async decide(ask, scope) {
       await approve(w, ask);

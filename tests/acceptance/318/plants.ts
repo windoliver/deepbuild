@@ -61,7 +61,7 @@ export const copiesDecision: Planting = {
 /** A catalogue whose ask.created leaves `fallback` to the live table: the log never holds it. */
 export const fallbackInLiveTable: Planting = {
   // The record lays these over the published schemas, so only the planted entry is passed.
-  schemas: listSchemas().filter((entry) => entry.name === 'ask.created@1').map((entry): SchemaEntry => {
+  schemas: listSchemas().filter((entry) => entry.name === 'ask.created@6').map((entry): SchemaEntry => {
     const schema = structuredClone(entry.schema) as Obj;
     const data = (schema.properties as Obj).data as Obj;
     for (const branch of (data.oneOf ?? [data]) as Obj[]) branch.required = (branch.required as string[]).filter((f) => f !== 'fallback');
