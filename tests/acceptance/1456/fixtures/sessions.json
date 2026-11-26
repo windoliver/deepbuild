@@ -1,0 +1,98 @@
+{
+  "about": "#1456's fixture (README: The fixture). Each session is its steps, in order: a core attention state, or a reading. A reading has `text`, the words the merge base writes for it (its prefix the one packages/hub/src/status.ts matches), `reworded`, the same reading in other words that share no prefix with the base's and none of the words it matches, and `code`, its closed code (README: Defined here). `expected` is each session's session.state, state/cause, as the merge base 118ec119f reads the record of the base's own words with no codes, run on it and pinned here.",
+  "sessions": [
+    {
+      "name": "hooks-cant-run",
+      "id": "1456a001-0000-4000-8000-000000000001",
+      "expected": "stuck/stuck",
+      "steps": [
+        { "attention": "finished" },
+        { "code": "hooks_cant_run", "text": "BLOCKED: hooks can't run, so this session's holds and every block but the floor are watch-only: the Stop entry runs /tmp/dh1456/gone/deep-hook, which isn't there. Run `deep setup` to point them at a deep-hook that runs.", "reworded": "Its hook program is missing (/tmp/dh1456/gone/deep-hook), so DeepBuild only looks on and holds nothing for it. `deep setup` fixes the path." }
+      ]
+    },
+    {
+      "name": "hooks-run-again",
+      "id": "1456a002-0000-4000-8000-000000000002",
+      "expected": "finished/finished",
+      "steps": [
+        { "attention": "finished" },
+        { "code": "hooks_cant_run", "text": "BLOCKED: hooks can't run, so this session's holds and every block but the floor are watch-only: the Stop entry runs /tmp/dh1456/gone/deep-hook, which isn't there. Run `deep setup` to point them at a deep-hook that runs.", "reworded": "Its hook program is missing (/tmp/dh1456/gone/deep-hook), so DeepBuild only looks on and holds nothing for it. `deep setup` fixes the path." },
+        { "code": "hooks_run_again", "text": "Hooks can run again: this session's gates hold again.", "reworded": "Its hook program is back, and its gates hold once more." }
+      ]
+    },
+    {
+      "name": "monitor-waiting",
+      "id": "1456a003-0000-4000-8000-000000000003",
+      "expected": "working/working",
+      "steps": [
+        { "attention": "finished" },
+        { "code": "monitor_waiting", "text": "Waiting on its monitor `npm run e2e`: each event wakes it, and its stop is judged once the watch ends.", "reworded": "Its background watch on `npm run e2e` is still open: every event wakes it, and the stop is judged when the watch closes." }
+      ]
+    },
+    {
+      "name": "monitor-ended",
+      "id": "1456a004-0000-4000-8000-000000000004",
+      "expected": "finished/finished",
+      "steps": [
+        { "attention": "finished" },
+        { "code": "monitor_waiting", "text": "Waiting on its monitor `npm run e2e`: each event wakes it, and its stop is judged once the watch ends.", "reworded": "Its background watch on `npm run e2e` is still open: every event wakes it, and the stop is judged when the watch closes." },
+        { "code": "monitor_ended", "text": "Its monitor `npm run e2e` ended: the command exited 0.", "reworded": "The background watch on `npm run e2e` closed: the command exited 0." }
+      ]
+    },
+    {
+      "name": "interrupted",
+      "id": "1456a005-0000-4000-8000-000000000005",
+      "expected": "finished/interrupted",
+      "steps": [
+        { "attention": "finished" },
+        { "code": "interrupted", "text": "Interrupt: you stopped its turn while it ran `npm test`.", "reworded": "You cut its turn short while it ran `npm test`." }
+      ]
+    },
+    {
+      "name": "watch-only",
+      "id": "1456a006-0000-4000-8000-000000000006",
+      "expected": "finished/finished",
+      "steps": [
+        { "attention": "finished" },
+        { "code": "watch_only", "text": "This session runs claude-code 0.0.1, not a version its facts cover (2.1.308): it is recorded unverified, and its holds and every block but the floor are watch-only.", "reworded": "Claude Code 0.0.1 is older than any version DeepBuild knows (2.1.308), so it records this session unverified and only looks on." }
+      ]
+    },
+    {
+      "name": "denied-ran-anyway",
+      "id": "1456a007-0000-4000-8000-000000000007",
+      "expected": "working/working",
+      "steps": [
+        { "attention": "working" },
+        { "code": "denied_ran_anyway", "text": "DeepBuild denied `rm -rf build` (fail_closed) and it ran anyway: this session's claims can't pass on its own checks.", "reworded": "A call DeepBuild refused, `rm -rf build` (fail_closed), went ahead regardless, so no claim of this session passes on its own checks." }
+      ]
+    },
+    {
+      "name": "mods-gone",
+      "id": "1456a008-0000-4000-8000-000000000008",
+      "expected": "finished/finished",
+      "steps": [
+        { "attention": "finished" },
+        { "code": "mods_watch", "text": "This session's Claude Code home (~/.claude) loads the mod approver, which approves calls on its own: its holds and blocks are watch-only until the mod is gone or the setup holds the deny.", "reworded": "A mod in ~/.claude, approver, can approve calls past the guard, so DeepBuild only looks on until it goes or the setup holds the deny." },
+        { "code": "mods_gone", "text": "Its Claude Code home loads no mod that can approve a call past the guard: its holds and blocks apply again.", "reworded": "No mod in ~/.claude can approve a call past the guard any more, so its holds and blocks apply again." }
+      ]
+    },
+    {
+      "name": "ran-unleased",
+      "id": "1456a009-0000-4000-8000-000000000009",
+      "expected": "working/working",
+      "steps": [
+        { "attention": "working" },
+        { "code": "ran_unleased", "text": "`cargo build` ran unleased: the hub was away when it started, so it took no cpu.slot (heavy command cargo)", "reworded": "With the hub away, `cargo build` started without a cpu.slot (heavy command cargo)." }
+      ]
+    },
+    {
+      "name": "stop-not-held",
+      "id": "1456a010-0000-4000-8000-000000000010",
+      "expected": "finished/finished",
+      "steps": [
+        { "attention": "finished" },
+        { "code": "stop_not_held", "text": "This stop isn't held: its claim's checks run after it, and a FAIL comes back as its next prompt.", "reworded": "DeepBuild lets this stop through: the claim's checks run afterwards, and a FAIL returns as the next prompt." }
+      ]
+    }
+  ]
+}

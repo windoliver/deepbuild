@@ -287,7 +287,7 @@ export class Work {
       const screen = `${repo}#${c.issue}`;
       const session = `calls${repo.replace(/[^0-9A-Za-z]/g, '')}x${c.issue}`;
       const handle = had?.handle ?? await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you', session }, 'work.call', {
-        kind: 'taste',
+        kind: 'taste', may_answer: 'verified_channel',
         question: `Is "${c.text}" true of #${c.issue}'s change? Before: main at ${c.main.slice(0, 12)}; after: PR #${c.pr} at ${c.head.slice(0, 12)}${c.reaches ? `, which reaches ${c.reaches}, so it waits for your answer` : ', which lands now and Send back reverts'}.`.slice(0, 8192),
         options: [{ id: YES, label: 'Yes', decision: 'none' }, { id: SEND_BACK, label: 'Send back', decision: 'none' }],
         recommended: YES, fallback: 'you', provisional: false, owner: 'you', key: key({ kind: 'work.call', screen, element: c.text }),
@@ -976,7 +976,7 @@ export class Work {
       : `${reverted.length} of its landings were reverted within a day: ${reverted.map((r) => `${r.landing.slice(0, 10)} by #${r.pr}`).join(', ')}`;
     const pin = this.runBreakerKey(ask, state.level);
     const handle = await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you' }, 'work.run_breaker', {
-      kind: 'exception', question: `The standing run ${ask} is paused: ${why}. Go on, or keep it paused?`.slice(0, 2000),
+      kind: 'exception', may_answer: 'trusted_path', question: `The standing run ${ask} is paused: ${why}. Go on, or keep it paused?`.slice(0, 2000),
       options: [{ id: 'resume', label: 'Go on', decision: 'none' }, { id: 'stay', label: 'Keep it paused', decision: 'none' }],
       recommended: 'stay', deadline: this.o.now() + DAY, fallback: 'you', default: 'stay', provisional: false, owner: 'you', key: pin, pinned_to: { kind: 'evidence', ref: pin },
     });
@@ -1002,7 +1002,7 @@ export class Work {
     const lines = list.map((x) => `attempt ${x.attempt}: ${agentName(x.agent)} on ${x.model ?? 'a model it did not name'}, ${x.ended && !KEPT.has(x.ended.cause) ? `replaced (${x.ended.cause})` : x.ended?.cause ?? 'live'}${x.ended?.verdict ? `: ${x.ended.verdict}` : ''}`);
     const pin = this.breakerKey(ask, issue, level);
     await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you' }, 'work.breaker', {
-      kind: 'exception', question: `Issue #${issue}'s last ${BREAKER} attempts were replaced. ${lines.join('; ')}. Start another attempt, or leave it waiting?`.slice(0, 2000),
+      kind: 'exception', may_answer: 'trusted_path', question: `Issue #${issue}'s last ${BREAKER} attempts were replaced. ${lines.join('; ')}. Start another attempt, or leave it waiting?`.slice(0, 2000),
       options: [{ id: 'again', label: 'Start another attempt', decision: 'none' }, { id: 'leave', label: 'Leave it waiting', decision: 'none' }],
       recommended: 'leave', deadline: this.o.now() + DAY, fallback: 'you', default: 'leave', provisional: false, owner: 'you', key: pin, pinned_to: { kind: 'evidence', ref: pin },
     });
