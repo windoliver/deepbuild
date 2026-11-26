@@ -238,6 +238,13 @@ path = "../../tests/acceptance/1141/app/memory.rs"
 name = "acceptance_1510"
 path = "../../tests/acceptance/1510/app/card.rs"
 
+# Issue #1583: the question card's text and a session's name, printed for tests/acceptance/1583/app.test.ts, which
+# judges them; written blind in tests/acceptance/1583. No libtest harness: it draws what it is given.
+[[test]]
+name = "acceptance_1583"
+path = "../../tests/acceptance/1583/app/card.rs"
+harness = false
+
 # Issue #1738: a session's task title shown as data on every surface that draws it, written blind in
 # tests/acceptance/1738.
 [[test]]

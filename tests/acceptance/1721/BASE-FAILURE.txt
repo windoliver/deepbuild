@@ -1,0 +1,84 @@
+#1721's blind acceptance suite, run once on the base commit c8d9684f0 ("Merge pull request #3268 …"), on macOS (Apple
+silicon, Metal), with the command in the README. deep-show and deep-hook were built before from the same commit (debug). The
+machine's 1-minute load was about 420 on 18 cores.
+
+Result: 3 tests, 3 failed, each at the patch's outcome, for the base's one reason: deep_show of the whole revision was presented at
+revision 1 (and rendered back there, for AC1 and AC3), and the patch that follows to the same doc ID was refused ref_unresolved at
+doc, "no shared document has this ID".
+
+- #1721.ec24a571: the first session's patch on base 1, refused ref_unresolved at doc.
+- #1721.d05285db: the second session's patch on base 1, refused ref_unresolved at doc.
+- #1721.560ffc8c: the first session's patch on base 1 after the hub's restart (the record held revision 1 and its document before
+  it), refused ref_unresolved at doc.
+
+The run's output, home folders written as ~:
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1721-aaeb1c/agent-abf420abe57c4f38b/tests/acceptance/1721
+
+ ❯ patches.test.ts (3 tests | 3 failed) 26721ms
+   ❯ a patch to the document the session drew (1)
+     × #1721.ec24a571 a session draws a one-box scene as a whole revision, then patches the same doc ID on base 1: applied at rev 2, and a render-back at rev 2 shows the box's visible box shifted right against rev 1's 9276ms
+   ❯ a second session's patch (1)
+     × #1721.d05285db a second session's patch to that document lands in its own writer layer, and read lists both layers 8421ms
+   ❯ a hub restart between the revision and the patch (1)
+     × #1721.560ffc8c the hub is stopped and started again on the same home after the whole revision: the patch is still applied at rev 2, from the record, and a render-back at rev 2 draws the moved box 9017ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  patches.test.ts > a patch to the document the session drew > #1721.ec24a571 a session draws a one-box scene as a whole revision, then patches the same doc ID on base 1: applied at rev 2, and a render-back at rev 2 shows the box's visible box shifted right against rev 1's
+AssertionError: deep_show of the patch on base 1 is applied; it is refused, with ref_unresolved at doc: {"outcome":"refused","rev":0,"ids":{},"achieved":{"created":{},"updated":0,"deleted":{},"unchanged":true},"issues":[{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"doc","actual":null,"what":"no shared document has this ID","fix":"Name an ID the document holds, or remove the reference."}],"cost_delta":{"cpu_ms":0,"gpu_ms":0,"vertices":0,"lights":0,"gpu_mb":0},"undo":[],"expansions":[],"arrived":176400000,"checked":176752800,"current":null,"core":"core@0.0.0","set_digest":"46ce7e0f35472549cc8fb8914d52391a28651b34c89c0a5da4290b3a3d3fb11f"}: expected 'refused' to be 'applied' // Object.is equality
+
+Expected: "applied"
+Received: "refused"
+
+ ❯ patched helpers.ts:121:164
+    119|   const reply = await show(s, { doc, patch: { patch: id, doc, base, re…
+    120|   const said = refusalOf(reply);
+    121|   expect(reply['outcome'], `deep_show of the patch on base ${base} is …
+       |                                                                                                                                                                    ^
+    122|   expect(reply['rev'], `the patch is applied at revision ${rev}: ${bri…
+    123|   return id;
+ ❯ patches.test.ts:14:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  patches.test.ts > a second session's patch > #1721.d05285db a second session's patch to that document lands in its own writer layer, and read lists both layers
+AssertionError: deep_show of the patch on base 1 is applied; it is refused, with ref_unresolved at doc: {"outcome":"refused","rev":0,"ids":{},"achieved":{"created":{},"updated":0,"deleted":{},"unchanged":true},"issues":[{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"doc","actual":null,"what":"no shared document has this ID","fix":"Name an ID the document holds, or remove the reference."}],"cost_delta":{"cpu_ms":0,"gpu_ms":0,"vertices":0,"lights":0,"gpu_mb":0},"undo":[],"expansions":[],"arrived":117600000,"checked":117952800,"current":null,"core":"core@0.0.0","set_digest":"46ce7e0f35472549cc8fb8914d52391a28651b34c89c0a5da4290b3a3d3fb11f"}: expected 'refused' to be 'applied' // Object.is equality
+
+Expected: "applied"
+Received: "refused"
+
+ ❯ patched helpers.ts:121:164
+    119|   const reply = await show(s, { doc, patch: { patch: id, doc, base, re…
+    120|   const said = refusalOf(reply);
+    121|   expect(reply['outcome'], `deep_show of the patch on base ${base} is …
+       |                                                                                                                                                                    ^
+    122|   expect(reply['rev'], `the patch is applied at revision ${rev}: ${bri…
+    123|   return id;
+ ❯ patches.test.ts:28:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  patches.test.ts > a hub restart between the revision and the patch > #1721.560ffc8c the hub is stopped and started again on the same home after the whole revision: the patch is still applied at rev 2, from the record, and a render-back at rev 2 draws the moved box
+AssertionError: deep_show of the patch on base 1 is applied; it is refused, with ref_unresolved at doc: {"outcome":"refused","rev":0,"ids":{},"achieved":{"created":{},"updated":0,"deleted":{},"unchanged":true},"issues":[{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"doc","actual":null,"what":"no shared document has this ID","fix":"Name an ID the document holds, or remove the reference."}],"cost_delta":{"cpu_ms":0,"gpu_ms":0,"vertices":0,"lights":0,"gpu_mb":0},"undo":[],"arrived":58800000,"checked":59152800,"current":null,"core":"core@0.0.0","set_digest":"46ce7e0f35472549cc8fb8914d52391a28651b34c89c0a5da4290b3a3d3fb11f"}: expected 'refused' to be 'applied' // Object.is equality
+
+Expected: "applied"
+Received: "refused"
+
+ ❯ patched helpers.ts:121:164
+    119|   const reply = await show(s, { doc, patch: { patch: id, doc, base, re…
+    120|   const said = refusalOf(reply);
+    121|   expect(reply['outcome'], `deep_show of the patch on base ${base} is …
+       |                                                                                                                                                                    ^
+    122|   expect(reply['rev'], `the patch is applied at revision ${rev}: ${bri…
+    123|   return id;
+ ❯ patches.test.ts:56:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  16:03:23
+   Duration  27.83s (tests 97%, transform 2%, import 1%)

@@ -1,0 +1,167 @@
+Runs of tests/acceptance/3295 on the Mac (MacBook Pro, Apple silicon). Paths under the job's scratch folder read <tmp>; c3295 is the base checkout, twin-<name> a copy of it with that twin's lines.json laid over crates/deep-hook/src/main.rs.
+Expected on the base: #3295.fae86cca fails at its assertion; #3295.63a9095d and #3295.2acd3e71 pass. Each twin fails its criterion's test at the control assertion.
+
+## The base
+# base a288ae247, Darwin arm64, node v24.22.0, cargo 1.99.1 (5f94df478 2026-08-27)
+# load at start: { 86.74 91.34 93.97 }
+$ node --test --test-concurrency=1 tests/acceptance/3295/late-close.test.mjs
+✔ #3295.63a9095d the late-close test still fails on a deep-hook that decides only once its agent closes stdin: killed at the one-second deadline (211434.437375ms)
+✔ #3295.2acd3e71 the late-close test still fails on a deep-hook that allows the call and never spools it (4461.123667ms)
+✖ #3295.fae86cca the late-close test reads INCONCLUSIVE, never FAIL or PASS, on a deep-hook given no time to read its call (4691.899541ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 225044.110666
+
+✖ failing tests:
+
+test at tests/acceptance/3295/late-close.test.mjs:161:1
+✖ #3295.fae86cca the late-close test reads INCONCLUSIVE, never FAIL or PASS, on a deep-hook given no time to read its call (4691.899541ms)
+  AssertionError [ERR_ASSERTION]: the lanes read the late-close test INCONCLUSIVE, not FAIL, on a hook given no time to read its call:
+  starved: FAIL in 0.75s, 1 hook starts
+  failures:
+  
+  ---- a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it stdout ----
+  
+  thread 'a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it' (154936094) panicked at crates/deep-hook/tests/cli.rs:251:5:
+  the call is spooled: ""
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  
+  
+  failures:
+      a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it
+  
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.75s
+  
+  error: test failed, to rerun pass `-p deep-hook --test cli`
+  
+  + actual - expected
+  
+  + 'FAIL'
+  - 'INCONCLUSIVE'
+  
+      at TestContext.<anonymous> (file://<tmp>/c3295/tests/acceptance/3295/late-close.test.mjs:170:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL',
+    expected: 'INCONCLUSIVE',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+# exit 1; load at end: { 75.01 87.38 92.09 }
+
+
+## Twin waits-for-close
+# twin waits-for-close laid over the base, run of #3295.63a9095d; load at start: { 75.64 86.93 91.85 }
+$ node --test --test-concurrency=1 --test-name-pattern='#3295.63a9095d' tests/acceptance/3295/late-close.test.mjs
+✖ #3295.63a9095d the late-close test still fails on a deep-hook that decides only once its agent closes stdin: killed at the one-second deadline (191734.023625ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 196709.108042
+
+✖ failing tests:
+
+test at tests/acceptance/3295/late-close.test.mjs:134:1
+✖ #3295.63a9095d the late-close test still fails on a deep-hook that decides only once its agent closes stdin: killed at the one-second deadline (191734.023625ms)
+  AssertionError [ERR_ASSERTION]: the late-close test passes on the checkout's own deep-hook, so a stand-in's failure is the stand-in's:
+  control: FAIL in 1s, 0 hook starts
+  failures:
+  
+  ---- a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it stdout ----
+  
+  thread 'a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it' (154980810) panicked at crates/deep-hook/tests/cli.rs:246:5:
+  assertion `left == right` failed: the call is allowed before its agent closes stdin
+    left: None
+   right: Some(0)
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  
+  
+  failures:
+      a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it
+  
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 1.00s
+  
+  error: test failed, to rerun pass `-p deep-hook --test cli`
+  
+  
+  'FAIL' !== 'PASS'
+  
+      at controlPasses (file://<tmp>/twin-waits-for-close/tests/acceptance/3295/late-close.test.mjs:130:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<tmp>/twin-waits-for-close/tests/acceptance/3295/late-close.test.mjs:135:9)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL',
+    expected: 'PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+# exit 1; load at end: { 71.95 81.28 88.60 }
+
+
+## Twin never-spools
+# twin never-spools laid over the base, run of #3295.2acd3e71; load at start: { 71.95 81.28 88.60 }
+$ node --test --test-concurrency=1 --test-name-pattern='#3295.2acd3e71' tests/acceptance/3295/late-close.test.mjs
+✖ #3295.2acd3e71 the late-close test still fails on a deep-hook that allows the call and never spools it (165478.279291ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 170323.217541
+
+✖ failing tests:
+
+test at tests/acceptance/3295/late-close.test.mjs:149:1
+✖ #3295.2acd3e71 the late-close test still fails on a deep-hook that allows the call and never spools it (165478.279291ms)
+  AssertionError [ERR_ASSERTION]: the late-close test passes on the checkout's own deep-hook, so a stand-in's failure is the stand-in's:
+  control: FAIL in 0.22s, 0 hook starts
+  failures:
+  
+  ---- a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it stdout ----
+  
+  thread 'a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it' (155018708) panicked at crates/deep-hook/tests/cli.rs:251:5:
+  the call is spooled: ""
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  
+  
+  failures:
+      a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it
+  
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.22s
+  
+  error: test failed, to rerun pass `-p deep-hook --test cli`
+  
+  
+  'FAIL' !== 'PASS'
+  
+      at controlPasses (file://<tmp>/twin-never-spools/tests/acceptance/3295/late-close.test.mjs:130:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<tmp>/twin-never-spools/tests/acceptance/3295/late-close.test.mjs:150:9)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'FAIL',
+    expected: 'PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+# exit 1; load at end: { 68.50 76.83 85.50 }
+

@@ -1,0 +1,183 @@
+# #3034's tests run against the base, commit c7dc0edc3690706adb84d678806301c3d14456ca, before any implementation
+#
+# Run in this checkout at the base (no crate edited), deep-gpu built once beforehand by
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -j 8 --bin deep-gpu
+# (the binary's SHA-256 starts 4d402a13d7f75a8d before and after these runs: each file's own cargo build --locked --bin
+# deep-gpu found it fresh and compiled nothing), one file at a time, with
+#   node node_modules/vitest/vitest.mjs run --root tests/acceptance/3034 --no-file-parallelism --testTimeout=3600000 <file>
+# on a reference Mac (Mac17,10, Apple M5 Max, 64 GB, macOS build 26B8119) under heavy load from other work (a load
+# average over 100). 9 tests, 9 failed, each at its own assertion, none at load, none BLOCKED or INCONCLUSIVE:
+#
+# - ac1-window.test.ts (2): from below the base draws the still surface black from edge to edge, so there is no bright
+#   disk to have an edge 48.8° off the axis; the planted name water_below_ior_one doesn't exist (bad_input, exit 2).
+# - ac2-card.test.ts (2): under water the white card reads 1.0000 and the black one 0.0000, as in air, at 3 m and at
+#   6 m: its share is 1, not 0.368 and 0.135; the planted name water_below_tint_by_depth doesn't exist.
+# - ac3-mirror.test.ts (2): no pixel is red in either view: no ball shows at the mirrored point; the planted name
+#   water_below_sky_at_every_angle doesn't exist.
+# - ac4-refusal.test.ts (1): the camera keyed through the surface isn't refused; all 241 frames draw with no issue, and
+#   1.49 m under the surface ior 1.5 draws the default's very frame (276002645a0b): no rule decides it.
+# - ac5-hashes.test.ts (1): its first part holds, as it must on the merge base itself: #166's 23 frames hash as
+#   base-hashes.json holds them (the file was taken from this test's own base-hashes line in a run just before, which
+#   failed BLOCKED: for want of the file; this run drew the same 23 again). Then it fails: the shot's frame at 3.5 s
+#   is the same picture at ior 1.5.
+# - ac6-taste.test.ts (1): the frame from below is the same picture at ior 1.5; the test stops there and writes no
+#   picture (docs/evidence/3034/ doesn't exist after the run).
+#
+# No test passes at the base. The type-check passes:
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/3034/tsconfig.json
+#
+# Probes at the base, not kept (README: What the base already does), each a deep-gpu run of this suite's documents:
+# - The camera 5 m under still water, straight up, fov 120, 1024 × 1024: it draws. view3d's own `project` puts the
+#   point straight above at (512, 512), the points 30° off the vertical toward +X, +Z, −X and −Z at (682.67, 512),
+#   (512, 341.33), (341.33, 512) and (512, 682.67), and the point 48.8° off toward +X at (849.66, 512): +X is screen
+#   right and +Z screen up, and each is where helpers.ts's pinhole puts it (focal 295.60 px), to the last digit
+#   printed. The linear target is 0.0000 at every pixel. The same camera with no water reads the white sky as
+#   (1, 1, 1) at every pixel.
+# - The card: in air the white card reads 1.0000 and the black one 0.0000 over the centre patch at 3 m and at 6 m; the
+#   channel holds its centre at z = −3.01 and −6.01; its corner projects to (309.9, 90.1) at 6 m, so it covers the patch.
+# - The ball seen directly in air, 0.6 m across, 8 m away on the axis of a 30° lens at 480 × 480: 3,448 red pixels in a
+#   box 66 px square, centroid (240.00, 240.00); a ball 0.6 m across is 33.6 px in radius there (3,549 px), so
+#   `mark.sphere@1` of size 0.6 is that ball.
+# - The two mirror views: `project` puts the mirrored point at (184.031, 266.501) outside the cone and (144.693,
+#   250.093) inside it, and the ball itself at (164.0, 794.5) and (−162.7, 1870.0), off both frames, as the pinhole
+#   does. Both frames are black at every pixel. Through a 100° lens the base does draw a red patch in the surface, 99 px
+#   above the mirrored point: it mirrors something, by no rule the issue gives.
+# - The camera keyed through the surface, 121 frames at 30 fps, 320 × 180: every frame draws, 121 different pictures,
+#   with no issue; the eye's height evaluates to 2.0078125 m at frame 0, 0.0078125 m at frame 60, −0.0255 m at frame
+#   61 and −1.4921875 m at frame 105; frames 6, 59, 60, 61, 68, 105 and 106 seeked cold have the played hashes; ior 1.5
+#   draws frame 105 as the default does, at 320 × 180 and at 1280 × 720 under the filmic look, so the base ignores
+#   `water.ior`. Seen from above the lake is a lake; from below the frame is the bed's color with the posts hung from
+#   its upper edge.
+# - An unknown planted name: `deep-gpu run --planted water_below_ior_one` answers {"ok":false,"code":"bad_input"} and
+#   exits 2.
+
+--- ac1-window.test.ts against the base ---
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3034
+AC1 #3034.e507438d: the disk's centre reads 0.0000, the surface 57° to 59.5° off the axis 0.0000
+ ❯ ac1-window.test.ts (2 tests | 2 failed) 20828ms
+   ❯ AC1 #3034.e507438d from below, still water shows the sky inside a cone of 48.8° about the vertical (2)
+     × AC1 #3034.e507438d a camera 5 m under still water, looking straight up through a 120° lens at a white sky, reads a bright disk in the linear target whose edge lies 48.8° off the axis within 0.5° 6366ms
+     × AC1 #3034.e507438d a planted surface with ior 1 (--planted water_below_ior_one) has no edge and fails, naming the angle 36ms
+
+ FAIL  ac1-window.test.ts > AC1 #3034.e507438d from below, still water shows the sky inside a cone of 48.8° about the vertical > AC1 #3034.e507438d a camera 5 m under still water, looking straight up through a 120° lens at a white sky, reads a bright disk in the linear target whose edge lies 48.8° off the axis within 0.5°
+AssertionError: the bright disk's edge lies 48.8° off the axis within 0.5° on every line: there is no bright disk: the surface straight above reads 0.0000 in the linear target; its edge must lie 48.8° off the axis within 0.5°: expected [ Array(1) ] to deeply equal []
+ ❯ none helpers.ts:100:67
+ ❯ ac1-window.test.ts:96:5
+
+ FAIL  ac1-window.test.ts > AC1 #3034.e507438d from below, still water shows the sky inside a cone of 48.8° about the vertical > AC1 #3034.e507438d a planted surface with ior 1 (--planted water_below_ior_one) has no edge and fails, naming the angle
+AssertionError: deep-gpu run --planted water_below_ior_one exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ runGpu helpers.ts:222:155
+ ❯ windowProblems ac1-window.test.ts:89:19
+ ❯ ac1-window.test.ts:101:17
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Duration  22.81s (tests 95%, transform 4%, import 1%)
+
+exit 1
+
+--- ac2-card.test.ts against the base ---
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3034
+AC2 #3034.b073da51: the card 3 m from the eye reads 1.00000 of its value in air; the issue's 0.368 (in air white 1.0000, black 0.0000; in water white 1.0000, black 0.0000)
+AC2 #3034.b073da51: the card 6 m from the eye reads 1.00000 of its value in air; the issue's 0.135 (in air white 1.0000, black 0.0000; in water white 1.0000, black 0.0000)
+ ❯ ac2-card.test.ts (2 tests | 2 failed) 19468ms
+   ❯ AC2 #3034.b073da51 under water a surface keeps exp(−d ÷ depth) of its own color over the distance from the eye (2)
+     × AC2 #3034.b073da51 a white card 3 m from the eye in water of depth 3 m reads 0.368 of its value in air within 2%, and at 6 m 0.135 8362ms
+     × AC2 #3034.b073da51 a planted tint that uses the card's depth below the surface in place of the distance seen (--planted water_below_tint_by_depth) reads the same at both and fails, naming the card 31ms
+
+ FAIL  ac2-card.test.ts > AC2 #3034.b073da51 under water a surface keeps exp(−d ÷ depth) of its own color over the distance from the eye > AC2 #3034.b073da51 a white card 3 m from the eye in water of depth 3 m reads 0.368 of its value in air within 2%, and at 6 m 0.135
+AssertionError: the card's share of its value in air at 3 m and at 6 m: the card `card` 3 m from the eye in water of depth 3 m reads 1.00000 of its value in air, not 0.368 within 2%; the card `card` 6 m from the eye in water of depth 3 m reads 1.00000 of its value in air, not 0.135 within 2%: expected [ …(2) ] to deeply equal []
+ ❯ none helpers.ts:100:67
+ ❯ ac2-card.test.ts:85:5
+
+ FAIL  ac2-card.test.ts > AC2 #3034.b073da51 under water a surface keeps exp(−d ÷ depth) of its own color over the distance from the eye > AC2 #3034.b073da51 a planted tint that uses the card's depth below the surface in place of the distance seen (--planted water_below_tint_by_depth) reads the same at both and fails, naming the card
+AssertionError: deep-gpu run --planted water_below_tint_by_depth exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ runGpu helpers.ts:222:155
+ ❯ cardProblems ac2-card.test.ts:65:19
+ ❯ ac2-card.test.ts:90:34
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Duration  20.21s (tests 98%, transform 1%)
+
+exit 1
+
+--- ac3-mirror.test.ts against the base ---
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3034
+AC3 #3034.f0c06eee: outside the cone (60.0° off the vertical) 0 red pixels, centroid (NaN, NaN); the mirrored point lands at (184.03, 266.50), its image's disk is 3544 px
+AC3 #3034.f0c06eee: inside the cone (30.0° off the vertical) 0 red pixels
+ ❯ ac3-mirror.test.ts (2 tests | 2 failed) 11133ms
+   ❯ AC3 #3034.f0c06eee from below, still water mirrors what is below it outside the cone (2)
+     × AC3 #3034.f0c06eee outside the cone a red ball 2 m below the surface shows mirrored in it, its centroid within 2 px of the mirrored point, and inside the cone it doesn't 5369ms
+     × AC3 #3034.f0c06eee a planted surface that shows the sky at every angle (--planted water_below_sky_at_every_angle) fails, naming the ball 37ms
+
+ FAIL  ac3-mirror.test.ts > AC3 #3034.f0c06eee from below, still water mirrors what is below it outside the cone > AC3 #3034.f0c06eee outside the cone a red ball 2 m below the surface shows mirrored in it, its centroid within 2 px of the mirrored point, and inside the cone it doesn't
+AssertionError: the ball mirrored outside the cone, at the mirrored point, and not inside it: the ball `ball` 2 m below the surface doesn't show mirrored outside the cone: 0 red pixels where its image covers 3544, about the mirrored point (184.0, 266.5): expected [ Array(1) ] to deeply equal []
+ ❯ none helpers.ts:100:67
+ ❯ ac3-mirror.test.ts:116:5
+
+ FAIL  ac3-mirror.test.ts > AC3 #3034.f0c06eee from below, still water mirrors what is below it outside the cone > AC3 #3034.f0c06eee a planted surface that shows the sky at every angle (--planted water_below_sky_at_every_angle) fails, naming the ball
+AssertionError: deep-gpu run --planted water_below_sky_at_every_angle exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ❯ runGpu helpers.ts:222:155
+ ❯ mirrorProblems ac3-mirror.test.ts:82:29
+ ❯ ac3-mirror.test.ts:121:17
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Duration  11.81s (tests 98%, transform 1%)
+
+exit 1
+
+--- ac4-refusal.test.ts against the base ---
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3034
+AC4 #3034.311508f3: not refused: the shot draws; at 3.5 s the default ior draws 276002645a0b, ior 1.5 draws 276002645a0b
+ ❯ ac4-refusal.test.ts (1 test | 1 failed) 40911ms
+   ❯ AC4 #3034.311508f3 a camera keyed through the surface is refused at check until the view decides its frames (1)
+     × AC4 #3034.311508f3 a camera keyed through the surface is refused, naming the first time its eye is below; where the view has lifted the refusal its frames below the surface read ior; on the merge base it draws with no issue and by no rule, and this fails 32954ms
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  41.98s (tests 99%, transform 1%)
+
+ FAIL  ac4-refusal.test.ts > AC4 #3034.311508f3 a camera keyed through the surface is refused at check until the view decides its frames > AC4 #3034.311508f3 a camera keyed through the surface is refused, naming the first time its eye is below; where the view has lifted the refusal its frames below the surface read ior; on the merge base it draws with no issue and by no rule, and this fails
+AssertionError: the camera keyed through the surface draws with no issue, so the view must have lifted the refusal, and the view's cone follows ior: but 1.49 m under the surface ior 1.5 draws the default's very frame, so no rule decides it (the merge base draws so): expected '276002645a0ba0de02b189a74fec679d494e2…' not to be '276002645a0ba0de02b189a74fec679d494e2…' // Object.is equality
+ ❯ ac4-refusal.test.ts:74:289
+
+exit 1
+
+--- ac5-hashes.test.ts against the base ---
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3034
+AC5 #3034.dd678c04 base-hashes: {"machine":{"model":"Mac17,10","chip":"Apple M5 Max","memoryBytes":68719476736,"macosBuild":"26B8119"},"hashes":{… the 23 frames, as base-hashes.json holds them …}}
+AC5 #3034.dd678c04: #166's 23 frames hash as on the merge base c7dc0edc3690
+ ❯ ac5-hashes.test.ts (1 test | 1 failed) 138069ms
+   ❯ AC5 #3034.dd678c04 the view is a function of t, and the water seen from above draws as on the merge base (1)
+     × AC5 #3034.dd678c04 #166's suite hashes the same as on the merge base, and a shot that crosses the surface hashes the same at 20 sampled times seeked and played 119858ms
+
+ FAIL  ac5-hashes.test.ts > AC5 #3034.dd678c04 the view is a function of t, and the water seen from above draws as on the merge base > AC5 #3034.dd678c04 #166's suite hashes the same as on the merge base, and a shot that crosses the surface hashes the same at 20 sampled times seeked and played
+AssertionError: what is compared under the surface is the view, whose cone follows ior: but at 3.5 s, 1.49 m under the surface, ior 1.5 draws the default's very frame, so no rule draws the shot there (the merge base draws so): expected '276002645a0ba0de02b189a74fec679d494e2…' not to be '276002645a0ba0de02b189a74fec679d494e2…' // Object.is equality
+ ❯ ac5-hashes.test.ts:122:249
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  138.78s (tests 100%)
+
+exit 1
+
+--- ac6-taste.test.ts against the base ---
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3034
+ ❯ ac6-taste.test.ts (1 test | 1 failed) 21505ms
+   ❯ AC6 #3034.20ebe811 the check run's two frames of one lake, and the one taste call on them (1)
+     × AC6 #3034.20ebe811 the check run takes one frame from above and one from below the same lake from the renderer's own output, and the recorded call on exactly those says the frame from below reads as under water; with none the run is INCONCLUSIVE, never PASS 10932ms
+
+ FAIL  ac6-taste.test.ts > AC6 #3034.20ebe811 the check run's two frames of one lake, and the one taste call on them > AC6 #3034.20ebe811 the check run takes one frame from above and one from below the same lake from the renderer's own output, and the recorded call on exactly those says the frame from below reads as under water; with none the run is INCONCLUSIVE, never PASS
+AssertionError: the frame from below is the view's, whose cone follows ior: but ior 1.5 draws the default's very frame, so no rule draws it and there is nothing to call on (the merge base draws so): expected '5b8afaf5ee3f773a7b4435be91fe55ae3d426…' not to be '5b8afaf5ee3f773a7b4435be91fe55ae3d426…' // Object.is equality
+ ❯ ac6-taste.test.ts:47:278
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  22.36s (tests 98%, import 1%, transform 1%)
+
+exit 1

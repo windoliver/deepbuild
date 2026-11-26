@@ -634,6 +634,11 @@ impl Hub<'_> {
                 {
                     return refused("unknown_file");
                 }
+                // #231: a draft is never sent: the store marks its bytes, and nothing is queued.
+                if let Some(sha) = files.iter().find(|sha| self.is_draft(sha)) {
+                    return json!({"outcome": "refused", "code": "draft_unsendable", "purpose": "draft", "file": sha,
+                        "what": format!("{sha} is a draft (an export with purpose: draft), which is never shared, attached or sent; export it with purpose: delivery")});
+                }
                 let sends = &mut self.capturing.sends;
                 sends.push(Send {
                     to: to.clone(),

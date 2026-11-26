@@ -27,7 +27,7 @@ const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const DAY = 86_400_000;
 /** How long a started agent has to write its first event before it ends as never started. */
 const FIRST_EVENT_MS = 60_000;
-/** The folders no command in a started session may read: your keys and the sign-ins other tools keep. */
+/** The folders no command in a started session may read, under your home: your keys and the sign-ins other tools keep. */
 const CREDENTIALS = ['.ssh', '.aws', '.gnupg', '.config/gh', '.netrc', '.docker', '.kube', 'Library/Keychains', '.codex/auth.json', '.claude/.credentials.json'];
 /** The agents a start can name, and the name their facts and binary go by. */
 const AGENTS: Record<string, string> = { 'claude-code': 'claude', codex: 'codex' };
@@ -241,7 +241,7 @@ export class Starts {
       ...(params.lands === 'workspace' ? ["Each task's change finishes on the workspace's own main, only on its own PASS; no forge is read or written."] : []),
     ].join(' ');
     const ask = await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you' }, 'start.approve', {
-      kind: 'authority', question: question.slice(0, 2000),
+      kind: 'authority', may_answer: 'trusted_path', question: question.slice(0, 2000),
       options: [{ id: 'allow', label: 'Approve this run', decision: 'allow' }, { id: 'deny', label: "Don't", decision: 'deny' }],
       recommended: null, deadline: now + DAY, fallback: 'you', default: 'deny', provisional: false, owner: 'you',
       key, pinned_to: { kind: 'evidence', ref: key },
@@ -665,8 +665,9 @@ export class Starts {
   /** The launch's arguments from the facts: mode, settings and sandbox filled, your words as the prompt's argument. */
   private argvOf(started: Obj, entry: Obj | undefined, mode: string, approval: Approval, prompt: string, worktree: string, git: GitFolders): string[] {
     const home = homedir();
-    // Your keys and other tools' sign-ins, and where the hub keeps sessions' own forge credentials.
-    const credentials = [...CREDENTIALS.map((c) => join(home, c)), join(this.o.root, 'starts')];
+    // Your keys and other tools' sign-ins, where the hub keeps sessions' own forge credentials, and the evidence store
+    // and the gate's checkouts, where a held-out variant rests and lies while its run lasts (#3229).
+    const credentials = [...CREDENTIALS.map((c) => join(home, c)), ...['starts', 'evidence', 'checkouts'].map((d) => join(this.o.root, d))];
     const sockets = this.o.plant === 'sandbox-cuts-hub-socket' ? [] : [this.o.socket];
     const open = this.o.plant === 'sandbox-way-out-open';
     const modes = started.modes as Record<string, string>;

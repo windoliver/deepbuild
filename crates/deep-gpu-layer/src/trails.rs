@@ -106,7 +106,10 @@ pub(crate) fn take_trails(scene: &mut Scene, from: &Scene) {
 
 /// #265: each water's wake samples, newest first with their flicks, as the last frame this
 /// process drew kept them: the planted `wake_keeps_last_frame` draws these.
-static WAKES: Mutex<BTreeMap<String, Vec<(i64, [f64; 2])>>> = Mutex::new(BTreeMap::new());
+static WAKES: Mutex<Wakes> = Mutex::new(BTreeMap::new());
+
+/// Each water's wake samples, newest first: each sample's flicks and place.
+type Wakes = BTreeMap<String, Vec<(i64, [f64; 2])>>;
 
 /// The planted `wake_keeps_last_frame`: a wake's samples are those the last frame this process
 /// drew kept, less those older than its span, and the item's place at t; it never reads the
@@ -128,6 +131,15 @@ pub(crate) fn plant_wake(scene: &mut Scene, planted: Option<Planted>, t: i64) {
     kept.retain(|(at, _)| *at < t && *at >= t - span);
     kept.insert(0, (t, now));
     wake.path = kept.iter().map(|(_, p)| *p).collect();
+}
+
+/// #3036: each plate's lowering as the last frame this process drew left it, a share of the depth
+/// a vertex, which the planted `tracks_keep_last_frame` draws from and adds to.
+static TRACKS: Mutex<BTreeMap<String, Vec<f64>>> = Mutex::new(BTreeMap::new());
+
+/// What the planted `tracks_keep_last_frame` keeps between the frames this process draws.
+pub(crate) fn kept_tracks() -> std::sync::MutexGuard<'static, BTreeMap<String, Vec<f64>>> {
+    TRACKS.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// #265: the check's refusal of a document's trails before anything draws, as the trail rule

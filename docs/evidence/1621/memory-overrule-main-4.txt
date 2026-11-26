@@ -1,0 +1,39 @@
+before: 2026-11-23T08:50:46Z; HEAD c52dc3e73; load { 28.45 33.60 55.07 }
+$ node node_modules/vitest/vitest.mjs run packages/hub/test/memory-overrule-main-copy.test.ts   # HEAD's packages/hub/test/memory-overrule.test.ts, unchanged
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ packages/hub/test/memory-overrule-main-copy.test.ts (2 tests | 1 failed) 14027ms
+   ❯ deep memory overrule (2)
+     × stays overruled across a re-read of the transcript, and a new prompt rejects it again 11789ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/memory-overrule-main-copy.test.ts > deep memory overrule > stays overruled across a re-read of the transcript, and a new prompt rejects it again
+AssertionError: expected [] to deeply equal [ 'kafka' ]
+
+- Expected
++ Received
+
+- [
+-   "kafka",
+- ]
++ []
+
+ ❯ packages/hub/test/memory-overrule-main-copy.test.ts:35:64
+     33|     await hook(m.h.home, s, 'UserPromptSubmit', { ...payload(s, 'UserP…
+     34|     for (const until = Date.now() + 10_000; Date.now() < until && !(aw…
+     35|     expect((await listed(m)).rejected.map((r) => r.direction)).toEqual…
+       |                                                                ^
+     36|     expect(decision(await toolCallIn(m, m.api, 'sh scripts/live.sh kaf…
+     37|   }, 300_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  03:50:46
+   Duration  14.28s (tests 99%, transform 1%)
+
+exit 1; after: 2026-11-23T08:51:01Z; HEAD c52dc3e73; load { 25.84 32.77 54.40 }

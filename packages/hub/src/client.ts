@@ -2,10 +2,10 @@
 // call the peer check judges, naming this process as the peer, so the hub can tell whether an agent's process tree
 // runs the command.
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import net from 'node:net';
 import { dirname, join } from 'node:path';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubControl, installedRoot, rootOf, rootToken } from './paths.js';
 import { checkCompat, type Hello } from './compat.js';
 import { refusedGeneration, StaleHub } from './generations.js';
 import { CONTRACT, startOf, type Refusal } from './wire.js';
@@ -133,6 +133,17 @@ export async function call(socket: string, token: string, method: string, params
   });
 }
 
+/** One slice or find from the hub at `root` (#3229): its answer, why it refused, or undefined when no hub answers there. */
+export async function handleRead(root: string, params: Obj): Promise<Obj | undefined> {
+  const at = rootOf(root);
+  try {
+    const reply = await call(at.socket, rootToken(at), 'handle.read', params, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+    return 'error' in reply ? { refused: reply.error.remediation } : reply.result;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Refusals that leave nothing done and nothing decided: not confirmed, an agent's command, or a hub that couldn't. */
 export const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 
@@ -144,9 +155,9 @@ export const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 export async function callAsYou(method: string, params: Obj): Promise<Obj | number> {
   let reply: Reply;
   try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+    const { path: socket, token } = hubControl();
     const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
-    reply = await withPrompt(() => call(hubAddress().path, token, method, params, peer));
+    reply = await withPrompt(() => call(socket, token, method, params, peer));
   } catch (error) {
     return notAnswered(error);
   }

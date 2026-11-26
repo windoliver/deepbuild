@@ -420,6 +420,14 @@ impl<S: Stepper> Stepper for Voiced<S> {
         self.inner.occurrences()
     }
 
+    fn value(&mut self, item: &str, array: &str) -> Option<f64> {
+        self.inner.value(item, array)
+    }
+
+    fn state(&mut self) -> Vec<u8> {
+        self.inner.state()
+    }
+
     fn seek(&mut self, step: i64, len: i64) -> Result<(i64, u64), Value> {
         self.inner.seek(step, len)
     }

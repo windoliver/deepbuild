@@ -2,11 +2,11 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r1",
-  "set_digest": "ac750e802e60360967c06e8452314b057e52aeaf33d68d8b11e7b6f014f01e18",
+  "set_digest": "fe5188ae99edcc03c776af9942b06307cfd715075dad1c623e2b3c8887b26025",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "data@1": {
-      "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
+      "digest": "2142cd1c512dd10e5b453dab41ba1e5ef47ce50d06b00be35d1009ef26d0fb29",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -340,6 +340,21 @@
         ],
         "writes": [
           "data.follow"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.grid_image",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t",
+          "refs"
+        ],
+        "writes": [
+          "data.grid",
+          "data.grid_mapped"
         ],
         "per": "item"
       },
@@ -708,6 +723,7 @@
   "contributions": {
     "core.fields": [
       "data.columns",
+      "data.grid",
       "data.vector_field",
       "marks2d.warp",
       "motion.fields",

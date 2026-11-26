@@ -563,13 +563,16 @@ impl Hub<'_> {
                 .get(panel)
                 .and_then(|s| s.scope.time())
                 .unwrap_or(self.now);
+            let quads =
+                self.scenario.module_planted.as_deref() == Some(crate::spatial::HIT_READS_QUADS);
             for (row, b, hull) in drawn.map(|d| self.row_boxes(&d, t)).unwrap_or_default() {
                 let set = row.split('#').next().unwrap_or_default();
                 if picked.iter().any(|s| s == set) {
                     continue;
                 }
                 let order = &doc["items"][set]["order"];
-                let target = json!({"id": row, "order": order, "params": {"box": b, "hull": hull}});
+                let hull = hull.as_ref().filter(|_| !quads);
+                let target = crate::spatial::target(&row, order, b, hull);
                 if let Some(items) = doc["items"].as_object_mut() {
                     items.insert(row, target);
                 }
@@ -795,8 +798,14 @@ impl Hub<'_> {
                 self.settle_focus(panel);
                 let mut state = self.state(panel);
                 // #549: the app's own Join prompt, null where the piece declares no relay.
+                // #278: the app's own Start, for a piece whose match is a room's: null but for
+                // the first player once enough copies have joined.
+                let start = self.start_prompt(panel);
                 if let Some(s) = state.as_object_mut() {
                     s.insert("join".into(), self.join_prompt(panel));
+                    if let Some(start) = start {
+                        s.insert("start".into(), start);
+                    }
                 }
                 json!({"state": state})
             }

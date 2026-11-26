@@ -1,0 +1,109 @@
+The #2317 suite, each file run once at base commit c7dc0edc3 ("Merge pull request #3058 …"; no implementation of
+#2317), on macOS 27.2 arm64 (shared, 1-minute load about 65 while it ran), Node 24.22.0, vitest 5.0.5, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2317 --no-file-parallelism \
+    --testTimeout=3600000 <file>
+
+after this checkout's release deep-physics was built from the unchanged base as
+`nice -n 10 sh scripts/lease cargo build --locked -j 6 --release -p deep-physics-rapier --bin deep-physics`
+(scripts/lease ran it unleased: "no deep on PATH and no built CLI at packages/cli/dist"), rebuilt after the throwaway
+right program (README) was put back, the binary byte-identical to the one built before it. The suite's own cargo calls
+made the rest: the wasm32 library (ac5, through scripts/physics-wasm32.mjs) and the merge base's release deep-physics
+in target/acceptance-191-base/c7dc0edc3690 (ac2 and ac4; about a minute). At the base the merge base is c7dc0edc3
+itself. `git status --short` listed only tests/acceptance/2317/.
+
+Result: Test Files 4 failed | 1 passed (5); Tests 8 failed | 1 passed (9); 2 to 24 s a file with the builds made.
+
+Passing at the base, as it should:
+- ac2 "the box is within 1 mm of its place on the platform at every step, here and at the merge base": the criterion
+  says "as it is at the merge base", and the merge base is the base, whose wrapper carries a box on a body that moves
+  in a straight line already (the issue's opening: "stays exactly").
+    the box's farthest from its place on the platform: 0.1772 mm here, 0.1772 mm at the merge base c7dc0edc3690
+    (within 1 mm)
+  It fails on a program that moves the box more than 1 mm from its place on a straight platform; its judge is shown
+  failing on the same bake with the box left where it was built.
+
+Every other test fails at an assertion in its own file, for the reason the README gives: the base's wrapper leaves the
+backend's contact reuse on, so the box slides out on the turntable and the 1 cm cube hangs past the table's edge; its
+kit holds no turntable; its budget report lists no p50 and nothing of the merge base's build; and it knows neither
+planted name. None fails in the harness and none is BLOCKED or INCONCLUSIVE.
+
+ac1-turntable.test.ts
+ × the box's centre is within 0.06 m of 1 m from the axis at every step of the 6 s at 90°/s, and within 0.01 m at 30°/s
+   AssertionError: the turntable at 120 Hz and 4 substeps:
+     box: the turntable at 90°/s: its centre is 1.0609 m from the axis after step 146, the first step past 0.06 m of
+     1 m; after step 720, at 6 s, it is 3.957 m from it
+     box: the turntable at 30°/s: its centre is 1.0101 m from the axis after step 125, the first step past 0.01 m of
+     1 m; after step 720, at 6 s, it is 1.309 m from it
+   (ac1-turntable.test.ts:25)
+   printed: the turntable at 90°/s: the box's distance from the axis at 0 s 1.000 m, 1 s 1.040 m, 2 s 1.210 m,
+     3 s 1.549 m, 4 s 1.970 m, 5 s 2.570 m, 6 s 3.957 m; it has gone 420.49° around of the disc's 450.14°
+   printed: the turntable at 30°/s: … 1 s 1.009 m, 2 s 1.049 m, 3 s 1.110 m, 4 s 1.171 m, 5 s 1.235 m, 6 s 1.309 m;
+     it has gone 147.79° around of the disc's 150.05°
+   (the issue's opening reads 1.040 m at 1 s, 1.549 m at 3 s and 3.957 m at 6 s at 90°/s, and 1.309 m at 6 s at 30°/s)
+ × a planted wrapper that leaves the backend's contact reuse on reads 3.957 m at 6 s and fails, naming the box and the
+   first step past the bound
+   AssertionError: deep-physics --planted wrapper_leaves_contact_reuse_on answers: expected
+     'deep-physics --planted wrapper_leaves_contact_reuse_on exits 2, not 0; stdout: {"ok":false,"code":"bad_input"};
+     stderr: ' to be ''   (ac1-turntable.test.ts:30)
+
+ac2-straight-platform.test.ts
+ ✓ the box is within 1 mm of its place on the platform at every step, here and at the merge base (above)
+
+ac3-what-rested.test.ts
+ × five and ten 1 m cubes move slower than 1 mm/s through the sixth second and the top of five ends 5.87 mm low within
+   0.3 mm; the 1 cm cube has dropped 0.5 mm before 1.6 sides past the edge; the five 1 cm cubes end 4.5 sides up within
+   2% of a side
+   AssertionError: what rested:
+     cube: the edge at step_rate 480: it has not dropped 0.500 mm until step 61, its centre 5.23 sides past the edge,
+     not before 1.6 sides
+   (ac3-what-rested.test.ts:35)
+   printed: the stacks' fastest cube in the sixth second: 0.0852 mm/s, 0.0629 mm/s, 0.4015 mm/s, 0.0887 mm/s (five
+     and ten, each at the default and at contact_hz 80); the top of five ends 5.845 mm low
+   printed: the edge: the cube has dropped 0.5 mm at step 61, its centre 5.23 sides past the edge; the five 1 cm
+     cubes: the top ends 0.92% of a side low
+   The stacks and the five 1 cm cubes hold at the base, as they should ("what rested"); the edge is the clause the
+   base fails.
+ × the first criterion's planted wrapper, which leaves the backend's contact reuse on, has not dropped the 1 cm cube
+   until 5.23 sides past the edge
+   AssertionError: deep-physics --planted wrapper_leaves_contact_reuse_on answers: … exits 2, not 0; stdout:
+     {"ok":false,"code":"bad_input"}   (ac3-what-rested.test.ts:40)
+ × a planted wrapper that turns the backend's contact reuse off for every world topples the five 1 cm cubes and fails,
+   naming the top body
+   AssertionError: deep-physics --planted wrapper_turns_contact_reuse_off answers: … exits 2, not 0; stdout:
+     {"ok":false,"code":"bad_input"}   (ac3-what-rested.test.ts:52)
+
+ac4-budget.test.ts
+ × the report lists the step's p50 and p95 on the merge base's build and on this one, and the 800-body world stays
+   under its budget.step_p95
+   AssertionError: the report on the 800-body world, timed on this Mac's release build and on the merge base's:
+     hosts.app.before is undefined, not {p50, p95}: five runs' step p50s and five runs' step p95s, ms
+     hosts.app.after is undefined, not {p50, p95}: five runs' step p50s and five runs' step p95s, ms
+   (ac4-budget.test.ts:28)
+   The base's check ran and timed the app host (its report held every field #2011's judges ask); it ignores `before`.
+   The verdict is read only after these, so at the base this is a failure, not a reading.
+
+ac5-kit.test.ts
+ × macOS arm64: the kit's data holds the turntable once, and the reference backend passes it within 0.06 m of 1 m
+   AssertionError: the turntable in the behavior kit on macOS arm64:
+     the behavior kit on aarch64-apple-darwin: the kit's data holds turntable 0 times, once expected, among its 86
+     fixtures
+     box: the turntable baked on aarch64-apple-darwin: its centre is 1.0609 m from the axis after step 146, the first
+     step past 0.06 m of 1 m; after step 720, at 6 s, it is 3.957 m from it
+   (ac5-kit.test.ts:37)
+ × wasm32: the physics crate built for wasm32-unknown-unknown holds the turntable once and passes it within 0.06 m of
+   1 m
+   AssertionError: the turntable in the behavior kit on wasm32:
+     the behavior kit on wasm32-unknown-unknown: the kit's data holds turntable 0 times, once expected, among its 86
+     fixtures
+     box: the turntable baked on wasm32-unknown-unknown: its centre is 1.0609 m from the axis after step 146, the
+     first step past 0.06 m of 1 m; after step 720, at 6 s, it is 3.957 m from it
+   (ac5-kit.test.ts:44)
+
+On the throwaway right program (README: A right program), before it was put back, the same nine tests ran once: eight
+passed, and ac4's report passed every check before its verdict, which read
+  INCONCLUSIVE: a reading, not a budget result, and not a pass: … runs [0.779667,1.15175,1.041959,0.934709,1.160875]
+  ms against 2 ms; … thermal state is "fair", not "nominal"; load 78.8 at a run's start or end is above the 18 cores
+with the step's p50 at 0.305 to 0.381 ms before and 0.354 to 0.421 ms after, and its p95 at 0.765 to 1.192 ms before
+and 0.780 to 1.161 ms after, on a loaded machine: readings, not results.

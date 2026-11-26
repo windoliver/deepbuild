@@ -42,6 +42,9 @@ pub struct Memo {
     /// #2760: the issue of the refusal the last evaluation ended on, where it names more than
     /// its path.
     pub(crate) refused: Option<Value>,
+    /// #3036's planted plate (`tracks_keep_last_frame`): each plate's lowering as the frame
+    /// before left it, a share of the depth a vertex.
+    pub tracks: BTreeMap<String, Vec<f64>>,
 }
 
 impl Memo {
@@ -502,7 +505,10 @@ fn plate(
     fills: Fills<'_>,
 ) -> Result<Mesh, Refused> {
     let terrain = item.get("kind").and_then(Value::as_str) == Some("plate@1")
-        && item.get("params").and_then(crate::terrain::of_params).is_some();
+        && item
+            .get("params")
+            .and_then(crate::terrain::of_params)
+            .is_some();
     let Some(memo) = ask.memo.filter(|_| terrain) else {
         return crate::scene::mesh_of(doc, id, item, seconds, fills);
     };

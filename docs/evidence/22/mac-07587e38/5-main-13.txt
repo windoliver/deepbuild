@@ -1,0 +1,294 @@
+== head b1a1ff86234e7e080e0e339774ac12ad05813e9b
+
+===== tests/acceptance/1002/first-screen-redraft/shown.test.ts  start 14:50:30 load { 21.04 37.00 41.25 }
+
+ RUN  v5.0.5 ~/private/dbc-22lm
+
+ ❯ tests/acceptance/1002/first-screen-redraft/shown.test.ts (1 test | 1 failed) 261550ms
+   ❯ #1002 the real window after a setup that stopped, shown to you (1)
+     × #1002.1f6f1740 screenshots of the real window offering Set up again with the reason and the count reading setup didn't finish, taken at the reference window, stay INCONCLUSIVE until a taste call on them is recorded 261480ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1002/first-screen-redraft/shown.test.ts > #1002 the real window after a setup that stopped, shown to you > #1002.1f6f1740 screenshots of the real window offering Set up again with the reason and the count reading setup didn't finish, taken at the reference window, stay INCONCLUSIVE until a taste call on them is recorded
+Error: BLOCKED: the window didn't take 1512 × 982: it is [0,40,1470,845]
+ ❯ blocked tests/acceptance/1002/first-screen-redraft/window.ts:31:56
+     29|   });
+     30| });
+     31| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     32| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     33| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.sizeTo tests/acceptance/1002/first-screen-redraft/window.ts:161:102
+ ❯ shot tests/acceptance/1002/first-screen-redraft/shown.test.ts:21:3
+ ❯ tests/acceptance/1002/first-screen-redraft/shown.test.ts:46:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  14:50:31
+   Duration  261.67s (tests 100%)
+
+===== tests/acceptance/1002/first-screen-redraft/shown.test.ts exit=1
+
+===== tests/acceptance/994/first-screen-redraft/shown.test.ts  start 14:54:53 load { 74.13 71.73 56.46 }
+
+ RUN  v5.0.5 ~/private/dbc-22lm
+
+ ❯ tests/acceptance/994/first-screen-redraft/shown.test.ts (1 test | 1 failed) 20039ms
+   ❯ AC5 #994.f8ef6a91 the real window, shown to you (1)
+     × AC5 #994.f8ef6a91 screenshots of the real window with the hub not answering count and the not notified row, taken at the reference window, stay INCONCLUSIVE until a taste call on them is recorded 19928ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/994/first-screen-redraft/shown.test.ts > AC5 #994.f8ef6a91 the real window, shown to you > AC5 #994.f8ef6a91 screenshots of the real window with the hub not answering count and the not notified row, taken at the reference window, stay INCONCLUSIVE until a taste call on them is recorded
+Error: BLOCKED: the window didn't take 1512 × 982: it is [0,40,1470,845]
+ ❯ blocked tests/acceptance/1002/first-screen-redraft/window.ts:31:56
+     29|   });
+     30| });
+     31| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     32| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     33| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.sizeTo tests/acceptance/1002/first-screen-redraft/window.ts:161:102
+ ❯ shot tests/acceptance/994/first-screen-redraft/shown.test.ts:20:3
+ ❯ tests/acceptance/994/first-screen-redraft/shown.test.ts:41:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  14:54:54
+   Duration  20.16s (tests 100%)
+
+===== tests/acceptance/994/first-screen-redraft/shown.test.ts exit=1
+
+===== tests/acceptance/1172/shown.test.ts  start 14:55:14 load { 58.72 68.39 55.62 }
+
+ RUN  v5.0.5 ~/private/dbc-22lm
+
+ ❯ tests/acceptance/1172/shown.test.ts (1 test | 1 failed) 340396ms
+   ❯ #1172 shown to you (1)
+     × AC7 the check run takes the screenshots at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 340281ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/shown.test.ts > #1172 shown to you > AC7 the check run takes the screenshots at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+Error: BLOCKED: deep-app has no window: first-frame-ms 510.5
+
+ ❯ blocked tests/acceptance/1172/helpers.ts:34:56
+     32| });
+     33|
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     35| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     36| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.mainWindow tests/acceptance/1172/helpers.ts:163:19
+ ❯ App.capture tests/acceptance/1172/helpers.ts:156:28
+ ❯ atReference tests/acceptance/1172/shown.test.ts:31:19
+ ❯ shot tests/acceptance/1172/shown.test.ts:39:5
+ ❯ take tests/acceptance/1172/shown.test.ts:46:3
+ ❯ tests/acceptance/1172/shown.test.ts:88:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  14:55:14
+   Duration  340.71s (tests 100%)
+
+===== tests/acceptance/1172/shown.test.ts exit=1
+
+===== tests/acceptance/1172/shell.test.ts  start 15:00:55 load { 57.54 61.52 55.99 }
+
+ RUN  v5.0.5 ~/private/dbc-22lm
+
+ ❯ tests/acceptance/1172/shell.test.ts (4 tests | 4 failed) 93060ms
+   ❯ #1172 the app a person runs (4)
+     × AC1 deep-app shows the registered sidebar with the 2 sessions and Needs you with 3 rows, the menu bar reads 3, and no row reads "Session 0001" 21928ms
+     × AC1 wrong program: the planted build that opens the spike window fails, naming the spike window 28458ms
+     × AC1 proof: the real window's sidebar rows are the replica's rows over the same record 14396ms
+     × AC2 answering one ask in the record makes the window and the menu bar read 2 within 1 s 28017ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/shell.test.ts > #1172 the app a person runs > AC1 deep-app shows the registered sidebar with the 2 sessions and Needs you with 3 rows, the menu bar reads 3, and no row reads "Session 0001"
+Error: BLOCKED: deep-app has no window: first-frame-ms 304.0
+
+ ❯ blocked tests/acceptance/1172/helpers.ts:34:56
+     32| });
+     33|
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     35| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     36| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.mainWindow tests/acceptance/1172/helpers.ts:163:19
+ ❯ App.capture tests/acceptance/1172/helpers.ts:156:28
+ ❯ shellFailures tests/acceptance/1172/helpers.ts:450:27
+ ❯ settled tests/acceptance/1172/helpers.ts:332:22
+ ❯ tests/acceptance/1172/shell.test.ts:21:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1172/shell.test.ts > #1172 the app a person runs > AC1 wrong program: the planted build that opens the spike window fails, naming the spike window
+Error: BLOCKED: deep-app has no window: first-frame-ms 261.0
+
+ ❯ blocked tests/acceptance/1172/helpers.ts:34:56
+     32| });
+     33|
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     35| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     36| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.mainWindow tests/acceptance/1172/helpers.ts:163:19
+ ❯ App.capture tests/acceptance/1172/helpers.ts:156:28
+ ❯ shellFailures tests/acceptance/1172/helpers.ts:450:27
+ ❯ tests/acceptance/1172/shell.test.ts:28:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1172/shell.test.ts > #1172 the app a person runs > AC1 proof: the real window's sidebar rows are the replica's rows over the same record
+Error: BLOCKED: deep-app has no window: first-frame-ms 340.7
+
+ ❯ blocked tests/acceptance/1172/helpers.ts:34:56
+     32| });
+     33|
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     35| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     36| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.mainWindow tests/acceptance/1172/helpers.ts:163:19
+ ❯ App.capture tests/acceptance/1172/helpers.ts:156:28
+ ❯ shellFailures tests/acceptance/1172/helpers.ts:450:27
+ ❯ settled tests/acceptance/1172/helpers.ts:332:22
+ ❯ tests/acceptance/1172/shell.test.ts:36:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1172/shell.test.ts > #1172 the app a person runs > AC2 answering one ask in the record makes the window and the menu bar read 2 within 1 s
+AssertionError: before the answer the window and the menu bar read 3: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Needs you should show 1 row for ask:01M7E4QQ1Q0980QKRAT1X8VEWR (\"Which header colour on the login page?\"); it has 2",
++   "the window's pixels lack ask:01M7E4QQ1SZV127R4X8TDNQ4P8's question: they read [\"D\",\"Needs you\",\"WI How it looks tomorrow 15:02\",\"WI How it looks tomorrow 15:02\",\"Wl How it looks tomorrow 15:02\",\"No project\",\"• Cart totals\",\"Release notes\",\"27 s\",\"27 s\",\"How it looks\",\"Which header colour on the login page?\",\"Blue header recommended\",\"Green header\",\"Default: Blue header • at tomorrow 15:02\",\"reference: the agent's\",\"Answering saves it for this task\",\"Answer\"]",
++   "the window's pixels lack ask:01M7E4QQ1SNM386X00J3SF611V's question: they read [\"D\",\"Needs you\",\"WI How it looks tomorrow 15:02\",\"WI How it looks tomorrow 15:02\",\"Wl How it looks tomorrow 15:02\",\"No project\",\"• Cart totals\",\"Release notes\",\"27 s\",\"27 s\",\"How it looks\",\"Which header colour on the login page?\",\"Blue header recommended\",\"Green header\",\"Default: Blue header • at tomorrow 15:02\",\"reference: the agent's\",\"Answering saves it for this task\",\"Answer\"]",
++   "the menu bar reads [], not 3",
++ ]
+
+ ❯ tests/acceptance/1172/shell.test.ts:51:96
+     49|     const world = await makeWorld();
+     50|     const app = await App.launch({ home: world.home, binary: await app…
+     51|     expect(await shell(world, app, 3), 'before the answer the window a…
+       |                                                                                                ^
+     52|     const [asked, ...rest] = world.asks;
+     53|     await answer(world, asked!);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  15:00:56
+   Duration  93.26s (tests 100%)
+
+===== tests/acceptance/1172/shell.test.ts exit=1
+
+===== tests/acceptance/1172/popout.test.ts  start 15:02:30 load { 41.79 56.27 54.62 }
+
+ RUN  v5.0.5 ~/private/dbc-22lm
+
+ ❯ tests/acceptance/1172/popout.test.ts (1 test | 1 failed) 27073ms
+   ❯ #1172 a popped-out view leaves the main window (1)
+     × AC5 after Needs you pops out to its own window, the main window no longer draws it and the new window does 26967ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/popout.test.ts > #1172 a popped-out view leaves the main window > AC5 after Needs you pops out to its own window, the main window no longer draws it and the new window does
+Error: BLOCKED: deep-app has no window: first-frame-ms 296.1
+
+ ❯ blocked tests/acceptance/1172/helpers.ts:34:56
+     32| });
+     33|
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     35| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     36| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.mainWindow tests/acceptance/1172/helpers.ts:163:19
+ ❯ App.capture tests/acceptance/1172/helpers.ts:156:28
+ ❯ tests/acceptance/1172/popout.test.ts:21:25
+ ❯ settled tests/acceptance/1172/helpers.ts:332:22
+ ❯ tests/acceptance/1172/popout.test.ts:20:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:02:30
+   Duration  27.24s (tests 100%)
+
+===== tests/acceptance/1172/popout.test.ts exit=1
+
+===== tests/acceptance/1457/budgets.test.ts  start 15:02:58 load { 33.99 53.07 53.52 }
+
+ RUN  v5.0.5 ~/private/dbc-22lm
+
+ ❯ tests/acceptance/1457/budgets.test.ts (4 tests | 2 failed) 35ms
+   ❯ #1457 AC4 nothing a person sees changes (2)
+     × the real app's tree and window picture on #1172's fixtures equal the merge base's; any delta is listed 2ms
+     ✓ wrong program: a tree with one name changed, and a picture with a changed pixel, are told apart from the base 1ms
+   ❯ #1457 AC5 budgets against the merge base (2)
+     × the release binary is smaller and the first frame not slower, both numbers reported 0ms
+     ✓ wrong program: a bigger binary, an equal one and a slower first frame each fail the judge 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1457/budgets.test.ts > #1457 AC4 nothing a person sees changes > the real app's tree and window picture on #1172's fixtures equal the merge base's; any delta is listed
+AssertionError: INCONCLUSIVE: BASE_BIN_DEBUG is not supplied by the local preflight (or names no file), so there is no merge-base number to compare with; this is not a pass
+ ❯ inconclusive tests/acceptance/1457/helpers.ts:14:60
+     12| export const TWINS = join(REPO, 'tests/acceptance/1457/twins');
+     13| export const SOURCE = 'crates/deep-app/src';
+     14| export const inconclusive = (why: string): never => expect.fail(`INCON…
+       |                                                            ^
+     15| export const twin = (name: string): string => readFileSync(join(TWINS,…
+     16|
+ ❯ supplied tests/acceptance/1457/helpers.ts:64:69
+ ❯ tests/acceptance/1457/budgets.test.ts:48:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1457/budgets.test.ts > #1457 AC5 budgets against the merge base > the release binary is smaller and the first frame not slower, both numbers reported
+AssertionError: INCONCLUSIVE: BASE_BIN_RELEASE is not supplied by the local preflight (or names no file), so there is no merge-base number to compare with; this is not a pass
+ ❯ inconclusive tests/acceptance/1457/helpers.ts:14:60
+     12| export const TWINS = join(REPO, 'tests/acceptance/1457/twins');
+     13| export const SOURCE = 'crates/deep-app/src';
+     14| export const inconclusive = (why: string): never => expect.fail(`INCON…
+       |                                                            ^
+     15| export const twin = (name: string): string => readFileSync(join(TWINS,…
+     16|
+ ❯ supplied tests/acceptance/1457/helpers.ts:64:69
+ ❯ tests/acceptance/1457/budgets.test.ts:67:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  15:02:58
+   Duration  207ms (transform 39%, import 32%, tests 25%, setup 3%, worker 1%)
+
+===== tests/acceptance/1457/budgets.test.ts exit=1
+
+===== tests/acceptance/41/app/screens.test.ts  start 15:02:58 load { 33.99 53.07 53.52 }
+
+ RUN  v5.0.5 ~/private/dbc-22lm
+
+===== tests/acceptance/41/app/screens.test.ts exit=143

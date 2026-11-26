@@ -1,0 +1,14 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 20:48:55 load { 18.74 13.56 9.77 } thermal 0 free KB 55170772
+part A start: Now drawing from 'AC Power'; load1 18.04; thermal 0; free KB 55168472 20:48:57 load { 18.04 13.50 9.77 } thermal 0 free KB 55168276
+part A head b1fc9abb20d2fd9a5fd46c323e861726fcd62a28; on origin/main: yes; origin/main 6a798c407feb902d615a68a7e7c3913252d7cb19 20:49:38 load { 12.89 12.76 9.67 } thermal 0 free KB 54175104
+setup A (npm ci, workspace build, deep-hook) exit=0 20:50:35 load { 21.12 14.88 10.64 } thermal 1 free KB 53033540
+part A:       Tests  12 failed | 3 passed (15); vitest exit=1 20:59:50 load { 36.82 60.26 40.65 } thermal 1 free KB 43457968
+part A failing/first-error lines saved: 29 20:59:50 load { 36.82 60.26 40.65 } thermal 1 free KB 43457968
+clone d22xa removed 20:59:54 load { 34.67 59.43 40.47 } thermal 1 free KB 49651500
+part B start: Now drawing from 'AC Power'; load1 34.67; thermal 1; free KB 49651480 20:59:54 load { 34.67 59.43 40.47 } thermal 1 free KB 49651800
+part B head 97fffed505149c3d93599549b0a32d2e1e7494c0; merge-base b1fc9abb20d2fd9a5fd46c323e861726fcd62a28 21:00:42 load { 19.11 51.40 38.58 } thermal 1 free KB 48626680
+setup B (npm ci, workspace build, deep-hook) exit=0 21:01:49 load { 16.69 44.74 37.04 } thermal 1 free KB 47509648
+part B-test start: Now drawing from 'AC Power'; load1 16.69; thermal 1; free KB 47509624 21:01:49 load { 16.69 44.74 37.04 } thermal 1 free KB 47509628
+part B:       Tests  2 passed (2); vitest exit=0 21:01:58 load { 15.80 43.62 36.73 } thermal 1 free KB 47503736
+login-name hits after redaction: 0 21:01:58 load { 15.80 43.62 36.73 } thermal 1 free KB 47516008
+secret scan hits=0 21:01:58 load { 15.80 43.62 36.73 } thermal 1 free KB 47515968

@@ -151,7 +151,7 @@ pub(crate) fn parse(list: Option<&Value>) -> Option<Vec<Tool>> {
     let tool = |t: &Value| {
         let (name, version) = t.get("tool")?.as_str()?.split_once('@')?;
         let named = !name.is_empty() && version.split('.').count() == 3;
-        Some(Tool {
+        let tool = Tool {
             id: t.get("tool")?.as_str()?.to_string(),
             codecs: texts(t.get("codecs")?)?,
             hardware: t.get("hardware")?.as_bool()?,
@@ -164,15 +164,14 @@ pub(crate) fn parse(list: Option<&Value>) -> Option<Vec<Tool>> {
             },
             pinned_only: false,
             surface: false,
-        })
-        .filter(|_| named && t.get("kind").and_then(Value::as_str) == Some("encode"))
+        };
+        let encode = named && t.get("kind").and_then(Value::as_str) == Some("encode");
         // Whichever input it registers, this build hands it each frame by a copy through memory.
-        .filter(|_| {
-            matches!(
-                t.get("input").and_then(Value::as_str),
-                Some("surface" | "memory")
-            )
-        })
+        let input = matches!(
+            t.get("input").and_then(Value::as_str),
+            Some("surface" | "memory")
+        );
+        (encode && input).then_some(tool)
     };
     list.as_array()?.iter().map(tool).collect()
 }
@@ -205,6 +204,13 @@ impl Hub<'_> {
         tools.extend(self.scenario.job_tools.iter().cloned());
         tools.extend(test_tools());
         tools
+    }
+
+    /// #231: the first encode tool that registers `codec` and takes GPU surfaces, by its ID.
+    pub(crate) fn surface_tool(&self, codec: &str) -> Option<String> {
+        let tools = self.encode_tools();
+        let takes = |t: &&Tool| t.surface && t.codecs.iter().any(|c| c == codec);
+        tools.iter().find(takes).map(|t| t.id.clone())
     }
 
     /// #518: an export that names a tool (`tool: name@version`) names one its brief pins

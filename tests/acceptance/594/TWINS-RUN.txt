@@ -47,7 +47,7 @@ reference.live.test.mjs tested the old wording. It stays untagged, kept for hist
 twins/build-dirs-not-kept (criterion 1; load 18.6, other sessions busy; 593 s)            0 pass, 1 fail
   node --test tests/acceptance/594/build-dirs.test.mjs, in a scratch tree laid as above
   FAIL build-dirs  at build-dirs.test.mjs:57  "the merge base copy's build directory
-                   <sandbox>/home/.cache/deepbuild-perf/<machine>/base/target is gone after the run"
+                   ~/.cache/deepbuild-perf/<machine>/base/target is gone after the run"
   This is the directories-still-exist assertion on the first run, the one before the second preflight. The second-run
   "built dependencies again" assertion is not reached.
 build-dirs names #594.5f88bcfc first, so build-dirs-not-kept decides it in the before lane.

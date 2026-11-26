@@ -1,0 +1,16 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 20:15:15 load { 18.07 42.51 53.57 } thermal 1 free KB 63116204
+PR 2097 head 0aa40ad023efe9d9abf1682530e2617590f7561a; origin/main c26bdb5beebe0b3ddc0d55dbe0165fa9b17e76b3 20:15:59 load { 16.12 38.71 51.61 } thermal 1 free KB 73688772
+head 3f2f86464 start: 3f2f86464539346c3bcd5dc844d5b0d51db3bd40; Now drawing from 'AC Power'; front app [Windows App] 20:16:04 load { 15.47 38.20 51.35 } thermal 1 free KB 73025928
+setup at 3f2f86464 (npm ci, workspace build, deep-hook) exit=0, 260 s 20:20:24 load { 122.24 77.94 64.69 } thermal 1 free KB 68187700
+head 3f2f86464 1345 batch: vitest exit=1;  Tests 1 failed | 2 passed (3) 20:49:30 load { 68.46 73.45 88.90 } thermal 1 free KB 49811908
+head 3f2f86464 AC3: not found 20:49:30 load { 68.46 73.45 88.90 } thermal 1 free KB 49808644
+head 3f2f86464 AC7: not found 20:49:30 load { 68.46 73.45 88.90 } thermal 1 free KB 49800124
+head 3f2f86464 AC8: not found 20:49:31 load { 68.46 73.45 88.90 } thermal 1 free KB 49797856
+head f17fa347c start: f17fa347ca56e065241978e3c2bc70f0bbd6e190; Now drawing from 'AC Power'; front app [Windows App] 20:49:33 load { 68.46 73.45 88.90 } thermal 1 free KB 49720104
+setup at f17fa347c (npm ci, workspace build, deep-hook) exit=0, 480 s 20:57:34 load { 68.07 66.36 79.45 } thermal 1 free KB 42816864
+head f17fa347c 1345 batch: vitest exit=1;  Tests 1 failed | 2 passed (3) 21:08:27 load { 87.12 126.71 114.94 } thermal 1 free KB 36780172
+head f17fa347c AC3: not found 21:08:27 load { 87.12 126.71 114.94 } thermal 1 free KB 36779012
+head f17fa347c AC7: not found 21:08:27 load { 87.12 126.71 114.94 } thermal 1 free KB 36778836
+head f17fa347c AC8: not found 21:08:27 load { 87.12 126.71 114.94 } thermal 1 free KB 36779124
+login-name hits after redaction: 0 21:08:27 load { 87.12 126.71 114.94 } thermal 1 free KB 36775752
+secret scan hits=0 21:08:28 load { 87.12 126.71 114.94 } thermal 1 free KB 36775052

@@ -1,0 +1,80 @@
+# RESULTS for tests/acceptance/3172-redraft-3274 (blind redraft of #3172.5a315338's Spark test)
+# Machine: Darwin arm64, node v24.22.0, cargo 1.99.1, load 61.32 61.16 74.70 at the run.
+# Base: 727d0821e670b6bd192f48c77d84faad8aead196 (branch claude/issue-3172-app992-redraft), the folder uncommitted beside it.
+
+## 1. At the base: node --test tests/acceptance/3172-redraft-3274/spark.test.mjs (exit 0)
+✔ #3172.5a315338 the Spark's cargo test at 0c73a8a4, read against that commit's workspace: each of the issue's 19 targets is read as its line says, an INCONCLUSIVE one with its reason, never FAIL or PASS (833.594417ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 869.2495
+
+## 2. With the twin: an APFS clone (cp -c) of scripts/, tests/acceptance/3172/, docs/evidence/1121/ and this folder,
+##    with .git pointing at the same repository, and twins/no-own-line/scripts/lanes.mjs copied over scripts/lanes.mjs.
+##    Same command, in the copy (exit 1). The failure is the node:assert deepEqual at spark.test.mjs:45.
+✖ #3172.5a315338 the Spark's cargo test at 0c73a8a4, read against that commit's workspace: each of the issue's 19 targets is read as its line says, an INCONCLUSIVE one with its reason, never FAIL or PASS (765.03275ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 818.54825
+
+✖ failing tests:
+
+test at tests/acceptance/3172-redraft-3274/spark.test.mjs:32:1
+✖ #3172.5a315338 the Spark's cargo test at 0c73a8a4, read against that commit's workspace: each of the issue's 19 targets is read as its line says, an INCONCLUSIVE one with its reason, never FAIL or PASS (765.03275ms)
+  AssertionError [ERR_ASSERTION]: of the 19 targets, 19 are read otherwise than their lines say
+  + actual - expected
+  
+  + [
+  +   'cargo -p deep-app --test spike_402 reads FAIL cargo -p deep-app --test spike_402: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1425 reads FAIL cargo -p deep-replica --test acceptance_1425: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1425_ac3 reads FAIL cargo -p deep-replica --test acceptance_1425_ac3: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1454_panel_redraft reads FAIL cargo -p deep-replica --test acceptance_1454_panel_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_1620_planted_loader reads FAIL cargo -p deep-replica --test acceptance_1620_planted_loader: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels reads FAIL cargo -p deep-replica --test acceptance_326_panels: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels_planted reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels_planted_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_panels_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_326_surfaces reads FAIL cargo -p deep-replica --test acceptance_326_surfaces: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_327_card reads FAIL cargo -p deep-replica --test acceptance_327_card: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_327_planted reads FAIL cargo -p deep-replica --test acceptance_327_planted: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_883 reads FAIL cargo -p deep-replica --test acceptance_883: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_883_ac3_redraft reads FAIL cargo -p deep-replica --test acceptance_883_ac3_redraft: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_994_sound reads FAIL cargo -p deep-replica --test acceptance_994_sound: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_994_window reads FAIL cargo -p deep-replica --test acceptance_994_window: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test card_size reads FAIL cargo -p deep-replica --test card_size: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test headless reads FAIL cargo -p deep-replica --test headless: the target failed outside any test it reported, not INCONCLUSIVE',
+  +   'cargo -p deep-replica --test acceptance_992_app reads FAIL cargo -p deep-replica --test acceptance_992_app: the target failed outside any test it reported, not BLOCKED'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<copy>/tests/acceptance/3172-redraft-3274/spark.test.mjs:45:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'cargo -p deep-app --test spike_402 reads FAIL cargo -p deep-app --test spike_402: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1425 reads FAIL cargo -p deep-replica --test acceptance_1425: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1425_ac3 reads FAIL cargo -p deep-replica --test acceptance_1425_ac3: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1454_panel_redraft reads FAIL cargo -p deep-replica --test acceptance_1454_panel_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_1620_planted_loader reads FAIL cargo -p deep-replica --test acceptance_1620_planted_loader: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels reads FAIL cargo -p deep-replica --test acceptance_326_panels: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels_planted reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels_planted_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_planted_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_panels_redraft reads FAIL cargo -p deep-replica --test acceptance_326_panels_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_326_surfaces reads FAIL cargo -p deep-replica --test acceptance_326_surfaces: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_327_card reads FAIL cargo -p deep-replica --test acceptance_327_card: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_327_planted reads FAIL cargo -p deep-replica --test acceptance_327_planted: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_883 reads FAIL cargo -p deep-replica --test acceptance_883: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_883_ac3_redraft reads FAIL cargo -p deep-replica --test acceptance_883_ac3_redraft: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_994_sound reads FAIL cargo -p deep-replica --test acceptance_994_sound: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_994_window reads FAIL cargo -p deep-replica --test acceptance_994_window: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test card_size reads FAIL cargo -p deep-replica --test card_size: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test headless reads FAIL cargo -p deep-replica --test headless: the target failed outside any test it reported, not INCONCLUSIVE', 'cargo -p deep-replica --test acceptance_992_app reads FAIL cargo -p deep-replica --test acceptance_992_app: the target failed outside any test it reported, not BLOCKED' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+## 3. For the dispute, the first draft's fourth test at the base (node --test --test-name-pattern="Spark's cargo test at 0c73a8a4"
+##    tests/acceptance/3172/inconclusive.test.mjs): it fails, reading today's [[test]] path for acceptance_992_app.
+✖ #3172.5a315338 the Spark's cargo test at 0c73a8a4: each of the issue's 19 targets is read as its line says, an INCONCLUSIVE one with its reason, never FAIL or PASS (185.025542ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+✖ failing tests:
+✖ #3172.5a315338 the Spark's cargo test at 0c73a8a4: each of the issue's 19 targets is read as its line says, an INCONCLUSIVE one with its reason, never FAIL or PASS (185.025542ms)
+  AssertionError [ERR_ASSERTION]: of the 19 targets, 1 are read otherwise than their lines say
+  +   'cargo -p deep-replica --test acceptance_992_app reads FAIL cargo -p deep-replica --test acceptance_992_app: the target failed outside any test it reported, not BLOCKED'

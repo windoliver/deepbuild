@@ -1,0 +1,10 @@
+
+ RUN  v5.0.5 <worktree>/target/e2e-22
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:53:30
+   Duration  491.06s (tests 100%)
+
+exit 0

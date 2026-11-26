@@ -2434,6 +2434,7 @@ dependencies = [
  "libc",
  "libm",
  "opus-rs",
+ "png 0.18.1",
  "rusty_aac",
  "serde_json",
  "sha2 0.10.9",
@@ -2448,8 +2449,10 @@ version = "0.0.0"
 name = "deep-effects-render"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas",
  "deep-canvas-effects",
  "deep-canvas-motion",
+ "deep-canvas-scene3d",
  "deep-gpu",
  "deep-scene3d-render",
  "naga 30.0.1",
@@ -2861,6 +2864,7 @@ name = "deep-show"
 version = "0.0.0"
 dependencies = [
  "blake3",
+ "crc32fast",
  "deep-canvas",
  "deep-canvas-cells",
  "deep-canvas-effects",
@@ -2902,8 +2906,10 @@ dependencies = [
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-pre-macos",
+ "ignore",
  "image",
  "libc",
+ "miniz_oxide 0.9.1",
  "objc2 0.6.5",
  "objc2-foundation 0.3.2",
  "png 0.18.1",
@@ -2973,6 +2979,17 @@ dependencies = [
  "ttf-parser",
  "typst",
  "typst-layout",
+]
+
+[[package]]
+name = "deep-urdf"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-physics",
+ "roxmltree 0.21.1",
+ "serde_json",
 ]
 
 [[package]]

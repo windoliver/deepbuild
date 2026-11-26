@@ -22,7 +22,7 @@ import { registry } from './socket-adapters.js';
 import { agentReply, allowReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, withWaits } from './hook-replies.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
-import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
+import { handleOf as ruleHandle, noticeText } from './rules.js';
 import { dropTestSettings, installedRoot, real, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { processHealth } from './process-health.js';
@@ -32,15 +32,15 @@ import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
 import { toolList } from './tools.js';
 import { gatesOff } from './watch.js';
-import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
+import { HostLinks } from './host-link.js';
+import { AUTHORITY, contractOf, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { writeSynced } from './vfs.js';
 import { budgetFile, readBudget, spend, spentWhy } from './restart-budget.js';
+import { parserInline, parserPool, type Parsers } from './parser-pool.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
-/** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
-const BIG = 1 << 20;
 const MAX_LINE = 64 << 20;
 /**
  * A consumer more than this many frames behind is cut off with fell_behind, never dropped silently (#34): the
@@ -62,6 +62,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.health', ['app', 'cli', 'person']], ['health', ['app', 'cli', 'person']], ['events.read', ['app', 'cli', 'person']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['ask.confirm', ['app']], ['views.installed', ['app']], ['command.run', ['app']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli', 'person']], ['session.page', ['app', 'cli', 'person']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
+  // One slice of what a handle names, or one find, for a session whose sandbox closes the evidence store (#3229).
+  ['handle.read', ['cli']],
   ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['race.start', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['ask.take_over', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
@@ -70,7 +72,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
   ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['hub.restart', ['cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['host.remove', ['cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['hub.restart', ['cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['host.remove', ['cli']], ['host.add', ['cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -85,7 +87,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
-  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['extension.restart', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
+  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['lease.gpu', ['cli']], ['lease.release', ['cli']], ['extension.install', ['cli']], ['extension.restart', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['mcp.tools', ['mcp']], ['evidence.paste', ['app']], ['eval.report', ['cli']],
   // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
   ['wiki.build', ['cli']], ['setup.report', ['cli']],
@@ -181,16 +183,10 @@ interface CoreLink {
   started: Promise<{ hooks: string[] }>;
   close(): Promise<void>;
 }
-/**
- * `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded); `count` is
- * the parser workers the pool holds, for hub.health (#2043).
- */
-interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; count(): number; close(): Promise<void> }
-
 /** A frame from the core: its event's JSON text, or, `caught` set, the head its subscriber's replay reached (#1575). */
 type OnFrame = (sub: string, event: string, caught?: boolean) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void, onForgot: (session: string) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options }, resourceLimits: YOUNG });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
@@ -201,6 +197,7 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
     if (m.op === 'asking') return onAsking(m.sessions ?? [], m.judged ?? [], m.resend ?? [], m.cantRun ?? []);
     if (m.op === 'acking') return onAcking(m.session!);
     if (m.op === 'scrub') return onScrub(m.values ?? []);
+    if (m.op === 'forgot') return onForgot(m.session!);
     if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
     if (m.op === 'fatal') return onFatal(m.message!);
     const waiting = pending.get(m.n!);
@@ -220,10 +217,10 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void, onForgot: (session: string) => void): Promise<CoreLink> {
   const { createCore } = await import('./hub-runtime.js');
   const { answer, asRefusal } = await import('./core-worker.js');
-  const core = createCore(options, onFrame, onAsking, onAcking, onScrub);
+  const core = createCore(options, onFrame, onAsking, onAcking, onScrub, onForgot);
   const started = core.started().then(() => ({ hooks: core.hooks() }));
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {
@@ -242,78 +239,6 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
       else core.unsubscribe(message.sub);
     },
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
-    close: async () => undefined,
-  };
-}
-
-function parserPool(given: readonly string[], plant: Plant | undefined, dir: string): Parsers {
-  // The pool's own list: each scrub's values join it, so a parser started later begins with all its elder was sent.
-  const held = [...given];
-  // Each line a parser holds, until that parser answers it or ends.
-  const pending = new Map<number, { resolve: (parsed: Parsed) => void; worker: Worker }>();
-  let n = 0;
-  let closing = false;
-  const make = (): Worker => {
-    const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, dir, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
-    worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
-      pending.get(id)?.resolve(parsed);
-      pending.delete(id);
-    });
-    if (plant === 'parser-pool-messages-only') return worker;
-    // A parser that throws on a line ends, and takes neither the hub nor a line with it (#2043): each line it held is
-    // refused, and another parser takes its place.
-    worker.on('error', (error) => process.stderr.write(`deep hub: a parser failed: ${error.stack ?? error.message}\n`));
-    worker.on('exit', () => {
-      for (const [id, line] of pending) {
-        if (line.worker !== worker || plant === 'parser-pool-leaves-line-waiting') continue;
-        pending.delete(id);
-        line.resolve({ kind: 'refused', id: null, error: refusal('unavailable', '', 'The hub failed while it read this line, so nothing of it was recorded.') });
-      }
-      if (closing) return;
-      if (worker === small) small = make();
-      else if (worker === big) big = make();
-    });
-    return worker;
-  };
-  // One parser for small lines, and one for large ones, started at the first: an idle hub holds one thread fewer.
-  let small = make();
-  let big: Worker | undefined;
-  return {
-    parse(chunks, first) {
-      const size = chunks.reduce((sum, c) => sum + c.length, 0);
-      const worker = size > BIG ? (big ??= make()) : small;
-      return new Promise((resolve) => {
-        pending.set(++n, { resolve, worker });
-        // A line in a buffer of its own is handed to the parser's thread, not copied to it; a short one sits in Node's shared pool, which stays here.
-        worker.postMessage({ n, chunks, first }, [...new Set(chunks.filter((c) => plant === 'hands-over-socket-chunk' || c.buffer.byteLength === c.byteLength).map((c) => c.buffer as ArrayBuffer))]);
-      });
-    },
-    scrub(values) {
-      held.push(...values);
-      for (const worker of [small, big]) worker?.postMessage({ scrub: values });
-    },
-    count: () => (big ? 2 : 1),
-    close: async () => {
-      closing = true;
-      await Promise.all([small, big].map((w) => w?.terminate()));
-    },
-  };
-}
-/** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
-async function parserInline(held: string[], plant: Plant, dir: string): Promise<Parsers> {
-  const { parseLine } = await import('./hookmap.js');
-  const { scrubText } = await import('@deepbuild/evidence');
-  return {
-    parse: async (chunks, first) => {
-      const line = Buffer.concat(chunks);
-      const parsed = parseLine(line, first, held, plant);
-      // A hook line is scrubbed whole, as a hub that scrubs what it reads before keeping any field would.
-      if (parsed.kind === 'hook') scrubText(line.toString('utf8'), { held });
-      const scoped = parsed.kind === 'hook' ? scopedAt(parsed.meta, dir) : undefined;
-      return scoped ? { ...parsed, scoped } : parsed;
-    },
-    scrub(values) { held.push(...values); },
-    count: () => 0,
     close: async () => undefined,
   };
 }
@@ -402,6 +327,8 @@ class Hub {
   private identity!: Identity;
   /** The network listener (#1338), open only while a project here has a member. */
   private network: tls.Server | undefined;
+  /** Each added host's link (#999): its listener here and the ssh that forwards the host's socket to it. */
+  private links: HostLinks | undefined;
   constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined, private readonly safe: boolean) {
     this.people = new People(root.dir);
     this.waits = new Waits({ rewrites: (agent) => this.rewrites(agent), ...(plant ? { plant } : {}) });
@@ -445,13 +372,16 @@ class Hub {
     const asking = (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => { this.asking = new Set(sessions); this.worked = new Set(judged); this.resend = new Set(resend); this.cantRun = new Set(cantRun); };
     const acking = (session: string) => { this.acking.add(session); };
     const scrub = (values: string[]) => { this.parsers.scrub(values); };
+    // A session that sends no more hooks, or whose next one is a resume's (#1866): nothing of it stays here.
+    const forgot = (session: string) => {
+      for (const of of [this.lastFailed, this.rulesHeard, this.acking, this.resend, this.worked, this.sawWork, this.asking, this.inPaseo]) of.delete(session);
+      this.waits.forget(session);
+    };
     // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
     // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
     this.identity = identityAt(join(this.root.dir, 'hub.key'), 'deep-hub');
-    // The planted hub of #1334 speaks a contract one major ahead, so this checkout's deep-hook is the older side.
-    const contract = this.plant === 'contract-major-ahead' ? `${Number(CONTRACT.split('.')[0]) + 1}.0` : CONTRACT;
-    this.helloLine = line({ hello: 'deep-hub', start: this.start, contract, features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
-    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub) : coreWorker(options, frame, fatal, asking, acking, scrub);
+    this.helloLine = line({ hello: 'deep-hub', start: this.start, contract: contractOf(this.plant), features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
+    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub, forgot) : coreWorker(options, frame, fatal, asking, acking, scrub, forgot);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant, this.root.dir) : parserPool(held, this.plant, this.root.dir);
     // Read once before any hook, so a rules.json spoiled later can be written again as it was.
     this.rules();
@@ -476,6 +406,8 @@ class Hub {
     // Hooks are acknowledged from the moment the socket exists; the hub reports ready once its core has started.
     this.hooks = new Set((await this.core.started).hooks);
     this.coreUp = true;
+    // Each added host's link (#999): its hooks come in on a listener of its own, and wait there while the core takes its spool.
+    (this.links = new HostLinks({ root: this.root.dir, accept: (sock, host) => this.accept(sock, undefined, host), said: (host, state, why) => this.core.request({ op: 'host-link', host, state, why }).then(() => undefined, () => undefined) })).start();
     // Once lost, the lock stays lost: every gate turns watch-only, BLOCKED, and deep-hook spools what this hub won't take.
     const checking = setInterval(() => {
       // An entry installed since the last hook is in the copy a later rewrite of rules.json is made from (#2204).
@@ -505,7 +437,8 @@ class Hub {
    * instead, which deep-hook matches no more. A reply that already denies the call stands, and `deep off` leaves it.
    */
   private leased(meta: HookMeta, ruled: string): string {
-    if (meta.event !== 'PreToolUse' || this.off) return ruled;
+    // A host has no `deep lease` to run it under (#999).
+    if (meta.event !== 'PreToolUse' || this.off || meta.host) return ruled;
     return heavyReply(meta, ruled, this.rewrites(meta.agent), this.plant);
   }
 
@@ -559,7 +492,7 @@ class Hub {
     this.arm();
   }
 
-  private accept(sock: net.Socket, remote?: Conn['remote']): void {
+  private accept(sock: net.Socket, remote?: Conn['remote'], host?: string): void {
     if (this.plant === 'accept-stops-at-emfile') {
       // The plant stops accepting the first time it finds no descriptor left.
       try {
@@ -570,6 +503,8 @@ class Hub {
     }
     const conn = new Conn(++this.ids, sock);
     conn.remote = remote;
+    // A host's hooks are read once its spool, as of the link's return, is in the record (#999).
+    if (host) Object.assign(conn, { host, queue: this.links!.gate(host) });
     this.conns.add(conn);
     sock.on('error', () => undefined);
     sock.on('close', () => {
@@ -740,10 +675,11 @@ class Hub {
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
     const meta = parsed.meta;
-    // The person is the connection's, never the payload's, but for the planted wrong program (#1337).
+    // The person is the connection's, never the payload's, but for the planted wrong program (#1337); the host is the connection's too (#999).
     const person = this.plant === 'actor-from-payload' && meta.payloadActor ? meta.payloadActor : conn.person;
     if (person) meta.person = person;
     else delete meta.person;
+    if (conn.host) meta.host = conn.host; else delete meta.host;
     if (this.cantRun.has(meta.agent)) Object.assign(meta, { watchOnly: true, cantRun: true });
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     let ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
@@ -1384,6 +1320,12 @@ class Hub {
           await this.syncNetwork();
           return result;
         }));
+      case 'host.add':
+        // Once its hooks are installed the host's link opens, and the reply says how its first try ended (#999).
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then(async (result) => ({ ...(result as Obj), link: await this.links!.open(String((result as Obj).host), String((result as Obj).socket)) })));
+      case 'host.remove':
+        // With what `deep host add` installed undone, the host's link ends too (#999).
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then(async (result) => { if (!(result as { you?: { stopped?: unknown } | null }).you?.stopped) await this.links?.forget(String((result as Obj).host)); return result; }));
       case 'mcp.cancel': {
         const call = `${conn.id}:${String(params.call)}`;
         if (conn.calls.delete(call)) this.core.post({ op: 'call-gone', call });
@@ -1407,7 +1349,7 @@ class Hub {
         {
           const call = method === 'mcp.call' ? `${conn.id}:${String(id)}` : undefined;
           if (call) conn.calls.add(call);
-          const work = this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}), ...(call ? { call } : {}) } });
+          const work = this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}), ...(call ? { call } : {}), ...(method === 'canvas.drawn' ? { conn: conn.id } : {}) } });
           return void reply(call ? work.finally(() => conn.calls.delete(call)) : work);
         }
     }
@@ -1432,6 +1374,7 @@ class Hub {
     clearTimeout(this.waitTimer);
     this.server.close();
     this.network?.close();
+    this.links?.close();
     // The stop-answers-waiting plant (#823) keeps the connections until the core stops, so a waiting call is answered.
     const answers = this.plant === 'stop-answers-waiting';
     if (!answers) for (const conn of this.conns) if (conn.sock !== requester) conn.sock.destroy();

@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "3a1e5d7fb380aaa28441eedbf200690fddbfa31b9071a6ae40be5d8b1af8378c",
+    "digest": "f4a7bb3d9fc43f25944740e16d4f226350cd8e43f5bc9292cd9884bb29149f75",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -18,7 +18,7 @@
   },
   "building": {
     "version": "1.0.0",
-    "digest": "6c932b2a8efa56170d153ff1eebd957b04800110bf99d2da4385d651a2cc2bd5",
+    "digest": "839b730dcc8140b811f0fafb620cc586654a2279117b51674fd337fba5a0f072",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -52,7 +52,7 @@
   },
   "data": {
     "version": "1.0.0",
-    "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
+    "digest": "2142cd1c512dd10e5b453dab41ba1e5ef47ce50d06b00be35d1009ef26d0fb29",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -134,7 +134,7 @@
   },
   "logic": {
     "version": "1.0.0",
-    "digest": "8ea81670ff36af60c3273da5c57ccf1107a428191d9bb46e9f30dd3d2db33e94",
+    "digest": "00525830ddf183ebfdad91a9c82de67864ddcc1a9f1d0cc9e6e30382243bf930",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -202,7 +202,7 @@
   },
   "media": {
     "version": "1.0.0",
-    "digest": "7e7b4de7eba523bc00538f0b4a154109908c50c84013b5670dfeba40af0caee5",
+    "digest": "7b2b348b50753051af6074133fc569279332b92d7d01eb8acd12fa55995f9a1f",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -239,7 +239,7 @@
   },
   "net": {
     "version": "1.0.0",
-    "digest": "1effe75b78c0e162eec963d4777ba28160bc33cbc2e3452be9bb7efe3096232e",
+    "digest": "d22991713cedfb0899fe331b7b00c6c075a2676ed020864b09573bdf69e7b1ec",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -304,7 +304,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "683377360bf94ea1a0bf34a1047052495d2fd83f0f1a72eb00eb6fce21e8fab7",
+    "digest": "2a173a15ca39cccc42f776fb39f09392fee495d0f9b4d44a08604c67eeec72ce",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

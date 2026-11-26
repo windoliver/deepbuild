@@ -1,0 +1,45 @@
+{
+  "id": "dial.cell",
+  "version": "1.0",
+  "title": "Cell",
+  "license": "MIT",
+  "author": "the #1857 acceptance suite",
+  "description": "per_side dots, each a rect.",
+  "inputs": {
+    "per_side": {
+      "type": "integer",
+      "default": 2,
+      "min": 1,
+      "max": 1024,
+      "about": "how many rows, cells a row and dots a cell"
+    }
+  },
+  "steps": {
+    "dots": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": "per_side",
+        "as": "i"
+      },
+      "params": {
+        "box": [
+          0,
+          0,
+          4,
+          4
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "dots"
+    ]
+  }
+}

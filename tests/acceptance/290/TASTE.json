@@ -1,0 +1,14 @@
+{
+  "issue": 290,
+  "criterion": "#290.005a3986",
+  "verdict": "looks_right",
+  "who": "The implementing agent (model Claude Fable 5.2), on the owner's delegation in the session (\"you can validte for me\")",
+  "when": "2026-11-22T01:26:42Z",
+  "screenshots": {
+    "sphere-behind-wall.png": "3dcce6e24fa947c67e82735a077bddb6193c07ffe2d0aa69bdf87eeb6e58cf35",
+    "torus-behind-wall.png": "5ef13cd68e7e634a50fd35ef7ae9b3dd86b5e6df36d6e682e22c318db4e75e85",
+    "match-copy-1.png": "e15d9c02a3662e21069537a200030c24f7c5c24727b3289672f8518a2e37cf44",
+    "match-copy-2.png": "5a62be880a42eee9221e95900d8177252267b66c69388546755825446e79093a"
+  },
+  "note": "The owner asked for this call in the session, and when shown the four pictures answered: \"close the gaps that we can close the isseu d oyour best,and you can validte for me\". So the agent that wrote the change made the call, on these exact files, each opened at full size; the owner can overrule it by recording their own. sphere-behind-wall.png: the half of the sphere behind the wall shows through it faintly, a pale blue with the sphere's own shading and round edge, and the half in plain sight is the plain lit sphere with no second copy over it; the two halves meet in one clean line at the wall's edge. torus-behind-wall.png: the torus reads through the wall as one faint ring with its near tube only; its far tube doesn't show as a second, darker band where the two overlap. match-copy-1.png: through the grey wall only the orange character shows, on the left, and nothing where the other one stands. match-copy-2.png: only the cyan character shows, on the right. In all four the hidden view is faint enough to read as behind the wall and plain enough to find at a glance."
+}

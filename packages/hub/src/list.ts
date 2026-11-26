@@ -2,11 +2,11 @@
 // (`rows.read`) or, with it down, from its database read-only. `deep` prints the list and the one count; `deep status`
 // adds each row's detail and ends on the count, so what needs you is the last thing on screen however long the detail
 // is; `--json` prints the rows. Every clock time is in your time zone.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { call, clock, notAnswering, notAnsweringSince, Unanswered } from './client.js';
 import { StaleHub } from './generations.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { controlToken, hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
 import type { Row, Why } from './rows.js';
@@ -49,7 +49,7 @@ function planted(rows: Row[]): Row[] {
 }
 
 /**
- * The list as text: each project's sessions under its name, the quiet ones folded into one line, then the open asks,
+ * The list as text: each project's sessions under its name, a host's (#999) under the host's, the quiet ones folded into one line, then the open asks,
  * then how many sessions and the count sentence. With `detail`, each session's detail under its row; a finished
  * session's is one line, how many calls, how many failed, its commits, and the handle `deep read` takes for the rest.
  */
@@ -60,6 +60,8 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
   const asks = rows.filter((r) => r.id.startsWith('ask:'));
   const age = (r: Row) => (r.since === null ? '' : `, ${elapsed(Math.max(0, now - r.since))}`);
   const quiet = sessions.filter((r) => r.word === 'quiet');
+  // A session on a host (#999) is listed under the host's name, as one here is under its project's.
+  const under = (r: Row) => r.host ?? r.project;
   let project: string | null | undefined;
   let section: number | undefined;
   for (const r of sessions.filter((s) => s.word !== 'quiet')) {
@@ -70,7 +72,7 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
       if (at === 1) out.push('Working:');
       if (at === 2) out.push('Finished:');
     }
-    if (r.project !== project) out.push((project = r.project) ?? 'no repo');
+    if (under(r) !== project) out.push((project = under(r)) ?? 'no repo');
     // Its one name, its agent, then its word and why (#2018): its ID shows only in a name another row would otherwise
     // read the same as, and a verdict that isn't PASS or FAIL says whom it waits for and its evidence after its word.
     // Its one flag beside its word (#2019), with the fix where one clears it.
@@ -88,7 +90,7 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
     const commits = d.commits?.length ? `, commit${d.commits.length === 1 ? '' : 's'} ${d.commits.map((c) => c.slice(0, 12)).join(', ')}` : ', no commits';
     out.push(`      ${d.verdict ? `${d.verdict}; ` : ''}${d.turn.calls} call${d.turn.calls === 1 ? '' : 's'}, ${d.turn.failed} failed${activePlant() === 'status-omits-commit' ? '' : commits}${d.calls?.length ? `: ${d.calls.join('; ')}` : ''}; the rest: deep read session:${r.session.replace(/[^0-9A-Za-z]/g, '')}`);
   }
-  const byRepo = [...new Set(quiet.map((r) => r.project ?? 'no repo'))].sort().map((p) => `${p} ${quiet.filter((r) => (r.project ?? 'no repo') === p).length}`);
+  const byRepo = [...new Set(quiet.map((r) => under(r) ?? 'no repo'))].sort().map((p) => `${p} ${quiet.filter((r) => (under(r) ?? 'no repo') === p).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
   // A new project from your words (#1342): its heading, your first words, over its one row until its card is ready.
   for (const r of rows.filter((x) => x.id.startsWith('job:brief-'))) out.push(r.title, `  New project  ${r.word} · ${r.why}${age(r)}`);
@@ -138,11 +140,15 @@ async function staleBeforeAsk(rows: Row[], ledger: string | undefined): Promise<
   }
 }
 
-/** The hub's socket and its token, beside the socket or the installed hub's. */
+/** The hub's socket and the token that belongs to it; none where no hub wrote one, so its database is still read. */
 function hub(): { socket: string; token: string } {
   const socket = hubAddress().path;
-  const token = [join(dirname(socket), 'control.token'), rootOf(installedRoot()).token].find((p) => existsSync(p));
-  return { socket, token: token ? readFileSync(token, 'utf8').trim() : '' };
+  try {
+    return { socket, token: controlToken(socket) };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return { socket, token: '' };
+  }
 }
 
 /** What a list read from the hub's database says first: the one sentence, since when and its fix (#1812), and what follows. */

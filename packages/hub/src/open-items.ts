@@ -212,6 +212,8 @@ export class OpenItems {
     }
     this.waiting.set(c.task, true);
   }
+  /** A claim on the task was let go (#1866): whether the task waits is read from the record again. */
+  letGo(task: string): void { this.waiting.delete(task); }
   /** Closes each item a pending claim's verdict opened (`verdict`) that its newest verdict no longer waits for (#82). */
   async settled(c: { session: string; agent: string; task: string }, needs: readonly string[]): Promise<void> {
     // Read from the record once per task after a start; known none open, there is nothing to read.
@@ -266,7 +268,7 @@ export class OpenItems {
   }
   private async ask(c: ClaimRead, item: string, question: string, close: { id: string; label: string }): Promise<void> {
     const raised = {
-      kind: 'exception', question, recommended: 'keep', default: 'keep', fallback: 'you', provisional: false, owner: 'you', key: waiverKey(item), pinned_to: await this.o.pin(c.cwd, question),
+      kind: 'exception', may_answer: 'trusted_path', question, recommended: 'keep', default: 'keep', fallback: 'you', provisional: false, owner: 'you', key: waiverKey(item), pinned_to: await this.o.pin(c.cwd, question),
       options: [{ ...close, decision: 'none' }, { id: 'keep', label: 'Keep it open', decision: 'none' }],
     };
     // Raised by the core, bound to no session: the stop doesn't wait on it, and your answer is never the agent's to read.

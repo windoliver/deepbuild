@@ -14,6 +14,7 @@ import { openRecord } from '../../../packages/record/src/index.ts';
 import type { Connection, Event, RecordStore } from '../../../packages/record/src/index.ts';
 import { askSources, draftAskSettings, openAsks } from '../../../packages/asks/src/index.ts';
 import type { AskKind, Asks } from '../../../packages/asks/src/index.ts';
+import { withDeclared } from '../declared.ts';
 
 export const SECOND = 1000;
 export const MINUTE = 60 * SECOND;
@@ -142,7 +143,7 @@ export async function openWorld(start: number): Promise<World> {
   const open = async (rebuild = false) => {
     w.record = await openRecord({ path: join(dir, 'record.db'), now });
     if (rebuild) await w.record.rebuild();
-    w.asks = await openAsks({ record: w.record, now, deliver: () => undefined, home });
+    w.asks = withDeclared(await openAsks({ record: w.record, now, deliver: () => undefined, home }));
   };
   const events = async (kind?: string): Promise<Event[]> => {
     const all: Event[] = [];

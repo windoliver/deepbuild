@@ -1,0 +1,302 @@
+{
+  "id": "familiar.physical_material",
+  "version": "1.0",
+  "title": "Physical material",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's MeshPhysicalMaterial: MeshStandardMaterial's color, roughness and metalness with its emission, and its coat, sheen, transmission with a volume, thin film, anisotropy, dispersion and specular words, each onto material@1's field of that meaning. A geometry instance wears it by naming `<instance>.material` in its `material`.",
+  "inputs": {
+    "color": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "roughness": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "metalness": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "emissive": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "emissiveIntensity": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "about": ""
+    },
+    "clearcoat": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "clearcoatRoughness": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "ior": {
+      "type": "number",
+      "default": 1.5,
+      "min": 1,
+      "max": 2.333,
+      "about": ""
+    },
+    "sheen": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "sheenColor": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "sheenRoughness": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "transmission": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "thickness": {
+      "type": "number",
+      "default": 0,
+      "unit": "m",
+      "min": 0,
+      "about": ""
+    },
+    "attenuationDistance": {
+      "type": "number",
+      "default": 0,
+      "unit": "m",
+      "min": 0,
+      "about": "0: the library's Infinity, no absorption"
+    },
+    "attenuationColor": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "specularIntensity": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "specularColor": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "anisotropy": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "anisotropyRotation": {
+      "type": "number",
+      "default": 0,
+      "unit": "deg",
+      "about": "counter-clockwise from the tangent, in degrees"
+    },
+    "iridescence": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "iridescenceIOR": {
+      "type": "number",
+      "default": 1.3,
+      "min": 1,
+      "max": 2.333,
+      "about": ""
+    },
+    "iridescenceThicknessRange": {
+      "type": "range",
+      "default": [
+        100,
+        400
+      ],
+      "unit": "nm",
+      "about": "the film is its upper end thick: the lower end is for a thickness picture, which is refused"
+    },
+    "dispersion": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "about": "20 ÷ the Abbe number"
+    },
+    "diffuseRoughness": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "retroreflectivity": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "about": ""
+    },
+    "fog": {
+      "type": "bool",
+      "default": true,
+      "about": "true only: the sky's fog reaches every surface"
+    }
+  },
+  "let": {
+    "fog": "fog ? fog : unmapped()",
+    "e0": "(floor(color / 65536) % 256) / 255",
+    "l0": "e0 <= 0.04045 ? e0 / 12.92 : pow((e0 + 0.055) / 1.055, 2.4)",
+    "e1": "(floor(color / 256) % 256) / 255",
+    "l1": "e1 <= 0.04045 ? e1 / 12.92 : pow((e1 + 0.055) / 1.055, 2.4)",
+    "e2": "(color % 256) / 255",
+    "l2": "e2 <= 0.04045 ? e2 / 12.92 : pow((e2 + 0.055) / 1.055, 2.4)",
+    "ee0": "(floor(emissive / 65536) % 256) / 255",
+    "el0": "ee0 <= 0.04045 ? ee0 / 12.92 : pow((ee0 + 0.055) / 1.055, 2.4)",
+    "ee1": "(floor(emissive / 256) % 256) / 255",
+    "el1": "ee1 <= 0.04045 ? ee1 / 12.92 : pow((ee1 + 0.055) / 1.055, 2.4)",
+    "ee2": "(emissive % 256) / 255",
+    "el2": "ee2 <= 0.04045 ? ee2 / 12.92 : pow((ee2 + 0.055) / 1.055, 2.4)",
+    "he0": "(floor(sheenColor / 65536) % 256) / 255",
+    "hl0": "he0 <= 0.04045 ? he0 / 12.92 : pow((he0 + 0.055) / 1.055, 2.4)",
+    "he1": "(floor(sheenColor / 256) % 256) / 255",
+    "hl1": "he1 <= 0.04045 ? he1 / 12.92 : pow((he1 + 0.055) / 1.055, 2.4)",
+    "he2": "(sheenColor % 256) / 255",
+    "hl2": "he2 <= 0.04045 ? he2 / 12.92 : pow((he2 + 0.055) / 1.055, 2.4)",
+    "ae0": "(floor(attenuationColor / 65536) % 256) / 255",
+    "al0": "ae0 <= 0.04045 ? ae0 / 12.92 : pow((ae0 + 0.055) / 1.055, 2.4)",
+    "ae1": "(floor(attenuationColor / 256) % 256) / 255",
+    "al1": "ae1 <= 0.04045 ? ae1 / 12.92 : pow((ae1 + 0.055) / 1.055, 2.4)",
+    "ae2": "(attenuationColor % 256) / 255",
+    "al2": "ae2 <= 0.04045 ? ae2 / 12.92 : pow((ae2 + 0.055) / 1.055, 2.4)",
+    "pe0": "(floor(specularColor / 65536) % 256) / 255",
+    "pl0": "pe0 <= 0.04045 ? pe0 / 12.92 : pow((pe0 + 0.055) / 1.055, 2.4)",
+    "pe1": "(floor(specularColor / 256) % 256) / 255",
+    "pl1": "pe1 <= 0.04045 ? pe1 / 12.92 : pow((pe1 + 0.055) / 1.055, 2.4)",
+    "pe2": "(specularColor % 256) / 255",
+    "pl2": "pe2 <= 0.04045 ? pe2 / 12.92 : pow((pe2 + 0.055) / 1.055, 2.4)"
+  },
+  "steps": {
+    "material": {
+      "op": "item",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          "l0",
+          "l1",
+          "l2",
+          1
+        ],
+        "roughness": "roughness",
+        "metallic": "metalness",
+        "emission": [
+          "el0",
+          "el1",
+          "el2"
+        ],
+        "emission_strength": "emissiveIntensity",
+        "coat": "clearcoat",
+        "coat_roughness": "clearcoatRoughness",
+        "ior": "ior",
+        "transmission": "transmission",
+        "absorption": {
+          "thickness": "thickness",
+          "attenuation": {
+            "color": [
+              "al0",
+              "al1",
+              "al2"
+            ],
+            "distance": "attenuationDistance"
+          }
+        },
+        "sheen": {
+          "weight": "sheen",
+          "color": [
+            "hl0",
+            "hl1",
+            "hl2"
+          ],
+          "roughness": "sheenRoughness"
+        },
+        "specular_level": "specularIntensity / 2",
+        "specular_color": [
+          "pl0",
+          "pl1",
+          "pl2"
+        ],
+        "anisotropy": {
+          "strength": "anisotropy",
+          "rotation": "anisotropyRotation"
+        },
+        "iridescence": {
+          "weight": "iridescence",
+          "ior": "iridescenceIOR",
+          "thickness": "iridescenceThicknessRange[1]"
+        },
+        "dispersion": "dispersion",
+        "diffuse_roughness": "diffuseRoughness",
+        "retroreflection": "retroreflectivity"
+      }
+    }
+  },
+  "refuses": {
+    "anisotropyMap": "Leave it out: material@1 takes anisotropy as one number over the whole part, and no picture of it.",
+    "clearcoatMap": "Leave it out: material@1 takes the coat as one number over the whole part, and no picture of it.",
+    "clearcoatRoughnessMap": "Leave it out: material@1 takes the coat's roughness as one number over the whole part, and no picture of it.",
+    "clearcoatNormalScale": "Leave it out: the coat takes the part's own normal.",
+    "clearcoatNormalMap": "Leave it out: the coat takes the part's own normal.",
+    "diffuseRoughnessMap": "Leave it out: material@1 takes diffuse roughness as one number over the whole part, and no picture of it.",
+    "iridescenceMap": "Leave it out: material@1 takes iridescence as one number over the whole part, and no picture of it.",
+    "iridescenceThicknessMap": "Leave it out: material@1 takes the film's thickness as one number over the whole part, and no picture of it.",
+    "sheenColorMap": "Leave it out: material@1 takes sheen as one number over the whole part, and no picture of it.",
+    "sheenRoughnessMap": "Leave it out: material@1 takes sheen as one number over the whole part, and no picture of it.",
+    "transmissionMap": "Leave it out: material@1 takes transmission as one number over the whole part, and no picture of it.",
+    "thicknessMap": "Leave it out: material@1 takes thickness as one number over the whole part, and no picture of it.",
+    "specularIntensityMap": "Leave it out: material@1 takes the specular level as one number over the whole part, and no picture of it.",
+    "specularColorMap": "Leave it out: material@1 takes the specular color as one number over the whole part, and no picture of it."
+  }
+}
