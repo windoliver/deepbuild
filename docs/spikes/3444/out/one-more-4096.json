@@ -1,0 +1,327 @@
+{
+ "commit": "390c3f39067e7520ca7d2405d86578d17fe4f668",
+ "binary": {
+  "name": "spike-3444",
+  "sha256": "69acd76959859461ad03fdc43e3665581f452bc93fd34ff56499bfb54e1ace97"
+ },
+ "machine": {
+  "model": "Mac17,10",
+  "chip": "Apple M5 Max",
+  "memoryBytes": 68719476736,
+  "power": "ac",
+  "lowPowerMode": false,
+  "thermalState": "fair",
+  "macosBuild": "26B8119"
+ },
+ "adapter": {
+  "backend": "metal",
+  "name": "Apple M5 Max",
+  "driver": ""
+ },
+ "device": {
+  "label": "spike-3444 one more",
+  "own": true,
+  "instance_flags": 32
+ },
+ "command": "spike-3444 --sets 33 --queries 4096",
+ "attempts": [
+  {
+   "n": 1,
+   "error": null,
+   "lost": false,
+   "query_sets": 1,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 2,
+   "error": null,
+   "lost": false,
+   "query_sets": 2,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 3,
+   "error": null,
+   "lost": false,
+   "query_sets": 3,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 4,
+   "error": null,
+   "lost": false,
+   "query_sets": 4,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 5,
+   "error": null,
+   "lost": false,
+   "query_sets": 5,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 6,
+   "error": null,
+   "lost": false,
+   "query_sets": 6,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 7,
+   "error": null,
+   "lost": false,
+   "query_sets": 7,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 8,
+   "error": null,
+   "lost": false,
+   "query_sets": 8,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 9,
+   "error": null,
+   "lost": false,
+   "query_sets": 9,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 10,
+   "error": null,
+   "lost": false,
+   "query_sets": 10,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 11,
+   "error": null,
+   "lost": false,
+   "query_sets": 11,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 12,
+   "error": null,
+   "lost": false,
+   "query_sets": 12,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 13,
+   "error": null,
+   "lost": false,
+   "query_sets": 13,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 14,
+   "error": null,
+   "lost": false,
+   "query_sets": 14,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 15,
+   "error": null,
+   "lost": false,
+   "query_sets": 15,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 16,
+   "error": null,
+   "lost": false,
+   "query_sets": 16,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 17,
+   "error": null,
+   "lost": false,
+   "query_sets": 17,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 18,
+   "error": null,
+   "lost": false,
+   "query_sets": 18,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 19,
+   "error": null,
+   "lost": false,
+   "query_sets": 19,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 20,
+   "error": null,
+   "lost": false,
+   "query_sets": 20,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 21,
+   "error": null,
+   "lost": false,
+   "query_sets": 21,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 22,
+   "error": null,
+   "lost": false,
+   "query_sets": 22,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 23,
+   "error": null,
+   "lost": false,
+   "query_sets": 23,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 24,
+   "error": null,
+   "lost": false,
+   "query_sets": 24,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 25,
+   "error": null,
+   "lost": false,
+   "query_sets": 25,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 26,
+   "error": null,
+   "lost": false,
+   "query_sets": 26,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 27,
+   "error": null,
+   "lost": false,
+   "query_sets": 27,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 28,
+   "error": null,
+   "lost": false,
+   "query_sets": 28,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 29,
+   "error": null,
+   "lost": false,
+   "query_sets": 29,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 30,
+   "error": null,
+   "lost": false,
+   "query_sets": 30,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 31,
+   "error": null,
+   "lost": false,
+   "query_sets": 31,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 32,
+   "error": null,
+   "lost": false,
+   "query_sets": 32,
+   "lost_reason": null,
+   "logged": []
+  },
+  {
+   "n": 33,
+   "error": "device lost: Unknown: Unexpected error variant (driver implementation is at fault)",
+   "lost": true,
+   "query_sets": 32,
+   "lost_reason": "Unknown: Unexpected error variant (driver implementation is at fault)",
+   "logged": [
+    "Failed to create counter sample buffer: NSError { code: 0, localizedDescription: \"Cannot allocate sample buffer\", domain: \"MTLCounterErrorDomain\", userInfo: {\"NSLocalizedDescription\": <__NSCFConstantString: 0x2798ab110>}, .. }"
+   ]
+  }
+ ],
+ "outcome": "lost",
+ "spike": 3444,
+ "part": "one_more_than_32",
+ "status": "RAN",
+ "wgpu": "30.0.1",
+ "sets_asked": 33,
+ "queries_per_set": 4096,
+ "dropped_then_asked": 0,
+ "after_drop": [],
+ "created": 32,
+ "first_not_created": {
+  "n": 33,
+  "error": "device lost: Unknown: Unexpected error variant (driver implementation is at fault)",
+  "lost": true,
+  "query_sets": 32,
+  "lost_reason": "Unknown: Unexpected error variant (driver implementation is at fault)",
+  "logged": [
+   "Failed to create counter sample buffer: NSError { code: 0, localizedDescription: \"Cannot allocate sample buffer\", domain: \"MTLCounterErrorDomain\", userInfo: {\"NSLocalizedDescription\": <__NSCFConstantString: 0x2798ab110>}, .. }"
+  ]
+ },
+ "device_works_after": false,
+ "query_sets_end": 32,
+ "lost": "Unknown: Unexpected error variant (driver implementation is at fault)",
+ "uncaught": [],
+ "started": "2026-11-25T15:22:12.535Z",
+ "ended": "2026-11-25T15:22:12.693Z",
+ "load": {
+  "start": 51.42822265625,
+  "end": 51.42822265625
+ },
+ "lease": "the file ~/.cache/deepbuild-gpu/lease",
+ "probe": null
+}

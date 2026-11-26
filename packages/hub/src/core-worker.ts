@@ -25,6 +25,8 @@ export type CoreRequest =
   | { op: 'subscribe'; sub: string; after: number; scope?: Scope }
   | { op: 'waits' }
   | { op: 'lock-lost'; path: string }
+  // A host's link came up or went down, or its deep-hook spooled while it was up (#999): settles once the host's spool is in the record.
+  | { op: 'host-link'; host: string; state: 'up' | 'down' | 'spool'; why: string }
   | { op: 'stop'; reason: string };
 export type CoreMessage =
   | { op: 'hook'; drafts: Draft[]; meta: HookMeta; writer: string }
@@ -62,6 +64,7 @@ export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): P
     case 'subscribe': return core.subscribe(request.sub, request.after, request.scope);
     case 'waits': return core.waitsState();
     case 'lock-lost': return core.lockLost(request.path);
+    case 'host-link': return core.hostLink(request.host, request.state, request.why);
     case 'stop': return core.stop(request.reason);
   }
 }

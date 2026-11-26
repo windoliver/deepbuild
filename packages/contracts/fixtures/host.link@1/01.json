@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "host.link",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "host": "build-01",
+    "up": false,
+    "why": "the link to build-01 ended (ssh exit 255): Connection to build-01 closed by remote host.",
+    "hook_version": null,
+    "hook_contract": null,
+    "hub_version": null,
+    "hub_contract": null
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "packages/paseo/server/plugin.ts": [
+    {
+      "find": [
+        "          turn_id: turnId ?? '', outcome: outcome.kind, ...(outcome.error?.message ? { error: outcome.error.message } : {}), ...(typeof outcome.reason === 'string' ? { reason: outcome.reason } : {}),"
+      ],
+      "wrong": [
+        "          turn_id: turnId ?? '', outcome: ['completed', 'failed', 'canceled'].includes(outcome.kind) ? outcome.kind : 'failed', ...(outcome.error?.message ? { error: outcome.error.message } : {}), ...(typeof outcome.reason === 'string' ? { reason: outcome.reason } : {}),"
+      ]
+    }
+  ]
+}

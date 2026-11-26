@@ -5,9 +5,10 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { RecordError } from '../../../packages/record/src/index.ts';
 import { about, agent, ask, card, core, hook, openWorld, plan, planShown, refused, sha256, shownAsks, sourceOf, ulid, type World } from './helpers.ts';
 import { lateAllow, pushAnsweredInWords } from './scenarios.ts';
+import { withDeclared } from '../declared.ts';
 
 let w: World;
-beforeEach(async () => { w = await openWorld(); });
+beforeEach(async () => { w = await openWorld({ asks: withDeclared }); });
 afterEach(async () => { await w.close(); });
 
 test('#318.e41be4c3 only the plan whose digest you approved runs, bound to your click; a changed plan needs a new approval; an agent never approves', async () => {

@@ -1,0 +1,4 @@
+{"ev":"instance","t_ns":112708,"unix_ms":1795640039640,"pid":72305,"thread":"main","call":0,"flags_bits":35,"validation_indirect_call":true,"backends":"Backends(VULKAN | METAL | DX12 | BROWSER_WEBGPU)"}
+{"ev":"device","t_ns":24886916,"unix_ms":1795640039665,"pid":72305,"thread":"main","call":0,"label":"deep-gpu","backend":"Metal","adapter":"Apple M5 Max","flags_bits":35,"validation_indirect_call":true,"indirect_validation":true}
+{"ev":"submit","t_ns":957311708,"unix_ms":1795640040598,"pid":72305,"thread":"main","call":0,"device":"deep-gpu","command_buffers_before":0,"query_sets":0,"buffers":57,"textures":16,"render_pipelines":9,"compute_pipelines":3,"shader_modules":8}
+{"ev":"submit","t_ns":1673143125,"unix_ms":1795640041314,"pid":72305,"thread":"main","call":0,"device":"deep-gpu","command_buffers_before":3596,"query_sets":0,"buffers":61,"textures":15,"render_pipelines":9,"compute_pipelines":10,"shader_modules":11}
