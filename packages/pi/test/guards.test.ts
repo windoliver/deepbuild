@@ -120,14 +120,14 @@ describe('guards on a pi call', () => {
     return w;
   }
 
-  it('with no deep-hook recorded, rules.json removed after setup holds a call with the hub away (#3477)', async () => {
+  it('#3477.38d1fd38 with no deep-hook recorded, rules.json removed after setup holds a call with the hub away', async () => {
     const w = await lost([bash('touch ran.txt')]);
     const end = await run(w.pi);
     expect(end.isError, said(end)).toBe(true);
     expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(false);
   }, 90_000);
 
-  it('with no deep-hook recorded and no rules.json, a home whose setup never finished lets a call run with the hub away', async () => {
+  it('#3477.2f3bbca8 with no deep-hook recorded and no rules.json, a home whose setup never finished lets a call run with the hub away', async () => {
     const w = await lost([bash('touch ran.txt')]);
     rmSync(join(w.home, '.deepbuild/setup-finished.json'));
     const end = await run(w.pi);
