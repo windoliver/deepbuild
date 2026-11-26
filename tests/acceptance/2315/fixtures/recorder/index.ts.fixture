@@ -1,0 +1,46 @@
+// The replacement environment@1 provider (#2315): a first-party test package that registers the environment `local`
+// through `deep.registerEnvironment` and declares it replaces deepbuild/env-local. Its fill is env-local's own
+// (`envLocal({ host })`, as tests/acceptance/331's env-local package registers it), on a supervisor of its own opened
+// on a record beside the package, so it passes environment@1's kit at install. Each call the host makes of it is
+// written, once it has finished, as one JSON line to the log recorder.json names: `up` with the checkout it was given,
+// its leased port and the handle it returned (or the error), and `down` with the handle it stopped. Nothing else of
+// the hub writes that log, so a line there is the host asking this provider, never env-local directly.
+import { appendFileSync, readFileSync } from 'node:fs';
+
+interface Settings { record: string; asks: string; supervisor: string; envLocal: string; log: string }
+let fill: Promise<any> | undefined;
+function local(settings: Settings): Promise<any> {
+  fill ??= (async () => {
+    const [{ openRecord }, { openAsks }, { openSupervisor }, { envLocal }] = await Promise.all([settings.record, settings.asks, settings.supervisor, settings.envLocal].map((entry) => import(entry)));
+    const record = await openRecord({ path: new URL('./ledger.db', import.meta.url).pathname, now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    const host = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 2 * 86_400_000 } } } });
+    return envLocal({ host });
+  })();
+  return fill;
+}
+function note(settings: Settings, line: Record<string, unknown>): void {
+  // A sandboxed conformance run may not reach the log; the kit's verdict never rests on it.
+  try { appendFileSync(settings.log, `${JSON.stringify({ ...line, process: process.pid })}\n`); } catch { /* not recorded */ }
+}
+
+export default function (deep: any): void {
+  const settings: Settings = JSON.parse(readFileSync(new URL('./recorder.json', import.meta.url), 'utf8'));
+  deep.registerEnvironment('local', {
+    slot: 'environment@1', revision: 1,
+    up: async (spec: unknown, lease: { port?: number } | undefined, checkout: string) => {
+      try {
+        const handle = await (await local(settings)).up(spec, lease, checkout);
+        note(settings, { call: 'up', checkout, port: lease?.port ?? null, handle: { id: handle.id, port: handle.port, pid: handle.pid } });
+        return handle;
+      } catch (error) {
+        note(settings, { call: 'up', checkout, port: lease?.port ?? null, error: error instanceof Error ? error.message : String(error) });
+        throw error;
+      }
+    },
+    down: async (handle: { id: string; port: number; pid: number }) => {
+      await (await local(settings)).down(handle);
+      note(settings, { call: 'down', handle: { id: handle.id, port: handle.port, pid: handle.pid } });
+    },
+  });
+}

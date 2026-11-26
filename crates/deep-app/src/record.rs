@@ -446,6 +446,7 @@ impl View {
     }
 }
 
+#[derive(Default)]
 pub struct RecordReader {
     socket: PathBuf,
     token_file: PathBuf,
@@ -459,6 +460,8 @@ pub struct RecordReader {
     owed: bool,
     /// Whether it checks the hub's hello covers the app before any call (#41), as the window's reader does.
     checks: bool,
+    /// Whether the hub has taken the app's hello on any connect so far (#3481).
+    greeted: bool,
 }
 
 impl RecordReader {
@@ -467,12 +470,7 @@ impl RecordReader {
         RecordReader {
             socket: socket.to_path_buf(),
             token_file: token_file.to_path_buf(),
-            client: None,
-            view: View::default(),
-            setting: None,
-            folds: false,
-            owed: false,
-            checks: false,
+            ..RecordReader::default()
         }
     }
 
@@ -518,10 +516,10 @@ impl RecordReader {
         }
     }
 
-    /// `deep-app --hub-check` (#41): connects as the window does, once, making the calls it makes on connect.
-    pub fn check(&mut self) -> Result<(), HubError> {
-        self.connect()?;
-        self.fold()
+    /// `deep-app --hub-check` (#41): connects as the window does, once, making the calls it makes on connect. It also
+    /// says whether the hub took the app's hello, so a refused hello isn't read as a refused call (#3481).
+    pub fn check(&mut self) -> (Result<(), HubError>, bool) {
+        (self.connect().and_then(|()| self.fold()), self.greeted)
     }
 
     /// Folds the record before the newest read into a table of its own, which the views then read in place of the
@@ -606,6 +604,7 @@ impl RecordReader {
             covered?;
         }
         client.hello_app(token.trim())?;
+        self.greeted = true;
         let start = client.hello["start"]
             .as_str()
             .unwrap_or_default()

@@ -16,6 +16,7 @@ import { afterAll, expect } from 'vitest';
 import { askSources, openAsks } from '../../../packages/asks/src/index.ts';
 import { openRecord } from '../../../packages/record/src/index.ts';
 import { cleanup, childEnv, CLI, hookRequest, installedRoot, makeHome, newSession, NODE, openAs, own, REPO, result, sendHook, sleep, startHub, tempDir, tokenOf, ulid, type Conn, type Hub, type Session } from '../16/helpers.ts';
+import { withDeclared } from '../declared.ts';
 
 export { sleep, tempDir, type Hub };
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
@@ -364,7 +365,7 @@ async function seed(home: string, root: string): Promise<{ asks: Ask[]; sessions
       v: 1, id: ulid(), kind: 'task.created', ts: now(), data: { task_ref: `task:${ulid()}`, thread: s.id, owner: 'you', title: s.task },
     });
   }
-  const core = await openAsks({ record, now, deliver: () => undefined });
+  const core = withDeclared(await openAsks({ record, now, deliver: () => undefined }));
   const row = askSources().find((r) => r.source === 'deep_ask.taste') ?? blocked('ask.sources@1 has no row deep_ask.taste');
   const asks: Ask[] = [];
   for (const { at, question, options } of QUESTIONS) {

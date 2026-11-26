@@ -41,7 +41,7 @@ for (let n = 0; n < 140; n++) {
   // Each ask its own key, so none supersedes another.
   for (let k = 0; k < 5; k++) {
     const ts = END - 600_000 + n * 10 + k;
-    await record.append({ ...who, writer: 'core' }, { v: 1, id: ulidAt(ts), kind: 'ask.created', ts, data: { ...structuredClone(choice), question: `Keep store ${n}-${k} on SQLite or plain files?`, deadline: END + DAY, key: createHash('sha256').update(`deep-list ${n}-${k}`).digest('hex') } });
+    await record.append({ ...who, writer: 'core' }, { v: 6, id: ulidAt(ts), kind: 'ask.created', ts, data: { ...structuredClone(choice), question: `Keep store ${n}-${k} on SQLite or plain files?`, deadline: END + DAY, key: createHash('sha256').update(`deep-list ${n}-${k}`).digest('hex') } });
   }
 }
 await record.close();

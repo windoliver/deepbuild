@@ -20,6 +20,7 @@ import { openCheckouts, type CheckoutPlant, type Checkouts } from '../../../pack
 import { openLeases, type LeaseTable } from '../../../packages/leases/src/index.ts';
 import { openRecord, type RecordStore } from '../../../packages/record/src/index.ts';
 import { openSupervisor, type Supervisor } from '../../../packages/supervisor/src/index.ts';
+import { withDeclared } from '../declared.ts';
 
 export const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 export const NODE = process.execPath;
@@ -154,7 +155,7 @@ export interface World {
 export async function openWorld(): Promise<World> {
   const dir = tempDir();
   const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
-  const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+  const asks = withDeclared(await openAsks({ record, now: Date.now, deliver: () => undefined }));
   const leases = await openLeases({ record, now: Date.now });
   const port = portKind();
   for (const kind of leaseKinds) await leases.declare('env-local', kind, kind.name === port.kind ? port.free : undefined);

@@ -1317,9 +1317,12 @@ impl Logic {
             }
             self.check(&l).map(Rc::new)
         };
+        // Each fixture save and the programs that wrote it are the piece's assets, by sha256.
+        let carried = |sha: &str| B64.decode(line["piece"]["assets"][sha].as_str()?).ok();
         Ok(checks::layout::layout(
             current,
             &mut old_of,
+            &carried,
             line,
             planted,
             &adapter,
