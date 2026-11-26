@@ -98,8 +98,9 @@ describe('what a claim on a host changed (#3511)', () => {
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/prix_é\.sh,/));
   }, 60_000);
 
-  it('a link that never answers: the stop returns at its hold with the check still to run, and the claim does not pass', async () => {
+  it('a link that never answers: the stop returns at its hold with the check still to run, and the claim has no verdict yet, never PASS', async () => {
     const v = await claimed({ base: BASE, head: { 'price.txt': '17.00\n' }, link: () => new Promise(() => undefined) });
-    expect(v?.outcome, JSON.stringify(v)).toMatch(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)$/);
+    expect(v?.outcome, JSON.stringify(v)).toBe('pending');
+    expect(v?.reasons).toEqual(['price-approved: runs still to come']);
   }, 60_000);
 });
