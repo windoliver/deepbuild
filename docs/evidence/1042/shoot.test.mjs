@@ -5,12 +5,14 @@
 //                                    player with today's light
 //   player-cjk-subset.png            the scroll's forty Han graphemes at its start, set in the bundle's subset of
 //                                    the CJK face
+//   app-yard-2s.png                  the app's own render of the yard 2 s in (a png_seq still), to hold beside the
+//                                    player's picture; no test reads it
 // and prints each SHA-256. The suite's helpers are TypeScript and assert through vitest, so it runs under vitest. From
 // the repository root, after `cargo build --locked --bin deep-show --no-default-features --features full`:
 //   node node_modules/vitest/vitest.mjs run --root docs/evidence/1042 shoot.test.mjs --testTimeout=900000
 // Needs Google Chrome.
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,7 +22,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..', '..');
 const BIN = join(REPO, 'target', 'debug', 'deep-show');
 const SUITE = join(REPO, 'tests', 'acceptance', '1042');
-const { exportWeb, receiptOf, scrollDoc, yardDoc } = await import(join(SUITE, 'helpers.ts'));
+const { appStill, exportWeb, receiptOf, scrollDoc, yardDoc } = await import(join(SUITE, 'helpers.ts'));
 const { Browser, BundleServer } = await import(join(SUITE, 'web.ts'));
 // Both pieces are 16 by 9 and the canvas fills the page's width.
 const VIEW = { width: 960, height: 560, deviceScaleFactor: 2, mobile: false };
@@ -46,6 +48,11 @@ it('takes the #1042 taste pictures', async () => {
       mkdirSync(site, { recursive: true });
       receiptOf(exportWeb(BIN, evidence, doc, join(site, name), `the ${name} exported to the web`), join(site, name), `the ${name} exported to the web`);
     }
+    mkdirSync(join(work, 'evidence-app'), { recursive: true });
+    appStill(BIN, join(work, 'evidence-app'), yardDoc(), '2s', [640, 360], [60, 1], join(work, 'app'), "the app's still of the yard");
+    const still = readFileSync(join(work, 'app', 'app-still', readdirSync(join(work, 'app', 'app-still')).find((f) => f.endsWith('.png'))));
+    writeFileSync(join(HERE, 'app-yard-2s.png'), still);
+    console.log(`app-yard-2s.png  ${createHash('sha256').update(still).digest('hex')}`);
     const origin = await server.start(site);
     browser = await Browser.open();
 

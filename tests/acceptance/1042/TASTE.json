@@ -1,0 +1,12 @@
+{
+  "issue": 1042,
+  "criterion": "#1042.ed73d00d",
+  "verdict": "looks_wrong",
+  "who": "The implementing agent (model Claude Fable 5.2), on the owner's delegation in the session (the owner asked it to validate for them, November 26, 2026); not the owner's own call",
+  "when": "2026-11-26T21:23:11Z",
+  "screenshots": {
+    "player-ray-shadow-fallback.png": "0548f6af223d10cbc9d6826bb115b7cf68ad5ea344283da120179aa1e1a5cc7d",
+    "player-cjk-subset.png": "c3053d6e89dcd2b89272a9bb60fa7fcfb838c5cf73bfa1f5a3325c916015cd19"
+  },
+  "note": "Checked each against the piece and the issue. player-cjk-subset.png looks right: the scroll's forty Han graphemes in two lines, dark on the page, each one whole and none a box or a gap, with the dot and the dark band under them. player-ray-shadow-fallback.png does not: the yard 2 s in shows the floor, the sky and the crate with its darker side, but no shadow on the floor, though its one light casts one. The app's own render of the same piece at the same time (docs/evidence/1042/app-yard-2s.png, a png_seq still) shows the crate's shadow on the floor behind its right side, and the issue says light in the player is today's light. The app draws a painted scene's sun shadow in deep-effects-render; the web player draws 3D through deep-scene3d-render alone, so the shadow is dropped in the browser and the receipt doesn't say so."
+}
