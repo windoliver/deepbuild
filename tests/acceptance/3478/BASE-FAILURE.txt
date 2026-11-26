@@ -9,19 +9,23 @@
 #   #3478.caea9543 FAILS at its assertion: the run's top-level build grant carries wait: 30, not stall: 720.
 #   #3478.981101c5 FAILS at its assertion: the base run waits 30 min (wait: 30) behind the held build slots, so it
 #     is still waiting at the test's 5-minute bound.
-#   #3478.ee81cf50, #3478.a5864770, #3478.b300c126 PASS: the base's 30-minute wait outlasts every line these tests
+#   #3478.aedbd072, #3478.de589636, #3478.b300c126 PASS: the base's 30-minute wait outlasts every line these tests
 #     make, as the issue expects (it names only the planted program as failing). Their proof is their twins, below.
 #   #3478.cfd0c346 has no test here: tests/acceptance/2574-redraft-2833/ and tests/acceptance/2820/, unchanged.
 #   #3478.1c95ae53 (added later, its own run below) FAILS at its assertion.
 #
-# A later run on the base, at a load of 138 to 176, read the same but for #3478.a5864770, which failed at its
+# The second and third criteria's tests were redrafted to the issue's new numbers (stall bound 0.25 min, hand-overs
+# for 40 s) and run again on the base, one file at a time, 2026-11-25 (2026-11-26 UTC) at a load of 100 to 170; their
+# two lines below are from those runs.
+#
+# A later run on the base, at a load of 138 to 176, read the same but for the third criterion's test, which failed at its
 # 8-minute bound: its sandbox's table had stopped, table.lock naming a live throttle.mjs process (README: a table
 # lock taken aside). That is the base's own throttle.mjs under load, and no failure this issue expects.
 
 ✖ #3478.caea9543 with neither variable set, a run that builds a binary is granted, and the log's granted entries for its top-level build and test requests each carry stall: 720 and no wait (15806.780793ms)
 ✔ #3478.b300c126 with DEEP_TEST_GRANT_STALL at 0.2, every build slot held for 8 s and a top-level timed --wait 0.05 request made after the run joined the line, the timed request ends INCONCLUSIVE no grant, and the run then gets its build grant and reads its tests' own results (35997.11225ms)
-✔ #3478.ee81cf50 with DEEP_TEST_GRANT_STALL at 0.05, a run that needs a binary behind build holders whose grants change hands about every 2 s for 20 s gets its build grant, then its test grant, and reads its tests' own results (37868.801973ms)
-✔ #3478.a5864770 with DEEP_TEST_GRANT_STALL at 0.05, a run that needs no binary behind test holders whose grants change hands about every 2 s for 20 s gets its test grant and reads its tests' own results (37894.042364ms)
+✔ #3478.aedbd072 with DEEP_TEST_GRANT_STALL at 0.25, a run that needs a binary behind build holders whose grants change hands about every 2 s for 40 s gets its build grant, then its test grant, and reads its tests' own results (45978.614293ms)
+✔ #3478.de589636 with DEEP_TEST_GRANT_STALL at 0.25, a run that needs no binary behind test holders whose grants change hands about every 2 s for 40 s gets its test grant and reads its tests' own results (64344.319029ms)
 ✖ #3478.981101c5 with DEEP_TEST_GRANT_STALL at 0.05 and every build slot held past the bound, a run that needs a binary prints the build line's INCONCLUSIVE no grant, an INCONCLUSIVE line for each file and a summary ending no job started, exits 2 within 5 minutes, and its tests never ran (303186.879668ms)
 ℹ tests 5
 ℹ suites 0
@@ -176,12 +180,14 @@ test at tests/acceptance/3478/redrafts.test.mjs:35:1
 # ---------------------------------------------------------------------------------------------------------------
 # The planted wrong programs (twins/README.md), redrafted against the implementation once it existed: each is the
 # change's scripts/affected.mjs with one line changed, laid over a scratch copy of the change's scripts/, and its
-# criterion's test file run there, one file at a time, 2026-11-24. Each fails at its criterion's assertion. (The
+# criterion's test file run there, one file at a time, 2026-11-24 (drain) and 2026-11-25 (the two moving lines). Each
+# fails at its criterion's assertion. (The
 # first twins, the blind job's throwaway with the same faults, failed the same tests at the same assertions.)
 #
-# Twin fixed-build-wait (a fixed 0.05-min wait for the build grant), node --test tests/acceptance/3478/moving-build.test.mjs:
+# Twin fixed-build-wait (a fixed 0.05-min wait for the build grant), node --test tests/acceptance/3478/moving-build.test.mjs,
+# run again 2026-11-25 (2026-11-26 UTC) with the redrafted test (DEEP_TEST_GRANT_STALL at 0.25, 40 s of hand-overs):
 
-✖ #3478.ee81cf50 with DEEP_TEST_GRANT_STALL at 0.05, a run that needs a binary behind build holders whose grants change hands about every 2 s for 20 s gets its build grant, then its test grant, and reads its tests' own results (14670.947577ms)
+✖ #3478.aedbd072 with DEEP_TEST_GRANT_STALL at 0.25, a run that needs a binary behind build holders whose grants change hands about every 2 s for 40 s gets its build grant, then its test grant, and reads its tests' own results (8358.585252ms)
 ℹ tests 1
 ℹ suites 0
 ℹ pass 0
@@ -189,45 +195,43 @@ test at tests/acceptance/3478/redrafts.test.mjs:35:1
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 14958.643029
+ℹ duration_ms 8455.953678
 
 ✖ failing tests:
 
 test at tests/acceptance/3478/moving-build.test.mjs:10:1
-✖ #3478.ee81cf50 with DEEP_TEST_GRANT_STALL at 0.05, a run that needs a binary behind build holders whose grants change hands about every 2 s for 20 s gets its build grant, then its test grant, and reads its tests' own results (14670.947577ms)
+✖ #3478.aedbd072 with DEEP_TEST_GRANT_STALL at 0.25, a run that needs a binary behind build holders whose grants change hands about every 2 s for 40 s gets its build grant, then its test grant, and reads its tests' own results (8358.585252ms)
   AssertionError [ERR_ASSERTION]: a run whose line keeps moving never reads INCONCLUSIVE no grant
   exit 2
   stdout:
   parallel node: tests/fixture-3478/self-build.test.mjs
   SETTLED no list: ~/.deepbuild/main-watch/settled.json is missing, so every suite the change reaches runs
-  INCONCLUSIVE no grant: no build grant changed hands within 0.05 min for the run's binaries; no test grant was asked for
+  INCONCLUSIVE no grant: no build grant changed hands within 0.25 min for the run's binaries; no test grant was asked for
   INCONCLUSIVE tests/fixture-3478/self-build.test.mjs: not run, for want of a build grant
-  INCONCLUSIVE affected: 0 new, 0 already failing on main, 1 inconclusive or blocked, 0 listed skips, 0 passed, in 7 s at load 129; no job started
+  INCONCLUSIVE affected: 0 new, 0 already failing on main, 1 inconclusive or blocked, 0 listed skips, 0 passed, in 4 s at load 106; no job started
   
   stderr:
   
-  throttle log ($TMPDIR/deep-1115-lxKhHF/throttle/log), 13 entries; its last 8 of 8 granted and timeout entries:
-  {"at":"2026-11-25T06:00:50.743Z","event":"granted","class":"build","grant":"top-level","id":"44db1eef3f24044e","pid":3965970,"index":1,"load":120.16,"cores":20,"wait":1}
-  {"at":"2026-11-25T06:00:53.169Z","event":"granted","class":"build","grant":"top-level","id":"72c1d50ac23a9696","pid":3966167,"index":2,"load":126.87,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:00:54.709Z","event":"granted","class":"build","grant":"top-level","id":"39dc6fc0bf5f98ff","pid":3966184,"index":2,"load":126.87,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:00:57.136Z","event":"granted","class":"build","grant":"top-level","id":"14a701fe9c4cf9a8","pid":3966173,"index":2,"load":126.87,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:00:59.195Z","event":"granted","class":"build","grant":"top-level","id":"c8720a75c2fb2529","pid":3966661,"index":2,"load":127.37,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:01:01.112Z","event":"granted","class":"build","grant":"top-level","id":"fe2eba10c90d4a9e","pid":3966164,"index":2,"load":127.37,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:01:02.680Z","event":"granted","class":"build","grant":"top-level","id":"31f2780dcbc57daf","pid":3966177,"index":2,"load":128.62,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:01:02.993Z","event":"timeout","class":"build","id":"3f6da1bdd2c440cb","pid":3966912,"wait":0.05}
-  its last 12 entries:
-  {"at":"2026-11-25T06:00:53.169Z","event":"granted","class":"build","grant":"top-level","id":"72c1d50ac23a9696","pid":3966167,"index":2,"load":126.87,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:00:54.704Z","event":"released","class":"build","id":"72c1d50ac23a9696","pid":3966167}
-  {"at":"2026-11-25T06:00:54.709Z","event":"granted","class":"build","grant":"top-level","id":"39dc6fc0bf5f98ff","pid":3966184,"index":2,"load":126.87,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:00:57.001Z","event":"released","class":"build","id":"39dc6fc0bf5f98ff","pid":3966184}
-  {"at":"2026-11-25T06:00:57.136Z","event":"granted","class":"build","grant":"top-level","id":"14a701fe9c4cf9a8","pid":3966173,"index":2,"load":126.87,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:00:59.136Z","event":"released","class":"build","id":"14a701fe9c4cf9a8","pid":3966173}
-  {"at":"2026-11-25T06:00:59.195Z","event":"granted","class":"build","grant":"top-level","id":"c8720a75c2fb2529","pid":3966661,"index":2,"load":127.37,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:01:00.907Z","event":"released","class":"build","id":"c8720a75c2fb2529","pid":3966661}
-  {"at":"2026-11-25T06:01:01.112Z","event":"granted","class":"build","grant":"top-level","id":"fe2eba10c90d4a9e","pid":3966164,"index":2,"load":127.37,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:01:02.625Z","event":"released","class":"build","id":"fe2eba10c90d4a9e","pid":3966164}
-  {"at":"2026-11-25T06:01:02.680Z","event":"granted","class":"build","grant":"top-level","id":"31f2780dcbc57daf","pid":3966177,"index":2,"load":128.62,"cores":20,"wait":10}
-  {"at":"2026-11-25T06:01:02.993Z","event":"timeout","class":"build","id":"3f6da1bdd2c440cb","pid":3966912,"wait":0.05}
+  throttle log ($TMPDIR/deep-1115-TrkP6Y/throttle/log), 11 entries; its last 7 of 7 granted and timeout entries:
+  {"at":"2026-11-26T04:41:04.795Z","event":"granted","class":"build","grant":"top-level","id":"ea0e933701e157ba","pid":3886707,"index":1,"load":106.34,"cores":20,"wait":1}
+  {"at":"2026-11-26T04:41:05.485Z","event":"granted","class":"build","grant":"top-level","id":"593dbd833469c1fb","pid":3886932,"index":2,"load":106.34,"cores":20,"wait":10}
+  {"at":"2026-11-26T04:41:07.226Z","event":"granted","class":"build","grant":"top-level","id":"72c77b7d385bc298","pid":3886893,"index":2,"load":106.34,"cores":20,"wait":10}
+  {"at":"2026-11-26T04:41:08.886Z","event":"granted","class":"build","grant":"top-level","id":"83fb8f0e20ea8441","pid":3886911,"index":2,"load":106.34,"cores":20,"wait":10}
+  {"at":"2026-11-26T04:41:10.506Z","event":"granted","class":"build","grant":"top-level","id":"3c364260518eaa09","pid":3886903,"index":2,"load":106.47,"cores":20,"wait":10}
+  {"at":"2026-11-26T04:41:12.248Z","event":"granted","class":"build","grant":"top-level","id":"b5dda15174a7df3d","pid":3886972,"index":2,"load":106.47,"cores":20,"wait":10}
+  {"at":"2026-11-26T04:41:12.341Z","event":"timeout","class":"build","id":"50475cd75edf4a6b","pid":3887897,"wait":0.05}
+  its last 11 entries:
+  {"at":"2026-11-26T04:41:04.795Z","event":"granted","class":"build","grant":"top-level","id":"ea0e933701e157ba","pid":3886707,"index":1,"load":106.34,"cores":20,"wait":1}
+  {"at":"2026-11-26T04:41:05.485Z","event":"granted","class":"build","grant":"top-level","id":"593dbd833469c1fb","pid":3886932,"index":2,"load":106.34,"cores":20,"wait":10}
+  {"at":"2026-11-26T04:41:07.016Z","event":"released","class":"build","id":"593dbd833469c1fb","pid":3886932}
+  {"at":"2026-11-26T04:41:07.226Z","event":"granted","class":"build","grant":"top-level","id":"72c77b7d385bc298","pid":3886893,"index":2,"load":106.34,"cores":20,"wait":10}
+  {"at":"2026-11-26T04:41:08.819Z","event":"released","class":"build","id":"72c77b7d385bc298","pid":3886893}
+  {"at":"2026-11-26T04:41:08.886Z","event":"granted","class":"build","grant":"top-level","id":"83fb8f0e20ea8441","pid":3886911,"index":2,"load":106.34,"cores":20,"wait":10}
+  {"at":"2026-11-26T04:41:10.456Z","event":"released","class":"build","id":"83fb8f0e20ea8441","pid":3886911}
+  {"at":"2026-11-26T04:41:10.506Z","event":"granted","class":"build","grant":"top-level","id":"3c364260518eaa09","pid":3886903,"index":2,"load":106.47,"cores":20,"wait":10}
+  {"at":"2026-11-26T04:41:12.067Z","event":"released","class":"build","id":"3c364260518eaa09","pid":3886903}
+  {"at":"2026-11-26T04:41:12.248Z","event":"granted","class":"build","grant":"top-level","id":"b5dda15174a7df3d","pid":3886972,"index":2,"load":106.47,"cores":20,"wait":10}
+  {"at":"2026-11-26T04:41:12.341Z","event":"timeout","class":"build","id":"50475cd75edf4a6b","pid":3887897,"wait":0.05}
   planted tests' notes:
   
       at TestContext.<anonymous> (file://<copy>/tests/acceptance/3478/moving-build.test.mjs:33:10)
@@ -297,9 +301,10 @@ test at tests/acceptance/3478/drain.test.mjs:13:1
     diff: 'simple'
   }
 
-# Twin fixed-test-wait (throttle.mjs test --wait 0.05 for the test grant), node --test tests/acceptance/3478/moving-test.test.mjs:
+# Twin fixed-test-wait (throttle.mjs test --wait 0.05 for the test grant), node --test tests/acceptance/3478/moving-test.test.mjs,
+# run again 2026-11-25 (2026-11-26 UTC) with the redrafted test:
 
-✖ #3478.a5864770 with DEEP_TEST_GRANT_STALL at 0.05, a run that needs no binary behind test holders whose grants change hands about every 2 s for 20 s gets its test grant and reads its tests' own results (14270.482675ms)
+✖ #3478.de589636 with DEEP_TEST_GRANT_STALL at 0.25, a run that needs no binary behind test holders whose grants change hands about every 2 s for 40 s gets its test grant and reads its tests' own results (9683.056101ms)
 ℹ tests 1
 ℹ suites 0
 ℹ pass 0
@@ -307,12 +312,12 @@ test at tests/acceptance/3478/drain.test.mjs:13:1
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 14694.605836
+ℹ duration_ms 9739.454997
 
 ✖ failing tests:
 
 test at tests/acceptance/3478/moving-test.test.mjs:10:1
-✖ #3478.a5864770 with DEEP_TEST_GRANT_STALL at 0.05, a run that needs no binary behind test holders whose grants change hands about every 2 s for 20 s gets its test grant and reads its tests' own results (14270.482675ms)
+✖ #3478.de589636 with DEEP_TEST_GRANT_STALL at 0.25, a run that needs no binary behind test holders whose grants change hands about every 2 s for 40 s gets its test grant and reads its tests' own results (9683.056101ms)
   AssertionError [ERR_ASSERTION]: a run whose line keeps moving never reads INCONCLUSIVE no grant
   exit 2
   stdout:
@@ -321,35 +326,35 @@ test at tests/acceptance/3478/moving-test.test.mjs:10:1
   INCONCLUSIVE no grant: no test grant came within 0.05 min
     Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
   INCONCLUSIVE tests/fixture-3478/plain.test.mjs: not run, for want of a test grant
-  INCONCLUSIVE affected: 0 new, 0 already failing on main, 1 inconclusive or blocked, 0 listed skips, 0 passed, in 8 s at load 139; no job started
+  INCONCLUSIVE affected: 0 new, 0 already failing on main, 1 inconclusive or blocked, 0 listed skips, 0 passed, in 6 s at load 106; no job started
   
   stderr:
   
-  throttle log ($TMPDIR/deep-1115-hJhuT7/throttle/log), 16 entries; its last 11 of 11 granted and timeout entries:
-  {"at":"2026-11-25T06:01:27.292Z","event":"granted","class":"test","grant":"top-level","id":"bba1d0785c60626e","pid":3974501,"index":1,"load":135.08,"cores":20,"wait":1,"readings":null}
-  {"at":"2026-11-25T06:01:27.321Z","event":"granted","class":"test","grant":"top-level","id":"9338d2dfe4a484b6","pid":3974478,"index":2,"load":135.08,"cores":20,"wait":1,"readings":null}
-  {"at":"2026-11-25T06:01:27.366Z","event":"granted","class":"test","grant":"top-level","id":"507c759e867ffcb9","pid":3974464,"index":3,"load":135.08,"cores":20,"wait":1,"readings":null}
-  {"at":"2026-11-25T06:01:27.373Z","event":"granted","class":"test","grant":"top-level","id":"83cb7b5777d46903","pid":3974473,"index":4,"load":135.08,"cores":20,"wait":1,"readings":null}
-  {"at":"2026-11-25T06:01:27.508Z","event":"granted","class":"test","grant":"top-level","id":"349f5e088d1d4cd2","pid":3974492,"index":5,"load":135.08,"cores":20,"wait":1,"readings":null}
-  {"at":"2026-11-25T06:01:28.402Z","event":"granted","class":"test","grant":"top-level","id":"419a5be0d59e3f59","pid":3974814,"index":6,"load":131.71,"cores":20,"wait":10,"readings":null}
-  {"at":"2026-11-25T06:01:30.119Z","event":"granted","class":"test","grant":"top-level","id":"b8386a78b5fa1ce4","pid":3974819,"index":6,"load":131.71,"cores":20,"wait":10,"readings":null}
-  {"at":"2026-11-25T06:01:31.981Z","event":"granted","class":"test","grant":"top-level","id":"cf365072fff9229a","pid":3974799,"index":6,"load":131.71,"cores":20,"wait":10,"readings":null}
-  {"at":"2026-11-25T06:01:35.137Z","event":"granted","class":"test","grant":"top-level","id":"a94a4fc87b7f03d4","pid":3974807,"index":6,"load":134.94,"cores":20,"wait":10,"readings":null}
-  {"at":"2026-11-25T06:01:37.115Z","event":"granted","class":"test","grant":"top-level","id":"f98a531c25932c7d","pid":3974801,"index":6,"load":134.94,"cores":20,"wait":10,"readings":null}
-  {"at":"2026-11-25T06:01:39.202Z","event":"timeout","class":"test","id":"f413050d8fadac26","pid":3976392,"wait":0.05}
+  throttle log ($TMPDIR/deep-1115-D77SbE/throttle/log), 15 entries; its last 11 of 11 granted and timeout entries:
+  {"at":"2026-11-26T04:41:13.341Z","event":"granted","class":"test","grant":"top-level","id":"ec11c61dcd115984","pid":3890637,"index":1,"load":106.47,"cores":20,"wait":1,"readings":null}
+  {"at":"2026-11-26T04:41:13.345Z","event":"granted","class":"test","grant":"top-level","id":"9752e1ae91c168d2","pid":3890639,"index":2,"load":106.47,"cores":20,"wait":1,"readings":null}
+  {"at":"2026-11-26T04:41:13.357Z","event":"granted","class":"test","grant":"top-level","id":"24259c0d33bf1aa0","pid":3890636,"index":3,"load":106.47,"cores":20,"wait":1,"readings":null}
+  {"at":"2026-11-26T04:41:13.385Z","event":"granted","class":"test","grant":"top-level","id":"8724345d428d0833","pid":3890652,"index":4,"load":106.47,"cores":20,"wait":1,"readings":null}
+  {"at":"2026-11-26T04:41:13.389Z","event":"granted","class":"test","grant":"top-level","id":"6b060e2774e76e43","pid":3890645,"index":5,"load":106.47,"cores":20,"wait":1,"readings":null}
+  {"at":"2026-11-26T04:41:14.128Z","event":"granted","class":"test","grant":"top-level","id":"e4bcccffa16fab3c","pid":3890968,"index":6,"load":105.95,"cores":20,"wait":10,"readings":null}
+  {"at":"2026-11-26T04:41:15.878Z","event":"granted","class":"test","grant":"top-level","id":"b3b792e92559e307","pid":3890954,"index":6,"load":105.95,"cores":20,"wait":10,"readings":null}
+  {"at":"2026-11-26T04:41:17.414Z","event":"granted","class":"test","grant":"top-level","id":"02698fbc4d09ef85","pid":3891039,"index":6,"load":105.95,"cores":20,"wait":10,"readings":null}
+  {"at":"2026-11-26T04:41:19.220Z","event":"granted","class":"test","grant":"top-level","id":"ec4c3eb30d669506","pid":3890973,"index":6,"load":105.56,"cores":20,"wait":10,"readings":null}
+  {"at":"2026-11-26T04:41:21.101Z","event":"granted","class":"test","grant":"top-level","id":"eadd240b89ea530e","pid":3890955,"index":6,"load":105.56,"cores":20,"wait":10,"readings":null}
+  {"at":"2026-11-26T04:41:22.289Z","event":"timeout","class":"test","id":"eee8fe25f8bbab93","pid":3893387,"wait":0.05}
   its last 12 entries:
-  {"at":"2026-11-25T06:01:27.508Z","event":"granted","class":"test","grant":"top-level","id":"349f5e088d1d4cd2","pid":3974492,"index":5,"load":135.08,"cores":20,"wait":1,"readings":null}
-  {"at":"2026-11-25T06:01:28.402Z","event":"granted","class":"test","grant":"top-level","id":"419a5be0d59e3f59","pid":3974814,"index":6,"load":131.71,"cores":20,"wait":10,"readings":null}
-  {"at":"2026-11-25T06:01:29.910Z","event":"released","class":"test","id":"419a5be0d59e3f59","pid":3974814}
-  {"at":"2026-11-25T06:01:30.119Z","event":"granted","class":"test","grant":"top-level","id":"b8386a78b5fa1ce4","pid":3974819,"index":6,"load":131.71,"cores":20,"wait":10,"readings":null}
-  {"at":"2026-11-25T06:01:31.936Z","event":"released","class":"test","id":"b8386a78b5fa1ce4","pid":3974819}
-  {"at":"2026-11-25T06:01:31.981Z","event":"granted","class":"test","grant":"top-level","id":"cf365072fff9229a","pid":3974799,"index":6,"load":131.71,"cores":20,"wait":10,"readings":null}
-  {"at":"2026-11-25T06:01:34.699Z","event":"released","class":"test","id":"cf365072fff9229a","pid":3974799}
-  {"at":"2026-11-25T06:01:35.137Z","event":"granted","class":"test","grant":"top-level","id":"a94a4fc87b7f03d4","pid":3974807,"index":6,"load":134.94,"cores":20,"wait":10,"readings":null}
-  {"at":"2026-11-25T06:01:36.970Z","event":"released","class":"test","id":"a94a4fc87b7f03d4","pid":3974807}
-  {"at":"2026-11-25T06:01:37.115Z","event":"granted","class":"test","grant":"top-level","id":"f98a531c25932c7d","pid":3974801,"index":6,"load":134.94,"cores":20,"wait":10,"readings":null}
-  {"at":"2026-11-25T06:01:39.202Z","event":"timeout","class":"test","id":"f413050d8fadac26","pid":3976392,"wait":0.05}
-  {"at":"2026-11-25T06:01:39.323Z","event":"released","class":"test","id":"f98a531c25932c7d","pid":3974801}
+  {"at":"2026-11-26T04:41:13.385Z","event":"granted","class":"test","grant":"top-level","id":"8724345d428d0833","pid":3890652,"index":4,"load":106.47,"cores":20,"wait":1,"readings":null}
+  {"at":"2026-11-26T04:41:13.389Z","event":"granted","class":"test","grant":"top-level","id":"6b060e2774e76e43","pid":3890645,"index":5,"load":106.47,"cores":20,"wait":1,"readings":null}
+  {"at":"2026-11-26T04:41:14.128Z","event":"granted","class":"test","grant":"top-level","id":"e4bcccffa16fab3c","pid":3890968,"index":6,"load":105.95,"cores":20,"wait":10,"readings":null}
+  {"at":"2026-11-26T04:41:15.638Z","event":"released","class":"test","id":"e4bcccffa16fab3c","pid":3890968}
+  {"at":"2026-11-26T04:41:15.878Z","event":"granted","class":"test","grant":"top-level","id":"b3b792e92559e307","pid":3890954,"index":6,"load":105.95,"cores":20,"wait":10,"readings":null}
+  {"at":"2026-11-26T04:41:17.394Z","event":"released","class":"test","id":"b3b792e92559e307","pid":3890954}
+  {"at":"2026-11-26T04:41:17.414Z","event":"granted","class":"test","grant":"top-level","id":"02698fbc4d09ef85","pid":3891039,"index":6,"load":105.95,"cores":20,"wait":10,"readings":null}
+  {"at":"2026-11-26T04:41:19.091Z","event":"released","class":"test","id":"02698fbc4d09ef85","pid":3891039}
+  {"at":"2026-11-26T04:41:19.220Z","event":"granted","class":"test","grant":"top-level","id":"ec4c3eb30d669506","pid":3890973,"index":6,"load":105.56,"cores":20,"wait":10,"readings":null}
+  {"at":"2026-11-26T04:41:20.921Z","event":"released","class":"test","id":"ec4c3eb30d669506","pid":3890973}
+  {"at":"2026-11-26T04:41:21.101Z","event":"granted","class":"test","grant":"top-level","id":"eadd240b89ea530e","pid":3890955,"index":6,"load":105.56,"cores":20,"wait":10,"readings":null}
+  {"at":"2026-11-26T04:41:22.289Z","event":"timeout","class":"test","id":"eee8fe25f8bbab93","pid":3893387,"wait":0.05}
   planted tests' notes:
   
       at TestContext.<anonymous> (file://<copy>/tests/acceptance/3478/moving-test.test.mjs:34:10)
@@ -366,9 +371,9 @@ test at tests/acceptance/3478/moving-test.test.mjs:10:1
 
 # ---------------------------------------------------------------------------------------------------------------
 # The throwaway implementation (README: How I checked the tests can pass), laid over a scratch copy the same way:
-# the suite with these files, four runs at a 1-minute load of 68 to 176.
+# the suite at the second and third criteria's first numbers (stall bound 0.05 min, 20 s of hand-overs), four runs at a 1-minute load of 68 to 176.
 #   Three runs: 5 of 5 passed (22 s, 41 s and 99 s).
-#   One run, at a load of 115 to 135: 3 of 5 passed. #3478.b300c126 and #3478.a5864770 failed at their 8-minute bound
+#   One run, at a load of 115 to 135: 3 of 5 passed. #3478.b300c126 and the third criterion's test failed at their 8-minute bound
 #     ("the run was still going 8 min after it started"): in each, the run had its grants and its jobs had started
 #     when the sandbox's table stopped for good, its table.lock naming a live throttle.mjs process that was itself
 #     waiting for the lock. That is the base's own throttle.mjs (README: a table lock taken aside), not the change.

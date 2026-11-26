@@ -619,7 +619,6 @@
   "tests/acceptance/2569/main.test.ts": 2,
   "tests/acceptance/2569/outlives.test.ts": 1,
   "tests/acceptance/2574-redraft-2833/grant.test.mjs": 3,
-  "tests/acceptance/2574/grant.test.mjs": 1,
   "tests/acceptance/2594/overlap.mjs": 1,
   "tests/acceptance/26-redraft-2073/contradiction.test.ts": 1,
   "tests/acceptance/26/ask.test.ts": 2,

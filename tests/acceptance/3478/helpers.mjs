@@ -186,7 +186,7 @@ export const holdEvery = (box, cls) => holdStill(box, cls, SLOTS[cls]);
  * A moving line of `cls` holders on the sandbox's table: every slot but one is held still, and the last changes hands
  * about every 2 s, with `ahead` holders waiting for it at every moment. Resolves, once a grant has changed hands, with
  * `pids()`, every holder's pid (each the `throttle.mjs` process that holds the grant), `watch()` (the watcher for a
- * run's request in this line) and `halt()`, after which the line adds no holder once it has moved for 20 s; or with
+ * run's request in this line) and `halt()`, after which the line adds no holder once it has moved for 40 s; or with
  * null when no grant changed hands within two minutes.
  */
 export async function movingLine(box, cls, ahead) {
@@ -194,7 +194,7 @@ export async function movingLine(box, cls, ahead) {
   if (!still.holders.every(Boolean)) return null;
   const script = join(box.dir, `feeder-${cls}.mjs`), stop = join(box.dir, `feeder-${cls}.stop`), pids = join(box.dir, `feeder-${cls}.pids`);
   writeFileSync(script, FEEDER);
-  const feeder = launch(box, [process.execPath, script, JSON.stringify({ throttle: THROTTLE, cls, ahead, hold: HOLD, least: 20_000, stop, granted: join(box.dir, `feeder-${cls}.granted`), pids })]);
+  const feeder = launch(box, [process.execPath, script, JSON.stringify({ throttle: THROTTLE, cls, ahead, hold: HOLD, least: 40_000, stop, granted: join(box.dir, `feeder-${cls}.granted`), pids })]);
   if (!await within(feeder.line(/^READY /), 2)) return null;
   return {
     pids: () => new Set([...still.pids, ...(existsSync(pids) ? readFileSync(pids, 'utf8').split('\n').filter(Boolean).map(Number) : [])]),

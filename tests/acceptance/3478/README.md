@@ -42,8 +42,8 @@ criterion's text, as `scripts/proof-change.mjs` derives it).
 | Criterion | Test (file) | What it requires | Wrong program |
 |---|---|---|---|
 | `#3478.caea9543` With neither variable set, a run that builds a binary is granted, and the log's `granted` entries for its top-level build and test requests each carry `stall: 720` and no `wait` | `defaults.test.mjs` | A run alone on its own table, with `DEEP_TEST_GRANT_WAIT` and `DEEP_TEST_GRANT_STALL` both unset, whose one selected test builds `fixture-a` itself. The planted test built its binary; the log holds at least one top-level `granted` entry of class `build` and one of class `test`, and every such entry has `stall` equal to 720 and no `wait` key | The base (its entries carry `wait: 30`) |
-| `#3478.ee81cf50` With `DEEP_TEST_GRANT_STALL` at 0.05, a run that needs a binary, behind build holders whose grants change hands every 2 s for 20 s, gets its build grant, then its test grant, and reads its tests' own results | `moving-build.test.mjs` | A moving build line (below). The run was seen waiting in it; it never prints `INCONCLUSIVE no grant`; at least 3 holders' grants (4.5 s of hand-overs, past the 3 s bound) are logged between its joining and its own top-level build grant; that grant comes before its top-level test grant; the planted test built its binary, and the run's `--results` file reads the planted file `PASS` | Twin `fixed-build-wait`. The base passes this test: its 30-minute wait outlasts the line |
-| `#3478.a5864770` With `DEEP_TEST_GRANT_STALL` at 0.05, a run that needs no binary, behind test holders whose grants change hands every 2 s for 20 s, gets its test grant and reads its tests' own results | `moving-test.test.mjs` | A moving test line (below). The same, for the run's top-level test grant; the log holds no top-level build grant; the planted test ran, and the `--results` file reads its file `PASS` | Twin `fixed-test-wait`. The base passes this test |
+| `#3478.aedbd072` With `DEEP_TEST_GRANT_STALL` at 0.25, a run that needs a binary, behind build holders whose grants change hands every 2 s for 40 s, gets its build grant, then its test grant, and reads its tests' own results | `moving-build.test.mjs` | A moving build line (below). The run was seen waiting in it; it never prints `INCONCLUSIVE no grant`; at least 11 holders' grants (each held 1.5 s, so 16.5 s at least, past the 15 s bound) are logged between its joining and its own top-level build grant; that grant comes before its top-level test grant; the planted test built its binary, and the run's `--results` file reads the planted file `PASS` | Twin `fixed-build-wait`. The base passes this test: its 30-minute wait outlasts the line |
+| `#3478.de589636` With `DEEP_TEST_GRANT_STALL` at 0.25, a run that needs no binary, behind test holders whose grants change hands every 2 s for 40 s, gets its test grant and reads its tests' own results | `moving-test.test.mjs` | A moving test line (below). The same, for the run's top-level test grant; the log holds no top-level build grant; the planted test ran, and the `--results` file reads its file `PASS` | Twin `fixed-test-wait`. The base passes this test |
 | `#3478.981101c5` With `DEEP_TEST_GRANT_STALL` at 0.05 and every build slot held past the bound, the run prints the build line's `INCONCLUSIVE no grant`, an `INCONCLUSIVE` line for each file and a summary ending `no job started`, exits 2 within 5 minutes; its tests never ran | `stalled-build.test.mjs` | Every build slot of the table is held for nine minutes and nothing else changes. Two files are selected, one that builds `fixture-a` and one that builds nothing. Within 5 minutes of its start the run ends: a line of its output starts `INCONCLUSIVE no grant: no build grant changed hands within 0.05 min for the run's binaries; no test grant was asked for`; for each of the two files a line starts `INCONCLUSIVE ` and names it; its last `affected:` line starts `INCONCLUSIVE affected: ` and ends `no job started`; it exits 2; neither planted test ran; the log holds no top-level test grant | The base (it waits 30 minutes, so it is still waiting at the 5-minute bound) |
 | `#3478.b300c126` With `DEEP_TEST_GRANT_STALL` at 0.2, every build slot held for 8 s, and a top-level `throttle.mjs timed --wait 0.05` request made after the run joined the line, the timed request ends `INCONCLUSIVE no grant`, and the run then gets its build grant and reads its tests' own results | `drain.test.mjs` | Every build slot is held. Once the run is seen waiting in the build line, a top-level `node scripts/throttle.mjs timed --wait 0.05 -- <command>` is started on the same table, and the holders let go 8 s after the run joined. The timed request prints a line starting `INCONCLUSIVE no grant`, exits 3 and never runs its command. The run never prints `INCONCLUSIVE no grant`; the log's `timeout` entry of class `timed` comes before the run's top-level build grant; the run takes a top-level test grant; the planted test built its binary, and the `--results` file reads its file `PASS` | Twin `fixed-build-wait`. The base passes this test |
 | `#3478.cfd0c346` With `DEEP_TEST_GRANT_WAIT` set, the run's waits and lines are as before: `tests/acceptance/2574-redraft-2833/` and `tests/acceptance/2820/` pass unchanged | none here | No new test: the criterion is those two suites, unchanged, passing on the change. `2574-redraft-2833/grant.test.mjs` (`#2574.AC2d`) and `2820/failures.test.mjs` (`#2820.AC5b`) set `DEEP_TEST_GRANT_WAIT` to 0.02 and read `no test grant came within 0.02 min`, a build `timeout` entry with `wait: 0.02`, each file `INCONCLUSIVE` and a non-zero exit | By reading, not run: a run that ignores `DEEP_TEST_GRANT_WAIT` once the stall is in fails `#2820.AC5b` (its `timeout` entry carries no `wait: 0.02`) and `#2574.AC2d` (no `came within 0.02 min` line) |
@@ -83,14 +83,15 @@ the code under test.
 
 A line of a class is made of `throttle.mjs <class>` holders the test starts on its own table. Every slot of the class
 but one (1 of 2 build slots and 5 of 6 test slots on Linux; none on the Mac's 1 build slot, 1 of its 2 test slots) is
-held still for the whole test. The last slot changes hands: a small feeder, written into the sandbox, keeps five
+held still for the whole test. The last slot changes hands: a small feeder, written into the sandbox, keeps thirteen
 holders waiting for it at every moment, each a `throttle.mjs <class> --wait 10` whose command holds its grant 1.5 s, so
 with the hand-over a grant of the class changes hands about every 2 s, as the issue asks. A request that joins at any
-moment has five holders ahead of it, at least 7.5 s of hand-overs, past the 3 s bound, while each hand-over is well
-inside it. The request under test is never starved: holders the feeder adds after it join behind it.
+moment has thirteen holders ahead of it, at least 19.5 s of hand-overs, past the 15 s bound (0.25 min), while each
+hand-over is well inside it. The tests require 11 of those grants between the run's joining and its own grant: a
+count of grants each held 1.5 s at least, which a busy machine can only lengthen, never a reading of the clock. The request under test is never starved: holders the feeder adds after it join behind it.
 
-The line moves for 20 s at least, and goes on until the run has its grant of that class or has ended, so the run finds
-it moving however long the run takes to reach its request on a loaded machine. A fixed 20 s would let a slow run
+The line moves for 40 s at least, and goes on until the run has its grant of that class or has ended, so the run finds
+it moving however long the run takes to reach its request on a loaded machine. A fixed 40 s would let a slow run
 arrive after the line had drained and prove nothing.
 
 A watcher, also written into the sandbox, reads `table.json` and the log every 40 ms: it notes how many holders'
@@ -104,9 +105,9 @@ wait.
    table, so every top-level `granted` entry of class `build` and `test` there is the run's, and each must carry
    `stall: 720` and no `wait`. The run's jobs pass through or take turns (`passed`, `turn`), which are not `granted`
    entries.
-2. **"A line of holders whose grants change hands every 2 s for 20 s"**: one slot changes hands and the others are
+2. **"A line of holders whose grants change hands every 2 s for 40 s"**: one slot changes hands and the others are
    held still, so a hand-over comes about every 2 s; with every slot cycling at once, hand-overs on the Spark's six
-   test slots would come three times as often. "For 20 s" is read as at least 20 s (above).
+   test slots would come three times as often. "For 40 s" is read as at least 40 s (above).
 3. **"Every build slot held for 8 s"** (fifth criterion): the 8 s count from the moment the run was seen in line, not
    from the holders' own grants. A run on a loaded machine may take longer than 8 s to reach its request, and the
    criterion needs the slots held when the timed request is made "after the run joined the line".
@@ -117,7 +118,9 @@ wait.
    scope names holders only for the test grant's line; a build line that goes on after `…was asked for` still passes.
 6. **"Exits 2 within 5 minutes"** counts from the run's start.
 7. **A planted `affected.mjs` that waits a fixed 0.05 min** does so whatever `DEEP_TEST_GRANT_STALL` says: in the fifth
-   criterion the variable is 0.2, and a twin that read it as a fixed wait would outlast the 8 s and pass.
+   criterion the variable is 0.2, and a twin that read it as a fixed wait would outlast the 8 s and pass. In the second
+   and third criteria the variable is 0.25; the line there puts more than 15 s of hand-overs ahead of the run, so a
+   program that read the variable as a fixed wait would fail them too.
 8. **"Reads its tests' own results"** is the planted file's own state in the run's `--results` file, `PASS`, not the
    run's summary state or exit status. The fixture run also starts some twenty lint jobs of its own, which are no
    test of the run's; on this machine at a load of 150 one of them once read `INCONCLUSIVE … job: no grant` (its
@@ -137,7 +140,8 @@ wait.
 - **The drain being unchanged**: only the fifth criterion's one case runs; #2744's own suite covers a stuck drain.
 - **Section 6's grant-wait table and `affected.mjs` paragraph**: docs, read by diff review.
 - **The guard's signed approval tag** for `scripts/affected.mjs`: a person's.
-- **Timing on a very loaded machine**: the moving line's hand-overs must stay under 3 s apart, and in `drain.test.mjs`
+- **Timing on a very loaded machine**: the moving line's hand-overs must stay under 15 s apart (0.25 min; the first
+  numbers, 3 s, were missed at a load of 134 to 248, where hand-overs stretched to 5.8 s), and in `drain.test.mjs`
   the run must look at the table within 12 s of joining (0.2 min) less the 8 s hold. At a load of 30 to 150 on 20
   cores both held.
 - **A table lock taken aside** (not this issue's; seen on the unchanged base too). At a load above 100, three of
@@ -148,7 +152,8 @@ wait.
   owner has finished and found no lock to remove; while the lock is aside a second process can take it, which would
   also explain the lint job above whose request left the table. A test whose run is caught so fails at the run's
   8-minute bound with `the run was still going 8 min after it started` and a `table.lock, still held:` line in its
-  message; it never passes. The moving line was cut from 30 processes to about ten after the first such stop, but the
+  message; it never passes. The moving line was cut from 30 processes to about ten after the first such stop (it is about
+  fifteen to twenty since the second and third criteria's numbers changed), but the
   run's own jobs are enough to cause it, in `defaults.test.mjs` and in #2820's and #2574's suites as well. Until
   `throttle.mjs` is repaired on main, a failure of that shape at a high load is the table's, not the change's.
 
@@ -159,7 +164,10 @@ implementation in a copy of `scripts/affected.mjs` (the two requests ask with `s
 unless `DEEP_TEST_GRANT_WAIT` is set), laid it over a copy of the checkout's `scripts/` in this job's scratch folder,
 and ran this suite against it, four runs with these files: 5 of 5 passed in three, and in one, at a load of 115 to
 135, two tests failed at their 8-minute bound on a stopped table (above). The two suites of the sixth criterion
-passed against it, 8 of 8, in one run.
+passed against it, 8 of 8, in one run. Those runs were at the second and third criteria's first numbers (a stall
+bound of 0.05 min, 20 s of hand-overs). At the present numbers (0.25 min, 40 s) `moving-build.test.mjs` and
+`moving-test.test.mjs` were each run once over a copy of the change's own `scripts/`, at a load of 100 to 170: both
+passed (36 s and 38 s), and both passed on the base (46 s and 64 s), as the issue expects.
 Each first twin was that file with one fault, and failed its test at its assertion; the twins in `twins/` now are the
 implementation's file with the same fault, redrafted blind once it existed (`twins/README.md`). The throwaway proves nothing
 about the real change. `BASE-FAILURE.txt` is the suite's run on the merge base, then the planted runs.
