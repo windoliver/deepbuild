@@ -1,0 +1,77 @@
+#1828's AC3 redraft, run once on the base, 914bd5f29775cf6b64a4050276afb97e04cdd659 (origin/main), with no
+implementation of #1828. Built first: npm ci, npm run build --workspaces; target/debug/deep-hook in place.
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1828/redraft --no-file-parallelism \
+    --testTimeout=1200000 --hookTimeout=180000 --reporter=verbose
+
+When:    2026-11-26 00:02:18 local time, 18 s (the test 9.7 s)
+Machine: Linux, in a systemd user unit (MemoryMax=24G), 1-minute load about 195 to 230.
+Result:  Test Files 1 failed (1); Tests 1 failed (1). Exit 1.
+
+It fails for the issue's reason: the starting world installed (both `deep install`s exited 0, acme/acme 1.0.0 and
+acme/stocks 1.0.0 installed, no ask raised), and the update's `deep install` ended at once, exit 1, with the host's
+"no asks core" refusal, before any ask was raised. The failing line, from deep install's stderr:
+
+  REFUSED: acme/acme@2.0.0 no longer provides what installed pieces use (acme/stocks uses ext.acme.prices@1), and this host has no asks core to ask you; nothing was installed
+
+---- the run's output (temp folders as written; no home folder appears) ----
+
+
+ RUN  v5.0.5 /var/tmp/blind-1828-ac3
+
+ × tests/acceptance/1828/redraft/update.test.ts > AC3 #1828.44a54c78 on the same hub, an update that drops an interface an installed package uses raises one extension.update ask and installs nothing before your yes > AC3 the update asks once, from extension.update, naming acme/stocks and ext.acme.prices@1; nothing is installed until your yes, and your yes installs it 9650ms
+   → the update raises an ask before it installs anything; deep install of 2.0.0: exit 1
+stdout: Source: /tmp/dh1828-pkg-acme-acme-2.0.0-tYGWDK
+  acme/acme@2.0.0, digest d1:34742787f5c455f8eb75818db16414da1d3467fbb34b3ac81e348fe97fa100f3, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: none
+  check kinds: none
+  provides: ext.acme.prices@2
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+  hosts: none
+
+stderr: REFUSED: acme/acme@2.0.0 no longer provides what installed pieces use (acme/stocks uses ext.acme.prices@1), and this host has no asks core to ask you; nothing was installed
+: expected 0 to be greater than 0
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1828/redraft/update.test.ts > AC3 #1828.44a54c78 on the same hub, an update that drops an interface an installed package uses raises one extension.update ask and installs nothing before your yes > AC3 the update asks once, from extension.update, naming acme/stocks and ext.acme.prices@1; nothing is installed until your yes, and your yes installs it
+AssertionError: the update raises an ask before it installs anything; deep install of 2.0.0: exit 1
+stdout: Source: /tmp/dh1828-pkg-acme-acme-2.0.0-tYGWDK
+  acme/acme@2.0.0, digest d1:34742787f5c455f8eb75818db16414da1d3467fbb34b3ac81e348fe97fa100f3, unsigned
+Permissions:
+  access: none
+  notices: none
+  actions: none
+  check kinds: none
+  provides: ext.acme.prices@2
+  uses: none
+  replaces: none
+  conflicts with: none
+  runs on: none
+  hosts: none
+
+stderr: REFUSED: acme/acme@2.0.0 no longer provides what installed pieces use (acme/stocks uses ext.acme.prices@1), and this host has no asks core to ask you; nothing was installed
+: expected 0 to be greater than 0
+ ❯ tests/acceptance/1828/redraft/update.test.ts:67:127
+     65|       return undefined;
+     66|     }, 180_000);
+     67|     expect(asked?.length, `the update raises an ask before it installs…
+       |                                                                                                                               ^
+     68|
+     69|     // Shown to you, and asked again by nothing: a while later still o…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  00:02:18
+   Duration  18.23s (tests 71%, transform 28%, import 2%)
+
+EXIT 1
