@@ -34,7 +34,7 @@ import { resolve } from 'node:path';
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { Answers, answerText, type Answer } from './answers.js';
 
-import { plantedSessionEnd } from './plant.js';
+import { plantedKeeps, plantedSessionEnd } from './plant.js';
 
 import { Hosts } from './hosts.js';
 import { Jobs } from './jobs.js';
@@ -45,7 +45,7 @@ import type { CallContext, Routes, CutOff, Note, Session } from './session-types
 import { parents } from './children.js';
 
 import { TranscriptReader } from './transcript-reader.js';
-import { letters, ghToken, WAKE_GRACE, SHOWN_SOON, said, FOREIGN, placesItself, type Obj, isObj, asRefused, effectEntries, callOf, sendKey, PULL_LOOKUP_MS, OWN_TURN, continueText } from "./hub-shared.js";
+import { letters, ghToken, WAKE_GRACE, SHOWN_SOON, said, FOREIGN, placesItself, type Obj, isObj, asRefused, effectEntries, callOf, sendKey, PULL_LOOKUP_MS, OWN_TURN, continueText, holdsTurns, sql } from "./hub-shared.js";
 
 export interface AnswerDeliveryOptions {
   settings: CoreOptions & { forge: string };
@@ -78,7 +78,7 @@ export class AnswerDelivery {
   constructor(private readonly options: AnswerDeliveryOptions) {}
 
   /** Your switches from a provisional ask's option, in flight: the commits made under the old one (#84). */
-  readonly switches = new Map<string, string[]>();
+  readonly switches = new Map<string, { session: string; commits: string[] }>();
 
   /** The log position of the last session.continued the hub routed (#85). */
   continuedPos = 0;
@@ -114,8 +114,11 @@ export class AnswerDelivery {
 
   readonly carried = new Map<string, Note[]>();
 
-  /** The asks raised for permission prompts and saved offers, by handle: their answer is never delivered as a message (#23). */
-  readonly prompts = new Set<string>();
+  /**
+   * The open asks raised for permission prompts and saved offers, by handle, with their session: their answer is never
+   * delivered as a message (#23). A closed one's is the record's to tell (answers.ts, OF_PROMPT).
+   */
+  readonly prompts = new Map<string, string>();
 
   answers!: Answers;
 
@@ -288,7 +291,7 @@ export class AnswerDelivery {
       const question = `The agent's promised check is BLOCKED (${blockedCause(p) === 'set_again' ? `promised ${p.set} times` : 'promised past its end'}; owner: ${owner}): "${p.quote}" Do the check yourself, or drop it?`;
       const options = [{ id: 'take', label: 'I will do the check', decision: 'none' }, { id: 'drop', label: 'Drop it', decision: 'none' }];
       // It carries its own deadline and default, as the hub's other asks do, so no settings it lacks refuse it (#1829).
-      const raised = { kind: 'choice', question, options, recommended: 'drop', deadline: this.options.services.now() + 2 * 86_400_000, default: 'drop', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'promise', session, quote: p.quote } as JsonValue)), pinned_to: await this.options.mcp().pinOf(cwd, question) };
+      const raised = { kind: 'choice', may_answer: 'trusted_path', question, options, recommended: 'drop', deadline: this.options.services.now() + 2 * 86_400_000, default: 'drop', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'promise', session, quote: p.quote } as JsonValue)), pinned_to: await this.options.mcp().pinOf(cwd, question) };
       ask = await this.options.services.asks.raise(this.options.events.connection('core', { session, agent }), 'promise.blocked', raised).catch(() => null);
     }
     await this.options.events.appendSession(session, agent, 'promise.blocked', { promise: p.id, status: 'BLOCKED', quote: p.quote, cause: blockedCause(p), owner, ask });
@@ -302,9 +305,9 @@ export class AnswerDelivery {
     await this.restoreNotes().catch(() => undefined);
   }
 
-  /** The promises the record holds that still wait, after a restart: each set one is armed again, each due one waits for its hook. */
-  private async restorePromises(): Promise<void> {
-    const rows = (await this.options.services.record.raw(`SELECT session_id AS session, kind, data, ts FROM events WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND session_id IS NOT NULL ORDER BY log_pos`)) as { session: string; kind: string; data: string | Obj; ts: number }[];
+  /** The promises the record holds that still wait, after a restart or of a session forgotten: each set one is armed again, each due one waits for its hook. */
+  private async restorePromises(of?: string): Promise<void> {
+    const rows = (await this.options.services.record.raw(`SELECT session_id AS session, kind, data, ts FROM events WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND ${of === undefined ? 'session_id IS NOT NULL' : `session_id = '${sql(of)}'`} ORDER BY log_pos`)) as { session: string; kind: string; data: string | Obj; ts: number }[];
     const handedAt = new Map<string, number>();
     for (const row of rows) {
       // A session's end takes its promise with it: nothing wakes a session that is gone.
@@ -320,18 +323,74 @@ export class AnswerDelivery {
       if (row.kind === 'promise.blocked' && p) p.asked = true;
     }
     for (const [session, p] of this.promises) {
+      if (of !== undefined && session !== of) continue;
       if (p.status === 'set') this.armPromise(session);
       else if (p.status === 'due' && p.handed) this.armPromiseGrace(session, p, WAKE_GRACE - (this.options.services.now() - (handedAt.get(session) ?? this.options.services.now())));
       else if (p.status === 'due') this.options.schedule.askingSoon();
     }
   }
 
-  /** Your words the record holds that no turn has carried yet, after a restart: each waits for its session's next route (#1577). */
-  private async restoreNotes(): Promise<void> {
+  /**
+   * The continues parked for a session's next prompt, which outlive the hub: each that no later turn of its session
+   * carried goes with that session's next prompt again (#85). And a stop whose task is open holds its session's DeepBuild
+   * turns across a restart too: each session's newest stop that no turn, prompt or continue followed.
+   */
+  async restoreTurns(of?: string): Promise<void> {
+    const session = (column: string): string => (of === undefined ? `${column} IS NOT NULL` : `${column} = '${sql(of)}'`);
+    for (const row of (await this.options.services.record.raw(`SELECT c.session_id, c.data FROM events c WHERE c.kind = 'session.continued' AND ${session('c.session_id')} AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = c.session_id AND e.log_pos > c.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'permission.request') AND ${OWN_TURN}) ORDER BY c.log_pos`)) as { session_id: string; data: string | Obj }[]) {
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      this.routesOf(row.session_id).later.push(await this.continueBlock(row.session_id, String(d.because), typeof d.task === 'string' ? d.task : null, typeof d.stop === 'string' ? d.stop : undefined));
+    }
+    for (const row of (await this.options.services.record.raw(`SELECT s.session_id, s.data FROM events s WHERE s.kind = 'agent.stop' AND ${session('s.session_id')} AND json_extract(s.data, '$.child') IS NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.session_id AND e.log_pos > s.log_pos AND e.kind IN ('user.ask', 'tool.before', 'tool.after', 'agent.stop', 'session.continued', 'session.end') AND ${OWN_TURN})`)) as { session_id: string; data: string | Obj }[]) {
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      if (holdsTurns(d)) this.routesOf(row.session_id).blocked = String(d.cause);
+    }
+  }
+
+  /** What a resume needs of a session the hub forgot (#1866), read from the record. */
+  private async recall(session: string): Promise<void> {
+    if (!this.promises.has(session)) await this.restorePromises(session);
+    if (!this.notes.has(session)) await this.restoreNotes(session);
+    await this.restoreTurns(session);
+  }
+
+  /**
+   * The core forgot the session (#1866): what is kept of it goes, as a SessionEnd's does, and with it what its prompts
+   * raised. What a resume needs of it is the record's.
+   */
+  forget(session: string): void {
+    this.over(session);
+    // A session that sent its SessionEnd has no routes left here.
+    const routes = this.routes.get(session);
+    if (routes) plantedKeeps(this.options.settings.plant, 'churn-keeps-gone-routes', session, routes);
+    this.routes.delete(session);
+    for (const note of this.handedNotes.values()) if (note.session === session) { clearTimeout(note.timer); this.handedNotes.delete(note.request); }
+    for (const of of [this.unknownSends, this.notes, this.typedAt]) of.delete(session);
+    for (const of of [this.prompts, this.unread]) for (const [ask, by] of of) if (by === session) of.delete(ask);
+    for (const [ask, s] of this.switches) if (s.session === session) this.switches.delete(ask);
+    for (const [handle, offer] of this.offers) if (offer.meta.session === session) this.offers.delete(handle);
+    for (const of of [this.pending, this.paseoRequests]) for (const key of of.keys()) if (key.startsWith(`${session}|`)) of.delete(key);
+    for (const of of [this.inPaseo, this.answerWaiting]) of.delete(session);
+    for (const of of [this.notUnder, this.takenRead]) for (const key of of) if (key.split('\0').includes(session)) of.delete(key);
+  }
+
+  /** A session is over: its running calls, its promised check, its paseo token and what its turn's hooks left go. */
+  private over(session: string): void {
+    // A call running as its session quit returns to nobody: its answer waits for the session's resume.
+    for (const [ask, waiting] of this.askWaits) if (waiting === session) this.stopAskWait(ask);
+    clearTimeout(this.promises.get(session)?.timer);
+    this.promises.delete(session);
+    for (const [token, by] of this.binds) if (by === session) this.binds.delete(token);
+    for (const map of [this.options.state().acks, this.options.state().midTurn, this.carried, this.options.state().turnsStarted, this.options.state().onScreen]) map.delete(session);
+  }
+
+  /** Your words the record holds that no turn has carried yet, after a restart or of a session forgotten: each waits for its session's next route (#1577). */
+  private async restoreNotes(of?: string): Promise<void> {
     const raw = this.options.services.record.raw;
     const carried = new Set(((await raw(`SELECT json_extract(data, '$.request') AS request FROM events WHERE kind = 'user.ask' AND json_extract(data, '$.from') = 'app'`)) as { request: string | null }[]).map((r) => r.request));
     for (const { data } of (await raw(`SELECT data FROM events WHERE kind = 'session.note' ORDER BY log_pos`)) as { data: string }[]) {
       const note = JSON.parse(data) as Note;
+      if (of !== undefined && note.session !== of) continue;
       if (!carried.has(note.request)) this.notes.set(note.session, [...(this.notes.get(note.session) ?? []), note]);
     }
   }
@@ -454,6 +513,8 @@ export class AnswerDelivery {
       // compaction starts a new session ID, and the cleared one's continues end with it.
       if (old) fresh.later = [...(old.handed ?? []), ...old.later];
       if (old?.places) fresh.places = true;
+      // A session this hub forgot, or never met: the record holds what its resume needs (#1866).
+      if (!old && meta.fields?.source === 'resume' && !this.options.state().sessions.has(meta.session)) void this.options.schedule.queue(() => this.recall(meta.session)).catch(() => undefined);
       this.routes.delete(meta.session);
       this.routes.set(meta.session, fresh);
     }
@@ -474,12 +535,7 @@ export class AnswerDelivery {
       // Its parked continues wait for the session to be resumed (#85), in an entry of no folder, so nothing reads
       // it as the folder's last session.
       if (r.later.length || r.handed?.length) this.routesOf(meta.session).later = [...(r.handed ?? []), ...r.later];
-      // A call running as its session quit returns to nobody: its answer waits for the session's resume.
-      for (const [ask, waiting] of this.askWaits) if (waiting === meta.session) this.stopAskWait(ask);
-      const promise = this.promises.get(meta.session);
-      clearTimeout(promise?.timer);
-      this.promises.delete(meta.session);
-      for (const map of [this.options.state().acks, this.options.state().midTurn, this.carried, this.options.state().turnsStarted, this.options.state().onScreen]) map.delete(meta.session);
+      this.over(meta.session);
     } else if (meta.event === 'StopFailure') {
       // A turn that ends on an API error ends like a Stop, and Claude Code starts its waiter as at a Stop; one an
       // earlier stop started may still wait, and either may wake the idle session (#85). Only the newest turn's: a prompt you
@@ -498,7 +554,7 @@ export class AnswerDelivery {
 
   /** The answers as the agent reads them, each naming its ask. */
   private answerText(rows: Answer[]): string {
-    return answerText(rows, (ask) => this.switches.get(ask));
+    return answerText(rows, (ask) => this.switches.get(ask)?.commits);
   }
 
   /**
@@ -560,7 +616,7 @@ export class AnswerDelivery {
   answered(delivery: Delivery): void {
     // A permission prompt's answer goes back through the prompt it holds (#23).
     this.permits.get(delivery.ask)?.(delivery);
-    if (this.prompts.has(delivery.ask)) return;
+    if (this.prompts.delete(delivery.ask)) return;
     // Your answer to a library fetch's authority ask (#1731), which no session raised: a yes runs the fetch's job.
     if (this.options.services.libraries?.answered(delivery.ask, delivery.decision)) return;
     // Your answer to a brief's card (#1342), which no session raised: a yes makes the project and starts its run.
@@ -1074,14 +1130,16 @@ export class AnswerDelivery {
       return { decision: 'none' };
     }
     const asked = await this.options.services.holds.asked(meta, about);
-    this.prompts.add(asked.ask);
+    plantedKeeps(this.options.settings.plant, 'churn-keeps-prompt-ask', asked.ask, meta.session);
     if (asked.decision) return { decision: asked.option === 'approve' ? 'allow' : 'deny', because: asked.decision };
+    this.prompts.set(asked.ask, meta.session);
     if (shown) {
-      if (meta.paseo?.request) this.paseoRequests.set(`${meta.session}|${meta.paseo.request}`, asked.ask);
+      const request = meta.paseo?.request ? `${meta.session}|${meta.paseo.request}` : undefined;
+      if (request) this.paseoRequests.set(request, asked.ask);
       const answer = await new Promise<Delivery | undefined>((done) => {
         const timer = setTimeout(() => { this.permits.delete(asked.ask); done(undefined); }, Math.max(0, until - Date.now()));
         timer.unref();
-        this.permits.set(asked.ask, (delivery) => { clearTimeout(timer); this.permits.delete(asked.ask); done(delivery); });
+        this.permits.set(asked.ask, (delivery) => { clearTimeout(timer); this.permits.delete(asked.ask); if (request) this.paseoRequests.delete(request); done(delivery); });
       });
       return { decision: !answer ? 'none' : answer.option === 'approve' ? 'allow' : 'deny' };
     }
@@ -1213,8 +1271,9 @@ export class AnswerDelivery {
     const offer = this.offers.get(handle)!;
     this.offers.delete(handle);
     const asked = await this.options.services.holds.asked(offer.meta, offer.about);
+    plantedKeeps(this.options.settings.plant, 'churn-keeps-prompt-ask', asked.ask, offer.meta.session);
     // Its answer is yours, given here: nothing is delivered to the session.
-    this.prompts.add(asked.ask);
+    if (!asked.decision) this.prompts.set(asked.ask, offer.meta.session);
     if (!asked.decision) await this.options.services.asks.answer(as, asked.ask, { option: 'approve', plan_hash: (await this.options.services.asks.card(asked.ask)).plan?.hash ?? null, token: `os-confirm:${ulid(this.options.services.now())}` }).catch((error: unknown) => { throw asRefused(error); });
     await this.options.memory().syncStanding().catch(() => undefined);
     const [saved] = (await this.options.services.record.raw(`SELECT id, data FROM events WHERE kind = 'decision.created' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [asked.ask])) as { id: string; data: string }[];

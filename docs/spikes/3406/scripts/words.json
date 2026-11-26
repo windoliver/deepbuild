@@ -1,0 +1,87 @@
+{
+  "baseCommit": "9e77c2ad6c0ff460dcff6905a161adee490536aa",
+  "criteria": {
+    "places": "The report holds, for each of the four places and each mode tried, the recording that shows the post delivered, held or refused, or the version tested with no route",
+    "latency": "For an idle session that woke, the time from the post to its first hook is given at p50 and p95 over at least 20 posts, beside the waiter's on the same session",
+    "quotes": "The report quotes what the model received and the transcript entry's origin fields, from a recording added to the corpus (#47) with secrets scrubbed. No recording holds the token's value, and the scrub's own check passes on each",
+    "wakes": "It says whether a `claude -p` session and a desktop app session can be woken this way, each with its recording, since the waiter can't do the first and is untested in the second",
+    "inbound": "It says what a session with `crossSessionInbound` set to `hold` and to `refuse` did with the post, and that the route then reads absent",
+    "decision": "It states the token decision as a question with what each answer costs, and builds nothing that keeps the token",
+    "issues": "It ends with the issues it proposes, each with its depends-on, and builds none of them"
+  },
+  "status": {
+    "places": "BLOCKED",
+    "latency": "PASS",
+    "quotes": "PASS",
+    "wakes": "BLOCKED",
+    "inbound": "PASS",
+    "decision": "PASS",
+    "issues": "PASS"
+  },
+  "notRun": {
+    "skips": "this Mac's managed settings set permissions.disableBypassPermissionsMode to disable, so no session here can skip prompts: one started with --permission-mode bypassPermissions ran in auto mode",
+    "desktop": "no desktop app session was opened for the spike",
+    "desktopAuto": "no desktop app session was opened in auto mode",
+    "editor": "no editor with Claude Code's extension is installed on the reference Mac"
+  },
+  "noRoute": {
+    "print-outlived": "a claude -p session with one prompt had ended, and its inbox with it, before a process left behind could post",
+    "resume": "the session had been closed and resumed in a new process, which listens at a new address; nothing listened at the old one"
+  },
+  "reviewed": "not reviewed yet: written by the #3406 spike on 2026-11-24 from https://code.claude.com/docs/en/hooks and the mapping in adapters/corpus/README.md, for the owner's review with this diff",
+  "decision": {
+    "question": "May the hub hold a session's CLAUDE_CODE_MESSAGING_TOKEN in memory for that session's life?",
+    "answers": [
+      {
+        "answer": "No. The hub keeps a session's inbox address only, and a post of ours carries no auth line.",
+        "costs": [
+          "Nothing that was recorded on this Mac: in every session that asks or runs in auto mode, a post with no auth line was delivered as one with it was.",
+          "A session that skips prompts would hold each post of ours for your approval, by the program's text. That was not run, since this Mac's managed settings turn the mode off. Such a session stays on the waiter and your next prompt."
+        ]
+      },
+      {
+        "answer": "Yes. The hook client reports the token at SessionStart, and the hub keeps it in memory and never in the record.",
+        "costs": [
+          "The hub then holds one secret for each live session, and #3405's rule that the SessionStart report carries nothing of the token has to change.",
+          "It bought nothing in any recording here: a post that sent the token first was delivered where a post without it, and one with a wrong token, were delivered too.",
+          "By the program's text it would not let the hub post for itself in a session that skips prompts: on macOS a process that is still running and is no descendant of the session is read as not the session's own, token or not. The post would have to come from a helper that exits before the check. That was not run.",
+          "The token dies with the session's process: a resume started a new process with a new token, so the hub's copy must be taken again at every SessionStart."
+        ]
+      },
+      {
+        "answer": "Not the hub. Only a hook that is still running posts, as the waiter runs now, and it needs no token.",
+        "costs": [
+          "The waiter's two limits stay: one process for each idle session, and the hook's timeout, after which an answer waits for your next prompt.",
+          "A claude -p session with one prompt ends its background hooks at teardown, so only a hook the session still waits on can post there."
+        ]
+      }
+    ]
+  },
+  "recommendation": {
+    "route": "beside"
+  },
+  "issues": [
+    {
+      "title": "A prompt DeepBuild posted to a Claude Code session's inbox is recorded `from: app`: its entry is known by the message ID the hub issued, never by its sender name or its text",
+      "dependsOn": [
+        "#47",
+        "#3405"
+      ]
+    },
+    {
+      "title": "Claude Code delivery: what the waiter can't deliver goes through the session's inbox before it waits for your next prompt",
+      "dependsOn": [
+        "#25",
+        "#3405",
+        "A prompt DeepBuild posted to a Claude Code session's inbox is recorded `from: app`: its entry is known by the message ID the hub issued, never by its sender name or its text"
+      ]
+    },
+    {
+      "title": "Spike: a Claude Code session's inbox in the desktop app, the editor extension and a session that skips prompts: the three places #3406 could not run",
+      "dependsOn": [
+        "#47",
+        "#3406"
+      ]
+    }
+  ]
+}

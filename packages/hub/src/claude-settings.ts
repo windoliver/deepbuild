@@ -122,12 +122,13 @@ function without(groups: unknown, ours: Set<string>): Group[] {
 
 /**
  * Our groups merged into `settings` beside yours, replacing what an earlier setup put there; records them as ours in
- * <root>/claude-hooks.json, with the MCP `servers` setup writes into ~/.claude.json, which the caller writes both after.
+ * <root>/claude-hooks.json, with the MCP `servers` setup writes into ~/.claude.json (a host's record holds none), which
+ * the caller writes after.
  */
-export function withHooks(root: string, settings: Obj, groups: Record<string, Obj[]>, servers: Record<string, Obj>): Obj {
+export function withHooks(root: string, settings: Obj, groups: Record<string, Obj[]>, servers?: Record<string, Obj>): Obj {
   const before = installed(root);
   const ours = new Set([...(before ? commands(before) : []), ...commands({ hooks: groups })]);
-  const record: Installed = { hooks: groups, servers };
+  const record: Installed = { hooks: groups, ...(servers ? { servers } : {}) };
   writeJson(installedFile(root), record as unknown as Obj);
   return merged(settings, record, ours);
 }

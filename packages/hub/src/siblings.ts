@@ -138,6 +138,19 @@ export class Siblings {
   private readonly loops = new Map<string, { ask: string; pair: string[]; at: number }>();
   constructor(private readonly o: SiblingOptions) {}
 
+  /** The session's process went with no SessionEnd (#992): it works beside no other until a hook of its own says so. */
+  died(session: string): void {
+    const m = this.map.get(session);
+    if (m) m.ended = true;
+    this.pending.delete(session);
+  }
+  /** The core forgot the session (#1866): its place on the map, what it was handed and what waits for it go. */
+  forget(session: string): void {
+    for (const of of [this.map, this.pending, this.turns, this.loops]) of.delete(session);
+    for (const of of [this.delivered, this.exempt]) for (const key of of) if (key.split('\0').includes(session)) of.delete(key);
+    for (const [hook, r] of this.inReply) if (r.session === session) this.inReply.delete(hook);
+    for (const key of this.dry.keys()) if (![...this.map.values()].some((m) => m.head !== null && key.split('\0').includes(m.head))) this.dry.delete(key);
+  }
   /** The map and what was delivered, read back from the record at the hub's start; nothing is queued from them. */
   async restore(): Promise<void> {
     await this.restoreLoops();
@@ -251,7 +264,7 @@ export class Siblings {
       ? `Sessions ${names} started ${count} of ${short(meta.session)}'s turns with each other's messages in the last 10 minutes, with no prompt from you. Let them go on?`
       : `Session ${names} had ${count} turns started by another session's messages in the last 10 minutes, with no prompt from you. Let it go on?`;
     held.ask = await this.o.ask(meta.session, meta.agent, meta.cwd, 'session.loop', {
-      kind: 'exception', question,
+      kind: 'exception', may_answer: 'trusted_path', question,
       options: [{ id: 'go-on', label: 'Let them go on', decision: 'none' }, { id: 'hold', label: 'Hold them until I prompt them', decision: 'none' }],
       recommended: 'hold', default: 'hold', fallback: 'you', provisional: false, owner: 'you', key: `loop:${[...held.pair].sort().join(':')}:${held.at}`,
     });
@@ -561,7 +574,7 @@ export class Siblings {
     const pair = [other, m];
     const question = `Sessions ${pair.map((s) => `${s.id} (${s.agent})`).join(' and ')} both work on issue #${m.issue} in ${basename(dirname(m.common))}. Keep which?`;
     await this.o.ask(m.id, m.agent, m.cwd, 'issue.twice', {
-      kind: 'choice', question,
+      kind: 'choice', may_answer: 'verified_channel', question,
       options: [...pair.map((s, i) => ({ id: `keep-${i}`, label: `Keep ${short(s.id)} (${s.agent}), stop the other`, decision: 'none' })), { id: 'keep-both', label: 'Keep both', decision: 'none' }],
       recommended: 'keep-both', default: 'keep-both', fallback: 'you', provisional: false, owner: 'you',
       key: `issue.twice:${m.common}:${m.issue}`,

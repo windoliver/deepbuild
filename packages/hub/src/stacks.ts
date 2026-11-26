@@ -1,5 +1,5 @@
 // A worktree's stack (#331, #332): `deep env up` and `down`, deep_env, and the stack a check run needs, through
-// env-local, every process through the host. The per-session keys a stack leases through the kernel's table stay
+// the environment provider the hub selected (#2315), env-local's every process through the host. The per-session keys a stack leases through the kernel's table stay
 // with the session that leased them and end once every process recorded for the run is gone; a stack goes down with
 // the session that started it or whose keys it holds, once that session ends (#342), and with the hub.
 import { execFile } from 'node:child_process';
@@ -299,13 +299,17 @@ export class Stacks {
    * the keys its session leased through the table (#332) end once every process recorded for it is gone, citing those ends.
    */
   async takeDown(run: string): Promise<{ stopped: number[]; left: string[] }> {
+    // A run an extension's provider started is its own: its down is the whole of it, and a failed one keeps its keys (#2315).
+    const foreign = this.o.environment.foreign?.(run) ?? false;
+    let downed = false;
     try {
       await this.o.environment.down(run);
-      return await this.o.supervisor().cleanup(run);
+      downed = true;
+      return foreign ? { stopped: [], left: [] } : await this.o.supervisor().cleanup(run);
     } finally {
       this.runs.delete(run);
       this.starters.delete(run);
-      await this.giveBack(run).catch(() => undefined);
+      if (!foreign || downed) await this.giveBack(run).catch(() => undefined);
     }
   }
 
@@ -335,6 +339,8 @@ export class Stacks {
    * those; while one runs, or for a run whose start nothing recorded, the record decides, never a guess.
    */
   private async giveBack(run: string): Promise<void> {
+    // A provider's run the record never tracked keeps its keys until its own down succeeds (#2315).
+    if (this.o.environment.foreign?.(run)) return;
     const ids = this.taken.get(run) ?? [];
     if (!ids.length) return;
     const rows = await this.o.raw(`SELECT kind, id, json_extract(data, '$.pid') AS pid FROM events WHERE kind IN ('process.tracked', 'process.ended') AND json_extract(data, '$.run') = ?`, [run]) as { kind: string; id: string; pid: number }[];
@@ -425,7 +431,7 @@ export class Stacks {
     if (running && holder && owner && owner !== holder) return { status: 'BLOCKED', worktree, cause: `the stack in ${worktree} runs on leases ${(this.taken.get(running.run) ?? []).join(', ')} held by ${owned(owner)}, so it stays theirs; their deep env down, or yours from your own terminal, ends it` };
     // A stack whose keys an ended session leased starts again under its new holder, so no key outlives its session's use.
     const orphaned = running !== undefined && this.owners.has(running.run) && owner === undefined && this.owners.get(running.run) !== (holder ?? 'core');
-    if (running && !orphaned && (await this.o.supervisor().status(running.run)).state === 'running' && (await this.o.environment.healthy(running))) {
+    if (running && !orphaned && (this.o.environment.foreign?.(running.run) || (await this.o.supervisor().status(running.run)).state === 'running') && (await this.o.environment.healthy(running))) {
       return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
     }
     // Any other is taken down, and a new one started.

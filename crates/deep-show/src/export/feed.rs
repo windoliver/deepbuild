@@ -4,6 +4,10 @@
 //! 4444 and PNG get its BGRA8 bytes. A tool that takes no frame for 10 s stops the export, naming
 //! the frame. This is the build's own tools' wire (#518): each frame is answered before the next
 //! is sent, so the tool never holds more than one; a plug-in's tool speaks `program.rs`'s.
+//!
+//! Issue #231: a frame is sent without waiting for its answer, which is heard before the next
+//! frame goes, so the tool encodes a frame while the export draws the next; and a held frame is
+//! sent as a repeat, with no bytes: the tool encodes the frame it was last sent again.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,6 +36,11 @@ pub(crate) struct Part {
     /// ends that process before it asks the tool anything else.
     unfinished: Arc<AtomicBool>,
     done: bool,
+    /// #231: the frame the tool was sent and hasn't answered yet; the seconds the tool has said
+    /// it spent on the frames it answered, and how long handing it its frames took.
+    owed: Option<i64>,
+    busy: f64,
+    handoff: Duration,
 }
 
 impl Drop for Part {
@@ -71,6 +80,9 @@ impl Part {
             opened: None,
             unfinished,
             done: false,
+            owed: None,
+            busy: 0.0,
+            handoff: Duration::ZERO,
         })
     }
 
@@ -92,8 +104,24 @@ impl Part {
         }
     }
 
+    /// #231: the tool's answer to the frame it was last sent, heard once: it took the frame.
+    fn settle(&mut self, tool: &mut Helper) -> Result<(), Value> {
+        let Some(k) = self.owed.take() else {
+            return Ok(());
+        };
+        match tool.hear_within(WAIT) {
+            Some(r) if r["frame"] == json!(k) => {
+                self.busy += r["seconds"].as_f64().unwrap_or(0.0);
+                Ok(())
+            }
+            Some(r) => Err(json!({"code": "writer_failed", "frame": k, "reply": r,
+                "what": format!("the encode tool failed at frame {k}")})),
+            None => Err(stalled(k)),
+        }
+    }
+
     /// Hands frame `k` to the tool as `bytes`, its NV12 planes or its straight BGRA8 rows as
-    /// it was opened for; `key` asks for a key frame.
+    /// it was opened for; `key` asks for a key frame. The frame before it is answered first.
     pub(crate) fn push(
         &mut self,
         tool: &mut Helper,
@@ -101,21 +129,32 @@ impl Part {
         bytes: &[u8],
         key: bool,
     ) -> Result<(), Value> {
-        debug_assert_eq!(k, self.next);
-        self.ready(tool)?;
-        match tool.feed(
-            &json!({"frame": k, "bytes": bytes.len(), "key": key}),
+        self.send(
+            tool,
+            json!({"frame": k, "bytes": bytes.len(), "key": key}),
             bytes,
-            WAIT,
-        ) {
-            Some(r) if r["frame"] == json!(k) => {
-                self.next += 1;
-                Ok(())
-            }
-            Some(r) => Err(json!({"code": "writer_failed", "frame": k, "reply": r,
-                "what": format!("the encode tool failed at frame {k}")})),
-            None => Err(stalled(k)),
+        )
+    }
+
+    /// #231: hands frame `k` to the tool as the frame before it again, with no bytes.
+    pub(crate) fn repeat(&mut self, tool: &mut Helper, k: i64, key: bool) -> Result<(), Value> {
+        self.send(tool, json!({"frame": k, "repeat": true, "key": key}), &[])
+    }
+
+    fn send(&mut self, tool: &mut Helper, head: Value, bytes: &[u8]) -> Result<(), Value> {
+        let k = self.next;
+        debug_assert_eq!(head["frame"], json!(k));
+        self.ready(tool)?;
+        self.settle(tool)?;
+        let at = std::time::Instant::now();
+        let given = tool.give(&head, bytes, WAIT);
+        self.handoff += at.elapsed();
+        if !given {
+            return Err(stalled(k));
         }
+        self.owed = Some(k);
+        self.next += 1;
+        Ok(())
     }
 
     /// The part, once its last frame is in: the tool's reply.
@@ -125,10 +164,18 @@ impl Part {
                 "what": format!("the part ended at frame {} before its last frame {}", self.next, self.end - 1)}));
         }
         self.ready(tool)?;
+        self.settle(tool)?;
         // Answered or not, the tool is past this job: it waits for no more of its frames.
         self.done = true;
         match tool.feed(&json!({"end": true}), &[], FINISH) {
-            Some(r) if r.get("error").is_none() && r.get("refused").is_none() => Ok(r),
+            // #231: with the reply, the seconds the hand-off took and the tool said it encoded.
+            Some(mut r) if r.get("error").is_none() && r.get("refused").is_none() => {
+                if let Some(o) = r.as_object_mut() {
+                    let spent = json!([self.handoff.as_secs_f64(), self.busy]);
+                    o.insert("spent".into(), spent);
+                }
+                Ok(r)
+            }
             Some(r) => Err(json!({"code": "writer_failed", "frame": self.end - 1, "reply": r})),
             None => Err(stalled(self.end - 1)),
         }

@@ -13,14 +13,18 @@ type ChannelKind = 'device' | 'chat' | 'email' | 'text';
 /** A host you approved for a package's outside calls, with its quota. */
 export interface HostGrant { host: string; quota: { calls: number; per_ms: number } }
 
-/** A kit the install ran on what the package registers: the slot, the fill (a check kind's name), its verdict. */
-export interface KitRun { slot: string; fill: string; verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE' }
+/**
+ * A kit the install ran on what the package registers: the slot, the fill (a check kind's name), its verdict. For a
+ * panel (#3233) also the kit revision it was held to, and, once it was read at an earlier revision, what the current
+ * one would refuse in it, empty when nothing.
+ */
+export interface KitRun { slot: string; fill: string; verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE'; revision?: number; reading?: string }
 
 /** A view of a project's pack, as the app shows it while you're in the project (#67). */
 export interface ProjectView { name: string; extension: string; commands: { name: string; action: string }[] }
 
 /** A view of a package you installed, as the app mounts it (#1454): its panel's folder, its pages, and what panel@1 said of these bytes, if it ran. */
-export interface InstalledView extends ProjectView { version: string; folder: string; area: string; pages: { name: string; param: string; values?: string[] }[]; kit: KitRun['verdict'] | null }
+export interface InstalledView extends ProjectView { version: string; folder: string; area: string; pages: { name: string; param: string; values?: string[] }[]; kit: KitRun['verdict'] | null; /** The kit revision these bytes were held to, and what the current one would refuse in them (#3233); absent where the kit kept none. */ revision?: number; reading?: string }
 
 export interface Installed { id: string; version: string; folder: string; digest: string; builtBy: string | null; project: string | null; kits: KitRun[] }
 

@@ -138,6 +138,9 @@
         "append-20k"
       ],
       "margin": 0.5,
+      "criteria": [
+        "#3440.e9dfc29b"
+      ],
       "limits": {},
       "initialReason": "Issue #14 first measurement: the merge base has no record package. One process opens a record in a temp folder and appends 20,000 stream events fired 200 at a time, so p50 includes Node's start and the per-call limits (5,000 events a second, 2 ms p95) stay in tests/acceptance/14/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
@@ -149,6 +152,9 @@
         "replay-100k"
       ],
       "margin": 0.5,
+      "criteria": [
+        "#3440.e9dfc29b"
+      ],
       "limits": {},
       "initialReason": "Issue #14 first measurement: the merge base has no record package. One process appends a 100,000-event log, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the replay's own limits (60 s per million events, 100 MB of working memory) stay in tests/acceptance/14/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
@@ -274,7 +280,8 @@
       },
       "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
-        "#2646.0e7e5ac3"
+        "#2646.0e7e5ac3",
+        "#3548.4bf12cec"
       ]
     },
     {
@@ -1190,6 +1197,23 @@
       ]
     },
     {
+      "id": "canvas-water-sea",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "water-sea"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "sea_gpu_ms": 0.6
+      },
+      "initialReason": "Issue #3033 first measurement: the merge base has no sea on water and no such task. A release deep-gpu draws a 1 km x 1 km plate of 256 x 256 cells, seen by a level camera 12 m up and 60 m in from its near edge so the water fills the lower half of a 1080p frame, as a sea of 64 waves from a 10 m/s wind against the same plate with that wind's four waves, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time is what the sea adds. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#3033.49bf9e99"
+      ]
+    },
+    {
       "id": "canvas-atlas-draw",
       "command": [
         "node",
@@ -1555,6 +1579,16 @@
       "initialReason": "Issue #1425 first measurement: at the merge base a panel imports the toolkit itself and loads with no module check. One process loads each of the 12 panels in crates/deep-app/panels through `deep-panel-host run`, which runs the app's loader (the module check, then @deepbuild/panel written where gpui-shell resolves it), and updates each 20 times; p50 includes Node's and the binary's start. The issue's 4 ms per update and 1 ms the check may add to a load stay in tests/acceptance/1425/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "panel-rules-500",
+      "command": [
+        "node",
+        "benchmarks/panel-rules.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #3233 first measurement: at the merge base panel@1 has no rule on reading or reach, so the rules' time is new. One `deep-app panel-bench` run of a fresh panel host on a 500-node panel (249 rows, each a named press that takes focus, its text #595959 on the root's #ffffff) times the three rules on each of 100 updates' trees, in the app; p50 includes Node's and both binaries' start. The issue's 1 ms the rules may add to the check of a 500-node update stays in tests/acceptance/3233/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "media-soak",
       "command": [
         "node",
@@ -1627,7 +1661,8 @@
       "initialReason": "Issue #157 first measurement (#157.d2250c69): the merge base reads no delivery back. One `deep-show run` exports a 10 s 1920 × 1080 film at 60 fps (600 frames, a bar moving a pixel a frame) as H.264 with AAC, which now checks the delivery from its own bytes in a fresh decode worker and encodes the colour probe; it prints the receipt's fidelity.decode_seconds (at most 1.25 s, 8x real time) and color_probe.seconds (under 1 s), which tests/acceptance/157/budgets.test.ts judges on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#157.d2250c69",
-        "#518.b0585e2f"
+        "#518.b0585e2f",
+        "#231.f202d6a5"
       ]
     },
     {
@@ -2312,6 +2347,18 @@
       "limits": {},
       "initialReason": "Issue #3220 first measurement (#3220.c2610cec): the merge base keeps no run's peak and admits no run on one. One process opens a record and the supervisor, runs one sandboxed program that holds 64 MiB for 2 s so every scan of it keeps its peak and CPU, and reads what it used; then keeps 10,000 keys' clean peaks and decides 1,000 admissions of a key with three clean runs, printing the median time of one against the criterion's 1 ms. The process starts a scan makes stay in tests/acceptance/3220/ac9-budgets.test.ts, counted against the merge base's 2. Once main has this task, p50 and peak memory of the whole command get a 50% merge-base margin.",
       "criteria": ["#3220.c2610cec"]
+    },
+    {
+      "id": "canvas-nested-check",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "nested-check"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1857 first measurement (#1857.df51c34e): the merge base copies the document's items for each nested instance. One process checks a board of 4,999 rects and one instance whose step repeats a nested recipe 1,024 times through `deep-show run`, so p50 includes Node's and the binary's start; the criterion's own 1 s, read on the check's clock, stays in tests/acceptance/1857/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": ["#1857.df51c34e"]
     }
   ]
 }
