@@ -1609,3 +1609,9 @@ timed.push('tests/acceptance/2750/budgets.test.ts');
 // only; its blind redraft, which runs the merge base's program beside the checkout's, runs in its place.
 Object.assign(redrafted, { 'tests/acceptance/3461/once.test.ts': 'tests/acceptance/3461-redraft-once/' });
 byHand.push('tests/acceptance/3461/once.test.ts');
+
+// #2764's first draft tags its tests #2764.d93a7447, which is no criterion of the issue: its one criterion is
+// #2764.f88db370 (tests/acceptance/2764-redraft/DISPUTE.md). Kept as written, by hand only; its blind redraft, named
+// by the live criterion ID, runs in its place.
+Object.assign(redrafted, { 'tests/acceptance/2764/proceed-codex-subagent.test.ts': 'tests/acceptance/2764-redraft/' });
+byHand.push('tests/acceptance/2764/proceed-codex-subagent.test.ts');
