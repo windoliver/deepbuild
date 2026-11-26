@@ -58,6 +58,15 @@ base met that once, and the change's build has not yet:
 
 Two more timed grants, at 18:30 and 19:22, ran nothing: the machine did not read fit within the minutes each waited.
 
+**The owner's waiver (Nov 25, 2026).** In the session that opened PR #3561 the owner was told this timing still read
+INCONCLUSIVE on the change's build, and answered that where that is down to load it is waived. Two of the three
+readings are: load and heat right after two cold builds at 14:48, and a load above the cores at 15:54. The third, at
+16:56, was taken on battery at a load of 9.09: that is the machine's power, not its load, and all five runs passed
+there, as they did at 15:54. No run failed with the machine drained. So the issue closes on the allocation count and
+these readings, with no counted run of the timing on the change's build. The suite is unchanged, and its timing test
+still reads INCONCLUSIVE wherever the machine isn't fit. The waiver is written here and in the PR only: in no check,
+and in no list a lane reads.
+
 ## Making them again
 
 From the checkout's root, with both builds' binaries in two folders, on a Mac with ffmpeg:
