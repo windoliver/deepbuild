@@ -136,7 +136,7 @@ test('the check budget comes from budgets.json and excludes the perf comparison'
 
 // A check that hangs, as one did for hours on the Spark holding the machine's timed grant, is stopped with its
 // children once the checks pass the budget with its margin, perf's allowance for the same workload.
-test('hung checks are stopped at the budget with its margin, their children too', (t) => {
+test('hung checks are stopped at the budget with its margin, their children too', async (t) => {
   const cwd = entry(t, { limit: 4000, checks: `
     import { spawn } from 'node:child_process';
     import { writeFileSync } from 'node:fs';
@@ -158,7 +158,7 @@ test('hung checks are stopped at the budget with its margin, their children too'
   const result = spawnSync(process.execPath, [join(cwd, 'scripts/preflight.mjs')], { encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL' });
   if (existsSync(file)) pids = JSON.parse(readFileSync(file, 'utf8'));
   // deadline: a stopped process stays a zombie until its new parent reaps it; 10 s bounds that, never a wait for it.
-  for (const by = Date.now() + 10_000; pids.some(alive) && Date.now() < by;) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+  for (const by = Date.now() + 10_000; pids.some(alive) && Date.now() < by;) await new Promise((next) => setTimeout(next, 100));
   assert.equal(result.error, undefined, `preflight never ended: ${result.stdout}`);
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /FAIL preflight budget: the checks ran past 6\.00 s, the budget with its margin, and were stopped\n\s+Fix: .+/);
