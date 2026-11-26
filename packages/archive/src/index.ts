@@ -313,7 +313,7 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
     if (done.has(key)) return;
     const ts = now();
     await options.asks.raise({ ...options.connection, session, agent: source.agent }, ROTATE_SOURCE, {
-      kind: 'exception',
+      kind: 'exception', may_answer: 'trusted_path',
       question: `A key was pasted into this session's chat${uuid ? ` (message ${uuid})` : ''}, so the agent and its provider have seen it. Rotate it?`,
       options: [{ id: 'rotated', label: 'I rotated it', decision: 'none' }, { id: 'later', label: 'Not now', decision: 'none' }],
       recommended: 'rotated', deadline: ts + 2 * DAY, fallback: 'you', default: 'later', provisional: false, owner: options.connection.actor,

@@ -172,7 +172,7 @@ export class Box {
     const key = sha(JSON.stringify({ kind: 'box.change', proposal: id }));
     const changes = this.things(change).map((t) => t.file ?? t.thing);
     const ask = await this.o.raise('box.change', {
-      kind: 'authority', question, options: [{ id: 'apply', label: 'Apply it', decision: 'allow' }, { id: 'keep', label: 'Keep it as it is', decision: 'deny' }],
+      kind: 'authority', may_answer: 'trusted_path', question, options: [{ id: 'apply', label: 'Apply it', decision: 'allow' }, { id: 'keep', label: 'Keep it as it is', decision: 'deny' }],
       recommended: null, deadline: this.o.now() + WEEK, fallback: 'you', default: 'keep', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: key },
     }, { steps: [{ does: asked.does, changes: changes.length ? changes : ['the wiki'], undo: asked.undo, public: false, cost: 0 }], diff: sha(JSON.stringify(revisions)) });
     const p: Proposal = { id, words, created: this.o.now(), change, revisions, question, ask, status: 'proposed' };

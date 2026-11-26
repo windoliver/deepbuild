@@ -1,0 +1,12 @@
+{
+  "scripts/affected.mjs": [
+    {
+      "find": [
+        "        for (const [file, ms] of fileMs(job.cwd ?? root, report)) if (ms > 600_000) slowRan.push(`SLOW ${file} ran ${Math.round(ms / 60_000)} min: a file over ten minutes belongs on the slow list`);"
+      ],
+      "wrong": [
+        "        if (job.ms > 600_000) for (const file of files) slowRan.push(`SLOW ${file} ran ${Math.round(job.ms / 60_000)} min: a file over ten minutes belongs on the slow list`);"
+      ]
+    }
+  ]
+}

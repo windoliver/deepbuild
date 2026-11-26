@@ -1,0 +1,21 @@
+{
+  "scripts/affected.mjs": [
+    {
+      "find": [
+        "  const wait = String(Math.min(Number(process.env.DEEP_TEST_GRANT_WAIT ?? '30'), untilBound()));"
+      ],
+      "wrong": [
+        "  const wait = process.env.DEEP_TEST_GRANT_WAIT ?? '30';"
+      ]
+    },
+    {
+      "find": [
+        "  for (const signal of ['SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));"
+      ],
+      "wrong": [
+        "  for (const signal of ['SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));",
+        "  setTimeout(() => child.kill('SIGKILL'), Math.max(0, ends - Date.now())).unref();"
+      ]
+    }
+  ]
+}
