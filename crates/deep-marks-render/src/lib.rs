@@ -132,8 +132,8 @@ enum Request {
         look: Look,
         steps: Vec<Step>,
         store: Option<PathBuf>,
-        /// #417 AC2's wrong program: a look switch that empties every node cache.
-        switch_rebuilds: bool,
+        /// The wrong program asked for, by name: #417 AC2's look switch, or a #3467 decode worker.
+        planted: Option<&'static str>,
     },
     /// #854: the document held on screen on the real clock.
     Idle {
@@ -1337,16 +1337,15 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 .collect::<Option<Vec<_>>>()?;
             // The first step opens the session, so it carries the document.
             steps.first()?.doc.as_ref()?;
-            let switch_rebuilds = match input.get("planted") {
-                None => false,
-                Some(Value::String(p)) if p == "look_switch_rebuilds" => true,
-                Some(_) => return None,
+            let planted = match input.get("planted") {
+                None => None,
+                Some(p) => Some(asset::session_plant(p.as_str()?)?),
             };
             Request::Session {
                 look,
                 steps,
                 store: store(input.get("store"))?,
-                switch_rebuilds,
+                planted,
             }
         }
         "render" => {

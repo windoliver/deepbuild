@@ -320,7 +320,7 @@ export class Hosts {
       open = { answer, done };
       this.asking.set(host, open);
       open.ask = await this.o.raise('host.change', {
-        kind: 'authority', question: `Let DeepBuild start runs as you on ${host}, as user services under your user there?`,
+        kind: 'authority', may_answer: 'trusted_path', question: `Let DeepBuild start runs as you on ${host}, as user services under your user there?`,
         options: [{ id: 'allow', label: `Allow on ${host}`, decision: 'allow' }, { id: 'decline', label: "Don't", decision: 'deny' }],
         recommended: null, deadline: this.o.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: key },
       }, { steps: [{ does: `Start runs on ${host} as you: user services under your user, their files under ~/.deepbuild/runs there, never as root`, changes: [`${host}: user services deep-<run token>`], undo: `Stop them with systemctl --user stop on ${host}`, public: false, cost: 0 }], diff: key })
@@ -450,7 +450,7 @@ export class Hosts {
     await this.o.put(bytes, 'root-plan.script', `${host}:${script}`);
     const question = own?.question ?? `Run this root plan on ${host} as root? ${steps.length} step${steps.length === 1 ? '' : 's'}, from the script ${script} (sha256 ${locked.slice(0, 12)}); only you run it, with deep host run in your own terminal.`;
     const ask = await this.o.raise('host.root_plan', {
-      kind: 'authority', question,
+      kind: 'authority', may_answer: 'trusted_path', question,
       options: [{ id: 'approve', label: 'Run it as root', decision: 'allow' }, { id: 'decline', label: "Don't run it", decision: 'deny' }],
       recommended: null, deadline: this.o.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you',
       key: sha(`host.root_plan:${host}:${script}:${locked}`), pinned_to: { kind: 'evidence', ref: locked },
