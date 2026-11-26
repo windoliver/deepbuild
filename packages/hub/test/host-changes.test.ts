@@ -115,7 +115,7 @@ describe('what a claim on a host changed (#3511)', () => {
       const file = join(dir, 'tests/price_test.sh');
       const then = new Date(Date.now() - 3_600_000);
       utimesSync(file, then, then);
-      git('update-index', '--refresh');
+      git('add', 'tests/price_test.sh');
       writeFileSync(file, 'cOmpare\n');
       utimesSync(file, then, then);
     }],
