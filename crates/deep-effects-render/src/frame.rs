@@ -20,6 +20,9 @@ use crate::compile::{compile_with, Compiled};
 use crate::glow;
 use crate::reference::{target, upload, Camera};
 use crate::runner::{Bound, Runner, LINEAR};
+
+mod audit;
+pub use audit::{pass_ms, profiler};
 use deep_canvas_effects::graph::Tex;
 use deep_canvas_effects::interp::Image;
 
@@ -96,6 +99,9 @@ pub struct Settings {
     pub emits: Vec<Emit>,
     pub hazes: Vec<Haze>,
     pub checks: bool,
+    /// #2485: each particle's fragments counted, one a fragment, into the overdraw target in
+    /// place of their shade, for effects.audit's host path, which reads the most any px took.
+    pub overdraw: bool,
 }
 
 /// #508: a wave field's or an arc's emission pass: its item, its kind, its operator and its
@@ -198,6 +204,8 @@ pub struct Effects {
     /// #508: the color a check reads back this frame, copied where the document's operators
     /// read the chain (before any display-only pass), when the settings ask for it.
     checks: Option<([u32; 2], wgpu::Texture, wgpu::TextureView)>,
+    /// #2485: the fragments each px took from the particles, when the settings count them.
+    counts: Option<([u32; 2], wgpu::Texture, wgpu::TextureView)>,
     /// The device everything above was made on (#1993): its epoch.
     built_on: Option<u64>,
 }
@@ -207,6 +215,8 @@ struct SparkDraw {
     layout: wgpu::BindGroupLayout,
     /// #853: grains, each drawn over what is behind it in place of adding to it.
     grains: wgpu::RenderPipeline,
+    /// #2485: each fragment a particle shades adds one to the overdraw target.
+    count: wgpu::RenderPipeline,
     /// The half-resolution puffs' draw into their half-size target, and the filtered upsample
     /// adding that to the linear target, with its sampler (#1173).
     half: wgpu::RenderPipeline,
@@ -294,6 +304,7 @@ impl Effects {
             op_rows: Vec::new(),
             clouds: BTreeMap::new(),
             checks: None,
+            counts: None,
             built_on: None,
         }
     }
@@ -523,7 +534,8 @@ impl Effects {
         self.sparks = Some(SparkDraw {
             pipeline,
             layout,
-            grains: into("vs", "fs", tested, over),
+            grains: into("vs", "fs", tested.clone(), over),
+            count: into("vs", "count_fs", tested, additive),
             half: into("vs", "half_fs", None, additive),
             upsample: into("upsample_vs", "upsample_fs", None, additive),
             upsample_full: into("upsample_vs", "upsample_full_fs", None, additive),
@@ -553,8 +565,14 @@ impl Effects {
         let d = &device.device;
         let compute = self.runner(device, "particles.sparks@1");
         self.spark_draw(device);
+        // #2485: counted, its fragments go to the overdraw target, at full size and never halved.
+        let counting = self
+            .settings
+            .overdraw
+            .then(|| self.counts.as_ref().map(|c| c.2.clone()))
+            .flatten();
         // A half-resolution puff draws into a half-size target, filtered up into `target` (#1173).
-        let small = (s.half && !self.planted.block_copy).then(|| {
+        let small = (s.half && !self.planted.block_copy && counting.is_none()).then(|| {
             if self.half.as_ref().is_none_or(|(k, _)| *k != size) {
                 self.half = Some((size, make(device, size.map(|n| n.div_ceil(2)))));
             }
@@ -681,6 +699,7 @@ impl Effects {
         });
         // Grains (#853) draw through their own pipeline, bound by its own layout.
         let (pipeline, layout) = match s.draw {
+            _ if counting.is_some() => (draw.count.clone(), draw.count.get_bind_group_layout(0)),
             GRAINS => (draw.grains.clone(), draw.grains.get_bind_group_layout(0)),
             _ => (draw.pipeline.clone(), draw.layout.clone()),
         };
@@ -802,11 +821,12 @@ impl Effects {
                 });
                 return;
             }
+            let target = counting.as_ref().unwrap_or(&target);
             timed(&profiler, label, encoder, |e, ts| {
                 let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some(SPARKS),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &target,
+                        view: target,
                         resolve_target: None,
                         depth_slice: None,
                         ops: wgpu::Operations {
@@ -1129,6 +1149,9 @@ impl Post for Effects {
                 self.profiler.clone(),
             );
             jobs.push((crate::strokes::STROKES.into(), job));
+        }
+        if s.overdraw {
+            jobs.push((SPARKS.into(), self.counts_job(device, size)));
         }
         for sp in &s.sparks {
             let job = self.sparks_job(device, &camera, sp, cur.clone(), frame.depth.clone(), size);

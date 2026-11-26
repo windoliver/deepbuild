@@ -58,7 +58,7 @@ pub const SIDECAR_KEYS: [&str; 9] = [
     "inputs",
     "at_times",
 ];
-pub const CHECK_KEYS: [&str; 11] = [
+pub const CHECK_KEYS: [&str; 15] = [
     "kind",
     "probe",
     "at_times",
@@ -72,6 +72,11 @@ pub const CHECK_KEYS: [&str; 11] = [
     "instruments",
     // logic.tuning's catalog records by hash, which a verdict reads from the store (#194).
     "catalogs",
+    // effects.audit's limits, each reading judged against its own (#2485).
+    "count_peak",
+    "bounds",
+    "overdraw",
+    "gpu_ms",
 ];
 /// Where a fixture's expected value came from, when not from the implementation itself.
 pub const EXPECTED_FROM: [&str; 4] = ["analytic", "upstream", "issue", "second_implementation"];

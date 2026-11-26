@@ -43,12 +43,31 @@ const KIND_RULES: &str = "kind_rules";
 /// The verdicts a claim can get, worst first: the claim's is the worst of its requirements'.
 const WORST_FIRST: [&str; 5] = ["INVALID", "BLOCKED", "FAIL", "INCONCLUSIVE", "PASS"];
 
+/// #2485: a pixel check's report where its frames went undrawn (`why`): an error read from
+/// evaluated data fails it as on any machine, the unread pixels noted beside; else it is blocked.
+fn unread(
+    out: deep_canvas::registry::Report,
+    why: Value,
+    blocked: &mut Vec<Value>,
+    results: &mut Vec<Value>,
+) -> deep_canvas::registry::Report {
+    if out.raised.iter().any(|(_, r, _)| r.severity == "error") {
+        results.push(json!({"unread": why}));
+    } else {
+        blocked.push(why);
+    }
+    out
+}
+
 /// The items of a kind this build doesn't know among `notices`, by kind: the check's
-/// `unknown_kind` notices, less the kinds the build draws without a registry entry (`knows`).
-fn unknown_by_kind(notices: &[Notice], into: &mut BTreeMap<String, Vec<String>>) {
+/// `unknown_kind` notices, less the kinds the build draws without a registry entry (`knows`),
+/// and particles@1 where the check reads those items itself (`particles`).
+fn unknown_by_kind(notices: &[Notice], particles: bool, into: &mut BTreeMap<String, Vec<String>>) {
     for n in notices.iter().filter(|n| n.code == "unknown_kind") {
         let kind = n.actual.as_str().unwrap_or_default();
-        if knows(kind) {
+        // #2485: effects.audit reads particles@1 in a 3D frame, drawn through the effects' post
+        // stage (#1719); every other check, and a 2D frame, still skip it, so it still blocks.
+        if knows(kind) || (particles && kind == "particles@1") {
             continue;
         }
         let ids = into.entry(kind.to_string()).or_default();
@@ -64,7 +83,7 @@ fn unknown_by_kind(notices: &[Notice], into: &mut BTreeMap<String, Vec<String>>)
 /// which the check skipped (sorted).
 pub fn unknown_items(notices: &[Notice]) -> Vec<String> {
     let mut by_kind = BTreeMap::new();
-    unknown_by_kind(notices, &mut by_kind);
+    unknown_by_kind(notices, false, &mut by_kind);
     let mut ids: Vec<String> = by_kind.into_values().flatten().collect();
     ids.extend(missing_packs(notices).flat_map(|n| n.ids.iter().cloned()));
     ids.sort();
@@ -159,7 +178,7 @@ impl<'a> Hub<'a> {
             return rows;
         }
         let mut by_kind = BTreeMap::new();
-        unknown_by_kind(notices, &mut by_kind);
+        unknown_by_kind(notices, false, &mut by_kind);
         rows.extend(blocked_rows(by_kind));
         rows
     }
@@ -891,7 +910,10 @@ impl<'a> Hub<'a> {
             // it, as its show did (#200).
             let checked = check_packed(cur.doc, sealed, &self.packs);
             if !self.planted(Planted::ChecksSkipUnknownKind) {
-                unknown_by_kind(&checked.notices, &mut by_kind);
+                // #2485: effects.audit reads particles@1 items itself, where a 3D frame draws them.
+                let reads_particles =
+                    kind == deep_canvas_effects::audit::KIND && crate::probe::draws_3d(cur.doc);
+                unknown_by_kind(&checked.notices, reads_particles, &mut by_kind);
                 blocked.extend(missing_rows(&checked.notices));
             }
             // A document that requires a canvas module the build lacks is BLOCKED, never a
@@ -1006,6 +1028,14 @@ impl<'a> Hub<'a> {
                     };
                     // #457: the check's own time on the requirement, and its parts' times.
                     let started = std::time::Instant::now();
+                    // #2485: where its frames weren't drawn here, a pixel check that also reads
+                    // evaluated data still reads that, beside why its pixels went unread.
+                    let undrawn = || {
+                        check
+                            .report
+                            .map(|run| run(&checked.lowered, &input))
+                            .unwrap_or_default()
+                    };
                     // #1938: a pixel check runs on the frames drawn for it here, or not at all.
                     let out = match (check.frames, drawn.and_then(|d| d.get(doc))) {
                         (Some((draws, run)), Some(crate::pixels::Drawn::Frames(f, fp))) => {
@@ -1039,17 +1069,16 @@ impl<'a> Hub<'a> {
                         }
                         (Some(_), Some(crate::pixels::Drawn::Elsewhere(e))) => {
                             elsewhere.push(in_doc(e.clone()));
-                            Default::default()
+                            undrawn()
                         }
                         (Some(_), Some(crate::pixels::Drawn::Blocked(b))) => {
                             let mut b = in_doc(b.clone());
                             b["kind"] = json!(kind);
-                            blocked.push(b);
-                            Default::default()
+                            unread(undrawn(), b, &mut blocked, &mut results)
                         }
                         (Some(_), None) => {
-                            blocked.push(in_doc(json!({"code": "not_drawn", "kind": kind})));
-                            Default::default()
+                            let b = in_doc(json!({"code": "not_drawn", "kind": kind}));
+                            unread(undrawn(), b, &mut blocked, &mut results)
                         }
                         // #1164: a report reads the revision as played, its input track inlined.
                         (None, _) => check

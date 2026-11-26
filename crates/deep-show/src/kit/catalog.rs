@@ -235,7 +235,7 @@ fn raised_with(
             // #1938: a pixel check reads the fixture's frames, drawn here as a verdict draws
             // them; what it couldn't read is an error, never a pass.
             if let Some((draws, run)) = check.frames {
-                if let crate::pixels::Drawn::Frames(f, _) = hub.frames_of(doc, &[0], draws) {
+                if let crate::pixels::Drawn::Frames(f, _) = hub.frames_for(kind, doc, &[0], draws) {
                     let out = run(&result.lowered, &input, &f);
                     for (id, r, _) in out.raised {
                         issues.push(crate::verdict::raised_json(hub, kind, &module, &id, r));

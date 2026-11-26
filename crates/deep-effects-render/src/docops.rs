@@ -818,15 +818,8 @@ impl Rec {
     }
 }
 
-/// The item's seed: the hash of the document's seed and its ID (Operator input: `seed`).
-pub fn item_seed(doc_seed: u64, id: &str) -> u32 {
-    let mut h =
-        interp::hash1(doc_seed as u32) ^ interp::hash1((doc_seed >> 32) as u32 ^ 0x9e37_79b9);
-    for b in id.bytes() {
-        h = interp::hash1(h ^ u32::from(b));
-    }
-    h
-}
+/// The item's seed (Operator input: `seed`), as the effects crate's bake reads it (#2485).
+pub use deep_canvas_effects::particles::item::item_seed;
 
 fn block<F: std::future::Future>(f: F) -> F::Output {
     let waker = std::task::Waker::noop();

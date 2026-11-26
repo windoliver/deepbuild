@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "98a14b4f555fe81e842a3adc8aed19e0ff2da4d67abc7e16c9af41c9c333e0ed",
+    "digest": "a355f032b989aecb2669ebe245ade1e8f2907e6cf82de5c70998eea05ccb21d8",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -68,7 +68,7 @@
   },
   "effects": {
     "version": "1.0.0",
-    "digest": "47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b",
+    "digest": "e8287f21f48d9b9a3a5042dd85e31e14b0ee0923b670cb12f8f4aaaac259b7fa",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
