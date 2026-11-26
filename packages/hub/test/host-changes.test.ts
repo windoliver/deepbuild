@@ -1,7 +1,7 @@
 // What a claim on a host changed (#3511), with the SSH link as the boundary: the script host-sessions.ts sends is run
 // here by `sh -s` in a real repo, as the host's shell runs it there, and the gate runner judges the claim on its read.
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -84,37 +84,51 @@ describe('what a claim on a host changed (#3511)', () => {
   it('a read that fails there never reads as no change: the check counts as the agent\'s own, naming the read', async () => {
     const v = await claimed({ base: BASE, head: { 'price.txt': '17.00\n' }, broken: true });
     expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
-    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git diff --name-only --no-renames [0-9a-f]{40} exited \d+/));
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git ls-files --cached --others --exclude-standard exited \d+/));
   }, 60_000);
 
-  it('a file the index is told to assume unchanged, edited, never reads as no change', async () => {
-    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: (git) => { git('update-index', '--assume-unchanged', 'tests/price_test.sh'); writeFileSync(join(dirs.at(-1)!, 'tests/price_test.sh'), 'nothing\n'); } });
-    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
-    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git compares 1 file with nothing \(tests\/price_test\.sh\)/));
-  }, 60_000);
-
-  it('a test file the index is told to skip, edited, never reads as no change', async () => {
-    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: (git) => { git('update-index', '--skip-worktree', 'tests/price_test.sh'); writeFileSync(join(dirs.at(-1)!, 'tests/price_test.sh'), 'nothing\n'); } });
-    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git compares 1 file with nothing \(tests\/price_test\.sh\)/));
-  }, 60_000);
-
-  it('a base replaced, in the folder\'s own git, by a commit that holds the edited test file still lists the file', async () => {
-    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n', 'tests/price_test.sh': 'nothing\n' }, there: (git) => {
+  // Each a way the folder's own git could take an edited test file for the base's: the read compares bytes, so none does.
+  const GUTTED = '[ "$(cat price.txt)" = 17.00 ] || exit 2\n';
+  const hides: [string, (git: (...args: string[]) => string, dir: string) => void][] = [
+    ['the index told to assume it unchanged', (git, dir) => { git('update-index', '--assume-unchanged', 'tests/price_test.sh'); writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED); }],
+    ['the index told to skip it', (git, dir) => { git('update-index', '--skip-worktree', 'tests/price_test.sh'); writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED); }],
+    ['the base replaced by a commit that holds the edit', (git, dir) => {
       const base = git('rev-parse', 'HEAD');
+      writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED);
       git('add', '-A');
       const edited = git('commit-tree', git('write-tree'), '-m', 'edited');
       git('reset', '-q');
       git('replace', base, edited);
-    } });
-    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/price_test\.sh,/));
+    }],
+    ['a clean filter that gives back the base\'s bytes', (git, dir) => {
+      writeFileSync(join(dir, '.git', 'info', 'attributes'), 'tests/price_test.sh filter=x\n');
+      git('config', 'filter.x.clean', `git cat-file blob ${git('rev-parse', 'HEAD')}:tests/price_test.sh`);
+      writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED);
+    }],
+    ['a working-tree encoding that reads the edit as the base\'s text', (_git, dir) => {
+      writeFileSync(join(dir, '.git', 'info', 'attributes'), 'tests/price_test.sh working-tree-encoding=UTF-7\n');
+      writeFileSync(join(dir, 'tests/price_test.sh'), 'c+AG8-mpare\n');
+    }],
+    ['an edit of the same size with its file times put back, ctime not trusted', (git, dir) => {
+      // An hour back, with the index written after it, so git takes the entry's times for the file's and reads no bytes.
+      git('config', 'core.trustctime', 'false');
+      const file = join(dir, 'tests/price_test.sh');
+      const then = new Date(Date.now() - 3_600_000);
+      utimesSync(file, then, then);
+      git('update-index', '--refresh');
+      writeFileSync(file, 'cOmpare\n');
+      utimesSync(file, then, then);
+    }],
+  ];
+  it.each(hides)('an edited test file is named though the folder\'s git is set to hide it: %s', async (_how, hide) => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: (git) => hide(git, dirs.at(-1)!) });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/price_test\.sh, which it may load/));
   }, 60_000);
 
-  it('a test file git reads through a filter program never reads as unchanged', async () => {
-    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n', 'tests/price_test.sh': 'nothing\n' }, there: (git) => {
-      writeFileSync(join(dirs.at(-1)!, '.git', 'info', 'attributes'), 'tests/price_test.sh filter=x\n');
-      git('config', 'filter.x.clean', `git cat-file blob ${git('rev-parse', 'HEAD')}:tests/price_test.sh`);
-    } });
-    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git reads 1 tracked file\(s\) through a filter program \(tests\/price_test\.sh\)/));
+  it('a folder whose git takes another folder for its work tree is no change set: nothing is known of it', async () => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: (git) => { const decoy = mkdtempSync(join(tmpdir(), 'host-changes-decoy-')); dirs.push(decoy); git('config', 'core.worktree', decoy); } });
+    expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git there takes .* for the work tree, not the folder/));
   }, 60_000);
 
   it('a changed test file whose name git still quotes is no change set: nothing is known of it', async () => {
