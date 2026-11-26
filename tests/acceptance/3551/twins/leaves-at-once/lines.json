@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    if (since >= overdue) return { wait: HOLD, waited };"
+      ],
+      "wrong": [
+        "    if (!held.length && since >= overdue) return { wait: HOLD, waited };"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    if (!held.length && since >= apart) return { wait: 60, waited };"
+      ],
+      "wrong": []
+    }
+  ]
+}
