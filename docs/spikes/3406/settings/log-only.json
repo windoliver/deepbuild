@@ -1,0 +1,317 @@
+{
+ "env": {
+  "DISABLE_AUTOUPDATER": "1"
+ },
+ "hooks": {
+  "PreToolUse": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "PostToolUse": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "PostToolUseFailure": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "PostToolBatch": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "Notification": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "UserPromptSubmit": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "UserPromptExpansion": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "SessionStart": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "SessionEnd": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "Stop": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "StopFailure": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "SubagentStart": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "SubagentStop": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "PreCompact": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "PostCompact": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "PreModelSwitch": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "PostModelSwitch": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "PermissionRequest": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "PermissionDenied": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "Setup": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "TeammateIdle": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "TaskCreated": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "TaskCompleted": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "Elicitation": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "ElicitationResult": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "ConfigChange": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "InstructionsLoaded": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "CwdChanged": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "FileChanged": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "DirectoryAdded": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ],
+  "MessageDisplay": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "'/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node' '~/dev/worktrees/doneright/issue-3406-work/docs/spikes/3406/hooks/hook.mjs' 'log'"
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -34,6 +34,8 @@ const seq = (ms) => (BigInt(ms) * 1_000_000n + BigInt(++sequenced % 1_000_000)).
 const hooked = (session) => ({ writer: 'hook', actor: 'you', scope: 'you', session, agent: 'claude-code' });
 const core = (session) => ({ writer: 'core', actor: 'you', scope: 'you', session, agent: 'claude-code' });
 const taste = askSources().find((row) => row.kind === 'taste');
+/** The version each side's record takes its taste row's fixture ask at: @6 once the fixture declares what may answer it (#1581), @5 before. */
+const ASK_V = 'may_answer' in taste.fixture.ask ? 6 : 5;
 /** The taste row's fixture ask, made distinct by `n`, open until `deadline`. */
 function ask(n, deadline) {
   const { deadline: _deadline, default: _default, ...data } = structuredClone(taste.fixture.ask);
@@ -85,7 +87,7 @@ const actions = {
       const session = ulid(at), pending = [start(record, session, at)];
       clock.now = at;
       for (let k = 0; k < Math.floor(tools / 299) + (s < tools % 299 ? 1 : 0); k++) pending.push(tool(record, session, ++at, k));
-      for (let a = 0; a < (s < 250 ? 4 : 0); a++) pending.push(record.append(core(session), { v: 5, id: ulid(++at), kind: 'ask.created', ts: at, data: ask(++asked, deadline) }));
+      for (let a = 0; a < (s < 250 ? 4 : 0); a++) pending.push(record.append(core(session), { v: ASK_V, id: ulid(++at), kind: 'ask.created', ts: at, data: ask(++asked, deadline) }));
       pending.push(record.append(hooked(session), { v: 1, id: ulid(++at), kind: 'session.end', ts: at, data: { reason: 'exit' } }));
       await Promise.all(pending);
       at += 1000;
@@ -96,7 +98,7 @@ const actions = {
     let pending = [start(record, live, at)];
     for (let a = 0; a < 3; a++) {
       asks.push(ulid(++at));
-      pending.push(record.append(core(live), { v: 5, id: asks[a], kind: 'ask.created', ts: at, data: ask(++asked, deadline) }));
+      pending.push(record.append(core(live), { v: ASK_V, id: asks[a], kind: 'ask.created', ts: at, data: ask(++asked, deadline) }));
     }
     for (let k = 0; k < 20_000 - 4; k++) {
       pending.push(tool(record, live, ++at, k));
@@ -161,7 +163,7 @@ const actions = {
     // One ask the newest session raised after its last tool call: #16's history holds none.
     const at = last.at + 1000, id = ulid(at);
     clock.now = at;
-    await record.append(core(last.session), { v: 5, id, kind: 'ask.created', ts: at, data: ask(1, T + 30 * DAY) });
+    await record.append(core(last.session), { v: ASK_V, id, kind: 'ask.created', ts: at, data: ask(1, T + 30 * DAY) });
     const kinds = Object.fromEntries((await record.raw('SELECT kind, count(*) AS n FROM events GROUP BY kind')).map((row) => [row.kind, Number(row.n)]));
     const out = { ask: id, session: last.session, kinds, head: await count(record, 'SELECT max(log_pos) AS n FROM events') };
     await record.close();

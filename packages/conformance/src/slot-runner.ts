@@ -131,7 +131,7 @@ export function slotKitProblems<F extends SlotFill>(kit: SlotKit<F>): Problem[] 
       const result = runCaseSync(impl.judge, p.fill, c, '');
       if (result.outcome !== 'PASS') { first = result; break; }
     }
-    if (!first) { problem('planted proof', p.name, `planted fill ${p.name} passes every case of the fixed part; the kit admits it`); continue; }
+    if (!first) { problem('planted proof', p.name, `planted fill ${p.name} passes every case of the fixed part; the kit admits it, and nothing holds rule ${p.breaks}`); continue; }
     if (first.outcome !== 'FAIL' || !p.message || !first.message.includes(p.message)) {
       const other = kit.planted.find((q) => q !== p && q.message && first!.message.includes(q.message));
       problem('planted proof', p.name, `planted fill ${p.name} is first refused on ${first.id} as ${first.outcome} "${first.message}"${other ? `, planted fill ${other.name}'s finding,` : ''} not with its own message "${p.message}"`);

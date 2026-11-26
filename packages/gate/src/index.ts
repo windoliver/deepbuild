@@ -5,7 +5,7 @@
 // (#30); and a definition's price and the stalled-claim rule (#325). The core never imports an extension.
 export { claimsFor } from './claims.js';
 export type { ClaimIntake, ClaimSource, MadeClaim, OpenAsk } from './claims.js';
-export { floor, lockDefinition, recomputeHash, validityGate } from './floor.js';
+export { floor, lockDefinition, recomputeHash, validityGate, validityReads } from './floor.js';
 export type { DefinitionParts, Finding, FloorInput, FloorResult, Lock, SessionLog, SessionRun, ValidityInput } from './floor.js';
 export { blanked, maskIn, segmentsOf, wordsOf } from './mask.js';
 export { checkSource, ownChanges, ownRead, runnerConfig, type ChangesPlant } from './own.js';

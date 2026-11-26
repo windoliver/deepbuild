@@ -1,0 +1,22 @@
+[package]
+name = "spike-3444"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Spike #3444: a headless probe on a device of its own, never the app's, that asks the pinned wgpu
+# (=30.0.1) on Metal for one timestamp query set after another and reports what the device did
+# with each: created, refused with the device kept, or lost. Outside the workspace, with its own
+# Cargo.lock, so nothing it pins reaches the app.
+[workspace]
+
+[dependencies]
+wgpu = { version = "=30.0.1", default-features = false, features = ["std", "metal", "parking_lot", "counters"] }
+pollster = "0.4"
+serde_json = { version = "1", features = ["preserve_order"] }
+log = "0.4"
+
+[profile.release]
+debug = false
+strip = "none"
