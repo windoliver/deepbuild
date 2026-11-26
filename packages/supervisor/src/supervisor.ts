@@ -43,7 +43,7 @@ const REPORTS_BY_ANOTHER = `process == "deepbuild-elsewhere" AND ${REPORTS}`;
 const DRAIN_MS = 1000;
 /** How often a key out of its pool has its cleanup check run again. */
 const RECHECK_MS = 60_000;
-/** The ask.sources@1 row the supervisor raises its unblock asks from. */
+/** The ask.sources@2 row the supervisor raises its unblock asks from. */
 const UNBLOCK_SOURCE = 'supervisor.cleanup';
 const RUN = /^run:[0-9A-Za-z]+$/;
 const MIB = 1024 * 1024;
@@ -734,7 +734,7 @@ class LocalSupervisor implements Supervisor {
     // The first open ask reads the record from here on: what came before can't answer it.
     if (!this.asked.size) this.cursor = await this.head();
     const handle = await this.options.asks.raise(CORE, UNBLOCK_SOURCE, {
-      kind: 'unblock',
+      kind: 'unblock', may_answer: 'verified_channel',
       question: `${key.dirty.run}'s cleanup couldn't release ${name}. Release it yourself?`,
       options: [{ id: 'done', label: 'I did it', decision: 'none' }, { id: 'retire', label: `Take ${name} out of its pool`, decision: 'none' }],
       recommended: 'done', deadline: now + this.options.settings.asks.unblock.deadline_ms, fallback: 'you', default: 'retire', provisional: false,

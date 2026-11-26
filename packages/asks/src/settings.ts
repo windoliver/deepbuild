@@ -1,5 +1,5 @@
 // What the asks core reads from files: your ask settings in config.json, which setup drafts, a repo's done.yaml asks
-// block, and the ask.sources@1 table beside the package.
+// block, and the ask.sources@2 table beside the package.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JsonValue } from '@deepbuild/contracts';
@@ -130,6 +130,6 @@ function yamlScalar(text: string, unread: () => Error, nested = false): JsonValu
 }
 
 let sources: AskSource[] | undefined;
-/** The ask.sources@1 table, as data beside the package. */
+/** The ask.sources@2 table, as data beside the package. */
 export const askSources = (): AskSource[] =>
   structuredClone((sources ??= JSON.parse(readFileSync(new URL('../sources.json', import.meta.url), 'utf8')) as AskSource[]));

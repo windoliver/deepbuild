@@ -1,0 +1,13 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "      unlisted = error.message;"
+      ],
+      "wrong": [
+        "      // Planted: a thread listing that can't be made is written as zeros, with no threadsUnread.",
+        "      threads = new Map();"
+      ]
+    }
+  ]
+}

@@ -241,7 +241,7 @@ export class Starts {
       ...(params.lands === 'workspace' ? ["Each task's change finishes on the workspace's own main, only on its own PASS; no forge is read or written."] : []),
     ].join(' ');
     const ask = await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you' }, 'start.approve', {
-      kind: 'authority', question: question.slice(0, 2000),
+      kind: 'authority', may_answer: 'trusted_path', question: question.slice(0, 2000),
       options: [{ id: 'allow', label: 'Approve this run', decision: 'allow' }, { id: 'deny', label: "Don't", decision: 'deny' }],
       recommended: null, deadline: now + DAY, fallback: 'you', default: 'deny', provisional: false, owner: 'you',
       key, pinned_to: { kind: 'evidence', ref: key },

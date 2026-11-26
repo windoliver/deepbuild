@@ -14,6 +14,7 @@ import { expect, type TestContext } from 'vitest';
 import { validate } from '../../../packages/contracts/src/index.ts';
 import { openRecord } from '../../../packages/record/src/index.ts';
 import { askSources, openAsks, type AskKind } from '../../../packages/asks/src/index.ts';
+import { withDeclared } from '../declared.ts';
 
 export const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 const AGENT = fileURLToPath(new URL('./fixtures/agent.mjs', import.meta.url));
@@ -150,7 +151,7 @@ export async function seedPastAsk(home: string, worktree: string, question: stri
   mkdirSync(rootOf(home), { recursive: true, mode: 0o700 });
   const now = Date.now();
   const record = await openRecord({ path: join(rootOf(home), 'ledger.db'), now: () => now });
-  const asks = await openAsks({ record, now: () => now, deliver: () => undefined });
+  const asks = withDeclared(await openAsks({ record, now: () => now, deliver: () => undefined }));
   const session = 'S0past';
   try {
     await record.append({ writer: 'hook', ...who, session, project: PROJECT, agent: 'claude-code' }, { v: 1, id: ulid(now), kind: 'session.start', ts: now, data: { agent: 'claude-code', worktree, branch: 'main', thread: session } });

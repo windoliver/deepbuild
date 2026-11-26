@@ -6,6 +6,7 @@ import type { AdapterCaps } from '../../../packages/adapters/src/index.ts';
 import type { Delivery } from '../../../packages/asks/src/index.ts';
 import type { ExtensionHost } from '../../../packages/extension-host/src/index.ts';
 import { approve, authorityAsk, contracts, hookLine, pkg, raise, readSeen, seenFile, type Seen, type World } from './helpers.ts';
+import { declared } from '../declared.ts';
 
 export const ALL_HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionEnd'];
 /** The hooks an adapter that only relays maps: what it observes, never a gate (a PreToolUse or a Stop deep-hook holds). */
@@ -37,7 +38,7 @@ export async function hooks(h: ExtensionHost, agent: string, session: string, ..
 
 /** An answer for the session: an authority ask raised for it and approved by you; the Delivery the asks core handed out. */
 export async function answerFor(w: World, session: string, question = 'Push feature/login to origin?'): Promise<Delivery> {
-  const ask = await raise(w, session, 'effect.push', authorityAsk({ question }));
+  const ask = await raise(w, session, 'effect.push', declared('effect.push', authorityAsk({ question })));
   await approve(w, ask);
   const delivery = w.deliveries.find((d) => d.ask === ask);
   expect(delivery, `the asks core handed out the answer to ${ask}`).toBeDefined();

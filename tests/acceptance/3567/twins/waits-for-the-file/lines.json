@@ -1,0 +1,10 @@
+{
+  "scripts/affected.mjs": [
+    {
+      "find": [
+        "    for (const stop of stoppers) stop();"
+      ],
+      "wrong": []
+    }
+  ]
+}

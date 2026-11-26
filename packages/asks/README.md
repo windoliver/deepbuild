@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The asks core (#318): an ask is raised only from a place in ask.sources@1, holds to ask.created, and ends answered on the trusted path, superseded, moot or defaulted at its deadline. It also decides when an ask shows (#319), gates resolvers (#349) and keys decisions by kind and scope (#23). The budget, buying, supervisor, runner, resolver-decisions, extension host, archive, routing replay and hub raise and answer asks through it.
+The asks core (#318): an ask is raised only from a place in ask.sources@2, holds to ask.created, where it declares what may answer it (#1581), and ends answered on the trusted path or, when it declared so, on a channel you verified, superseded, moot or defaulted at its deadline. It also decides when an ask shows (#319), gates resolvers (#349) and keys decisions by kind and scope (#23). The budget, buying, supervisor, runner, resolver-decisions, extension host, archive, routing replay and hub raise and answer asks through it.
 
 ## Where new code goes
 
@@ -11,7 +11,7 @@ The asks core (#318): an ask is raised only from a place in ask.sources@1, holds
 - `src/showing.ts`: showing, folding, shared cards and batch rules, with the record-derived batch indexes. Its options are ask lookup, open asks, thread's open asks, clock, schedule and batch append. Appending each identity's batch precedes the next log read, as before.
 - `src/decision-keys.ts`: structured keys, scopes, bounds, suggestions and target-origin exclusions. Its options are session lookup, decisions by key and near key, and the plant.
 - `src/model.ts`: shared data and public types, reexported by `index.ts`; no seam imports the entry, even for types.
-- `sources.json`: the ask.sources@1 table. A new place that raises asks gets a row here, with its kind and a fixture, or it can't raise one.
+- `sources.json`: the ask.sources@2 table. A new place that raises asks gets a row here, with its kind and a fixture, an ask as the place raises it, declaring what may answer it, or it can't raise one.
 - Tests: `test/` for rules beyond the acceptance suites in `tests/acceptance/318/` and `tests/acceptance/319/`.
 
 ## What it may import
@@ -20,4 +20,4 @@ Core layer. It reaches `@deepbuild/contracts` and `@deepbuild/record` through th
 
 ## Deviations
 
-- `sources.json`: the ask.sources@1 table kept as data beside the package and read at runtime by `askSources()`, not code in `src/`.
+- `sources.json`: the ask.sources@2 table kept as data beside the package and read at runtime by `askSources()`, not code in `src/`.

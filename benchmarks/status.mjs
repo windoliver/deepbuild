@@ -46,7 +46,7 @@ for (let n = 0; n < 30; n++) {
   const session = `live-${n}`;
   const project = ['orchard', 'quarry', 'tundra'][n % 3];
   await turn(session, project, END - 3_600_000 + n * 1000, n < 3 ? undefined : n < 6 ? { outcome: 'failed', cause: 'rate_limited', owner: 'service' } : undefined);
-  if (n < 3) await record.append({ writer: 'core', actor: 'you', scope: 'you', session, project }, { v: 4, id: ulidAt(END - 600_000 + n), kind: 'ask.created', ts: END - 600_000 + n, data: { ...structuredClone(taste), question: `Which header for ${session}?`, deadline: END + DAY } });
+  if (n < 3) await record.append({ writer: 'core', actor: 'you', scope: 'you', session, project }, { v: 6, id: ulidAt(END - 600_000 + n), kind: 'ask.created', ts: END - 600_000 + n, data: { ...structuredClone(taste), question: `Which header for ${session}?`, deadline: END + DAY } });
   if (n < 6) attention.push(session.slice(0, 8));
 }
 await record.close();

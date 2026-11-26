@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: players.test.ts judges 150 frames a second on the real clock and forward.test.ts holds a window on it for 10 s; every file draws on the GPU and decodes on the hardware decoder, and a file run without DEEP_BIN_DIR builds its binary with cargo" }
