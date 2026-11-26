@@ -93,6 +93,7 @@ A Codex turn that no prompt started, such as a goal's continuation, opens with a
 | codex `interrupt` | a SIGINT to `codex exec` while a shell call runs, on a scripted model: Interrupt in place of Stop (#3136) |
 | claude-code 2.1.299 `desktop-resume` | the desktop app quit mid-call and reopened: SessionEnd, SessionStart from `resume`, and its resume prompt; also another session's message |
 | codex 0.160.0 `desktop-heartbeat` | Codex Desktop (the ChatGPT app's Codex, 0.160.0): a heartbeat set up on a thread, its run as a `<heartbeat>` prompt, and its removal |
+| claude-code 2.1.308 `inbox-post` | three posts to one idle session's own inbox from the #3406 spike's throwaway hook (`docs/spikes/3406/`): the line alone, the line with a sender name and a message ID, and the auth line first from a process its hook left behind. Each starts a turn whose entry has `turnOrigin` `peer`, which today's facts read as `session` |
 
 The subagent, resume, compact and crash sessions are also the usage-counting fixtures: their transcripts carry each turn's usage as the agent wrote it.
 
@@ -107,6 +108,7 @@ Codex versions: the `subagent`, `compact` and `interrupt` sets (#3136) ran each 
 | `loop-iteration` | a Claude Code `/loop` iteration's UserPromptSubmit |
 | `subagent-report` | a background subagent's report as a UserPromptSubmit |
 | `other-session-message` | another session's message as a UserPromptSubmit |
+| `inbox-post` | a line posted to a session's own inbox, by a script and not by another session, as a UserPromptSubmit |
 | `desktop-resume-prompt` | the Claude desktop app's resume prompt as a UserPromptSubmit |
 | `goal-continuation` | the first hook of a Codex goal's continuation turn |
 | `heartbeat` | a Codex heartbeat's prompt, a UserPromptSubmit opening with `<heartbeat>` |

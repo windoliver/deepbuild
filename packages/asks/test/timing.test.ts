@@ -27,7 +27,7 @@ const OPTIONS: Record<string, Obj[]> = {
 const RECOMMENDED: Record<string, string> = { taste: 'green', authority: 'push', unblock: 'done' };
 /** An ask with its deadline and, where your settings name it, its default left to your settings. */
 const ask = (kind: AskKind, subject: string, over: Obj = {}): Obj => ({
-  kind, question: `Which way for ${subject}?`, options: structuredClone(OPTIONS[kind]!), recommended: RECOMMENDED[kind]!,
+  kind, may_answer: ['authority', 'exception', 'definition'].includes(kind) ? 'trusted_path' : 'verified_channel', question: `Which way for ${subject}?`, options: structuredClone(OPTIONS[kind]!), recommended: RECOMMENDED[kind]!,
   fallback: 'you', provisional: false, owner: 'you', key: sha(`${kind}:${subject}`), pinned_to: { kind: 'evidence', ref: sha(subject) },
   ...(kind === 'unblock' ? { default: 'wait', steps: ['Run gh auth login'], where: 'your terminal', why: 'the push needs a token', unblocks: ['task:01K74FX2B4D6F8H0K2M4P6R8T0'], proves: 'auth.unit' } : {}),
   ...over,
@@ -308,7 +308,7 @@ describe('the hub stopped and started', () => {
     await start('S1');
     // Filed while the hub is down: nothing has shown it.
     const raised = id(now);
-    await record.append(core('S1'), { v: 1, id: raised, kind: 'ask.created', ts: now, data: ask('taste', 'header', { deadline: T0 + 6 * HOUR, default: 'green' }) });
+    await record.append(core('S1'), { v: 6, id: raised, kind: 'ask.created', ts: now, data: ask('taste', 'header', { deadline: T0 + 6 * HOUR, default: 'green' }) });
     const h = `ask:${raised}`;
     await record.close();
     // The hub starts a day later on a clock that moves between reads.
@@ -374,7 +374,7 @@ describe('an ask past its deadline', () => {
   it('first shown by one call defaults no sooner than its minimum notice after, not on the next call (#908)', async () => {
     await start('S1');
     const raised = id(now);
-    await record.append(core('S1'), { v: 1, id: raised, kind: 'ask.created', ts: now, data: ask('taste', 'header', { deadline: T0 + HOUR, default: 'green' }) });
+    await record.append(core('S1'), { v: 6, id: raised, kind: 'ask.created', ts: now, data: ask('taste', 'header', { deadline: T0 + HOUR, default: 'green' }) });
     const h = `ask:${raised}`;
     now = T0 + 2 * HOUR;
     await asks.tick();

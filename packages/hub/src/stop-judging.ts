@@ -244,7 +244,7 @@ export class StopJudging {
     const question = `${d.task_ref}'s definition locked with ${n} paid check${n === 1 ? '' : 's'}: ${listed}, ${total} in all. Approve a budget of ${total} for ${n === 1 ? 'its run' : `their ${n} runs`} until ${until}?`;
     const key = sha256Hex(canonicalize({ kind: 'budget.issue', task_ref: d.task_ref, budget } as unknown as JsonValue));
     await this.options.services.asks.raise(this.options.events.connection('core', { session: d.session, agent: d.agent }), 'budget.issue', {
-      action: { kind: 'budget.issue', ...budget }, kind: 'authority', question, options: [{ id: 'approve', label: `Approve ${total}`, decision: 'allow' }, { id: 'decline', label: "Don't fund them", decision: 'deny' }],
+      action: { kind: 'budget.issue', ...budget }, kind: 'authority', may_answer: 'trusted_path', question, options: [{ id: 'approve', label: `Approve ${total}`, decision: 'allow' }, { id: 'decline', label: "Don't fund them", decision: 'deny' }],
       recommended: null, deadline: this.options.services.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: key },
     }, { steps: [{ does: `Approve a budget of ${total} for ${d.task_ref}: ${listed}, until ${until}`, changes: [d.task_ref], undo: null, public: false, cost: pricing.total_usd }], diff: key });
   }
@@ -391,7 +391,7 @@ export class StopJudging {
     const agent = this.options.state().live.get(session)?.agent ?? 'claude-code';
     const question = `The change for #${issue} ships behind ${w.name}, which is ${w.state === 'off' ? 'off' : 'unset'} where it's deployed (${deployed}). Does it stay off for now? Then the pull request may say Closes, with a follow-up to turn ${w.name} on.`;
     return this.options.services.asks.raise(this.options.events.connection('core', { session, agent }), 'switch.off', {
-      action: { kind: 'switch.off', repo, name: w.name, deployed, task, issue }, kind: 'exception', question,
+      action: { kind: 'switch.off', repo, name: w.name, deployed, task, issue }, kind: 'exception', may_answer: 'trusted_path', question,
       options: [{ id: 'stay-off', label: `${w.name} stays off: close it with a follow-up to turn it on`, decision: 'none' }, { id: 'not-yet', label: "Keep the pull request at Part of until it's on", decision: 'none' }],
       recommended: 'stay-off', deadline: this.options.services.now() + 2 * DAY, fallback: 'you', default: 'not-yet', provisional: false, owner: 'you',
       key: sha256Hex(canonicalize({ kind: 'switch.off', repo, name: w.name })), pinned_to: await this.options.mcp().pinOf(cwd, question),
@@ -632,7 +632,7 @@ export class StopJudging {
     const named = left.length ? left.map((r) => `${r.id} ("${r.text}")`).join(', ') : 'its open items';
     const question = `The claim on ${task} stalled: ${rule} and no new passing evidence, with ${named} still open, so DeepBuild stopped sending the agent back. Split the issue (what's proven closes now, and the rest moves to a new issue with what each item needs), fund the live runs it needs, or accept what's proven?`;
     const ask = await this.options.services.asks.raise(core, 'claim.stalled', {
-      action: { kind: 'claim.stalled', task }, kind: 'exception', question,
+      action: { kind: 'claim.stalled', task }, kind: 'exception', may_answer: 'trusted_path', question,
       options: [{ id: 'split', label: "Split the issue: what's proven closes now", decision: 'none' }, { id: 'fund', label: 'Fund the live runs it needs', decision: 'none' }, { id: 'accept', label: "Accept what's proven", decision: 'none' }],
       recommended: 'split', deadline: this.options.services.now() + 2 * DAY, fallback: 'you', default: 'split', provisional: false, owner: 'you',
       key: sha256Hex(canonicalize({ kind: 'claim.stalled', task, claim })), pinned_to: await this.options.mcp().pinOf(meta.cwd, question),
@@ -716,7 +716,7 @@ export class StopJudging {
       // A claim the agent stopped on again is told once, and said once.
       if (slowClaims.includes(claim)) return;
       slowClaims.push(claim);
-      await this.options.events.appendReading(meta.session, meta.agent, `This stop isn't held: ${why}. Its verdict comes with your next message.`).catch(() => undefined);
+      await this.options.events.appendReading(meta.session, meta.agent, `This stop isn't held: ${why}. Its verdict comes with your next message.`, undefined, 'stop_not_held').catch(() => undefined);
     };
     // Something already sends the agent on: the turn isn't ending, so no slow check starts.
     const waiting = () => this.options.schedule.queue(() => this.options.delivery().answers.waitingFor(meta.session));
@@ -818,9 +818,9 @@ export class StopJudging {
     live.workedSinceClaim = false;
   }
 
-  /** A claim's state from the record (verdict-chat), with the runs' expected times. */
+  /** A claim's state from the record (verdict-chat), with the runs' expected times and the slow checks whose run is about to start. */
   stateOf(claim: string): Promise<ClaimState | undefined> {
-    return claimState(this.options.services.raw, claim.replace(/^claim:/, ''), this.expected);
+    return claimState(this.options.services.raw, claim.replace(/^claim:/, ''), this.expected, this.options.services.gate.slowStarting(claim));
   }
 
   /**
@@ -890,9 +890,9 @@ export class StopJudging {
     if (!live || !b?.watch) return;
     live.background.delete(id);
     if (live.state === 'working') return;
-    await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, `Its monitor ${backgrounded([b.what])} ended: ${why}.`)).catch(() => undefined);
+    await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, `Its monitor ${backgrounded([b.what])} ended: ${why}.`, undefined, 'monitor_ended')).catch(() => undefined);
     // Another watch still running keeps the row waiting on it; a wake that began a turn meanwhile is judged at its stop.
-    if (watching(live).length) return void await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, waitingOn(watching(live)))).catch(() => undefined);
+    if (watching(live).length) return void await this.options.schedule.queue(() => this.options.events.appendReading(session, live.agent, waitingOn(watching(live)), undefined, 'monitor_waiting')).catch(() => undefined);
     await this.judgeEnded(session);
   }
 
@@ -1098,7 +1098,7 @@ export class StopJudging {
         this.watchOnlyClaims.add(r.claim);
         if (!this.toldUntrusted.has(r.session)) {
           this.toldUntrusted.add(r.session);
-          await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${[...new Set([...spec.map((c) => c.check), ...releaseNames])].join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`).catch(() => undefined);
+          await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${[...new Set([...spec.map((c) => c.check), ...releaseNames])].join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`, undefined, 'watch_only').catch(() => undefined);
           await this.options.flags().watchOnly(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', 'checks', true);
         }
       }

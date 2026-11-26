@@ -108,6 +108,8 @@ export type Plant =
   // counting every accepted taste call as seen, or giving a run's whole median for both its halves.
   | 'unseen-reads-as-card' | 'folds-seen-unseen' | 'one-median-per-run'
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
+  // #3548's: a hub that starts a new log file at each start and keeps the old ones.
+  | 'log-new-file-each-start'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
   | 'delivered-on-waiter-exit' | 'wake-assumed' | 'delivered-to-dead-waiter' | 'routes-from-settings' | 'routes-kept-across-sessions'
@@ -248,6 +250,9 @@ export type Plant =
   // #992's: a reading that checks waiting before gone, an adapter that opens an ask from a Notification hook, and an
   // app that reads a session waiting on you as working.
   | 'waiting-first' | 'ask-from-notification' | 'waiting-as-working'
+  // #1456's: a reading recorded with no code read as no reading, so an earlier record loses the states its words gave
+  // (the first suite's name, and its blind redraft's).
+  | 'legacy-readings-unread' | 'legacy-table-skipped'
   // #997's: loop facts read as the merge base did, with no monitor's watch.
   | 'monitor-unread'
   // #322's: criteria read from the GitHub API alone, a comment author's role from the comment's text, every author a
@@ -387,6 +392,7 @@ const PLANTS: readonly string[] = [
   'hooks-order-ours-first', 'log-raw-command',
   'matches-text', 'fail-closed-only-rules', 'installs-unchecked', 'trusts-hints', 'warn-as-block', 'unknown-as-block',
   'bundle-raw-logs', 'doctor-hides-token', 'doctor-not-checked-first', 'doctor-takes-any-flag', 'stop-hold-wide-margin',
+  'log-new-file-each-start',
   'answer-skips-held-stop', 'stop-hold-releases-without-answer', 'both-routes', 'stop-hold-polls', 'no-stop-count', 'stop-count-never-resets',
   'waiter-never-wakes', 'waiter-outlives-session', 'waiter-gives-up-at-600s', 'waiter-per-stop', 'waiter-under-stop-only', 'waiter-polls', 'waiter-checks-every-5s',
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',
@@ -445,7 +451,7 @@ const PLANTS: readonly string[] = [
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only', 'monitor-unread',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
   'egress-refusals-unrecorded', 'egress-refusal-once-per-operation', 'egress-refusals-seen-without-run',
-  'waiting-first', 'ask-from-notification', 'waiting-as-working',
+  'waiting-first', 'ask-from-notification', 'waiting-as-working', 'legacy-readings-unread', 'legacy-table-skipped',
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',

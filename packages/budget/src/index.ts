@@ -419,7 +419,7 @@ class BudgetLedger implements Ledger {
     let ask: string;
     try {
       ask = await this.options.asks.raise(asCore(connection), source, {
-        kind: 'authority', question,
+        kind: 'authority', may_answer: 'trusted_path', question,
         options: [{ id: 'approve', label: yes, decision: 'allow' }, { id: 'decline', label: no, decision: 'deny' }],
         recommended: null, deadline: now + RAISE_WAIT, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
         pinned_to: { kind: 'evidence', ref: run.inputs },

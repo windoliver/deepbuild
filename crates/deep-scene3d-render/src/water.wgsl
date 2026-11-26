@@ -65,6 +65,19 @@ struct Params {
     // rgb: what a ray shows above the water where nothing stands and no sky's pass draws, linear;
     // w: 1 when so.
     above: vec4<f32>,
+    // #3033: a sea's table, longest first, four waves a lane, read only by water with a sea
+    // (sea.wgsl). x: its shortest wave's wavenumber. Then, a lane each: the waves' wavenumbers
+    // along their headings (x, then z), their phases at t, their wavenumbers, their amplitudes,
+    // their slopes along their headings (x, then z) and their steepness's share of those slopes.
+    sea: vec4<f32>,
+    sea_kx: array<vec4<f32>, 16>,
+    sea_kz: array<vec4<f32>, 16>,
+    sea_at: array<vec4<f32>, 16>,
+    sea_k: array<vec4<f32>, 16>,
+    sea_a: array<vec4<f32>, 16>,
+    sea_sx: array<vec4<f32>, 16>,
+    sea_sz: array<vec4<f32>, 16>,
+    sea_steep: array<vec4<f32>, 16>,
 };
 
 @group(0) @binding(0) var<uniform> params: Params;

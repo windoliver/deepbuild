@@ -317,7 +317,7 @@ export class Libraries {
     const source = picked.pack ? `${library} (${picked.pack.url}; terms ${picked.license.terms})` : library;
     const question = `Fetch ${id} from ${source}: ${bytes} bytes in ${files} file${files === 1 ? '' : 's'}, under ${license}${credit}?`;
     const ask = await this.d.raise('library.fetch', {
-      kind: 'authority', question, options: [{ id: 'fetch', label: 'Fetch it', decision: 'allow' }, { id: 'decline', label: "Don't fetch it", decision: 'deny' }],
+      kind: 'authority', may_answer: 'trusted_path', question, options: [{ id: 'fetch', label: 'Fetch it', decision: 'allow' }, { id: 'decline', label: "Don't fetch it", decision: 'deny' }],
       recommended: null, deadline: this.d.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key: ref, pinned_to: { kind: 'evidence', ref },
     }, { steps: [{ does: `Download ${id} from ${source}, ${bytes} bytes, into the evidence store under ${license}${credit}, then import it`, changes: [`evidence:${picked.file.sha256}`], undo: null, public: false, cost: 0 }], diff: ref });
     this.fetches.set(key, { state: 'held', ask, picked });
@@ -340,7 +340,7 @@ export class Libraries {
     if (known) return known;
     const ref = sha256(cause);
     const ask = await this.d.raise('library.unblock', {
-      kind: 'unblock', question: a.question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', deadline: this.d.now() + DAY,
+      kind: 'unblock', may_answer: 'verified_channel', question: a.question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', deadline: this.d.now() + DAY,
       steps: a.steps, where: a.where, why: a.why, unblocks: [`req:${ref.slice(0, 16)}`], proves: a.proves,
       fallback: 'you', provisional: false, owner: 'you', key: ref, pinned_to: { kind: 'evidence', ref },
     });

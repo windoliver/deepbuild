@@ -16,6 +16,7 @@ import { askSources, openAsks, type Asks } from '../../../packages/asks/src/inde
 import { openRecord, type Connection } from '../../../packages/record/src/index.ts';
 import { withPlans } from '../plans.ts';
 import { ulid } from '../24/helpers.ts';
+import { withDeclared } from '../declared.ts';
 
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 const made: string[] = [];
@@ -76,7 +77,7 @@ export interface Bench { asks: Asks; close(): Promise<void> }
 export async function openBench(root: string, t: Tree): Promise<Bench> {
   const now = Date.now();
   const record = await openRecord({ path: join(root, 'ledger.db'), now: Date.now });
-  const asks = withPlans(await openAsks({ record, now: Date.now, deliver: () => undefined }));
+  const asks = withDeclared(withPlans(await openAsks({ record, now: Date.now, deliver: () => undefined })));
   await record.append({ writer: 'hook', ...who, session: SESSION, project: PROJECT, agent: 'claude-code' }, { v: 1, id: ulid(now), kind: 'session.start', ts: now, data: { agent: 'claude-code', worktree: t.dir, branch: 'main', thread: SESSION } });
   return { asks, close: () => record.close() };
 }
