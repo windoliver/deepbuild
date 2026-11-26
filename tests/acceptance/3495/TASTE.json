@@ -1,9 +1,11 @@
 {
   "issue": 3495,
   "criterion": "#3495.f4a87a07",
-  "verdict": null,
-  "who": null,
-  "when": null,
-  "files": {},
-  "note": "No call recorded yet. A person fills this in once, on the rows one check run of rows.test.ts wrote to shown.txt in $DS3495_SHOWN: verdict reads_right or reads_wrong, who, when, and files with shown.txt's SHA-256, which the run prints."
+  "verdict": "reads_right",
+  "who": "the owner (GitHub windoliver), by leaving the call to the coding agent that built the change: shown the six rows before and after in the #3495 session, in what deep prints and in the list, the owner answered that the agent should validate them and close what can close the issue",
+  "when": "2026-11-26T22:52:47Z",
+  "files": {
+    "shown.txt": "c0efc63ae38c00af911ba39731aa9cf4a0b6a73abfb362e61a4bf35baa690f8c"
+  },
+  "note": "Made by the agent on the owner's word; the owner did not judge the rows one by one, and saw their text, not a picture of the drawn list. shown.txt is what rows.test.ts wrote on this branch's build before its merge with main. Read against the design: each of the six rows leads with its sentence, word for word, then its word, then the row's own sentence as before, and the project's page has no line of its own for a session. Most open to another reading: the sent back line is long in what deep prints; PASS's sentence and its own sentence say nearly the same, and the own sentence is #3498's to reword; and at the list's narrowest width only a start of the sentence is drawn, the whole of it in the row's accessible name."
 }
