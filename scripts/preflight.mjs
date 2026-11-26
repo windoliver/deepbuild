@@ -126,11 +126,20 @@ function work(args) {
   const budgetMs = budgets.preflight.limits.elapsedMs;
   // Checks that outrun the budget with its margin, perf's allowance for the same workload, are stopped with their
   // children: a hung check would hold the machine's timed grant, and so every build and test on it, for ever.
-  const allowanceMs = budgetMs * (1 + budgets.preflight.margin);
+  // Whole milliseconds, as spawnSync's timeout takes them, so any margin the budget file allows can be used.
+  const allowanceMs = Math.ceil(budgetMs * (1 + budgets.preflight.margin));
+  // Work whose supervising preflight is gone stops before its next step: no one holds its grant or watches it.
+  const parent = process.ppid;
+  const orphaned = () => {
+    if (process.ppid === parent) return;
+    console.log('BLOCKED preflight: the preflight that started this work is gone, so nothing more runs');
+    process.exit(1);
+  };
   const started = performance.now();
   let observation = {}, checkStatus = 1, stopped = false;
   console.log('Warming builds (not timed)');
   warm(root);
+  orphaned();
   try {
     // Lane output streams as it runs, so a measurement that breaks never hides what ran.
     const { elapsedMs, cpuMs, peakBytes, instructions, status } = measureOnce([process.execPath, 'scripts/checks.mjs', ...args], root, true, allowanceMs, false);
@@ -143,6 +152,7 @@ function work(args) {
     else console.log(`BLOCKED check workload: ${error.message}\n  Fix: Install /usr/bin/time (GNU time on Linux) and restore the check runner.`);
   }
   const checksMs = performance.now() - started;
+  orphaned();
   let perfStatus = 1;
   if (checkStatus) console.log('RUN perf\nBLOCKED perf: the check lanes did not pass, so their workload was not measured\n  Fix: Repair the failing lanes above; perf runs once they pass.');
   // The perf lane's builds and runs hold a cpu.slot of the calling session's through scripts/lease (#1015).
@@ -150,12 +160,14 @@ function work(args) {
   // The harness budgets lane runs real agents for minutes, so it stays out of the checks' budget and
   // perf. It runs wherever a harness budget is declared; perf freezes that budget once it is on main.
   let laneStatus = 0;
+  orphaned();
   if (budgets.harness && checkStatus) {
     console.log('RUN harness budgets\nBLOCKED harness budgets: the check lanes did not pass, so no agent session was started\n  Fix: Repair the failing lanes above; the lane runs once they pass.');
     laneStatus = 1;
   } else if (budgets.harness) laneStatus = spawnSync(process.execPath, ['scripts/agent-harness.mjs', 'budgets'], { cwd: root, stdio: 'inherit' }).status ?? 1;
   // The release lanes spend plan usage too, so they run once, at release, and only after the checks pass.
   let releaseStatus = 0;
+  orphaned();
   if (process.env.DEEP_PREFLIGHT !== 'release') for (const { name } of releaseLanes) console.log(`SKIP ${name}: it spends plan usage, so only the release preflight runs it`);
   else if (checkStatus) {
     for (const { name } of releaseLanes) console.log(`RUN ${name}\nBLOCKED ${name}: the check lanes did not pass, so no agent session was started\n  Fix: Repair the failing lanes above; the lane runs once they pass.`);
