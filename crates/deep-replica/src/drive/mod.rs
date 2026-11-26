@@ -692,7 +692,7 @@ impl Replica {
                     Some(dir) => {
                         let runtime = deep_app::new_runtime();
                         let loaded = runtime.map_err(|e| e.to_string()).and_then(|runtime| {
-                            let view = deep_app::mount_panel(&runtime, &dir, window, cx)
+                            let view = deep_app::mount_panel_unheld(&runtime, &dir, window, cx)
                                 .map_err(|e| format!("{e:#}"))?;
                             match (&area, replacing) {
                                 (Some(area), _) => deep_app::views::place(
@@ -876,7 +876,7 @@ impl Replica {
             "feed" => self.feed(call),
             "open" => self.open(call),
             "notification" => self.notification(call),
-            "resize" => self.resize(call),
+            "resize" | "window" => self.window_changes(name, call),
             "wait_for" => self.wait_for(call),
             "see" => self.see(call),
             "probe" => self.probe(call),
@@ -893,7 +893,7 @@ impl Replica {
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, menus, show, terminal, clipboard, stored, close, ui_check and motion_check"),
+                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, window, menus, show, terminal, clipboard, stored, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();

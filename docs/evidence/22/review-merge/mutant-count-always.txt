@@ -1,0 +1,8 @@
+325:                let counts = true; // MUTANT: the count folds in any record
+test record::tests::a_hub_that_lists_its_asks_folds_none_by_count ... FAILED
+thread 'record::tests::a_hub_that_lists_its_asks_folds_none_by_count' (3247084) panicked at crates/deep-app/src/record.rs:1417:9:
+  left: "folded"
+ right: "queued"
+test result: FAILED. 118 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+error: test failed, to rerun pass `-p deep-app --lib`
+[exit 101]

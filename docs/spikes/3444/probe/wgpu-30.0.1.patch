@@ -1,0 +1,103 @@
+diff -ruN -x Cargo.lock -x target a/wgpu-30.0.1/src/api/device.rs b/wgpu-30.0.1/src/api/device.rs
+--- a/wgpu-30.0.1/src/api/device.rs
++++ b/wgpu-30.0.1/src/api/device.rs
+@@ -137,9 +137,14 @@
+     /// </div>
+     #[must_use]
+     pub fn create_shader_module(&self, desc: ShaderModuleDescriptor<'_>) -> ShaderModule {
++        // DeepBuild spike #3444 probe: the time inside the call, read around it.
++        #[cfg(metal)]
++        let probe = crate::probe::begin("shader_module", desc.label);
+         let module = self
+             .inner
+             .create_shader_module(desc, wgt::ShaderRuntimeChecks::checked());
++        #[cfg(metal)]
++        crate::probe::end(probe);
+         ShaderModule { inner: module }
+     }
+ 
+@@ -254,7 +259,12 @@
+     /// Creates a [`RenderPipeline`].
+     #[must_use]
+     pub fn create_render_pipeline(&self, desc: &RenderPipelineDescriptor<'_>) -> RenderPipeline {
++        // DeepBuild spike #3444 probe: the time inside the call, read around it.
++        #[cfg(metal)]
++        let probe = crate::probe::begin("render_pipeline", desc.label);
+         let pipeline = self.inner.create_render_pipeline(desc);
++        #[cfg(metal)]
++        crate::probe::end(probe);
+         RenderPipeline { inner: pipeline }
+     }
+ 
+@@ -268,7 +278,12 @@
+     /// Creates a [`ComputePipeline`].
+     #[must_use]
+     pub fn create_compute_pipeline(&self, desc: &ComputePipelineDescriptor<'_>) -> ComputePipeline {
++        // DeepBuild spike #3444 probe: the time inside the call, read around it.
++        #[cfg(metal)]
++        let probe = crate::probe::begin("compute_pipeline", desc.label);
+         let pipeline = self.inner.create_compute_pipeline(desc);
++        #[cfg(metal)]
++        crate::probe::end(probe);
+         ComputePipeline { inner: pipeline }
+     }
+ 
+diff -ruN -x Cargo.lock -x target a/wgpu-30.0.1/src/lib.rs b/wgpu-30.0.1/src/lib.rs
+--- a/wgpu-30.0.1/src/lib.rs
++++ b/wgpu-30.0.1/src/lib.rs
+@@ -260,6 +260,9 @@
+ mod cmp;
+ mod dispatch;
+ mod macros;
++/// DeepBuild spike #3444's probe. Not part of wgpu.
++#[cfg(metal)]
++mod probe;
+ pub mod util;
+ 
+ //
+diff -ruN -x Cargo.lock -x target a/wgpu-30.0.1/src/probe.rs b/wgpu-30.0.1/src/probe.rs
+--- a/wgpu-30.0.1/src/probe.rs
++++ b/wgpu-30.0.1/src/probe.rs
+@@ -0,0 +1,42 @@
++//! DeepBuild spike #3444's probe, the wgpu crate's half. Not part of wgpu.
++//!
++//! Opens a call around each `Device::create_shader_module`, `create_render_pipeline` and
++//! `create_compute_pipeline`, and writes its row when it returns: `kind`, `label` and `ns`, the
++//! time inside the call. The rows wgpu-core and wgpu-hal write between carry the call's number.
++//! With `DEEP_3444_PROBE` unset nothing is opened and nothing is written.
++
++use alloc::{format, string::String};
++
++pub(crate) struct Open {
++    started: u64,
++    kind: &'static str,
++    label: String,
++}
++
++pub(crate) fn begin(kind: &'static str, label: Option<&str>) -> Option<Open> {
++    if !crate::hal::probe::on() {
++        return None;
++    }
++    crate::hal::probe::begin();
++    Some(Open {
++        started: crate::hal::probe::now_ns(),
++        kind,
++        label: String::from(label.unwrap_or("")),
++    })
++}
++
++pub(crate) fn end(open: Option<Open>) {
++    if let Some(open) = open {
++        let ns = crate::hal::probe::now_ns() - open.started;
++        crate::hal::probe::emit(
++            "create",
++            &format!(
++                "\"kind\":{},\"label\":{},\"ns\":{}",
++                crate::hal::probe::quote(open.kind),
++                crate::hal::probe::quote(&open.label),
++                ns
++            ),
++        );
++        crate::hal::probe::end();
++    }
++}

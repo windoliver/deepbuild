@@ -751,7 +751,7 @@ pub fn mesh_of(
 ) -> Result<crate::geom::Mesh, Refused> {
     let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
     let built = if crate::building::KINDS.contains(&kind) {
-        crate::building::build(doc, id, item)
+        crate::building::build(doc, id, item, outlines.planted)
     } else {
         // #1929: a host that keeps a memo between its frames keeps each deform's bind there.
         let memo = outlines.memo;
@@ -972,4 +972,23 @@ pub(super) fn profiled_points(
         .map(|at| deep_canvas_drawn::geometry::width_along(&metres, *at, total))
         .collect();
     (fine, widths)
+}
+
+/// The X, Y, Z angles in degrees of the rotation `r` (its rows), as `local_of` composes them:
+/// Rz · Ry · Rx.
+fn euler_of(r: &[Vec3; 3]) -> Vec3 {
+    use deep_canvas::ops::{asin, atan2, deg};
+    if r[2][0].abs() > 1.0 - 1e-12 {
+        // Straight up or down: X and Z turn about one axis, so Z takes none.
+        return [
+            deg(atan2(-r[1][2], r[1][1])),
+            deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
+            0.0,
+        ];
+    }
+    [
+        deg(atan2(r[2][1], r[2][2])),
+        deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
+        deg(atan2(r[1][0], r[0][0])),
+    ]
 }

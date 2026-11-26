@@ -5,14 +5,14 @@
 // (#30); and a definition's price and the stalled-claim rule (#325). The core never imports an extension.
 export { claimsFor } from './claims.js';
 export type { ClaimIntake, ClaimSource, MadeClaim, OpenAsk } from './claims.js';
-export { floor, lockDefinition, recomputeHash, validityGate } from './floor.js';
+export { floor, lockDefinition, recomputeHash, validityGate, validityReads } from './floor.js';
 export type { DefinitionParts, Finding, FloorInput, FloorResult, Lock, SessionLog, SessionRun, ValidityInput } from './floor.js';
 export { blanked, maskIn, segmentsOf, wordsOf } from './mask.js';
 export { checkSource, ownChanges, ownRead, runnerConfig, type ChangesPlant } from './own.js';
 export type { ApprovedCheck } from './own.js';
 export { headTrust, pushRecordKit, runPushRecordKit } from './head.js';
 export type { HeadInput, HeadPlan, HeadResult, ProviderPush, PushKit, PushReading, PushRecordReader } from './head.js';
-export { executeClaim, runHeavy, runTiming, slot, verdictMemory } from './exec.js';
+export { admit, memFree, executeClaim, runHeavy, runTiming, slot, verdictMemory, type MemoryAsk, type MemoryWait } from './exec.js';
 export type { ExecCheck, Executed, ExecutedCheck, ExecuteOptions, HeavyOptions, HeavyResult, Load, TimedRun, VerdictMemory } from './exec.js';
 export { baseProof, openCheckouts, OverBudget } from './checkouts.js';
 export type { BaseCheckout, BaseRun, Budget, CheckoutPlant, Checkouts, CheckoutsOptions, ClaimCheckInput, ClaimCheckRun, ClaimInput, ClaimRun, Cited, DeclaredSurface, Snapshot, StandIn, TempCheckout } from './checkouts.js';

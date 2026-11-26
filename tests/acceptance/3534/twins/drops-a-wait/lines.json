@@ -1,0 +1,13 @@
+{
+  "scripts/issue-time.mjs": [
+    {
+      "find": [
+        "    ms[RANK.find((cause) => over.includes(cause)) ?? (to <= lastPrompt ? 'prompt' : 'merge')] += to - from;"
+      ],
+      "wrong": [
+        "    const cause = RANK.find((name) => over.includes(name));",
+        "    if (cause) ms[cause] += to - from;"
+      ]
+    }
+  ]
+}

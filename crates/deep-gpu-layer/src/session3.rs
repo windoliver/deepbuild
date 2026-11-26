@@ -60,6 +60,11 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             foam_keeps_state: p == Some(Planted::WaterFoamKeepsState),
             calm_ignores_shore: p == Some(Planted::ShoreCalmIgnoresField),
             flow_single_phase: p == Some(Planted::WaterFlowSinglePhase),
+            no_cone: matches!(
+                p,
+                Some(Planted::WaterBelowIorOne | Planted::WaterBelowSkyAtEveryAngle)
+            ),
+            tint_by_depth: p == Some(Planted::WaterBelowTintByDepth),
         },
         flare: deep_scene3d_render::flare::Planted {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
@@ -114,6 +119,11 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             no_reach: p == Some(Planted::CascadeNoPenumbraReach),
             noise_from_frame: p == Some(Planted::SoftNoiseFromFrame),
             filter_in_texels: p == Some(Planted::CascadeFilterInTexels),
+            tile_arrival_order: p == Some(Planted::TileArrivalOrder),
+            tile_keeps_fixed_caps: p == Some(Planted::TileKeepsFixedCaps),
+            tile_hysteresis: p == Some(Planted::TileHysteresis),
+            tile_filter_in_texels: p == Some(Planted::TileFilterInTexels),
+            tile_key_without_size: p == Some(Planted::TileKeyWithoutSize),
         },
         fill: deep_scene3d_render::fill::Planted {
             top_32: p == Some(Planted::FillTop32),
@@ -462,6 +472,18 @@ pub fn kept_items(app: &mut App) -> Vec<(String, Vec<String>)> {
             .renderer
             .as_ref()
             .map_or(Vec::new(), |r| r.read_kept_items(&device))
+    })
+}
+
+/// Each tiled light's texels as the frame just drawn read them, by light ID (#2034).
+pub fn tile_texels(app: &mut App) -> Vec<(String, Vec<u8>)> {
+    app.worker.call(|state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        (shared.renderer.as_ref()).map_or(Vec::new(), |r| r.tile_texels(&device))
     })
 }
 

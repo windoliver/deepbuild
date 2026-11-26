@@ -13,8 +13,7 @@
 use std::{cell::Cell, cell::RefCell, collections::HashMap, sync::Arc, time::Duration};
 
 use gpui_kit::base::dock::{
-    register_panel, DockArea, DockAreaState, DockPlacement, DockState, Panel, PanelEvent,
-    PanelInfo, PanelState,
+    register_panel, DockArea, DockPlacement, Panel, PanelEvent, PanelInfo, PanelState,
 };
 use gpui_kit::base::ObservedElement;
 use gpui_kit::component::TitleBar;
@@ -31,6 +30,9 @@ use crate::rows::{
 };
 pub(crate) use crate::rows::{in_lane, page_title, RowDrawn, Shape};
 use crate::{bound, brand, canvas, cells, chrome, copy, show::CanvasPanel, states, text};
+
+mod layout;
+pub use layout::Layout;
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
 pub const HOME: &str = "deepbuild/home";
@@ -1442,6 +1444,9 @@ pub fn focus_id(window: &Window) -> Option<String> {
     if crate::words::focused(window) {
         return Some("box-draft".to_owned());
     }
+    if crate::find::focused(window) {
+        return Some("find-field".to_owned());
+    }
     list_focused(window)
 }
 
@@ -1757,39 +1762,24 @@ pub(crate) fn label(
         .child(text)
 }
 
-/// #1498: a line of content, drawn as a label draws it, that the kit's selection selects, its selection outlined in
-/// `color`: a check's failure line. A label, a row or a button never selects.
-pub(crate) fn content(
-    id: impl Into<ElementId>,
-    text: impl Into<SharedString>,
-    color: Hsla,
-) -> ObservedElement<Stateful<Div>> {
-    let text = text.into();
-    observed(id)
-        .role(Role::Label)
-        .aria_label(text.clone())
-        .typed(sizes().body)
-        .h(sizes().body.line)
-        .flex()
-        .items_center()
-        .child(crate::select::Outlined::new("text", text, color))
-}
-
 /// A page's title: the title role, so a page has one voice (#1458). A title longer than its row wraps, whole, and the
 /// row grows with it (#1808).
 pub(crate) fn title(
     id: impl Into<ElementId>,
     text: impl Into<SharedString>,
 ) -> ObservedElement<Stateful<Div>> {
-    let s = sizes();
+    let (s, text): (_, SharedString) = (sizes(), text.into());
     // A title longer than its room ends in an ellipsis, its whole text in its accessible name, as a row's does: a page
     // at 360 pt wide draws nothing past its frame (#2403).
-    label(id, text)
+    observed(id)
+        .role(Role::Label)
+        .aria_label(text.clone())
         .typed(s.title)
-        .h_auto()
         .min_h(s.title.line + s.space(2))
         .min_w_0()
-        .truncate()
+        .flex()
+        .items_center()
+        .child(div().min_w_0().truncate().child(text))
 }
 
 /// A list's heading: the body role at medium weight (#1458).
@@ -1885,7 +1875,7 @@ struct Record {
     deadlines: Vec<u64>,
     /// What a session's page shows by its real names (#1348): the session, its issue and branch, and its newest
     /// run's failure whole, its trace included. On a session's page only.
-    details: Vec<String>,
+    details: std::rc::Rc<Vec<String>>,
     /// The sidebar's running jobs (#1925), in the list's order: each row's ID, its words, why it is there, and the
     /// status-map entry its row names (#1349: a job waiting on you is blocked, not running).
     jobs: Vec<(String, String, String, &'static str)>,
@@ -1898,7 +1888,16 @@ pub fn sidebar() -> Vec<(String, String, states::State)> {
 
 /// The one count, as the record the views draw stands: the window and the menu bar both read it (#1172).
 pub fn count() -> usize {
-    crate::record::with_view(|view| states::count(&view.table())).unwrap_or(0)
+    crate::record::with_view(count_of).unwrap_or(0)
+}
+
+/// The count of what needs you in this view: as many as Needs you draws.
+fn count_of(view: &crate::record::View) -> usize {
+    let table = view.table();
+    if table.listed() {
+        return states::count(&table);
+    }
+    view.needs_you().len()
 }
 
 fn record(kind: Kind, opened: Option<&str>) -> Record {
@@ -1944,9 +1943,9 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
             })
             .collect()
     } else {
-        view.inbox
-            .iter()
-            .filter(|row| row["status"] != "closed")
+        // Each open ask the core has shown: one waiting for its batch isn't drawn (#22).
+        view.needs_you()
+            .into_iter()
             .map(|row| {
                 // The row draws the question as the card does, its controls and direction marks shown (#1510).
                 (
@@ -2045,7 +2044,8 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
             details
         }
         _ => Vec::new(),
-    };
+    }
+    .into();
     // Each running job's row (#1925), as the hub built it: a job whose tool reports no counter says how long it has
     // run, which reads differently as the clock moves on.
     let jobs = match kind {
@@ -2126,6 +2126,7 @@ impl Render for Shipped {
         // goes to the box.
         let is_page = !matches!(self.kind, Kind::Sidebar | Kind::Line) && !self.popped;
         if is_page {
+            crate::find::read(cx);
             let shows =
                 crate::open::shown_region(cx) == Some(crate::open::Region::Shipped(self.kind));
             if shows {
@@ -2212,6 +2213,8 @@ impl Render for Shipped {
                 let planted_nothing = crate::plain::planted("hub-down-nothing-needs-you")
                     && matches!(empty, crate::empties::Empty::Unreachable { .. });
                 let mut drawn: Vec<AnyElement> = Vec::new();
+                // #3282's planted list draws its topmost ask row's time 0 wide.
+                let mut plant_left = crate::plain::planted("ask-time-0-wide");
                 // What's drawn above the rows that scroll: Needs you's heading and what goes under it.
                 let mut heading_ends = None;
                 for (n, item) in items.iter().enumerate() {
@@ -2299,7 +2302,13 @@ impl Render for Shipped {
                                 still: cx.reduce_motion(),
                                 width: self.list_room.get().map(|area| area.width),
                             };
-                            let drawn_row = RowDrawn::of(row, selected, ring, shape, now, window);
+                            let mut drawn_row =
+                                RowDrawn::of(row, selected, ring, shape, now, window);
+                            if row.id.starts_with("ask:")
+                                && std::mem::replace(&mut plant_left, false)
+                            {
+                                drawn_row.timed = false;
+                            }
                             drawn.push(self.row_in_view(row, drawn_row, window, cx));
                         }
                     }
@@ -2619,6 +2628,13 @@ impl Render for Shipped {
                 // What a planted page draws beside the chart: the base's label, saying the caption again (#1459).
                 let beside = format!("{}: {} points", caption.text, hours.len()); // copy-exception: planted wrong program
                 let terminal = self.terminal.as_ref().filter(|tab| tab.session == session);
+                // What the page shows by its real names, and the newest failure whole (#1348).
+                let details = crate::lines::drawn(&record.details, chrome.focus);
+                // #1815's planted find counts the page's title and its state word.
+                if crate::plain::planted("find-matches-chrome") {
+                    crate::find::here(&task);
+                    crate::find::here(&state.text(now));
+                }
                 let tab = (!session.is_empty()).then(|| {
                     let session = session.clone();
                     control(
@@ -2658,20 +2674,16 @@ impl Render for Shipped {
                         )
                         .child(terminal_view(tab, chrome))
                         .children(crate::select::grid_outline(&tab.outline, chrome.focus))
+                        .children(crate::find::grid(tab.screen.as_ref(), chrome.focus))
                 });
                 // The session's canvas, in the place of its deadlines' line (#1454).
                 let figure = CANVAS
                     .with(|canvas| canvas.borrow().clone())
                     .filter(|panel| panel.read(cx).shows(&session));
                 if let Some(panel) = &figure {
-                    panel.update(cx, |panel, _| panel.show_session(&session));
+                    panel.update(cx, |panel, _| panel.show_session(&session).find());
                 }
                 let chart = terminal.is_none() && figure.is_none() && !hours.is_empty();
-                // What the page shows by its real names, and the newest failure whole (#1348): content, which the kit's
-                // selection selects (#1498).
-                let details = record.details.iter().enumerate().map(|(n, line)| {
-                    content(("session-detail", n), line.clone(), chrome.focus).h_auto()
-                });
                 // The page reads as its task's title, and to a screen reader as `Session <title>`. An untitled
                 // session's short name, `Session <ID>`, is only its accessible name: the title draws no ID (#1455).
                 let short = &session[..session.len().min(8)];
@@ -2703,6 +2715,17 @@ impl Render for Shipped {
                     Option<crate::list::Doing>,
                     Option<String>,
                 );
+                // Its taste calls answered where none of their pictures was drawn (#3234), read beside the return card.
+                // #3234's planted card reads them as answers from the card.
+                let unseen: Vec<String> =
+                    crate::record::with_view(|view| view.table().unseen(&session).to_vec())
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|_| !crate::plain::planted("unseen-reads-as-card"))
+                        .map(|question| {
+                            copy::fill("views.call_unseen", &[&crate::question::visible(&question)])
+                        })
+                        .collect();
                 let (problem, readings, listed, doing, flagged): Read =
                     crate::record::with_view(|view| {
                         let table = view.table();
@@ -2747,12 +2770,13 @@ impl Render for Shipped {
                     .as_ref()
                     .filter(|[_, _, why]| !why.is_empty())
                     .map(|[word, _, why]| format!("{}: {}", states::shown(word), copy::hub(why)));
-                // The page fills its lane, so its canvas takes the height left under what's above it (#1498).
+                // The page fills its lane, so its canvas takes the height left under what's above it (#1498), and is as
+                // long as what it holds, so it scrolls (#1808).
                 let content = div()
                     .flex()
                     .flex_col()
-                    .flex_1()
-                    .min_h_0()
+                    .flex_none()
+                    .flex_grow(1.)
                     .when(session.is_empty(), |content| content.invisible());
                 // While you rename it (#2018), the title is a field holding the name, with the caret in it.
                 let field = self
@@ -2811,7 +2835,13 @@ impl Render for Shipped {
                         div()
                             .flex()
                             .flex_col()
-                            .child(reads("return-card", &shown))
+                            .child(reads(
+                                "return-card",
+                                &std::iter::once(shown.clone())
+                                    .chain(unseen)
+                                    .collect::<Vec<_>>()
+                                    .join(" · "),
+                            ))
                             .children(bound_values(bound::Surface::Card, chrome, false)),
                     )
                     .children(tab)
@@ -2878,7 +2908,7 @@ impl Render for Shipped {
                     .children(bound_panel(chrome));
                 page.child(in_lane(
                     Some(format!("session:{session}").into()),
-                    Some(heading.into_any_element()),
+                    Some(crate::find::titled(heading, chrome, window, cx)),
                     content,
                     true,
                 ))
@@ -2890,7 +2920,7 @@ impl Render for Shipped {
                 let heading = page_title(title("agents-title", copy::text("views.agents")), chrome);
                 page.child(in_lane(
                     Some("agents".into()),
-                    Some(heading.into_any_element()),
+                    Some(crate::find::titled(heading, chrome, window, cx)),
                     inner,
                     true,
                 ))
@@ -2983,7 +3013,8 @@ impl Render for Shipped {
                                             .flex_1()
                                             .min_w_0()
                                             .truncate()
-                                            .child(rule.text.clone()),
+                                            .child(rule.text.clone())
+                                            .children(crate::find::found(&rule.text, chrome)),
                                     )
                                     .child(
                                         div()
@@ -3020,7 +3051,7 @@ impl Render for Shipped {
                     }));
                 page.child(in_lane(
                     Some("rules".into()),
-                    Some(heading.into_any_element()),
+                    Some(crate::find::titled(heading, chrome, window, cx)),
                     content,
                     true,
                 ))
@@ -3095,83 +3126,6 @@ pub fn title_bar(window: &Window) -> TitleBar {
                 .text_color(ink),
         ),
     )
-}
-
-/// Which panel fills each region of the window (#1461): the list on the left, and the pages it opens on the right.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Layout {
-    /// The list.
-    pub sidebar: String,
-    /// The pages, by panel name; `active` is drawn. No tab strip is drawn over them.
-    pub center: Vec<String>,
-    pub active: usize,
-    /// The session's line, drawn on a session's page.
-    pub line: String,
-    /// The list's first section: the shipped Needs you, or a view that replaces it and passed `needs-you@1`.
-    pub needs_you: String,
-}
-
-impl Layout {
-    /// The app's window with `needs-you`, `session`, `home` or `rules` showing, so a replica draws the app's tree
-    /// (#1454). `needs-you` and `sidebar` open on what the window opens on: the first open ask, else the latest
-    /// project. Any other name is a mistake, not a view.
-    pub fn shipped(view: &str) -> Self {
-        let active = match view {
-            "needs-you" | "home" | "sidebar" => HOME,
-            "session" => SESSION,
-            "rules" => RULES,
-            other => {
-                panic!("{other} is not a shipped view; the shipped views are {SHIPPED_VIEWS:?} and home")
-            }
-        };
-        let center: Vec<String> = [HOME, SESSION, AGENTS, RULES].map(str::to_owned).into();
-        Self {
-            sidebar: SIDEBAR.into(),
-            active: center.iter().position(|name| name == active).unwrap_or(0),
-            center,
-            line: LINE.into(),
-            needs_you: NEEDS_YOU.into(),
-        }
-    }
-
-    /// The app's window (#1172, #1461): the list, and the pages, with the first-launch page first while setup hasn't
-    /// finished, or a mounted panel's view first.
-    pub fn app(panel: bool) -> Self {
-        let mut center: Vec<String> = [HOME, SESSION, AGENTS].map(str::to_owned).into();
-        if panel {
-            center.insert(0, EXTENSION.into());
-        } else if crate::setup::needed() {
-            center.insert(0, WELCOME.into());
-        }
-        Self {
-            sidebar: SIDEBAR.into(),
-            center,
-            active: 0,
-            line: LINE.into(),
-            needs_you: NEEDS_YOU.into(),
-        }
-    }
-
-    /// The window's two regions: the list docked left, the pages beside it, and nothing docked anywhere else.
-    pub fn state(&self) -> DockAreaState {
-        let tabs = |names: &[String], active: usize| PanelState {
-            panel_name: "TabPanel".into(), // copy-exception: the dock's panel name, an identity
-            children: names.iter().map(PanelState::new).collect(),
-            info: PanelInfo::tabs(active),
-        };
-        DockAreaState {
-            version: None,
-            center: tabs(&self.center, self.active),
-            left_dock: Some(DockState::new(
-                tabs(std::slice::from_ref(&self.sidebar), 0),
-                DockPlacement::Left,
-                sizes().sidebar,
-                true,
-            )),
-            right_dock: None,
-            bottom_dock: None,
-        }
-    }
 }
 
 thread_local! {

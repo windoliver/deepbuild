@@ -10,10 +10,12 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
+use deep_canvas::ops;
 use serde_json::{json, Value};
 
-use crate::scene::{Layer3, Refused};
+use crate::scene::{Layer3, Refused, Scene};
 
 /// The most waves one water sums.
 pub const MAX_WAVES: usize = 4;
@@ -44,6 +46,37 @@ impl Wave {
     pub fn phase(&self, x: [f64; 2], t: f64) -> f64 {
         self.k() * (self.dir[0] * x[0] + self.dir[1] * x[1]) - self.omega() * t
     }
+
+    /// #3033: deep water's speed for its length, m/s: √(g × length ÷ 2π).
+    pub fn speed(&self) -> f64 {
+        ops::sqrt(G * self.length / std::f64::consts::TAU)
+    }
+}
+
+/// #3033: how many waves a sea sums, and how many of its longest the vertex stage draws.
+pub const SEA_WAVES: usize = 64;
+pub const SEA_DRAWN: usize = 16;
+/// #3033: the shorter side in m under which a plate can't hold a sea's longest waves.
+pub const SEA_PLATE: f64 = 100.0;
+
+/// #3033: one row of a sea's table: its wave, its heading in deg, the phase it starts at in rad
+/// and the speed it travels at in m/s, deep water's for its length.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Swell {
+    pub wave: Wave,
+    pub direction: f64,
+    pub phase: f64,
+    pub speed: f64,
+}
+
+/// #3033: a sea: what it was drawn from at check, and its table, longest first.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Sea {
+    pub wind: f64,
+    pub direction: f64,
+    pub spread: f64,
+    pub seed: u32,
+    pub rows: Vec<Swell>,
 }
 
 /// A wake: the item it follows, its span and the path the item took, newest first, each point
@@ -299,6 +332,8 @@ pub struct Water {
     /// Each part's extent at rest in world x and z: (part, [min x, min z, max x, max z]).
     pub plates: Vec<(String, [f64; 4])>,
     pub waves: Vec<Wave>,
+    /// #3033: its sea, which draws in place of `waves`, or none.
+    pub sea: Option<Sea>,
     /// Ripples: their scale in m and strength 0..1, and the wind they drift with in m/s (x, z).
     pub ripple_scale: f64,
     pub ripple_strength: f64,
@@ -310,6 +345,9 @@ pub struct Water {
     pub depth: f64,
     /// How far the mirror's lookup moves along the bent normal, in frame px.
     pub distort: f64,
+    /// #3034: its index of refraction: from below, the surface shows what is above it inside
+    /// a cone of asin(1 ÷ ior) about its normal and mirrors what is below it outside.
+    pub ior: f64,
     /// Foam's steepness threshold; 1 is off.
     pub foam: f64,
     /// #968: the flow faster than which foam covers the water, m/s, or none.
@@ -345,6 +383,25 @@ impl Water {
         let cell = (1.0 / (self.rain * RING_LIFE).sqrt()).max(2.0 * RING_SPEED * RING_LIFE);
         let slot = 1.0 / (self.rain * cell * cell);
         (cell, slot, (RING_LIFE / slot - 1e-9).ceil() as u32)
+    }
+
+    /// #3034: the water's level where `eye` lies below a part's surface at rest, inside its
+    /// extent in x and z and lower than its plane: a frame from there is under water.
+    pub fn under(&self, eye: [f64; 3]) -> Option<f64> {
+        let covers = |(_, [x0, z0, x1, z1]): &(String, [f64; 4])| {
+            eye[0] >= *x0 && eye[0] <= *x1 && eye[2] >= *z0 && eye[2] <= *z1
+        };
+        (eye[1] < self.level && self.plates.iter().any(covers)).then_some(self.level)
+    }
+
+    /// The water as `scene`'s: its own mirror unless a material names one (#166), and whether
+    /// the frame is under it (#3034).
+    pub(crate) fn seen_in(self, scene: &mut Scene) {
+        if scene.mirror.is_none() {
+            scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &self);
+        }
+        scene.under = self.under(scene.camera.eye);
+        scene.water = Some(Arc::new(self));
     }
 }
 
@@ -384,6 +441,47 @@ pub fn wind(speed: f64, direction: f64) -> Vec<Wave> {
         .collect()
 }
 
+/// #3033: a sea's table: [`SEA_WAVES`] waves for a wind of `wind` m/s toward `direction` deg, by
+/// `seed`, longest first. A fully developed sea holds the share exp(−1.25 (ω_p ÷ ω)⁴) of its
+/// energy below ω, with the wind table's peak ω_p and significant height. Each wave carries the
+/// same energy, so the height's standard deviation is a quarter of that height. Wave i sits at
+/// the share (i + the seed's shift) ÷ 64 of the energy between the lowest 0.2% and the highest
+/// 1%: that is its wavenumber along the wind, so the lengths lie evenly in energy there and the
+/// sum doesn't repeat along it for tens of peak lengths. Its heading fans within `spread` of the
+/// wind's by the golden ratio, and its phase is hashed from the seed.
+pub fn sea(wind: f64, direction: f64, spread: f64, seed: u32) -> Vec<Swell> {
+    if wind <= 0.0 {
+        return Vec::new();
+    }
+    let n = SEA_WAVES as f64;
+    let peak = 0.877 * 0.877 * G / (wind * wind);
+    let amplitude = 0.25 * 0.21 * wind * wind / G * ops::sqrt(2.0 / n);
+    let shift = unit(hash(seed ^ 0x0123_4567));
+    let fan = unit(hash(seed ^ 0x51ed_270b));
+    let mut rows: Vec<Swell> = (0..SEA_WAVES)
+        .map(|i| {
+            let share = 0.002 + 0.988 * (i as f64 + shift) / n;
+            let along = peak * ops::sqrt(1.25 / -ops::log(share));
+            let turn = spread * (2.0 * (i as f64 * 0.618_033_988_749_894_9 + fan).fract() - 1.0);
+            let wave = Wave {
+                dir: heading(direction + turn),
+                length: std::f64::consts::TAU * ops::cos(ops::rad(turn)) / along,
+                amplitude,
+                steepness: 0.5,
+            };
+            Swell {
+                wave,
+                direction: direction + turn,
+                phase: std::f64::consts::TAU
+                    * unit(hash(seed ^ (i as u32 + 1).wrapping_mul(0x85eb_ca6b))),
+                speed: wave.speed(),
+            }
+        })
+        .collect();
+    rows.sort_by(|a, b| b.wave.length.total_cmp(&a.wave.length));
+    rows
+}
+
 /// Reads a material's `water`, at `items/<material>/params/water`. `t` in s, `seed` the
 /// document's.
 pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, Refused> {
@@ -397,6 +495,7 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
                 .ok_or_else(|| bad("out_of_range", at(k))),
         }
     };
+    let mut drawn = None;
     let (waves, drift) = match spec.get("waves") {
         Some(Value::Array(list)) => {
             if list.len() > MAX_WAVES {
@@ -435,6 +534,36 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
             (waves, drift)
         }
         None | Some(Value::Null) => wind_of(None, &at)?,
+        // #3033: `waves: sea {wind, direction, spread, seed}`: its table draws in place of a
+        // list's waves, and the ripples drift with its wind.
+        Some(Value::Object(w)) if w.contains_key("sea") => {
+            let s = &w["sea"];
+            let field = |k: &str, default: f64, range: [f64; 2]| {
+                num(s.get(k), &format!("waves/sea/{k}"), default, range)
+            };
+            let wind = field("wind", f64::NAN, [0.0, 60.0])?;
+            if wind.is_nan() {
+                return Err(bad("bad_input", at("waves/sea/wind")));
+            }
+            let direction = field("direction", 0.0, [-3600.0, 3600.0])?;
+            let spread = field("spread", 30.0, [0.0, 60.0])?;
+            let seed = match s.get("seed") {
+                None | Some(Value::Null) => seed,
+                Some(v) => v
+                    .as_u64()
+                    .and_then(|x| u32::try_from(x).ok())
+                    .ok_or_else(|| bad("out_of_range", at("waves/sea/seed")))?,
+            };
+            drawn = Some(Sea {
+                wind,
+                direction,
+                spread,
+                seed,
+                rows: sea(wind, direction, spread, seed),
+            });
+            let d = heading(direction);
+            (Vec::new(), [d[0] * wind, d[1] * wind])
+        }
         Some(w @ Value::Object(_)) => wind_of(w.get("wind").or(Some(w)), &at)?,
         Some(_) => return Err(bad("out_of_range", at("waves"))),
     };
@@ -472,6 +601,7 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         [1e-3, 1e5],
     )?;
     let distort = num(spec.get("distort"), "distort", 16.0, [0.0, 256.0])?;
+    let ior = num(spec.get("ior"), "ior", 1.33, [1.0, f64::INFINITY])?;
     let foam = num(
         spec.get("foam").and_then(|f| f.get("threshold")),
         "foam/threshold",
@@ -525,6 +655,7 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         parts: BTreeSet::new(),
         plates: Vec::new(),
         waves,
+        sea: drawn,
         ripple_scale,
         ripple_strength,
         drift,
@@ -532,6 +663,7 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         absorption: color,
         depth,
         distort,
+        ior,
         foam,
         foam_speed,
         flow: crate::flow::parse(material, spec.get("flow"))?,
@@ -594,6 +726,23 @@ pub fn find<'a>(
         if let Some(w) = found.as_mut().filter(|w| w.material == name) {
             w.parts.insert(s.id.clone());
             let corners = crate::scene::corners_of(s);
+            // #3033: a plate under 100 m on its shorter side can't hold a sea's longest waves.
+            if w.sea.is_some() && corners.len() == 8 {
+                let side = |c: usize| {
+                    let d = |a: usize| corners[c][a] - corners[0][a];
+                    ops::sqrt(d(0) * d(0) + d(1) * d(1) + d(2) * d(2))
+                };
+                let shorter = side(1).min(side(4));
+                if shorter + 1e-6 < SEA_PLATE {
+                    return Err(carrying(
+                        "out_of_range",
+                        &format!("items/{name}/params/water/waves/sea"),
+                        json!({"ids": [name, s.id], "actual": {"part": s.id, "side": shorter},
+                            "what": format!("{} is {shorter} m on its shorter side: a sea's longest waves need {SEA_PLATE} m", s.id),
+                            "fix": "Make the plate at least 100 m on its shorter side, or give its water `waves: wind`."}),
+                    ));
+                }
+            }
             if first {
                 w.level = corners.iter().map(|c| c[1]).sum::<f64>() / corners.len().max(1) as f64;
             }
@@ -753,10 +902,10 @@ impl Water {
     }
 }
 
-/// A wake or a trail (#450) behind an item a live drag moves is refused at check, naming the
-/// item: a document control whose handle drags the item or one of its parents, whose earlier
-/// places nothing keeps for either to read. One a logic array moves reads the logic bake's
-/// earlier steps through its drivers (#265).
+/// A wake or a trail (#450) behind an item a live drag moves, or a plate's tracks under one
+/// (#3036), is refused at check, naming the item: a document control whose handle drags the item
+/// or one of its parents, whose earlier places nothing keeps for any of them to read. One a logic
+/// array moves reads the logic bake's earlier steps through its drivers (#265).
 pub fn dragged(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
     let empty = serde_json::Map::new();
     let items = doc
@@ -773,16 +922,14 @@ pub fn dragged(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
     if handles.is_empty() {
         return Ok(());
     }
-    for item in items.values() {
+    let sources = items.values().flat_map(|item| {
         let source = item
             .pointer("/params/water/wake/item")
             .or_else(|| item.pointer("/params/trail/of"));
-        let Some(wake) = source
-            .and_then(Value::as_str)
-            .map(|s| s.split('#').next().unwrap_or(s))
-        else {
-            continue;
-        };
+        let one = source.and_then(Value::as_str).into_iter();
+        one.chain(crate::tracks::sources(doc, item))
+    });
+    for wake in sources.map(|s| s.split('#').next().unwrap_or(s)) {
         // The item and its parents.
         let mut chain = vec![wake];
         while let Some(p) = items
@@ -951,6 +1098,63 @@ mod tests {
         assert!(read(within(65, F / 32, |_| 1.0)).is_ok());
     }
 
+    /// #3034: a 20 m lake at y = 0 seen from `eye`.
+    fn lake(eye: [f64; 3]) -> Value {
+        json!({
+            "format": 1, "profile": "scene", "title": "T", "size": [320, 180], "camera": "cam",
+            "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "name": "C", "order": "a0", "layer": "main", "params": {"projection": "perspective", "position": eye, "target": [0, 0, 0], "fov": 40}},
+                "wet": {"id": "wet", "kind": "material@1", "name": "M", "order": "a1", "layer": "main", "params": {"water": {}}},
+                "lake": {"id": "lake", "kind": "plate@1", "name": "L", "order": "b0", "layer": "main", "material": "wet", "params": {"grid": [4, 4], "size": [20, 20]}, "at": {"pos": [0, 0, 0]}}
+            }
+        })
+    }
+
+    fn look() -> crate::look::Look3 {
+        crate::look::Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}}))
+            .unwrap()
+    }
+
+    /// #3034: a frame is under water where its eye lies below a part's surface at rest, inside
+    /// its extent and lower than its plane; the view its mirror draws then takes the whole ray.
+    #[test]
+    fn a_frame_is_under_water_where_its_eye_lies_below_a_part() {
+        let look = look();
+        let at = |eye: [f64; 3]| {
+            crate::scene::evaluate(&lake(eye), 0, &look, &mut crate::label::Labels::new()).unwrap()
+        };
+        let below = at([0.0, -2.0, 3.0]);
+        let level = below.water.as_ref().expect("the lake is water").level;
+        assert!(level.abs() < 1e-9, "{level}");
+        assert_eq!(below.under, Some(level));
+        let mirrored = |scene: &Scene| {
+            let m = scene.mirror.clone().expect("the water mirrors");
+            crate::mirror::view(scene, &m, [160, 90]).under
+        };
+        assert_eq!(mirrored(&below), Some(f64::INFINITY));
+        // A camera aimed past the surface: a point 2 m under it shows in the mirrored view
+        // where its image 2 m over it shows in the frame, flipped about the centre.
+        let mut doc = lake([0.0, -2.0, 0.0]);
+        doc["items"]["cam"]["params"]["target"] = json!([0.5, 2.3, -6.9]);
+        let aimed = crate::scene::evaluate(&doc, 0, &look, &mut crate::label::Labels::new());
+        let aimed = aimed.unwrap();
+        let m = aimed.mirror.clone().expect("the water mirrors");
+        let view = crate::mirror::view(&aimed, &m, [320, 180]);
+        let seen = aimed.camera.project([0.0, 2.0, -6.9]).unwrap();
+        let drawn = view.camera.project([0.0, -2.0, -6.9]).unwrap();
+        let flipped = 2.0 * aimed.camera.centre[0] - seen[0];
+        assert!(
+            (drawn[0] - flipped).abs() < 1e-6 && (drawn[1] - seen[1]).abs() < 1e-6,
+            "{drawn:?} {seen:?}"
+        );
+        // Above its plane, and lower than it but beside the part.
+        for eye in [[0.0, 2.0, 3.0], [14.0, -2.0, 3.0]] {
+            let dry = at(eye);
+            assert_eq!((dry.under, mirrored(&dry)), (None, None), "{eye:?}");
+        }
+    }
+
     /// #2760: a list none of whose kinds carries a point is refused, naming the list.
     #[test]
     fn a_list_with_no_point_is_refused_by_name() {
@@ -970,5 +1174,40 @@ mod tests {
         let world = doc(json!({}));
         assert!(pointed(&world, "pond", "pool.occurrences", "p").is_ok());
         assert!(pointed(&world, "pond", "markers.beat", "p").is_err());
+    }
+
+    /// #3033: a sea on a plate under 100 m on its shorter side is refused at check, naming the
+    /// plate; at 100 m it holds its 64 waves, longest first.
+    #[test]
+    fn a_sea_is_refused_on_a_plate_under_100_m_on_its_shorter_side() {
+        let look = json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}});
+        let look = crate::look::Look3::read(&look).unwrap();
+        let on = |size: [f64; 2]| {
+            let doc = json!({
+                "format": 1, "profile": "scene", "title": "T", "size": [320, 180], "camera": "cam",
+                "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+                "items": {
+                    "cam": {"id": "cam", "kind": "camera@1", "name": "C", "order": "a0", "layer": "main", "params": {"projection": "perspective", "position": [0, 20, 60], "target": [0, 0, 0], "fov": 50}},
+                    "brine": {"id": "brine", "kind": "material@1", "name": "M", "order": "a1", "layer": "main", "params": {"water": {"waves": {"sea": {"wind": 10}}}}},
+                    "bay": {"id": "bay", "kind": "plate@1", "name": "P", "order": "b0", "layer": "main", "material": "brine", "params": {"grid": [4, 4], "size": size}}
+                }
+            });
+            crate::scene::evaluate(&doc, 0, &look, &mut crate::label::Labels::new())
+        };
+        let refused = on([400.0, 99.0]).err().expect("99 m is under 100 m");
+        assert_eq!(refused.code, "out_of_range");
+        assert!(
+            refused
+                .path
+                .starts_with("items/brine/params/water/waves/sea: bay is "),
+            "{}",
+            refused.path
+        );
+        let scene = on([400.0, 100.0]).ok().expect("100 m holds a sea");
+        let rows = &scene.water.as_ref().unwrap().sea.as_ref().unwrap().rows;
+        assert_eq!(rows.len(), SEA_WAVES);
+        assert!(rows
+            .windows(2)
+            .all(|w| w[0].wave.length >= w[1].wave.length));
     }
 }

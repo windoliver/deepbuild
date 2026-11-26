@@ -1,0 +1,237 @@
+# #3336's suite on base 3c564bbdd, arm64 Mac (Darwin 27.2), Node 24.22.0, load 84-107.
+# Command: npx vitest run tests/acceptance/3336 --reporter=verbose (PATH/cargo env as in the README).
+# Run 2026-11-23 20:07:59-20:13:57 PST, exit 1: 2 files failed, 3 tests failed, each at its own assertion.
+# This run predates two edits that change no assertion: the taste budget became 18.5 min in all (was a 17-min run limit),
+# and planted-writer's message cuts each output line to 300 characters. Home paths redacted to ~; long lines cut to 400.
+# #1941's own taste test fails here (texture-missing asset_missing), as on main; that is not judged.
+
+
+ RUN  v5.0.5 /private/tmp/<scratch>/blindB
+
+ × tests/acceptance/3336/planted-writer.test.ts > #3336 the unit lane reads its tree again after its commands > #3336.f0336513 a planted test that writes a tracked file under docs/evidence/ makes the unit lane FAIL, naming the path; its twin writing to a temp folder passes 10153ms
+   → a test that writes the tracked docs/evidence/3336-planted/scene-before.png makes the unit lane FAIL: exit 0; verdicts: ["PASS unit (3.53 s)"]; records: ["PASS"]
+--- the lane's output (last 60 lines):
+LANE unit
+RUN unit
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `~/.nvm/versions/node/v24.22.0/bin/node node_modules/vitest/vitest.mjs run --reporter=default --reporter=<tmp>/deep-3336-lane-gkW8Xv/repo/scripts/proof-vitest-reporter.mjs --exclude tests/acceptance/149/** --exclude tests/acceptance/1523/** --exclude tests/accep
+
+ RUN  v5.0.5 <tmp>/deep-3336-lane-gkW8Xv/repo
+
+stdout | tests/planted-3336.test.ts > draws a screenshot and writes it
+wrote <tmp>/deep-3336-lane-gkW8Xv/repo/docs/evidence/3336-planted/scene-before.png
+
+ ✓ tests/planted-3336.test.ts (1 test) 230ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:08:11
+   Duration  375ms (tests 85%, transform 7%, setup 4%, import 2%, worker 1%)
+PASS unit (3.53 s)
+: expected 0 to be greater than 0
+ × tests/acceptance/3336/taste.test.ts > #3336 the unit lane runs #1941's taste test from a clean copy > #3336.f7adc8c8 after #1941's taste test runs as the unit lane runs it, git status of the copy is clean 32ms
+   → git status --porcelain of the copy after tests/acceptance/1941/taste.test.ts (exit 1) in <tmp>/deep-3336-taste-3Oc3cF/repo: the tree it ends on isn't the tree it started on
+--- the run's last lines:
+
+ RUN  v5.0.5 <tmp>/deep-3336-taste-3Oc3cF/repo
+
+ ❯ tests/acceptance/1941/taste.test.ts (1 test | 1 failed) 253935ms
+   ❯ #1941.afbf01b2 screenshots of each planted-fault scene before and after its named fix, and the one taste call on them (1)
+     × #1941.afbf01b2 the run writes each planted-fault scene before and after its named fix from render-back's own snapshots, and the recorded call on exactly those says they look right 39237ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1941/taste.test.ts > #1941.afbf01b2 screenshots of each planted-fault scene before and after its named fix, and the one taste call on them > #1941.afbf01b2 the run writes each planted-fault scene before and after its named fix from render-back's own snapshots, and the recorded call on exactly those says they look right
+AssertionError: each planted-fault scene is drawn by render-back before and after its named fix is applied:
+  render-back of texture-missing before its fix (revision 0) isn't presented with a snapshot: {"code":"asset_missing","path":"items/crate-mat/params/maps/base_color","core":"core@0.0.0","set_digest":"cb7524850ed603528e456ac1bbf5b788263d19b707d3d35cc80eac09a835b471"}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "render-back of texture-missing before its fix (revision 0) isn't presented with a snapshot: {\"code\":\"asset_missing\",\"path\":\"items/crate-mat/params/maps/base_color\",\"core\":\"core@0.0.0\",\"set_digest\":\"cb7524850ed603528e456ac1bbf5b788263d19b707d3d35cc80eac09a835b471\"}",
++ ]
+
+ ❯ none tests/acceptance/1941/helpers.ts:49:73
+     47| /** No failures; the message lists them. */
+     48| export function none(failures: readonly string[], what: string): void {
+     49|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     50| }
+     51| /** A test that can't be judged here fails with this, never passes (AG…
+ ❯ tests/acceptance/1941/taste.test.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  20:09:33
+   Duration  254.16s (tests 100%)
+
+: expected [ …(27) ] to deeply equal []
+ × tests/acceptance/3336/taste.test.ts > #3336 the unit lane runs #1941's taste test from a clean copy > #3336.7d4ab4ab #1941's taste run writes nothing into the checkout, its screenshots land outside it, and the run names where 1ms
+   → files under the checkout's copy that tests/acceptance/1941/taste.test.ts (exit 1) in <tmp>/deep-3336-taste-3Oc3cF/repo wrote; whatever the run writes goes to a temp or run folder: expected [ …(27) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/3336/planted-writer.test.ts > #3336 the unit lane reads its tree again after its commands > #3336.f0336513 a planted test that writes a tracked file under docs/evidence/ makes the unit lane FAIL, naming the path; its twin writing to a temp folder passes
+AssertionError: a test that writes the tracked docs/evidence/3336-planted/scene-before.png makes the unit lane FAIL: exit 0; verdicts: ["PASS unit (3.53 s)"]; records: ["PASS"]
+--- the lane's output (last 60 lines):
+LANE unit
+RUN unit
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `~/.nvm/versions/node/v24.22.0/bin/node node_modules/vitest/vitest.mjs run --reporter=default --reporter=<tmp>/deep-3336-lane-gkW8Xv/repo/scripts/proof-vitest-reporter.mjs --exclude tests/acceptance/149/** --exclude tests/acceptance/1523/** --exclude tests/accep
+
+ RUN  v5.0.5 <tmp>/deep-3336-lane-gkW8Xv/repo
+
+stdout | tests/planted-3336.test.ts > draws a screenshot and writes it
+wrote <tmp>/deep-3336-lane-gkW8Xv/repo/docs/evidence/3336-planted/scene-before.png
+
+ ✓ tests/planted-3336.test.ts (1 test) 230ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:08:11
+   Duration  375ms (tests 85%, transform 7%, setup 4%, import 2%, worker 1%)
+PASS unit (3.53 s)
+: expected 0 to be greater than 0
+ ❯ tests/acceptance/3336/planted-writer.test.ts:32:123
+     30|     expect(planted.after, 'the planted writer rewrote the tracked scre…
+     31|     const failures = planted.verdicts.filter((v) => v.startsWith('FAIL…
+     32|     expect(failures.length, `a test that writes the tracked ${PLANTED_…
+       |                                                                                                                           ^
+     33|     expect(failures.some((v) => v.includes(PLANTED_SHOT)), `the unit l…
+     34|     expect(planted.exit, `the lane run exits 1: ${shown(planted)}`).to…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/3336/taste.test.ts > #3336 the unit lane runs #1941's taste test from a clean copy > #3336.f7adc8c8 after #1941's taste test runs as the unit lane runs it, git status of the copy is clean
+AssertionError: git status --porcelain of the copy after tests/acceptance/1941/taste.test.ts (exit 1) in <tmp>/deep-3336-taste-3Oc3cF/repo: the tree it ends on isn't the tree it started on
+--- the run's last lines:
+
+ RUN  v5.0.5 <tmp>/deep-3336-taste-3Oc3cF/repo
+
+ ❯ tests/acceptance/1941/taste.test.ts (1 test | 1 failed) 253935ms
+   ❯ #1941.afbf01b2 screenshots of each planted-fault scene before and after its named fix, and the one taste call on them (1)
+     × #1941.afbf01b2 the run writes each planted-fault scene before and after its named fix from render-back's own snapshots, and the recorded call on exactly those says they look right 39237ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1941/taste.test.ts > #1941.afbf01b2 screenshots of each planted-fault scene before and after its named fix, and the one taste call on them > #1941.afbf01b2 the run writes each planted-fault scene before and after its named fix from render-back's own snapshots, and the recorded call on exactly those says they look right
+AssertionError: each planted-fault scene is drawn by render-back before and after its named fix is applied:
+  render-back of texture-missing before its fix (revision 0) isn't presented with a snapshot: {"code":"asset_missing","path":"items/crate-mat/params/maps/base_color","core":"core@0.0.0","set_digest":"cb7524850ed603528e456ac1bbf5b788263d19b707d3d35cc80eac09a835b471"}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "render-back of texture-missing before its fix (revision 0) isn't presented with a snapshot: {\"code\":\"asset_missing\",\"path\":\"items/crate-mat/params/maps/base_color\",\"core\":\"core@0.0.0\",\"set_digest\":\"cb7524850ed603528e456ac1bbf5b788263d19b707d3d35cc80eac09a835b471\"}",
++ ]
+
+ ❯ none tests/acceptance/1941/helpers.ts:49:73
+     47| /** No failures; the message lists them. */
+     48| export function none(failures: readonly string[], what: string): void {
+     49|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     50| }
+     51| /** A test that can't be judged here fails with this, never passes (AG…
+ ❯ tests/acceptance/1941/taste.test.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  20:09:33
+   Duration  254.16s (tests 100%)
+
+: expected [ …(27) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   " M docs/evidence/1941/budget-over-class-after.png",
++   " M docs/evidence/1941/budget-over-class-before.png",
++   " M docs/evidence/1941/budget-showpiece-after.png",
++   " M docs/evidence/1941/budget-showpiece-before.png",
++   " M docs/evidence/1941/coincident-walls-after.png",
++   " M docs/evidence/1941/coincident-walls-before.png",
++   " M docs/evidence/1941/contrast-muted-after.png",
++   " M docs/evidence/1941/contrast-muted-before.png",
++   " M docs/evidence/1941/exposure-clipped-after.png",
++   " M docs/evidence/1941/exposure-clipped-before.png",
++   " M docs/evidence/1941/floating-vase-after.png",
++   " M docs/evidence/1941/floating-vase-before.png",
++   " M docs/evidence/1941/framing-cut-after.png",
++   " M docs/evidence/1941/framing-cut-before.png",
++   " M docs/evidence/1941/grid-off-after.png",
++   " M docs/evidence/1941/grid-off-before.png",
++   " M docs/evidence/1941/noise-reseeds-after-next-frame.png",
++   " M docs/evidence/1941/noise-reseeds-after.png",
++   " M docs/evidence/1941/noise-reseeds-before-next-frame.png",
++   " M docs/evidence/1941/noise-reseeds-before.png",
++   " M docs/evidence/1941/overlap-crates-after.png",
++   " M docs/evidence/1941/overlap-crates-before.png",
++   " M docs/evidence/1941/scale-door-after.png",
++   " M docs/evidence/1941/scale-door-before.png",
++   " M docs/evidence/1941/seam-moved-after.png",
++   " M docs/evidence/1941/seam-moved-before.png",
++   " M docs/evidence/1941/texture-missing-after.png",
++ ]
+
+ ❯ tests/acceptance/3336/taste.test.ts:30:171
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/3336/taste.test.ts > #3336 the unit lane runs #1941's taste test from a clean copy > #3336.7d4ab4ab #1941's taste run writes nothing into the checkout, its screenshots land outside it, and the run names where
+AssertionError: files under the checkout's copy that tests/acceptance/1941/taste.test.ts (exit 1) in <tmp>/deep-3336-taste-3Oc3cF/repo wrote; whatever the run writes goes to a temp or run folder: expected [ …(27) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rewrote docs/evidence/1941/budget-over-class-after.png",
++   "rewrote docs/evidence/1941/budget-over-class-before.png",
++   "rewrote docs/evidence/1941/budget-showpiece-after.png",
++   "rewrote docs/evidence/1941/budget-showpiece-before.png",
++   "rewrote docs/evidence/1941/coincident-walls-after.png",
++   "rewrote docs/evidence/1941/coincident-walls-before.png",
++   "rewrote docs/evidence/1941/contrast-muted-after.png",
++   "rewrote docs/evidence/1941/contrast-muted-before.png",
++   "rewrote docs/evidence/1941/exposure-clipped-after.png",
++   "rewrote docs/evidence/1941/exposure-clipped-before.png",
++   "rewrote docs/evidence/1941/floating-vase-after.png",
++   "rewrote docs/evidence/1941/floating-vase-before.png",
++   "rewrote docs/evidence/1941/framing-cut-after.png",
++   "rewrote docs/evidence/1941/framing-cut-before.png",
++   "rewrote docs/evidence/1941/grid-off-after.png",
++   "rewrote docs/evidence/1941/grid-off-before.png",
++   "rewrote docs/evidence/1941/noise-reseeds-after-next-frame.png",
++   "rewrote docs/evidence/1941/noise-reseeds-after.png",
++   "rewrote docs/evidence/1941/noise-reseeds-before-next-frame.png",
++   "rewrote docs/evidence/1941/noise-reseeds-before.png",
++   "rewrote docs/evidence/1941/overlap-crates-after.png",
++   "rewrote docs/evidence/1941/overlap-crates-before.png",
++   "rewrote docs/evidence/1941/scale-door-after.png",
++   "rewrote docs/evidence/1941/scale-door-before.png",
++   "rewrote docs/evidence/1941/seam-moved-after.png",
++   "rewrote docs/evidence/1941/seam-moved-before.png",
++   "rewrote docs/evidence/1941/texture-missing-after.png",
++ ]
+
+ ❯ tests/acceptance/3336/taste.test.ts:41:133
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Start at  20:08:01
+   Duration  355.72s (tests 100%)
+

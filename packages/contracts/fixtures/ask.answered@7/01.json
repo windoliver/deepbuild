@@ -1,0 +1,39 @@
+{
+  "v": 7,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "ask.answered",
+  "subject": "ask:01K74G4B6D8F0H2K4M6P8R0T2V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "answer": "looks-right",
+    "plan_hash": null,
+    "decision": "none",
+    "via": "card",
+    "verified": true,
+    "on": {
+      "kind": "evidence",
+      "ref": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    },
+    "token": null,
+    "words": null,
+    "image": null,
+    "option": "looks-right",
+    "pictures": [
+      {
+        "sha256": "60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752",
+        "shown": true,
+        "scale": 1,
+        "ms": 2400
+      },
+      {
+        "sha256": "fd61a03af4f77d870fc21e05e7e80678095c92d808cfb3b5c279ee04c74aca13",
+        "shown": false,
+        "scale": 0.127,
+        "ms": 900
+      }
+    ]
+  }
+}

@@ -3,7 +3,7 @@ import type { JsonValue } from '@deepbuild/contracts';
 import type { Connection, RecordStore } from '@deepbuild/record';
 import type { AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Decision, InboxStatus, Missing, PlanStep, Refusal, Resolver, RuleState } from './model.js';
 
-/** One row of ask.sources@1: a place that raises asks, the one kind it raises, and its fixture. */
+/** One row of ask.sources@2: a place that raises asks, the one kind it raises, and its fixture, an ask as the place raises it. */
 export interface AskSource {
   source: string;
   kind: AskKind;
@@ -79,6 +79,11 @@ export interface AsksOptions {
    * left out, the shipped adapters' caps answer, and an agent no adapter knows has none.
    */
   errorTurnHook?: (agent: string) => boolean;
+  /**
+   * The pictures a taste call's evidence lists (#3234), by their SHA-256 in its order, read from the manifest the ask is
+   * pinned to; undefined when the evidence lists none. Left out, no answer records its pictures unless the card sent them.
+   */
+  pictures?: (evidence: string) => string[] | undefined;
 }
 /** One row of the inbox projection that `deep inbox` and the app read. */
 export interface InboxRow {
@@ -101,8 +106,19 @@ export interface InboxRow {
   missing: Missing | null;
   /** What you typed beside an ask that typed text can't close, as its card shows it. */
   words: string[];
-  /** The exception "this session keeps asking" that holds it, while it shows only there (#667); null otherwise. */
+  /**
+   * True only on its session's "keeps asking" exception, the one its further asks fold into; false on every other row,
+   * other exceptions included. The app reads it to tell which exception holds a session's folded asks.
+   */
+  holder: boolean;
+  /**
+   * The exception that holds it while it shows only there (#667), which may be another session's of its thread; null
+   * otherwise. The app keeps a folded ask from a panel until this is in sight.
+   */
   folded: string | null;
+  /** Who raised it. A fold is one person's, so the app folds a live ask only into an exception of the same pair. */
+  actor: string;
+  scope: string;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -119,6 +135,8 @@ export interface Asks {
    * and the time before you saw it, or before they were back on, moves its deadline later as `away` does.
    */
   notifications(off: boolean): Promise<void>;
+  /** Whether one of your batch times has come since the asks were last shown, by your settings as they are now: the hub's beat ticks then, with nothing else due. */
+  batchDue(): Promise<boolean>;
   card(ask: string): Promise<Card>;
   needsYou(): Promise<Card[]>;
   holds(session: string, step: Step): Promise<string[]>;

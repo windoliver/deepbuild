@@ -1,0 +1,16 @@
+# #321 AC5 (deadline.test.ts, "held with nobody answering") at this change and at its merge base 2a69a293, alternated, same box
+
+== head, first run (load ~36)
+Error: AC5 #321.e6090cff [effect.push] the call never runs: `git push origin main`, sent again after ask:… took no, was allowed (… stderr "deep-hook: spooled …, but its sync didn't finish within the hook's 50 ms")
+== base, first run (load 41)
+Tests  1 passed | 1 skipped (2)
+== head run 1 load 29.53
+      Tests  1 passed | 1 skipped (2)
+== base run 1 load 24.12
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+Error: AC5 #321.e6090cff [effect.push] the call never runs: `git push origin main`, sent again after ask:01M6ZXEBPPH9WGC4JCJ7XZJQSG took no, was allowed (exit 0 after 33 ms, stdout "", stderr "deep-hook: spooled 01M6ZXFGDB205VT9FG2JTWHQF7, but its sync didn't 
+      Tests  1 failed | 1 skipped (2)
+== head run 2 load 31.81
+      Tests  1 passed | 1 skipped (2)
+== base run 2 load 42.95
+      Tests  1 passed | 1 skipped (2)

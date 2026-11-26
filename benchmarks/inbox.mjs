@@ -44,7 +44,7 @@ for (let d = 0; d < 30; d++) {
     for (let n = 0; n < 5; n++) {
       const id = ulidAt(at + n);
       const data = { ...structuredClone(taste), question: `Which header for ${session} screen ${n}?`, key: sha256(`${session}:${n}`), pinned_to: { kind: 'evidence', ref: sha256(`${session} screen ${n}`) }, deadline: at + (d === 29 ? 3 * DAY : DAY) };
-      appends.push(record.append({ writer: 'core', actor: 'you', scope: 'you', session }, { v: 1, id, kind: 'ask.created', ts: at + n, data }));
+      appends.push(record.append({ writer: 'core', actor: 'you', scope: 'you', session }, { v: 6, id, kind: 'ask.created', ts: at + n, data }));
       if (d < 29) defaults.push({ session, input: { v: 1, id: ulidAt(at + DAY), kind: 'ask.defaulted', subject: `ask:${id}`, ts: at + DAY, data: { answer: taste.default, plan_hash: null, decision: 'none' } } });
       else open++;
     }

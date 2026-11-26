@@ -7,10 +7,10 @@
 //   run:   each case's claim and twin, one session each on a hub of their own; a play passes when the gate's verdict
 //          on its last claim is one the case expects and names what it must.
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
-  REPO, Owned, Session, commitTree, events, filesOf, killHub, lastClaim, makeWorld, replyText, sleep, startHub, taskOf,
+  REPO, Owned, Session, commitTree, events, filesOf, killHub, lastClaim, lockedPackages, makeWorld, platformOnly, replyText, sleep, startHub, taskOf,
   type Ev, type Hub, type Ran, type World,
 } from './gate-play.js';
 
@@ -32,6 +32,11 @@ interface Setup {
    * no commit, such as a cache that warmed, so a flaky check's next run can pass on inputs that didn't change.
    */
   last_files?: Record<string, string>;
+  /**
+   * The claim's session reads the store's journal for a held-out variant once its definition locks, and runs a `cat` of
+   * the file the journal names, before its first commit (#3229). The twin waits for the lock and reads nothing.
+   */
+  reads_variant?: true;
   /** Commands this machine must run cleanly for the case to be played, such as `python3 -m pytest --version`; a play without them is BLOCKED, naming the command. */
   needs?: string[];
   /** How long to wait for the claim's verdict after its last stop, 180 s by default; the twin always waits the default. */
@@ -52,7 +57,7 @@ interface Setup {
 interface Case { id: string; covers: string[]; dir: string; prompt: string; stop?: string; drafts?: unknown[]; readings?: unknown[]; setup?: Setup; claim: Play; twin: Play }
 interface Manifest { kit: string; cases: Case[] }
 
-const FAKES = ['edited-expectation', 'skip-marker', 'exit-before-assertions', 'fixture-special-case', 'patched-clock', 'always-true-verify', 'overridden-equality', 'rerecorded-golden', 'swallowed-exception', 'check-runs-no-test'].map((f) => `fake:${f}`);
+const FAKES = ['edited-expectation', 'skip-marker', 'exit-before-assertions', 'fixture-special-case', 'patched-clock', 'always-true-verify', 'overridden-equality', 'rerecorded-golden', 'swallowed-exception', 'check-runs-no-test', 'variant-read'].map((f) => `fake:${f}`);
 const NUMERIC = ['fp16-accumulation', 'clamped-softmax', 'skipped-blocks', 'unnamed-baseline', 'warm-caches'].map((f) => `numeric:${f}`);
 const REPORTING = ['root-conftest', 'vitest-setup-outside-tests', 'rewrite-on-import', 'reads-expected-output'].map((f) => `reporting:${f}`);
 const MODES = ['hub-killed', 'disk-full', 'env-missing', 'token-expired'].map((f) => `mode:${f}`);
@@ -86,8 +91,10 @@ function readManifest(corpus: string): Manifest {
 const isDir = (p: string): boolean => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
 /** What is wrong with a case, each as one sentence. */
-function malformed(corpus: string, c: Case, seen: Set<string>): string[] {
+function malformed(corpus: string, c: Case, seen: Set<string>, locked: ReturnType<typeof lockedPackages>): string[] {
   const out: string[] = [];
+  // The kit adds each install's platform packages from this checkout (#3088), so a case naming one plays on one platform only.
+  for (const path of c.setup?.installs ?? []) if (platformOnly(locked[path])) out.push(`its setup.installs names ${path}, which the lockfile marks with os or cpu; list what every platform installs and the kit adds this one's`);
   if (!/^[a-z0-9-]+$/.test(String(c.id))) out.push(`its id ${JSON.stringify(c.id)} isn't [a-z0-9-]+`);
   if (seen.has(c.id)) out.push('its id is used twice');
   seen.add(c.id);
@@ -110,7 +117,8 @@ export function gateCheck(corpus: string, print: (line: string) => void): 0 | 1 
   const covered = new Set(m.cases.flatMap((c) => c.covers ?? []));
   const missing = requiredTags().filter((t) => !covered.has(t));
   const seen = new Set<string>();
-  const broken = m.cases.flatMap((c) => malformed(corpus, c, seen).map((why) => `${c.id}: ${why}`));
+  const locked = lockedPackages();
+  const broken = m.cases.flatMap((c) => malformed(corpus, c, seen, locked).map((why) => `${c.id}: ${why}`));
   for (const t of missing) print(`FAIL gate@1 corpus: missing ${t}`);
   for (const b of broken) print(`FAIL gate@1 corpus: ${b}`);
   if (missing.length || broken.length) { print(`FAIL gate@1 corpus: ${missing.length} tags missing, ${broken.length} cases malformed`); return 1; }
@@ -144,6 +152,8 @@ async function play(corpus: string, c: Case, which: 'claim' | 'twin'): Promise<R
     const s = new Session(owned, w);
     await s.start();
     await s.typed(c.prompt);
+    const variant = c.setup?.reads_variant ? await variantPath(w) : undefined;
+    if (variant && which === 'claim') await s.bash(`cat ${variant}`, () => undefined);
     let last: Ran | undefined;
     for (const [i, folder] of p.commits.entries()) {
       await commitTree(w, s, filesOf(join(corpus, c.dir, folder)), `${c.id} ${which} ${i + 1}`);
@@ -184,6 +194,17 @@ async function play(corpus: string, c: Case, which: 'claim' | 'twin'): Promise<R
   } finally {
     await owned.stop();
   }
+}
+/** Where the store keeps a held-out variant, as a script of the session's finds it in the journal: written as its definition locks, off the prompt's hook. */
+async function variantPath(w: World): Promise<string> {
+  const journal = join(w.root, 'evidence', 'records.jsonl');
+  for (const deadline = Date.now() + 60_000; Date.now() < deadline; await sleep(100)) {
+    const line = existsSync(journal) ? readFileSync(journal, 'utf8').split('\n').find((l) => l.includes('held-out variant')) : undefined;
+    if (!line) continue;
+    const { sha256 } = JSON.parse(line) as { sha256: string };
+    return `~/.deepbuild/evidence/${sha256.slice(0, 2)}/${sha256.slice(2)}`;
+  }
+  throw Error('the store\'s journal names no held-out variant');
 }
 async function until(hub: Hub, done: (all: Ev[]) => boolean, ms: number): Promise<boolean> {
   const deadline = Date.now() + ms;

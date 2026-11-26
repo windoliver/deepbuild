@@ -1,0 +1,198 @@
+Acceptance tests for #3233 at the base 00239f65 (main when this job started), with only tests/acceptance/3233/ and its
+one [[test]] entry in crates/deep-replica/Cargo.toml added, on 2026-11-24 on a Mac17,10 with node v24.22.0. The
+machine was shared and loaded all night (one-minute load 22 to 75 on 18 cores).
+
+READ THIS FIRST: two of the four files ran as test files; two did not.
+
+  kit.test.ts      ran as a test file      5 tests: 3 fail, 2 pass
+  guide.test.ts    ran as a test file      2 tests: 1 fails, 1 passes
+  panels.test.ts   NOT RUN as a test file  14 tests: by the probes below, 11 would fail and 3 pass
+  budgets.test.ts  NOT RUN as a test file  2 tests: by the probes below, both would fail
+
+Why the two are unrun. Each file is to run once through the machine's throttle:
+  node scripts/throttle.mjs test --wait 60 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/3233 --no-file-parallelism <file>
+The throttle was asked twice and gave no grant either time:
+  03:30 to 04:32  (for a probe)           INCONCLUSIVE no grant: no test grant came within 60 min
+  04:54 to 05:54  (for panels.test.ts)    INCONCLUSIVE no grant: no test grant came within 60 min
+It was not asked a third time. By 06:04 the checkout's target/ folder, with the base's whole build in it, was gone
+(the checkout's own folder was last changed at 05:14, while the second request waited). This job ran nothing that
+removes it and doesn't know what did. Without it either file's own build step would compile every workspace crate,
+which this job may not start, so neither file was run outside the throttle either.
+
+The two files that ran were run directly, not through the throttle, at 06:07 and 06:13. They read TypeScript, the
+guide and one script, build nothing and take under a second each.
+
+What stands in for the two unrun files is a reading, not a run. Between the two waits, while the build was there,
+the built binaries were driven directly at the base (seconds each, no cargo):
+  - the suite's Rust half, target/debug/deps/acceptance_3233-6a5cce7ec994c831 --out <file>, all 12 probes, 04:33;
+  - the same binary's key drive on three variants of named-press, to learn what the base does with keys;
+  - target/debug/deep-app panel-bench with target/debug/deep-panel-host on the suite's 500-node panel, through the
+    suite's own helper (helpers.ts, bench), 04:49.
+The suite's judges (judges.ts) were then run on what those gave, call for call as each test makes them. So for the
+two unrun files the lines below are what the judge said of the base's real answer, and the assertion the test would
+fail at; the test file itself, its cargo step and its beforeAll are untried.
+
+
+kit.test.ts (ran: 3 fail, 2 pass)
+
+  x AC1 #3233.0404c3df the kit is at revision 2 and lists "Names what it presses", "Reads on its fill" and "Reaches by
+    key" beside its five rules, each with one planted fill of its own
+      AssertionError: expected [ ...(9) ] to deeply equal []
+        "the kit is at revision 1, not 2"
+        "the kit lists 5 rules, not the five it had and three more: no-network, no-programs, focus-on-gesture,
+         inside-its-panel, never-over-the-card"
+        "the kit plants 5 fills, not the five it had and three more: reaches-network, runs-a-program,
+         moves-focus-unasked, draws-outside, covers-the-card"
+        "no rule of the kit is named \"Names what it presses\": ..."     (and "Reads on its fill", "Reaches by key")
+        "0 planted fills raise no_name; \"Names what it presses\" needs exactly one"   (and low_contrast, pointer_only)
+  x AC1 #3233.0404c3df the kit fails each of the three planted fills with its own code and message and no other
+      AssertionError: expected [ ...(3) ] to deeply equal []
+        "the kit plants no fill that raises no_name, for \"Names what it presses\""    (and low_contrast, pointer_only)
+  v AC1 #3233.0404c3df the reference panel passes
+      Passes, as it should: the base's reference panel passes the base's kit, and the three rules must not fail it.
+  v AC1 #3233.0404c3df the five earlier plants still fail with theirs alone
+      Passes, as it should: each fails at the base with its own code and message, and the three rules must not reach
+      one of them first.
+  x AC1 #3233.0404c3df planted: a kit that passes one of the three plants fails its own hygiene, naming the rule
+      AssertionError: expected [ ...(3) ] to deeply equal []
+        "the kit plants no fill that raises no_name and breaks a rule it lists, for \"Names what it presses\""
+        (and low_contrast, pointer_only)
+      It fails before its plant: there is no plant to pass. The shipped kit passed its hygiene first. Tried apart on
+      each of the base's five plants, earlier the same night: the changed kit reads PASS where the shipped kit reads FAIL, and the
+      base's hygiene then says "planted fill <name> passes every case of the fixed part; the kit admits it", which
+      names the fill and no rule.
+
+
+guide.test.ts (ran: 1 fails, 1 passes)
+
+  x AC6 #3233.58c6f0e7 the extension guide's table lists eight planted fills for the slot: the five it had and the
+    kit's three
+      AssertionError: expected [ ...(4) ] to deeply equal []
+        "the kit plants no fill that raises no_name, for \"Names what it presses\", so the row has no name to list
+         for it"                                                                  (and low_contrast, pointer_only)
+        "the row lists 5 planted fills (5 distinct), not eight: reaches-network, runs-a-program, moves-focus-unasked,
+         draws-outside, covers-the-card"
+  v AC6 #3233.58c6f0e7 the guide's own drift check passes
+      Passes, as it should: the base's guide is what its contract publishes ("PASS guide: docs/extension-guide.md
+      has one entry per published method (46) and slot (17), each as the contract has it"). It fails a guide whose
+      row was edited by hand.
+
+
+panels.test.ts (NOT RUN as a test file; the judges' reading of the built Rust half's report)
+
+What the base gave, for every probe: the pack check passed ({"result":"pass"}, names nothing) and the load was ok.
+Every fixture loaded and drew, so no test below blames a rule for a fixture that doesn't draw. The trees:
+
+  nameless-press    v_flex .size_full
+                      div
+                        text "Refreshed 0"
+                      div :id[Str("refresh-control")] .w[Number(120.0)] .h[Number(28.0)] :track_focus[Number(..)] :on_click(fn)
+  named-press       the same, the last div holding    text "Refresh"
+  pointer-only      the same as named-press, the last div without :track_focus
+  button-label      v_flex .size_full
+                      Button "button" .w[Number(120.0)] .h[Number(28.0)] :track_focus[Number(..)] :on_click(fn)
+                        text "button"
+  faint-text        div .size_full .bg[Str("#ffffff")] .text_color[Str("#9a9a9a")]
+                      text "Status"
+  clear-text        div .size_full .bg[Str("#ffffff")] .text_color[Str("#595959")]
+                      text "Status"
+  text-color-only   div .size_full .text_color[Str("#cccccc")]
+                      text "Status"
+  keys              {"start":0,"afterTab":0,"afterEnter":0,"afterSpace":0,"tabs":4}
+  keys-planted      {"start":0,"afterTab":0,"afterEnter":0,"afterSpace":0,"tabs":4}
+
+  x AC2 #3233.c6c7b61c a div that takes a press and holds no text is refused at pack check, naming the node and no_name
+      would fail at: expect(packRefuses(...)).toEqual([])
+        "nameless-press: the pack check took the panel, which no_name refuses"
+  x AC2 #3233.c6c7b61c a div that takes a press and holds no text is refused again at load, naming the node and no_name
+      would fail at: expect(loadRefuses(...)).toEqual([])
+        "nameless-press: the load took the panel, which no_name refuses"
+  v AC2 #3233.c6c7b61c the same div holding the text "Refresh" loads
+      Would pass, as it should: the base takes a named press, and the rule must not refuse one.
+  x AC2 #3233.c6c7b61c a Button whose only label is "button" is refused at pack check and at load, naming the node and
+    no_name
+        "button-label: the pack check took the panel, which no_name refuses"
+        "button-label: the load took the panel, which no_name refuses"
+  x AC3 #3233.dd2321b3 text #9a9a9a on a bg of #ffffff is refused at pack check and at load, naming both colors and the
+    ratio under 4.5
+      (the test's own ratio, 2.814, is under 4.5)
+        "faint-text: the pack check took the panel, which low_contrast refuses"
+        "faint-text: the load took the panel, which low_contrast refuses"
+  v AC3 #3233.dd2321b3 the same text as #595959 loads
+      Would pass, as it should (the test's own ratio, 7.005, clears 4.5): the rule must not refuse ink that clears
+      the floor.
+  x AC3 #3233.dd2321b3 a panel that sets only text_color to #cccccc is refused at pack check and at load, naming the
+    look's fill and the theme where it fails
+      (by the look's own file, #cccccc reads 1.47 on light raised #f5f5f6 and 1.61 on light ground #ffffff, and
+      clears the floor on both dark fills; the load ran with the replica drawing dark)
+        "text-color-only: the pack check took the panel, which low_contrast refuses"
+        "text-color-only: the load took the panel, which low_contrast refuses"
+  x AC4 #3233.5531067a a div that takes a press and can't take focus is refused at pack check and at load with
+    pointer_only, naming the node
+        "pointer-only: the pack check took the panel, which pointer_only refuses"
+        "pointer-only: the load took the panel, which pointer_only refuses"
+  v AC4 #3233.5531067a with focus it loads
+      Would pass, as it should: the base takes a press that takes focus, and the rule must not refuse one.
+  x AC4 #3233.5531067a in a replica Tab reaches it, and Enter, then Space, each run its handler exactly once
+      would fail at: expect(driveProblems('the replica', ...)).toEqual([])
+        "the replica: after Tab, pressed 4 times, Enter ran the handler 0 times: Tab didn't reach the element, or
+         Enter doesn't run its press"
+        "the replica: Space ran the handler 0 times, not exactly once"
+      The reason is the criterion's: at the base Tab reaches nothing a panel draws. Seen apart, on variants of the
+      fixture run through the same probe:
+        - the div also given .tab_index(0) and .tab_stop(true), which the base's tree takes: still 4 Tabs and 0 runs,
+          so the base's replica window moves no focus on Tab at all;
+        - the div given focus by the script's own task (which the base's pack check refuses, "it moves focus without
+          your gesture", so it is no fixture): Enter ran the handler once and Space once,
+          {"start":0,"afterTab":0,"afterEnter":1,"afterSpace":2,"tabs":1}. Enter and Space on a focused element
+          already hold at the base; what is new is that Tab reaches it.
+  x AC4 #3233.5531067a planted: a host that runs the handler on both key down and key up fails, naming the count
+      would fail at its first assertion, 'the real host must pass the judge before its plant means anything', with
+      the real drive's two problems above: at the base the real host doesn't pass, so its plant shows nothing yet.
+      The planted host itself reads as the README says once an element holds focus: on the variant that takes focus
+      itself it gave {"start":0,"afterTab":0,"afterEnter":2,"afterSpace":4,"tabs":1}, where the real delivery gave
+      1 and 2, and the judge says of it "the planted host: Enter ran the handler 2 times, not exactly once".
+  x AC5 #3233.e6784a2a a panel installed against revision 1 that holds a nameless press still loads, and what panel@1
+    says of it for its listing names the finding
+      It loads (the first half holds at the base). It would fail on the second:
+        "installed-at-1: what panel@1 says of it, which its listing is made from, doesn't name no_name and
+         refresh-control: {"result":"pass"}"
+  x AC5 #3233.e6784a2a planted: a host that refuses it at load fails, naming the panel
+      The real loader loads it, so the first assertion holds. The planted host, which drops panel-kit.json, loaded
+      it too, so it would fail at:
+        'BLOCKED: the planted host, which drops the record of the earlier install, loaded the panel too, so in this
+         build no load holds a panel to revision 2'
+      That is the base's own lack: nothing there holds a panel to revision 2 at load.
+  x AC5 #3233.e6784a2a an update of that panel with the node unchanged is refused at pack check, naming the node and
+    no_name
+        "update-of-installed: the pack check took the panel, which no_name refuses"
+
+
+budgets.test.ts (NOT RUN as a test file; what its two tests read, taken apart)
+
+  x AC7 #3233.640994cd the perf lane has the task panel-rules-500, a #3233 first measurement, valid against the merge
+    base's budgets, and it runs
+      would fail at: expect(task, 'benchmarks/budgets.json has a task panel-rules-500').toBeDefined()
+      (benchmarks/budgets.json at the base holds 173 tasks and none of that id; validateBudgets of the base's budgets
+      against themselves, the step before, throws nothing; `git merge-base HEAD origin/main` answers the base)
+  x AC7 #3233.640994cd on a reference Mac, the three rules add under 1 ms to the check of a 500-node update
+      would fail at: expect(rulesProblems(report.runs, 100), "each timed update carries the three rules' time").toEqual([])
+        "run 0 of panel-bench reports no rulesNs, the three rules' time on each update: its fields are warmup,
+         scriptNs, ipcNs, totalNs"
+      The work before it holds at the base: deep-app panel-bench took the suite's panel, its report's tree counts
+      500 nodes (1 v_flex, 250 div, 249 text), and it reports the one run asked for. One run of 64 + 100 updates
+      took 4.6 s; a 500-node update there read about 2.0 ms in all at the median (script 1.0 ms, the boundary
+      1.0 ms), dev build, under load: a reading only.
+      It fails on the missing surface, before any time is judged, so it does not read INCONCLUSIVE here. Once the
+      surface exists, this machine as it was (thermal state "fair", load above its 18 cores) would read
+      INCONCLUSIVE, never a pass: judgeLimit said so of made-up readings, earlier the same night.
+
+
+Not checked at the base
+
+  - panels.test.ts's and budgets.test.ts's own run: their cargo step (`cargo test --locked -p deep-replica --test
+    acceptance_3233 -- --out <file>`; `cargo build --locked -p deep-panel-host -p deep-app --features
+    deep-app/panel-check --message-format=json`), the reading of cargo's messages for the two binaries, and the
+    beforeAll that holds the report. The Rust half and the bench were driven by their built files directly.
+  - That a test file's own build step compiles nothing on a fresh build: no file with a build step ran.
+  - `node scripts/repo-rules.mjs` on this folder.

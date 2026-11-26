@@ -1,0 +1,8 @@
+all cores
+foley alone	6087 ms	installed	load 130
+foley alone	4797 ms	installed	load 130
+foley alone	4848 ms	installed	load 130
+one core
+foley alone	28293 ms	installed	load 141
+foley alone	19891 ms	installed	load 146
+foley alone	11534 ms	installed	load 141

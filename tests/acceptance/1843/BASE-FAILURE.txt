@@ -1,0 +1,80 @@
+#1843's acceptance tests on the base, 2c79d71eb, with only this folder added, on an Apple M5 Max under macOS 27.2, Node
+24.22.0, toolchain 1.99.1, Nov 24 2026, 03:47, one-minute load about 24, inside one grant of the test throttle. The
+workspaces were built from this checkout. The screen was locked and the display asleep for the whole run (from 01:50 on).
+
+Command:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1843 --no-file-parallelism --reporter=verbose --testTimeout=600000
+
+  Test Files  2 failed (2)
+       Tests  17 failed | 3 passed (20)
+
+  clock.test.ts: 16 ran, 13 failed, 3 passed. real.test.ts: 4, all BLOCKED before the app was started.
+  After it helpers.ts and real.test.ts changed in the real app's half only (how long an answer is waited for, over one
+  connection; a control in a window that isn't active is BLOCKED, not a failure). clock.test.ts didn't, and wasn't run again.
+
+== AC1 #1843.5a8eb94d (clock.test.ts)
+
+  ✓ control: with no trigger the same press 600 ms after the card was presented answers
+
+  × move at 300 ms makes a press at 600 ms answer nothing and one at 800 ms answer
+    AssertionError: the card's move: expected [ Array(1) ] to deeply equal []
+    + "the trigger move never reached the card for ask:01KB1462AK0000000000000002 (\"Which store keeps the release notes?\"):
+       deep-drive refused {\"call\":\"window\",\"window\":{\"origin\":[120,80]}} (README, Surface 1): {\"code\":\"refused\",\"message\":
+       \"\\\"window\\\" is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record,
+       motion, expect, feed, resize, menus, show, terminal, clipboard, stored, close, ui_check and motion_check\"}"
+  ✓ resize at 300 ms makes a press at 600 ms answer nothing and one at 800 ms answer
+  × occluded at 300 ms …      AssertionError: the card's occluded: …    the same refusal, of {"visible":false}
+  × display at 300 ms …       AssertionError: the card's display: …     the same refusal, of {"display":2}
+  × activation at 300 ms …    AssertionError: the card's activation: …  the same refusal, of {"active":false}
+
+  × move on the armed card, at 700 ms, makes a press at 1000 ms answer nothing and one at 1200 ms answer
+    AssertionError: the armed card's move: …   the same refusal, of {"origin":[120,80]}
+  ✓ resize on the armed card, at 700 ms, makes a press at 1000 ms answer nothing and one at 1200 ms answer
+  × occluded on the armed card …     AssertionError: the armed card's occluded: …
+  × display on the armed card …      AssertionError: the armed card's display: …
+  × activation on the armed card …   AssertionError: the armed card's activation: …
+
+  × wrong program: a table that ignores move fails, naming it
+    AssertionError: the planted table (README, Plants: card-ignores-move) lets the press through: expected 'the trigger move
+    never reached the card …' to contain 'after move at 300 ms, a press 600 ms after the card was presented answered ask:01KB1462AK0000000000000002'
+  × wrong program: a table that ignores resize fails, naming it
+    AssertionError: the planted table (README, Plants: card-ignores-resize) lets the press through: expected '' to contain
+    'after resize at 300 ms, a press 600 ms after the card was presented answered ask:01KB1462AK0000000000000002'
+  × … occluded …     × … display …     × … activation …     as move's
+
+FAILS for the expected reason: the base's card hears no move, no cover, no display and no window coming forward, and nothing
+there can say one to it; the plants don't exist. The base passes `resize` on the virtual clock, armed or not: its ask page is
+laid out again in the frame a resize asks for, and `Controller::placed` presents the card again in a slot that moved. Those
+two tests stay as the regression the criterion names, and `card-ignores-resize` is what they fail on.
+
+== AC2 #1843.3a7ab2f8 and AC3 #1843.0a3b77c9 (real.test.ts): BLOCKED, not run
+
+  × AC2 … armed at 960×640, then resized to 700×400 …        Error: BLOCKED: the screen is locked
+  × AC2 … wrong program: a card that ignores resize …        Error: BLOCKED: the screen is locked
+  × AC3 … a click on an armed card's option in an inactive window …   Error: BLOCKED: the screen is locked
+  × AC3 … wrong program: a card that ignores activation …    Error: BLOCKED: the screen is locked
+
+Neither criterion's test has run on the base's real window. What each should say there, from what was seen and read:
+
+- AC2. The base likely PASSES it, against the criterion's "the merge base answers it": the card moved onto its ask's page (#1461,
+  #1808) after the issue was written. Seen in a scratch run, not a test, of the base's replica on AC2's own ask at the app's content
+  size (960×606, the title bar's 34 points left out): armed, its nine options inside the window, the last ending at 476; resized to 700×366,
+  presented in the first frame, its eighth and ninth options below the window's foot (at 368 and 416), still presented 3 s later;
+  a click on its first option sent the hub nothing; back at 960×606, armed within 2 s. Whether a click in the same breath as a real window's
+  resize lands before the app's next frame, where the base's card is still armed, only the real run can say. The test is the criterion's
+  words either way; what makes it fail is `card-ignores-resize`.
+- AC3. The base should FAIL it, at "the click that brought the inactive window forward (activation), landing on card-option:… of a card that
+  read armed, answered ask:…": its window takes the click that activates it (`acceptsFirstMouse` answers YES,
+  vendor/gpui-pre-macos/src/window.rs), and no card looks at activation. Not run.
+
+== What else was tried, each on a throwaway change in this checkout, reverted before the run above
+
+- AC1 on a throwaway right program (the `window` call telling the card, each of the five plants in it): 16 of 16 passed, so the timings
+  can be met and each plant is caught, naming its trigger.
+- The posted click (probe.swift, `post`). An AppKit window behind the lock gets a mouse event posted to its process only when it carries
+  both the window's number and the point in it: with the two public fields alone, or either of the others alone, nothing
+  arrived; with both, the down and the up arrived at that point, the window neither active nor key. On the base's own `deep-app`, made to lay out
+  its window each tick behind the lock, that click landed on the armed card's option, the confirm stand-in said yes, and the hub
+  recorded ask.answered via the card, twice in a row, on two asks.
+- Not tried: the reads and moves through the Accessibility API, and the window server's own click, on a real window. They need an unlocked screen.

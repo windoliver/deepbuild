@@ -4,23 +4,26 @@
 // journal keeps each run until its finish is durable, so a start after a cut finishes or reruns it.
 import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { readFileSync, realpathSync } from 'node:fs';
-import { basename, isAbsolute, relative } from 'node:path';
+import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, isAbsolute, relative } from 'node:path';
+import { availableMb, CLASS_MB, type Admission } from './admission.js';
 import type { ChecksProvider, CommandRun } from './checks-port.js';
 import { isRecord as isObj, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText, type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 import type { CheckResult } from '@deepbuild/conformance';
 import type { ExtensionHost } from '@deepbuild/extension-host';
-import { slot } from '@deepbuild/gate';
+import { admit, type MemoryWait } from '@deepbuild/gate';
 import type { LeaseTable } from '@deepbuild/leases';
-import { after, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
+import { after, type Grant, type Host, type Started, type Supervisor, type Used } from '@deepbuild/supervisor';
 import type { Up } from './environment-port.js';
 import type { TimingReport } from '@deepbuild/verdicts';
 import { isRoot, type Declared, type Hosts } from './hosts.js';
 import { words } from './claude-settings.js';
+import { inCheckout } from './hub-shared.js';
 import type { RunKey } from './gate-runner.js';
 import { FINDINGS, findingOf, type KeyFacts } from './shared-runs.js';
 import type { StackWant, Stacks } from './stacks.js';
+import { HELD_OUT, type Variant, type Variants } from './variants.js';
 import { keepAside, writeSynced } from './vfs.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
 
@@ -43,8 +46,17 @@ interface Run { run: string; check: string; claim: string; commit: string; argv:
   keep?: boolean;
   /** A host your SSH config names, where it runs as the user service named by its run token (#1942), which the journal keeps so a later hub follows it again. */
   host?: string; token?: string;
+  /** The held-out variant whose files lie in its checkout while it runs (#3229). */
+  variant?: Variant;
   /** The changes a run on a host declares it makes, each with its undo as you, recorded once it ends (#1946). */
-  changes?: Declared[] }
+  changes?: Declared[];
+  /** What it is admitted on (#3220): its expected peak memory, taken as units of the host's `mem` pool. */
+  memory?: Admission }
+/**
+ * A held-out variant's run (#3229): which variant, its files' plain bytes, held in memory until the run starts, and the
+ * build its checkout needs once they lie there.
+ */
+export interface HeldOutRun { variant: Variant; files: Record<string, Uint8Array>; build?: () => Promise<void> }
 /**
  * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
  * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
@@ -80,10 +92,14 @@ interface RunsOptions {
   invalid(claim: string, commit: string, reason: string, outcome?: 'INVALID' | 'INCONCLUSIVE'): Promise<void>;
   /** The gate runner keeps a claim's check run's closed record for its verdict. */
   recorded(run: string, record: CommandRun): CommandRun;
+  /** A lease holder as a waiting run's line names it (#3220). */
+  who(holder: string): string;
   /** The gate runner keys a run once it has ended (#1018): what run.finished keeps of its key. */
-  keyed(key: RunKey, run: string, record: CommandRun): Promise<KeyFacts>;
+  keyed(key: RunKey, run: string, record: CommandRun, used?: Used): Promise<KeyFacts>;
   stopping: () => boolean;
   stacks: Stacks;
+  /** Told when a held-out variant's files lie in a checkout, and when they are gone from it (#3229). */
+  variants: () => Pick<Variants, 'lies' | 'gone'>;
   store: () => EvidenceStore;
   host: () => Host;
   supervisor: () => Supervisor;
@@ -137,13 +153,27 @@ function recordable(run: Run, held: string[]): { spec: Obj; withheld: string[] }
 }
 
 
+/** What the gate reads of a check's run on a host (#999): passed on a clean exit, failed on any other, missing when it never started there. */
+function hostRecord(run: Run, end: { code: number | null; failed?: string | undefined }, cut: 'stopped' | 'overran' | undefined): CommandRun {
+  const empty = sha256Hex(new Uint8Array());
+  const outcome = cut ?? (end.code === 0 ? 'passed' : end.code === null ? 'missing' : 'failed');
+  const message = outcome === 'missing' ? end.failed ?? `it never started on ${run.host!}` : `the command exited ${String(end.code)} on ${run.host!}`;
+  return {
+    run: run.run, outcome, testsRun: outcome === 'passed' ? 1 : 0, tested: false, failures: outcome === 'failed' || outcome === 'missing' ? [{ test: '(run)', file: run.check, line: 1, stack: null, assertion: false, message }] : [],
+    evidence: [], read: [], mask: null, exit: end.code === null ? null : { code: end.code, signal: null, cause: 'exit' }, output: { stdout: '', stderr: '', sha256: { stdout: empty, stderr: empty } },
+    env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0,
+  } as CommandRun;
+}
+
 export class Runs {
   /** The journal read at start, updated and durably written as a whole. */
   private journal: Record<string, Run> = {};
   /** Each run in flight, by its handle: what it is, its end, and how to stop it. */
   private readonly live = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
   /** The held-out variants' runs still to finish (#1018), whose findings their finish withholds, keyed or not. */
-  private readonly heldOut = new Set<string>();
+  private readonly heldOut = new Map<string, HeldOutRun>();
+  /** The memory reserved and used on this host by the runs that ended with a reading since the hub started, in MB (#3220). */
+  private readonly memory = { reserved: 0, used: 0, runs: 0 };
   /** Each run on a host's stdout as it came, for `deep run follow` (#1942), kept a minute past its end; and who waits for more. */
   private readonly tails = new Map<string, { chunks: Buffer[]; size: number; ended: boolean; wake: (() => void)[] }>();
   constructor(private readonly o: RunsOptions) {}
@@ -215,8 +245,8 @@ export class Runs {
     this.o.point();
   }
 
-  /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and whether it's a held-out variant's (#1018); a claim's check that needs the app with its stack (#580). */
-  async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut = false, stack?: StackWant): Promise<Obj> {
+  /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and its held-out variant's files (#1018); a claim's check that needs the app with its stack (#580). */
+  async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut?: HeldOutRun, stack?: StackWant, memory?: Admission): Promise<Obj> {
     const { check, claim, commit, argv, env = {}, host, cwd = host === undefined ? process.cwd() : '', grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec, outside, keep = false, changes } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
@@ -248,16 +278,44 @@ export class Runs {
       throw new Refused(refusal('type', '/params/changes', 'Give changes only with host: a list of {does, changes, undo}, each what the run does, what it touches (files by absolute path) and its undo as you there, or null when it has none.', changes));
     }
     const handle = id ?? `run:${ulid(this.o.now())}`;
-    if (heldOut) this.heldOut.add(handle);
+    if (heldOut) this.heldOut.set(handle, heldOut);
     const run = await this.launch({
       run: handle, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment || stack ? { environment: true } : {}), ...(stack ? { stack } : {}),
       ...(keep ? { keep } : {}), ...(host !== undefined ? { host: host as string } : {}), ...(declared?.length ? { changes: declared as Declared[] } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
-      ...(key ? { key } : {}), ...(isObj(spec) && typeof command === 'string' ? { spec } : {}), ...(outside === true ? { outside: true } : {}),
+      ...(key ? { key } : {}), ...(heldOut ? { variant: heldOut.variant } : {}), ...(isObj(spec) && typeof command === 'string' ? { spec } : {}), ...(outside === true ? { outside: true } : {}),
+      ...(memory ? { memory } : {}),
     }).catch((error: unknown) => { this.heldOut.delete(handle); throw error; });
     return { run };
+  }
+
+  /**
+   * A held-out variant's files (#1018), over the snapshot's in its own checkout, from the moment its run starts. Each
+   * one's folder is resolved through any link the snapshot holds and must still lie in the checkout, and a link in the
+   * file's place is removed, never written through.
+   */
+  private lay(run: Run, held: HeldOutRun): void {
+    this.o.variants().lies(run.run, held.variant, run.cwd);
+    for (const [path, bytes] of Object.entries(held.files)) {
+      const file = inCheckout(run.cwd, path, "a held-out variant's file");
+      mkdirSync(dirname(file), { recursive: true });
+      rmSync(file, { force: true });
+      writeFileSync(file, bytes, { flag: 'wx' });
+    }
+  }
+  /** They go as the run ends, before its finish is recorded (#3229); a path the run led out of the checkout isn't followed. */
+  private lift(run: Run, held: HeldOutRun): void {
+    if (this.o.plant === 'leaves-unsealed-variant') return;
+    for (const path of Object.keys(held.files)) {
+      try { rmSync(inCheckout(run.cwd, path, "a held-out variant's file"), { recursive: true, force: true }); } catch { /* it lies outside the checkout, or the checkout is gone */ }
+    }
+    this.o.variants().gone(run.run);
+  }
+  /** The held-out variants whose runs the last hub left in flight, each with the checkout it lay in (#3229). */
+  leftVariants(): { run: string; variant: Variant; dir: string }[] {
+    return Object.values(this.journal).flatMap((r) => (r.variant ? [{ run: r.run, variant: r.variant, dir: r.cwd }] : []));
   }
 
   /** The session a claim was made in, as a lease holder; the core's own for a claim the record doesn't hold. */
@@ -276,29 +334,39 @@ export class Runs {
     // at most half the cores run checks, and the slot shows in the lease table under that session. A fast-lane run
     // may take the slot the pool keeps for a held stop's quick checks (#907). A run on a host takes none of this machine's.
     const holder = await this.claimSession(run.claim);
-    const lease = run.host ? undefined : await slot(this.o.leases(), holder, run.run, run.lane === 'fast' ? 'fast' : 'slow');
+    // Its expected peak as units of `mem` in the same ask (#3220): what the gate admitted it on, or a check's class's
+    // constant; and only while the kernel reads that much available. The planted wrong programs read no number, or the pool alone.
+    const memory = this.o.plant === 'admits-on-nothing' ? undefined : run.memory ?? { mb: CLASS_MB.check, on: 'class' as const };
+    const leases = run.host ? [] : await admit(this.o.leases(), holder, run.run, run.lane === 'fast' ? 'fast' : 'slow', memory && {
+      mb: memory.mb, ...(this.o.plant === 'admits-on-pool-only' ? {} : { available: availableMb }), waiting: (why) => this.waiting(run, memory.mb, why),
+    });
+    const held = this.heldOut.get(run.run);
+    // A start that fails never ran: it leaves neither its slot, its variant's files nor the journal, and the failure is what's thrown.
+    const neverRan = async (error: unknown): Promise<never> => {
+      if (held) this.lift(run, held);
+      for (const lease of leases) await this.o.leases().release(lease.id, []).catch(() => undefined);
+      try { this.writeJournal((runs) => { delete runs[run.run]; }); } catch { /* the restart's recovery finds no start for it */ }
+      throw error;
+    };
+    if (held) await (async () => { this.lay(run, held); await held.build?.(); })().catch(neverRan);
     // Where it runs and what it needs (#29), so a later placement can pick any host from the same record.
     const ts = this.o.now();
     const { spec, withheld } = recordable(run, this.o.held);
     if (!adopt) await this.o.appendAsCore({
       v: 3, id: ulid(ts), kind: 'run.started', ts, subject: run.run,
       data: {
-        run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: run.host ?? 'local', needs: { cores: 1, memory_mb: 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow',
+        run: run.run, check: run.check, claim: run.claim, commit: run.commit, host: run.host ?? 'local', needs: { cores: 1, memory_mb: memory && !run.host ? memory.mb : 0, stack_slot: run.environment ? 1 : 0, gpus: 0, expected_ms: run.expected_ms ?? null }, lane: run.lane ?? 'slow',
         // What it runs (#996): a journal that can't be read is rebuilt from it.
         ...spec, withheld, ...(run.environment ? { environment: true } : {}),
       },
-    }).catch(async (error: unknown) => {
-      // A start the record refused never ran: it leaves neither its slot nor the journal, and the refusal is what's thrown.
-      if (lease) await this.o.leases().release(lease.id, []).catch(() => undefined);
-      try { this.writeJournal((runs) => { delete runs[run.run]; }); } catch { /* the restart's recovery finds no start for it */ }
-      throw error;
-    });
+    }).catch(neverRan);
     const token = run.token ?? randomBytes(24).toString('base64url');
     const env = { ...run.env, DEEP_RUN_TOKEN: token };
     const values = this.o.plant === 'no-run-values' ? undefined : { env, held: [token, ...this.o.held] };
     const writer = this.o.store().connect({ role: 'deepbuild', via: 'job' });
     const label = { source: run.run, redaction: 'complete' as const, license: { name: 'local', allows: [] }, ...(values ? { run: values } : {}) };
-    const sinks = [writer.text({ kind: 'run.stdout', ...label }), writer.text({ kind: 'run.stderr', ...label })];
+    // What a held-out variant's run prints can hold the variant, so its output is sealed as its files are (#3229).
+    const sinks = ['run.stdout', 'run.stderr'].map((kind) => writer.text({ kind: held ? HELD_OUT : kind, ...label, ...(held ? { sealed: true as const } : {}) }));
     let writes = Promise.resolve();
     const tail = run.host ? { chunks: [] as Buffer[], size: 0, ended: false, wake: [] as (() => void)[] } : undefined;
     if (tail) this.tails.set(run.run, tail);
@@ -412,11 +480,16 @@ export class Runs {
     // A run still going at its spec's deadline is stopped and ends overran (#27), never passed or failed; the command
     // check kind holds its own runs to theirs.
     let overran = false;
-    const disarm = run.deadline && run.command === undefined ? after(run.deadline, () => { overran = true; stop(); setTimeout(() => void this.o.host().signal(run.run, 'SIGKILL').catch(() => undefined), RUN_KILL_GRACE_MS).unref(); }) : undefined;
+    const disarm = run.deadline && (run.command === undefined || run.host) ? after(run.deadline, () => { overran = true; stop(); setTimeout(() => void this.o.host().signal(run.run, 'SIGKILL').catch(() => undefined), RUN_KILL_GRACE_MS).unref(); }) : undefined;
     const done = ended.then(async ({ code, failed, missing, record }) => {
       disarm?.();
+      // A claim's check on a host (#999) has one result, its exit status there, as a command that starts no test tool has here.
+      if (run.host && run.command !== undefined) record = hostRecord(run, { code, failed }, this.o.stopping() ? 'stopped' : overran ? 'overran' : undefined);
       // What the run left behind is stopped and its leases released before its finish is recorded.
       if (this.o.plant !== 'run-spawns-itself' && !run.host) await this.o.supervisor().cleanup(run.run).catch(() => undefined);
+      if (held) this.lift(run, held);
+      // What it used, read only off the supervisor's scan of its tree (#3220); a run on a host has no reading here.
+      const used = run.host ? undefined : this.o.supervisor().used(run.run);
       // The kind's record holds the run's output, scrubbed by value: it goes to the store as the sinks' would.
       if (record) { output.stdout(Buffer.from(record.output.stdout)); output.stderr(Buffer.from(record.output.stderr)); }
       await writes;
@@ -432,7 +505,7 @@ export class Runs {
         if (stdout !== undefined && stderr !== undefined) record = { ...record, output: { ...record.output, sha256: { stdout, stderr } } };
         record = this.o.recorded(run.run, record);
         // Its key (#1018), once it has ended: kept with its finish, so any claim with an equal key reads it, after a restart too.
-        const key = run.key ? await this.o.keyed(run.key, run.run, record) : undefined;
+        const key = run.key ? await this.o.keyed(run.key, run.run, record, used) : undefined;
         const outcome = record.outcome;
         const findings = outcome === 'stopped' ? ['hub stopped'] : record.mask !== null ? [`uncounted: ${record.mask}`] : record.failures.slice(0, FINDINGS).map(findingOf);
         // What the kind's result names as its evidence beyond the output (a replacing kind's content keys) is kept with the findings.
@@ -443,16 +516,16 @@ export class Runs {
         await this.finish(run, outcome, hidden ? (record.failures.length ? ['failed on a held-out variant of its fixtures'] : []) : findings, evidence, {
           tests_run: record.testsRun, passed: Math.max(0, record.testsRun - new Set(record.failures.map((f) => f.test)).size),
           assertion: first?.assertion && !hidden ? first.test : null, points_to: first && !hidden ? `${first.file}:${first.line}` : null,
-        }, key);
+        }, key, used);
         return;
       }
       const hidden = this.heldOut.delete(run.run);
       const outcome = this.o.stopping() ? 'stopped' : overran ? 'overran' : missing ? 'missing' : code === 0 ? 'passed' : 'failed';
       const findings = this.o.stopping() ? ['hub stopped'] : overran ? [`still running at its deadline of ${words(run.deadline!)}, so it was stopped`] : missing ? [`its stack never came up: ${missing}`] : failed ? [hidden ? 'failed on a held-out variant of its fixtures' : failed] : [];
-      await this.finish(run, outcome, findings, evidence);
+      await this.finish(run, outcome, findings, evidence, undefined, undefined, used);
     });
     this.live.set(run.run, { run, done, stop });
-    void done.finally(() => lease && this.o.leases().release(lease.id, []).catch(() => undefined)).finally(() => {
+    void done.finally(() => Promise.all(leases.map((lease) => this.o.leases().release(lease.id, []).catch(() => undefined)))).finally(() => {
       this.live.delete(run.run);
       if (!tail) return;
       tail.ended = true;
@@ -462,6 +535,16 @@ export class Runs {
       // The journal still holds the run, so the next start recovers it.
       .catch((error: unknown) => process.stderr.write(`deep hub: ${run.run}'s finish wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     return run.run;
+  }
+  /**
+   * A check run's line on the hub's stderr while it waits for memory (#3220), once each time why changes: DeepBuild's
+   * runs hold the `mem` pool, named by holder, or the kernel reads less available than it expects, in use outside them.
+   */
+  private waiting(run: Run, mb: number, why: MemoryWait): void {
+    const what = `deep hub: ${run.run} (${run.check}) waits for memory: it is admitted on ${mb} MB, and`;
+    process.stderr.write(why.on === 'pool'
+      ? `${what} the mem pool on local has ${why.free} MB free, held by ${[...new Set(why.holders.map((l) => `${this.o.who(l.holder)} with ${l.units ?? 1} MB`))].join(', ')}\n`
+      : `${what} the kernel reads ${why.available} MB available on local: the memory is in use outside DeepBuild's runs\n`);
   }
   /** run.output (#1942): a run's stdout from byte `from`, once there is some or it has ended, base64; `deep run follow` reads it. */
   async output(params: Obj): Promise<Obj> {
@@ -481,14 +564,40 @@ export class Runs {
     const bytes = (tail.chunks[0] ?? Buffer.alloc(0)).subarray(from);
     return { text: bytes.toString('base64'), next: from + bytes.length, ended: tail.ended && from + bytes.length >= tail.size };
   }
-  private async finish(run: Run, outcome: string, findings: string[], evidence: string[], counts: { tests_run: number; passed: number; assertion: string | null; points_to: string | null } = { tests_run: 0, passed: 0, assertion: null, points_to: null }, key?: KeyFacts): Promise<void> {
+  private async finish(run: Run, outcome: string, findings: string[], evidence: string[], counts: { tests_run: number; passed: number; assertion: string | null; points_to: string | null } = { tests_run: 0, passed: 0, assertion: null, points_to: null }, key?: KeyFacts, used?: Used): Promise<void> {
     await this.o.appendCore('run.finished', {
       run: run.run, outcome, tests_run: counts.tests_run, passed: counts.passed, runs: 1, evidence, check: run.check, assertion: counts.assertion, expected: null, actual: null, step: null,
       points_to: counts.points_to, findings, environment: `${process.platform}-${process.arch}`, ...(key ? { key: { ...key } } : {}),
-    }, { subject: run.run, v: 2 });
+      // What it used beside what it needed (#3220): null where no scan read its tree, never 0. The planted wrong program writes 0.
+      used: this.o.plant === 'unread-peak-recorded-zero' ? { memory_peak_mb: used?.memory_peak_mb ?? 0, cpu_s: used?.cpu_s ?? 0 } : used ?? { memory_peak_mb: null, cpu_s: null },
+    }, { subject: run.run, v: 4 });
+    await this.readings(run, used, key);
     // The journal keeps the run until its finish is durable, so a cut before then reruns it.
     await this.o.sync();
     this.writeJournal((runs) => { delete runs[run.run]; });
+  }
+  /**
+   * The readings a run's end adds (#3220): what its key declared, what it was admitted on and what it used; and this
+   * host's memory reserved against memory used, over every run that ended with a reading, so the share reserved and
+   * never used shows. A run no scan read adds nothing to compare.
+   */
+  private async readings(run: Run, used: Used | undefined, key: KeyFacts | undefined): Promise<void> {
+    const peak = used?.memory_peak_mb;
+    if (run.host || typeof peak !== 'number') return;
+    const memory = this.o.plant === 'admits-on-nothing' ? undefined : run.memory ?? { mb: CLASS_MB.check, on: 'class' as const };
+    const admitted = memory?.mb ?? 0;
+    this.memory.reserved += admitted;
+    this.memory.used += peak;
+    this.memory.runs += 1;
+    const n = this.memory.runs;
+    const read = (value: number, source: string): Promise<void> => {
+      const now = this.o.now();
+      return this.o.appendCore('reading.recorded', { reading: `reading:${ulid(now)}`, value, unit: 'MB', as_of: now, source, n, outside: false });
+    };
+    const on = memory?.on === 'runs' ? 'its key\'s clean runs' : memory?.on === 'declared' ? 'what its check declares' : memory ? 'its class\'s constant' : 'nothing';
+    if (key) await read(peak, `memory of check ${run.check} on key ${key.id.slice(0, 12)}: declared ${run.memory?.declared ?? 'nothing'}${run.memory?.declared ? ' MB' : ''}, admitted on ${admitted} MB from ${on}, used ${peak} MB at its peak (${run.run})`);
+    await read(this.memory.reserved, `memory reserved on local by the ${n} runs that ended with a reading since the hub started, each what it was admitted on`);
+    await read(this.memory.used, `memory used on local by the same ${n} runs, each its peak: ${this.memory.reserved ? Math.round((100 * this.memory.used) / this.memory.reserved) : 0}% of what was reserved`);
   }
   /** A kept run this hub found running: looked at until it's gone. */
   private adopt(run: Run): void {

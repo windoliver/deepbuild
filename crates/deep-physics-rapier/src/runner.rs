@@ -44,6 +44,7 @@ pub mod links;
 mod live;
 pub mod net;
 mod replay;
+pub mod through;
 mod timeline;
 pub mod vehicle;
 pub mod walk;
@@ -99,6 +100,8 @@ pub struct Run {
     centre: centre::Plant,
     /// #2371's twin: a track keeps both of two `set`s of one target and path on one step.
     set_applies_both: bool,
+    /// #3258's planted reading of what passed through what.
+    through: deep_canvas_physics::through::Planted,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -470,6 +473,7 @@ impl Run {
             vehicle: crate::VehiclePlant::None,
             centre: centre::Plant::None,
             set_applies_both: false,
+            through: deep_canvas_physics::through::Planted::None,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -509,6 +513,7 @@ impl Run {
                     && !fast::planted(name, &mut run)
                     && !dims::planted(name, &mut run)
                     && !links::planted(name, &mut run)
+                    && !through::planted(name, &mut run)
                     && !laws::planted(name, &mut run) =>
             {
                 return None

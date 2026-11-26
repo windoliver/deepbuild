@@ -11,6 +11,7 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -22,6 +23,25 @@ use rustls::{ClientConfig, ClientConnection, DigitallySignedStruct, SignatureSch
 
 /// The network route's fail-open time from the hook's start: `routes.network.failOpenMs` in the adapter facts.
 pub const FAIL_OPEN: Duration = Duration::from_millis(1500);
+
+/// Whether this machine reaches its hub over a socket an SSH link forwards from the hub's machine (#999): `hub.forwarded`
+/// in config.json, which `deep host add` writes on a host. Kept from the one read of config.json a hook makes.
+static FORWARDED: AtomicBool = AtomicBool::new(false);
+
+/// Keeps the `hub.forwarded` setting as config.json has it: only `true` counts.
+pub fn note_forwarded(setting: Option<&Value>) {
+    FORWARDED.store(matches!(setting, Some(Value::Bool(true))), Ordering::SeqCst);
+}
+
+/// Whether the hub's socket, its address read from config.json, is a forwarded one: its hooks have the network route's time.
+pub fn forwarded(_address: &Path) -> bool {
+    FORWARDED.load(Ordering::SeqCst)
+}
+
+/// How long a hub on the network route has to acknowledge, short of the route's fail-open time; none on this machine's own socket.
+pub fn ack_budget(network: bool) -> Option<Duration> {
+    network.then(|| FAIL_OPEN - Duration::from_millis(30))
+}
 
 /// A joined project's hub: its ID (the SHA-256 of its certificate), where it is reached, and this machine's credential.
 pub struct Remote {
@@ -498,6 +518,12 @@ mod tests {
         );
         assert_eq!(requests(&text), [&first, &glued, &third]);
         assert_eq!(requests("{cut\n\n"), Vec::<&str>::new());
+    }
+
+    #[test]
+    fn only_the_network_route_has_its_time_to_acknowledge() {
+        assert_eq!(ack_budget(false), None);
+        assert_eq!(ack_budget(true), Some(Duration::from_millis(1470)));
     }
 
     #[test]

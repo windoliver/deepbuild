@@ -1236,6 +1236,10 @@
         "miniz_oxide": {
           "spec": "^0.9",
           "why": "Issue #2892: the player's prebuilt module sets stored as gzip once per build, by the export's own compressor (src/export/gzip.rs); both already in the lockfile."
+        },
+        "ignore": {
+          "spec": "^0.4",
+          "why": "Issue #3299: the build script's source digest skips what the workspace's .gitignore names, by git's own rules; already in the lockfile."
         }
       },
       "dependencies": {
@@ -1321,7 +1325,7 @@
         },
         "deep-effects-render": {
           "spec": "* path=../deep-effects-render",
-          "why": "Issue #411: the test-machines feature's GPU operators compile and dispatch through it; in no shipped build. Already in the workspace tree."
+          "why": "Issue #1719: the post stage render-back draws a 3D frame through. Issue #411's test-machines feature compiles and dispatches its GPU operators through it too. Already in the workspace tree."
         },
         "deep-canvas-seams": {
           "spec": "* path=../deep-canvas-seams",
@@ -1863,6 +1867,14 @@
     },
     "crates/deep-effects-render/Cargo.toml": {
       "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #1719: a document's frame rate and the flick its frame's post stage is staged at, and the content hash a closed-form particles bake is kept by. Already in the workspace tree."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #1719: the evaluated scene and look a 3D frame's post stage reads, in view3d, render-back and the app's canvas panel. Already in the workspace tree."
+        },
         "deep-canvas-effects": {
           "spec": "* path=../deep-canvas-effects",
           "why": "Issue #380: the operator check, the WGSL the core writes and the CPU reference interpreter."
@@ -2813,6 +2825,30 @@
         }
       }
     },
+    "crates/deep-urdf/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #3035: the canonical bytes and hash the import writes with, and the ops module its angles go through."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #3035: the shipped clean look an imported robot's document names."
+        },
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #3035: the physics check a written world passes before any byte is kept."
+        },
+        "roxmltree": {
+          "spec": "=0.21.1",
+          "why": "Issue #3035: reads a robot description's XML, with no DTD and no entity a file declares; already in the workspace tree."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #3035: writes the document and its report. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-lottie-reader/Cargo.toml": {
       "dependencies": {
         "thorvg": {
@@ -2858,6 +2894,26 @@
         "log": {
           "spec": "^0.4",
           "why": "Spike #2435: the logger that collects wgpu's warnings into the probe's report."
+        }
+      }
+    },
+    "docs/spikes/3444/own-device/Cargo.toml": {
+      "dependencies": {
+        "wgpu": {
+          "spec": "=30.0.1",
+          "why": "Spike #3444: timestamp query sets on the wgpu the app pins, on Metal, with its internal counters on; outside the workspace with its own lockfile, so nothing it pins reaches the app."
+        },
+        "pollster": {
+          "spec": "^0.4",
+          "why": "Spike #3444: blocks on wgpu's adapter, device and error-scope futures in the headless probe."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Spike #3444: the probe's report of each attempt, keys in order."
+        },
+        "log": {
+          "spec": "^0.4",
+          "why": "Spike #3444: the logger that collects wgpu-hal's errors, Metal's own words among them, into the probe's report."
         }
       }
     },
@@ -3224,6 +3280,30 @@
         "wasmparser": {
           "spec": "=0.263.0",
           "why": "Issue #851's blind suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/2700/probe/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../../../crates/deep-canvas",
+          "why": "Issue #2700: the acceptance probe calls the canvas core's public entry, built from each checkout's own copy; test-only, outside the workspace."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2700: the probe prints what it saw as one JSON line, with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
+        }
+      }
+    },
+    "tests/acceptance/2700/probe-reached/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../../../crates/deep-canvas",
+          "why": "Issue #2700: the acceptance probe calls the canvas core's public entry, built from each checkout's own copy; test-only, outside the workspace."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2700: the probe prints what it saw as one JSON line, with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
         }
       }
     }
