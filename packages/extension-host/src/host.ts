@@ -1665,7 +1665,7 @@ class Host implements ExtensionHost {
     if (!asks) throw Error(`${question} needs your yes, and this host has no asks core to ask you`);
     const key = sha256Hex(canonicalize(about));
     const ask = await asks.raise({ writer: 'core', actor: 'you', scope: 'you' }, source, {
-      kind: 'authority', question,
+      kind: 'authority', may_answer: 'trusted_path', question,
       options: [{ id: 'approve', label: allow, decision: 'allow' }, { id: 'decline', label: deny, decision: 'deny' }],
       recommended: null, deadline: this.options.now() + 86_400_000, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
       pinned_to: { kind: 'evidence', ref: key },
