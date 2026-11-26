@@ -67,3 +67,8 @@ One of:
    each criterion times a preflight against a budget of seconds and a 30 s stop bound). That commit takes the owner's
    signed tag.
 2. **The first draft runs.** Then the lint lane fails on its seven waits until the wait ratchet's rule changes.
+
+## Ruling
+
+Option 1 is prepared as commit c6f3082736ff5f7952fd397da1222488afce0d0e, and is pending the owner's signed tag on it.
+That tag is the ruling. If the owner declines to sign, option 2 stands, and a new commit reverts c6f308273.
