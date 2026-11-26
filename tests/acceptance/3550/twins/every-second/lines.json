@@ -1,0 +1,18 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "  // A minute's sample that can't be written, as on a full disk, is said and the next is still tried."
+      ],
+      "wrong": [
+        "  // Planted: the thread listing is made every second, not once a sample.",
+        "  setInterval(() => {",
+        "    try {",
+        "      threadsByProcess();",
+        "    } catch {}",
+        "  }, 1_000);",
+        "  // A minute's sample that can't be written, as on a full disk, is said and the next is still tried."
+      ]
+    }
+  ]
+}

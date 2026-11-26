@@ -6,43 +6,34 @@
 //   node scripts/design-section.mjs <doc>#<anchor>   the section's bytes, as the doc holds them
 //   node scripts/design-section.mjs --issue <n>      each section open issue n links, once each, in the order it first
 //                                                    links them, each after a `==> <doc>#<anchor> <==` line
+//   node scripts/design-section.mjs --issue <n> --all
+//                                                    the same, with the text whatever it adds up to
+//
+// An issue's run ends with one line on standard error (#3546): the sections it printed, their bytes and their tokens by
+// the pinned tokenizer. Past 25,000 tokens it prints each section's outline in place of its text, one line a heading
+// with its anchor and its own tokens, and that last line names the command that prints one; --all prints the text.
 //
 // The issue comes from the open issues the doc lanes read; without them the run is BLOCKED and prints no section.
 // A section that can't be printed exits 1, naming the doc and the anchor; a wrong command line exits 2.
-import { existsSync, readFileSync } from 'node:fs';
 import { resolve as pathResolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { outline, prose, resolve, targets } from './doc-links.mjs';
+import { resolve } from './doc-links.mjs';
+import { LIMIT, cost, headings, linked, section } from './linked-sections.mjs';
 import { openIssues } from './open-issues.mjs';
 
 // Docs paths are the repository's, wherever it runs from; a relative cached issues file stays the caller's.
 if (process.env.DEEP_OPEN_ISSUES) process.env.DEEP_OPEN_ISSUES = pathResolve(process.env.DEEP_OPEN_ISSUES);
 process.chdir(fileURLToPath(new URL('../', import.meta.url)));
 
-// The section's bytes, or what stops it.
-function section(file, id) {
-  if (!/^docs\/[^/]+\.md$/.test(file) || !existsSync(file)) return { problem: `${file} is not a doc under docs/` };
-  const { anchors: found, headings, lines } = outline(file);
-  if (!found.has(id)) return { problem: `no heading or <a id> in ${file} is #${id}` };
-  const heading = found.get(id);
-  const bytes = readFileSync(file);
-  const at = headings.findIndex((candidate) => candidate.id === heading);
-  // An <a id> in a doc with no heading: the lane lands it, so its section runs from its line to the end.
-  if (at === -1) return { bytes: bytes.subarray(lines.get(id)), heading: `#${id}`, start: lines.get(id), end: bytes.length };
-  const { level, offset } = headings[at];
-  // An <a id> before its heading starts the section at its own line; one inside a section's text belongs to that section.
-  const start = id === heading ? offset : Math.min(offset, lines.get(id) ?? offset);
-  const end = headings.slice(at + 1).find((next) => next.level <= level)?.offset ?? bytes.length;
-  return { bytes: bytes.subarray(start, end), heading, start, end };
-}
-
 const fail = (problem) => {
   console.error(`no section: ${problem}`);
   process.exit(1);
 };
 
+const count = (n) => n.toLocaleString('en-US');
 const args = process.argv.slice(2);
-if (args[0] === '--issue' && args.length === 2 && /^\d+$/.test(args[1])) {
+const all = args[0] === '--issue' && args[2] === '--all';
+if (args[0] === '--issue' && args.length === (all ? 3 : 2) && /^\d+$/.test(args[1])) {
   const number = Number(args[1]);
   const { issues = [], missing } = openIssues();
   const issue = issues.find((candidate) => candidate.number === number);
@@ -50,32 +41,22 @@ if (args[0] === '--issue' && args.length === 2 && /^\d+$/.test(args[1])) {
     console.log(`BLOCKED #${number}'s linked sections: ${missing ?? `#${number} is not among the ${issues.length} open issues read`}`);
     process.exit(1);
   }
-  // Each linked section once, in the order the issue first links it: a link to a heading already printed, or to a
-  // subsection inside a section already printed, prints nothing more. A parent linked after its subsection still
-  // prints whole, since the order is the issue's.
-  const printed = new Set();
-  const ranges = [];
+  const { sections, problems } = linked(issue.body);
+  const { bytes, tokens } = await cost(sections);
+  // Tokens that weren't counted pass no limit: the text prints, and the closing line says so.
+  const outlined = !all && tokens > LIMIT;
   const out = [];
-  const problems = new Set();
-  for (const { line } of prose(issue.body ?? '')) {
-    for (const target of targets(line)) {
-      const link = resolve(target, null);
-      if (!link?.id) continue;
-      const { bytes, heading, start, end, problem } = section(link.file, link.id);
-      if (problem) problems.add(problem);
-      else if (!printed.has(`${link.file}#${heading}`) && !ranges.some((r) => r.file === link.file && r.start <= start && end <= r.end)) {
-        printed.add(`${link.file}#${heading}`);
-        ranges.push({ file: link.file, start, end });
-        out.push(Buffer.from(`==> ${link.file}#${link.id} <==\n`), bytes);
-      }
-    }
-  }
+  for (const s of sections) out.push(Buffer.from(`==> ${s.file}#${s.id} <==\n`), outlined ? Buffer.from((await headings(s)).map((h) => `${h.line}  ${s.file}#${h.id}  ${count(h.tokens)} tokens\n`).join('')) : s.bytes);
   // Not process.exit: on macOS a pipe's write finishes after it returns.
   process.stdout.write(Buffer.concat(out));
-  if (!printed.size && !problems.size) problems.add(`no section of docs/*.md`);
+  if (!sections.length && !problems.size) problems.add(`no section of docs/*.md`);
   if (problems.size) {
     console.error(`no section: #${number} links ${[...problems].join('; ')}`);
     process.exitCode = 1;
+  }
+  if (sections.length) {
+    const totals = `#${number}: ${count(sections.length)} section${sections.length === 1 ? '' : 's'}, ${count(bytes)} bytes, ${tokens === null ? 'tokens not counted, gpt-tokenizer is not installed (npm ci)' : `${count(tokens)} tokens`}`;
+    console.error(outlined ? `${totals}, past ${count(LIMIT)}, so each section's outline is printed in place of its text. \`node scripts/design-section.mjs <doc>#<anchor>\` prints one section, and \`node scripts/design-section.mjs --issue ${number} --all\` the text.` : `${totals}.`);
   }
 } else if (args.length === 1 && args[0].includes('#') && !args[0].startsWith('-')) {
   const link = resolve(args[0], null);
@@ -84,6 +65,6 @@ if (args[0] === '--issue' && args.length === 2 && /^\d+$/.test(args[1])) {
   if (problem) fail(problem);
   process.stdout.write(bytes);
 } else {
-  console.error('usage: node scripts/design-section.mjs <doc>#<anchor> | --issue <n>');
+  console.error('usage: node scripts/design-section.mjs <doc>#<anchor> | --issue <n> [--all]');
   process.exit(2);
 }
