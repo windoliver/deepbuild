@@ -53,3 +53,4 @@ The top of the TypeScript stack under the CLI: the core packages and the first-p
 - `src/plant.ts`: every planted wrong program the tests select with `DEEP_HUB_PLANT`, in one module so a proof lane's twin can lay a wrong program over this file alone.
 - `src/vfs.ts`: the design's test VFS (`DEEP_HUB_TEST_VFS`), which numbers durable writes so a test can cut the process after any one, as a power cut would.
 - `src/settle.ts`: forces one collection once each thread is warm, so an idle hub holds only what it uses.
+- `src/replay.ts`: beside what the hub says of a record that replays its log at the start (#3544), the two planted folds a test selects with `DEEP_HUB_TEST_FOLD`, which hold the replay's pages so the hub can be read while it rebuilds.

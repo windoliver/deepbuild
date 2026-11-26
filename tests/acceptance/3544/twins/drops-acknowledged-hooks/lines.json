@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/server.ts": [
+    {
+      "find": [
+        "    this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });"
+      ],
+      "wrong": [
+        "    if (!this.replay.at) this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });"
+      ]
+    }
+  ]
+}
