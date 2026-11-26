@@ -1,0 +1,12 @@
+{
+  "scripts/proof-guard.mjs": [
+    {
+      "find": [
+        "    const hit = touched.filter((number) => guarded.has(number) || (inSection(number) && added.some((line) => line.startsWith('## '))));"
+      ],
+      "wrong": [
+        "    const hit = touched;"
+      ]
+    }
+  ]
+}

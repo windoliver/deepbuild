@@ -1,0 +1,29 @@
+--- a/packages/gate/src/scheduler.ts
++++ b/packages/gate/src/scheduler.ts
+@@ -97,6 +97,8 @@
+   /** A newer claim changed the check's inputs: no further run starts here. */
+   cancelled: { by: string; prompt: { origin: Origin; at: number } } | null;
+   fastWaiting: boolean; place: Place | null; startedBy: StartedBy | null;
++  /** A person's prompt opened the turn this snapshot's stop ended. */
++  person: boolean;
+   attempt: number; keptProduct: boolean;
+   delivered: Set<Claim>; lateNoted: boolean;
+   never: NeverStarted | null;
+@@ -350,7 +352,7 @@
+   private newSet(s: Sess, def: CheckDef, snapshot: string, claim: Claim, changed: string[], lane: 'fast' | 'slow'): RSet {
+     return {
+       n: ++this.seq, sess: s, def, snapshot, claim, changed, runs: [], running: null, lane, kept: true, cancelled: null, fastWaiting: false, place: null, startedBy: null,
+-      attempt: 1, keptProduct: true, delivered: new Set(), lateNoted: false, never: null,
++      attempt: 1, keptProduct: true, delivered: new Set(), lateNoted: false, never: null, person: s.lastPrompt?.origin === 'human',
+     };
+   }
+   /** A newer claim changed the check's inputs: the older snapshot starts nothing more, and its place is given up. */
+@@ -392,7 +394,7 @@
+       // Slots a fast-lane check admitted for a later moment is counted on stay its own.
+       freeSlots -= this.fastQueue.filter((set) => set.claim.stop.R > this.now || blocked(set)).length;
+       if (freeSlots <= 0) return did;
+-      const ready = this.places.filter((p) => !p.held && !blocked(p.set)).sort((a, b) => (a.set.def.on_base === 'fails' ? 0 : 1) - (b.set.def.on_base === 'fails' ? 0 : 1) || a.at - b.at || a.set.n - b.set.n);
++      const ready = this.places.filter((p) => !p.held && !blocked(p.set)).sort((a, b) => (a.set.person ? 0 : 1) - (b.set.person ? 0 : 1) || (a.set.def.on_base === 'fails' ? 0 : 1) - (b.set.def.on_base === 'fails' ? 0 : 1) || a.at - b.at || a.set.n - b.set.n);
+       const p = ready[0];
+       if (!p) return did;
+       this.dropPlace(p);
