@@ -1,0 +1,32 @@
+{
+  "id": "rows.row",
+  "version": "1.0",
+  "title": "Row",
+  "license": "MIT",
+  "author": "the #1857 acceptance suite",
+  "description": "One rect.",
+  "steps": {
+    "dot": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          4,
+          4
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "dot"
+    ]
+  }
+}

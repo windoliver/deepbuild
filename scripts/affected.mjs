@@ -33,7 +33,7 @@
 // the selection without running it. A test that starts a package's build is selected when the change is in that
 // package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below).
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { availableParallelism, constants, homedir, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, resolve, sep } from 'node:path';
@@ -429,6 +429,37 @@ const lintLabel = (rest) => {
 // no job: each reads as run by none.
 const live = new Set();
 let stopped = null;
+// The run's bound (#3567): 60 minutes from its start, its waits for a grant included. At it the run starts nothing
+// more, stops each job still running with its tree, and reads INCONCLUSIVE, naming each file that didn't finish and
+// each that never started. DEEP_AFFECTED_MIN sets the bound in minutes, for tests.
+const BOUND_MIN = Number(process.env.DEEP_AFFECTED_MIN ?? 60);
+const stoppers = new Set();
+let ends = Infinity, bound = null;
+const untilBound = () => Math.max(0, (ends - Date.now()) / 60_000);
+// Each file's time by its tests' own (#3567), from the rows its runner reported: the top-level ones hold the rest.
+function fileMs(cwd, report) {
+  const sums = new Map();
+  for (const line of report.split('\n')) {
+    let row;
+    try { row = JSON.parse(line); } catch { continue; }
+    if (!['pass', 'fail'].includes(row?.type) || typeof row.ms !== 'number' || typeof row.file !== 'string' || row.nesting) continue;
+    const file = relative(cwd, row.file.startsWith('file:') ? fileURLToPath(row.file) : row.file).split(sep).join('/');
+    sums.set(file, (sums.get(file) ?? 0) + row.ms);
+  }
+  return sums;
+}
+// What a stopped run's tests leave in the shared temporary folder, their clean-up skipped (#2857): 605's repo copies
+// and 305's deep-show copies, about 1 GB each. A run removes those a day old before it starts any job: no test of
+// either runs that long, and what other tests keep there on purpose, such as 1455's base trees, stays.
+const LEFTOVER = /^deep-(?:605|305)-/;
+function sweepLeftovers() {
+  for (const name of readdirSync(tmpdir()).filter((entry) => LEFTOVER.test(entry))) {
+    const path = join(tmpdir(), name);
+    try {
+      if (Date.now() - statSync(path).mtimeMs > 86_400_000) rmSync(path, { recursive: true, force: true });
+    } catch {}
+  }
+}
 // A test job whose log and report have both stood still for IDLE minutes is stopped (#2627): a test that starves its
 // worker's event loop defeats vitest's own limit (#2783), and a handle a test leaks keeps its file from exiting (#2804),
 // either for ever. The bound is above the longest stretch a test may write nothing: #1781's 120 min build hook runs
@@ -441,6 +472,7 @@ const IDLE_MIN = Number(process.env.DEEP_JOB_IDLE_MIN ?? 360);
 const size = (path) => { try { return statSync(path).size; } catch { return 0; } };
 function run(logs, label, command, args, env = {}, cwd = root) {
   if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
+  if (bound) return Promise.resolve({ label, log: null, status: null, output: '', unstarted: true });
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
   const report = /^(?:vitest|node)/.test(label) ? join(logs, `${label}.jsonl`) : null;
   const descriptor = openSync(log, 'w');
@@ -450,6 +482,20 @@ function run(logs, label, command, args, env = {}, cwd = root) {
     const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
     live.add(child);
     let idle = null, watch = null;
+    // At the run's bound the job is stopped as one that stood still is, sooner, so the run ends within seconds of it.
+    const stop = () => {
+      if (idle) return;
+      let tree = [];
+      try { tree = descendants(child.pid); } catch {}
+      idle = { cut: report ? size(report) : undefined, bound: true };
+      child.kill('SIGTERM');
+      // deadline: a stopped job's tree is given 3 s to end on SIGTERM before it is killed, and its throttle 2 s more.
+      idle.killed = new Promise((killed) => setTimeout(() => {
+        try { killTree([...tree, ...child.exitCode === null && child.signalCode === null ? descendants(child.pid) : []]); } catch {}
+        setTimeout(() => { child.kill('SIGKILL'); killed(); }, 2_000);
+      }, 3_000));
+    };
+    stoppers.add(stop);
     if (report) {
       let seen = '', since = performance.now();
       // deadline: the look only stops a job that wrote nothing for IDLE_MIN minutes, a hang turned into a result.
@@ -475,9 +521,10 @@ function run(logs, label, command, args, env = {}, cwd = root) {
         }
       }, Math.min(10_000, IDLE_MIN * 10_000));
     }
-    child.on('error', (error) => { clearInterval(watch); live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
+    child.on('error', (error) => { clearInterval(watch); stoppers.delete(stop); live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
     child.on('close', async (status) => {
       clearInterval(watch);
+      stoppers.delete(stop);
       await idle?.killed;
       live.delete(child);
       closeSync(descriptor);
@@ -526,8 +573,9 @@ async function runGroups(groups, places, files, vitest, node, label, { env = {},
 const HELD = 'DEEP_AFFECTED_HELD';
 async function queued(args, files, started, prep) {
   const marker = join(mkdtempSync(join(tmpdir(), 'deep-affected-grant-')), 'started');
-  const wait = process.env.DEEP_TEST_GRANT_WAIT ?? '30';
-  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE_RUN: String(shardsRoom(prep.shards.length)), [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '', prep }) } });
+  // The wait ends at the run's bound, where the throttle takes its own request out of the table.
+  const wait = String(Math.min(Number(process.env.DEEP_TEST_GRANT_WAIT ?? '30'), untilBound()));
+  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE_RUN: String(shardsRoom(prep.shards.length)), [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '', prep, ends }) } });
   // A terminal's SIGINT reaches the whole group; a SIGTERM or SIGHUP sent to this process alone is passed on.
   process.on('SIGINT', () => {});
   for (const signal of ['SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
@@ -580,7 +628,7 @@ async function prepare(untimed, timedFiles, alone, listedFiles, started) {
     const plan = binaryPlan(root, untimed);
     if (timedFiles.length) plan.names = [...new Set([...plan.names, ...binaryNames(root, timedFiles)])];
     if (plan.names.length || plan.builds.length) {
-      const wait = Number(process.env.DEEP_TEST_GRANT_WAIT ?? '30');
+      const wait = +Math.min(Number(process.env.DEEP_TEST_GRANT_WAIT ?? '30'), untilBound()).toFixed(2);
       try {
         grant = acquire('build', { wait });
       } catch (error) {
@@ -654,6 +702,7 @@ async function main(args) {
   let held = process.env[HELD] && JSON.parse(process.env[HELD]);
   delete process.env[HELD];
   if (held) writeFileSync(held.marker, '');
+  ends = held?.ends ?? Date.now() + BOUND_MIN * 60_000;
   const paths = args.filter((arg) => !arg.startsWith('--'));
   const block = args.includes('--alone');
   const changed = block ? [] : paths.length ? paths : changedPaths(root);
@@ -727,6 +776,14 @@ async function main(args) {
     for (const child of live) child.kill(signal === 'SIGINT' ? 'SIGTERM' : signal);
   });
 
+  // deadline: the run's bound; at it no job starts and each one running is stopped.
+  const atBound = setTimeout(() => {
+    if (stopped) return;
+    bound = BOUND_MIN;
+    for (const stop of stoppers) stop();
+  }, ends - Date.now());
+  atBound.unref();
+  sweepLeftovers();
   // What the run made before its test grant (prepare): its logs, binaries, shards and package build.
   const { logs, binRoot } = held.prep;
   const binaries = new Map(held.prep.binaries);
@@ -836,11 +893,21 @@ async function main(args) {
     }
 
     if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];
-    const failures = [], passed = [], findings = [], skips = [], partial = new Set();
+    const failures = [], passed = [], findings = [], skips = [], partial = new Set(), slowRan = [];
     // What an earlier run of this tree kept, as its runner reported it.
     if (kept) { const before = kept.results([...done.vitest, ...done.node]); failures.push(...before.failures); passed.push(...before.passed); skips.push(...before.skips); }
     for (const job of jobs) {
       const tests = /^(?:vitest|node)/.test(job.label);
+      // A job the bound kept from starting ran nothing, and one it stopped that reports no test didn't finish.
+      if (job.unstarted) {
+        const unstarted = job.files ?? ({ ...blocks, timed: timedFiles })[job.label.split('-')[1] ?? 'parallel']?.[job.label.split('-')[0]] ?? [`${job.label} job`];
+        for (const file of unstarted) { partial.add(file); failures.push({ id: file, state: 'INCONCLUSIVE', message: `not started: the run reached its bound of ${bound} min` }); }
+        continue;
+      }
+      if (job.idle?.bound && !tests) {
+        failures.push({ id: `${job.label} job`, state: 'INCONCLUSIVE', message: `not finished: the run reached its bound of ${bound} min and stopped it` });
+        continue;
+      }
       let report = '';
       try { if (tests) report = readFileSync(join(logs, `${job.label}.jsonl`)).subarray(0, job.idle?.cut).toString('utf8'); } catch {}
       // A stopped job's report may end part way through a row.
@@ -865,7 +932,9 @@ async function main(args) {
         skips.push(...results.skips ?? []);
         // A file that reported no test didn't run, and nothing unrun passes. A job stopped for standing still may have
         // stopped part way through a file that reported, so it reads INCONCLUSIVE itself, and the run with it.
-        const stuck = job.idle && `its job reported nothing for ${job.idle.minutes} min and was stopped`;
+        const stuck = job.idle && (job.idle.bound ? `the run reached its bound of ${bound} min and stopped its job` : `its job reported nothing for ${job.idle.minutes} min and was stopped`);
+        if (job.idle?.bound) for (const file of files) failures.push({ id: file, state: 'INCONCLUSIVE', message: `not finished: ${stuck}` });
+        for (const [file, ms] of fileMs(job.cwd ?? root, report)) if (ms > 600_000) slowRan.push(`SLOW ${file} ran ${Math.round(ms / 60_000)} min: a file over ten minutes belongs on the slow list`);
         if (stuck || results.cut || results.failures.some(({ id }) => id === `${job.label} report`)) for (const file of files) partial.add(file);
         if (stuck) failures.push({ id: `${job.label} job`, state: 'INCONCLUSIVE', message: `${stuck}; a file it reported may be part run (${job.log})` });
         // A runner that a signal or an error ended with no failed test may have left a file it had started part run (#2136).
@@ -873,7 +942,7 @@ async function main(args) {
           for (const file of files) partial.add(file);
           failures.push({ id: `${job.label} job`, state: 'INCONCLUSIVE', message: `its runner ${job.status === null ? 'was ended by a signal' : `exited ${job.status}`} with no failed test (${job.log})` });
         }
-        for (const file of files.filter((file) => !report.includes(file))) failures.push({ id: named(file, '(file)'), state: results.noGrant || stuck ? 'INCONCLUSIVE' : 'FAIL', message: results.noGrant ?? stuck ?? 'reported no test' });
+        for (const file of files.filter((file) => !job.idle?.bound && !report.includes(file))) failures.push({ id: named(file, '(file)'), state: results.noGrant || stuck ? 'INCONCLUSIVE' : 'FAIL', message: results.noGrant ?? stuck ?? 'reported no test' });
       }
     }
     const baseline = JSON.parse(readFileSync(join(root, BASELINE), 'utf8'));
@@ -891,6 +960,7 @@ async function main(args) {
     if (skipped.length) console.log(`INCONCLUSIVE ${skipped.length} selected ${skipped.length === 1 ? 'file was' : 'files were'} not run, left to a person or to a lane of its own; run each by hand or in its lane: ${skipped.join(' ')}`);
     if (unrunSlow.length) console.log(`INCONCLUSIVE ${unrunSlow.length} slow ${unrunSlow.length === 1 ? 'file was' : 'files were'} not run; --slow runs them: ${unrunSlow.join(' ')}`);
     console.log(`TIMED the timed list, from scripts/lanes.mjs (${timed.length}): ${timed.join(' ')}`);
+    for (const line of slowRan) console.log(line);
     const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || watched.folders.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
     const resultsFile = args.find((arg) => arg.startsWith('--results='))?.slice(10);
     // Each test's result as its runner reported it, which runLanes reads for the unit lane's record as a runner's report.
@@ -902,6 +972,7 @@ async function main(args) {
     console.log(`${/^(?:BLOCKED|INCONCLUSIVE)\b/.test(error.message) ? '' : 'BLOCKED test binaries: '}${error.message}`);
     return error.message.startsWith('INCONCLUSIVE') ? 2 : 3;
   } finally {
+    clearTimeout(atBound);
     for (const shard of shards) shard.release();
     rmSync(binRoot, { recursive: true, force: true });
   }

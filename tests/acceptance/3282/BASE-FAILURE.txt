@@ -1,0 +1,74 @@
+Base run of tests/acceptance/3282 at 8c984adb9 (origin/main), macOS, Node 24.22, 2026-11-24 10:28Z.
+1-minute load 373 at start, 372 at end (other sessions' cargo builds). deep-drive plain and env-plants builds made in beforeAll.
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/3282 --no-file-parallelism --testTimeout=600000
+Result: AC1's two tests fail at their assertions (every call row's time slot is 0 wide); AC2's two pass, as a kept behaviour must.
+An earlier run the same day timed out AC1's first test while the replica's builds ran inside it at load ~400; the builds were then moved to beforeAll.
+
+
+ RUN  v5.0.5 ~/private/clones/d3282/tests/acceptance/3282
+
+ ❯ time.test.ts (4 tests | 2 failed) 25408ms
+   ❯ AC1 #3282.c198443a an open taste call's row draws its time (2)
+     × AC1 #3282.c198443a: at a 260-wide list, each open taste call's row draws its time in a slot with width that holds the time's text 4373ms
+     × AC1 #3282.c198443a wrong program: a planted row that draws its time 0 wide fails, naming the row 5464ms
+   ✓ AC2 #3282.d93e985c session rows keep 12 characters of title (2)
+     ✓ AC2 #3282.d93e985c: at 260 wide, beside the open taste call rows, a session row reading INCONCLUSIVE shows at least 12 characters of its title 2068ms
+     ✓ AC2 #3282.d93e985c wrong program: #1808's planted row that shows 8 fails, naming the row 1654ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  time.test.ts > AC1 #3282.c198443a an open taste call's row draws its time > AC1 #3282.c198443a: at a 260-wide list, each open taste call's row draws its time in a slot with width that holds the time's text
+AssertionError: expected { failures: [ …(5) ], …(1) } to match object { failures: [] }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "failures": [],
++   "failures": [
++     "row ask:01M86H5X6P6XCJH8MAQ6WAJAG4 (\"Which header colour on the login page?\") draws its time \"Thu 15:51\" in a slot 0 wide (ask:01M86H5X6P6XCJH8MAQ6WAJAG4:time at [486,96,0,64]), which doesn't hold it: drawn inside it [], over it []",
++     "row ask:01M86H7QSP4DF7D0P0R40XM9J0 (\"Does the cart badge read well on dark?\") draws its time \"Thu 15:52\" in a slot 0 wide (ask:01M86H7QSP4DF7D0P0R40XM9J0:time at [486,160,0,64]), which doesn't hold it: drawn inside it [], over it []",
++     "row ask:01M86H9JCP13H8J63R8A3PDDNM (\"Is the empty basket picture friendly?\") draws its time \"Thu 15:53\" in a slot 0 wide (ask:01M86H9JCP13H8J63R8A3PDDNM:time at [486,224,0,64]), which doesn't hold it: drawn inside it [], over it []",
++     "row ask:01M86HBCZPW63A17F1E2AN8GDH (\"Should the receipt use the serif face?\") draws its time \"Thu 15:54\" in a slot 0 wide (ask:01M86HBCZPW63A17F1E2AN8GDH:time at [486,288,0,64]), which doesn't hold it: drawn inside it [], over it []",
++     "row ask:01M86HD7JP5TA4Z1TTKTKJ0EFQ (\"Does the checkout button sit right?\") draws its time \"Thu 15:55\" in a slot 0 wide (ask:01M86HD7JP5TA4Z1TTKTKJ0EFQ:time at [486,352,0,64]), which doesn't hold it: drawn inside it [], over it []",
++   ],
+  }
+
+ ❯ time.test.ts:38:29
+     36|   it(`AC1 ${ID.time}: at a 260-wide list, each open taste call's row d…
+     37|     expect(calls.map((c) => c.question), 'the world holds the five ope…
+     38|     expect(await timesOf()).toMatchObject({ failures: [] });
+       |                             ^
+     39|   }, 30 * MIN);
+     40|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  time.test.ts > AC1 #3282.c198443a an open taste call's row draws its time > AC1 #3282.c198443a wrong program: a planted row that draws its time 0 wide fails, naming the row
+AssertionError: the planted list draws every call row but ask:01M86H5X6P6XCJH8MAQ6WAJAG4 as shipped: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "row ask:01M86H7QSP4DF7D0P0R40XM9J0 (\"Does the cart badge read well on dark?\") draws its time \"Thu 15:52\" in a slot 0 wide (ask:01M86H7QSP4DF7D0P0R40XM9J0:time at [486,160,0,64]), which doesn't hold it: drawn inside it [], over it []",
++   "row ask:01M86H9JCP13H8J63R8A3PDDNM (\"Is the empty basket picture friendly?\") draws its time \"Thu 15:53\" in a slot 0 wide (ask:01M86H9JCP13H8J63R8A3PDDNM:time at [486,224,0,64]), which doesn't hold it: drawn inside it [], over it []",
++   "row ask:01M86HBCZPW63A17F1E2AN8GDH (\"Should the receipt use the serif face?\") draws its time \"Thu 15:54\" in a slot 0 wide (ask:01M86HBCZPW63A17F1E2AN8GDH:time at [486,288,0,64]), which doesn't hold it: drawn inside it [], over it []",
++   "row ask:01M86HD7JP5TA4Z1TTKTKJ0EFQ (\"Does the checkout button sit right?\") draws its time \"Thu 15:55\" in a slot 0 wide (ask:01M86HD7JP5TA4Z1TTKTKJ0EFQ:time at [486,352,0,64]), which doesn't hold it: drawn inside it [], over it []",
++ ]
+
+ ❯ time.test.ts:45:130
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  02:28:05
+   Duration  26.18s (tests 98%, transform 1%, import 1%)
+
+JSON report written to <scratchpad>/base.json
+exit 1

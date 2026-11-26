@@ -1,0 +1,39 @@
+#3236 AC8 (#3236.b9b04201), blind redraft: the criterion's test on the base f8c6cff82 with only this folder added, once, on a
+Mac17,10 (M5 Max, 64 GB, a reference Mac) under macOS 27.2, Nov 23, 2026, one-minute load about 75, in an unlocked session with the
+Accessibility API allowed (no platform gate stopped it). deep-show built once beforehand in debug (toolchain 1.99.1, 54 minutes at a
+load of 140 to 360); the file's own build found it fresh.
+
+Command:
+
+  NO_COLOR=1 PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/3236-redraft-ac8 --silent=false --reporter=verbose \
+    --testTimeout=600000 --hookTimeout=3600000 --no-file-parallelism live
+
+Verdict: FAIL, at a named assertion, before any window opens: the replica refuses the scatter. The base has no missing value in a
+number column, so the NaN in y's f64 column is `out_of_range`. Nothing past it was reached: the base gives a mark set's node no value,
+walks no set without a pick control and announces nothing (read in a scratch run with a number in the missing row's place: the same
+document is then presented with no issue, its `see` holds {"id": "scatter", "role": "data", "name": "Distance over time"} and no
+announcement, and Tab and Right leave state.focus null).
+
+After this run only client.swift, standin.swift, helpers.ts's judge and client.test.ts changed (when a missing announcement is BLOCKED).
+None of it is reached on the base, so the verdict stands and wasn't taken again.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/3236-redraft-ac8
+
+ × live.test.ts > AC8 #3236.b9b04201 the live tree read through AppKit > AC8 #3236.b9b04201 holds the node's value, and the walk's announcements equal the replica's 3152ms
+   → the scatter with a missing row is presented: [{"check":"document.validate","code":"out_of_range","severity":"error","ids":[],"path":"items/scatter/params/columns/y/data","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Give the field a value of its type inside its range."}]: expected 'refused' to be 'presented' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  live.test.ts > AC8 #3236.b9b04201 the live tree read through AppKit > AC8 #3236.b9b04201 holds the node's value, and the walk's announcements equal the replica's
+AssertionError: the scatter with a missing row is presented: [...] (as above): expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../539/helpers.ts:258:93
+ ❯ live.test.ts:41:5
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  18.24s (tests 98%, transform 2%)

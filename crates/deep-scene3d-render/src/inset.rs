@@ -229,6 +229,15 @@ impl Store {
     }
 }
 
+deep_gpu::paired! { unlit_uniform: "inset_unlit.wgsl", Unlit;
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct UnlitUniform {
+    to_world: [f32; 16],
+    scale: [f32; 4],
+}
+}
+
 /// The unlit insets' pipeline and its layout.
 pub struct Unlit {
     layout: wgpu::BindGroupLayout,
@@ -315,16 +324,18 @@ impl Unlit {
         depth: &wgpu::TextureView,
         slot: &wgpu::TextureView,
     ) -> crate::Job {
-        let mut words: Vec<f32> = to_world.to_vec();
-        words.extend([
-            internal[0] as f32 / size[0].max(1) as f32,
-            internal[1] as f32 / size[1].max(1) as f32,
-            0.0,
-            0.0,
-        ]);
+        let values = UnlitUniform {
+            to_world,
+            scale: [
+                internal[0] as f32 / size[0].max(1) as f32,
+                internal[1] as f32 / size[1].max(1) as f32,
+                0.0,
+                0.0,
+            ],
+        };
         let uniform = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(UNLIT_PASS),
-            contents: bytemuck::cast_slice(&words),
+            contents: bytemuck::bytes_of(&values),
             usage: wgpu::BufferUsages::UNIFORM,
         });
         let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {

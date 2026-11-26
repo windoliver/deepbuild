@@ -64,9 +64,11 @@ mod regions;
 mod relation;
 mod reseed;
 mod scene;
+mod sea;
 mod seam;
 mod serve;
 mod session3;
+mod shader_layout;
 mod simplify;
 mod spawn;
 mod status;
@@ -182,6 +184,8 @@ pub enum Planted {
     /// plate whose horizon table is never read, and its sky occlusion from its slope alone.
     TerrainNoHorizonBake,
     TerrainOcclusionFromSlope,
+    /// #3036's wrong program: a plate that keeps the surface the frame before drew.
+    TracksKeepLastFrame,
     /// #2215's wrong program (tests/acceptance/2215/README.md: Assumed surfaces 3): the frame's
     /// receipt lists no part that refracts through the round lobe.
     RasterListsNothing,
@@ -277,6 +281,11 @@ pub enum Planted {
     HiddenViewWithoutOwnDepth,
     HiddenViewWritesIds,
     HiddenViewAfterStatus,
+    /// #3033's wrong seas (tests/acceptance/3033/README.md: Planted programs): every amplitude
+    /// of the table halved; every row at the longest wave's speed; only its four longest kept.
+    WaterSeaAmplitudesHalved,
+    WaterSeaSpeedOfLongest,
+    WaterSeaDrawsFourLongest,
     /// #971: the local tone map's base brought back up with a range weight of 1 at every tap.
     LocalBaseIgnoresEdges,
     /// #971: the local tone map's pyramid has the look's `levels` at every output size.
@@ -343,9 +352,9 @@ pub enum Planted {
     CreaseBelowAngle,
     EdgesDeriveEveryFrame,
     EdgesDashOtherSpace,
-    /// #1782's, by name (tests/acceptance/1782/README.md: Planted programs): a crease line's
-    /// wrong picker, and a hidden style's wrong span classifiers, cache, edge IDs and dash.
-    HiddenLines(&'static str),
+    /// By name: #1782's (tests/acceptance/1782/README.md: Planted programs), a crease line's wrong
+    /// picker and a hidden style's span classifiers, cache, edge IDs and dash; and #853's two.
+    Named(&'static str),
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
@@ -393,6 +402,8 @@ pub enum Planted {
     HalftonePopTakesDotPasses,
     InkFillFlat,
     RimKeepsFirst,
+    /// #1857's wrong program: a look's check admits a line profile's break of 0, and draws it.
+    ProfileAdmitsZeroBreaks,
     /// #1561's wrong programs (tests/acceptance/1561/README.md: Planted programs): a live window
     /// that hands a 2D document's frames no page and none of its look's drawn fields; and a
     /// frame that reuses the last frame's marks drawn with no page.
@@ -790,6 +801,9 @@ impl Planted {
             "hidden_view_without_own_depth" => Planted::HiddenViewWithoutOwnDepth,
             "hidden_view_writes_ids" => Planted::HiddenViewWritesIds,
             "hidden_view_after_status" => Planted::HiddenViewAfterStatus,
+            "water_sea_amplitudes_halved" => Planted::WaterSeaAmplitudesHalved,
+            "water_sea_speed_of_longest" => Planted::WaterSeaSpeedOfLongest,
+            "water_sea_draws_four_longest" => Planted::WaterSeaDrawsFourLongest,
             "local_base_ignores_edges" => Planted::LocalBaseIgnoresEdges,
             "local_pyramid_fixed_levels" => Planted::LocalPyramidFixedLevels,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
@@ -887,6 +901,7 @@ impl Planted {
             "halftone_pop_takes_dot_passes" => Planted::HalftonePopTakesDotPasses,
             "ink_fill_flat" => Planted::InkFillFlat,
             "rim_keeps_first" => Planted::RimKeepsFirst,
+            "profile_admits_zero_breaks" => Planted::ProfileAdmitsZeroBreaks,
             "live_passes_no_page" => Planted::LivePassesNoPage,
             "reuse_drops_page" => Planted::ReuseDropsPage,
             "drops_clouds" => Planted::DropsClouds,
@@ -1022,10 +1037,11 @@ impl Planted {
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
             "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
             "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
+            deep_canvas_scene3d::tracks::KEEPS_LAST_FRAME => Planted::TracksKeepLastFrame,
             "raster_lists_nothing" => Planted::RasterListsNothing,
             _ => {
-                let planted = deep_canvas_scene3d::spans::PLANTED;
-                Planted::HiddenLines(planted.iter().find(|p| p.0 == name)?.0)
+                let named = deep_canvas_scene3d::spans::PLANTED.iter().map(|p| p.0);
+                Planted::Named(named.chain(particles::PLANTED).find(|p| *p == name)?)
             }
         })
     }

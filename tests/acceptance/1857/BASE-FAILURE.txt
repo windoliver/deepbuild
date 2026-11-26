@@ -1,0 +1,87 @@
+#1857 acceptance suite at the base commit 8637610231a52f8898e931fcf40688687ff04bcb
+
+NOT RUN AT THE BASE. No test file of this suite has been run, at the base or anywhere.
+
+Why: every test file builds its binary first (README: Run them), and the base's build was not in the checkout when
+the suite was whole. `build-base.log` ends with `done 2026-11-24 04:12:01` and names `target/debug/deep-show` and
+`target/debug/deep-gpu`, but on 2026-11-24 at 13:40 and again at 14:18 the checkout
+(~/dev/devin-worktrees/doneright/issue-1857-blind) held no `target/` folder at all, and
+`cargo metadata --no-deps --offline` gives `<checkout>/target` as the target folder. A test file's own `cargo build`
+would therefore have compiled the workspace from nothing, outside the machine's build queue. This job starts no
+build, so no file was started.
+
+What is needed to run it: in the checkout, with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0,
+  cargo build --locked --bin deep-show --no-default-features --features full
+  cargo build --locked --bin deep-gpu
+(the caller's `cargo build --locked -j 8 --bin deep-show --bin deep-gpu` is the same two binaries; whether the
+first line above finds that build's units fresh was not checked), then each file once:
+  node scripts/throttle.mjs test --wait 60 -- env CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1857 --no-file-parallelism --testTimeout=3600000 <file>
+for cap.test.ts, budgets.test.ts, looks.test.ts and still.test.ts. The packages' `dist` folders are not needed.
+
+What was run instead, none of it a binary of the repository (README: What was checked without a build):
+  tsc -p tests/acceptance/1857/tsconfig.json                    no error
+  node <scratch>/check-judges.mjs <checkout>                    65 lines ok, "ALL JUDGES AND THE RUNNER HOLD"
+  node <scratch>/check-tags.mjs <checkout>                      11 tests, "EVERY TEST NAME READS WHOLE FROM ITS SOURCE WITH ONE TAG"
+  node node_modules/vitest/vitest.mjs list --root tests/acceptance/1857    11 tests listed, none run
+
+
+FORECAST, from the base's sources, not from a run. Each line is what the test is expected to meet at the base. A
+test of new behaviour that meets anything else there, or a test of criterion 7 that fails there, is a finding
+against this suite.
+
+cap.test.ts
+  AC1 #1857.b706b07a  t1 and f1 refused inside the child's limits, in under 1 s and under 64 MB
+      expected to FAIL at its own assertion, at t1, its first board: "the Recipe section states no cap beside "at
+      most 1,024 per repeat"" and "has no over_budget error: no cap refuses it; its errors: … bad_id …". The base
+      expands t1 down to its first book, whose ID has nine segments, and refuses with `bad_id` (expand.rs:
+      `id_fault`), at once. f1 is not reached in this test at the base. Run by itself it would be expected to fail
+      "ran out of time: no answer 60.0 s after it was asked, and it was stopped by PID" or "ran out of memory: its
+      resident memory reached … past its limit of 1024.0 MB": the base has no cap and makes each of f1's
+      1,074,791,424 derived items.
+  AC1 #1857.b706b07a  the planted expansion_counts_after
+      UNRUNNABLE at the base: the name is the implementer's to add. Expected there: `deep-show run` answers
+      `{"ok":false,"code":"bad_input"}` for an unknown `planted` value (main.rs), so the test fails with "fails by
+      running out of time or memory; the failures were: … deep-show run refused the scenario". With the name
+      added over the base's expansion it would meet what f1 meets above, and pass.
+  AC2 #1857.2a469c19  d1 with per_side 1,024
+      expected to FAIL at its own assertion as f1 would: out of time or memory.
+  AC3 #1857.0972fd24  w1, the param of three {repeat} lists
+      expected to FAIL at its own assertion: "ran out of memory" (a list of 1,074,791,424 numbers is made before
+      anything reads it; `Template::eval`), or out of time.
+
+budgets.test.ts (this machine is a reference Mac, but at 14:00 it was on battery with a 1-minute load of 120 to 155
+on 18 cores, so here a timed test can only FAIL at its first child or end INCONCLUSIVE)
+  AC4 #1857.df51c34e  the 5,000-item board checks whole, in under 1 s
+      NOT FORECAST for its first part. The base expands g1 into its 2,048 derived items, copying the board's item
+      map (5,000 items and more) for each of the 1,024 nested instances. If that takes the child past its 300 s
+      the test fails "ran out of time"; if not, the first part holds at the base, as it may, and the test then
+      ends INCONCLUSIVE on an unfit machine, which is no pass, and is expected to FAIL on a fit reference Mac with
+      every run over 1,000 ms.
+  AC4 #1857.df51c34e  the planted expansion_copies_items
+      UNRUNNABLE at the base: the name is the implementer's to add. On an unfit machine the test ends INCONCLUSIVE
+      before it asks for the name; on a fit one the base answers `bad_input` and the test fails at its first child.
+
+looks.test.ts
+  AC5 #1857.812f8d12  breaks {every: 0, gap: 0} refused at lines/nib/profile/breaks/every
+      expected to FAIL at its own assertion: "ran out of time: no answer 120.0 s after it was asked, and it was
+      stopped by PID". The base admits the profile (spec.rs: `number`, any finite value) and `profiled` never
+      leaves its loop.
+  AC5 #1857.812f8d12  the planted profile_admits_zero_breaks
+      UNRUNNABLE at the base: the name is the implementer's to add. Expected there: `deep-gpu run` refuses an
+      unknown `--planted` name before it reads its line (main.rs: `bad_input`), so the test fails with "fails by
+      hanging past 5 s; the failures were: … ended without an answer".
+  AC6 #1857.52aa8ad1  overshoot 1e18 and flick 1e18 refused, the process up
+      expected to FAIL at its own assertion: "ended without an answer (exit …)" or "ran out of memory". The base
+      admits both and `profiled` asks `extend` for 10^18 points.
+
+still.test.ts
+  AC7 #1857.5a457b1e  every shipped line profile is still admitted and drawn
+      expected to PASS, as a criterion that says "still" must: the five profiles are the base's own.
+  AC7 #1857.5a457b1e  the castle still expands
+      expected to PASS: the base has no cap, and #1719's suite presents the same document with the same pack.
+      Not checked here: that the castle as committed, shown without its look and with `include: ["issues"]`
+      alone, is answered inside 300 s and 4,096 MB on this machine.
+
+Limits and deadlines: proven on node children only (a hung child stopped at its deadline and gone; a child taking
+128 MB every 5 ms stopped at a reading of 401 MB against 400, kernel peak 717 MB, and gone). That they hold on the
+base's two binaries is unproven until the files are run.

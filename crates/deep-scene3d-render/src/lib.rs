@@ -41,7 +41,9 @@ mod planted;
 pub mod print;
 pub mod proxy;
 mod readouts;
+mod records;
 mod set;
+mod shader_layout;
 pub mod shadow;
 pub mod sss;
 pub mod status;
@@ -78,12 +80,15 @@ pub use crate::diag::{draw_offscreen_diag, white, Diag, DiagCounts};
 pub use crate::mesh::tangents_derived;
 use crate::mesh::{Mesh, MESHES};
 pub use crate::module::{
-    draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
-    LIGHT, PYRAMID_NS_PER_PX,
+    draw_offscreen, draw_offscreen_texture, timed, AfterFrame, Counts, HdrFrame, Module3,
+    PostFrame, Profiler, Shared, LIGHT, PYRAMID_NS_PER_PX,
 };
 use crate::passes::{geometry_pass, glass_pass, per_pixel_pass, resolve_ids};
 pub use crate::planted::Planted;
 pub use crate::readouts::{lay_over, readouts_as_labels};
+use crate::records::{
+    PointRecord, PuffRecord, SegmentRecord, TextRecord, LINE, POINT, PUFF, SEGMENT, TEXT,
+};
 use crate::set::Set;
 use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 pub use crate::tone::tone;
@@ -129,6 +134,24 @@ fn shader(planted: &Planted) -> String {
         source = source.replace(IDS_BY_ROW, "const IDS_BY_PLACE: bool = true;");
     }
     source
+}
+
+/// #425's band masks out of the scene's shader, with the mask dump's stages.
+fn mask_dump_source(scene: &str) -> Option<String> {
+    let start = scene.find("// Issue #425: a band's mask")?;
+    let end = scene.find("// End of #425's band masks.")?;
+    Some(format!("{}\n{MASK_DUMP}", &scene[start..end]))
+}
+
+deep_gpu::paired! { mask_dump: "mask_dump.wgsl", MaskDump;
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct MaskDump {
+    key: u32,
+    code: u32,
+    pad0: u32,
+    pad1: u32,
+}
 }
 
 /// A pass whose band masks [`Renderer::mask_dump`] reports (#425).
@@ -267,6 +290,7 @@ pub trait Post: Send {
     ) -> (Vec<(String, Job)>, Option<wgpu::TextureView>);
 }
 
+deep_gpu::paired! { frame_uniform: "scene3d.wgsl", Frame; "outline.wgsl", LineFrame;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub(crate) struct FrameUniform {
@@ -290,6 +314,7 @@ pub(crate) struct FrameUniform {
     cut: [[f32; 4]; cut::MAX_PLANES],
     cut_info: [u32; 4],
     cap: [f32; 4],
+}
 }
 
 /// The most distinct adjusts a frame shades with (#424): its adjust table's entries.
@@ -338,11 +363,13 @@ const PLANT_CALLS_CUT: u32 = 4_194_304;
 /// The most distinct lobe sets a frame shades with (#428): its lobe table's entries.
 const LOBE_ENTRIES: usize = 512;
 
+deep_gpu::paired! { lobe_entry: "scene3d.wgsl", LobeEntry;
 /// scene3d.wgsl's `LobeEntry` (#428): a material's extra lobes, as [`lobe_entry`] packs them.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct LobeEntry {
     v: [[f32; 4]; 8],
+}
 }
 
 /// A material's lobes as the shader reads them; `seed` its flake seed, the pattern seed's hash.
@@ -411,6 +438,7 @@ fn lobes_at(table: &[LobeEntry], e: &LobeEntry, sub: Option<&LobeEntry>) -> Opti
     })
 }
 
+deep_gpu::paired! { lights_uniform: "scene3d.wgsl", Lights;
 /// scene3d.wgsl's `Lights`: the view, the light count and the lights the policy shades (#421).
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -437,9 +465,12 @@ struct LightsUniform {
     /// response takes (#485).
     answers: [[f32; 4]; SHADED],
     /// The fill lights' clusters and what their depth is measured from (#1634; fill.rs).
-    fill: [[f32; 4]; 2],
+    fill: [f32; 4],
+    fill_view: [f32; 4],
+}
 }
 
+deep_gpu::paired! { local_uniform: "scene3d.wgsl", Local;
 /// scene3d.wgsl's `Local` (#446).
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -449,7 +480,9 @@ struct LocalUniform {
     info: [f32; 4],
     size: [f32; 4],
 }
+}
 
+deep_gpu::paired! { env_uniform: "scene3d.wgsl", Env;
 /// scene3d.wgsl's `Env` (#422): the environment's irradiance coefficients, its mix's, and how to
 /// read its cubes.
 #[repr(C)]
@@ -477,6 +510,7 @@ struct EnvUniform {
     /// #3034: a frame under water, and the color deep water takes ([`water::under`]).
     under: [f32; 4],
     under_color: [f32; 4],
+}
 }
 
 /// Our DFG table (#421): for 32 cosines of the view angle across and 32 roughnesses down, the
@@ -585,6 +619,7 @@ const EXACT: u32 = 2;
 const UNTESTED: u32 = 4;
 const OUTLINED: u32 = 8;
 
+deep_gpu::paired! { tone_uniform: "output.wgsl", Tone { _pad: _ };
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct ToneUniform {
@@ -598,17 +633,26 @@ struct ToneUniform {
     graded: u32,
     /// Where the curves end: 1 for SDR (#177).
     top: f32,
-    _pad: [u32; 3],
-    wb: [[f32; 4]; 3],
+    /// #458's planted output: 1 applies the exposure after the tone map.
+    late: u32,
+    _pad: [u32; 2],
+    wb0: [f32; 4],
+    wb1: [f32; 4],
+    wb2: [f32; 4],
     slope: [f32; 4],
     offset: [f32; 4],
     power: [f32; 4],
 }
+}
 
+deep_gpu::paired! { solid_record:
+    "scene3d.wgsl", Element; "cull.wgsl", Element; SOLID => "scene3d.wgsl", mesh_vs;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct SolidRecord {
-    rows: [[f32; 4]; 3],
+    r0: [f32; 4],
+    r1: [f32; 4],
+    r2: [f32; 4],
     color: u32,
     pick: u32,
     /// Object's shadow flags: [`NO_CAST`] and [`NO_RECEIVE`] (#420); its material's (#421).
@@ -625,6 +669,7 @@ struct SolidRecord {
     /// Its material operator's time in seconds (f32 bits), its seed, and the item's opacity (f32
     /// bits), which the operator's alpha multiplies (#429).
     op: [u32; 4],
+}
 }
 
 /// #446's planted wrong program's bit in the shader's planted word (scene3d.wgsl).
@@ -649,20 +694,6 @@ const MAPS: u32 = 8192;
 /// The cutaway reaches it (#424).
 const CUT: u32 = 16384;
 
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct SegmentRecord {
-    a: [f32; 4],
-    b: [f32; 4],
-    color: u32,
-    pick: u32,
-    flags: u32,
-    /// A mesh-edge line's dash and gap in its size space, as two f16 (#1640), or 0.
-    dash: u32,
-    /// Its alpha at each end, as two f16: a trail's fade (#450), else 1 and 1.
-    fade: u32,
-}
-
 /// Two f16 ones: a segment drawn at its full alpha.
 const OPAQUE_ENDS: u32 = 0x3c00_3c00;
 
@@ -675,34 +706,6 @@ fn half_bits(x: f64) -> u32 {
     }
     let b = x.min(65504.0).to_bits();
     (((b >> 23) - 112) << 10) | ((b >> 13) & 0x3ff)
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct PointRecord {
-    p: [f32; 4],
-    color: u32,
-    pick: u32,
-    flags: u32,
-    pad: u32,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-/// One glyph of a label: the label's anchor and em, the glyph's quad from the label's centre in
-/// ems (x right, y down), its texels on its atlas page, the label's axes (each `w` the fraction
-/// of half its box on that axis, for the label pass), and `flags`: world size, facing, the page,
-/// and [`LATER`].
-struct TextRecord {
-    p: [f32; 4],
-    rect: [f32; 4],
-    uv: [f32; 4],
-    right: [f32; 4],
-    up: [f32; 4],
-    color: u32,
-    pick: u32,
-    flags: u32,
-    pad: u32,
 }
 
 /// A solid's instance record: `tie` its rank by ID, `winding` false for the planted program that
@@ -770,8 +773,11 @@ fn solid_record(
     });
     // Its adjust's entry in the frame's adjust table, 0 for none (#424; Object: adjust).
     op[3] = adjust;
+    let [r0, r1, r2] = m.map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]);
     SolidRecord {
-        rows: m.map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]),
+        r0,
+        r1,
+        r2,
         // A material's color word holds the receiver sets it belongs to (#446): its own color is
         // its base, and the lights are what reads the word.
         color: if s.material.is_some() {
@@ -1582,19 +1588,6 @@ const SOLID: [wgpu::VertexAttribute; 12] = wgpu::vertex_attr_array![
 ];
 // A culled batch's instance step is its row in the batch's records (#484).
 const ROW: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![2 => Uint32];
-const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-    0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
-];
-/// A line's segment records, with its dash (#1640).
-const LINE: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
-    0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32, 5 => Uint32, 6 => Uint32
-];
-const POINT: [wgpu::VertexAttribute; 4] =
-    wgpu::vertex_attr_array![0 => Float32x4, 1 => Uint32, 2 => Uint32, 3 => Uint32];
-const TEXT: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
-    0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4,
-    5 => Uint32, 6 => Uint32, 7 => Uint32
-];
 
 /// A solid's vertex layouts: the mesh's vertices, then its instance records.
 fn mesh_buffers() -> [Option<wgpu::VertexBufferLayout<'static>>; 2] {
@@ -3723,7 +3716,8 @@ impl Renderer {
             locals: [LocalUniform::zeroed(); local::MAPS],
             items: [[[0.0; 4]; 6]; SHADED],
             answers: [[0.0; 4]; SHADED],
-            fill: [[0.0; 4]; 2],
+            fill: [0.0; 4],
+            fill_view: [0.0; 4],
         };
         // Each light's local map (#446).
         let mut local_of = BTreeMap::new();
@@ -3827,7 +3821,7 @@ impl Renderer {
             .collect();
         let (lit, remade) =
             (self.fill).prepare(device, scene, &order, &records, &mut self.cluster_buffer);
-        u.fill = lit;
+        [u.fill, u.fill_view] = lit;
         self.counts.scoring_ms += ordering.elapsed().as_secs_f64() * 1e3;
         self.counts.lists_bytes = self.fill.bytes(&self.cluster_buffer);
         let [w, h] = self.internal();
@@ -4760,8 +4754,13 @@ impl Renderer {
             planted: self.planted.water,
             above: (!self.sky).then(|| scene.ground.map(decode)),
         };
+        // #3033: a sea draws through pipelines of its own, made when the water first has one.
+        let sea = w.sea.is_some();
+        if self.waterer.as_ref().is_some_and(|held| held.sea != sea) {
+            self.waterer = None;
+        }
         self.waterer
-            .get_or_insert_with(|| Box::new(water::Waterer::new(device, reversed, samples)))
+            .get_or_insert_with(|| Box::new(water::Waterer::new(device, reversed, samples, sea)))
             .prepare(device, scene, w, &frame, &ids, &depth, [&ids_ms, &depth_ms]);
         self.watering = true;
     }
@@ -5680,6 +5679,10 @@ impl Renderer {
             ToneMap::Agx { white, contrast } => (2, white, contrast),
             other => (other.code(), 16.29, 1.25),
         };
+        let [wb0, wb1, wb2] = look
+            .grade
+            .white_balance()
+            .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]);
         let tone = ToneUniform {
             // #422's planted draws_black: nothing reaches the final target.
             exposure: if self.planted.draws_black {
@@ -5701,11 +5704,11 @@ impl Renderer {
             saturation: look.grade.saturation as f32,
             graded: u32::from(!look.grade.is_identity()),
             top: 1.0,
-            _pad: [u32::from(self.planted.exposure_after_tone_map), 0, 0],
-            wb: look
-                .grade
-                .white_balance()
-                .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
+            late: u32::from(self.planted.exposure_after_tone_map),
+            _pad: [0; 2],
+            wb0,
+            wb1,
+            wb2,
             slope: rgb4(look.grade.slope),
             offset: rgb4(look.grade.offset),
             power: rgb4(look.grade.power),
@@ -8263,10 +8266,7 @@ impl Renderer {
             _ => self.internal(),
         };
         let d = &device.device;
-        let scene = shader(&self.planted);
-        let start = scene.find("// Issue #425: a band's mask")?;
-        let end = scene.find("// End of #425's band masks.")?;
-        let source = format!("{}\n{MASK_DUMP}", &scene[start..end]);
+        let source = mask_dump_source(&shader(&self.planted))?;
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d mask dump"),
             source: wgpu::ShaderSource::Wgsl(source.into()),
@@ -8304,9 +8304,15 @@ impl Renderer {
             level,
             lower: false,
         }));
+        let dump = MaskDump {
+            key,
+            code,
+            pad0: 0,
+            pad1: 0,
+        };
         device
             .queue
-            .write_buffer(&uniform, 0, bytemuck::cast_slice(&[key, code, 0, 0]));
+            .write_buffer(&uniform, 0, bytemuck::bytes_of(&dump));
         let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("scene3d mask dump"),
             layout: &layout,
@@ -8803,18 +8809,6 @@ type PuffDraw = (
     wgpu::Buffer,
     u32,
 );
-
-/// A puff's instance record (scene3d.wgsl's `puff_vs`).
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct PuffRecord {
-    center: [f32; 4],
-    shape: [f32; 4],
-    light: [f32; 4],
-}
-
-const PUFF: [wgpu::VertexAttribute; 3] =
-    wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4];
 
 /// The transmissive parts' pass (#428): each drawn over the targets the geometry pass wrote,
 /// reading the opaque scene's copy.

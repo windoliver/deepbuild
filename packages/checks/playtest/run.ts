@@ -4,6 +4,9 @@
 // outcome's and any the input asks for. testsRun counts runs; a failure names its run (`bot <b> run <i>`) and starts
 // with its code. Before any run, each bot plays no step at the check's own seed: a bot the piece can't take, such as a
 // policy naming a control it doesn't declare, is refused there by the replica, and the check ends with no run counted.
+// From a save (#1047), `from: {save}`, every run and its replay start at the save's step, where the piece is restored
+// as opening a save does, once logic.layout has checked the save against the piece; a save it refuses ends the check
+// with no run counted, INVALID. A run's steps are the piece's own, so they count on from the save's.
 // With a play interface (#555), the interface is played first for no step, so a name the piece publishes no array of
 // the right type for fails play.missing before any run; goals are expressions over its names; a name's range fails a
 // run that publishes a value outside it with play.out_of_range; and each bot's bands and expectations hold over its runs.
@@ -11,7 +14,7 @@ import { createHash } from 'node:crypto';
 import type { CheckResult, Failure } from '@deepbuild/conformance';
 import { kindOf, lower, refusal } from './bots.ts';
 import { declared, goalTest, legalPaths, linkOffGrid, linksOf, lockRefusal, outOfRange, ranged } from './iface.ts';
-import { firstDiffering, goalSteps, outcomeOf, type Judged } from './judge.ts';
+import { firstDiffering, goalSteps, outcomeOf, startOf, type Judged } from './judge.ts';
 import { actingSteps, modelReplies, type Ask } from './model.ts';
 import { onReferenceMac, soakFailure, windowsOf } from './soak.ts';
 import type { Bot, Outcome, Play, PlayAnswer, PlaytestInput, Span } from './types.ts';
@@ -72,7 +75,9 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
   const bounds = iface ? ranged(iface) : [];
   const links = iface && linksOf(iface);
   const values = [...new Set([input.stuck?.measure, ...reads, ...bounds.map((r) => r.path), links?.rows, links?.count].filter((v): v is string => v !== undefined))];
-  const common = { span, values, ...(input.piece_seed ? { piece_seed: input.piece_seed } : {}), ...(iface ? { play: iface } : {}) };
+  const common = { span, values, ...(input.piece_seed ? { piece_seed: input.piece_seed } : {}), ...(iface ? { play: iface } : {}), ...(input.from ? { from: input.from } : {}) };
+  // #1047: the step each run starts at: the save's, once the save has passed logic.layout below.
+  let at = 0;
   const jobs = input.bots.flatMap((bot, b) => Array.from({ length: runs }, (_, i) => ({ bot, b, test: `bot ${b} run ${i}`, seed: runSeed(input.seed, i) })));
   const ran: Ran[] = [];
   let refused: Failure | undefined;
@@ -97,9 +102,9 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
             ask: ask ?? (async () => ({ text: '' })),
           });
           rows = asked.rows;
-          first = await play(input.piece, { ...common, seed, bot, rows, frames: [0] });
+          first = await play(input.piece, { ...common, seed, bot, rows, frames: [at] });
         } else {
-          first = await play(input.piece, { ...common, seed, bot, frames: [0] });
+          first = await play(input.piece, { ...common, seed, bot, frames: [at] });
         }
       } catch (e) {
         refused = failure(test, `refused: ${String((e as Error)?.message ?? e)}`, false);
@@ -110,13 +115,22 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
       const acting = rows ? actingSteps(rows) : undefined;
       const outcome = outcomeOf(first, goals, stuck, acting);
       const every = input.frames?.every ? steps(input.frames.every, first.step) : 0;
-      const keep = [...new Set([0, outcome.step, ...(every ? Array.from({ length: Math.floor((first.steps - 1) / every) + 1 }, (_, n) => n * every) : [])])].filter((k) => k < first.steps);
+      const keep = [...new Set([at, outcome.step, ...(every ? Array.from({ length: Math.floor((first.steps - 1) / every) + 1 }, (_, n) => at + n * every) : [])])].filter((k) => k < at + first.steps);
       const replay = await play(input.piece, { ...common, seed, track: first.entries, frames: keep });
       const reached = new Map([...goalSteps(first, goals)].flatMap(([g, k]) => (k === undefined ? [] : [[g, k] as const])));
       const model = rows ? { replayed: outcomeOf(replay, goals, stuck, acting) } : undefined;
       ran.push({ test, bot: job.b, seed, outcome, first, replay, reached, ...(model ? { model } : {}) });
     }
   };
+  // #1047: from a save, logic.layout checks the save against the piece before any run: a play of no step from it, which
+  // the replica refuses, naming both layouts, when the save doesn't pass. The check then counts no run and is INVALID.
+  if (input.from) {
+    try {
+      at = startOf(await play(input.piece, { seed: input.seed, span: { steps: 0 }, from: input.from, values: [], frames: [] }));
+    } catch (e) {
+      return { ...ended([failure('from', `refused before any run: ${said(e)}`, false)]), outcome: 'ran_nothing', runs: [] };
+    }
+  }
   // The interface taken by the piece before any run, then each bot: a play of no step at the check's own seed, which the
   // replica refuses, naming what, for a name the piece publishes no array of the right type for (play.missing), or a
   // bot the piece can't take, such as a policy on a control it doesn't declare.
@@ -158,10 +172,10 @@ export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): 
     if (differs !== undefined) failures.push(failure(r.test, `playtest.replay: ${r.test} (seed ${r.seed}): its track played again without its bot first differs in the full-state hash at step ${differs}`));
     for (const { name, path, range } of bounds) {
       const out = outOfRange(r.first.values[path] ?? [], range);
-      if (out) failures.push(failure(r.test, `play.out_of_range: ${r.test} (seed ${r.seed}): ${name} row ${out.row} is ${out.value} at step ${out.step}, outside [${range[0]}, ${range[1]}]`));
+      if (out) failures.push(failure(r.test, `play.out_of_range: ${r.test} (seed ${r.seed}): ${name} row ${out.row} is ${out.value} at step ${at + out.step}, outside [${range[0]}, ${range[1]}]`));
     }
     const off = links && linkOffGrid(r.first.values[links.rows] ?? [], r.first.values[links.count] ?? [], links.cells);
-    if (off) failures.push(failure(r.test, `play.out_of_range: ${r.test} (seed ${r.seed}): links row ${off.row} names cell ${off.cell} at step ${off.step}, off the grid's cells 0 to ${links!.cells - 1}`));
+    if (off) failures.push(failure(r.test, `play.out_of_range: ${r.test} (seed ${r.seed}): links row ${off.row} names cell ${off.cell} at step ${at + off.step}, off the grid's cells 0 to ${links!.cells - 1}`));
   }
   const shown: RunShown[] = ran.map((r) => ({
     test: r.test, seed: r.seed, track: r.first.track, outcome: r.outcome, replay: r.replay.track,
@@ -227,7 +241,7 @@ function told(r: Ran): string | undefined {
   const run = `${r.test} (seed ${r.seed})`;
   switch (o.kind) {
     case 'stuck': {
-      const value = JSON.stringify(r.first.values[o.measure]?.[o.from_step]);
+      const value = JSON.stringify(r.first.values[o.measure]?.[o.from_step - startOf(r.first)]);
       const frame = r.replay.frames.find((f) => f.step === o.step)?.sha256 ?? 'not kept';
       return `playtest.stuck: ${run}: ${o.measure} last moved at step ${o.from_step}, to ${value}, and was found stuck at step ${o.step}; its frame there is ${frame}`;
     }

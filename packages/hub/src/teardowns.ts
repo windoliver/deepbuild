@@ -93,7 +93,7 @@ export class Teardowns {
     await this.o.append(ran.session, ran.agent, 'resource.created', { resource, kind: kind.name, ...(key === undefined ? {} : { key }), cost_usd: kind.cost, check: kind.check, cwd: ran.cwd });
     const named = key ?? `the one \`${ran.command.slice(0, 200)}\` made`;
     await this.o.raise(ran.session, ran.agent, {
-      kind: 'unblock', question: `Take down ${kind.name} ${named}: a session created it, and it costs $${kind.cost} until it's gone.`,
+      kind: 'unblock', may_answer: 'verified_channel', question: `Take down ${kind.name} ${named}: a session created it, and it costs $${kind.cost} until it's gone.`,
       options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', steps: [`Remove ${named} at its provider`], where: 'at its provider',
       why: 'Nothing here can reach it, and its check closes this task once it\'s gone', unblocks: [`session:${letters(ran.session)}`], proves: kind.check, cost_usd: kind.cost,
       fallback: 'you', provisional: false, owner: 'you', key: resource, pinned_to: { kind: 'evidence', ref: resource },

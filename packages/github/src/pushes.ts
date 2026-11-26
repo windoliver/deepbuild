@@ -22,9 +22,9 @@ function limitLifts(res: Response, now: number): number | undefined {
   return res.status === 429 ? now + 60_000 : undefined;
 }
 export type Rest = (method: 'GET' | 'POST', path: string, body?: Obj) => Promise<{ body: unknown; next: string | undefined }>;
-/** One call to the REST API at `api`: a refused one throws ForgeRefused, naming when a limit lifts. */
-export const restOf = (api: string, token: string | undefined): Rest => async (method, path, body) => {
-  const res = await forgeFetch(api, path, { method, token, body, signal: AbortSignal.timeout(4000) });
+/** One call to the REST API at `api`, given `ms` to answer: a refused one throws ForgeRefused, naming when a limit lifts. */
+export const restOf = (api: string, token: string | undefined, ms = 4000): Rest => async (method, path, body) => {
+  const res = await forgeFetch(api, path, { method, token, body, signal: AbortSignal.timeout(ms) });
   if (!res.ok) throw new ForgeRefused(res.status, limitLifts(res, Date.now()), path);
   return { body: await res.json(), next: /<([^>]+)>;\s*rel="next"/.exec(res.headers.get('link') ?? '')?.[1] };
 };
