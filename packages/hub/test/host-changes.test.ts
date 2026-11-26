@@ -138,6 +138,9 @@ describe('what a claim on a host changed (#3511)', () => {
       writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED);
       rmSync(join(dir, '.git', 'index'));
       git('update-index', '--add', ...Object.keys(BASE));
+      // The scene holds only if git finds the two copies by its two orders: by path the forged one, by id the genuine.
+      expect(git('ls-tree', '-r', 'HEAD')).toContain(`${gutted}\ttests/price_test.sh`);
+      expect(git('rev-parse', 'HEAD:tests/price_test.sh')).toBe(file);
     }],
     ['an edit of the same size with its file times put back, ctime not trusted', (git, dir) => {
       // An hour back, with the index written after it, so git takes the entry's times for the file's and reads no bytes.
@@ -175,11 +178,13 @@ describe('what a claim on a host changed (#3511)', () => {
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/new_test\.sh, which it may load/));
   }, 60_000);
 
-  it('a step of the read that fails there, as one does when the host\'s disk fills, ends it with no change set, though git is set to hide the edit', async () => {
+  // A step that fails there, as one does when the host's disk fills: the tool, run in its place, fails as it can.
+  const fails: [string, string][] = [['awk', `case "$*" in *'ENVIRON["RE"]'*) exit 2 ;; esac`], ['base64', 'exit 1']];
+  it.each(fails)('a step of the read that fails there ends it with no change set, though git is set to hide the edit: a failing %s', async (tool, fail) => {
     const bin = mkdtempSync(join(tmpdir(), 'host-bin-'));
     dirs.push(bin);
-    const awk = execFileSync('sh', ['-c', 'command -v awk']).toString().trim();
-    writeFileSync(join(bin, 'awk'), `#!/bin/sh\ncase "$*" in *'ENVIRON["RE"]'*) exit 2 ;; esac\nexec ${awk} "$@"\n`, { mode: 0o755 });
+    const real = execFileSync('sh', ['-c', `command -v ${tool}`]).toString().trim();
+    writeFileSync(join(bin, tool), `#!/bin/sh\n${fail}\nexec ${real} "$@"\n`, { mode: 0o755 });
     const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: hides[0][1], env: { PATH: `${bin}:${process.env.PATH ?? ''}` } });
     expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, the read of what the claim changed didn't end/));

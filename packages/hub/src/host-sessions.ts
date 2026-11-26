@@ -87,7 +87,7 @@ export GIT_NO_REPLACE_OBJECTS=1
 B=$2; S=$3; RE=$4; T=$(printf '\t')
 g() { LC_ALL=C timeout -k 1 "$S" git -c core.quotePath=false -c core.commitGraph=false -c core.ignorecase=false "$@" 2>/dev/null; }
 run() { f=$1; shift; g "$@" > "$f" || { say 'git %s exited %s' "$*" "$?"; return 1; }; }
-out() { printf '%s\t%s\n' "$1" "$(base64 -w0 < "$2")"; }
+out() { v=$(base64 -w0 < "$2"); printf '%s\t%s\n' "$1" "$v"; }
 d=$(mktemp -d)
 trap 'rm -rf "$d"' EXIT
 here=$(pwd -P); top=$(g rev-parse --show-toplevel) || top=; gd=$(g rev-parse --absolute-git-dir) || gd=
