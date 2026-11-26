@@ -1,0 +1,13 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    const high = listed.filter((entry) => entry.load > entry.cores);"
+      ],
+      "wrong": [
+        "    // Planted: the runnable threads and the commands are over every sample whose threads were read, above the cores or not.",
+        "    const high = listed;"
+      ]
+    }
+  ]
+}

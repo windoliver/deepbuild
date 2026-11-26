@@ -1,0 +1,15 @@
+{
+  "packages/hub/src/hub-log.ts": [
+    {
+      "find": ["import { closeSync, fstatSync, ftruncateSync, openSync, readSync, renameSync, writeSync } from 'node:fs';"],
+      "wrong": ["import { closeSync, fstatSync, ftruncateSync, openSync, readSync, renameSync, statSync, writeSync } from 'node:fs';"]
+    },
+    {
+      "find": ["export function keepLog(path: string, plant?: Plant): void {"],
+      "wrong": [
+        "export function keepLog(path: string, plant?: Plant): void {",
+        "  setInterval(() => statSync(path, { throwIfNoEntry: false })?.size, 10);"
+      ]
+    }
+  ]
+}
