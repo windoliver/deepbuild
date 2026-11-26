@@ -1,9 +1,10 @@
 // What a claim on a host changed (#3511), with the SSH link as the boundary: the script host-sessions.ts sends is run
 // here by `sh -s` in a real repo, as the host's shell runs it there, and the gate runner judges the claim on its read.
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { deflateSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RecordedRun } from '@deepbuild/gate';
 import type { Connection } from '@deepbuild/record';
@@ -26,13 +27,15 @@ const exec = (_host: string, args: string[], script: string): Promise<{ code: nu
 });
 
 /**
- * A claim of a session on the host `gpu-box`: its folder there holds `base` committed, then `head` written over it,
- * `broken` making its index no index. Its one approved check ran there and exited 0, recording no read files, as a
+ * A claim of a session on the host `gpu-box`: its folder there, alone in a temporary folder, holds `base` committed,
+ * then `head` written over it and `there` done in it, `broken` making its index no index. Its one approved check ran there and exited 0, recording no read files, as a
  * run on a host does. Returns the claim's verdict.
  */
-async function claimed(o: { base: Record<string, string>; head: Record<string, string>; broken?: boolean; there?: (git: (...args: string[]) => string) => void; link?: typeof exec }) {
-  const dir = mkdtempSync(join(tmpdir(), 'host-changes-'));
-  dirs.push(dir);
+async function claimed(o: { base: Record<string, string>; head: Record<string, string>; broken?: boolean; there?: (git: (...args: string[]) => string, dir: string) => void; link?: typeof exec }) {
+  const root = mkdtempSync(join(tmpdir(), 'host-changes-'));
+  dirs.push(root);
+  const dir = join(root, 'repo');
+  mkdirSync(dir);
   const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, stdio: 'pipe' }).toString().trim();
   const put = (files: Record<string, string>) => { for (const [p, text] of Object.entries(files)) { mkdirSync(join(dir, p, '..'), { recursive: true }); writeFileSync(join(dir, p), text); } };
   git('init', '-q', '-b', 'main');
@@ -41,7 +44,7 @@ async function claimed(o: { base: Record<string, string>; head: Record<string, s
   git('commit', '-qm', 'one');
   const base = git('rev-parse', 'HEAD');
   put(o.head);
-  o.there?.(git);
+  o.there?.(git, dir);
   if (o.broken) writeFileSync(join(dir, '.git', 'index'), 'not an index\n');
   const sessions = new HostSessions({ root: dir, hosts: { exec: o.link ?? exec, read: o.link ?? exec } } as unknown as ConstructorParameters<typeof HostSessions>[0]);
   let gate: GateRunner;
@@ -121,14 +124,54 @@ describe('what a claim on a host changed (#3511)', () => {
     }],
   ];
   it.each(hides)('an edited test file is named though the folder\'s git is set to hide it: %s', async (_how, hide) => {
-    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: (git) => hide(git, dirs.at(-1)!) });
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: hide });
     expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: the claim changed tests\/price_test\.sh, which it may load/));
   }, 60_000);
 
   it('a folder whose git takes another folder for its work tree is no change set: nothing is known of it', async () => {
-    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: (git) => { const decoy = mkdtempSync(join(tmpdir(), 'host-changes-decoy-')); dirs.push(decoy); git('config', 'core.worktree', decoy); } });
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: (git, dir) => { mkdirSync(join(dirname(dir), 'decoy')); git('config', 'core.worktree', join(dirname(dir), 'decoy')); } });
     expect(v?.reasons).toContainEqual(expect.stringMatching(/price-approved counts as the agent's own: what the claim changed couldn't be read \(on gpu-box, git there takes .* for the work tree, not the folder/));
+  }, 60_000);
+
+  // Each a way to make the folder's git show another tree than the one in it, or keep from looking in a folder: then
+  // nothing is known of what changed.
+  const loose = (dir: string, oid: string) => join(dir, '.git', 'objects', oid.slice(0, 2), oid.slice(2));
+  const forge = (dir: string, oid: string, kind: string, body: Buffer) => { chmodSync(loose(dir, oid), 0o644); writeFileSync(loose(dir, oid), deflateSync(Buffer.concat([Buffer.from(`${kind} ${body.length}\0`), body]))); };
+  const blinds: [string, (git: (...args: string[]) => string, dir: string) => void, RegExp][] = [
+    ['a repo of its own in the folder above, taken for the work tree', (git, dir) => {
+      const up = dirname(dir);
+      for (const [path, text] of Object.entries(BASE)) { mkdirSync(join(up, path, '..'), { recursive: true }); writeFileSync(join(up, path), text); }
+      execFileSync('git', ['init', '-q'], { cwd: up });
+      execFileSync('git', ['add', ...Object.keys(BASE)], { cwd: up });
+      git('config', 'core.worktree', up);
+      writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED);
+    }, /holds a \.git of its own/],
+    ['a repo of its own in a new folder', (_git, dir) => {
+      mkdirSync(join(dir, 'x', 'tests'), { recursive: true });
+      execFileSync('git', ['init', '-q'], { cwd: join(dir, 'x') });
+      writeFileSync(join(dir, 'x', 'conftest.py'), 'new\n');
+    }, /git lists x\/ as a folder it did not look in/],
+    ['the test folder swapped for a link to a copy of it with a file added', (_git, dir) => {
+      const other = join(dirname(dir), 'other');
+      renameSync(join(dir, 'tests'), other);
+      writeFileSync(join(other, 'conftest.py'), 'new\n');
+      symlinkSync(other, join(dir, 'tests'));
+    }, /git lists tests as a folder it did not look in/],
+    ['the base\'s test folder forged in the folder\'s own store', (git, dir) => {
+      const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: GUTTED }).toString().trim();
+      writeFileSync(join(dir, 'tests/price_test.sh'), GUTTED);
+      forge(dir, git('rev-parse', 'HEAD:tests'), 'tree', Buffer.concat([Buffer.from('100644 price_test.sh\0'), Buffer.from(blob, 'hex')]));
+    }, /or a tree it holds there is not the object its id names/],
+    ['the base\'s package.json forged in the folder\'s own store with the new scripts', (git, dir) => {
+      writeFileSync(join(dir, 'package.json'), pkg('true'));
+      forge(dir, git('rev-parse', 'HEAD:package.json'), 'blob', Buffer.from(pkg('true')));
+    }, /holds no package\.json there that is the object its id names/],
+  ];
+  it.each(blinds)('a folder whose git is kept from showing what changed is no change set: %s', async (_how, blind, why) => {
+    const v = await claimed({ base: BASE, head: { 'price.txt': '18.00\n' }, there: blind });
+    expect(v?.outcome, JSON.stringify(v)).not.toBe('PASS');
+    expect(v?.reasons).toContainEqual(expect.stringMatching(new RegExp(`price-approved counts as the agent's own: what the claim changed couldn't be read \\(on gpu-box, .*${why.source}`)));
   }, 60_000);
 
   it('a changed test file whose name git still quotes is no change set: nothing is known of it', async () => {

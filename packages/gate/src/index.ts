@@ -8,7 +8,7 @@ export type { ClaimIntake, ClaimSource, MadeClaim, OpenAsk } from './claims.js';
 export { floor, lockDefinition, recomputeHash, validityGate, validityReads } from './floor.js';
 export type { DefinitionParts, Finding, FloorInput, FloorResult, Lock, SessionLog, SessionRun, ValidityInput } from './floor.js';
 export { blanked, maskIn, segmentsOf, wordsOf } from './mask.js';
-export { checkSource, ownChanges, ownRead, runnerConfig, type ChangesPlant } from './own.js';
+export { checkSource, OWN_BY_NAME, ownChanges, ownRead, runnerConfig, type ChangesPlant } from './own.js';
 export type { ApprovedCheck } from './own.js';
 export { headTrust, pushRecordKit, runPushRecordKit } from './head.js';
 export type { HeadInput, HeadPlan, HeadResult, ProviderPush, PushKit, PushReading, PushRecordReader } from './head.js';

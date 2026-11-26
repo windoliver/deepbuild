@@ -8,7 +8,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
-import { runnerConfig } from '@deepbuild/gate';
+import { OWN_BY_NAME, runnerConfig } from '@deepbuild/gate';
 import { scriptsOf, type Changes } from './claim-changes.js';
 import { claudeCommand, longestDeadline, ourGroups, withHooks } from './claude-settings.js';
 import { shellQuote as q } from './shell.js';
@@ -69,47 +69,60 @@ printf 'oid\t%s\ntext\t%s\n' "$o" "$(GIT_NO_REPLACE_OBJECTS=1 git -C "$1" -c cor
 const FILES = String.raw`r=$(realpath -e -- "$1" 2>/dev/null) || { echo read; exit 0; }; max=$2; shift 2; i=0
 for p; do f=$(realpath -e -- "$r/$p" 2>/dev/null) && case "$f" in "$r"/*) [ -f "$f" ] && printf 'file\t%s\t%s\n' "$i" "$(head -c "$max" < "$f" | base64 -w0)" ;; esac; i=$((i + 1)); done; echo read`;
 /**
- * What a folder there changed against a commit (#3511), by bytes: each file the commit holds is hashed as it lies in
- * the folder, with no filter, attribute, index or file time between, so nothing in the folder's own git can stand in
- * for a file; and the files the folder lists that the commit doesn't hold are added. It prints, each in base64: the
- * repo's top, the changed files, the added ones, every file either names, and package.json as the commit and the
- * folder hold it.
- * Paths are the repo's, from its top. Each git call ends within `$3` seconds, and one that fails, or a top that
- * isn't the folder or above it, says so on a line of its own: then nothing is known of what changed.
+ * What a folder there changed against a commit (#3511). The files whose path can make them a check's own (`$4`, an
+ * extended regular expression) are compared by their bytes: each the commit holds is hashed as it lies in the folder,
+ * with no filter, attribute, index or file time between, against the commit's trees, each named again first, so
+ * nothing in the folder's own git can stand in for one. The rest are git's own diff. Files the folder lists that the
+ * commit doesn't hold are added; one git lists as a folder it didn't look in is a failed read. It prints, each in
+ * base64: the repo's top, the changed files, the added ones, every file either names, and package.json as the commit
+ * and the folder hold it, paths from the top. Each git call ends within `$3` seconds, and one that fails, a repo
+ * whose top isn't the folder's, or a `.git` between the two, says so on a line of its own: then nothing is known of
+ * what changed.
  */
 const CHANGES = String.raw`say() { printf 'unread\t%s\n' "$(printf "$@" | base64 -w0)"; }
 cd -- "$1" || { say 'the folder %s could not be entered' "$1"; echo read; exit 0; }
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_NOSYSTEM GIT_ATTR_SOURCE GIT_GRAFT_FILE GIT_SHALLOW_FILE GIT_REPLACE_REF_BASE GIT_CEILING_DIRECTORIES GIT_DISCOVERY_ACROSS_FILESYSTEM
 export GIT_NO_REPLACE_OBJECTS=1
-B=$2; S=$3; T=$(printf '\t')
+B=$2; S=$3; RE=$4; T=$(printf '\t')
 g() { LC_ALL=C timeout -k 1 "$S" git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c core.quotePath=false "$@" 2>/dev/null; }
 run() { f=$1; shift; g "$@" > "$f" || { say 'git %s exited %s' "$*" "$?"; return 1; }; }
 out() { printf '%s\t%s\n' "$1" "$(base64 -w0 < "$2")"; }
 d=$(mktemp -d) || { say 'no temporary folder could be made there'; echo read; exit 0; }
 trap 'rm -rf "$d"' EXIT
-top=$(g rev-parse --show-toplevel)
-case "$(pwd -P)/" in "$top"/*) cd -- "$top" ;; *) say 'git there takes %s for the work tree, not the folder' "$top"; echo read; exit 0 ;; esac
-if run "$d/tree" ls-tree -r "$B" && run "$d/listed" ls-files --cached --others --exclude-standard; then
+here=$(pwd -P); top=$(g rev-parse --show-toplevel); gd=$(g rev-parse --absolute-git-dir)
+[ -n "$top" ] && [ -n "$gd" ] || { say 'git there finds no repo for the folder'; echo read; exit 0; }
+case "$here/" in "$top"/*) ;; *) say 'git there takes %s for the work tree, not the folder' "$top"; echo read; exit 0 ;; esac
+p=$here; while [ "$p" != "$top" ] && [ "$p" != / ]; do [ -e "$p/.git" ] && { say 'git there takes %s for the work tree, though %s holds a .git of its own' "$top" "$p"; echo read; exit 0; }; p=$(dirname -- "$p"); done
+[ -e "$top/.git" ] || { say 'git there takes %s for the work tree, which holds no .git' "$top"; echo read; exit 0; }
+export GIT_DIR="$gd" GIT_WORK_TREE="$top"; cd -- "$top" || exit 0
+# The commit and its trees, packed and named again from their bytes: an object the folder's own store forged has another name.
+ok=n; g rev-list --objects --no-object-names --no-walk --filter=blob:none "$B" > "$d/objs" && g pack-objects --stdout -q < "$d/objs" > "$d/p.pack" && g index-pack -o "$d/p.idx" "$d/p.pack" > /dev/null && g show-index < "$d/p.idx" | cut -d' ' -f2 | sort > "$d/named" && sort "$d/objs" | cmp -s - "$d/named" && ok=y
+if [ $ok = n ]; then say 'the commit %s or a tree it holds there is not the object its id names' "$B"
+elif run "$d/tree" ls-tree -r "$B" && run "$d/listed" ls-files --cached --others --exclude-standard && run "$d/diffed" diff --name-only --no-renames "$B"; then
   if grep -q "$T\"" "$d/tree" || grep -q '^"' "$d/listed"; then say "git names a path it can't list plainly"
   else
     cut -f2 "$d/tree" > "$d/paths"
-    exec 3> "$d/hash" 4> "$d/oids" 5> "$d/changed"
-    while IFS="$T" read -r meta p; do
-      set -- $meta
-      x=n; [ -x "$p" ] && x=y
-      case "$1$x" in
-        100644n|100755y) if [ -f "$p" ] && [ ! -L "$p" ]; then printf '%s\n' "$p" >&3; printf '%s\n' "$3" >&4; else printf '%s\n' "$p" >&5; fi ;;
-        120000?) [ -L "$p" ] && [ "$(readlink -- "$p" | tr -d '\n' | g hash-object --stdin)" = "$3" ] || printf '%s\n' "$p" >&5 ;;
-        *) printf '%s\n' "$p" >&5 ;;
-      esac
-    done < "$d/tree"
-    exec 3>&- 4>&- 5>&-
+    # Each own-by-name file the commit holds, by what lies at its path now: a file of the same kind and execute bit is
+    # hashed, a link's text is hashed, and anything else is changed.
+    RE=$RE awk -F "$T" 'BEGIN { re = ENVIRON["RE"] } $2 ~ re' "$d/tree" > "$d/own"
+    cut -f2 "$d/own" | xargs -r -d '\n' stat --printf '%F\t%a\t%n\n' -- > "$d/stat" 2> /dev/null
+    awk -F "$T" -v H="$d/hash" -v O="$d/oids" -v L="$d/links" -v C="$d/changed" '
+      FILENAME == ARGV[1] { k[$3] = $1; x[$3] = substr($2, length($2) - 2, 1) % 2; next }
+      { split($1, m, " "); p = $2
+        if ((m[1] == "100644" || m[1] == "100755") && k[p] == "regular file" && x[p] == (m[1] == "100755")) { print p > H; print m[3] > O }
+        else if (m[1] == "120000" && k[p] == "symbolic link") print m[3] "\t" p > L
+        else print p > C }' "$d/stat" "$d/own"
+    touch "$d/hash" "$d/oids" "$d/links" "$d/changed"
+    while IFS="$T" read -r o p; do [ "$({ readlink -- "$p"; printf .; } | head -c -2 | g hash-object --stdin)" = "$o" ] || printf '%s\n' "$p" >> "$d/changed"; done < "$d/links"
     if run "$d/hashes" hash-object --no-filters --stdin-paths < "$d/hash" && [ "$(wc -l < "$d/hashes")" -eq "$(wc -l < "$d/hash")" ]; then
       paste "$d/oids" "$d/hashes" "$d/hash" | awk -F "$T" '$1 != $2 { print $3 }' >> "$d/changed"
-      awk 'NR == FNR { t[$0]; next } !($0 in t)' "$d/paths" "$d/listed" > "$d/added"
+      cat "$d/diffed" >> "$d/changed"
+      awk 'FILENAME == ARGV[1] { t[$0]; next } !($0 in t)' "$d/paths" "$d/listed" > "$d/added"
+      while IFS= read -r p; do case "$p" in */) ;; *) [ -d "$p" ] || continue ;; esac; say 'git lists %s as a folder it did not look in' "$p"; break; done < "$d/added"
       cat "$d/paths" "$d/listed" > "$d/all"
       printf '%s' "$top" > "$d/top"; out top "$d/top"; out diff "$d/changed"; out others "$d/added"; out tracked "$d/all"
-      if grep -qx package.json "$d/paths"; then g show "$B:package.json" > "$d/was" && out was "$d/was" || say 'git show %s:package.json exited %s' "$B" "$?"; fi
+      o=$(awk -F "$T" '$2 == "package.json" { split($1, m, " "); print m[3] }' "$d/tree")
+      if [ -n "$o" ]; then g cat-file blob "$o" > "$d/was" && [ "$(g hash-object --no-filters --stdin < "$d/was")" = "$o" ] && out was "$d/was" || say 'the commit %s holds no package.json there that is the object its id names' "$B"; fi
       [ -f package.json ] && head -c 1048576 package.json > "$d/now" && out now "$d/now"
     else say 'the files there could not all be hashed within %s s' "$S"; fi
   fi
@@ -310,7 +323,7 @@ export class HostSessions {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<Changes>((done) => { timer = setTimeout(() => done(unread(`the read of what the claim changed ran past its ${Math.ceil(ms)} ms deadline`)), ms); });
     const read = (async (): Promise<Changes> => {
-      const r = await this.o.hosts.read(host, [cwd, base, String(Math.max(1, Math.floor(ms / 1000)))], CHANGES);
+      const r = await this.o.hosts.read(host, [cwd, base, String(Math.max(1, Math.floor(ms / 1000))), OWN_BY_NAME], CHANGES);
       if (r.code !== 0 || !r.stdout.endsWith('read\n')) return unread(`the read of what the claim changed didn't end (ssh exit ${String(r.code)}: ${r.stderr.trim().slice(-200)})`);
       const lines = r.stdout.split('\n').map((l) => l.split('\t'));
       const text = (name: string): string[] => lines.filter((l) => l[0] === name).map((l) => Buffer.from(l[1] ?? '', 'base64').toString('utf8'));
