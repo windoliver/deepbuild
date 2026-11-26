@@ -755,3 +755,79 @@ export async function shellFailuresDrawn(world: World, app: App, want: { rows: r
   if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
   return out;
 }
+
+// ---- A capture OCR reads nothing from is unreadable, never a reading of 0 (REDRAFT.md, Tenth redraft). Added beside the
+// judges above, which stay as they were.
+
+/** The prefix of a failure that says a capture couldn't be read: the run is INCONCLUSIVE on it, never PASS, never 0 rows. */
+export const UNREADABLE = 'UNREADABLE: ';
+/** OCR of one rectangle of the picture alone (`probe ocr-in`), boxes in the whole picture's pixels. */
+export const ocrIn = async (picture: Picture, level: 'accurate' | 'fast', rect: readonly number[]): Promise<Line[]> =>
+  probe('ocr-in', picture.path, level, ...rect.map((v) => String(Math.round(v))));
+
+/** Every other pixel of the rectangle, both ways (dense enough to land on a 2 px stroke), is within 12 of the first: one fill. */
+export function blankIn(picture: Picture, rect: readonly number[]): boolean {
+  const [x0, y0, w, h] = rect.map(Math.floor) as [number, number, number, number];
+  const first = picture.at(x0, y0);
+  for (let y = y0; y < y0 + h; y += 2) for (let x = x0; x < x0 + w; x += 2) if (distance(picture.at(x, y), first) > 12) return false;
+  return true;
+}
+
+/**
+ * Whether a reading is missing evidence: OCR returned no line from a region that isn't one blank fill. Invariant 2: an
+ * empty reading is never a reading of nothing drawn, so it can't count 0 rows; a blank fill can.
+ */
+export const unreadable = (lines: readonly Line[], blank: boolean, where: string): string | null =>
+  lines.length || blank ? null : `${UNREADABLE}OCR read no line from ${where}, which isn't blank, so its pixels can't be judged`;
+
+/**
+ * `shellFailuresDrawn`, with the pixels read two ways. The list's rows are counted from OCR of the list's region alone
+ * (`ocrIn`, `.accurate`): R5e showed Vision drop a whole correct frame when a long line spans the page beside the list,
+ * and read the left 520 px of the same frame whole. The window's own text (the spike, the count) is read from the whole
+ * capture, `.accurate` and then `.fast` when that reads nothing. A region read as nothing that isn't blank is `UNREADABLE`,
+ * never 0 rows. Everything else is `shellFailuresDrawn`'s own.
+ */
+export async function shellFailuresRead(world: World, app: App, want: { rows: readonly Ask[]; count: number }): Promise<string[]> {
+  const out: string[] = [];
+  const tree = await app.tree();
+  const main = tree.windows.flatMap((w) => nodes(w.tree));
+  const named = main.filter((n) => n.name);
+  const win = await app.mainWindow();
+  const picture = await app.capture(`shell-${want.count}`, win);
+  const whole = [0, 0, picture.width, picture.height];
+  let lines = await ocr(picture);
+  if (!lines.length) lines = await ocrIn(picture, 'fast', whole);
+  const lost = unreadable(lines, blankIn(picture, whole), 'the whole window');
+  if (lost) out.push(lost);
+  const spike = [...named.map((n) => n.name), ...lines.map((l) => l.text)].find((text) => /\bSession \d{4}\b|waiting on you/.test(text));
+  if (spike) out.push(`the window is the spike window: it draws "${spike}"`);
+  if (!named.some((n) => n.name === 'Tasks')) out.push(`the window has no registered sidebar: no node is named "Tasks"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
+  for (const s of world.sessions) {
+    const rows = named.filter((n) => n.role === 'AXButton' && n.name.includes(s.task));
+    if (rows.length !== 1) out.push(`the sidebar should show session "${s.task}" once, as a row; it has ${rows.length}`);
+  }
+  if (!named.some((n) => n.name === 'Needs you')) out.push('the window has no Needs you view: no node is named "Needs you"');
+  const roots = tree.windows.map((w) => w.tree);
+  const tasks = world.sessions.map((s) => s.task);
+  out.push(...askRowFailuresKept(roots, world.asks, want.rows, tasks));
+  const px = listEdgePx(roots, tasks, win.frame, picture.width);
+  if (px === null) out.push(`can't find the list on the pixels: no session row ${JSON.stringify(tasks)} is on the tree`);
+  else {
+    const region = [0, 0, Math.min(Math.ceil(px), picture.width), picture.height];
+    const listed = await ocrIn(picture, 'accurate', region);
+    const gone = unreadable(listed, blankIn(picture, region), `the list's region (${JSON.stringify(region)})`);
+    if (gone) out.push(gone);
+    else out.push(...rowLineFailures(listed, world.asks, px, { open: want.rows.length, kept: world.asks.length - want.rows.length }));
+  }
+  const counted = lines.flatMap((l) => [...l.text.matchAll(/\b(\d+)\s+asks?\s+needs?\s+you\b/gi)]).map((m) => Number(m[1]));
+  for (const n of counted) if (n !== want.count) out.push(`the window's count reads ${n}, not ${want.count}`);
+  const menu = menuCount(tree);
+  if (menu !== want.count) out.push(`the menu bar reads ${JSON.stringify(tree.menu)}, not ${want.count}`);
+  return out;
+}
+
+/** The failures, unless every one is `UNREADABLE`: then the run is INCONCLUSIVE with their reasons, never PASS. */
+export function unlessUnreadable(failures: readonly string[]): readonly string[] {
+  if (failures.length && failures.every((f) => f.startsWith(UNREADABLE))) inconclusive(failures.join('; '));
+  return failures;
+}

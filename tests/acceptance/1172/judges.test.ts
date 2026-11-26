@@ -2,7 +2,7 @@
 // judge AC1, AC2, AC4 and AC5 lean on must pass a right reading and fail the wrong ones, so a failure on the real app is
 // the app's, not the judge's.
 import { describe, expect, it } from 'vitest';
-import { answeredFailures, askRowFailures, askRowLine, drawsRow, rowLineFailures, gridLaw, groundAndInk, hex, type Ask, type Line, type Node, type Picture, type Rgb } from './helpers.ts';
+import { answeredFailures, askRowFailures, askRowLine, blankIn, drawsRow, rowLineFailures, unlessUnreadable, unreadable, gridLaw, groundAndInk, hex, type Ask, type Line, type Node, type Picture, type Rgb } from './helpers.ts';
 
 const GROUND: Rgb = [255, 255, 255];
 const FIVE: Rgb = [216, 27, 154];
@@ -263,5 +263,48 @@ describe('#1172 (judges) Needs you rows on the pixels once an ask row keeps its 
   });
   it('AC5: after the pop-out, a main window still drawing a row in its list fails', () => {
     expect(rowLineFailures([line('Tasks'), line('Cart totals'), line('• ... How it looks tomorrow 16:49')], asks, 520, { open: 0, kept: 0 }).join('\n')).toMatch(/1 open ask row\(s\), not 0/);
+  });
+});
+
+describe('#1172 (judges) a capture OCR reads nothing from is unreadable, never 0 rows (Tenth redraft)', () => {
+  const asks: Ask[] = ['Which header colour on the login page?', 'Which font for the printed receipt?', 'Which layout for the changelog?']
+    .map((question, i) => ({ handle: `ask:0${i + 1}`, question, option: { id: 'one', label: 'a' }, other: 'b', session: 's', task: 't' }));
+  const line = (text: string): Line => ({ text, box: [10, 0, 200, 20] });
+  /** R5e's list region (the left 520 px of shell-2.png), which `.accurate` reads whole though the whole frame read nothing. */
+  const R5E = ['D', 'Needs you', '2', '• ... How it looks tomorrow 14:30', '• ... How it looks tomorrow 14:30', 'No project'].map(line);
+  const full = [0, 0, 400, 200];
+
+  it('control: a drawn picture isn\'t blank; one fill is', () => {
+    expect(blankIn(picture([[21, 31, 2, 9, [24, 24, 24]]]), full)).toBe(false);
+    expect(blankIn(picture([]), full)).toBe(true);
+  });
+  it('wrong reading: no line from a region that isn\'t blank is unreadable, never a count', () => {
+    expect(unreadable([], false, 'the list\'s region')).toMatch(/^UNREADABLE: OCR read no line from the list's region/);
+  });
+  it('control: no line from a blank region, or any line read, is a reading', () => {
+    expect(unreadable([], true, 'x')).toBeNull();
+    expect(unreadable(R5E, false, 'x')).toBeNull();
+  });
+  it('wrong program: a blank list (one fill, no line) is read as no rows and fails by count', () => {
+    expect(unreadable([], true, 'x')).toBeNull();
+    expect(rowLineFailures([], asks, 520, { open: 2, kept: 1 }).join('\n')).toMatch(/0 open ask row\(s\), not 2/);
+  });
+  it('control: R5e\'s list region after the answer, two open rows, passes', () => {
+    expect(rowLineFailures(R5E, asks, 520, { open: 2, kept: 1 })).toEqual([]);
+  });
+  it('twin A: the answered ask still drawn open in the list region fails by count', () => {
+    expect(rowLineFailures([...R5E, line('• ... How it looks tomorrow 14:30')], asks, 520, { open: 2, kept: 1 }).join('\n')).toMatch(/3 open ask row\(s\), not 2/);
+  });
+  it('only unreadable failures make the run INCONCLUSIVE, never PASS', () => {
+    expect(() => unlessUnreadable(['UNREADABLE: OCR read no line from the list\'s region'])).toThrow(/INCONCLUSIVE: UNREADABLE/);
+    expect(unlessUnreadable([])).toEqual([]);
+  });
+  it('twin A with its pixels unreadable still fails on the tree, never INCONCLUSIVE', () => {
+    const failures = ['UNREADABLE: OCR read no line from the list\'s region', 'answered ask:01 ("Which header colour on the login page?") still reads as open in the list: …'];
+    expect(unlessUnreadable(failures)).toEqual(failures);
+  });
+  it('the blank-main twin fails on the tree (no list), never INCONCLUSIVE', () => {
+    const failures = ['the window has no registered sidebar: no node is named "Tasks"', 'can\'t find the list on the pixels: no session row ["Cart totals","Release notes"] is on the tree'];
+    expect(unlessUnreadable(failures)).toEqual(failures);
   });
 });

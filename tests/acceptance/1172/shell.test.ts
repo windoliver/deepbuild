@@ -7,12 +7,13 @@
 // window's pixels (README: The surface). The replica is only compared with, never judged in its place.
 import { describe, expect, it } from 'vitest';
 import {
-  answer, answeredFailures, App, appBinary, loaded, inconclusive, makeWorld, menuCount, nodes, replicaBinary, settled, shellFailuresDrawn, tempDir, useCleanup, readJson, childProcess, type World,
+  answer, answeredFailures, App, appBinary, loaded, inconclusive, makeWorld, menuCount, nodes, replicaBinary, settled, shellFailuresRead, tempDir, unlessUnreadable, useCleanup, readJson, childProcess, type World,
 } from './helpers.ts';
 
 useCleanup();
 const MINUTES = 60_000;
-const shell = async (world: World, app: App, count: number) => settled(() => shellFailuresDrawn(world, app, { rows: world.asks.slice(3 - count), count }));
+// A capture OCR reads nothing from is INCONCLUSIVE, never 0 rows (REDRAFT.md, Tenth redraft).
+const shell = async (world: World, app: App, count: number) => unlessUnreadable(await settled(() => shellFailuresRead(world, app, { rows: world.asks.slice(3 - count), count })));
 
 describe('#1172 the app a person runs', () => {
   it('AC1 deep-app shows the registered sidebar with the 2 sessions and Needs you with 3 rows, the menu bar reads 3, and no row reads "Session 0001"', async () => {
@@ -25,7 +26,7 @@ describe('#1172 the app a person runs', () => {
   it('AC1 wrong program: the planted build that opens the spike window fails, naming the spike window', async () => {
     const world = await makeWorld();
     const app = await App.launch({ home: world.home, binary: await appBinary('plant-spike-window') });
-    const failures = await shellFailuresDrawn(world, app, { rows: world.asks, count: 3 });
+    const failures = await shellFailuresRead(world, app, { rows: world.asks, count: 3 });
     await app.stop();
     expect(failures.join('\n'), 'the planted spike window must fail the same judge AC1 holds the app to, naming it').toMatch(/the spike window/);
   }, 8 * MINUTES);
@@ -58,9 +59,9 @@ describe('#1172 the app a person runs', () => {
       // Address; REDRAFT.md, Seventh redraft): the window reads 2 when nothing offers it as open, and the menu bar reads 2.
       if (menuCount(reading) === 2 && !answeredFailures(reading.windows.map((w) => w.tree), asked!, world.asks, world.sessions.map((s) => s.task)).length) { elapsed = reading.t1 - answered; break; }
     }
-    const after = await settled(() => shellFailuresDrawn(world, app, { rows: rest, count: 2 }), 3000);
+    const after = await settled(() => shellFailuresRead(world, app, { rows: rest, count: 2 }), 3000);
     await app.stop();
-    expect(after, 'once answered, the window draws 2 open rows (the answered one kept at most as one list row and one page, each drawn answered) and the menu bar reads 2').toEqual([]);
+    expect(unlessUnreadable(after), 'once answered, the window draws 2 open rows (the answered one kept at most as one list row and one page, each drawn answered) and the menu bar reads 2').toEqual([]);
     if (elapsed > 1000 && loaded()) inconclusive(`the window and the menu bar read 2 ${Math.round(elapsed)} ms after the answer, past 1 s, with the machine's load above half its cores`);
     expect(elapsed, 'ms from the answer to the window and the menu bar reading 2').toBeLessThanOrEqual(1000);
   }, 8 * MINUTES);

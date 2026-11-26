@@ -13,6 +13,9 @@
 //                                 screen reader sends, which GPUI gives any element with a role and an on_click:
 //                                 {"found", "pressed", "code", "role"}
 //   probe ocr <png>               [{"text", "box": [x, y, w, h]}] in the picture's pixels, top left origin
+//   probe ocr-in <png> <accurate|fast> <x> <y> <w> <h>  the same, read from that rectangle of the picture (its pixels,
+//                                 top left origin) alone, boxes still in the whole picture's pixels: a long line elsewhere
+//                                 can't make Vision drop the region (REDRAFT.md, Tenth redraft)
 //
 // Compiled by helpers.ts with swiftc into the run's temp folder. Screen points have their origin at the main display's
 // top left, as the Accessibility API and CGWindowList give them. It starts nothing and stops nothing. A press, not a
@@ -158,6 +161,20 @@ case "ocr":
     guard let top = line.topCandidates(1).first else { return nil }
     let b = line.boundingBox
     return ["text": top.string, "box": [b.minX * w, (1 - b.maxY) * h, b.width * w, b.height * h]]
+  })
+case "ocr-in":
+  guard args.count > 7, let image = NSImage(contentsOfFile: args[2]), let whole = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+        let x = Double(args[4]), let y = Double(args[5]), let rw = Double(args[6]), let rh = Double(args[7]),
+        let cg = whole.cropping(to: CGRect(x: x, y: y, width: rw, height: rh)) else { die("ocr-in takes a picture, a level and a rectangle") }
+  let (w, h) = (Double(cg.width), Double(cg.height))
+  let request = VNRecognizeTextRequest()
+  request.recognitionLevel = args[3] == "fast" ? .fast : .accurate
+  request.usesLanguageCorrection = false
+  try! VNImageRequestHandler(cgImage: cg).perform([request])
+  emit((request.results ?? []).compactMap { line -> [String: Any]? in
+    guard let top = line.topCandidates(1).first else { return nil }
+    let b = line.boundingBox
+    return ["text": top.string, "box": [x + b.minX * w, y + (1 - b.maxY) * h, b.width * w, b.height * h]]
   })
 default:
   die("unknown command \(args[1])")

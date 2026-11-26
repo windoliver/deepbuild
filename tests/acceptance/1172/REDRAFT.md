@@ -9,6 +9,7 @@ Sixth redraft (2026-11-25), of the fifth at 766efa508, for a dispute from a Mac 
 Seventh redraft (2026-11-25), of the sixth at 3e7cd3fea, for a review's dispute that a right page fails the sixth (below, Seventh redraft).
 Eighth redraft (2026-11-25), of the seventh at 78c912ece, for a review's dispute on the word's case (below, Eighth redraft).
 Ninth redraft (2026-11-25), of the eighth at fa5de8990, for a Mac run's dispute that rows keeping their time draw no title (below, Ninth redraft).
+Tenth redraft (2026-11-26), of the ninth at fa32fd1e4 (branch head ae5550efd), for a Mac run's dispute that OCR read nothing from a correct frame (below, Tenth redraft).
 
 ## Why
 
@@ -553,3 +554,61 @@ A review found nothing blocking and asked for one hardening:
 - **`shellFailuresCard`** (fourth redraft) now has no caller in this folder; it stays because `helpers.ts` changes by added
   lines only (other issues' tests read it). The same holds for `shellFailures`, `shellFailuresCut`, `drawsRow` and
   `ROW_START` where unused here.
+
+## Tenth redraft (2026-11-26)
+
+Redrafted blind at ae5550efd from #1172 and its comments, the design, AGENTS.md and this folder, with the Mac runner's
+OCR experiment (`target/mac/1172-pack-check/ae5550efd/R5e-ocr/`, text results only); no implementation code was read.
+
+### The dispute
+
+Mac run R5e (3 runs at ae5550efd, AC2, uncovered window, a right program): `shell-3.png`, the precondition, OCRs 17 to 18
+lines and passes; `shell-2.png`, after the answer, OCRs 0 lines in all 3 runs, and AC2 failed on "… all read []". The
+runner viewed `shell-2.png`: it draws `Needs you 2`, two open rows `… How it looks tomorrow 14:29` and a banner across the
+top, the answered ask's question then `Answered "Blue header" at 14:30 from deep inbox. Nothing is left to answer.` The
+experiment, shell-2 / shell-3: the probe's `.accurate` request 0 / 17; `.fast` 12 / 17 (but `.fast` reads rows as
+`How it looks`, dropping the ellipsis); en-US only, another loader, revisions 1 to 3, 1512 wide: 0 on shell-2; the left
+520 px alone, `.accurate`: 10 / 10, with `Needs you`, `2` and the rows; the top 140 px cut off: 10 lines with both rows;
+`perform()` threw nothing. So Vision's `.accurate` silently drops the whole frame when the long banner shares a band with
+the clipped header, and the test took that empty reading as "no rows drawn".
+
+### Ruling
+
+The ninth redraft counted from an OCR reading it never checked was a reading. Invariant 2: "Nothing missing or unrun
+passes", so an empty reading is missing evidence, never 0 rows, and a right program must not fail on it either. The count
+already comes from the list's region only (ninth redraft), so reading that region alone is no new assumption, and R5e
+shows it reads the frame Vision dropped.
+
+### What changed
+
+| Change | Source |
+|---|---|
+| `probe.swift`: `ocr-in <png> <accurate\|fast> <x> <y> <w> <h>`, the same request on that rectangle alone, boxes in the whole picture's pixels. `ocr` is unchanged | R5e: the left 520 px read 10 / 10 |
+| `shellFailuresRead` (`shellFailuresDrawn`'s checks): the list's rows are counted from `ocrIn(.accurate)` of the list's region, `[0, 0, listEdgePx, height]`, so a row anywhere in the list, top to bottom, is read; `.fast` is never used to count (it drops ellipses). The spike and the window's count text come from the whole capture, `.accurate`, then `.fast` if that reads nothing | R5e; the ninth's list region |
+| `unreadable`: a region OCR read no line from that isn't one blank fill (`blankIn`, every other pixel within 12 of the first) gives an `UNREADABLE:` failure, never a count; a blank fill reads as nothing drawn and fails by count as before | Invariant 2 |
+| `unlessUnreadable` in `shell.test.ts` (AC1's tests, AC2 before and after): when every failure is `UNREADABLE`, the run is INCONCLUSIVE with the reasons; any other failure beside it still fails | Invariant 2: INCONCLUSIVE, never PASS |
+| `judges.test.ts`: 9 cases (85 pass) | AGENTS.md, Proof |
+
+### How the wrong programs still fail
+
+- **Twin A** (the answered ask still drawn open): the tree fails it (`answeredFailures`: "still reads as open in the
+  list") whatever the pixels read, so it is a FAIL, never INCONCLUSIVE; and where the list region reads, it counts 3 open
+  rows, not 2.
+- **The blank-main twin:** no `Tasks` node and no session row, so the tree fails and the list can't be found on the
+  pixels: a FAIL. A list region that is one blank fill reads as no rows and fails by count, not as unreadable.
+- Every earlier wrong program is judged by the same counts and tree.
+
+### Still not settled
+
+1. **`probe ocr-in` is unrun.** It needs the Mac (Vision, swiftc); typechecked only on the TypeScript side.
+2. **AC5.** `popout.test.ts` still reads whole captures with `ocr`; a banner beside its list could drop a frame there too.
+   Not disputed, so not changed.
+3. **`blankIn`'s step.** Every other pixel; a 1 px stroke on odd pixels only would read as blank.
+4. **The whole-capture read.** If both levels read nothing while the list region reads, the run is INCONCLUSIVE, since
+   the spike and count text then went unread.
+5. Earlier items stand.
+
+### Run here (Linux, no Mac)
+
+`npx vitest run --root tests/acceptance/1172 judges`: 1 file, 85 passed. `npx tsc -p tests/acceptance/1172/tsconfig.json
+--noEmit`: clean. `shell.test.ts` and `probe ocr-in` were not run (they need the Mac).
