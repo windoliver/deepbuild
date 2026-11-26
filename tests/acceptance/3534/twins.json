@@ -1,0 +1,30 @@
+{
+  "#3534.8aeb9b47": [
+    "drops-a-wait"
+  ],
+  "#3534.e845c6a7": [
+    "reads-prompt-words"
+  ],
+  "#3534.021e72cb": [
+    "counts-first-prompt"
+  ],
+  "#3534.f9de4edc": [
+    "counts-nested-grants"
+  ],
+  "#3534.2c0280c9": [
+    "names-day-with-ten"
+  ],
+  "#3534.9ca3cb3b": [
+    "counts-revert-mention"
+  ],
+  "#3534.8eed42c8": [
+    "person-wait-as-job",
+    "wait-counted-whole"
+  ],
+  "#3534.087b8d1d": [
+    "not-read-as-zero"
+  ],
+  "#3534.4ae32bc7": [
+    "takes-last-word"
+  ]
+}
