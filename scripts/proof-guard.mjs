@@ -658,7 +658,9 @@ function caseEdits(commit, path, before, after, atBase, by) {
 }
 
 // A removed or changed line among your decisions or their heading, one inserted between them, or a
-// heading added inside their section, named by its line in the file before the commit. A second copy
+// `## ` heading added inside their section, named by its line in the file before the commit. A hunk
+// those pass that adds a row or a heading of any level inside the section is an edit too, whatever
+// line it follows (#3403), each named by its own line in the file after the commit. A second copy
 // of the heading would let a later commit move the section the guard reads, so it is refused outright.
 function decisionEdits(file, before, after) {
   const { heading, what, row } = DECISIONS[file.path];
@@ -670,10 +672,14 @@ function decisionEdits(file, before, after) {
   for (let index = start; index < (end < 0 ? lines.length : end); index += 1) if (row(lines[index])) guarded.add(index + 1);
   const inSection = (line) => line > start && line <= (end < 0 ? lines.length : end);
   const edits = [];
-  for (const { oldStart, removed, added } of file.hunks) {
+  for (const { oldStart, newStart, removed, added } of file.hunks) {
     const touched = removed.length ? removed.map((_, index) => oldStart + index) : [oldStart];
     const hit = touched.filter((number) => guarded.has(number) || (inSection(number) && added.some((line) => line.startsWith('## '))));
     for (const line of hit) edits.push({ line, detail: `${file.path}:${line}: ${what} ${removed.length ? 'changed' : 'added to'}` });
+    if (hit.length || !touched.some(inSection)) continue;
+    added.forEach((text, index) => {
+      if (row(text) || /^#+ /.test(text)) edits.push({ line: newStart + index, detail: `${file.path}:${newStart + index}: ${row(text) ? what : `a heading under ${heading.slice(3)}`} added` });
+    });
   }
   if (after.split('\n').filter((line) => line === heading).length > 1) edits.push({ hard: true, line: start + 1, detail: `${file.path}: a second "${heading}" heading, which would move the section the guard reads` });
   return edits;
