@@ -1,0 +1,1 @@
+{ "alone": true, "why": "binary: rows.test.ts builds deep-drive plain and with env-plants, each written over target/debug/deep-drive, starts a real hub and draws its record in app replicas" }

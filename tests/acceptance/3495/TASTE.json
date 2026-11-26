@@ -1,0 +1,9 @@
+{
+  "issue": 3495,
+  "criterion": "#3495.f4a87a07",
+  "verdict": null,
+  "who": null,
+  "when": null,
+  "files": {},
+  "note": "No call recorded yet. A person fills this in once, on the rows one check run of rows.test.ts wrote to shown.txt in $DS3495_SHOWN: verdict reads_right or reads_wrong, who, when, and files with shown.txt's SHA-256, which the run prints."
+}
