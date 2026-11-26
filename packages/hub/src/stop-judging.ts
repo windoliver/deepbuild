@@ -818,9 +818,9 @@ export class StopJudging {
     live.workedSinceClaim = false;
   }
 
-  /** A claim's state from the record (verdict-chat), with the runs' expected times. */
+  /** A claim's state from the record (verdict-chat), with the runs' expected times and the slow checks whose run is about to start. */
   stateOf(claim: string): Promise<ClaimState | undefined> {
-    return claimState(this.options.services.raw, claim.replace(/^claim:/, ''), this.expected);
+    return claimState(this.options.services.raw, claim.replace(/^claim:/, ''), this.expected, this.options.services.gate.slowStarting(claim));
   }
 
   /**

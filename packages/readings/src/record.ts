@@ -118,6 +118,8 @@ export function staleRuns(events: RecordEvent[]) {
   return { sessions };
 }
 
+/** The `reason` of a check.held place that waits in the queue for a slot (#3562): held for no loop, so no loop reading counts it. */
+export const SLOT_WAIT = 'a check slot';
 /**
  * A looping session's held places (#965's check.held@1): each is appended again, whole, each time it changes, so the
  * newest record for a check and snapshot stands. A place a newer snapshot took before it started is a run the loop saved.
@@ -126,7 +128,7 @@ export function loopHolds(events: RecordEvent[]) {
   const sessions: { session: string; places_taken: number; runs_saved: number; runs_started: number; starts: { check: string; claim: string; by: string; waited_ms: number | null }[] }[] = [];
   for (const [session, list] of bySession(events)) {
     const places = new Map<string, Record<string, unknown>>();
-    for (const e of list) if (e.kind === 'check.held') places.set(`${str(e.data.check)}\0${str(e.data.snapshot)}`, e.data);
+    for (const e of list) if (e.kind === 'check.held' && e.data.reason !== SLOT_WAIT) places.set(`${str(e.data.check)}\0${str(e.data.snapshot)}`, e.data);
     if (!places.size) continue;
     const taken = [...places.values()].filter((p) => p.replaced_by !== null && p.replaced_by !== undefined).length;
     const starts = [...places.values()].filter((p) => typeof p.started_at === 'number').map((p) => ({
