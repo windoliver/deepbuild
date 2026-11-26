@@ -119,10 +119,10 @@ fn assets(scene: &Scene) -> (u64, u64) {
             };
         }
         for (_, slot) in s.maps.iter().flat_map(|m| m.slots()) {
-            let Some(t) = slot.as_ref().and_then(|x| scene.texels.get(&x.sha)) else {
+            let Some(t) = slot.as_ref().and_then(|x| scene.texels.get(x.key())) else {
                 continue;
             };
-            if maps.insert((slot.as_ref().map(|x| &x.sha), &t.format)) {
+            if maps.insert((slot.as_ref().map(|x| x.key()), &t.format)) {
                 map_bytes += t.data.len() as u64;
             }
         }

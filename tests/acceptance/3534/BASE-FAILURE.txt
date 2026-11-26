@@ -1,0 +1,944 @@
+# #3534 acceptance suite at base 5a81b58de, the commit this job's checkout is detached at, macOS arm64 (Darwin 27.2.0),
+# 18 cores, one-minute load 100 (load averages 100.21 118.16 77.38 before the run, 96.11 117.01 77.21 after it), Node v24.22.2.
+# Run: node --test tests/acceptance/3534/*.test.mjs, from the checkout, once, exit 1. This is the second pass's run,
+# of the suite as revised to the issue's nine criteria.
+# The checkout's path is written <checkout> and each test file's scratch folder <sandbox>; no home folder is named.
+#
+# Expected failures at the base, all 21 tests, each at an assertion of the suite's (ERR_ASSERTION, thrown by started()
+# in tests/acceptance/3534/helpers.mjs):
+# - scripts/issue-time.mjs does not exist at the base, so `node scripts/issue-time.mjs ...` in the scratch tree exits 1
+#   (MODULE_NOT_FOUND, shown in each message) and prints nothing. Every test first runs the command and fails there:
+#   "scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run".
+# - By criterion: #3534.8aeb9b47 2 tests and #3534.4ae32bc7 5 (table.test.mjs); #3534.e845c6a7 3, #3534.021e72cb 2 and
+#   #3534.8eed42c8 2 (person.test.mjs); #3534.f9de4edc 2, #3534.2c0280c9 2 and #3534.9ca3cb3b 1 (machine.test.mjs);
+#   #3534.087b8d1d 3 (not-read.test.mjs, and one test of table.test.mjs that also carries #3534.4ae32bc7).
+# No test passes at the base: the suite holds no guard of existing behaviour. No helper crashed: each test file built
+# its fixture (the scratch tree, the HOME, the transcripts, the stand-in gh, the two logs) before its first test failed.
+
+✖ #3534.f9de4edc a tool call that runs over a minute, and a turn's end until a background job's notice, are job minutes (980.479292ms)
+✖ #3534.f9de4edc the machine's build and test lines give the top-level grants, the requests that timed out, the share of samples held, the requests waiting on average and a request's average wait (0.257875ms)
+✖ #3534.2c0280c9 a tool call whose result says a hook did not answer is hook minutes (0.123458ms)
+✖ #3534.2c0280c9 a day with over 10 tool calls a hook left unanswered is named with its calls and its sessions, and a day with 10 is not (0.128292ms)
+✖ #3534.9ca3cb3b quality over the span gives the PRs merged, those that are a revert, the failures listed, those dated in the span, and the skips (0.110958ms)
+✖ #3534.087b8d1d an issue whose sessions left no transcript is listed as not read, with its PR and why, and has no row of minutes (1001.172667ms)
+✖ #3534.087b8d1d the issue that is not read is in no average: the totals are those of the issues read (0.189625ms)
+✖ #3534.e845c6a7 a person's wait is split into merge, prompt, conflict, plan, question and permission, and the six sum to the issue's person minutes (981.971625ms)
+✖ #3534.e845c6a7 only a prompt that is the app's conflict line is a conflict: one that talks of merge conflicts in its own words, or opens with the line's first words, is a prompt like any other (0.187292ms)
+✖ #3534.e845c6a7 the totals give each of a person's six kinds of wait as minutes an issue (0.097542ms)
+✖ #3534.021e72cb prompts counts a person's prompts before the merge, beside the first (0.094125ms)
+✖ #3534.021e72cb the totals give the prompts an issue: the mean of the count over the issues read (0.073042ms)
+✖ #3534.8eed42c8 a turn's end until a person's prompt is a wait for a person, and a wait for a job only when a job the session started gives its notice after that prompt (0.101334ms)
+✖ #3534.8eed42c8 a wait that runs past the merge is cut at the merge, and what follows the merge counts for nothing (39.3005ms)
+✖ #3534.8aeb9b47 each issue's causes sum to its whole time, from its session's first prompt to its merge, to the minute (915.032083ms)
+✖ #3534.8aeb9b47 of the causes that sum, thinking and each tool call that returns within a minute are own, thinking over 15 minutes is unplaced, and neither is spread over another cause (0.248125ms)
+✖ #3534.4ae32bc7 the totals give the issues read, the mean and the median of their minutes, the share that took over 12 hours and each cause's mean an issue (0.273041ms)
+✖ #3534.4ae32bc7 the table holds each issue whose PR merged in the span, named by the first Closes, Fixes, Resolves or Part of of its PR's body, with its PR, its first prompt and its merge (0.160417ms)
+✖ #3534.4ae32bc7 #3534.087b8d1d without --json the table is printed: a line for each issue read, the totals after them, and the issue not read with its PR (60.212708ms)
+✖ #3534.4ae32bc7 the forge is read once a run, with gh pr list --state merged, for each PR's number, title, body, headRefName and mergedAt (0.253ms)
+✖ #3534.4ae32bc7 the command writes nothing: after its runs the tree, the home folder and the temporary folder hold what they held before the first (0.116041ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 0
+ℹ fail 21
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1325.965
+
+✖ failing tests:
+
+test at tests/acceptance/3534/machine.test.mjs:13:1
+✖ #3534.f9de4edc a tool call that runs over a minute, and a turn's end until a background job's notice, are job minutes (980.479292ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/machine.test.mjs:14:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/machine.test.mjs:27:1
+✖ #3534.f9de4edc the machine's build and test lines give the top-level grants, the requests that timed out, the share of samples held, the requests waiting on average and a request's average wait (0.257875ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/machine.test.mjs:28:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/machine.test.mjs:46:1
+✖ #3534.2c0280c9 a tool call whose result says a hook did not answer is hook minutes (0.123458ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/machine.test.mjs:47:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/machine.test.mjs:60:1
+✖ #3534.2c0280c9 a day with over 10 tool calls a hook left unanswered is named with its calls and its sessions, and a day with 10 is not (0.128292ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/machine.test.mjs:61:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/machine.test.mjs:76:1
+✖ #3534.9ca3cb3b quality over the span gives the PRs merged, those that are a revert, the failures listed, those dated in the span, and the skips (0.110958ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/machine.test.mjs:81:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/not-read.test.mjs:10:1
+✖ #3534.087b8d1d an issue whose sessions left no transcript is listed as not read, with its PR and why, and has no row of minutes (1001.172667ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/not-read.test.mjs:11:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/not-read.test.mjs:25:1
+✖ #3534.087b8d1d the issue that is not read is in no average: the totals are those of the issues read (0.189625ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/not-read.test.mjs:26:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/person.test.mjs:15:1
+✖ #3534.e845c6a7 a person's wait is split into merge, prompt, conflict, plan, question and permission, and the six sum to the issue's person minutes (981.971625ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/person.test.mjs:16:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/person.test.mjs:26:1
+✖ #3534.e845c6a7 only a prompt that is the app's conflict line is a conflict: one that talks of merge conflicts in its own words, or opens with the line's first words, is a prompt like any other (0.187292ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/person.test.mjs:27:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/person.test.mjs:43:1
+✖ #3534.e845c6a7 the totals give each of a person's six kinds of wait as minutes an issue (0.097542ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/person.test.mjs:44:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/person.test.mjs:53:1
+✖ #3534.021e72cb prompts counts a person's prompts before the merge, beside the first (0.094125ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/person.test.mjs:54:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/person.test.mjs:74:1
+✖ #3534.021e72cb the totals give the prompts an issue: the mean of the count over the issues read (0.073042ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/person.test.mjs:75:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/person.test.mjs:81:1
+✖ #3534.8eed42c8 a turn's end until a person's prompt is a wait for a person, and a wait for a job only when a job the session started gives its notice after that prompt (0.101334ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/person.test.mjs:82:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/person.test.mjs:95:1
+✖ #3534.8eed42c8 a wait that runs past the merge is cut at the merge, and what follows the merge counts for nothing (39.3005ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-16 --until 2025-03-19 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/person.test.mjs:96:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/table.test.mjs:25:1
+✖ #3534.8aeb9b47 each issue's causes sum to its whole time, from its session's first prompt to its merge, to the minute (915.032083ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/table.test.mjs:27:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/table.test.mjs:42:1
+✖ #3534.8aeb9b47 of the causes that sum, thinking and each tool call that returns within a minute are own, thinking over 15 minutes is unplaced, and neither is spread over another cause (0.248125ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/table.test.mjs:43:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/table.test.mjs:57:1
+✖ #3534.4ae32bc7 the totals give the issues read, the mean and the median of their minutes, the share that took over 12 hours and each cause's mean an issue (0.273041ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/table.test.mjs:58:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/table.test.mjs:75:1
+✖ #3534.4ae32bc7 the table holds each issue whose PR merged in the span, named by the first Closes, Fixes, Resolves or Part of of its PR's body, with its PR, its first prompt and its merge (0.160417ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/table.test.mjs:86:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/table.test.mjs:103:1
+✖ #3534.4ae32bc7 #3534.087b8d1d without --json the table is printed: a line for each issue read, the totals after them, and the issue not read with its PR (60.212708ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/table.test.mjs:104:15)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/table.test.mjs:118:1
+✖ #3534.4ae32bc7 the forge is read once a run, with gh pr list --state merged, for each PR's number, title, body, headRefName and mergedAt (0.253ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at readWhole (file://<checkout>/tests/acceptance/3534/table.test.mjs:16:16)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/table.test.mjs:120:22)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3534/table.test.mjs:132:1
+✖ #3534.4ae32bc7 the command writes nothing: after its runs the tree, the home folder and the temporary folder hold what they held before the first (0.116041ms)
+  AssertionError [ERR_ASSERTION]: scripts/issue-time.mjs does not exist in <checkout>, so the command the issue names has nothing to run
+  `node scripts/issue-time.mjs --since 2025-03-10 --until 2025-03-14 --json` exit 1
+  stdout:
+  
+  stderr:
+  node:internal/modules/cjs/loader:1568
+    throw err;
+    ^
+  
+  Error: Cannot find module '<sandbox>/tree/scripts/issue-time.mjs'
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at Module._load (node:internal/modules/cjs/loader:1341:5)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+      at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+      at node:internal/main/run_main_module:33:47 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: []
+  }
+  
+  Node.js v24.22.2
+  
+      at started (file://<checkout>/tests/acceptance/3534/helpers.mjs:507:10)
+      at reading (file://<checkout>/tests/acceptance/3534/helpers.mjs:514:15)
+      at readWhole (file://<checkout>/tests/acceptance/3534/table.test.mjs:16:16)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3534/table.test.mjs:135:17)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

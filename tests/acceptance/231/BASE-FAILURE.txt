@@ -1,0 +1,139 @@
+#231: the suite at the base 5fcfb690b (5fcfb690ba6592ad567c303ecf67054dbcbdfc3c). Phase 2, November 23, 2026.
+
+Run on the Mac17,10 the brief names, with the base's two binaries built once by the caller and named by
+DEEP_231_BIN_DIR (`deep-show-full`, `deep-show-full+test-encode-tools`), so no cargo ran. Each file was asked for
+under the machine's test grant, one at a time, from the checkout's root:
+
+  DEEP_231_BIN_DIR=<bins> node scripts/throttle.mjs test --wait <min> -- node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/231 --no-file-parallelism --testTimeout=3600000 <file>
+
+The machine was shared all through: a one-minute load between 20 and 400 on 18 cores, the thermal state "fair". A
+test grant came after waits of minutes to two hours, and seven times not at all within its wait (120 or 20 minutes).
+Five of the seven files ran; speed.test.ts and wall.test.ts got no grant. Vitest loads the suite as it is; no
+workspace package had to be built.
+
+WHAT RAN, AND EACH TEST'S RESULT AT THE BASE
+
+holds.test.ts (ran, 33 s): 6 tests, 6 failed.
+- AC1, the 30 s hold's delivery: FAIL "the 30 s hold's delivery: receipt.reused_frames is a whole number, zero or
+  more, got undefined". (The 30 s and 1 s holds were shown and delivered first.)
+- AC1, handed over as GPU surfaces: FAIL "the 30 s hold, a draft handed over as GPU surfaces: receipt.reused_frames is
+  a whole number, zero or more, got undefined". (The base exported it through test-frames@1.0.0, handoff surface.)
+- AC1, the kit's held-span law: FAIL "the export module's kit, its laws part: deep-show run answers the scenario ok
+  …; got {"ok":false,"code":"bad_input"}" (the base's kit knows no `laws` part).
+- AC2, the reading and the status binding: FAIL "the changed reading changes the picture at frame 40: expected
+  '140b2d52…' not to be '140b2d52…'" (the base's export reads no `readings`, so its stills at frames 39 and 40 are
+  one picture; the planted run is never reached).
+- AC6, the three holds: FAIL "the 30 s hold: receipt.reused_frames is a whole number, zero or more, got undefined".
+- AC6, planted reuse_ignores_valid_until: FAIL "…(planted reuse_ignores_valid_until): deep-show run answers the
+  scenario ok …; got {"ok":false,"code":"bad_input"}".
+
+send.test.ts (ran, 5 s): 1 test, 1 failed.
+- AC4: FAIL "the draft: receipt.reused_frames is a whole number, zero or more, got undefined". Past it the base would
+  fail the criterion's own assertion: a probe sent both files and each was queued, {"send": {"id": "send:1", "state":
+  "waiting"}}, so "the draft's Send queues nothing" is false there.
+
+seeks.test.ts (ran, 253 s): 2 tests, 2 failed.
+- AC8, the six fixture films (206 s): BLOCKED "2 of the six fixture films are in tests/fixtures/films/
+  (camera-and-transitions, strokes-and-paper), each of which equals its seek renders frame for frame; the criterion
+  asks all six (…). Unblock: the issue that adds the other fixture films; this is not a pass". The base draws every
+  frame, so its 300 frames of each film do equal their 300 stills; the test still never passes there.
+- AC8, the spectrum film (48 s): FAIL "the spectrum film: receipt.reused_frames is a whole number, zero or more, got
+  undefined", after its 240 stills were made and its guards held (the picture first changes at frame 61, and most
+  frames repeat the one before).
+
+starts.test.ts (ran with `-t "planted receipt that books compiles"`, 4 s): 1 failed, 1 left out.
+- AC5, planted receipt_books_compiles_under_draw: FAIL "the orbit's draft (planted
+  receipt_books_compiles_under_draw): deep-show run answers the scenario ok …; got {"ok":false,"code":"bad_input"}".
+- AC5, the set exported twice from one process: left out on purpose (below).
+
+counters.test.ts (ran with `-t "planted export that reads each frame back|kit states the law"`, 161 s): 2 failed, 1
+left out.
+- AC10, planted export_hashes_on_cpu (159 s): FAIL on its shipped side first, "the city's first 2 s, a draft handed
+  over as GPU surfaces: receipt.reused_frames is a whole number, zero or more, got undefined". (The base exported
+  that cut of the city at 1080p through test-frames@1.0.0, handoff surface; the planted run is never reached.)
+- AC10, the kit's law: FAIL "the export module's kit, its laws part: deep-show run answers the scenario ok …; got
+  {"ok":false,"code":"bad_input"}".
+- AC10, the whole city by GPU surfaces: left out on purpose (below).
+
+WHAT DID NOT RUN, AND WHY
+
+speed.test.ts: asked three times; twice it answered "INCONCLUSIVE no grant: no test grant came within <n> min" (120
+and 20 minutes), and once its wait was cut off with the session. Nothing in it exports at 1080p60 off a quiet
+reference Mac, so a run here would have
+read, by a probe of the same helpers (helpers.ts `referenceMacProblem`: "the thermal state is fair, not nominal";
+`loadProblem`: "the one-minute load reached 151.6, above the 18 cores"):
+- AC9, each fixture within its limits: INCONCLUSIVE "the speeds count only on a quiet reference Mac, so nothing is
+  timed here: the thermal state is fair, not nominal". On a quiet reference Mac the base fails at the first run:
+  "…cold run 1: receipt.start is cold or warm, got null".
+- AC9, the planted judge: PASSES at the base, and should: it runs no product code. Its wrong program is the planted
+  judge this suite holds (judges.ts `setAsWholeFailures`), which passes 34 s, 14 s and 4 s as 52 s against 53 s; the
+  suite's own judge fails the same readings, naming the city. Checked as a plain node script (scratch
+  prove-judges.mjs).
+- AC7, the budgets task: FAIL "benchmarks/budgets.json has a task whose reason or criteria name #231.f202d6a5".
+- AC7, the deliveries at 2x: INCONCLUSIVE, as AC9's first.
+- AC7, planted guard_waits_8_4_ms: INCONCLUSIVE "the budget counts only on a quiet reference Mac, so the planted
+  guard isn't timed here"; on a quiet reference Mac the base answers bad_input for the planted name.
+- AC5, the stated speeds: its judge's leg holds (a warm run among three is refused), then INCONCLUSIVE, as AC9's.
+
+wall.test.ts: its planted test alone was asked for (`-t "planted receipt that takes wall"`), twice: the first wait
+was stopped after 11 minutes when the queue of runs was started again, and the second answered "no test grant came
+within 20 min". By the other planted tests' runs it reads:
+- AC3, planted receipt_wall_sums_phases: FAIL at "the city's draft (planted receipt_wall_sums_phases): deep-show run
+  answers the scenario ok …; got {"ok":false,"code":"bad_input"}", as starts.test.ts's planted test did; the base
+  answers bad_input before it draws a frame.
+
+Three tests were left out on purpose, whatever the grant: each exports whole 1080p60 fixtures only to fail on a field
+the base plainly lacks.
+- AC3, the city's draft (wall.test.ts, 3,600 frames at 1080p60): would FAIL at "the city's draft:
+  receipt.timing.wall is a finite number of seconds, zero or more, got undefined". The base's video receipt's
+  `timing` is {"open": 0.07…} alone (read from its reply to a 10-frame cut of the city).
+- AC5, the set exported twice from one process (starts.test.ts, 12,720 frames at 1080p60): would FAIL at "the
+  explainer's first export, the process's first: receipt.start is cold or warm, got null".
+- AC10, the whole city by GPU surfaces (counters.test.ts, 3,600 PNGs at 1080p): would FAIL at "the city, a draft
+  handed over as GPU surfaces: receipt.reused_frames is a whole number, zero or more, got undefined", as its 2 s cut
+  did.
+
+Of the 22 tests: 12 ran and failed at an assertion of the work's (11 FAIL, 1 BLOCKED); 3 were left out on purpose;
+7 got no grant (speed.test.ts's six and wall.test.ts's planted test). No test passes at the base but AC9's
+planted-judge test, which runs no product code.
+
+WHAT THE BASE HAS, AS THE PROBES READ IT
+
+A probe (the inputs' scratch/probe.mjs: the suite's own helpers.ts loaded by a plain node script, under a test grant)
+showed each fixture to the base's `deep-show` and exported it small:
+- The exported reply holds `outcome`, `receipt`, `core` and `set_digest`: no `work`, no `reports`. The video receipt
+  holds `frames`, `frame_hashes`, `fidelity`, `handoff` (`copy` for H.264; `surface` through test-frames@1.0.0) and
+  `timing: {open}`: no `reused_frames`, no `start`, no phase, no `wall`. `purpose` and `readings` on the call are
+  ignored. Every planted name of this suite answers {"ok": false, "code": "bad_input"}, and so does the kit's `laws`
+  part; the kit does know the module `export` (its `fixtures` part runs).
+- The 2 s hold: 120 frames, one hash; its stills equal its frames; its MP4's video track reads 120 samples, timescale
+  60,000, each 1,000 long, so `videoTrack` and the 1/60 s check read a real file rightly.
+- The hold under grain: 48 distinct frames in 2 s; frames 0 to 2 one picture, frame 3 the next. The arithmetic the
+  tests rest on (720 patterns in 30 s, the first new pattern at frame 3) holds at the base.
+- The hold with a particle item: shown and exported, and every frame is one picture: the base's export draws no
+  particle. Criterion 6's particle clause needs it drawn (README: Not settled).
+- The readings film: under the record as given, with the reading at 7, and with the verdict at pass, three different
+  pictures: the bound value and the status binding both draw.
+- The spectrum film: 240 frames, 6 distinct; the picture changes at frames 61, 62, 63 and 121, 122, 123 and holds
+  elsewhere; eleven stills equal their frames.
+- The speed fixtures: the explainer whole at 480 × 270 gives 2,160 frames, 1,302 distinct, 858 repeats, exactly what
+  `SET.explainer` says an export draws and reuses; the orbit whole at 480 × 270 gives 600 distinct frames; the city's
+  first 2 s give 120 distinct frames, and its first ten frames export at 1920 × 1080. None was exported whole at
+  1080p60 at the base.
+- `timedShow` on the 2 s hold measured 2.83 s from the command to the file; its receipt's lease waited 1 ms.
+- The two fixture films there are 300 frames each at 30 fps, and their stills export.
+
+WHAT PHASE 2 CHANGED IN THE SUITE
+
+Each for a reason that isn't the work's (README: Fixtures has the same list):
+- helpers.ts `readingsFilm`: the bound text's own `text` is empty. The base refused "0": bound_typed_over.
+- helpers.ts `spectrumFilm`: the bars are `marks@1` with mark `bar`, a `level` column on `spectrum.tone`, an `encode`
+  through a `scale@1` and a camera on the page. The first form was refused: bad_encode at items/bars/params/encode.
+- helpers.ts `explainer`: the six captions read "Part A" to "Part F". "Part 1 of 6" was refused: number_unsourced.
+- helpers.ts `orbit` and `city`: the post and the buildings take the roles ink, accent and muted. The role `live`
+  isn't in the shipped look: frame 0 stopped with ref_unresolved.
+- send.test.ts: the draft is a 2 s hold and the delivery a 1 s hold. A draft and a delivery of one film were the same
+  bytes at the base, so the test's own guard that the two files differ failed there before any Send.
+- README.md: those changes, the AC4 row, the spectrum fixture, and what the base showed of the particle film.
+No judge changed. `tsc -p tests/acceptance/231/tsconfig.json` exits 0 and judges.ts `proveJudges` passes.

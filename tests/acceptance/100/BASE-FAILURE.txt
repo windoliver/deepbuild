@@ -1,0 +1,74 @@
+# #100 acceptance tests: the runs on the base, on a stand-in and on each twin
+
+2026-11-25, Node v24.22.2, on a shared machine at a load of about 66. Each `$` line is one real run of that command,
+with the spec reporter and scripts/proof-reporter.mjs beside it. Kept of each run: every test's result line, and of
+each failure its error line, the lines its diff adds and its frame in the suite. Dropped: the runner's count lines, the
+rest of the diff and the runner's own frames. Each `judged` line reads the same run's proof report by the rule of
+atAssertion in scripts/proof-runs.mjs: an ERR_ASSERTION whose innermost frame is under the test paths. `exit` is the
+runner's exit code. <checkout> is the checkout and <scratch> a scratch folder outside it.
+
+On the base the first test fails at its assertion, for the issue's reason: neither Decided table has the row. The
+second passes there, since the base's docs hold that half of the criterion; the twin solver-waits-on-review is what it
+fails on. The live test doesn't read the checkout: it read the 2,160 issues of that day and found none waiting.
+
+## The base (ba461c1ba), in the checkout
+
+$ node --test tests/acceptance/100/criterion.test.mjs
+✖ AC1 #100.acd6f892 both docs' Decided tables record build first for ropes and cloth (30.966625ms)
+✔ AC1 #100.acd6f892 a search of the public docs finds no rope, cloth or solver of ours waiting on a licensing or patent review (66.741ms)
+  AssertionError [ERR_ASSERTION]: 2 of the two Decided tables don't record build first for ropes and cloth
+  +   `docs/technical-design.md#decided: of 111 rows, 1 name ropes and cloth ("rapier's soft bodies"), and none says build first in its Decision cell`,
+  +   `docs/canvas-primitives.md#whats-decided-and-what-would-reopen-it: of 49 rows, 1 name ropes and cloth ("rapier's soft bodies"), and none says build first in its Decision cell`
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/100/criterion.test.mjs:38:10)
+judged: at its assertion (ERR_ASSERTION, innermost frame tests/acceptance/100/criterion.test.mjs:38)
+exit 1
+
+$ node --test tests/acceptance/100/issues.live.test.mjs    (gh signed in, network on)
+✔ AC1 #100.acd6f892 (live) a search of the rendered issues finds no rope, cloth or solver of ours waiting on a licensing or patent review (22092.82275ms)
+exit 0
+
+$ GH_CONFIG_DIR=<an empty folder> node --test tests/acceptance/100/issues.live.test.mjs    (signed out: no token in the environment)
+﹣ AC1 #100.acd6f892 (live) a search of the rendered issues finds no rope, cloth or solver of ours waiting on a licensing or patent review (23.074958ms) # INCONCLUSIVE: gh isn't signed in or can't read the issues of windoliver/deepbuild: To get started with GitHub CLI, please run:  gh auth login
+exit 0
+
+## The stand-in (mine): the base's docs with this row added to both Decided tables, after "Rapier's soft bodies"
+
+| Our own solver for ropes and cloth | Build first, with no licensing or patent review gating it. Ropes and cloth run live on Rapier's soft bodies, new in 0.36, and heavier cloth bakes on our own solver by vertex block descent, so nothing in the design or the issues waits on a review. | A cross-machine golden fails |
+
+$ node --test tests/acceptance/100/criterion.test.mjs    (in <scratch>/held)
+✔ AC1 #100.acd6f892 both docs' Decided tables record build first for ropes and cloth (22.930084ms)
+✔ AC1 #100.acd6f892 a search of the public docs finds no rope, cloth or solver of ours waiting on a licensing or patent review (60.483ms)
+exit 0
+
+## Twin design-row-undecided (docs/technical-design.md, 663 bytes) laid over the stand-in
+
+$ node --test tests/acceptance/100/criterion.test.mjs    (in <scratch>/twin-design-row-undecided)
+✖ AC1 #100.acd6f892 both docs' Decided tables record build first for ropes and cloth (15.549416ms)
+✔ AC1 #100.acd6f892 a search of the public docs finds no rope, cloth or solver of ours waiting on a licensing or patent review (37.735542ms)
+  AssertionError [ERR_ASSERTION]: 1 of the two Decided tables doesn't record build first for ropes and cloth
+  +   `docs/technical-design.md#decided: of 2 rows, 2 name ropes and cloth ("rapier's soft bodies", "our own solver for ropes and cloth: build first?"), and none says build first in its Decision cell`
+      at TestContext.<anonymous> (file://<scratch>/twin-design-row-undecided/tests/acceptance/100/criterion.test.mjs:38:10)
+judged: at its assertion (ERR_ASSERTION, innermost frame tests/acceptance/100/criterion.test.mjs:38)
+exit 1
+
+## Twin primitives-table-silent (docs/canvas-primitives.md, 462 bytes) laid over the stand-in
+
+$ node --test tests/acceptance/100/criterion.test.mjs    (in <scratch>/twin-primitives-table-silent)
+✖ AC1 #100.acd6f892 both docs' Decided tables record build first for ropes and cloth (10.883083ms)
+✔ AC1 #100.acd6f892 a search of the public docs finds no rope, cloth or solver of ours waiting on a licensing or patent review (22.975583ms)
+  AssertionError [ERR_ASSERTION]: 1 of the two Decided tables doesn't record build first for ropes and cloth
+  +   `docs/canvas-primitives.md#whats-decided-and-what-would-reopen-it: of 1 rows, 1 name ropes and cloth ("rapier's soft bodies"), and none says build first in its Decision cell`
+      at TestContext.<anonymous> (file://<scratch>/twin-primitives-table-silent/tests/acceptance/100/criterion.test.mjs:38:10)
+judged: at its assertion (ERR_ASSERTION, innermost frame tests/acceptance/100/criterion.test.mjs:38)
+exit 1
+
+## Twin solver-waits-on-review (docs/technical-design.md, 610 bytes) laid over the stand-in
+
+$ node --test tests/acceptance/100/criterion.test.mjs    (in <scratch>/twin-solver-waits-on-review)
+✔ AC1 #100.acd6f892 both docs' Decided tables record build first for ropes and cloth (14.771792ms)
+✖ AC1 #100.acd6f892 a search of the public docs finds no rope, cloth or solver of ours waiting on a licensing or patent review (39.535083ms)
+  AssertionError [ERR_ASSERTION]: the 9 public docs have a rope, cloth or solver waiting on a licensing or patent review in 1 statement
+  +   'docs/technical-design.md:8: heavier cloth bakes through asset jobs on our own solver by vertex block descent, which is held back until a patent and licensing review clears it.'
+      at TestContext.<anonymous> (file://<scratch>/twin-solver-waits-on-review/tests/acceptance/100/criterion.test.mjs:46:10)
+judged: at its assertion (ERR_ASSERTION, innermost frame tests/acceptance/100/criterion.test.mjs:46)
+exit 1

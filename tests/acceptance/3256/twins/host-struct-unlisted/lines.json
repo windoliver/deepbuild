@@ -1,0 +1,19 @@
+{
+  "crates/deep-groups-render/src/read.rs": [
+    {
+      "find": [
+        "use deep_gpu::device::Device;"
+      ],
+      "wrong": [
+        "use deep_gpu::device::Device;",
+        "",
+        "/// #3256's planted wrong program: a new host struct with neither a pair nor a reason.",
+        "#[repr(C)]",
+        "#[allow(dead_code)]",
+        "struct Unlisted3256 {",
+        "    a: [f32; 4],",
+        "}"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "scripts/issue-time.mjs": [
+    {
+      "find": [
+        "    days: [...byDay].filter(([, calls]) => calls.length > 10).sort().map(([day, calls]) => ({ day, hook_calls: calls.length, sessions: [...new Set(calls.map((call) => call.session))].sort() })),"
+      ],
+      "wrong": [
+        "    days: [...byDay].filter(([, calls]) => calls.length >= 10).sort().map(([day, calls]) => ({ day, hook_calls: calls.length, sessions: [...new Set(calls.map((call) => call.session))].sort() })),"
+      ]
+    }
+  ]
+}

@@ -44,6 +44,7 @@ fn spans_size(listed: usize) -> usize {
     (MOST_FILL + CELLS + 1) * 4 + listed.max(LISTED).next_power_of_two() * 2
 }
 
+deep_gpu::paired! { params: "fill.wgsl", Params;
 /// fill.wgsl's `Params`.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -53,13 +54,16 @@ struct Params {
     depth: [f32; 4],
     count: [u32; 4],
 }
+}
 
+deep_gpu::paired! { reach: "fill.wgsl", Reach;
 /// fill.wgsl's `Reach`: a light in view space with its range, and its score.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Reach {
     at: [f32; 4],
     score: [u32; 4],
+}
 }
 
 /// A fill light as scene3d.wgsl reads one from the light grid's buffer: a key light's record,

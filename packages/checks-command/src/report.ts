@@ -78,6 +78,10 @@ function failure(checkout: string, test: string, testFile: string | null, error:
   return { test, file: at.file, line: at.line, stack: error.stack, assertion: named, message: error.message };
 }
 
+/** Every control's name starts so (controls.ts), whichever run drew it: a run that shares its checkout leaves its own out too. */
+export const CONTROL = 'deepbuild control ';
+export const isControl = (test: string): boolean => test.includes(CONTROL);
+
 type Attempt = 'passed' | 'failed';
 export interface Ran { test: string; file: string | null; attempts: Attempt[]; meta: Record<string, unknown> }
 /** `malformed`: lines the tool's reporter can't have written, which leave the run uncounted. */
@@ -85,9 +89,10 @@ export interface Reported { ran: Ran[]; failures: Failure[]; malformed: number }
 
 interface NodeLine { type: string; name: string | null; file: string | null; line?: unknown; suite?: boolean; skip?: boolean; todo?: boolean; error?: { message: string; stack: string | null; code: string | null; name: string | null; failureType: string | null }; message?: string }
 /**
- * node:test's report, as check.kind@1's reporter writes it (#314): a skipped test that passed, or a todo test, didn't
- * run. With each file a test of it came from and every test the report names at its call's line, but a todo test's
- * failure, which the run doesn't count (`seen`), so the runner can find those of a file's tests it never reported.
+ * node:test's report, as check.kind@1's reporter writes it (#314): a skipped test that passed, or a todo test but the
+ * run's control, didn't run; a suite fails on its own when a hook of it throws. With each file a test of it came from and
+ * every test the report names at its call's line, but a todo test's failure, which the run doesn't count (`seen`), so the
+ * runner can find those of a file's tests it never reported.
  */
 export function nodeTest(lines: string[], checkout: string, stderr: string): Reported & { files: string[]; seen: Seen[] } {
   const read = parsed<NodeLine>(lines);
@@ -95,7 +100,7 @@ export function nodeTest(lines: string[], checkout: string, stderr: string): Rep
     && (l.error === undefined || (typeof l.error === 'object' && l.error !== null)));
   const fileEntry = (l: NodeLine): boolean => l.file !== null && l.name !== null && resolve(checkout, l.name) === l.file;
   // A test a hook skips still runs: its failure counts, as the tool counts it.
-  const counted = (l: NodeLine): boolean => (l.type === 'test:fail' || (l.type === 'test:pass' && l.skip !== true)) && !l.suite && l.todo !== true;
+  const counted = (l: NodeLine): boolean => (l.type === 'test:fail' || (l.type === 'test:pass' && l.skip !== true)) && !l.suite && (l.todo !== true || isControl(l.name ?? ''));
   const ran = all.filter((l) => counted(l) && !fileEntry(l))
     .map((l) => ({ test: l.name ?? '', file: l.file && under(checkout, l.file), attempts: [l.type === 'test:pass' ? 'passed' : 'failed'] as Attempt[], meta: {} }));
   // A hook's skip still runs the test's body: it was no test left out.
@@ -104,7 +109,7 @@ export function nodeTest(lines: string[], checkout: string, stderr: string): Rep
   const files = [...new Set(all.flatMap((l) => (l.file && l.type.startsWith('test:') ? [under(checkout, l.file)] : [])))]
     .filter((f): f is string => f !== null && !f.startsWith('node_modules/'));
   const printed = all.filter((l) => l.type === 'test:stderr').map((l) => l.message ?? '').join('') || stderr;
-  const failures = all.filter((l) => counted(l) && l.type === 'test:fail' && l.error?.failureType !== 'subtestsFailed').map((l) => {
+  const failures = all.filter((l) => l.type === 'test:fail' && (counted(l) || (l.suite === true && l.todo !== true)) && l.error?.failureType !== 'subtestsFailed').map((l) => {
     const e = l.error ?? { message: '(no error in the report)', stack: null, code: null, name: null, failureType: null };
     const file = l.file && under(checkout, l.file);
     // A crash outside any test has no cause of its own in the report; the tool wrote the error to stderr.
@@ -116,9 +121,9 @@ export function nodeTest(lines: string[], checkout: string, stderr: string): Rep
   return { ran, failures, malformed: lines.length - all.length, files, seen };
 }
 
-interface VitestLine { type: string; name?: string; file: string | null; retries?: number; errors: Caught[]; meta?: Record<string, unknown>; filter?: unknown; tool?: unknown; line?: unknown }
-/** What a Vitest-format report says besides its tests: each Vitest or Jest file it ran, and pytest's listing and the tests it left out. */
-export interface Listing { files: { file: string; tool: 'vitest' | 'jest' }[]; listed: Listed[]; left: Left[]; started: { test: string; file: string | null }[] }
+interface VitestLine { type: string; name?: string; file: string | null; retries?: number; errors: Caught[]; meta?: Record<string, unknown>; filter?: unknown; by?: unknown; replayed?: unknown; tool?: unknown; line?: unknown }
+/** What a Vitest-format report says besides its tests: each Vitest or Jest file it ran, pytest's listing and the tests it left out, and what Vitest's config leaves tests out by (`by`), each a run error too. */
+export interface Listing { files: { file: string; tool: 'vitest' | 'jest' }[]; listed: Listed[]; left: Left[]; by: string[]; started: { test: string; file: string | null }[] }
 /**
  * Vitest's report, as the command check kind's reporter writes it (runtime/vitest-reporter.mjs), and Jest's and
  * pytest's in the same format. A run error that names a filter is no failure when `named` (the check's command) holds it.
@@ -127,7 +132,8 @@ export function vitest(lines: string[], checkout: string, lastAttemptOnly = fals
   const all = parsed<VitestLine>(lines);
   const ran: Ran[] = [];
   const failures: Failure[] = [];
-  const listing: Listing = { files: [], listed: [], left: [], started: [] };
+  const listing: Listing = { files: [], listed: [], left: [], by: [], started: [] };
+  let replayed = false;
   let malformed = lines.length - all.length;
   // Every test of a file names it: each is placed once.
   const placed = new Map<string, string | null>();
@@ -156,10 +162,13 @@ export function vitest(lines: string[], checkout: string, lastAttemptOnly = fals
       else if (l.type === 'test:left' && typeof l.name === 'string' && typeof l.filter === 'string') listing.left.push({ test: l.name, file, filter: l.filter });
       else malformed += 1;
     } else if (!(l.type === 'run:error' && typeof l.filter === 'string' && named(l.filter))) {
-      for (const e of l.errors) failures.push(failure(checkout, file ?? '(run)', file, e));
+      if (typeof l.by === 'string') listing.by.push(l.by);
+      replayed ||= l.replayed === true;
+      for (const e of l.errors) failures.push(failure(checkout, l.name ?? file ?? '(run)', file, e));
     }
   }
-  return { ran, failures, malformed, ...listing };
+  // Replayed results are an earlier run's: none of these tests ran.
+  return { ran: replayed ? [] : ran, failures, malformed, ...listing };
 }
 
 interface GoEvent { Action?: unknown; Package?: unknown; Test?: unknown; Output?: unknown }

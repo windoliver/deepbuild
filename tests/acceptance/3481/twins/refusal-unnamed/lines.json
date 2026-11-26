@@ -1,0 +1,19 @@
+{
+  "crates/deep-app/src/main.rs": [
+    {
+      "find": [
+        "                eprintln!(",
+        "                    \"deep-app: the hub at {} refused the app's hello: {} at {}: {}\",",
+        "                    deep_app::hub::address().display(),",
+        "                    field(\"code\"),",
+        "                    field(\"path\"),",
+        "                    field(\"remediation\")",
+        "                );"
+      ],
+      "wrong": [
+        "                let _ = field;",
+        "                eprintln!(\"deep-app: the hub refused the app's hello\");"
+      ]
+    }
+  ]
+}

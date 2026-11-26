@@ -310,7 +310,9 @@ fn a_packs_refusals_keep_its_presets_order() {
             expect.push(format!("preset test.{key} fails"));
         } else if i % 3 == 0 {
             presets.insert(key.clone(), preset(1.05));
-            expect.push(format!("preset test.{key} is refused: with param fb at 1.05"));
+            expect.push(format!(
+                "preset test.{key} is refused: with param fb at 1.05"
+            ));
         } else {
             presets.insert(key, preset(0.95));
         }

@@ -1,0 +1,81 @@
+Base run of tests/acceptance/2315-redraft-waits at fd9be7a702f7cac74bab5095a2780ebe4d487095 (origin/main), 2026-11-25, macOS, Node 24.22.0,
+load about 22 to 35. Command, from the repo root:
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2315-redraft-waits --no-file-parallelism --reporter=verbose
+Every test fails at its assertion: the base's deep env up runs env-local directly and never asks the installed replacement.
+
+
+ RUN  v5.0.5 ~/deepbuild-runs/2315/blind/tests/acceptance/2315-redraft-waits
+
+ × swap.test.ts > AC1 #2315.9f5b8ef0 deep env up and deep env down invoke the installed replacement environment@1 provider, not env-local > AC1 #2315.9f5b8ef0 deep env up in a worktree asks the replacement's up, with the worktree as its checkout, and reports the stack it returned 6286ms
+   → deep env up asked the installed replacement tests/env-recorder's up once, with the worktree /private/tmp/dh2315-IIfntI/work as its checkout; it asked it 0 times, so the stack came from elsewhere (env-local). The replacement's log: [{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-Txssbp","port":53171,"handle":{"id":"run:01M897WR462Y0C1KS1QC477J9T","port":53171,"pid":31495},"process":31253},{"call":"down","handle":{"id":"run:01M897WR462Y0C1KS1QC477J9T","port":53171,"pid":31495},"process":31253},{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-8207hw","port":53182,"handle":{"id":"run:01M897WTQ60D2MPG2K1SCRX1XZ","port":53182,"pid":31736},"process":31253},{"call":"down","handle":{"id":"run:01M897WTQ60D2MPG2K1SCRX1XZ","port":53182,"pid":31736},"process":31253}]: expected +0 to be 1 // Object.is equality
+ × swap.test.ts > AC1 #2315.9f5b8ef0 deep env up and deep env down invoke the installed replacement environment@1 provider, not env-local > AC1 #2315.9f5b8ef0 deep env down in that worktree asks the replacement's down for the handle its up returned, and the stack stops 986ms
+   → deep env down asked the installed replacement tests/env-recorder's down once, for the handle its up returned for /private/tmp/dh2315-YfcpVy/work; it asked it 0 times. The replacement's log: [{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-Txssbp","port":53171,"handle":{"id":"run:01M897WR462Y0C1KS1QC477J9T","port":53171,"pid":31495},"process":31253},{"call":"down","handle":{"id":"run:01M897WR462Y0C1KS1QC477J9T","port":53171,"pid":31495},"process":31253},{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-8207hw","port":53182,"handle":{"id":"run:01M897WTQ60D2MPG2K1SCRX1XZ","port":53182,"pid":31736},"process":31253},{"call":"down","handle":{"id":"run:01M897WTQ60D2MPG2K1SCRX1XZ","port":53182,"pid":31736},"process":31253}]: expected +0 to be 1 // Object.is equality
+ × trust.test.ts > AC2 #2315.7023c897 revoking trust on the loaded environment@1 provider stops its active handle, and deep env up then refuses naming it, never falling back to env-local > AC2 #2315.7023c897 revoking trust in the project the replacement came with stops the stack its up started, once, and the next deep env up refuses naming tests/env-recorder, starting no stack 5831ms
+   → deep env up asked the replacement's up for /private/tmp/dh2315-jrwBZL/repo, so it holds an active handle; it was never asked (env-local ran). The replacement's log: [{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-PvqyUu","port":53205,"handle":{"id":"run:01M897WZH6DC50TY23H4YY279V","port":53205,"pid":32497},"process":32378},{"call":"down","handle":{"id":"run:01M897WZH6DC50TY23H4YY279V","port":53205,"pid":32497},"process":32378},{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-0rEigc","port":53216,"handle":{"id":"run:01M897X1E00K64546JGZ2PTZXR","port":53216,"pid":32747},"process":32378},{"call":"down","handle":{"id":"run:01M897X1E00K64546JGZ2PTZXR","port":53216,"pid":32747},"process":32378}]: expected +0 to be 1 // Object.is equality
+ × disable.test.ts > AC2 #2315.7023c897 disabling the loaded environment@1 provider stops its active handle, and deep env up then refuses naming it, never falling back to env-local > AC2 #2315.7023c897 disabling the replacement stops the stack its up started, once, and the next deep env up refuses naming tests/env-recorder, starting no stack 4984ms
+   → deep env up asked the replacement's up for /private/tmp/dh2315-SoTgX7/work, so it holds an active handle; it was never asked (env-local ran). The replacement's log: [{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-KVdIYp","port":53233,"handle":{"id":"run:01M897X5X3J1PJBGAZKECMGRKG","port":53233,"pid":33421},"process":33262},{"call":"down","handle":{"id":"run:01M897X5X3J1PJBGAZKECMGRKG","port":53233,"pid":33421},"process":33262},{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-MaxzSl","port":53244,"handle":{"id":"run:01M897X7TN0MP354EE2MAMRJ9Q","port":53244,"pid":33671},"process":33262},{"call":"down","handle":{"id":"run:01M897X7TN0MP354EE2MAMRJ9Q","port":53244,"pid":33671},"process":33262}]: expected +0 to be 1 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  disable.test.ts > AC2 #2315.7023c897 disabling the loaded environment@1 provider stops its active handle, and deep env up then refuses naming it, never falling back to env-local > AC2 #2315.7023c897 disabling the replacement stops the stack its up started, once, and the next deep env up refuses naming tests/env-recorder, starting no stack
+AssertionError: deep env up asked the replacement's up for /private/tmp/dh2315-SoTgX7/work, so it holds an active handle; it was never asked (env-local ran). The replacement's log: [{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-KVdIYp","port":53233,"handle":{"id":"run:01M897X5X3J1PJBGAZKECMGRKG","port":53233,"pid":33421},"process":33262},{"call":"down","handle":{"id":"run:01M897X5X3J1PJBGAZKECMGRKG","port":53233,"pid":33421},"process":33262},{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-MaxzSl","port":53244,"handle":{"id":"run:01M897X7TN0MP354EE2MAMRJ9Q","port":53244,"pid":33671},"process":33262},{"call":"down","handle":{"id":"run:01M897X7TN0MP354EE2MAMRJ9Q","port":53244,"pid":33671},"process":33262}]: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ disable.test.ts:23:208
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  swap.test.ts > AC1 #2315.9f5b8ef0 deep env up and deep env down invoke the installed replacement environment@1 provider, not env-local > AC1 #2315.9f5b8ef0 deep env up in a worktree asks the replacement's up, with the worktree as its checkout, and reports the stack it returned
+AssertionError: deep env up asked the installed replacement tests/env-recorder's up once, with the worktree /private/tmp/dh2315-IIfntI/work as its checkout; it asked it 0 times, so the stack came from elsewhere (env-local). The replacement's log: [{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-Txssbp","port":53171,"handle":{"id":"run:01M897WR462Y0C1KS1QC477J9T","port":53171,"pid":31495},"process":31253},{"call":"down","handle":{"id":"run:01M897WR462Y0C1KS1QC477J9T","port":53171,"pid":31495},"process":31253},{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-8207hw","port":53182,"handle":{"id":"run:01M897WTQ60D2MPG2K1SCRX1XZ","port":53182,"pid":31736},"process":31253},{"call":"down","handle":{"id":"run:01M897WTQ60D2MPG2K1SCRX1XZ","port":53182,"pid":31736},"process":31253}]: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ swap.test.ts:27:281
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  swap.test.ts > AC1 #2315.9f5b8ef0 deep env up and deep env down invoke the installed replacement environment@1 provider, not env-local > AC1 #2315.9f5b8ef0 deep env down in that worktree asks the replacement's down for the handle its up returned, and the stack stops
+AssertionError: deep env down asked the installed replacement tests/env-recorder's down once, for the handle its up returned for /private/tmp/dh2315-YfcpVy/work; it asked it 0 times. The replacement's log: [{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-Txssbp","port":53171,"handle":{"id":"run:01M897WR462Y0C1KS1QC477J9T","port":53171,"pid":31495},"process":31253},{"call":"down","handle":{"id":"run:01M897WR462Y0C1KS1QC477J9T","port":53171,"pid":31495},"process":31253},{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-8207hw","port":53182,"handle":{"id":"run:01M897WTQ60D2MPG2K1SCRX1XZ","port":53182,"pid":31736},"process":31253},{"call":"down","handle":{"id":"run:01M897WTQ60D2MPG2K1SCRX1XZ","port":53182,"pid":31736},"process":31253}]: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ swap.test.ts:45:244
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  trust.test.ts > AC2 #2315.7023c897 revoking trust on the loaded environment@1 provider stops its active handle, and deep env up then refuses naming it, never falling back to env-local > AC2 #2315.7023c897 revoking trust in the project the replacement came with stops the stack its up started, once, and the next deep env up refuses naming tests/env-recorder, starting no stack
+AssertionError: deep env up asked the replacement's up for /private/tmp/dh2315-jrwBZL/repo, so it holds an active handle; it was never asked (env-local ran). The replacement's log: [{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-PvqyUu","port":53205,"handle":{"id":"run:01M897WZH6DC50TY23H4YY279V","port":53205,"pid":32497},"process":32378},{"call":"down","handle":{"id":"run:01M897WZH6DC50TY23H4YY279V","port":53205,"pid":32497},"process":32378},{"call":"up","checkout":"/private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-checkout-0rEigc","port":53216,"handle":{"id":"run:01M897X1E00K64546JGZ2PTZXR","port":53216,"pid":32747},"process":32378},{"call":"down","handle":{"id":"run:01M897X1E00K64546JGZ2PTZXR","port":53216,"pid":32747},"process":32378}]: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ trust.test.ts:57:202
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed (4)
+   Start at  03:36:40
+   Duration  19.93s (tests 96%, import 2%, transform 2%)
+

@@ -1,0 +1,123 @@
+{
+  "id": "familiar.rect_area_light",
+  "version": "1.0",
+  "title": "Rect area light",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The library's RectAreaLight: its intensity is the face's luminance in cd/m², as light.area@1 lumens (π × intensity × width × height), shining along its local −Z.",
+  "inputs": {
+    "color": {
+      "type": "integer",
+      "default": 16777215,
+      "min": 0,
+      "max": 16777215,
+      "about": "Color as 0xRRGGBB, sRGB; linear in ours"
+    },
+    "intensity": {
+      "type": "number",
+      "default": 1,
+      "unit": "cd/m²",
+      "min": 0,
+      "about": "the face's luminance"
+    },
+    "power": {
+      "type": "number",
+      "default": -1,
+      "unit": "lm",
+      "min": -1,
+      "about": "−1: from intensity; else the library's lumens, kept"
+    },
+    "width": {
+      "type": "number",
+      "default": 10,
+      "unit": "m",
+      "min": 0,
+      "about": ""
+    },
+    "height": {
+      "type": "number",
+      "default": 10,
+      "unit": "m",
+      "min": 0,
+      "about": ""
+    },
+    "position": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "m",
+      "about": "Object3D.position"
+    },
+    "rotation": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "deg",
+      "about": "Object3D.rotation, in the library's default order XYZ, in degrees"
+    }
+  },
+  "let": {
+    "e0": "(floor(color / 65536) % 256) / 255",
+    "l0": "e0 <= 0.04045 ? e0 / 12.92 : pow((e0 + 0.055) / 1.055, 2.4)",
+    "e1": "(floor(color / 256) % 256) / 255",
+    "l1": "e1 <= 0.04045 ? e1 / 12.92 : pow((e1 + 0.055) / 1.055, 2.4)",
+    "e2": "(color % 256) / 255",
+    "l2": "e2 <= 0.04045 ? e2 / 12.92 : pow((e2 + 0.055) / 1.055, 2.4)",
+    "lm": "power >= 0 ? power : pi * intensity * width * height",
+    "ca": "cos(rad(rotation[0]))",
+    "sa": "sin(rad(rotation[0]))",
+    "cb": "cos(rad(rotation[1]))",
+    "sb": "sin(rad(rotation[1]))",
+    "cc": "cos(rad(rotation[2]))",
+    "sc": "sin(rad(rotation[2]))",
+    "m00": "cb * cc",
+    "m01": "-cb * sc",
+    "m02": "sb",
+    "m10": "ca * sc + sa * sb * cc",
+    "m11": "ca * cc - sa * sb * sc",
+    "m12": "-sa * cb",
+    "m20": "sa * sc - ca * sb * cc",
+    "m21": "sa * cc + ca * sb * sc",
+    "m22": "ca * cb",
+    "rx": "abs(m20) < 0.9999999999 ? deg(atan2(m21, m22)) : 0",
+    "ry": "deg(asin(max(-1, min(1, -m20))))",
+    "rz": "abs(m20) < 0.9999999999 ? deg(atan2(m10, m00)) : deg(atan2(-m01, m11))"
+  },
+  "steps": {
+    "light": {
+      "op": "item",
+      "kind": "light.area@1",
+      "params": {
+        "power": "lm",
+        "color": [
+          "l0",
+          "l1",
+          "l2"
+        ],
+        "shape": "rect",
+        "size": [
+          "width",
+          "height"
+        ]
+      },
+      "at": {
+        "pos": [
+          "position[0]",
+          "position[1]",
+          "position[2]"
+        ],
+        "rot": [
+          "rx",
+          "ry",
+          "rz"
+        ]
+      }
+    }
+  }
+}

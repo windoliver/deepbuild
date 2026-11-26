@@ -2,7 +2,7 @@
 
 import { type Delivery, type Resolver } from '@deepbuild/asks';
 
-import { type Connection } from '@deepbuild/record';
+import { type Connection, type EventInput } from '@deepbuild/record';
 
 import { type PromiseState } from './promises.js';
 import { Answers, type Answer } from './answers.js';
@@ -51,7 +51,7 @@ import { type ChannelAsk } from './channels.js';
 
 /** The delivery capabilities consumed by another hub domain. */
 export interface AnswerDeliveryPort {
-  switches: Map<string, string[]>;
+  switches: Map<string, { session: string; commits: string[] }>;
   continuedPos: number;
   unknownSends: Map<string, Map<string, { label: string; pr: boolean; denied?: boolean; done?: boolean }>>;
   settling: Map<string, Set<() => void>>;
@@ -59,7 +59,7 @@ export interface AnswerDeliveryPort {
   handed: Map<string, { session: string; at: number; timer: NodeJS.Timeout; via: 'wake' | 'next_prompt' | 'stop_hold'; hook?: string }>;
   unread: Map<string, string>;
   carried: Map<string, Note[]>;
-  prompts: Set<string>;
+  prompts: Map<string, string>;
   answers: Answers;
   binds: Map<string, string>;
   answerWaiting: Set<string>;
@@ -73,6 +73,8 @@ export interface AnswerDeliveryPort {
   promiseCarried(session: string, via: 'next_prompt' | 'stop_hold', prompt?: string): Promise<string | undefined>;
   promiseDueFor(session: string): boolean;
   restore(): Promise<void>;
+  restoreTurns(of?: string): Promise<void>;
+  forget(session: string): void;
   appNotes(drafts: Draft[], session: string): void;
   noteText(notes: Note[]): string;
   note(params: Obj): Promise<Obj>;
@@ -158,6 +160,9 @@ export interface StopJudgingPort {
   buildProduct(b: { cwd: string; command: string }): Promise<{ code: number | null; tail: string }>;
   runEnded(run: string): Promise<string>;
   judged(claim: string): Promise<void>;
+  letGo(session: string): void;
+  keeps(claim: string): boolean;
+  forget(session: string): void;
   runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; variant?: Variant; key?: RunKey; stack?: StackWant }): Promise<string>;
   invalid(claim: string, commit: string, reason: string, outcome?: 'INVALID' | 'INCONCLUSIVE'): Promise<void>;
   stopRule(count: Counter): boolean;
@@ -171,6 +176,7 @@ export interface SessionMemoryPort {
   tasted: Map<string, Set<string>>;
   ruleState: Map<string, { given: Set<string>; full: boolean; editing: Map<string, RuleFileBefore[]> }>;
   firstPrompted: Set<string>;
+  forget(session: string): void;
   judgeRules(): Promise<void>;
   tasteAt(session: string, cwd: string, said: string, starting: boolean): Promise<string | undefined>;
   lessons(): Promise<Lesson[]>;
@@ -201,6 +207,7 @@ export interface SessionStatePort {
   endedOrder: Set<string>;
   projects: Map<string, string>;
   sessionPeople: Map<string, string>;
+  sessionHosts: Map<string, string>;
   entered: Map<string, string>;
   tails: Map<string, UsageTail>;
   turnsStarted: Map<string, string>;
@@ -210,7 +217,6 @@ export interface SessionStatePort {
   states: Map<string, string>;
   statesRead: boolean;
   stating: Promise<void> | undefined;
-  touched: Set<string> | 'all';
   rows: Map<string, Placed>;
   rowsFirst: boolean;
   versioned: Set<string>;
@@ -224,6 +230,7 @@ export interface SessionStatePort {
   goneSessions(): Promise<void>;
   sessionOver(session: Session): void;
   archivedThreads(): Promise<void>;
+  appended(input: EventInput, session: string | undefined): void;
   stateSoon(): void;
   seeRow(id: string): Promise<Obj>;
   statesSettled(): Promise<void>;
@@ -235,7 +242,8 @@ export interface SessionStatePort {
   childOf(session: Session, agent: string): Promise<void>;
   whose(meta: HookMeta, seq: string | undefined): Promise<{ job?: string; wait?: string; reading?: { job: string; text: string } }>;
   park(job: string): Promise<void>;
-  startOf(pid: number, fresh?: boolean): Promise<string | undefined>;
+  startOf(pid: number, fresh?: boolean, host?: string): Promise<string | undefined>;
+  head(session: string, cwd: string): Promise<{ sha: string; branch: string | null } | undefined>;
   verify(meta: HookMeta): Promise<boolean>;
   forgetEnded(): void;
   mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }>;
@@ -253,6 +261,7 @@ export interface SessionStatePort {
 /** The mcp capabilities consumed by another hub domain. */
 export interface McpOperationsPort {
   stamps: Stamp[];
+  forget(session: string): void;
   index: Promise<IndexFill | undefined>;
   mcpCall(params: Obj, context: CallContext): Promise<unknown>;
   agentConnection(session: string): Connection;

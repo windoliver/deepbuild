@@ -54,6 +54,25 @@ const workloads = {
     const applied = answer.replies.slice(0, 200).filter((r) => r.outcome === 'applied').length;
     if (applied !== 200) throw Error(`${applied} of 200 patches applied`);
   },
+  // #1857: a board of 5,000 items, one of them an instance whose step repeats a nested recipe 1,024 times, checked
+  // whole once: 4,999 rects and the sheet of tests/acceptance/1857's rows pack, which expands to 2,048 derived items.
+  'nested-check'() {
+    const items = {};
+    for (let i = 0; i < 4_999; i++) items[`r${i}`] = { id: `r${i}`, kind: 'rect@1', name: `r${i}`, order: `b${String(i).padStart(5, '0')}`, params: { box: [0, 0, 8, 8], paint: { fill: { role: 'muted' } } } };
+    items.g1 = { id: 'g1', kind: 'rows.sheet@1', name: 'g1', order: 'a0', params: {}, at: { pos: [40, 40, 0] } };
+    const document = { format: 1, profile: 'board', title: 'Sheet', description: 'A sheet among 4,999 rects.', size: [640, 360], packs: ['test/rows@1.0.0'], items };
+    const sessions = { 'sess-alpha': { thread: 'thread-alpha', name: 'Alpha', process: { pid: 4100, start: 1000 } } };
+    const packs = [{ id: 'test/rows', dir: join(root, 'tests/acceptance/1857/fixtures/packs/test-rows-1.0.0') }];
+    const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+    let answer;
+    try {
+      [answer] = run('deep-show', 'run', [JSON.stringify({ evidence, sessions, panels: { main: { rect: [0, 0, 640, 360] } }, docs: { [DOC]: { panel: 'main' } }, packs, calls: [{ call: 'deep_show', session: 'sess-alpha', doc: DOC, document, include: ['issues'] }] })]);
+    } finally {
+      rmSync(evidence, { recursive: true, force: true });
+    }
+    const derived = Object.keys(answer.replies?.[0]?.expansions?.find((e) => e.instance === 'g1')?.derived ?? {}).length;
+    if (derived !== 2_048) throw Error(`g1 expanded to ${derived} derived items, not 2,048: ${JSON.stringify(answer).slice(0, 600)}`);
+  },
   // A merge by ID of two writers' 10,000-item revisions of one base.
   'merge-10k'() {
     const base = { ...structuredClone(envelope), id: DOC.toLowerCase() };
@@ -1477,6 +1496,7 @@ workloads['between-steps'] = async () => (await import('./between-steps.mjs')).b
 // (benchmarks/world-pages.mjs).
 workloads['world-pages'] = async () => (await import('./world-pages.mjs')).worldPages({ root, release, once, runs });
 workloads['water-rings'] = async () => (await import('./water-rings.mjs')).waterRings({ root, release, once, runs });
+workloads['water-sea'] = async () => (await import('./water-sea.mjs')).waterSea({ root, release, once, runs }); // #3033's budget
 workloads['atlas-draw'] = async () => (await import('./atlas-draw.mjs')).atlasDraw({ release, once, runs });
 workloads['atlas-slice'] = async () => (await import('./atlas-slice.mjs')).atlasSlice({ release, once, runs });
 // #161's budgets: the fx@1 pack's own check, each operator's compile and a still canvas's dispatches (benchmarks/fx-pack.mjs).

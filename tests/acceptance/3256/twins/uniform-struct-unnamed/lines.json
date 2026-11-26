@@ -1,0 +1,18 @@
+{
+  "crates/deep-scene3d-render/src/print.wgsl": [
+    {
+      "find": [
+        "@group(0) @binding(7) var<storage, read> masks: array<u32>;"
+      ],
+      "wrong": [
+        "@group(0) @binding(7) var<storage, read> masks: array<u32>;",
+        "",
+        "// #3256's planted wrong program: a new uniform struct that no host struct names and no list holds.",
+        "struct Unnamed3256 {",
+        "    v: vec4<f32>,",
+        "}",
+        "@group(0) @binding(8) var<uniform> unnamed_3256: Unnamed3256;"
+      ]
+    }
+  ]
+}
