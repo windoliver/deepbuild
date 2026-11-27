@@ -179,8 +179,6 @@ export function readIssue(root, change) {
   return { number, word, criteria };
 }
 
-// A module path as vite and node resolve it: as written, a script name's TypeScript sources (helpers.js names
-// helpers.ts or helpers.tsx, as TS ESM imports them, #3585), with a script extension, or a folder's index.
 const EXTENSIONS = ['.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs', '.jsx'];
 const SOURCES = { '.js': ['.ts', '.tsx'], '.mjs': ['.mts'], '.cjs': ['.cts'], '.jsx': ['.tsx'] };
 const sources = (path) => {
