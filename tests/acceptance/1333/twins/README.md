@@ -1,7 +1,12 @@
 # Twins for the 1333 tests
 
 The base has no job, so every test fails there on a missing script, and that proves little about what the tests can
-catch. These are planted wrong programs, each a plausible way to fake one criterion. `../twins.json` names them.
+catch. These are planted wrong programs, each a plausible way to fake one criterion. `../twins.json` names 15 of them.
+
+`../twins.json` lists a twin under the criterion tag of the test it breaks, and the lane lays it only for a test that
+carries that tag. It doesn't name `every-tick` and `no-age`: each fails only its Scope test, which carries no tag
+since no criterion holds it, and neither fails a tagged test. It doesn't name AC5's second wrong program either: that
+one is the base `9bdebdfb`'s `scripts/lanes.mjs`, which doesn't run the check, and no copy of it is kept here.
 
 The blind job built them on its own throwaway implementation, which isn't kept: a `scripts/main-watch.mjs` of about
 180 lines, a `scripts/known-failures-check.mjs` of about 20, the lint lane in `scripts/lanes.mjs` given

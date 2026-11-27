@@ -1,7 +1,3 @@
-// The tree a stack served (#29; design: The stack a check runs against). The core, never the environment, works out
-// from the supervisor's records which tree the stack served over the run: each host process's working folder and the
-// files it read, each container's bind mounts, and the build its image came from. A run whose stack served another
-// tree, or one the records can't place, is uncounted, naming the process, mount or image and its tree.
 export interface StackRecords {
   processes: { name: string; pid: number; cwd: string; reads: string[] }[];
   /** `image` absent: one the stack didn't build, whose image holds no app code (#580). */
@@ -16,7 +12,6 @@ export type Served =
 const under = (path: string, tree: string): boolean => path === tree || path.startsWith(`${tree.replace(/\/+$/, '')}/`);
 
 export function attributeStack(records: StackRecords, trees: Trees, options: { plant?: 'takes-environments-word' } = {}): Served {
-  // The planted wrong program: the environment said it started from the checkout, and that is taken as so.
   if (options.plant === 'takes-environments-word') return { served: 'checkout' };
   const elsewhere = [trees.worktree, ...trees.others];
   const place = (path: string): 'checkout' | string | null => (under(path, trees.checkout) ? 'checkout' : elsewhere.find((t) => under(path, t)) ?? null);

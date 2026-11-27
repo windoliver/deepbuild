@@ -1,0 +1,12 @@
+{
+  "scripts/shards.mjs": [
+    {
+      "find": [
+        "const IDLE_MS = 3 * 24 * 60 * 60 * 1000;"
+      ],
+      "wrong": [
+        "const IDLE_MS = 1 * 24 * 60 * 60 * 1000;"
+      ]
+    }
+  ]
+}

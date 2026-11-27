@@ -1,0 +1,8 @@
+{
+  "packages/hub/src/entries-watch.ts": [
+    {
+      "find": ["    if (!rows.length) return this.codex.stays?.(file);"],
+      "wrong": []
+    }
+  ]
+}

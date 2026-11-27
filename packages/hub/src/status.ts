@@ -6,7 +6,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { codeWords } from '@deepbuild/contracts';
 import { billingMode } from '@deepbuild/readings';
-import { NOTED, readingCode, type ReadingCode } from './reading-codes.js';
+import { MODE_CODES, NOTED, readingCode, type ReadingCode } from './reading-codes.js';
 import { shadowedBy, topLevel } from './claude-settings.js';
 import { call, notAnswered } from './client.js';
 import { rowReadings } from './codex-loops.js';
@@ -553,12 +553,16 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const codex = rows.filter((r) => r.agent === 'codex');
   const readings = await rowReadings(query, codex.map((r) => r.id), now, elapsed);
   for (const row of codex) if (readings.has(row.id)) row.readings = readings.get(row.id)!;
-  // The newest older-or-current set reading of each session: an older one stays on its row (#148).
-  const sets = (await query(`WITH coded AS MATERIALIZED (SELECT r.session_id, json_extract(r.data, '$.reading') AS text, ${readingCode('r')} AS code, r.log_pos FROM events r WHERE r.kind = 'session.reading') SELECT * FROM coded WHERE code IN ('older_set', 'newer_set') ORDER BY log_pos`)) as { session_id: string; text: string; code: ReadingCode }[];
-  const newest = new Map(sets.map((r) => [r.session_id, r]));
+  // The newest older-or-current set reading of each session: an older one stays on its row (#148). So does the newest
+  // reading of the mode its turn started in (#3429), until a turn of its starts in a mode that asks.
+  const standing = (await query(`WITH coded AS MATERIALIZED (SELECT r.session_id, json_extract(r.data, '$.reading') AS text, ${readingCode('r')} AS code, r.log_pos FROM events r WHERE r.kind = 'session.reading') SELECT * FROM coded WHERE code IN ('older_set', 'newer_set', ${MODE_CODES.map((c) => `'${c}'`).join(', ')}) ORDER BY log_pos`)) as { session_id: string; text: string; code: ReadingCode }[];
+  const newest = new Map(standing.filter((r) => !MODE_CODES.includes(r.code)).map((r) => [r.session_id, r]));
+  const modes = new Map(standing.filter((r) => MODE_CODES.includes(r.code)).map((r) => [r.session_id, r]));
   for (const row of rows) {
     const set = newest.get(row.id);
     if (set?.code === 'older_set') row.readings = [...(row.readings ?? []), set.text];
+    const mode = modes.get(row.id);
+    if (mode && mode.code !== 'mode_asks') row.readings = [...(row.readings ?? []), mode.text];
   }
   return rows;
 }

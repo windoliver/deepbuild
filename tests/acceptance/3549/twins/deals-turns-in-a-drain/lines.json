@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "  if (request.class === 'turn') return !table.requests.some((other) => other.class === 'timed' && !other.window && !marked) && nextTurn(table) === request.id;"
+      ],
+      "wrong": [
+        "  if (request.class === 'turn') return nextTurn(table) === request.id;"
+      ]
+    }
+  ]
+}
