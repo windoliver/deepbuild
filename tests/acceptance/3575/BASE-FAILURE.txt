@@ -1,0 +1,87 @@
+# The suite on the base, 94eacba01, with nothing but these files added. Two runs, each one command through the test
+# throttle:
+#   NO_COLOR=1 node scripts/throttle.mjs test --wait 60 -- node node_modules/vitest/vitest.mjs run \
+#     --root tests/acceptance/3575 --no-file-parallelism --testTimeout=600000 <files>
+# first ac1 to ac5 and ac7 (52 s; load average 22 on 18 cores as it ended), then ac6 and ac8 (21 s; load average 104
+# as it ended).
+# macOS 27.2, node v24.22.2. The packages are the base's own build (npm run build --workspaces) and the debug
+# deep-hook, deep-canvas-render, deep-show and deep-drive the base's own sources', each built through the build
+# throttle (README, Run them). <tmp> is a test's temp folder, ~ a home folder; none appears below.
+#
+# Test Files  8 failed (8); Tests  8 failed (8). No test is skipped, none fails at its setup or a timeout.
+#
+# Every test first builds the fixture on the base's own surfaces, and that part passes at the base: a hub starts,
+# deep install loads packages/jobs/import and packages/jobs/asset-tools, a data pack whose assets carry title,
+# publisher and edition installs (the base keeps none of the three), each file is fetched after one yes, imported as a
+# table, and the first two are joined and summed into a table of one row, employed 250 in workers. ac2 also imports the
+# agent's file, whose record names it origin: agent. Then each test fails at the assertion below.
+
+FAILED  AC1 #3575.1149d4e1  ac1-three-rows.test.ts:15
+  AssertionError: the fixture piece passes the check, data.sources included: expected [ Array(1) ] to deeply equal []
+  + "document.validate module_missing [\"sources\"] items/sources/kind: sources@1"
+
+FAILED  AC2 #3575.cc5a5b34  ac2-two-rows.test.ts:22
+  AssertionError: the piece without its second label, with a label of the agent's table, passes the check,
+  data.sources included: expected [ Array(1) ] to deeply equal []
+  + "document.validate module_missing [\"sources\"] items/sources/kind: sources@1"
+
+FAILED  AC3 #3575.b050d53d  ac3-source-line.test.ts:13 (lineOf, called at :24)
+  AssertionError: the entry of the first label's number holds line, the one line hover or focus shows with show.source
+  (README: The surface under test): {"item":"first","row":"Northfold","text":"250","source":{"table":"derived",
+  "column":"employed","row":0,"bytes":[25,28],"raw":"MjUw","origin":{"job":{"kind":"table.derive",
+  "tool":"table-derive@1.0.0","input":{"county":"dedd545c…","metro":"e6f20c1a…"}}},"weakest":"source","from":[
+  {"input":"county","table":"dedd545c…","keys":["1","2","3","4"]},{"input":"metro","table":"e6f20c1a…",
+  "keys":["11","12","13","14"]}]}}: expected 'undefined' to be 'string'
+
+FAILED  AC4 #3575.f439728a  ac4-check-failures.test.ts:22
+  AssertionError: the control: the same piece with its list of the whole document passes the check, data.sources
+  included: expected [ Array(1) ] to deeply equal []
+  + "document.validate module_missing [\"sources\"] items/sources/kind: sources@1"
+
+FAILED  AC5 #3575.e744d3c9  ac5-ask.test.ts:19
+  AssertionError: deep inbox shows counties's ask with the file's title, publisher and edition: "Fetch a-counties.csv
+  from pack:fixture/tables1@1.0.0 (https://127.0.0.1:64027/fixture/tables1/a-counties.csv; terms CC-BY-4.0: reuse is
+  allowed with credit to the publisher.): 42 bytes in 1 file, under CC-BY-4.0 (credit: The county returns of Tarn
+  Vale)?  authority  no repo    0s  If you don't answer: Don't fetch it, tomorrow at 18:04  ask:01M8FM1HDA6HQ49KBZSMBJPVRT
+      answer with fetch (Fetch it), decline (Don't fetch it)
+      plan 1824b7911713: 1 step, 1 can't be undone
+      1. Download a-counties.csv from pack:fixture/tables1@1.0.0 (https://127.0.0.1:64027/fixture/tables1/a-counties.csv;
+  terms CC-BY-4.0: reuse is allowed with credit to the publisher.), 42 bytes, into the evidence store under CC-BY-4.0
+  (credit: The county returns of Tarn Vale), then import it  changes evidence:dedd545c…  undo: can't undo  cost $0.00":
+  expected [ 'title, County employment', …(2) ] to deeply equal []
+  + "title, County employment"
+  + "publisher, Tarn Vale Census Office"
+  + "edition, 2019"
+  (the assertion before it holds at the base: the ask shows the size, 42, and the license, CC-BY-4.0)
+
+FAILED  AC6 #3575.1f2653c3  ac6-replica.test.ts:23
+  AssertionError: the replica shows the fixture piece: expected 'showing the piece on the session's p…' to be ''
+  + showing the piece on the session's page: the replica answered {"code":"asset_missing","message":"{\"code\":
+    \"asset_missing\",\"path\":\"items/first/params/columns/key/from\"}","issues":{"code":"asset_missing",
+    "path":"items/first/params/columns/key/from"}}
+
+FAILED  AC7 #3575.397602e4  ac7-planted-list.test.ts:15
+  AssertionError: the control: the list as shipped passes the check, data.sources included: expected [ Array(1) ] to
+  deeply equal []
+  + "document.validate module_missing [\"sources\"] items/sources/kind: sources@1"
+
+FAILED  AC8 #3575.723dcdab  ac8-shown.test.ts:22
+  AssertionError: the replica shows the fixture piece: expected 'showing the piece on the session's p…' to be ''
+  + showing the piece on the session's page: the replica answered {"code":"asset_missing","message":"{\"code\":
+    \"asset_missing\",\"path\":\"items/first/params/columns/key/from\"}","issues":{"code":"asset_missing",
+    "path":"items/first/params/columns/key/from"}}
+
+# What the base lacks, by test: ac1, ac2, ac4 and ac7 the kind sources@1 (the check refuses the item, naming it); ac3
+# the source line of a column read; ac5 the plan's title, publisher and edition; ac6 and ac8 a replica that shows the
+# piece at all. At the base the replica's copy of the canvas core reads no table from its evidence folder (the hub's
+# canvas core and deep-canvas-render inline a table's columns; deep-drive's does not), so its show refuses the piece
+# at the first label's column read, before it reaches the list. The replica launched on its fixture record, opened
+# the session's page and held the hub's evidence store in its own folder when it answered that.
+#
+# Not reached on the base, so not run there: the check's sources rows, the fetched asset's record source, data.sources,
+# the planted list (a probe of the base's check with planted: "sources_leaves_out_uncredited" answers bad_input), the
+# second fixture of ac3, the fourth file of ac5, and everything of ac6 and ac8 after show. A scratch probe, not kept,
+# drove the base's deep-drive through the rest of those two files' calls on a document of one text item: open, show,
+# see, probe {item}, the marker on the clipboard, your drag with the option key across the item's box and your copy
+# (the clipboard then held the item's whole text), the pointer over it, a second of the replica's clock, a picture of
+# the window, another session's page, and stored. At the base see's tree holds no node for a document's item.
