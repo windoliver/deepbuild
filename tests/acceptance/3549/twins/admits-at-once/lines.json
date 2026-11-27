@@ -1,0 +1,20 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "  const room = (other) => other.class === 'timed' || held < (other.limit ?? 1);"
+      ],
+      "wrong": [
+        "  const room = (other) => other.class === 'timed' || other.class === 'build' || held < (other.limit ?? 1);"
+      ]
+    },
+    {
+      "find": [
+        "    if (request.class === 'build') return roomForTest(slots, readings(), Date.now(), true, LIMITS.build);"
+      ],
+      "wrong": [
+        "    if (request.class === 'build') return true;"
+      ]
+    }
+  ]
+}
