@@ -1,0 +1,12 @@
+{
+  "scripts/issue-time.mjs": [
+    {
+      "find": [
+        "    .map((span) => ({ from: Math.max(span.from, first), to: Math.min(span.to, merged), cause: span.to > merged && ['prompt', 'conflict'].includes(span.cause) ? 'merge' : span.cause }))"
+      ],
+      "wrong": [
+        "    .map((span) => ({ from: Math.max(span.from, first), to: span.to, cause: span.to > merged && ['prompt', 'conflict'].includes(span.cause) ? 'merge' : span.cause }))"
+      ]
+    }
+  ]
+}

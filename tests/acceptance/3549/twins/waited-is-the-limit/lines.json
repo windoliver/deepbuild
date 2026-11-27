@@ -1,0 +1,20 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, ...stall !== undefined ? { stall } : { wait }, ...!entry.nested && { waited: now - asked }, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });"
+      ],
+      "wrong": [
+        "      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, ...stall !== undefined ? { stall } : { wait }, ...!entry.nested && { waited: bound }, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });"
+      ]
+    },
+    {
+      "find": [
+        "        log({ event: 'timeout', class: cls, id: request.id, pid, ...stall !== undefined ? { stall } : { wait }, ...!request.nested && { waited: Date.now() - asked }, ...blocked.length ? { blockers: blocked } : {} });"
+      ],
+      "wrong": [
+        "        log({ event: 'timeout', class: cls, id: request.id, pid, ...stall !== undefined ? { stall } : { wait }, ...!request.nested && { waited: bound }, ...blocked.length ? { blockers: blocked } : {} });"
+      ]
+    }
+  ]
+}

@@ -23,13 +23,20 @@ pub type Maps = std::collections::BTreeMap<String, Arc<Texels>>;
 #[cfg(not(feature = "full"))]
 pub type Maps = ();
 
+/// #1042: the light a 3D frame's post stage draws, as the app's frames draw it: the effects'
+/// settings holding the key sun's shadow, which a scene of painted solids casts through that
+/// stage (one of materials shades it in the renderer). The other shipped effects stay off.
+#[cfg(feature = "full")]
+pub type Light = deep_effects_render::frame::Settings;
+
 /// What a frame draws.
 pub enum Frame {
     /// A 2D frame's pixels.
     Pixels(Vec<u8>),
-    /// A 3D frame's scene and look, and its 2D writer layers' straight RGBA with no ground.
+    /// A 3D frame's scene and look, the light its post stage draws, and its 2D writer layers'
+    /// straight RGBA with no ground.
     #[cfg(feature = "full")]
-    Scene(Box<Scene>, Box<Look3>, Vec<u8>),
+    Scene(Box<Scene>, Box<Look3>, Box<Light>, Vec<u8>),
 }
 
 /// The player's painter and the store its pictures come from: the bundle, held in memory.
@@ -115,7 +122,28 @@ impl Draw {
                 scene.texels.insert(map, t.clone());
             }
         }
+        let seconds = p.t() as f64 / crate::play::FLICKS as f64;
+        let seed = p.document()["seed"].as_u64().unwrap_or(0);
+        let all = deep_effects_render::scene::settings(
+            &scene,
+            &serde_json::Value::Null,
+            &look,
+            &[],
+            seconds,
+            seed,
+            deep_effects_render::scene::Seeding::Item,
+        );
+        let light = Light {
+            shadow: all.shadow,
+            t: all.t,
+            ..Light::default()
+        };
         let over = self.layers(p, px, None).unwrap_or_else(clear);
-        Some(Frame::Scene(Box::new(scene), Box::new(look), over))
+        Some(Frame::Scene(
+            Box::new(scene),
+            Box::new(look),
+            Box::new(light),
+            over,
+        ))
     }
 }

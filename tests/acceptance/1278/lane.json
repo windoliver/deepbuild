@@ -1,0 +1,1 @@
+{ "alone": true, "why": "timing: the four plays compare pixel hashes that GPU timing can move, and the mirror-ball readings sit within 2%, so no other suite's draws share the GPU with them" }

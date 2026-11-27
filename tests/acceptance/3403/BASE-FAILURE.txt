@@ -1,0 +1,223 @@
+#3403 acceptance suite on the untouched merge base.
+
+Base: 8feb93630b60d18c55d551e8b07554d51049e497 (the checkout detached at it, nothing changed outside tests/acceptance/3403/)
+Node: v24.22.0; git 2.56.0; macOS arm64; date 2026-11-25; load average { 7.33 9.22 11.63 }
+Command: node --test tests/acceptance/3403/*.test.mjs (exit 1, 2.7 s)
+Result on base: 13 tests, 6 fail, each at an assertion on the guard's exit status, 7 pass, 0 skipped; no crash, missing symbol or fixture error.
+  fail  #3403.69cb5bd7  (criterion 1, 2 tests)  wrong program: the merge base, which judges added lines by the line they follow
+  fail  #3403.62dbb38a  (criterion 4, 2 tests)  wrong program: the merge base, which reads only rows
+  fail  #3403.15e88fe0  (criterion 2, the unsigned tag and the one-more-file commit)  wrong program: the merge base, which passes the commit whatever its tag
+  pass  #3403.15e88fe0  (criterion 2, the signed tag)  the base passes that commit with or without a tag; fails on a guard that refuses the edit even as its own approved proposal
+  pass  #3403.0dd07b16  (criterion 3, 2 tests)  "as on the merge base"; fail on a guard that lets a row added after a row through, and on one that lets a changed row through
+  pass  #3403.88a04a1b  (criterion 5, 3 tests)  what "passes today"; fail on a guard that refuses every edit to the file
+  pass  #3403.8fe962c0  (criterion 6, 1 test)   "as on the merge base"; fails on a guard that reads a merge commit against its first parent
+The twins for the tests that pass are the implementer's to plant (README.md). Local paths are written as <checkout> and ~.
+
+================ The suite on the untouched base ================
+✔ #3403.15e88fe0 the same commit, touching only docs/technical-design.md and approved by a signed tag that holds Approves: docs/technical-design.md, passes the guard (481.276083ms)
+ℹ the new table as its own proposal, under a signed tag; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -183,0 +184,7 @@; exit 0
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.2 s
+
+✖ #3403.15e88fe0 the same tag unsigned approves nothing, and the guard fails naming docs/technical-design.md (481.483375ms)
+ℹ the new table under the same tag, unsigned; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -183,0 +184,7 @@; exit 0
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.2 s
+
+✖ #3403.15e88fe0 the same edit in a commit that touches one more file, under the same signed tag, fails the guard, since it passes only as its own approved proposal (479.002958ms)
+ℹ the new table and one more file in the approved commit; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -183,0 +184,7 @@; exit 0
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.2 s
+
+✔ #3403.88a04a1b a commit that adds a blank line inside Decisions passes the guard with no approval (430.142459ms)
+ℹ one blank line inside Decisions, no approval; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -175,0 +176 @@; exit 0
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.1 s
+
+✔ #3403.88a04a1b a commit that adds a table under a heading outside Decisions, on the lines just before the section, passes the guard with no approval (461.225666ms)
+ℹ criterion 1's heading and table, ahead of the Decisions heading, no approval; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -161,0 +162,7 @@; exit 0
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.2 s
+
+✔ #3403.88a04a1b a commit that adds a table under a heading in the section after Decisions passes the guard with no approval (427.986167ms)
+ℹ criterion 1's heading and table, under the heading that ends Decisions, no approval; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -192,0 +193,7 @@; exit 0
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.1 s
+
+✔ #3403.8fe962c0 a merge commit that brings in rows main already holds passes the guard, as on the merge base (557.711083ms)
+ℹ the change merges main, which holds new rows under Decisions; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -181 +181 @@ @@ -182,0 +183,8 @@; exit 0
+PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.2 s
+
+✖ #3403.69cb5bd7 one commit that adds a ### heading and a table of two rows after a blank line inside Decisions, with no approval, fails the guard, naming docs/technical-design.md and the line of the first added row (430.406375ms)
+ℹ a new heading and a table of two rows after a blank line, no approval; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -183,0 +184,7 @@; exit 0
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.1 s
+
+✖ #3403.69cb5bd7 a table added on the lines right after an existing ### heading inside Decisions, which follow no blank line and no row, fails the guard too, whatever line a row follows (459.902166ms)
+ℹ a table right under an existing heading, no approval; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -184,0 +185,4 @@; exit 0
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.2 s
+
+✔ #3403.0dd07b16 a commit that adds one row at the end of an existing table fails the guard as on the merge base, naming its line (428.745459ms)
+ℹ one row at the end of the Decided table, no approval; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -182,0 +183 @@; exit 1
+FAIL guard: docs/technical-design.md:182: a row under Decisions added to (commit e2faad06c8fe)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 0.1 s
+
+✔ #3403.0dd07b16 a commit that changes a row's text fails the guard as on the merge base, naming its line (413.949875ms)
+ℹ the Reopens if cell of one row changed, no approval; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -181 +181 @@; exit 1
+FAIL guard: docs/technical-design.md:181: a row under Decisions changed (commit 0a93b8a5c2f6)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 0.1 s
+
+✖ #3403.62dbb38a a commit that adds a #### heading with a paragraph under it inside Decisions, and no row, fails the guard, naming the heading's line (443.297625ms)
+ℹ a #### heading and a paragraph, no row, no approval; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -185,0 +186,4 @@; exit 0
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.2 s
+
+✖ #3403.62dbb38a a commit that adds a ##### heading alone inside Decisions fails the guard too, a heading of any level (430.996125ms)
+ℹ a ##### heading alone, no approval; git diff -U0 HEAD~1 HEAD -- docs/technical-design.md: @@ -185,0 +186,2 @@; exit 0
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 0.2 s
+
+ℹ tests 13
+ℹ suites 0
+ℹ pass 7
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2658.841458
+
+✖ failing tests:
+
+test at tests/acceptance/3403/approved.test.mjs:15:1
+✖ #3403.15e88fe0 the same tag unsigned approves nothing, and the guard fails naming docs/technical-design.md (481.483375ms)
+  AssertionError [ERR_ASSERTION]: an unsigned tag approves nothing: the guard must fail
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.2 s
+  
+      at refuses (file://<checkout>/tests/acceptance/3403/helpers.mjs:156:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3403/approved.test.mjs:19:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3403/approved.test.mjs:22:1
+✖ #3403.15e88fe0 the same edit in a commit that touches one more file, under the same signed tag, fails the guard, since it passes only as its own approved proposal (479.002958ms)
+  AssertionError [ERR_ASSERTION]: an approved commit that carries more than the file its tag names is no proposal of its own: the guard must fail
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.2 s
+  
+      at refuses (file://<checkout>/tests/acceptance/3403/helpers.mjs:156:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3403/approved.test.mjs:27:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3403/refused.test.mjs:10:1
+✖ #3403.69cb5bd7 one commit that adds a ### heading and a table of two rows after a blank line inside Decisions, with no approval, fails the guard, naming docs/technical-design.md and the line of the first added row (430.406375ms)
+  AssertionError [ERR_ASSERTION]: rows that follow a blank line under a new heading are a guarded edit: the guard must fail
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.1 s
+  
+      at refuses (file://<checkout>/tests/acceptance/3403/helpers.mjs:156:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3403/refused.test.mjs:15:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3403/refused.test.mjs:20:1
+✖ #3403.69cb5bd7 a table added on the lines right after an existing ### heading inside Decisions, which follow no blank line and no row, fails the guard too, whatever line a row follows (459.902166ms)
+  AssertionError [ERR_ASSERTION]: a row added anywhere inside Decisions is a guarded edit: the guard must fail
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.2 s
+  
+      at refuses (file://<checkout>/tests/acceptance/3403/helpers.mjs:156:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3403/refused.test.mjs:23:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3403/refused.test.mjs:45:1
+✖ #3403.62dbb38a a commit that adds a #### heading with a paragraph under it inside Decisions, and no row, fails the guard, naming the heading's line (443.297625ms)
+  AssertionError [ERR_ASSERTION]: a heading added inside Decisions is a guarded edit: the guard must fail
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.2 s
+  
+      at refuses (file://<checkout>/tests/acceptance/3403/helpers.mjs:156:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3403/refused.test.mjs:50:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3403/refused.test.mjs:54:1
+✖ #3403.62dbb38a a commit that adds a ##### heading alone inside Decisions fails the guard too, a heading of any level (430.996125ms)
+  AssertionError [ERR_ASSERTION]: a heading of any level added inside Decisions is a guarded edit: the guard must fail
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 0.2 s
+  
+      at refuses (file://<checkout>/tests/acceptance/3403/helpers.mjs:156:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3403/refused.test.mjs:57:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 0,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
