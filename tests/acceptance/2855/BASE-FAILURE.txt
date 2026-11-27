@@ -1,0 +1,367 @@
+# #2855 acceptance suite at the base 345c9ae26 (origin/main), before any implementation
+# macOS 27.2.1 arm64, Mac18,1, 12 cores, node v24.22.0
+# load at start: 69.94 64.12 59.58
+# NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2855 --testTimeout=600000
+
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-2855-mcp-discover-93fc4f/tests/acceptance/2855
+
+ ❯ ac1-discover.test.ts (4 tests | 4 failed) 2286ms
+   ❯ #2855.a98dc587 each server answers server/discover (4)
+     × #2855.a98dc587 deep mcp answers server/discover with supportedVersions 2026-07-28 first and each held handshake revision after it, capabilities naming tools (and resources where it has them), and its name and version under io.modelcontextprotocol/serverInfo 636ms
+     × #2855.a98dc587 deep mcp actions answers server/discover with supportedVersions 2026-07-28 first and each held handshake revision after it, capabilities naming tools (and resources where it has them), and its name and version under io.modelcontextprotocol/serverInfo 868ms
+     × #2855.a98dc587 deep-hook's mcp actions answers server/discover with supportedVersions 2026-07-28 first and each held handshake revision after it, capabilities naming tools (and resources where it has them), and its name and version under io.modelcontextprotocol/serverInfo 126ms
+     × #2855.a98dc587 the reading tools answers server/discover with supportedVersions 2026-07-28 first and each held handshake revision after it, capabilities naming tools (and resources where it has them), and its name and version under io.modelcontextprotocol/serverInfo 653ms
+ ❯ ac2-no-handshake.test.ts (4 tests | 4 failed) 3155ms
+   ❯ #2855.2b6ba6a3 a client with no handshake is served (4)
+     × #2855.2b6ba6a3 deep mcp: with no initialize and 2026-07-28 in each request's _meta, tools/list is a handshake session's tools in its order with resultType "complete", ttlMs 0 and cacheScope "private"; a tool call's result has resultType "complete"; ping is -32601; resources/read of a missing page is -32602 where a handshake session gets -32002 978ms
+     × #2855.2b6ba6a3 deep mcp actions: with no initialize and 2026-07-28 in each request's _meta, tools/list is a handshake session's tools in its order with resultType "complete", ttlMs 0 and cacheScope "private"; a tool call's result has resultType "complete"; ping is -32601; resources/read of a missing page is -32602 where a handshake session gets -32002 934ms
+     × #2855.2b6ba6a3 deep-hook's mcp actions: with no initialize and 2026-07-28 in each request's _meta, tools/list is a handshake session's tools in its order with resultType "complete", ttlMs 0 and cacheScope "private"; a tool call's result has resultType "complete"; ping is -32601; resources/read of a missing page is -32602 where a handshake session gets -32002 179ms
+     × #2855.2b6ba6a3 the reading tools: with no initialize and 2026-07-28 in each request's _meta, tools/list is a handshake session's tools in its order with resultType "complete", ttlMs 0 and cacheScope "private"; a tool call's result has resultType "complete"; ping is -32601; resources/read of a missing page is -32602 where a handshake session gets -32002 1023ms
+ ❯ ac6-lists-handshake.test.ts (1 test | 1 failed) 9667ms
+   ❯ #2855.61e68686 the lister still reads a handshake server after its probe (1)
+     × #2855.61e68686 a handshake server that answers server/discover with -32601, and one that never answers it, are each probed, then listed by tool and digest, the silent one within 10 s 9637ms
+ ❯ ac3-unheld-version.test.ts (4 tests | 4 failed) 10346ms
+   ❯ #2855.215d37df a version the server doesn't hold is answered -32022 and never reaches the hub (4)
+     × #2855.215d37df deep mcp: a tools/call naming 2099-01-01 in its _meta is answered -32022 with data.supported and data.requested, and no call from that process reaches the hub 3309ms
+     × #2855.215d37df deep mcp actions: a tools/call naming 2099-01-01 in its _meta is answered -32022 with data.supported and data.requested, and no call from that process reaches the hub 2495ms
+     × #2855.215d37df deep-hook's mcp actions: a tools/call naming 2099-01-01 in its _meta is answered -32022 with data.supported and data.requested, and no call from that process reaches the hub 2046ms
+     × #2855.215d37df the reading tools: a tools/call naming 2099-01-01 in its _meta is answered -32022 with data.supported and data.requested, and no call from that process reaches the reading job 2171ms
+ ❯ ac5-lists-modern.test.ts (1 test | 1 failed) 81014ms
+   ❯ #2855.287aa5df the lister reads a server that takes no handshake (1)
+     × #2855.287aa5df a server that refuses initialize and answers server/discover is listed with its two tools and their digests, saying it took no handshake; its added delete_repo waits for your approval as a handshake server's does and never reaches it 81013ms
+ ❯ ac4-codex-wait.test.ts (1 test | 1 failed) 158787ms
+   ❯ #2855.ed6c227c Codex's wait holds for a Codex that never sends initialize (1)
+     × #2855.ed6c227c with tool_timeout_sec = 120, a deep_ask from a client named codex-mcp-client only in _meta waits for the hub's "still waiting", as one named at initialize does 158781ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-discover.test.ts > #2855.a98dc587 each server answers server/discover > #2855.a98dc587 deep mcp answers server/discover with supportedVersions 2026-07-28 first and each held handshake revision after it, capabilities naming tools (and resources where it has them), and its name and version under io.modelcontextprotocol/serverInfo
+AssertionError: deep mcp's answer to server/discover: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp: server/discover is answered error -32601 (\"Method server/discover not found.\"), not a discover result",
++ ]
+
+ ❯ ac1-discover.test.ts:40:71
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  ac1-discover.test.ts > #2855.a98dc587 each server answers server/discover > #2855.a98dc587 deep mcp actions answers server/discover with supportedVersions 2026-07-28 first and each held handshake revision after it, capabilities naming tools (and resources where it has them), and its name and version under io.modelcontextprotocol/serverInfo
+AssertionError: deep mcp actions's answer to server/discover: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp actions: server/discover is answered error -32601 (\"Method server/discover not found.\"), not a discover result",
++ ]
+
+ ❯ ac1-discover.test.ts:40:71
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  ac1-discover.test.ts > #2855.a98dc587 each server answers server/discover > #2855.a98dc587 deep-hook's mcp actions answers server/discover with supportedVersions 2026-07-28 first and each held handshake revision after it, capabilities naming tools (and resources where it has them), and its name and version under io.modelcontextprotocol/serverInfo
+AssertionError: deep-hook's mcp actions's answer to server/discover: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep-hook's mcp actions: server/discover is answered error -32601 (\"Method server/discover not found.\"), not a discover result",
++ ]
+
+ ❯ ac1-discover.test.ts:40:71
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  ac1-discover.test.ts > #2855.a98dc587 each server answers server/discover > #2855.a98dc587 the reading tools answers server/discover with supportedVersions 2026-07-28 first and each held handshake revision after it, capabilities naming tools (and resources where it has them), and its name and version under io.modelcontextprotocol/serverInfo
+AssertionError: the reading tools's answer to server/discover: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the reading tools: server/discover is answered error -32601 (\"no method server/discover\"), not a discover result",
++ ]
+
+ ❯ ac1-discover.test.ts:40:71
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  ac2-no-handshake.test.ts > #2855.2b6ba6a3 a client with no handshake is served > #2855.2b6ba6a3 deep mcp: with no initialize and 2026-07-28 in each request's _meta, tools/list is a handshake session's tools in its order with resultType "complete", ttlMs 0 and cacheScope "private"; a tool call's result has resultType "complete"; ping is -32601; resources/read of a missing page is -32602 where a handshake session gets -32002
+AssertionError: deep mcp served with no handshake: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp: tools/list's result has resultType undefined, not \"complete\"",
++   "deep mcp: tools/list's result has ttlMs undefined, not 0",
++   "deep mcp: tools/list's result has cacheScope undefined, not \"private\"",
++   "deep mcp: tools/call of deep_ask's result has resultType undefined, not \"complete\"",
++   "deep mcp: ping is answered result {}, not -32601",
++   "deep mcp: resources/read of deep://codes/no_such_code_2855 is answered error -32002 (\"No resource deep://codes/no_such_code_2855; the codes' pages are deep://codes/unlisted_field, deep://codes/required, deep://codes/type, deep://codes/enum, deep), not -32602",
++ ]
+
+ ❯ ac2-no-handshake.test.ts:65:68
+     63|       }
+     64|       mcp.stop();
+     65|       expect(failures, `${server.label} served with no handshake`).toE…
+       |                                                                    ^
+     66|     }, 120_000);
+     67|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  ac2-no-handshake.test.ts > #2855.2b6ba6a3 a client with no handshake is served > #2855.2b6ba6a3 deep mcp actions: with no initialize and 2026-07-28 in each request's _meta, tools/list is a handshake session's tools in its order with resultType "complete", ttlMs 0 and cacheScope "private"; a tool call's result has resultType "complete"; ping is -32601; resources/read of a missing page is -32602 where a handshake session gets -32002
+AssertionError: deep mcp actions served with no handshake: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp actions: tools/list's result has resultType undefined, not \"complete\"",
++   "deep mcp actions: tools/list's result has ttlMs undefined, not 0",
++   "deep mcp actions: tools/list's result has cacheScope undefined, not \"private\"",
++   "deep mcp actions: tools/call of find_actions's result has resultType undefined, not \"complete\"",
++   "deep mcp actions: ping is answered result {}, not -32601",
++   "deep mcp actions: resources/read of deep://codes/no_such_code_2855 is answered error -32002 (\"No resource deep://codes/no_such_code_2855; the codes' pages are deep://codes/unlisted_field, deep://codes/required, deep://codes/type, deep://codes/enum, deep), not -32602",
++ ]
+
+ ❯ ac2-no-handshake.test.ts:65:68
+     63|       }
+     64|       mcp.stop();
+     65|       expect(failures, `${server.label} served with no handshake`).toE…
+       |                                                                    ^
+     66|     }, 120_000);
+     67|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  ac2-no-handshake.test.ts > #2855.2b6ba6a3 a client with no handshake is served > #2855.2b6ba6a3 deep-hook's mcp actions: with no initialize and 2026-07-28 in each request's _meta, tools/list is a handshake session's tools in its order with resultType "complete", ttlMs 0 and cacheScope "private"; a tool call's result has resultType "complete"; ping is -32601; resources/read of a missing page is -32602 where a handshake session gets -32002
+AssertionError: deep-hook's mcp actions served with no handshake: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep-hook's mcp actions: tools/list's result has resultType undefined, not \"complete\"",
++   "deep-hook's mcp actions: tools/list's result has ttlMs undefined, not 0",
++   "deep-hook's mcp actions: tools/list's result has cacheScope undefined, not \"private\"",
++   "deep-hook's mcp actions: tools/call of find_actions's result has resultType undefined, not \"complete\"",
++   "deep-hook's mcp actions: ping is answered result {}, not -32601",
++   "deep-hook's mcp actions: resources/read of deep://codes/no_such_code_2855 is answered error -32002 (\"No resource deep://codes/no_such_code_2855; the codes' pages are deep://codes/unlisted_field, deep://codes/required, deep://codes/type, deep://codes/enum, deep), not -32602",
++ ]
+
+ ❯ ac2-no-handshake.test.ts:65:68
+     63|       }
+     64|       mcp.stop();
+     65|       expect(failures, `${server.label} served with no handshake`).toE…
+       |                                                                    ^
+     66|     }, 120_000);
+     67|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  ac2-no-handshake.test.ts > #2855.2b6ba6a3 a client with no handshake is served > #2855.2b6ba6a3 the reading tools: with no initialize and 2026-07-28 in each request's _meta, tools/list is a handshake session's tools in its order with resultType "complete", ttlMs 0 and cacheScope "private"; a tool call's result has resultType "complete"; ping is -32601; resources/read of a missing page is -32602 where a handshake session gets -32002
+AssertionError: the reading tools served with no handshake: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the reading tools: tools/list's result has resultType undefined, not \"complete\"",
++   "the reading tools: tools/list's result has ttlMs undefined, not 0",
++   "the reading tools: tools/list's result has cacheScope undefined, not \"private\"",
++   "the reading tools: tools/call of read's result has resultType undefined, not \"complete\"",
++   "the reading tools: ping is answered result {}, not -32601",
++ ]
+
+ ❯ ac2-no-handshake.test.ts:65:68
+     63|       }
+     64|       mcp.stop();
+     65|       expect(failures, `${server.label} served with no handshake`).toE…
+       |                                                                    ^
+     66|     }, 120_000);
+     67|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  ac3-unheld-version.test.ts > #2855.215d37df a version the server doesn't hold is answered -32022 and never reaches the hub > #2855.215d37df deep mcp: a tools/call naming 2099-01-01 in its _meta is answered -32022 with data.supported and data.requested, and no call from that process reaches the hub
+AssertionError: deep mcp answers 2099-01-01 without the hub: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp: a tools/call naming 2099-01-01 is answered result {\"content\":[{\"type\":\"text\",\"text\":\"{\\\"counted\\\":1}\"}],\"isError\":false,\"structuredContent\":{\"counted\":1}}, not -32022",
++   "deep mcp: the tools/call naming 2099-01-01 reached the hub: its count of calls from the process went from 0 to 1 ({\"v\":1,\"hello\":\"mcp\",\"parent\":{\"pid\":19455,\"start\":\"Fri Nov 27 00:10:04 2026\"},\"cwd\":\"/private/tmp/dh2855-ZNJsCX\"} | {\"v\":1,\"id\":\"mcp#1\",\"method\":\"mcp.call\",\"params\":{\"tool\":\"deep_ask\",\"arguments\":{}}})",
++ ]
+
+ ❯ ac3-unheld-version.test.ts:46:91
+     44|       }
+     45|       mcp.stop();
+     46|       expect(failures, `${server.label} answers ${FUTURE} without the …
+       |                                                                                           ^
+     47|     }, 120_000);
+     48|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  ac3-unheld-version.test.ts > #2855.215d37df a version the server doesn't hold is answered -32022 and never reaches the hub > #2855.215d37df deep mcp actions: a tools/call naming 2099-01-01 in its _meta is answered -32022 with data.supported and data.requested, and no call from that process reaches the hub
+AssertionError: deep mcp actions answers 2099-01-01 without the hub: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep mcp actions: a tools/call naming 2099-01-01 is answered result {\"content\":[{\"type\":\"text\",\"text\":\"{\\\"counted\\\":1}\"}],\"isError\":false,\"structuredContent\":{\"counted\":1}}, not -32022",
++   "deep mcp actions: the tools/call naming 2099-01-01 reached the hub: its count of calls from the process went from 0 to 1 ({\"v\":1,\"hello\":\"mcp\",\"parent\":{\"pid\":19455,\"start\":\"Fri Nov 27 00:10:04 2026\"},\"cwd\":\"/private/tmp/dh2855-8aMSuW\"} | {\"v\":1,\"id\":\"mcp#1\",\"method\":\"mcp.call\",\"params\":{\"tool\":\"find_actions\",\"arguments\":{}}})",
++ ]
+
+ ❯ ac3-unheld-version.test.ts:46:91
+     44|       }
+     45|       mcp.stop();
+     46|       expect(failures, `${server.label} answers ${FUTURE} without the …
+       |                                                                                           ^
+     47|     }, 120_000);
+     48|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  ac3-unheld-version.test.ts > #2855.215d37df a version the server doesn't hold is answered -32022 and never reaches the hub > #2855.215d37df deep-hook's mcp actions: a tools/call naming 2099-01-01 in its _meta is answered -32022 with data.supported and data.requested, and no call from that process reaches the hub
+AssertionError: deep-hook's mcp actions answers 2099-01-01 without the hub: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep-hook's mcp actions: a tools/call naming 2099-01-01 is answered result {\"content\":[{\"type\":\"text\",\"text\":\"{\\\"counted\\\":1}\"}],\"isError\":false,\"structuredContent\":{\"counted\":1}}, not -32022",
++   "deep-hook's mcp actions: the tools/call naming 2099-01-01 reached the hub: its count of calls from the process went from 0 to 1 ({\"v\":1,\"hello\":\"mcp\",\"parent\":{\"pid\":19455,\"start\":\"Fri Nov 27 00:10:04 2026\"},\"cwd\":\"/private/tmp/dh2855-RdPkTL\"} | {\"v\":1,\"id\":\"mcp#1\",\"method\":\"mcp.call\",\"params\":{\"tool\":\"find_actions\",\"arguments\":{}}})",
++ ]
+
+ ❯ ac3-unheld-version.test.ts:46:91
+     44|       }
+     45|       mcp.stop();
+     46|       expect(failures, `${server.label} answers ${FUTURE} without the …
+       |                                                                                           ^
+     47|     }, 120_000);
+     48|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  ac3-unheld-version.test.ts > #2855.215d37df a version the server doesn't hold is answered -32022 and never reaches the hub > #2855.215d37df the reading tools: a tools/call naming 2099-01-01 in its _meta is answered -32022 with data.supported and data.requested, and no call from that process reaches the reading job
+AssertionError: the reading tools answers 2099-01-01 without the reading job: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the reading tools: a tools/call naming 2099-01-01 is answered result {\"content\":[{\"type\":\"text\",\"text\":\"{\\\"counted\\\":1}\"}]}, not -32022",
++   "the reading tools: the tools/call naming 2099-01-01 reached the reading job: its count of calls from the process went from 0 to 1 (POST /call {\"name\":\"read\",\"arguments\":{}})",
++ ]
+
+ ❯ ac3-unheld-version.test.ts:46:91
+     44|       }
+     45|       mcp.stop();
+     46|       expect(failures, `${server.label} answers ${FUTURE} without the …
+       |                                                                                           ^
+     47|     }, 120_000);
+     48|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  ac4-codex-wait.test.ts > #2855.ed6c227c Codex's wait holds for a Codex that never sends initialize > #2855.ed6c227c with tool_timeout_sec = 120, a deep_ask from a client named codex-mcp-client only in _meta waits for the hub's "still waiting", as one named at initialize does
+AssertionError: each client's wait for deep_ask: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "a client that names itself codex-mcp-client only in its requests' _meta: the wait for deep_ask ended after 55.0 s with {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"code\\\":\\\"unavailable\\\",\\\"retryable\\\":true,\\\"remediation\\\":\\\"The DeepBuild hub is unreachable (it did not answer in time); nothing was recorded. Call again once it is back.\\\",\\\"path\\\":\\\"\\\",\\\"actual\\\":\\\"\\\",\\\"evidence\\\":[]}\"}],\"isError\":true}}, not the hub's \"still waiting\" at 115 s",
++ ]
+
+ ❯ ac4-codex-wait.test.ts:65:57
+     63|     await sleep(10_000);
+     64|     const failures = (await Promise.all([named, askOnce(w, codexThread…
+     65|     expect(failures, "each client's wait for deep_ask").toEqual([]);
+       |                                                         ^
+     66|   }, 420_000);
+     67| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  ac5-lists-modern.test.ts > #2855.287aa5df the lister reads a server that takes no handshake > #2855.287aa5df a server that refuses initialize and answers server/discover is listed with its two tools and their digests, saying it took no handshake; its added delete_repo waits for your approval as a handshake server's does and never reaches it
+AssertionError: forge listed with no handshake, and delete_repo held as tracker's is: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "forge: the record holds no mcp.tools_listed for it, so the lister read no list",
++   "forge: the call to delete_repo ran with nothing held: deep-hook allowed mcp__forge__delete_repo at PreToolUse (exit 0 after 14 ms, stdout \"\", stderr \"\")",
++   "forge: the fake server got 1 tools/call request(s) for delete_repo",
++ ]
+
+ ❯ ac5-lists-modern.test.ts:73:95
+     71|     await typed(s2, 'Clean up the archived repositories.');
+     72|     for (const server of [tracker, forge]) failures.push(...await held…
+     73|     expect(failures, 'forge listed with no handshake, and delete_repo …
+       |                                                                                               ^
+     74|   }, 600_000);
+     75| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  ac6-lists-handshake.test.ts > #2855.61e68686 the lister still reads a handshake server after its probe > #2855.61e68686 a handshake server that answers server/discover with -32601, and one that never answers it, are each probed, then listed by tool and digest, the silent one within 10 s
+AssertionError: the handshake servers probed and listed: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "refuser: the lister's first request is \"initialize\", not the server/discover probe (its requests: initialize, notifications/initialized, tools/list)",
++   "mute: the lister's first request is \"initialize\", not the server/discover probe (its requests: initialize, notifications/initialized, tools/list)",
++ ]
+
+ ❯ ac6-lists-handshake.test.ts:45:65
+     43|       }
+     44|     }
+     45|     expect(failures, 'the handshake servers probed and listed').toEqua…
+       |                                                                 ^
+     46|   }, 300_000);
+     47| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  6 failed | 1 passed (7)
+      Tests  15 failed | 1 passed (16)
+   Start at  00:10:04
+   Duration  159.54s (tests 99%)
+
+
+# load at end: 56.09 60.95 59.14
