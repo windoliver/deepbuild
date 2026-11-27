@@ -1,0 +1,72 @@
+# #3506's acceptance tests at the base: not run, no test grant
+
+Base: 4471593fba7b2e1bfcdec9ed88e20b7dff474bfe (origin/main; its last merge is #3508), with what #3031 lands laid over
+it, committed first (a5affddc8: spikes/3031/ and docs/spikes/3031/, byte for byte from the job that builds #3031).
+Host: this job's Mac (Mac17,10, Apple M5 Max, 18 cores, macOS), shared with many other sessions. One-minute load 37
+to 192 over the night.
+
+## No file was run
+
+Every run of a test file, and the probe before them, was asked for under the machine's test class, as the brief
+and AGENTS.md require; no test grant came, so nothing was run, and no file reads PASS or FAIL here.
+
+  $ node scripts/throttle.mjs test --wait 60 -- node <scratchpad>/probe-listing.mjs 2
+  (asked 2026-11-27 00:44 EST)
+  INCONCLUSIVE no grant: no test grant came within 60 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  (exit 3)
+
+  $ DEEP_3506_BASE=<scratchpad>/base-3506 node scripts/throttle.mjs test --wait 180 -- \
+      node <scratchpad>/runner.mjs <scratchpad>/runs ac5-unedited.test.mjs ac4-estimate.test.mjs \
+      ac2-one-depth.test.mjs ac1-device-bytes.test.mjs ac3-hashes-1637.test.mjs ac3-hashes-468.test.mjs \
+      ac3-hashes-419.test.mjs ac3-hashes-971.test.mjs ac3-planted-dof.test.mjs
+  (asked 2026-11-27 01:44 EST)
+  INCONCLUSIVE no grant: no test grant came within 180 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  (exit 3, 04:44 EST)
+
+The runner (a scratch script, not kept) would have run a one-frame probe of the reader's listing, then each file's
+own command, `node --test tests/acceptance/3506/<file>`, once, in turn. <scratchpad> is this job's scratch folder
+(`/private/tmp/claude-501/-Users-<name>-…/scratchpad`); `base-3506/` in it is a `git archive` export of 4471593fb.
+The throttle's log shows one test grant (02cab85d8c0a3cec) held from 05:20 UTC through both waits.
+
+## What each file is expected to read at the base (not observed)
+
+These are what the files are written to read there, from the judges and the base's code; none was seen on a run.
+
+| File | Criterion | Expected at the base, with DEEP_3506_BASE the export |
+|---|---|---|
+| ac1-device-bytes.test.mjs | #3506.86abd572 | FAIL at its assertion (`bytesProblems`): the change holds 0 B less than the merge base, which is the same program |
+| ac2-one-depth.test.mjs, first test | #3506.0dcb130c | FAIL at its assertion (`oneDepthProblems`): each view holds 2 4-sample depths, `scene3d depth ms` and `scene3d occluders' depth`; the view holds 2 resolved images, `scene3d.motion resolved` and `scene3d.dof resolved` |
+| ac2-one-depth.test.mjs, second test | #3506.0dcb130c | BLOCKED, a plain error: the copy of the reader with `occluders_own_depth` set doesn't compile (no such field) |
+| ac3-planted-dof.test.mjs | #3506.55c33ada | BLOCKED, a plain error: `deep-gpu run --planted dof_reads_shared_before_write` answers bad_input |
+| ac3-hashes-1637, -468, -419, -971.test.mjs | #3506.55c33ada | BLOCKED, a plain error: the export's target/debug holds no deep-gpu or deep-show. The base is its own merge base; a test of behaviour that must not change, given one side |
+| ac4-estimate.test.mjs, first test | #3506.39b8e6ca | FAIL at its assertion (`estimateProblems`): the estimate falls by 0 B, not by 154,414,080 B |
+| ac4-estimate.test.mjs, second test | #3506.39b8e6ca | BLOCKED, a plain error: the copy with `estimate_counts_occluders_depth` set doesn't compile |
+| ac5-unedited.test.mjs | #3506.25e79c7f | PASS: nothing under tests/acceptance/ that the base holds differs |
+
+## What was checked without a test grant
+
+- `node --check` on every module; each module loads, and `drive.mjs` throws BLOCKED inside a vitest worker.
+- Every judge on good and planted inputs (21 checks in a scratch script, not kept): a listing shaped as #3031's
+  README gives the base's targets fails `oneDepthProblems` with three findings, the first naming
+  `scene3d occluders' depth`, and `plantedDepthProblems` passes it; a listing with one depth a view and one resolved
+  image (under `scene3d resolved` or an old label) passes, one with no resolved image or a second 4-sample depth
+  under another label fails, naming it; 215 MB less passes and 214,999,999 B fails; the estimate falling by exactly
+  20 B a pixel passes, by 0, by the view's 16 alone, or by 1,000 B more fails naming 154,414,080 B; a listing with
+  depth of field off is INVALID.
+- `mergeBase` on the export: taken (its 2,155 program files match 4471593fb's blob IDs, in 1.5 s); an added file
+  under crates/ and one byte changed in a crate's file are each refused, BLOCKED, naming the file; unset is BLOCKED.
+- The reader's copies, as `readerSources` writes them: against the export's crates, and with each planted field set
+  in the reader's two `Planted::default()` and its `held::of(scene)`.
+- Builds, each under `node scripts/throttle.mjs build`, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 (cargo 1.99.1,
+  Node 24.22.0): the reader in release, `spikes/3031/target/release/spike-3031` (19 min 26 s); its copy against the
+  export, `spike-3031-base` (4 min 44 s, the registry's crates shared); `cargo build --locked --bin deep-gpu`, debug.
+  The planted copies were not built: at the base they can only fail to compile.
+- `node scripts/public-text.mjs`: passes. `node scripts/repo-rules.mjs`: fails only on `deps`, naming the carried
+  reader's spikes/3031/Cargo.toml dependencies, which #3031's own entry in scripts/repo-rules.json lists (not carried:
+  it isn't part of the listing); no rule names a file of this suite.
+
+Not checked: any listing, byte count, estimate or hash read from the device, so nothing here says what the reader
+lists on this Mac at the base, how long a 300-frame listing takes, or whether `view3d` with `capture: "every"` gives
+each frame a `pixel_hash` as the base's code reads.

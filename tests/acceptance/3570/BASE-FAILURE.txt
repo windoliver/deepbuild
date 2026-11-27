@@ -1,0 +1,47 @@
+# The suite on the base, 2daec1c4b501caa600f6d8c3a400f4ca623f8945, with nothing but these files added:
+# NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3570 --no-file-parallelism
+# --testTimeout=600000 --hookTimeout=180000 --reporter=verbose. macOS 27.2, node v24.22.2, 18 cores, load average 94
+# as it began and 96 as it ended. The packages are the base's own build (npm run build --workspaces) and the debug
+# deep-hook, deep-canvas-render and deep-show the base's own sources' (README, Run them). No timed grant was held; a
+# test grant was asked for first and none came within 60 minutes, so the run took none (it starts 10 hubs and reads one
+# list each). An earlier run of the same files, before the file server answered byte ranges, read the same 16 failures.
+# <repo> is the checkout, <tmp> a temp folder of a test.
+#
+# Each of the 16 tests fails at the same named assertion, the first of its test, before any fixture is made or
+# fetched: a hub starts, `deep install packages/jobs/import` loads the base's plug-in, and deep_job's list of the kind
+# `import` holds lottie-import@1.0.0 and urdf-import@1.0.0 and no tool whose name starts `table`. None fails at its
+# setup or a timeout. That is the work: the base has no table import.
+#
+# Test Files  9 failed (9); Tests  16 failed (16); Duration 28.78 s
+
+FAILED  AC4 #3570.c30fc78d  ac4-workbook.test.ts > the named sheet's 5 rows come in, B6 as its stored 250 with formula_cells 1; with no stored value B6 is missing
+FAILED  AC4 #3570.c30fc78d  ac4-workbook.test.ts > planted evaluates_formulas: runs-as-is qualifies and is listed; the reader that evaluates the formula fails the kind's qualification naming the cell, and isn't listed
+FAILED  AC2 #3570.dabc4318  ac2-zip-member.test.ts > the county file as the zip's second member imports to the plain file's table hash; naming the first member writes its table, its path, hash and size in the receipt
+FAILED  AC2 #3570.dabc4318  ac2-zip-member.test.ts > planted takes_first_member: runs-as-is qualifies and is listed; the reader that takes the first member whatever member says fails the kind's qualification and isn't listed
+FAILED  AC5 #3570.9251b800  ac5-missing.test.ts > (D) listed under missing is missing and counted 1 for pop; unlisted, the import is refused naming the row and pop
+FAILED  AC5 #3570.9251b800  ac5-missing.test.ts > planted reads_marker_as_zero: runs-as-is qualifies and is listed; the reader that writes 0 for the marker fails the kind's qualification and isn't listed
+FAILED  AC6 #3570.39c1c79a  ac6-group.test.ts > 1,234 is refused in a plain i64 column, naming the row and column, and reads 1234 under group ","
+FAILED  AC8 #3570.112c972a  ac8-trace.test.ts > one machine: imports the fetched file to a table of one row
+FAILED  AC8 #3570.112c972a  ac8-trace.test.ts > the label passes honest numbers in a document that binds a reading, its trace naming the fetched file's URL and fetch time
+FAILED  AC8 #3570.112c972a  ac8-trace.test.ts > two machines, first leg: the Mac pair, a second hub in a clean home, writes a byte-identical table
+FAILED  AC8 #3570.112c972a  ac8-trace.test.ts > two machines: this Mac and a Linux aarch64 host write byte-identical tables
+FAILED  AC1 #3570.d751be37  ac1-county.test.ts > writes the 3,200 counties in file order as 3 columns, the receipt reads 600,000 read and 3,200 kept, and the supervisor read a peak under 128 MB
+FAILED  AC3 #3570.090eb211  ac3-zip-refusals.test.ts > refuses each, naming it, and writes nothing
+FAILED  AC3 #3570.090eb211  ac3-zip-refusals.test.ts > Scope: a path the archive holds twice is refused by name with nothing written
+FAILED  AC9 #3570.1144aef4  ac9-budget.test.ts > one timed import of the pipe file, judged once
+FAILED  AC7 #3570.df4af9a2  ac7-encoding.test.ts > the name reads André (U+00E9) under latin-1, and under utf-8 the import is refused naming the row
+
+Each one, as vitest prints it (ac1-county.test.ts:18 here; the others at their own first `must(w, …)` or `expect(…)`):
+
+      AssertionError: a hub with the import kind's table tool: expected 'the kind import lists 0 tools whose n…' to be '' // Object.is equality
+
+      - Expected
+      + Received
+
+      + the kind import lists 0 tools whose name starts table, not one (README: The surface under test); its tools: lottie-import@1.0.0, urdf-import@1.0.0
+
+# Not reached on the base, so not run there: the fixtures past the first assertion, the imports, the plants, the check
+# and the timing. A probe at the base (a scratch test, not kept, that skipped the tool check) installed a data pack and
+# fetched labels.csv and the 42 MB county.txt through the Source block after one yes each, in 8.5 s; it found that
+# `deep install` of a data pack needs the debug deep-show built, and that the Source block reads a large file by byte
+# ranges, which the suite's file server now answers.

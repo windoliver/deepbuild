@@ -1,0 +1,13 @@
+{
+  "crates/deep-gpu-layer/src/session3.rs": [
+    {
+      "find": [
+        "                    | Planted::ClaimsMsaaOverSingleSample",
+        "                    | Planted::EnvironmentTextureRace"
+      ],
+      "wrong": [
+        "                    | Planted::ClaimsMsaaOverSingleSample"
+      ]
+    }
+  ]
+}
