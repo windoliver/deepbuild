@@ -1,0 +1,222 @@
+#3502 acceptance tests at the base, 2edb19ff4 (origin/main), before any implementation.
+Run on 2026-11-26 on a Mac17,10 (Apple M5 Max, 18 cores), macOS 27.2, Node 24.22.0, rustc 1.99.1, with the base's
+packages built (npm run build --workspaces) and the base's own debug binaries built by the caller:
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-show
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-drive
+The machine was shared: its 1-minute load stood between 18 and 180 on 18 cores, and its thermal state read "fair".
+
+HOW IT WAS RUN, AND WHAT IS UNRUN
+
+1. Through the throttle, as the lanes run a suite that is alone, no file ran. The first request,
+     node scripts/throttle.mjs test --wait 60 -- node --test tests/acceptance/3502/pin.test.mjs
+   waited its 60 minutes (18:25 to 19:25) and ended
+     INCONCLUSIVE no grant: no test grant came within 60 min
+   with exit 3. It was not asked again. So every file below is unrun under a grant.
+2. The tests that start no cargo and no workspace binary were then run once each, directly, as
+     CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node --test tests/acceptance/3502/<file>
+   Those are the results marked "direct" below. No run started cargo.
+3. The tests that drive the base's built deep-show and deep-drive were not run as test files. Their statements were
+   run as probes on those binaries, through the suite's own helpers, with DEEP_BIN_DIR naming the checkout's
+   target/debug so that nothing was built. Those are the results marked "probe" below. A probe is a reading of the
+   base, not a test run.
+4. Never run, here or anywhere: build.test.mjs's cargo build, rows.test.mjs's run of every row's test, and the two
+   tests that judge a time on a release build (each stops before it builds, as below).
+
+EACH TEST AT THE BASE
+
+pin.test.mjs (direct): 2 of 2 fail, for the criterion's reason.
+  ✖ AC1 #3502.46a47d8c vendor/gpui-pre, vendor/gpui-pre-apple and vendor/gpui-pre-macos are one release at or past
+    0.3.13, and Cargo.lock, the manifests, the toolkit's commit and .cargo/config.toml agree with it
+      AssertionError: Expected values to be strictly deep-equal:
+      + [
+      +   'vendor/gpui-pre is 0.3.9, before 0.3.13',
+      +   'vendor/gpui-pre-apple is 0.3.9, before 0.3.13',
+      +   'vendor/gpui-pre-macos is 0.3.9, before 0.3.13'
+      + ]
+      - []
+  ✖ AC1 #3502.46a47d8c node scripts/vendor-rebase.mjs check passes on the new pin, with a line for every row
+      Error: this tree isn't on the new pin, one release at or past 0.3.13:
+      vendor/gpui-pre is 0.3.9, before 0.3.13
+      vendor/gpui-pre-apple is 0.3.9, before 0.3.13
+      vendor/gpui-pre-macos is 0.3.9, before 0.3.13
+    It stops before the lint runs. The lint itself passes at the base: #1551's own scope test, which runs it, read
+    PASS through this suite's runner (below).
+
+build.test.mjs (direct): 1 of 1 fails, before cargo starts.
+  ✖ AC1 #3502.46a47d8c the workspace builds on the new pin: cargo build --workspace --locked
+      Error: this tree isn't on the new pin, one release at or past 0.3.13: (the three lines above)
+
+rows.test.mjs (direct): 1 fails, 1 passes.
+  ✖ AC1 #3502.46a47d8c every remaining row's test passes on the new pin, each row with its own outcome; a row whose
+    test can't run reads BLOCKED, naming it, never PASS
+      Error: this tree isn't on the new pin, one release at or past 0.3.13: (the three lines above)
+    It stops before any row's test starts.
+  ✔ AC2 #3502.e03d1e0d each row that was removed: its test still passes without our change
+    It passes at the base and should: the base is its own merge base, so no row was removed ("no row of the merge
+    base was removed") and no test is run. Its wrong program is the planted removal, in rows-planted.test.mjs.
+
+rows-planted.test.mjs (direct): 3 of 3 pass.
+  ✔ AC1 #3502.46a47d8c a row whose test passes reads PASS, one whose test fails FAIL, and one whose test can't run
+    reads BLOCKED, naming the row, never PASS
+    It passes on any tree and should: it holds the runner and the judge to a planted table. Of its ten rows only the
+    three whose tests pass read PASS; the others read FAIL, BLOCKED or INCONCLUSIVE, each named.
+  ✔ AC2 #3502.e03d1e0d each row that was removed names the upstream change that meets its removal condition, and no
+    row is still carried whose condition the pin has met
+    It passes at the base and should: no row was removed, and at 0.3.9 no row's own pin condition is met (#1550's
+    row asks for 0.3.11 or later).
+  ✔ AC2 #3502.e03d1e0d a planted removal of a row whose condition the release doesn't meet fails that row's test,
+    naming it; a removal the release meets passes
+    It passes on any tree and should: the planted tree fails the check with
+      FAIL row #11 The greeting names who it greets: its test tests/carried.test.mjs › the greeting names who it
+      greets fails
+    and the same check passes the removal the stub release meets.
+
+pictures.test.mjs: 1 BLOCKED (direct, no variable); both tests' statements pass as probes.
+  ✖ AC3 #3502.83b16d90 the replica's pictures of every shipped page at the head and at the merge base are equal, in
+    light and dark at both windows, or each differing picture is listed with its cause
+      (direct, DEEP_3502_BASE_DRIVE unset)
+      Error: BLOCKED: DEEP_3502_BASE_DRIVE is unset: it carries the path of the merge base's own deep-drive, built
+      there with no change (README: The merge base)
+      (probe, DEEP_3502_BASE_DRIVE naming a copy of the base's own target/debug/deep-drive, 18 s)
+      20 pictures a side over deepbuild/needs-you, deepbuild/home, deepbuild/session, deepbuild/welcome,
+      deepbuild/agents; 0 differ; the judge passes
+    It passes at the base and should: behavior that must not change, the base against itself.
+  ✔ AC3 #3502.83b16d90 the comparison is no empty one: a picture taken twice is equal, it shows the page, and a
+    planted change of one pixel is listed, naming the picture   (probe, 3 s)
+      3024 × 1964: the picture deepbuild/needs-you reference light differs between the head and the merge base (1
+      of 5939136 pixels differ, the first at 1512, 982) and docs/evidence/3502/pictures.json doesn't list it with
+      its cause
+    It passes on any tree and should: it is the proof that the comparison can fail.
+
+still.test.mjs: 1 fails (direct); the planted test's statements pass as a probe.
+  ✖ AC4 #3502.e758e239 on the new pin, the still board, once settled in the app's shown window, runs 0
+    request-frame callbacks over 60 s   (direct)
+      Error: this tree isn't on the new pin, one release at or past 0.3.13: (the three lines above)
+    It stops before a window opens. The same statements less the pin's check, as a probe (62 s): the base's window
+    was shown for the whole minute (shown_ms 61384.76) and ran request_frames 0 at 120 Hz, which is #1551's reading
+    of the old pin and the reason this test asks for the new one first.
+  ✔ AC4 #3502.e758e239 a planted link that never pauses (link_never_stops) fails the same check, naming the count
+      (probe, 63 s) window shown (shown_ms 61037.66), request_frames 7195:
+      the still window ran 7195 request-frame callbacks in 60 s
+    It passes at the base and should: the plant is the base's own (#1551's), and the check fails it by its count.
+
+cap.test.mjs (direct): 1 of 1 fails, for the criterion's reason, naming the count.
+  ✖ AC5 #3502.0a92cc25 #3441's tick lists, played through the pin's own cap with no patch of ours for it: under the
+    thermal cap 600 ticks exactly 1/60 s apart present more than 300 frames, and the counts are recorded
+      AssertionError: under the thermal cap, thermal cap, 60 Hz, 600 ticks exactly 1/60 s apart presented 300 frames,
+      not more than 300 (the rule played is the threshold vendor/gpui-pre 0.3.9 holds)
+    The assertion before it passed: the cap's lines in vendor/gpui-pre equal gpui-pre 0.3.9's. The run printed the
+    base's count for each of the 27 lists; the exact ones are 300 (thermal, 60 Hz), 200 (thermal, 120 Hz), 300 and
+    150 (inactive), 3000, 30000 and 20000 (the longer runs), as #3441's table has the rule on main.
+
+withdrawals.test.mjs: no test passes; the first fails for a missing wake, not for the criterion's reason.
+  ✖ AC6 #3502.350a78c3 under a planted Notification Center whose calls take 2 s, 20 withdrawals in a row keep every
+    one of its calls off the UI thread   (probe of its statements, 2 s)
+      Error: deep-show live refused the scenario: {"ok":false,"code":"bad_input"}
+    The base's deep-show has no `withdrawals` wake, so this is a failure for a surface that isn't there. That the
+    merge base waits on its UI thread is read only through DEEP_3502_BASE_SHOW (the third test). The planted center
+    itself was read under the base's deep-show (below).
+  ✖ AC6 #3502.350a78c3 and they leave an input's frame on screen within 2 frames, on a reference Mac in a release
+    build   (direct; it stops before it builds)
+      Error: INCONCLUSIVE: 2 frames is a time, and a reading, not a budget result: off the reference Macs (Mac15,7
+      (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal
+      state nominal): thermal state is "fair", not "nominal"; load 30.7958984375 at a run's start or end is above
+      the 18 cores
+  ✖ AC6 #3502.350a78c3 the merge base waits on its UI thread and fails the same check, naming the call   (direct)
+      Error: BLOCKED: DEEP_3502_BASE_SHOW is unset: it carries the path of a deep-show built from the merge base
+      with the withdrawals wake added and nothing else (README: The merge base)
+
+animation.test.mjs (direct): 1 INCONCLUSIVE before it builds, 1 fails.
+  ✖ AC7 #3502.f53607ef on a reference Mac, a 300-frame animation in the app's focused window presents at the
+    display's rate, and no frame waits more than 4 ms for its drawable
+      Error: INCONCLUSIVE: a reading, not a budget result: off the reference Macs (…): thermal state is "fair", not
+      "nominal"; load 30.7958984375 at a run's start or end is above the 18 cores
+  ✖ AC7 #3502.f53607ef the merge base's reading is recorded beside the head's, both taken on one reference Mac
+      AssertionError: + [ 'no reading is recorded: no docs/evidence/3502/frames.json' ]  - []
+
+budgets.test.mjs (direct): 1 of 1 fails, for the criterion's reason.
+  ✖ AC8 #3502.160644ed terminal-60hz, canvas-idle, app-select-700 and deep-list-700 each name this criterion for the
+    budget window, and each is the merge base's task, unmoved
+      AssertionError: the task terminal-60hz of benchmarks/budgets.json names #3502.160644ed in its criteria, so the
+      budget window's record of it proves the criterion: it names []
+    The assertions before it passed: the budgets are valid against the merge base's, and the task is unmoved.
+
+trial.test.mjs (direct): 1 fails, 1 passes.
+  ✖ AC9 #3502.16dea0e8 the Rebase trial names the versions moved to, as the tree holds them, a result for each suite
+    it lists, and the outcome
+      AssertionError: Expected values to be strictly deep-equal:
+      + [
+      +   'the record says gpui-pre moved to 0.3.11, and the tree holds 0.3.9',
+      +   'the record says gpui-pre-apple moved to 0.3.11, and the tree holds 0.3.9',
+      +   "the record's Tried line names no version gpui-pre-macos moved to",
+      +   'the record says gpui-kit moved to 0.9.0, and the tree holds 0.8.0',
+      +   'the suite #377 reads "not run": a trial with a suite unrun leaves this open',
+      +   (the same line for #390, #391, #140 and #358)
+      +   'the record lists no result for the suite #1480, whose row #1480 The mask rect write: … the moved trees
+      +    still carry: that suite is unrun as far as the record says',
+      +   (the same line for #1546, #1482, #124, #1427, #1550, #1434, #2471, #177, #1551, #3232, #1843, #542, #1431,
+      +    #1489 and #499: 16 in all)
+      + ]
+      - []
+    The base's record is November 6's trial, which left the pin.
+  ✔ AC9 #3502.16dea0e8 a trial with a suite unrun leaves this open: a suite not run, a carried row's suite unlisted,
+    a version the tree doesn't hold or no outcome each fail, naming it
+    It passes on any tree and should: it holds the judge to made-up records.
+
+Of the 21 tests: 8 fail at their own assertion for a reason their criterion names (the trees are 0.3.9, five times;
+the merge base presents 300; no task names the criterion; the trial tried 0.3.11 and ran no suite), 1 fails for a
+record that isn't there, 1 fails for a surface that isn't there (the withdrawals wake), 3 read INCONCLUSIVE or
+BLOCKED where they should, and 7 pass where they should (the planted checks, the comparison's own proof, and two
+that have nothing to judge on a base that removed no row); the last, the comparison of pictures, reads BLOCKED
+without the merge base's build and passes with the base's own.
+
+WHAT THE BASE'S BINARIES ANSWERED, AND WHAT IT CHANGED IN THE SUITE
+
+deep-show live, the still board (show.mjs `scenario(stillBoard(), …)`): the call is presented (`"outcome":
+"presented"`, created card, label, q1, q2, q3). The answer's `live` holds display, frames, wakeups, tree, after,
+request_frames, process and window; `display` is `{"uuid", "refresh_hz": 120, "max_refresh_hz": 120}`. A wake the
+base doesn't know answers `{"ok":false,"code":"bad_input"}`. Four short watches (1 to 5 s) from the settled moment
+read request_frames 2, 0, 0 and 2; the 60 s watch read 0.
+
+deep-show live, the film (`scenario(film(), {"watch_from": "first_frame", …})`): 377 frames in 4 s and 1015 in 9 s
+at 120 Hz, each `{frame_seq, rev, predicted_ns, presented_ns, refresh_ns: 8333333}`. The answer has no `window`: the
+base tracks one only for a run that settles. In the 9 s run most gaps over 1.5 refreshes came in the first 2.8 s
+(one of 26 refreshes at 137 ms, one of 7.5 at 1154 ms) and a few later, near 7.5 s, in a debug build on the loaded
+machine.
+  Changed: the reading takes the first 300 frames presented once the film's first pass (4 s, its own
+  transport.span) is over, and the watch is 19 s. The README names `window` in a run watched from `first_frame` as
+  new. At that watch the base presented 2249 frames. As it answers, the reading stops at "the answer has no
+  live.window.state"; given a made-up `window` and a wait of 0 on each frame, neither of which the base answers, it
+  took its 300 frames over 303 refreshes, in the debug build on the loaded machine.
+
+deep-drive (pictures.mjs): `{"ready":true}`, then for a launch `{"replica", "window": {"size": [960, 640], "scale":
+2}, "locale", "frames", "ok": true, "t": 0}` and for a screenshot `{"sha256", "path", "w": 1920, "h": 1280, "ok":
+true, "t": 0}`; the reference window's picture is 3024 × 1964. Its refusal of an unknown center lists
+["deepbuild/needs-you","deepbuild/home","deepbuild/session","deepbuild/welcome","deepbuild/agents"]. Two takes of
+all 20 pictures from one build differed nowhere.
+  Changed: launched as a center alone, `deepbuild/welcome` drew Needs you's picture, byte for byte, and its
+  snapshot listed no welcome view. With `"setup": "unfinished"` it draws the first-launch page (views
+  deepbuild/sidebar and deepbuild/welcome). pictures.mjs now launches that center so, and gives every replica of
+  a run the same empty home folder. At the base `deepbuild/needs-you` and `deepbuild/home` still draw one picture
+  over this record; both are taken and compared.
+
+The rows' runner (rows.mjs), on real tests of the base that build nothing:
+  - node --test: the two #2359 rows (`… › AC1 #2359.74e0b9bf: locked rsa on its affected path`, and rkyv) first read
+    BLOCKED, "ran no test by that name": node's TAP writes a `#` of a name as `\#`.
+    Changed: rows.mjs reads a TAP name back as the file wrote it, and the planted table has a row named with its ID.
+    Both rows then read PASS.
+  - vitest: `tests/acceptance/3440/size.test.ts › ${AC.size} …` read PASS and a name the file doesn't hold BLOCKED;
+    `tests/acceptance/1551/vendored.test.ts › ${C1} ${C2} scope: … › ${C1} ${C2} the build takes gpui-pre-macos
+    from ${TREE}, …` read PASS in 25 s. That test runs `node scripts/vendor-rebase.mjs check`, so the lint passes at
+    the base. `vitest list` prints a name as its source writes it (`${C1} …`), which is how the table's cells hold
+    them; a run reports the name with its constants filled in, and the runner's pattern takes either.
+
+The planted Notification Center (planted-center.m) under the base's deep-show: the run exited 0 and answered its
+`input` wake with a frame and its presented time, and the log held
+  {"call":"currentNotificationCenter","phase":"planted","main_thread":true,"ns":…}
+and no call: the base's deep-show never withdraws. Under a bare Objective-C host the same library answered
+`bundleIdentifier dev.deepbuild.acceptance-3502`, class DeepPlantedCenter (a kind of UNUserNotificationCenter), and
+2.005 s, 2.005 s and 2.002 s for the two withdrawal calls on the main thread and one on another. It has not met
+GPUI's own calls: nothing at the base makes one from deep-show.
+
+The temporary folders (deep-3502-*) were gone after the runs, and the folder holds no cache.
