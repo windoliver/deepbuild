@@ -43,6 +43,7 @@ export class Workspaces {
   private readonly tasks = new Map<string, string>();
   /** The workspace a session outside any repo landed in, so its next task lands there too. */
   private readonly sessions = new Map<string, string>();
+  private readonly placing = new Map<string, Promise<Space>>();
   private readonly kept = new Set<string>();
   /** Each checkout's workspace, by the git it shares, or null for one that is no workspace's. */
   private readonly checkouts = new Map<string, string | null>();
@@ -259,11 +260,16 @@ export class Workspaces {
   async land(t: { session: string; cwd: string; task_ref: string; text: string; item?: { title?: string } }): Promise<string | undefined> {
     if (repoOf(t.cwd) || !existsSync(t.cwd) || !statSync(t.cwd).isDirectory()) return undefined;
     const known = this.sessions.get(t.session);
-    const topic = t.item?.title ?? t.text;
-    const at = known ? this.named(known).folder : this.ownFolder(topic);
-    // Said before any git runs, so the prompt's own reply carries it, or if the task lands after that reply the next prompt that reaches the model (#2669): the session isn't in the folder its work belongs in.
-    if (!known) this.o.told(t.session, t.cwd, `DeepBuild: this session is outside any repo, so this task's home is the workspace at ${at}. Keep what you build there, as code where you can; your work there is committed for you at each stop.`);
-    const space = known ? this.named(known) : await this.make(topic, undefined, t.task_ref, at);
+    let placing = known ? undefined : this.placing.get(t.session);
+    if (!known && !placing) {
+      const topic = t.item?.title ?? t.text;
+      const at = this.ownFolder(topic);
+      // Said before any git runs, so the prompt's own reply carries it, or if the task lands after that reply the next prompt that reaches the model (#2669): the session isn't in the folder its work belongs in.
+      this.o.told(t.session, t.cwd, `DeepBuild: this session is outside any repo, so this task's home is the workspace at ${at}. Keep what you build there, as code where you can; your work there is committed for you at each stop.`);
+      placing = this.make(topic, undefined, t.task_ref, at);
+      this.placing.set(t.session, placing);
+    }
+    const space = known ? this.named(known) : await placing!.finally(() => this.placing.delete(t.session));
     this.sessions.set(t.session, space.id);
     this.tasks.set(t.task_ref, space.id);
     this.o.adopted(t.session, space.id);
