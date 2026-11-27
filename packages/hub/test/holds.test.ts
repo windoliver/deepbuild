@@ -197,10 +197,8 @@ describe('a held push (#1156)', () => {
     expect(held ?? 'let through', "the delete waits on an ask though a Codex subagent started in the proceed's turn").toContain('ask:');
     const raised = (await record.raw("SELECT question FROM asks WHERE kind = 'authority'")) as { question: string }[];
     expect(raised.map((a) => a.question), 'one ask, naming the proceed').toEqual([expect.stringContaining('the turn a "proceed" started for "Clean up the release?"')]);
-    // Claude Code's subagent prompt (a background subagent's report) does start a turn, as a prompt you type does.
     await prompt('subagent', 'claude-code');
     expect(await remove(), "past Claude Code's subagent report no proceed holds the delete").toBeUndefined();
-    // A Codex prompt you type ends the proceed's turn too.
     await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Tag it?', rule: 'r' } });
     await prompt('person');
     expect(await remove(), 'past your Codex prompt no proceed holds the delete').toBeUndefined();

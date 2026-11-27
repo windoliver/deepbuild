@@ -152,8 +152,7 @@ export class Holds {
 
   /**
    * The proceed whose turn the session is in, or undefined: the newest of its proceeds, stops and prompts is a proceed.
-   * A subagent's stop, which names its child, ends no turn of the session's (#1836), as in the record's projections,
-   * and a Codex subagent's prompt starts none (#2764), as the stop's judging reads it.
+   * A subagent's stop, which names its child, ends no turn of the session's (#1836), as in the record's projections.
    */
   private async proceeding(session: string): Promise<{ id: string; question: string; rule: string } | undefined> {
     const child = this.o.plant === 'proceed-ends-at-child-stop' ? '' : ` AND NOT (kind = 'agent.stop' AND json_extract(data, '$.child') IS NOT NULL)`;
