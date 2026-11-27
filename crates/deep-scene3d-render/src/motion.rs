@@ -16,7 +16,6 @@ const SHADER: &str = include_str!("motion.wgsl");
 pub const MOTION_PASS: &str = "scene3d.motion";
 const VELOCITY: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 const TILES: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
-const RESOLVED: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 deep_gpu::paired! { uniform: "motion.wgsl", U;
 #[repr(C)]
@@ -105,8 +104,6 @@ struct Targets {
     depth: wgpu::TextureView,
     tile_max: wgpu::TextureView,
     near: wgpu::TextureView,
-    resolved: wgpu::Texture,
-    resolved_view: wgpu::TextureView,
 }
 
 /// The core's velocity target's format (#431): each pixel's travel in px, two half floats.
@@ -192,7 +189,7 @@ pub struct MotionPass {
     /// with the velocity and linear targets they bind.
     blur: Option<Held>,
     binds: Option<(
-        [wgpu::TextureView; 2],
+        [wgpu::TextureView; 3],
         wgpu::BindGroup,
         [wgpu::BindGroup; 3],
     )>,
@@ -569,6 +566,7 @@ impl MotionPass {
         scene: &Scene,
         meshes: &deep_canvas::gauge::Kept<Shape, Mesh>,
         linear: &wgpu::TextureView,
+        resolved: &(wgpu::Texture, wgpu::TextureView),
         size: [u32; 2],
     ) -> Option<Frame> {
         // A frame that doesn't blur lets go of the blur's buffers and of the targets its bind
@@ -600,13 +598,6 @@ impl MotionPass {
         {
             use wgpu::TextureUsages as T;
             let view = |t: &wgpu::Texture| t.create_view(&Default::default());
-            let resolved = texture(
-                d,
-                "scene3d.motion resolved",
-                size,
-                RESOLVED,
-                T::STORAGE_BINDING | T::COPY_SRC,
-            );
             self.targets = Some(Targets {
                 size,
                 tiles,
@@ -638,16 +629,14 @@ impl MotionPass {
                     TILES,
                     T::STORAGE_BINDING | T::TEXTURE_BINDING,
                 )),
-                resolved_view: view(&resolved),
-                resolved,
             });
         }
         let tg = self.targets.as_ref().expect("made above");
         let (velocity_view, tile_view, near_view, resolved_view) =
-            (&tg.velocity, &tg.tile_max, &tg.near, &tg.resolved_view);
-        // The targets are made together, so a frame whose velocity and linear targets hold
-        // binds as the last one did.
-        let bound = [velocity_view, linear];
+            (&tg.velocity, &tg.tile_max, &tg.near, &resolved.1);
+        // The targets are made together, so a frame whose velocity, linear and resolved targets
+        // hold binds as the last one did.
+        let bound = [velocity_view, linear, resolved_view];
         let (draw_bind, binds) = match &self.binds {
             Some((held, draw, binds)) if held.iter().eq(bound) => (draw.clone(), binds.clone()),
             _ => {
@@ -708,7 +697,7 @@ impl MotionPass {
             binds,
             velocity: velocity_view.clone(),
             depth: tg.depth.clone(),
-            resolved: tg.resolved.clone(),
+            resolved: resolved.0.clone(),
             tiles,
             size,
         })
