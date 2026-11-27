@@ -1606,6 +1606,10 @@ timed.push('tests/acceptance/3257/ac7-budget.test.ts');
 // child's peak on the reference Mac.
 timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
 
+// #1867's folder (blind) runs alone by its lane.json: each file starts hubs of its own. Two of its files read a
+// put-back against the criterion's second, and read INCONCLUSIVE past it while the load is over the cores.
+timed.push('tests/acceptance/1867/codex-watch.test.ts', 'tests/acceptance/1867/claude-json.test.ts');
+
 // #2750's folder (blind) runs alone by its lane.json: each test starts real hubs, a forge on 127.0.0.1 and git
 // repositories. budgets.test.ts times a rebuild from the event log on the reference Mac.
 timed.push('tests/acceptance/2750/budgets.test.ts');
@@ -1627,6 +1631,21 @@ timed.push('tests/acceptance/3467/players.test.ts');
 Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial'], ['3238', 'no-grant'], ['3240', 'line'], ['3334', 'stall'], ['3334', 'far-stalled'], ['3567', 'grant'], ['2820', 'failures']]
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3549/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3549/')));
+
+// #3507's folder (blind) runs alone by its lane.json: its files build deep-show and deep-gpu and draw on Metal.
+// ac3-timing.test.mjs times the geometry pass against the merge base's on the reference Mac, where a pass changed.
+timed.push('tests/acceptance/3507/ac3-timing.test.mjs');
+
+// #3507's criterion 2 was reworded by the owner (2026-11-26: the class fixtures count from 1 to 2 a covered pixel).
+// ac2-classes.test.mjs, written for the criterion as it was, is kept as written, by hand only; its blind redraft
+// runs in its place, alone: it draws on Metal under the machine's GPU lease.
+Object.assign(redrafted, { 'tests/acceptance/3507/ac2-classes.test.mjs': 'tests/acceptance/3507-redraft-ac2/' });
+byHand.push('tests/acceptance/3507/ac2-classes.test.mjs');
+alone.push('tests/acceptance/3507-redraft-ac2/');
+
+// #3617's folder (blind) runs alone by its lane.json: each file builds deep-gpu and runs GPU surface frames at 1936 x 1584.
+// ac2-onepass.test.ts judges the five-run draw-and-finish p95 on a reference Mac.
+timed.push('tests/acceptance/3617/ac2-onepass.test.ts');
 
 // #3402: #1352's section, routes and taste-call files find the section as the one heading holding its words and read
 // Decided rows under ### Decided alone, so they fail since #3138. Kept as written, by hand only; their blind redraft,

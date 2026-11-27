@@ -1,0 +1,12 @@
+{
+  "crates/deep-hook/src/main.rs": [
+    {
+      "find": [
+        "        Ok(ack) if ack.ack == id => ack,"
+      ],
+      "wrong": [
+        "        Ok(ack) if !id.is_empty() => ack,"
+      ]
+    }
+  ]
+}

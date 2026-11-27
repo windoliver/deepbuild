@@ -1,0 +1,28 @@
+{
+  "scene": "one-pass",
+  "format": "bgra8_premultiplied",
+  "color_space": "srgb",
+  "size": [1936, 1584],
+  "frames": 300,
+  "resize": null,
+  "device_loss_at": null,
+  "window": [2000, 1648],
+  "view": [32, 32],
+  "page": {
+    "cell": 32,
+    "colors": [
+      [120, 140, 150],
+      [100, 80, 60]
+    ]
+  },
+  "background": [0, 0, 0, 255],
+  "regions": [
+    {
+      "name": "fill",
+      "rect": [0, 0, null, null],
+      "fill": {
+        "color": [160, 90, 40, 255]
+      }
+    }
+  ]
+}
