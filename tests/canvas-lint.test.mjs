@@ -87,6 +87,24 @@ function lint(t, lib, options) {
   return { status: run.status, output: `${run.stdout}\n${run.stderr}` };
 }
 
+test('two crates with findings are both reported, on one build job and again once the first run has built (#3723)', (t) => {
+  const cast = 'fn same(x: f64) -> f64 {\n    x\n}\n\npub fn code() -> usize {\n    let f: fn(f64) -> f64 = same;\n    f as usize // plant: fn pointer cast\n}\n';
+  const root = workspace(`${TWIN}\n${cast}`);
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, 'deep-canvas-second', 'src'), { recursive: true });
+  writeFileSync(join(root, 'deep-canvas-second', 'Cargo.toml'), '[package]\nname = "deep-canvas-second"\nversion = "0.0.0"\nedition = "2021"\npublish = false\n');
+  writeFileSync(join(root, 'deep-canvas-second', 'src', 'lib.rs'), cast);
+  writeFileSync(join(root, 'Cargo.toml'), '[workspace]\nmembers = ["deep-canvas-planted", "deep-canvas-second"]\nexclude = ["stubs/libm"]\nresolver = "2"\n');
+  const findings = () => {
+    const run = spawnSync(process.execPath, [lintScript, '--root', root], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, CARGO_BUILD_JOBS: '1' } });
+    assert.equal(run.status, 1, `${run.stdout}\n${run.stderr}`);
+    return run.stdout.split('\n').filter((line) => line.startsWith('FAIL canvas-lint: '));
+  };
+  const unbuilt = findings();
+  for (const crate of ['deep-canvas-planted', 'deep-canvas-second']) assert.ok(unbuilt.some((line) => new RegExp(`^FAIL canvas-lint: ${crate}/src/lib\\.rs:\\d+:\\d+ .*fn_to_numeric_cast_any`).test(line)), `${crate}:\n${unbuilt.join('\n')}`);
+  assert.deepEqual(findings(), unbuilt);
+});
+
 test('a direct libm call outside src/ops.rs fails the canvas lint naming the file and line', (t) => {
   const line = PLANTED.split('\n').findIndex((text) => text.includes('// plant: direct libm')) + 1;
   const { status, output } = lint(t, PLANTED);
