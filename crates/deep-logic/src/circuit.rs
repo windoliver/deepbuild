@@ -7,7 +7,7 @@
 //! `circuit.range`. The rules read the arrays a library writes at every step with the item's own
 //! topology, ratings, inputs and the pack's constants, never a library's verdict, so they hold any
 //! library, a planted one included. An item is circuit@2's when its program imports
-//! `lib:circuit@2` or links a library that implements it; circuit@1's bytes and rules are as #1181
+//! `lib:circuit@2` or links a library that implements it or exports its builders; circuit@1's bytes and rules are as #1181
 //! built them.
 
 use serde_json::{json, Map, Value};

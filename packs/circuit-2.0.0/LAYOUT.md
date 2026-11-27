@@ -4,8 +4,8 @@ Two layouts a circuit@2 library, a piece and the logic module agree on (#3604): 
 makes from a logic item's `circuit` and copies to the item's asset 0; and **`circuit.state@2`**, the state a library
 keeps from the address `s` its caller gives the builders and `solve`. Every number is little-endian; every address is
 an i32 into the caller's memory. Volts, amperes, watts, ohms, joules and seconds are SI; an area is in mm². An item's
-`circuit` is circuit@2's when its program imports `lib:circuit@2` or links a library that implements it; otherwise it
-is circuit@1's, laid out as `packs/circuit-1.0.0/LAYOUT.md` says.
+`circuit` is circuit@2's when its program imports `lib:circuit@2` or links a library that implements it or exports
+`breaker`, `rcd`, `changeover` or `transformer`; otherwise it is circuit@1's, laid out as `packs/circuit-1.0.0/LAYOUT.md` says.
 
 ## The built table
 

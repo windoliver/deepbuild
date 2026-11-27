@@ -886,8 +886,8 @@ pub fn check_in(
             )
         };
         let given = asset(&d.program).ok_or_else(|| missing("program", &d.program))?;
-        // #3604: an item whose program imports circuit@2, or links a library implementing it,
-        // declares its `circuit` under circuit@2.
+        // #3604: an item whose program imports circuit@2, or links a library implementing it or
+        // exporting its builders, declares its `circuit` under circuit@2.
         let circuit2 = crate::interfaces::imported(&given)
             .iter()
             .any(|n| n == "circuit@2");
@@ -919,11 +919,15 @@ pub fn check_in(
             given = links::empty_linking(given);
         }
         let linked = !d.links.is_empty() || planted.linker_adds_linking_section;
+        // A library linked by its own name that claims no interface still reads circuit@2's table
+        // when it exports circuit@2's builders.
         let circuit_major = if circuit2
-            || libraries
-                .iter()
-                .any(|l| l.implements.iter().any(|i| i == "circuit@2"))
-        {
+            || libraries.iter().any(|l| {
+                l.implements.iter().any(|i| i == "circuit@2")
+                    || l.exports.iter().any(|e| {
+                        ["breaker", "rcd", "changeover", "transformer"].contains(&e.as_str())
+                    })
+            }) {
             2
         } else {
             1
