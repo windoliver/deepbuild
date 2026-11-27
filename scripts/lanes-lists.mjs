@@ -1655,9 +1655,5 @@ for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
   byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
 }
 
-// #1828's AC3 runs as its blind redraft, 1828/redraft/: since #2062 a provider row that keeps no digest serves no use
-// that states one, and the first draft's acme/feed keeps none while acme/board states one, so its setup refuses to
-// install on main with or without the fix (tests/acceptance/1828/redraft/DISPUTE.md). update.test.ts is kept as
-// written, by hand only.
 Object.assign(redrafted, { 'tests/acceptance/1828/update.test.ts': 'tests/acceptance/1828/redraft/' });
 byHand.push('tests/acceptance/1828/update.test.ts');
