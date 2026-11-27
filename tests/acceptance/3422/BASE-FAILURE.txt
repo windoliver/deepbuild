@@ -1,0 +1,75 @@
+Acceptance tests for #3422 on the base 35956a44a (origin/main when this suite was written; the ratchet unchanged), run
+on 2026-11-26 with Node v24.22.0 in this checkout, with the suite uncommitted, at a load of about 39:
+
+  node --test 'tests/acceptance/3422/*.test.mjs'
+
+Trimmed to each test's result and each failure's message; node's diff of the two lists and its stack frames are left
+out. No local path appears below. 3 of the 6 tests fail, each at the assertion on the Fix line in assertSaysHow
+(tests/acceptance/3422/helpers.mjs), reached from its own test. 3 pass on the base: the #3422.2c41ea06 tests, which
+compare this checkout's ratchet with the merge base's, and on the base those are one script (README: On the base).
+
+✖ #3422.df5e60b4 a file a line over its ceiling fails the ratchet, and its Fix line says to move one named concept to a file of its own that imports by name; the Fix lines to lower a ceiling and to remove an entry say none of it
+✖ #3422.df5e60b4 a new file over 1,500 lines with no ceiling fails the ratchet, and its Fix line says to move one named concept to a file of its own that imports by name
+✖ #3422.df5e60b4 a file grown with its ceiling raised to match fails the ratchet, and its Fix line says to move one named concept to a file of its own that imports by name
+✔ #3422.2c41ea06 on this checkout the ratchet's findings are the same paths with the same reasons as the merge base's ratchet's, and git status is unchanged
+✔ #3422.2c41ea06 in a scratch repository planted with each kind of finding, the ratchet's findings are the same paths with the same reasons as the merge base's ratchet's; with none planted both pass alike
+✔ #3422.2c41ea06 in a scratch repository whose ceilings file can't be read, the ratchet's finding is the same path with the same reason as the merge base's ratchet's
+ℹ tests 6
+ℹ pass 3
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+✖ #3422.df5e60b4 a file a line over its ceiling fails the ratchet, and its Fix line says to move one named concept to a file of its own that imports by name; the Fix lines to lower a ceiling and to remove an entry say none of it
+  AssertionError [ERR_ASSERTION]: the Fix line for a file over its ceiling doesn't say how, as the issue asks: move one named concept to a file of its own, which imports what it needs by name
+  FAIL size: crates/fixture/src/big.rs: 1601 lines, over its ceiling of 1600
+    Fix: Split or shrink the file to 1600 lines or fewer: a ceiling never rises.
+    actual: [ 'to move', 'one named concept', 'to a file of its own', 'to import', 'by name' ],
+    expected: [],
+
+✖ #3422.df5e60b4 a new file over 1,500 lines with no ceiling fails the ratchet, and its Fix line says to move one named concept to a file of its own that imports by name
+  AssertionError [ERR_ASSERTION]: the Fix line for a file over 1,500 lines with no ceiling doesn't say how, as the issue asks: move one named concept to a file of its own, which imports what it needs by name
+  FAIL size: packages/fixture/src/new.ts: 1501 lines, over 1500 with no ceiling
+    Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+    actual: [ 'to move', 'one named concept', 'to a file of its own', 'to import', 'by name' ],
+    expected: [],
+
+✖ #3422.df5e60b4 a file grown with its ceiling raised to match fails the ratchet, and its Fix line says to move one named concept to a file of its own that imports by name
+  AssertionError [ERR_ASSERTION]: the Fix line for a file over the merge base's ceiling, with its own raised doesn't say how, as the issue asks: move one named concept to a file of its own, which imports what it needs by name
+  FAIL size: crates/fixture/src/big.rs: 1610 lines, its ceiling of 1610 above the merge base's 1600
+    Fix: Split or shrink the file to 1600 lines or fewer and set its ceiling to that: a ceiling never rises.
+    actual: [ 'to move', 'one named concept', 'to a file of its own', 'to import', 'by name' ],
+    expected: [],
+
+Checked before delivery, in a throwaway copy of the base outside this checkout (git archive of 35956a44a with a .git
+of its own holding HEAD and origin/main there, as the proof lanes prepare theirs; deleted after, never committed). The
+copy's unchanged ratchet gave the same 3 failures and 3 passes as above. Then, with scripts/size-ratchet.mjs replaced
+there by each of these, the suite's results were:
+
+  - a ratchet that drops the finding for crates/deep-show/src/hub.rs: same-findings 2 pass, 1 fail
+      ✖ #3422.2c41ea06 on this checkout the ratchet's findings are the same paths with the same reasons as the merge base's ratchet's, and git status is unchanged
+        AssertionError [ERR_ASSERTION]: on this checkout the ratchet's findings differ from the merge base's ratchet's, at 1 path:
+        crates/deep-show/src/hub.rs: a finding goes: FAIL size: crates/deep-show/src/hub.rs: 2538 lines, over its ceiling of 2528
+  - a ratchet that adds a finding for scripts/lanes.mjs: same-findings 2 pass, 1 fail
+      ✖ #3422.2c41ea06 on this checkout the ratchet's findings are the same paths with the same reasons as the merge base's ratchet's, and git status is unchanged
+        AssertionError [ERR_ASSERTION]: on this checkout the ratchet's findings differ from the merge base's ratchet's, at 1 path:
+        scripts/lanes.mjs: a finding appears: FAIL size: scripts/lanes.mjs: one long line
+  - a ratchet that writes "past its ceiling of" for "over its ceiling of": same-findings 1 pass, 2 fail
+      ✖ #3422.2c41ea06 on this checkout the ratchet's findings are the same paths with the same reasons as the merge base's ratchet's, and git status is unchanged
+        AssertionError [ERR_ASSERTION]: on this checkout the ratchet's findings differ from the merge base's ratchet's, at 9 paths:
+        crates/deep-app/src/views.rs: its reason changes, from: FAIL size: crates/deep-app/src/views.rs: 3540 lines, over its ceiling of 3523 to: FAIL size: crates/deep-app/src/views.rs: 3540 lines, past its ceiling of 3523
+        … (8 more paths, each named the same way)
+      ✖ #3422.2c41ea06 in a scratch repository planted with each kind of finding, the ratchet's findings are the same paths with the same reasons as the merge base's ratchet's; with none planted both pass alike
+        AssertionError [ERR_ASSERTION]: in the scratch repository planted with each kind of finding the ratchet's findings differ from the merge base's ratchet's, at 1 path:
+        crates/fixture/src/over.rs: its reason changes, from: FAIL size: crates/fixture/src/over.rs: 1601 lines, over its ceiling of 1600 to: FAIL size: crates/fixture/src/over.rs: 1601 lines, past its ceiling of 1600
+  - a ratchet that adds the advice to every Fix line: fix-line 2 pass, 1 fail
+      ✖ #3422.df5e60b4 a file a line over its ceiling fails the ratchet, and its Fix line says to move one named concept to a file of its own that imports by name; the Fix lines to lower a ceiling and to remove an entry say none of it
+        AssertionError [ERR_ASSERTION]: the Fix line for a file under its ceiling, whose ceiling is lowered holds the advice for splitting a file, which this finding doesn't ask for (Scope: "Nothing else")
+        FAIL size: crates/fixture/src/shrunk.rs: 1550 lines, under its ceiling of 1600; lower it to 1550
+          Fix: Set its ceiling in scripts/size-ceilings.json to 1550. Move one named concept to a file of its own, which imports by name.
+  - a ratchet with only its three Fix lines reworded ("Bring the file to <n> lines or fewer. Move one named concept to a
+    file of its own, which imports what it needs by name: no `use super::*` there, and no name moved to a shared file
+    that only one file reads."): all 6 pass
+  - the copy with its origin/main ref deleted, the ratchet unchanged: same-findings 0 pass, 3 fail, each with
+      Error: BLOCKED: this checkout has no merge base of HEAD with origin/main to read the ratchet from (fatal: Not a valid object name origin/main)
