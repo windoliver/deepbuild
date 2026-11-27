@@ -1,7 +1,3 @@
-// #3588, criterion 2: the same scene, the untimed file passing, and the holders letting go 20 s after the run's timed
-// phase began waiting: the rebuild is granted, the timed file runs and reads PASS, and the run exits 0. Regression
-// protection: it holds on the merge base too. The wrong program is the planted twin `skips-the-rebuild`, an affected.mjs
-// whose timed phase builds nothing again before the timed job (twins/README.md).
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BINARY, BOUND_MIN, dump, EXIT_MS, LET_GO_MS, letGo, passedCount, pause, PRINTS, record, runScene, sandbox, scene, SCENE, summary, throttleLog, TIMED, UNTIMED, until, waiting } from './helpers.mjs';
@@ -15,7 +11,6 @@ test(`${C2} with every build slot held from before the timed phase, and the hold
   const played = await runScene(box, fx);
   let exited = false;
   played.done.then(() => { exited = true; });
-  // The timed phase began waiting: a request of the run's own for a build or a timed grant is in the table.
   let began = null;
   if (played.held) {
     // deadline: the run's own limit bounds a run that never asks.
@@ -33,13 +28,11 @@ test(`${C2} with every build slot held from before the timed phase, and the hold
   assert.ok(record(fx).find((entry) => entry.event === 'deleted')?.gone, `the untimed file didn't remove ${BINARY} from DEEP_BIN_DIR, so nothing needed building again\n${all()}`);
   assert.ok(began !== null, `the run's timed phase never waited in the table for a build or a timed grant behind the holders\n${all()}`);
 
-  // The rebuild is granted: a build grant of the run's, given once the holders let go.
   const log = throttleLog(box);
   const gone = log.findIndex((entry) => entry.event === 'released' && entry.class === 'build' && played.holders.includes(entry.pid));
   assert.ok(gone >= 0, `the holders never gave their build grants back\n${all()}`);
   assert.ok(log.slice(gone).some((entry) => entry.event === 'granted' && entry.class === 'build' && !played.holders.includes(entry.pid)), `no build grant was granted to the run once the holders let go: nothing was built again of what the cleanup removed\n${all()}`);
 
-  // The timed file runs, finding the binary built again, and reads PASS.
   const ran = record(fx).find((entry) => entry.event === 'timed-ran');
   assert.ok(ran, `the timed file's test never ran\n${all()}`);
   assert.ok(ran.there && ran.stdout === PRINTS, `the timed file found no working ${BINARY} in DEEP_BIN_DIR: the rebuild didn't put back what the cleanup removed\n${all()}`);

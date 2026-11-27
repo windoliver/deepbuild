@@ -1,7 +1,3 @@
-// For #3588's redraft under #3549 (REDRAFT.md): the original's helpers (3588/helpers.mjs), with `runScene` counting the
-// holders of every build slot by the machine's build limit, the one `scripts/throttle.mjs` states for this platform on
-// its `LIMITS` line (`buildLimit()`, from #2820's redraft), never a default number. Everything else is the original's,
-// re-exported unchanged; `runScene` is the original's line for line but the count.
 import { existsSync, watch, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildLimit } from '../2820-redraft-3549/helpers.mjs';
@@ -11,17 +7,8 @@ import { hold, holding, start } from '../3567/helpers.mjs';
 
 export { BINARY, BOUND_MIN, dump, EXIT_MS, LET_GO_MS, letGo, passedCount, pause, PLANTED, PRINTS, record, sandbox, scene, SCENE, stateLines, summary, throttleLog, throttleTable, TIMED, UNTIMED, until, waiting } from '../3588/helpers.mjs';
 
-/** The original's: how long past EXIT_MS a run is let go on, to say how late it is (3588/helpers.mjs keeps it unexported). */
 const GRACE_MS = 20_000;
 
-/**
- * The original's `runScene` (3588/helpers.mjs), the holders counted by `buildLimit()`: starts the run, `node
- * scripts/affected.mjs --timed <untimed> <timed>`, in its own process group, limited to EXIT_MS and GRACE_MS more. Once
- * the run has given back its own build grant (the table's log: the first build grant released), every build slot of the
- * table is taken by other sessions' holders (#3567's `hold`), one for each of the build limit; once all hold, the
- * untimed file is let go on (its go file); and from the moment it has deleted the binary, that DEEP_BIN_DIR is watched
- * for the binary to come back. `done` resolves with #3567's run result.
- */
 export async function runScene(box, fx) {
   const slots = buildLimit();
   const run = start(box, fx, ['--timed', UNTIMED, TIMED], { limit: EXIT_MS + GRACE_MS });
