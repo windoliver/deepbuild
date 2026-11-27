@@ -193,7 +193,12 @@ replica is at the reference window, 1512 × 982 points, on a copy of the record 
 - **The live run** (`live.test.ts`): `liveWorld`, #1101's world with its hub on the wall clock, so the real app and the
   hub read the same time; one session on the hook wire. The real `deep-app` in that HOME, set to the reference window;
   `deep open session/<id>`; the replica on a copy of the record with the same page open; the app brought to the front;
-  then the hub holds the session's `git push origin main` and raises its ask, and what it appended is fed to the replica.
+  once the hub's log is still (`quiet`), what it appended since the copy is fed, and 3 s later the replica is read. Then
+  the hub holds the session's `git push origin main` and raises its ask. `held` returns at the hub's `ask.created`; the
+  hub lists the ask a moment later, at its next reading of its sessions: `session.state`, the session's row reading
+  needs you and the ask's own row (`row.set`, `listed`), and only a listed ask is in sight. So the test waits until the
+  hub's record holds that listing (BLOCKED if it never does) and its log is still, then feeds the replica everything
+  the hub appended, in log order, and reads it 3 s later (Readings 20).
 - **The idle window** (`budgets.test.ts`): 30 sessions, ten a project in `docs`, `shop` and `web`, each stopped with no
   claim three and a half hours ago, two seconds apart, and no open ask; `launch.frames: "dirty"`, `read_back: "off"`.
 
@@ -294,6 +299,32 @@ BLOCKED where the window can't be read, and none passes.
     clock that drew or told an entity. Their ages are in hours, so no time the window draws turns over in the minute.
     **"Compared with the merge base, on the reference Mac in the local preflight"**: none is a pass anywhere; a count above
     none is compared with the merge base's over the same record only on a fit reference Mac, and is INCONCLUSIVE elsewhere.
+20. **"The first criterion's run", live, is fed whole** (AC10). For the window an ask has opened once it is in sight, and
+    at this base that is once the hub's list holds its row: Needs you draws the asks the list holds, the count counts
+    them, and the notifier takes only a listed ask as in sight (#22; `View::needs_you` in
+    `crates/deep-app/src/record.rs`, `count` in `states.rs`, `Notifier::saw` and `due` in `notify.rs`). The hub lists an
+    ask at its next reading of its sessions, 200 ms after the append that asks for one
+    (`packages/hub/src/session-state.ts`, `stateSoon` and `recordStates`). So the replica is read only once it has been
+    fed that listing and the hub's log is still.
+    **The dispute, and the ruling (2026-11-26, at `501534ea685b`).** The fixture fed the replica once, right after
+    `held()`, let 3 s of its clock pass and read it. The claim against it had three parts. One: `held()` returns as soon
+    as the hub's `ask.created` is in the record, the hub appends the session's row and the ask's own a moment later, and
+    that one feed gives the replica `ask.created`, `plan.proposed` and `ask.batched` without them. Two: a replica fed
+    only that far has not been told the ask is in sight, so the first criterion's run has not happened in it, whatever
+    the program under test does. Three: the suite's other files feed only what a quiet hub has appended. Each part is
+    true, by reading and by a probe at the base (What was run). `held()` returned 28 ms after the hub's `ask.created`,
+    and the feed right after it gave `tool.before`, `transcript.archived`, `ask.created`, `plan.proposed` and
+    `ask.batched`; the hub recorded `session.state` and the two rows 188 ms after `ask.created`. 3 s later the replica's
+    list held no row for the ask, Needs you read 0 ("Nothing needs you"), the session still read working and no
+    notification had been posted. A second feed, once the hub was quiet, gave those three events; 3 s after it the list
+    held the ask, Needs you read 1 ("1 ask needs you"), and the one notification had been posted 1.0 s after that feed.
+    At the suite's first base neither `record.rs` nor `notify.rs` read the list for this; #22 was merged since. In the
+    other files a feed follows `quiet` (`changed`, a `Turn`'s hook, `hold.test.ts`'s first and last) or, for
+    `hold.test.ts`'s middle one, the hub's own acknowledgement of the yes, which it sends once its rows have settled;
+    the probe found nothing left unfed there. The redraft changes the fixture alone: before the feed after the ask, a
+    wait for the hub's listing of the ask and for its log to be still; before the last feed before the ask, a wait for
+    its log to be still, so that nothing the hub wrote before the ask is fed after it and read as the ask's. The
+    assertions, the judge and every expected value are as they were.
 
 ## Scope the criteria don't cover
 
@@ -373,6 +404,45 @@ Phase 2, with the base built (2026-11-24):
 - Not run: any planted program (none exists at the base: each wrong-program test fails where it first holds the
   shipped run to its judge); `live.test.ts` past its permission gate; the timed comparison of `budgets.test.ts`; `node
   scripts/repo-rules.mjs` (it starts cargo; the folder was searched for a home folder's path instead, and holds none).
+
+The redraft of the live run's fixture (2026-11-26), at `501534ea685b` (main, whose last merge is #3500), with that base
+built beforehand: the packages, `deep-hook`, `deep-drive` with `deep-app/test-confirm`, `deep-app` and the Swift probe.
+
+- One test grant, `node scripts/throttle.mjs test --wait 600 -- sh <a script>`, asked at 20:19 and granted at 20:33: a
+  probe of the base, then `live.test.ts` once, on the file as it stands. Every binary was checked first to be newer than
+  every Rust source, and no run compiled a workspace crate.
+- The probe (a scratch vitest file outside this folder, not kept), on `liveWorld`'s hub and the base's `deep-drive`,
+  with no real window; three readings:
+  1. The feeds as they stood. `held()` returned 28 ms after the hub's `ask.created`. The feed right after it:
+     `tool.before`, `transcript.archived`, `ask.created`, `plan.proposed`, `ask.batched`. The hub's record:
+     `ask.batched` 14 ms after `ask.created`, then `session.state`, the session's `row.set` (needs you, `listed`) and
+     the ask's `row.set` (needs you, `listed`), each 188 ms after it. 3 s of the replica's clock after that feed: its
+     rows hold the session, working, and no row for the ask; the tree holds no node for the ask; `heading:needs-you`
+     has the value `0` and `sidebar-count` is named "Nothing needs you". A second feed, once the hub was quiet:
+     those three events. 3 s after it: the rows hold the session, needs you, and the ask; the tree holds the ask's
+     node; the heading's value is `1` and the count is named "1 ask needs you". `close` gives one notification, for
+     the ask, 1.03 s after the second feed and none before it (the base's replica tells its notifier of no open
+     page). The base's snapshot carries no announcements at any reading.
+  2. The redraft's order: `held()`, the hub's listing of the ask awaited (found in its record 0.5 s after `held()`
+     returned), the hub quiet, then one feed: `user.ask`, `tool.before`, `transcript.archived`, `ask.created`,
+     `plan.proposed`, `ask.batched`, `session.state` and the two rows. 3 s later the rows hold the ask, the heading's
+     value is `1`, and the one notification came 1.05 s after the feed began.
+  3. `hold.test.ts`'s middle feed, after the yes and the press: `ask.answered`, `approval.held`, `session.state`, the
+     session's row, working, and the ask's row leaving the list (the last three recorded 210 ms after
+     `ask.answered`). A feed once the hub was quiet gave nothing more. That file is unchanged.
+- `live.test.ts` at the base, 8 s: BLOCKED at line 45, `the real app's window didn't come to the front
+  ({"main":true,"front":false})`. The session was unlocked and the permission granted: the run passed both gates,
+  started the real app, placed its window, opened the session's page in it with `deep open` and read it there, and
+  opened the same page in the replica. It stopped before the feeds the redraft changed, so at the base those ran only
+  in the probe's second reading, with no real window. The gate reads the window server's order once, at once after
+  asking for the app to come forward; whether the window was in front a moment later was not read.
+- What the redraft changed: `live.test.ts` (the two waits, its header and its imports of `awaitRecord` and `quiet`);
+  this file (The fixtures: the live run; Readings 20; this list); `BASE-FAILURE.txt` (`live.test.ts`'s entry).
+- After the change: the type-check, exit 0.
+- `tests/acceptance/3232/node_modules`, which the run made for vitest's cache, was removed.
+- Not run: `live.test.ts` past its front gate; any other test file (none changed); each judge against planted inputs
+  (`judges.ts` is unchanged); any planted program; `node scripts/repo-rules.mjs` (it starts cargo; the changed files
+  were searched for a home folder's path instead, and hold none).
 
 ## Files
 

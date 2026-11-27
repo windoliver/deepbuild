@@ -90,12 +90,13 @@ hub.test.ts: 2 tests, 2 failed; Start at  20:02:03, Duration  6.45s
       FAILS at hub.test.ts:69:44: nothing to repeat: the hub stopped: the snapshot carries no announcements list
       (snapshot.announcements is missing)
 
-live.test.ts: 1 tests, 1 failed; Start at  20:02:10, Duration  613ms
+live.test.ts: 1 tests, 1 failed; Start at  20:33:41, Duration  8.16s
   AC10 #3232.a107747a: on the reference Mac, the live window's tree read through AppKit holds one node marked as a
   polite live region whose value is the last line, and the first criterion's run gives the same entries live as in the
   replica; BLOCKED, naming where it stopped, if the platform can't be read
-      BLOCKED: the platform can't be read: this process has no Accessibility permission, so AppKit's tree of the real
-      window can't be read from outside it; grant it to the app the tests run under (live.test.ts:24:5)
+      BLOCKED: the platform can't be read: the real app's window didn't come to the front
+      ({"main":true,"front":false}), so it isn't the key window (live.test.ts:45:40)
+      (this entry alone is from a run at 501534ea685b on 2026-11-26; every other entry is from the run before it)
 
 budgets.test.ts: 1 tests, 1 failed; Start at  20:02:11, Duration  5.21s
   AC11 #3232.fec442e2: a window with 30 quiet sessions adds no announcement and no wakeup over 60 s, compared with the
