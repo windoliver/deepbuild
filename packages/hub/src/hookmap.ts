@@ -569,3 +569,13 @@ function payloadCaller(payload: Record<string, unknown>): string | undefined {
   if (/[\\/]\.claude[\\/]projects[\\/]/.test(transcript)) return 'claude-code';
   return undefined;
 }
+
+/** A request line the adapters map, for a payload the core rebuilt from what the parser kept of the hook. */
+export function mappedHook(meta: HookMeta, draft: Draft, payload: Record<string, unknown>, transcript: readonly Record<string, unknown>[]): Record<string, unknown> | undefined {
+  if (meta.agent === 'pi' || meta.agent === 'paseo') return undefined;
+  const name = ADAPTERS[meta.agent] ?? 'claude';
+  const adapter = registry().get(name);
+  const version = ((adapter.facts as Record<string, unknown>).versions as string[]).at(-1)!;
+  const line = { v: 1 as const, agent: name, event: meta.event, seq: draft.seq ?? '0', id: draft.id, pid: meta.pid, ppid: meta.ppid, matched: [], payload: { session_id: meta.session, hook_event_name: meta.event, ...payload } as JsonValue };
+  return adapter.mapHook(line, version, transcript as JsonValue[]).events.find((e) => e.kind === draft.kind)?.data as Record<string, unknown> | undefined;
+}
