@@ -236,7 +236,7 @@ impl SlotQuery {
                     let begin = u64::from_le_bytes(t[..8].try_into().ok()?);
                     let end = u64::from_le_bytes(t[8..].try_into().ok()?);
                     (end >= begin)
-                        .then(|| [begin as f64 * self.period_ns, end as f64 * self.period_ns])
+                        .then_some([begin as f64 * self.period_ns, end as f64 * self.period_ns])
                 })
                 .collect(),
             Err(_) => {
@@ -433,9 +433,7 @@ impl View {
         for q in &mut self.draw_queries {
             *q = None;
         }
-        for d in &mut self.draw_times {
-            *d = None;
-        }
+        self.draw_times.fill(None);
         let states = self.ui.states();
         for (slot, state) in states.into_iter().enumerate() {
             // A slot on screen keeps its old pixel buffer in GPUI's hands until it's released,
