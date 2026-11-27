@@ -1606,6 +1606,10 @@ timed.push('tests/acceptance/3257/ac7-budget.test.ts');
 // child's peak on the reference Mac.
 timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
 
+// #1867's folder (blind) runs alone by its lane.json: each file starts hubs of its own. Two of its files read a
+// put-back against the criterion's second, and read INCONCLUSIVE past it while the load is over the cores.
+timed.push('tests/acceptance/1867/codex-watch.test.ts', 'tests/acceptance/1867/claude-json.test.ts');
+
 // #2750's folder (blind) runs alone by its lane.json: each test starts real hubs, a forge on 127.0.0.1 and git
 // repositories. budgets.test.ts times a rebuild from the event log on the reference Mac.
 timed.push('tests/acceptance/2750/budgets.test.ts');
@@ -1639,6 +1643,6 @@ Object.assign(redrafted, { 'tests/acceptance/3507/ac2-classes.test.mjs': 'tests/
 byHand.push('tests/acceptance/3507/ac2-classes.test.mjs');
 alone.push('tests/acceptance/3507-redraft-ac2/');
 
-// #1867's folder (blind) runs alone by its lane.json: each file starts hubs of its own. Two of its files read a
-// put-back against the criterion's second, and read INCONCLUSIVE past it while the load is over the cores.
-timed.push('tests/acceptance/1867/codex-watch.test.ts', 'tests/acceptance/1867/claude-json.test.ts');
+// #3617's folder (blind) runs alone by its lane.json: each file builds deep-gpu and runs GPU surface frames at 1936 x 1584.
+// ac2-onepass.test.ts judges the five-run draw-and-finish p95 on a reference Mac.
+timed.push('tests/acceptance/3617/ac2-onepass.test.ts');
