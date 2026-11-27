@@ -577,6 +577,7 @@ export function proof(name: string, value: unknown): void {
 const REFERENCE_MACS = [
   { model: 'Mac15,7', chip: 'Apple M3 Pro', gib: 36 },
   { model: 'Mac15,12', chip: 'Apple M3', gib: 16 },
+  { model: 'Mac17,10', chip: 'Apple M5 Max', gib: 64 },
 ];
 const sh = (cmd: string, ...args: string[]): string => { try { return execFileSync(cmd, args, { encoding: 'utf8' }).trim(); } catch { return ''; } };
 
@@ -586,9 +587,10 @@ export function environmentProblem(): string | null {
   const chip = sh('sysctl', '-n', 'machdep.cpu.brand_string');
   const gib = Math.round(Number(sh('sysctl', '-n', 'hw.memsize')) / 2 ** 30);
   if (!REFERENCE_MACS.some((m) => m.model === model && m.chip === chip && m.gib === gib)) return `not a reference Mac: ${model} / ${chip} / ${gib} GiB`;
-  const lpm = /^\s*lowpowermode\s+(\d)/m.exec(sh('pmset', '-g'));
-  if (!lpm) return 'Low Power Mode state unknown (no lowpowermode line in pmset -g)';
-  if (lpm[1] !== '0') return 'Low Power Mode is on';
+  const pmsetLpm = /^\s*lowpowermode\s+([01])\s*$/m.exec(sh('pmset', '-g'))?.[1];
+  const lpm = pmsetLpm ?? { true: '1', false: '0' }[sh('osascript', '-l', 'JavaScript', '-e', 'ObjC.import("Foundation"); $.NSProcessInfo.processInfo.isLowPowerModeEnabled')];
+  if (!lpm) return 'Low Power Mode state unknown (no lowpowermode line in pmset -g and no NSProcessInfo answer)';
+  if (lpm !== '0') return 'Low Power Mode is on';
   const therm = sh('pmset', '-g', 'therm');
   const limited = [...therm.matchAll(/_Limit\s*=\s*(\d+)/g)].some((m) => Number(m[1]) < 100);
   if (limited || !/No thermal warning level/.test(therm)) return `thermal state not nominal: ${therm.replace(/\s+/g, ' ')}`;
