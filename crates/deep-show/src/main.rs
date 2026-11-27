@@ -1361,6 +1361,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
                 || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p) || packs::PLANTED.contains(p)
+                // #3611: the cores that take a kept pack check they must not.
+                || packs::checked::PLANTED.iter().any(|(name, _)| name == p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1765,6 +1767,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         quiet_hours,
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
+        pack_checks: packs::checked::given(input)?,
         job_tools: export::tools::parse(input.get("job_tools"))?,
         notes,
         installed,
@@ -2658,7 +2661,10 @@ fn start_args(args: &[String]) -> Result<StartArgs, ()> {
     let mut rest = args.get(1..).unwrap_or_default();
     while let [flag, value, more @ ..] = rest {
         match flag.as_str() {
-            "--planted" if planted.is_none() => planted = Some(planted_named(value)?),
+            "--planted" if planted.is_none() => {
+                planted = Some(planted_named(value)?);
+                packs::checked::started(value);
+            }
             "--costs" if costs.is_none() => costs = Some(value.clone()),
             // #1901: the folder kept output lives in across processes.
             "--cache" if cache.is_none() => cache = Some(PathBuf::from(value)),

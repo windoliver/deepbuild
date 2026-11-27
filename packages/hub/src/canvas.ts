@@ -117,22 +117,28 @@ export async function exportCommand(args: readonly string[]): Promise<number> {
   }
 }
 /**
+ * Where a canvas core this hub starts keeps each pack check's result, and the key that marks its rows (#3611; canvas
+ * primitives, Pack: a check's result, kept): the world's `pack_checks`.
+ */
+export interface PackChecks { dir: string; key: string }
+
+/**
  * The pack check of each pack folder (#306), run by the hub's own canvas core in a world that holds only those packs:
  * the store's row per version, `{pack, version, state, checks, issues}`, as its `packs` call answers.
  */
-export async function checkPacks(canvas: Canvas, packs: { id: string; dir: string }[]): Promise<Obj[]> {
-  const { reply } = await canvas.call({ sessions: [], record: {}, file: { packs }, docs: [] }, { call: 'packs' });
+export async function checkPacks(canvas: Canvas, packs: { id: string; dir: string }[], pack_checks: PackChecks): Promise<Obj[]> {
+  const { reply } = await canvas.call({ sessions: [], record: {}, file: { packs, pack_checks }, docs: [] }, { call: 'packs' });
   if (!Array.isArray(reply.packs)) throw Error(`the canvas core gave no pack rows: ${JSON.stringify(reply).slice(0, 300)}`);
   return reply.packs as Obj[];
 }
 
 /** Still rendering is shared; only the hub supplies installed packs and checked asset bytes. */
-export async function renderStill(document: unknown, still: string, evidence: string, packs: { id: string; dir: string }[] = []): Promise<Obj> {
+export async function renderStill(document: unknown, still: string, evidence: string, packs: { id: string; dir: string }[] = [], pack_checks?: PackChecks): Promise<Obj> {
   const canvas = new Canvas(evidence);
   try {
     const world: CanvasWorld = {
       sessions: [{ id: EXPORTER, thread: EXPORTER, name: 'deep export' }], record: {},
-      file: { panels: { still: { rect: [0, 0, 1, 1] } }, docs: { [STILL_DOC]: { panel: 'still', document } }, packs }, docs: [STILL_DOC],
+      file: { panels: { still: { rect: [0, 0, 1, 1] } }, docs: { [STILL_DOC]: { panel: 'still', document } }, packs, pack_checks }, docs: [STILL_DOC],
     };
     const { reply: at } = await canvas.call(world, { call: 'time', doc: STILL_DOC, text: /^\d+$/.test(still) ? `${still}f` : `@${still}` });
     if (typeof at.t !== 'number') return { outcome: 'refused', code: at.code, reason: `${still} is neither a frame nor a marker` };
@@ -269,7 +275,7 @@ function shape(world: CanvasWorld, evidence: string, opened: ReadonlyMap<string,
   const sessions: Obj = {};
   for (const s of world.sessions) sessions[s.id] = { thread: s.thread, name: s.name, process: { pid: 0, start: 0 } };
   const out: Obj = { evidence, sessions, panels: PANELS, docs: Object.fromEntries(world.docs.map((doc) => [doc, { panel: PANEL }])) };
-  for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault', 'packs', 'job_tools', 'installed']) if (world.file[key] !== undefined) out[key] = world.file[key];
+  for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault', 'packs', 'pack_checks', 'job_tools', 'installed']) if (world.file[key] !== undefined) out[key] = world.file[key];
   // A document stored whole opens from that, as a release stored it; every other one from the record.
   for (const [doc, recorded] of opened) {
     const placed = (out.docs as Obj)[doc];

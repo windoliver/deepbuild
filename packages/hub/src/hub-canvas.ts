@@ -143,8 +143,10 @@ export class HubCanvas {
 
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const packs = this.packsNeeded ? await this.options.libraries()?.packs.installed(this.canvas()) : undefined;
-    const file: Obj = { ...this.worldFile.read(), packs: packs ?? [] };
+    const store = this.packsNeeded ? this.options.libraries()?.packs : undefined;
+    const packs = await store?.installed(this.canvas());
+    // #3611: with its packs the core gets the store of kept check results and this launch's key, never a world file's.
+    const file: Obj = { ...this.worldFile.read(), packs: packs ?? [], pack_checks: store?.checks };
     // The hub slot check.kind@1's fills deep_kinds lists: each check kind a plug-in registered, with its kit at install (#1415).
     const host = this.options.extensions();
     const kits = (await host?.installed() ?? []).flatMap((p) => p.kits).filter((k) => k.slot === 'check.kind@1');
@@ -505,8 +507,8 @@ export class HubCanvas {
     if (held) return held;
     const game = await this.gameAssets({ document: params.document });
     if (game.refused) return game.refused;
-    const packs = this.options.libraries()!.packs.all();
-    const rendered = await renderStill(game.call.document, params.still, this.options.root.evidence, packs);
+    const store = this.options.libraries()!.packs;
+    const rendered = await renderStill(game.call.document, params.still, this.options.root.evidence, store.all(), store.checks);
     const hash = (rendered.snapshots as Obj[] | undefined)?.[0]?.sha256;
     if (rendered.outcome !== 'presented' || typeof hash !== 'string') return { status: 'BLOCKED', cause: `No still could be drawn: ${JSON.stringify(rendered)}` };
     // The canvas store's bytes are rehashed before they leave the hub; neither an input path nor an output path

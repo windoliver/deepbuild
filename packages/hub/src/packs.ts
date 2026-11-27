@@ -1,11 +1,11 @@
 // Installed data packs (#1820): immutable manifests and license files, pinned by owner/name@version.
 // Downloads and authority live in the library fetch job; this module never calls the network or admits bytes.
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalize, isRecord as object, type JsonValue } from '@deepbuild/contracts';
-import { checkPacks, type Canvas } from './canvas.js';
+import { checkPacks, type Canvas, type PackChecks } from './canvas.js';
 
 type Obj = Record<string, unknown>;
 const hash = (v: string | Uint8Array) => createHash('sha256').update(v).digest('hex');
@@ -90,11 +90,18 @@ export interface Refusal { ref: string; digest: string; issues: unknown[]; check
 export class Packs {
   private readonly held = new Map<string, PackVersion>();
   private readonly folder: string;
+  /**
+   * The store of kept check results and this launch's key, which a canvas core gets only on its input pipe. The key
+   * is made here and lives in memory alone: a command's child can write every file under the root, so a key kept in
+   * one would let it write a row a core takes. A hub started again makes a new key, and its first core checks again.
+   */
+  readonly checks: PackChecks;
   /** The release's packs, read, checked and installed once a process, as the canvas core starts (#1720). */
   private shipping?: ReturnType<typeof releasePacks>;
   private release?: Promise<Obj[]>;
   constructor(root: string) {
     this.folder = join(root, 'packs');
+    this.checks = { dir: join(this.folder, 'checked'), key: randomBytes(32).toString('hex') };
     mkdirSync(join(this.folder, 'refused'), { recursive: true });
     for (const name of readdirSync(this.folder)) if (name.endsWith('.json')) {
       const pack = JSON.parse(readFileSync(join(this.folder, name), 'utf8')) as PackVersion;
@@ -139,7 +146,7 @@ export class Packs {
     const staged = fresh.map(({ folder, pack }) => ({ folder, pack, dir: this.stage(pack) }));
     let checked: Obj[];
     try {
-      checked = await checkPacks(canvas, staged.map(({ pack, dir }) => ({ id: pack.id, dir })));
+      checked = await checkPacks(canvas, staged.map(({ pack, dir }) => ({ id: pack.id, dir })), this.checks);
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
       return [...rows, ...fresh.map(({ folder, pack }) => ({ folder, pack: pack.id, version: pack.version, state: 'not_checked', issues: [why] }))];

@@ -48,6 +48,8 @@ byHand.push(...['ac1-planted', 'ac2-invariants', 'ac3-checks', 'ac4-canvas'].map
 
 // #3033's folder (blind) runs alone by its lane.json; budgets.test.ts times a sea at 1080p with judgeLimit.
 timed.push('tests/acceptance/3033/budgets.test.ts');
+// #3611's suite times a fresh core's first reply on a filled store, on the reference Mac.
+timed.push('tests/acceptance/3611/ac6-first-reply.test.mjs');
 
 /**
  * Why each `alone` entry is alone (#3066; docs/parallel-proof.md, section 7), one reason an entry: `binary`, a sibling's

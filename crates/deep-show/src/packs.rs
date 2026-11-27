@@ -14,6 +14,8 @@ use deep_canvas::document::{CheckResult, Expansion, Issue, Pack, PackPlanted, Pa
 use deep_canvas::registry::Sealed;
 use serde_json::{json, Map, Value};
 
+pub mod checked;
+
 /// One pack version offered to the store.
 pub struct Row {
     pub pack: String,
@@ -24,10 +26,15 @@ pub struct Row {
     pub layouts: Vec<Value>,
 }
 
-/// The half of the pack check that runs a pack's programs, after the core's half admitted it:
-/// its layouts' rows and the issues that refuse it (#238).
-pub type Vet<'v> =
-    &'v mut dyn FnMut(&Value, &deep_canvas::document::Pack) -> (Vec<Value>, Vec<Issue>);
+/// One offer of a pack version to the store: its folder, the twin a scenario plants, the
+/// evidence store, and the store's kept check results where the hub named them (#3611).
+pub struct Offer<'o> {
+    pub id: &'o str,
+    pub dir: &'o Path,
+    pub twin: Option<&'o str>,
+    pub evidence: &'o Path,
+    pub kept: Option<&'o checked::Store>,
+}
 
 /// Reads a pack folder as one manifest: `pack.json`, its `id` set to `owner/name`, and each
 /// `recipes` entry's file inlined.
@@ -50,12 +57,23 @@ thread_local! {
 /// The logic module's check of the pack version whose manifest hashes to `version`: `check` runs
 /// once a process, as the rest of the version's check does (#3044).
 pub fn lib_check(version: &str, check: impl FnOnce() -> Value) -> Value {
-    if let Some(reply) = LIB_CHECKS.with(|c| c.borrow().get(version).cloned()) {
+    if let Some(reply) = lib_kept(version) {
         return reply;
     }
     let reply = check();
-    LIB_CHECKS.with(|c| c.borrow_mut().insert(version.to_string(), reply.clone()));
+    lib_take(version, reply.clone());
     reply
+}
+
+/// The logic module's reply this process holds for `version`, which a kept check result keeps
+/// (#3611).
+pub fn lib_kept(version: &str) -> Option<Value> {
+    LIB_CHECKS.with(|c| c.borrow().get(version).cloned())
+}
+
+/// Holds the logic module's reply for `version`, as its check left it.
+pub fn lib_take(version: &str, reply: Value) {
+    LIB_CHECKS.with(|c| c.borrow_mut().insert(version.to_string(), reply));
 }
 
 /// #1958: the store's sweep deleted `owner/name@version`: this process holds it no more.
@@ -94,17 +112,27 @@ pub fn manifest_of(reference: &str) -> Option<Value> {
 
 /// Installs one pack version: the folder read, the pack check run once, the store's row kept.
 /// The reply is `install_pack`'s.
+///
+/// #3611: where the hub named its store of kept check results, a version this process hasn't
+/// admitted is taken from its row when this core may take it, and no part of its check runs;
+/// any other row runs the check, whose result replaces it.
 pub fn install(
     packs: &mut Packs,
     rows: &mut Vec<Row>,
     sealed: &Sealed,
-    id: &str,
-    dir: &Path,
-    twin: Option<&str>,
-    vet: Vet<'_>,
+    host: &mut crate::sandbox::Host,
+    offer: Offer<'_>,
 ) -> Value {
     // #161: the pack check's wall time, from reading the folder to its verdict.
     let started = std::time::Instant::now();
+    let before = checked::reading(packs, host);
+    let Offer {
+        id,
+        dir,
+        twin,
+        evidence,
+        kept,
+    } = offer;
     let mut layouts = Vec::new();
     let key = (id.to_string(), dir.to_path_buf());
     let known = twin
@@ -115,38 +143,105 @@ pub fn install(
         Some((manifest, pack)) => Ok((manifest, Some(pack))),
         None => load(id, dir).map(|manifest| (manifest, None)),
     };
+    let as_json = |issues: &[Issue]| issues.iter().map(Issue::to_json).collect::<Vec<Value>>();
     let (version, outcome, issues) = match loaded {
-        Err(issues) => (String::new(), "refused", issues),
+        Err(issues) => (String::new(), "refused", as_json(&issues)),
         Ok((mut manifest, known)) => {
             if let Some(planted) = twin {
                 crate::familiar::twin(planted, id, &mut manifest);
                 crate::math_twins::twin(planted, id, &mut manifest);
             }
             let version = manifest["version"].as_str().unwrap_or_default().to_string();
-            let admitted = match known {
-                Some(pack) => Ok(packs.readmit(pack).clone()),
-                None => packs.admit(&manifest, sealed).cloned(),
-            };
-            match admitted {
-                Ok(pack) => {
-                    let (rows, issues) = vet(&manifest, &pack);
-                    layouts = rows;
-                    if issues.is_empty() {
-                        if twin.is_none() {
-                            ADMITTED.with(|a| a.borrow_mut().insert(key, (manifest, pack)));
-                        }
-                        (version, "installed", Vec::new())
-                    } else {
-                        packs.withdraw(&pack.id.text());
-                        (version, "refused", issues)
-                    }
+            // A row names one version's bytes beside the versions it requires. A twin, a version
+            // the store already holds (a republish is refused for what the store holds) and one
+            // with a provider (run against the layouts of the packs beside it) keep none.
+            let held = packs.get(&format!("{id}@{version}")).is_some();
+            let row = kept
+                .filter(|_| twin.is_none() && known.is_none() && !held)
+                .filter(|_| manifest.get("providers").is_none())
+                .map(|store| store.bound(&manifest, packs));
+            let taken = row.as_ref().and_then(|row| row.read(evidence));
+            let taken = taken.and_then(|found| match found.refused {
+                true => {
+                    packs.refuse_kept(&format!("{id}@{version}"), &found.issues);
+                    host.refuse_kept(&format!("{id}@{version}"), &found.left["programs"]);
+                    Some((None, found))
                 }
-                Err(issues) => (version, "refused", issues),
-            }
+                false => {
+                    // A planted core's row may hold nothing a check left, or what another
+                    // digest's check left: its verdict stands with nothing admitted.
+                    let core = (found.left.get("core"))
+                        .and_then(|left| packs.admit_kept(&manifest, sealed, left).cloned());
+                    let pack = core.and_then(|pack| {
+                        if host.take(&manifest, &pack, sealed, &found.left["programs"]) {
+                            return Some(pack);
+                        }
+                        packs.withdraw(&pack.id.text());
+                        None
+                    });
+                    (pack.is_some() || found.forced).then_some((pack, found))
+                }
+            });
+            let (outcome, issues) = match taken {
+                Some((pack, found)) => {
+                    layouts = found.layouts;
+                    if let Some(pack) = pack {
+                        ADMITTED.with(|a| a.borrow_mut().insert(key, (manifest, pack)));
+                    }
+                    (
+                        if found.refused {
+                            "refused"
+                        } else {
+                            "installed"
+                        },
+                        found.issues,
+                    )
+                }
+                None => {
+                    let admitted = match known {
+                        Some(pack) => Ok(packs.readmit(pack).clone()),
+                        None => packs.admit(&manifest, sealed).cloned(),
+                    };
+                    let (left, issues) = match admitted {
+                        Ok(pack) => {
+                            let (rows, mut issues) = host.vet(&manifest, &pack, sealed);
+                            issues.extend(kind_meshes(&pack, sealed, evidence));
+                            layouts = rows;
+                            let ours = pack.id.text();
+                            if issues.is_empty() {
+                                let programs = host.left(&manifest, &pack);
+                                let left =
+                                    programs.map(|p| json!({"core": pack.left(), "programs": p}));
+                                if twin.is_none() {
+                                    ADMITTED.with(|a| a.borrow_mut().insert(key, (manifest, pack)));
+                                }
+                                (left, issues)
+                            } else {
+                                packs.withdraw(&ours);
+                                (Some(json!({"programs": host.refusal(&ours)})), issues)
+                            }
+                        }
+                        Err(issues) => (Some(json!({"programs": null})), issues),
+                    };
+                    let issues = as_json(&issues);
+                    if let (Some(row), Some(left)) = (&row, &left) {
+                        row.write(!issues.is_empty(), &issues, &layouts, left);
+                    }
+                    (
+                        if issues.is_empty() {
+                            "installed"
+                        } else {
+                            "refused"
+                        },
+                        issues,
+                    )
+                }
+            };
+            (version, outcome, issues)
         }
     };
+    checked::ran(before, checked::reading(packs, host));
     let check_ms = started.elapsed().as_secs_f64() * 1e3;
-    let issues: Vec<Value> = issues.iter().map(Issue::to_json).collect();
     // One row per version: a refused republish leaves the row of the version first published,
     // and a version offered again after a refusal takes its row once admitted.
     match rows
@@ -189,7 +284,7 @@ pub fn rows_reply(rows: &[Row], packs: &Packs) -> Value {
             })
         })
         .collect();
-    json!({"packs": list})
+    json!({"packs": list, "counts": checked::counts()})
 }
 
 /// `expansions` on a reply: one row per recipe instance, sorted by instance; `timing` when the

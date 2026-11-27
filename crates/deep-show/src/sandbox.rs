@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use deep_canvas::document::{Issue, Pack, PackId};
-use deep_canvas::registry::lists::{entry_digest, SealedEntry};
+use deep_canvas::registry::lists::{entry_digest, KitResult, SealedEntry};
 use deep_canvas::registry::Sealed;
 use deep_canvas_sandbox::check::Refusal;
 use deep_canvas_sandbox::layouts::{self, Planted, PACK_MAX_BYTES};
@@ -37,6 +37,8 @@ pub struct Host {
     pub links: u64,
     pub rewrites: u64,
     pub runs: u64,
+    /// #3611: the registry kits its half of a pack's check ran.
+    pub kits: u64,
     /// Each program's check and rewrite, by its sha256 and role: once per program.
     rewritten: BTreeMap<(String, String), Result<Rewritten, Vec<Refusal>>>,
     /// Each provider's output, by its content key: once per key.
@@ -213,20 +215,7 @@ impl Host {
         pack: &Pack,
         sealed: &Sealed,
     ) -> (Vec<Value>, Vec<Issue>) {
-        // The other packs this host holds are in the key: a provider's output may name one's layout.
-        let others: Vec<String> = self
-            .packs
-            .keys()
-            .filter(|k| **k != pack.id.text())
-            .cloned()
-            .collect();
-        let key = (
-            pack.id.text(),
-            hash(manifest.to_string().as_bytes()),
-            format!("{:?}", self.planted),
-            self.evidence.clone(),
-            others.join(" "),
-        );
+        let key = self.vet_key(manifest, pack);
         // A host that checked this version already (#1958's reinstall) checks it again as it did,
         // and its partial check is not kept; so is one whose evidence lost bytes the check kept.
         let again = self.vetted.contains(&key.1);
@@ -270,6 +259,120 @@ impl Host {
             VETTED.with(|c| c.borrow_mut().insert(key, v));
         }
         (rows, issues)
+    }
+
+    /// What a passed check of a version is kept under in this process.
+    fn vet_key(&self, manifest: &Value, pack: &Pack) -> VetKey {
+        // The other packs this host holds are in the key: a provider's output may name one's layout.
+        let others: Vec<String> = self
+            .packs
+            .keys()
+            .filter(|k| **k != pack.id.text())
+            .cloned()
+            .collect();
+        (
+            pack.id.text(),
+            hash(manifest.to_string().as_bytes()),
+            format!("{:?}", self.planted),
+            self.evidence.clone(),
+            others.join(" "),
+        )
+    }
+
+    /// #3611: what a passed check of this version left in the host, as the store's row keeps it
+    /// (Pack: a check's result, kept): its layouts' rows, its program entries, each rewritten
+    /// program's hash, its data verdicts, its registry entries with their kits, the hashes it
+    /// kept in the evidence store and the logic module's reply. `None` when this process holds
+    /// no passed check of it.
+    pub fn left(&self, manifest: &Value, pack: &Pack) -> Option<Value> {
+        let key = self.vet_key(manifest, pack);
+        let v = VETTED.with(|c| c.borrow().get(&key).cloned())?;
+        let pairs = |list: &[((String, String), Value)]| -> Vec<Value> {
+            list.iter().map(|((a, b), v)| json!([a, b, v])).collect()
+        };
+        let rewritten: Vec<Value> = (v.rewritten.iter())
+            .map(|((sha, role), r)| json!([sha, role, r.as_ref().ok().map(|rw| &rw.hash)]))
+            .collect();
+        let entries: Vec<Value> = (v.entries.iter())
+            .map(|e| json!({"registry": e.registry, "name": e.name, "value": e.value, "since": e.since, "digest": e.digest, "kit": e.kit.kept()}))
+            .collect();
+        Some(json!({
+            "rows": v.rows, "programs": pairs(&v.programs), "rewritten": rewritten,
+            "validated": pairs(&v.validated), "entries": entries, "vetted": v.vetted,
+            "kept": v.kept, "libs": crate::packs::lib_kept(&key.1),
+        }))
+    }
+
+    /// #3611: admits the version with what a kept check left ([`Host::left`]) and runs nothing:
+    /// a program is rewritten again when a piece first runs it. False when what was left doesn't
+    /// fit this build's registries, and the check runs.
+    pub fn take(&mut self, manifest: &Value, pack: &Pack, sealed: &Sealed, left: &Value) -> bool {
+        let pairs = |key: &str| -> Option<Vec<((String, String), Value)>> {
+            let list = left.get(key)?.as_array()?.iter();
+            list.map(|p| {
+                Some((
+                    (p[0].as_str()?.into(), p[1].as_str()?.into()),
+                    p.get(2)?.clone(),
+                ))
+            })
+            .collect()
+        };
+        let texts = |key: &str| -> Option<Vec<String>> {
+            let list = left.get(key)?.as_array()?.iter();
+            list.map(|s| s.as_str().map(String::from)).collect()
+        };
+        let entry = |e: &Value| -> Option<SealedEntry> {
+            let text = |key: &str| e[key].as_str().map(String::from);
+            let reg = sealed.registry(e["registry"].as_str()?)?;
+            Some(SealedEntry {
+                name: text("name")?,
+                registry: reg.def.name.clone(),
+                origin: "pack",
+                module: String::new(),
+                pack: pack.id.text(),
+                value: e.get("value")?.clone(),
+                since: text("since")?,
+                digest: text("digest")?,
+                kit: KitResult::from_kept(&reg.def.kit, &e["kit"])?,
+                twin: None,
+            })
+        };
+        let vetted = || -> Option<Vetted> {
+            Some(Vetted {
+                rows: left.get("rows")?.as_array()?.clone(),
+                programs: pairs("programs")?,
+                rewritten: Vec::new(),
+                validated: pairs("validated")?,
+                entries: (left.get("entries")?.as_array()?.iter())
+                    .map(entry)
+                    .collect::<Option<_>>()?,
+                vetted: texts("vetted")?,
+                kept: texts("kept")?,
+            })
+        };
+        let Some(v) = vetted() else {
+            return false;
+        };
+        let key = self.vet_key(manifest, pack);
+        if let Some(reply) = left.get("libs").filter(|r| !r.is_null()) {
+            crate::packs::lib_take(&key.1, reply.clone());
+        }
+        VETTED.with(|c| c.borrow_mut().insert(key, v));
+        // The host is given what the check left as a later host of the checking process is.
+        self.vet(manifest, pack, sealed).1.is_empty()
+    }
+
+    /// #3611: the refusal this host holds of a version its half of the check refused, which a
+    /// document naming one of its providers fails with.
+    pub fn refusal(&self, key: &str) -> Option<&Vec<Value>> {
+        self.refused.get(key)
+    }
+
+    /// Holds a kept refusal's issues as [`Host::refusal`] gave them, when its half refused.
+    pub fn refuse_kept(&mut self, key: &str, refusal: &Value) {
+        if let Some(issues) = refusal.as_array() {
+            self.refused.insert(key.to_string(), issues.clone());
+        }
     }
 
     fn vet_fresh(
@@ -385,6 +488,7 @@ impl Host {
             if let Some(reg) = sealed.registry("data.layout@1") {
                 let mut entry = layout.clone();
                 entry["judged"] = json!(judged);
+                self.kits += 1;
                 let kit = reg.def.run_kit(name, &entry);
                 let unnamed: Vec<&str> = kit
                     .failed()
@@ -421,6 +525,7 @@ impl Host {
             for (key, preset) in manifest["presets"].as_object().into_iter().flatten() {
                 let name = format!("{pack_name}.{key}");
                 let since = "R6".to_string();
+                self.kits += 1;
                 entries.push(SealedEntry {
                     kit: reg.def.run_kit(&name, preset),
                     registry: reg.def.name.clone(),
@@ -643,10 +748,8 @@ impl Host {
         };
         let pack_id = format!("{id}@{}", manifest["version"].as_str().unwrap_or_default());
         let since = "R6".to_string();
-        Ok(reply["interfaces"]
-            .as_array()
-            .into_iter()
-            .flatten()
+        let judged = reply["interfaces"].as_array().into_iter().flatten();
+        let made: Vec<SealedEntry> = judged
             .filter_map(|i| {
                 let name = i["name"].as_str()?.to_string();
                 let mut value = manifest["interfaces"].get(i["label"].as_str()?)?.clone();
@@ -664,7 +767,9 @@ impl Host {
                     twin: None,
                 })
             })
-            .collect())
+            .collect();
+        self.kits += made.len() as u64;
+        Ok(made)
     }
 
     /// A provider's links and its library form at its pack's check (Provider `gen@1`: links, the
