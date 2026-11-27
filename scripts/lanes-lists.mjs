@@ -1269,6 +1269,10 @@ byHand.push('tests/acceptance/2760/budgets.test.ts');
 timed.push('tests/acceptance/2386/ac6-budget.test.ts');
 // Its blind redraft of the pixel-hash test (tests/acceptance/2386-redraft-ac6-hashes/DISPUTE.md) builds deep-canvas-render.
 alone.push('tests/acceptance/2386-redraft-ac6-hashes/');
+// #2039's folder (blind) runs alone by its lane.json; ac4-budget.test.ts times 500 nine-part atlas rows on a release
+// deep-show. Its Oracle lane builds deep-canvas-render.
+timed.push('tests/acceptance/2039/ac4-budget.test.ts');
+alone.push('tests/acceptance/2039-oracle/');
 // #1456's first-draft AC2 and AC4 tests: their twins widen Plant to string, which builds neither at the base nor on the
 // work, so they can't be proven. Their blind redraft (tests/acceptance/1456-redraft-ac2-ac4/DISPUTE.md) runs in their
 // place, alone: its hubs run deep-hook from target/, and #992's suite it runs builds deep-drive with cargo.
@@ -1615,3 +1619,26 @@ byHand.push('tests/acceptance/3461/once.test.ts');
 // #3467's folder (blind) runs alone by its lane.json: each file draws on Metal and decodes on the hardware decoder.
 // players.test.ts judges #499's five players' frames a second on the real clock on a reference Mac.
 timed.push('tests/acceptance/3467/players.test.ts');
+
+// #3549 makes the build number a ceiling, 4 on the Mac and 6 on the Spark, so these files, which fill the build class
+// with the old 1 and 2, no longer hold their scene on the right program (tests/acceptance/<issue>/DISPUTE-3549.md).
+// Each, kept as written, maps to its blind redraft, which reads the count from throttle.mjs's LIMITS line and runs in
+// its place with every test of the file; the originals run by hand until the owner rules on the swap.
+Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial'], ['3238', 'no-grant'], ['3240', 'line'], ['3334', 'stall'], ['3334', 'far-stalled'], ['3567', 'grant'], ['2820', 'failures']]
+  .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3549/`])));
+byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3549/')));
+
+// #3507's folder (blind) runs alone by its lane.json: its files build deep-show and deep-gpu and draw on Metal.
+// ac3-timing.test.mjs times the geometry pass against the merge base's on the reference Mac, where a pass changed.
+timed.push('tests/acceptance/3507/ac3-timing.test.mjs');
+
+// #3507's criterion 2 was reworded by the owner (2026-11-26: the class fixtures count from 1 to 2 a covered pixel).
+// ac2-classes.test.mjs, written for the criterion as it was, is kept as written, by hand only; its blind redraft
+// runs in its place, alone: it draws on Metal under the machine's GPU lease.
+Object.assign(redrafted, { 'tests/acceptance/3507/ac2-classes.test.mjs': 'tests/acceptance/3507-redraft-ac2/' });
+byHand.push('tests/acceptance/3507/ac2-classes.test.mjs');
+alone.push('tests/acceptance/3507-redraft-ac2/');
+
+// #3617's folder (blind) runs alone by its lane.json: each file builds deep-gpu and runs GPU surface frames at 1936 x 1584.
+// ac2-onepass.test.ts judges the five-run draw-and-finish p95 on a reference Mac.
+timed.push('tests/acceptance/3617/ac2-onepass.test.ts');

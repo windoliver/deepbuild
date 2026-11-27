@@ -1,0 +1,35 @@
+#3552, the file index before the step. Reference Mac: 18 cores, macOS 27.2. The home folder is written ~. Times are UTC.
+
+== 2026-11-25, from the issue's table, not read again here
+Read with: mdfind -count -onlyin <folder> 'kMDItemFSSize > 0'
+~/deepbuild-shards, 103 shards                         589,947   (554,102 half an hour before)
+the two folders sessions' worktrees are made in      1,636,561   (610 folders)
+~/deepbuild-bays                                         1,022
+~, the whole home folder                             2,811,573
+~/.deepbuild, ~/.cargo and ~/.cache                          0
+
+== 2026-11-26, read for this change, with no step done
+13:29:55Z ~/deepbuild-shards 900657 (41 s). The indexer faulted at 13:29:31Z while it served this count (mac-index-fault.txt), so it may be short.
+13:29:55Z ~/deepbuild-bays 0, ~/dev/claude-worktrees 0, ~/dev/devin-worktrees 0, ~ 0. No reading: the index was already marked invalid.
+13:32:05Z the whole machine, mdfind -count 'kMDItemFSSize > 0': 21250, the new index being built
+13:34:32Z the whole machine: 88183
+14:17Z    System Settings, Spotlight, Search Privacy: "No Locations Added", 0 rows in the list
+
+== The load sampler's log before the step
+node scripts/throttle.mjs load, a sample a minute; the log is kept as ~/.deepbuild/throttle/load.log.3240-before-3550.
+A sample's top is its five busiest processes. Counted per sample, as the issue's 22.8% is:
+  jq -c 'select(.top) | [.top[].command] | any(IN("mds","mds_stores","mdworker_shared","mdsync","fseventsd"))' <log> | sort | uniq -c
+
+The whole log:
+  samples: 3394 from 2026-11-23T09:11:11.830Z to 2026-11-25T18:15:39.376Z, in 2822 distinct minutes, 0 failed
+  mds, mds_stores, mdworker_shared, mdsync or fseventsd: among the five busiest in 773 of 3394 samples, 22.8%, at 1.23 cores then
+  mds, mds_stores, mdworker_shared or mdsync: among the five busiest in 625 of 3394 samples, 18.4%, at 1.28 cores then
+  fseventsd: among the five busiest in 171 of 3394 samples, 5.0%, at 0.89 cores then
+  load above the cores in 3087 of 3394 samples, 91.0%
+
+Its last 24 hours, to the Mac's restart at 2026-11-25T18:16:25Z:
+  samples: 1856 from 2026-11-24T18:16:24.940Z to 2026-11-25T18:15:39.376Z, in 1296 distinct minutes, 0 failed
+  mds, mds_stores, mdworker_shared, mdsync or fseventsd: among the five busiest in 343 of 1856 samples, 18.5%, at 1.17 cores then
+  mds, mds_stores, mdworker_shared or mdsync: among the five busiest in 237 of 1856 samples, 12.8%, at 1.28 cores then
+  fseventsd: among the five busiest in 117 of 1856 samples, 6.3%, at 0.84 cores then
+  load above the cores in 1586 of 1856 samples, 85.5%

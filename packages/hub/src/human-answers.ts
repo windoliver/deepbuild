@@ -252,9 +252,9 @@ export class HumanAnswers {
     return tree === switched[2] ? `your answer to ${switched[1]} switched the option the agent went on with, and no check has run on a commit after it` : undefined;
   }
 
-  /** A folder's spec checks as the revision you approved writes them (#1864): its HEAD's spec, never the worktree's file. */
+  /** A folder's spec checks as the revision you approved writes them (#1864, #3466): the one kept for its repo, or until it has one its HEAD's spec, never the worktree's file. */
   private async approvedChecks(cwd: string): Promise<ReturnType<typeof checksIn>> {
-    return checksIn((await approvedSpec(cwd, (await headOf(cwd).catch(() => undefined))?.sha ?? '')).spec);
+    return checksIn((await approvedSpec(cwd, (await headOf(cwd).catch(() => undefined))?.sha ?? '', this.options.services.record)).spec);
   }
   private async proves(cwd: string, check: string): Promise<boolean> { return (await this.approvedChecks(cwd).catch(() => new Map())).has(check); }
   /**

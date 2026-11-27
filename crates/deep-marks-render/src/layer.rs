@@ -148,10 +148,18 @@ pub fn gpui_lacks<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Option<Stri
                 fill: Fill::Ramp(_),
                 ..
             } => true,
-            // #535: GPUI draws no turned picture; #269: nor a grid image, rebuilt on the GPU.
+            // #535: GPUI draws no turned picture; #269: nor a grid image, rebuilt on the GPU;
+            // #2039: nor a nine-part frame.
             Mark::Image {
-                adjust, turn, grid, ..
-            } => !adjust.is_identity() || *turn != 0.0 || grid.is_some(),
+                adjust,
+                turn,
+                grid,
+                tile,
+                ..
+            } => {
+                let cut = tile.is_some_and(|t| t.cut.is_some());
+                !adjust.is_identity() || *turn != 0.0 || grid.is_some() || cut
+            }
             _ => false,
         };
         if lacks {

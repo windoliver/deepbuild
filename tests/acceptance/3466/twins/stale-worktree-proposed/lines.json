@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/approved-spec.ts": [
+    {
+      "find": [
+        "  if (approved.oid === is || (approved.kept && approved.oid && is && await unreached(folder, is, approved.oid, approved.kept))) return undefined;"
+      ],
+      "wrong": [
+        "  if (approved.oid === is || (approved.kept && approved.oid && is && await unreached(folder, is, approved.oid, approved.kept) && false)) return undefined;"
+      ]
+    }
+  ]
+}
