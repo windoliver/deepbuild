@@ -258,6 +258,9 @@ pub enum Planted {
     MirrorSamplesFullFrame,
     /// #468: a circle of confusion linear in |d − s|, matched to the physical one at 10 m.
     CocLinearInDistance,
+    /// #3506: the depth of field copies the image it shares with motion blur into the linear one
+    /// before its gather writes it.
+    DofReadsSharedBeforeWrite,
     /// #166: the water's foam carried from frame to frame as simulation state.
     WaterFoamKeepsState,
     /// #268: the shore's field measured from each item's centre, not where it meets the water.
@@ -787,6 +790,7 @@ impl Planted {
             "mirror_halves_twice" => Planted::MirrorHalvesTwice,
             "mirror_samples_full_frame" => Planted::MirrorSamplesFullFrame,
             "coc_linear_in_distance" => Planted::CocLinearInDistance,
+            "dof_reads_shared_before_write" => Planted::DofReadsSharedBeforeWrite,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
