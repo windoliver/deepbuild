@@ -1654,3 +1654,11 @@ for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
   redrafted[`tests/acceptance/1352/${name}.test.mjs`] = 'tests/acceptance/1352-redraft-3402/';
   byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
 }
+
+// #3588 under #3549: bound and granted fill the build class with the old 1 and 2
+// (tests/acceptance/3588/DISPUTE-3549.md). Kept as written, by hand only; their blind redraft, which holds one holder
+// per slot of throttle.mjs's LIMITS line, runs in their place (the owner's call, 2026-11-27).
+for (const name of ['bound', 'granted']) {
+  redrafted[`tests/acceptance/3588/${name}.test.mjs`] = 'tests/acceptance/3588-redraft-3549/';
+  byHand.push(`tests/acceptance/3588/${name}.test.mjs`);
+}
