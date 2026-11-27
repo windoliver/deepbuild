@@ -293,7 +293,7 @@ export function writeLibrary(dir: string, shelf: Pick<Shelf, 'host' | 'serve'>, 
   }
   const manifest = {
     id: lib.id, name: lib.id.split('/')[1], version: lib.version, license: lib.license.id,
-    description: `A sample library made by the #154 acceptance tests (${lib.id}).`, requires: { core: '^1', modules: {} },
+    description: `A sample library made by the #154 acceptance tests (${lib.id}).`, requires: { core: '>=0.0.0', modules: {} },
     assets: takesOf(lib).map((t) => ({
       path: t.path, url: url(t), sha256: sha256(t.bytes), size: t.bytes.length, license: t.license ?? lib.license,
       upstream: { url: url(t), version: lib.version, modified: '2026-01-01T00:00:00Z' },

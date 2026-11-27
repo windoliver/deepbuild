@@ -1,0 +1,128 @@
+Base commit: c60215952 ("Merge pull request #3632 from windoliver/docs/3618-gpui-fast-decision"), = origin/main
+Build: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs build -- cargo build --locked --bin deep-show --no-default-features --features r1
+       (cold, 9m 38s, into this checkout's target/debug/deep-show; the file's own cargo build was then a no-op)
+Run: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2058 --no-file-parallelism --testTimeout=600000
+     (vitest 5.0.5, node v24.22.0, darwin-arm64)
+Result: Test Files 1 failed (1); Tests 4 failed (4); exit 1. Duration 4.03 s.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/2058/tsconfig.json, exit 0.
+Date: 2026-11-26. Load at the run (uptime): 17:33 up 6 days, 21:59, 3 users, load averages: 42.91 46.87 36.06
+      (not waited for; nothing here is timed).
+
+Why each test fails at the base: nothing compares `requires.core` with the build. The document check only asks that
+the value is text, and the pack check only that the range parses, so each fixture that must be refused checks clean,
+and each test fails at its first assertion, the one that the document or the pack is refused.
+
+requires-core.test.ts
+  x #2058.e29d9bdc (AC1)  at "fixtures/documents/board.json with requires.core 0.0.1, one patch above the build's core
+      0.0.0, is refused": expected 'presented' to be 'refused'; the reply has no issue.
+  x #2058.3cf1dddc (AC2)  at "fixtures/documents/board.json with requires.core "soon" is refused": expected 'presented'
+      to be 'refused'; the reply has no issue.
+  x #2058.729deb44 (AC3)  at "the pack acme/ahead@1.0.0 (fixtures/packs/ahead-1.0.0) with requires.core >=0.0.1, on the
+      build's core 0.0.0, is refused by the pack check": expected 'installed' to be 'refused'; the row has no issue.
+  x #2058.d337dccb (AC4)  at "fixtures/documents/lists-pack.json, which lists the pack acme/ahead@1.0.0 whose
+      requires.core is >=0.0.1 on the build's core 0.0.0, is refused on load": expected 'presented' to be 'refused';
+      the reply has no issue and holds t1's expansion through acme/ahead@1.0.0.
+
+The halves a test doesn't reach at the base (the same document at the build's core, the one with no requires.core, the
+pack with >=0.0.0) were read by hand on the same binary, below: each checks clean, so each test's second half holds at
+the base and only the refusals are missing.
+
+----------------------------------------------------------------------------------------------------------------------
+The bug on main, reproduced: the base binary's raw answers (target/debug/deep-show run, one scenario each, the suite's
+own scenario shape; each reply cut to core, outcome, issues and the expansions' instance, kind, pack and derived IDs;
+the `packs` replies whole). The issue read this from the code and did not run it.
+
+registry core: "core@0.0.0"
+board requires.core 0.0.1: {"core":"core@0.0.0","outcome":"presented","issues":[],"expansions":[]}
+board requires.core 0.0.0: {"core":"core@0.0.0","outcome":"presented","issues":[],"expansions":[]}
+board requires.core soon: {"core":"core@0.0.0","outcome":"presented","issues":[],"expansions":[]}
+board requires.core none: {"core":"core@0.0.0","outcome":"presented","issues":[],"expansions":[]}
+pack >=0.0.1: packs: {"packs":[{"pack":"acme/ahead","version":"1.0.0","state":"installed","checks":1,"issues":[],"layouts":[],"named_by":0}],"core":"core@0.0.0","set_digest":"fe5188ae99edcc03c776af9942b06307cfd715075dad1c623e2b3c8887b26025"}
+pack >=0.0.1: lists-pack.json: {"core":"core@0.0.0","outcome":"presented","issues":[],"expansions":[{"instance":"t1","kind":"ahead.tile@1","pack":"acme/ahead@1.0.0","derived":["t1.face"]}]}
+pack >=0.0.0: packs: {"packs":[{"pack":"acme/ahead","version":"1.0.0","state":"installed","checks":1,"issues":[],"layouts":[],"named_by":0}],"core":"core@0.0.0","set_digest":"fe5188ae99edcc03c776af9942b06307cfd715075dad1c623e2b3c8887b26025"}
+pack >=0.0.0: lists-pack.json: {"core":"core@0.0.0","outcome":"presented","issues":[],"expansions":[{"instance":"t1","kind":"ahead.tile@1","pack":"acme/ahead@1.0.0","derived":["t1.face"]}]}
+
+----------------------------------------------------------------------------------------------------------------------
+The run's output (colour codes removed; the checkout's path cut to <checkout>):
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2058
+
+ ❯ requires-core.test.ts (4 tests | 4 failed) 3942ms
+   × #2058.e29d9bdc a document whose requires.core is one patch above the build's core is refused out_of_range at requires/core, its message holding both versions; at the build's core it checks clean 2311ms
+   × #2058.3cf1dddc the same document with requires.core of soon is refused at requires/core as not a version; with no requires.core it checks clean 94ms
+   × #2058.729deb44 a pack whose requires.core is >= one patch above the build's core is refused by the pack check out_of_range at its requires/core, its message naming the pack, the range and the build's core; with >= the build's core it checks clean 160ms
+   × #2058.d337dccb a document that lists that pack is refused on load, naming the pack and its range 210ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  requires-core.test.ts > #2058.e29d9bdc a document whose requires.core is one patch above the build's core is refused out_of_range at requires/core, its message holding both versions; at the build's core it checks clean
+AssertionError: fixtures/documents/board.json with requires.core 0.0.1, one patch above the build's core 0.0.0, is refused; the document check's answer: {"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["r1"],"removed":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.1.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"fe5188ae99edcc03c776af9942b06307cfd715075dad1c623e2b3c8887b26025"}: expected 'presented' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "presented"
+
+ ❯ requires-core.test.ts:47:91
+     45|   const newer = shown(boardRequiring(core.above));
+     46|   const got = checked(newer);
+     47|   expect(got.outcome, `${name}, is refused; the document check's answe…
+       |                                                                                           ^
+     48|   const at = errors(issues(newer)).filter((i) => i.code === 'out_of_ra…
+     49|   expect(at.length, `${name}, is refused by an error out_of_range at r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  requires-core.test.ts > #2058.3cf1dddc the same document with requires.core of soon is refused at requires/core as not a version; with no requires.core it checks clean
+AssertionError: fixtures/documents/board.json with requires.core "soon" is refused; the document check's answer: {"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["r1"],"removed":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.1.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"fe5188ae99edcc03c776af9942b06307cfd715075dad1c623e2b3c8887b26025"}: expected 'presented' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "presented"
+
+ ❯ requires-core.test.ts:62:89
+     60|   const soon = shown(boardRequiring('soon'));
+     61|   const got = checked(soon);
+     62|   expect(got.outcome, `${name} is refused; the document check's answer…
+       |                                                                                         ^
+     63|   const at = errors(issues(soon)).filter((i) => i.code === 'out_of_ran…
+     64|   expect(at.length, `${name} is refused by an error out_of_range at re…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  requires-core.test.ts > #2058.729deb44 a pack whose requires.core is >= one patch above the build's core is refused by the pack check out_of_range at its requires/core, its message naming the pack, the range and the build's core; with >= the build's core it checks clean
+AssertionError: the pack acme/ahead@1.0.0 (fixtures/packs/ahead-1.0.0) with requires.core >=0.0.1, on the build's core 0.0.0, is refused by the pack check; its row: {"pack":"acme/ahead","version":"1.0.0","state":"installed","checks":1,"issues":[],"layouts":[],"named_by":0}: expected 'installed' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "installed"
+
+ ❯ requires-core.test.ts:79:89
+     77|   const ahead = aheadRequiring(range, temp('pack'));
+     78|   const row = packRow(run(bin(), scenario(temp('evidence'), [ahead], […
+     79|   expect(row.state, `${name}, is refused by the pack check; its row: $…
+       |                                                                                         ^
+     80|   const at = errors(row.issues).filter((i) => i.code === 'out_of_range…
+     81|   expect(at.length, `${name}, is refused by an error out_of_range at r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  requires-core.test.ts > #2058.d337dccb a document that lists that pack is refused on load, naming the pack and its range
+AssertionError: fixtures/documents/lists-pack.json, which lists the pack acme/ahead@1.0.0 whose requires.core is >=0.0.1 on the build's core 0.0.0, is refused on load; the load's answer: {"rev":1,"expansions":[{"instance":"t1","kind":"ahead.tile@1","pack":"acme/ahead@1.0.0","key":"7a89028d8cc753ebf6af9379c390c2a1","derived":{"t1.face":{"id":"t1.face","kind":"rect@1","layer":"you-231b11069cb5","name":"t1.face","order":"a0","params":{"box":[0,0,40,40],"paint":{"fill":{"role":"muted"}}},"at":{"pos":[20,20,0]}}},"seeds":{"t1.face":"f85b95cec16b164f"},"broken_out":[],"channels":{}}],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["t1"],"removed":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.1.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"fe5188ae99edcc03c776af9942b06307cfd715075dad1c623e2b3c8887b26025"}: expected 'presented' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "presented"
+
+ ❯ requires-core.test.ts:103:91
+    101|   const listing = shown(boardListingAhead(), [aheadRequiring(range, te…
+    102|   const got = checked(listing);
+    103|   expect(got.outcome, `${name}, is refused on load; the load's answer:…
+       |                                                                                           ^
+    104|   const naming = errors(issues(listing)).filter((i) => mentions(i.raw,…
+    105|   expect(naming.length, `an error of the load of ${name}, names the pa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  17:33:10
+   Duration  4.03s (tests 99%)
+

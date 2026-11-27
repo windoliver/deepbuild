@@ -47,4 +47,5 @@ These hold in the core and every extension:
 - Delete your additions whose removal changes neither required behavior nor proof, and code your change leaves without a caller; revert unrelated edits. Preserve others' code and work and required failing checks.
 - No option, flag, fallback, config key, dependency, export or duplicate test the task doesn't need.
 - Add a shared abstraction only when two callers need it now.
+- Write no comments: names say what code does, and a decision goes in `docs/adr/` ([0001](docs/adr/0001-code-carries-no-comments.md)). The comment ratchet only goes down.
 - Reach a module only through its public entry. No import cycles, and the core never imports an extension.
