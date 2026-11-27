@@ -67,7 +67,7 @@ test at tests/agent-name-branches.test.mjs:53:1
   + ]
   - []
   
-      at TestContext.<anonymous> (file:///home/jing/deepbuild/.claude/worktrees/redraft-1880-base/tests/agent-name-branches.test.mjs:54:10)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/redraft-1880-base/tests/agent-name-branches.test.mjs:54:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.start (node:internal/test_runner/test:1262:17)
@@ -132,7 +132,7 @@ test at tests/agent-name-branches.test.mjs:57:1
   -   "packages/hub/src/core.ts:2639 branches on an agent's name (meta.agent === 'codex'); read a cap or a fact its adapter declares instead"
     ]
   
-      at TestContext.<anonymous> (file:///home/jing/deepbuild/.claude/worktrees/redraft-1880-base/tests/agent-name-branches.test.mjs:64:10)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/redraft-1880-base/tests/agent-name-branches.test.mjs:64:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
