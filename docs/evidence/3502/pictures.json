@@ -1,0 +1,76 @@
+{
+  "differing": [
+    {
+      "page": "deepbuild/needs-you",
+      "window": "opening",
+      "theme": "light",
+      "cause": "gpui-pre 0.3.11 sets a line's first text run at its exact point size, no longer a hair larger (gpui-pre-apple src/text_system.rs, break_ligature starts false), so two glyphs of one chrome label land a fraction of a pixel from where 0.3.9 drew them; with 0.3.9's value put back, this picture equals the merge base's."
+    },
+    {
+      "page": "deepbuild/needs-you",
+      "window": "opening",
+      "theme": "dark",
+      "cause": "gpui-pre 0.3.11 sets a line's first text run at its exact point size, no longer a hair larger (gpui-pre-apple src/text_system.rs, break_ligature starts false), so two glyphs of one chrome label land a fraction of a pixel from where 0.3.9 drew them; with 0.3.9's value put back, this picture equals the merge base's."
+    },
+    {
+      "page": "deepbuild/needs-you",
+      "window": "reference",
+      "theme": "light",
+      "cause": "gpui-pre 0.3.11 sets a line's first text run at its exact point size, no longer a hair larger (gpui-pre-apple src/text_system.rs, break_ligature starts false), so two glyphs of one chrome label land a fraction of a pixel from where 0.3.9 drew them; with 0.3.9's value put back, this picture equals the merge base's."
+    },
+    {
+      "page": "deepbuild/needs-you",
+      "window": "reference",
+      "theme": "dark",
+      "cause": "gpui-pre 0.3.11 sets a line's first text run at its exact point size, no longer a hair larger (gpui-pre-apple src/text_system.rs, break_ligature starts false), so two glyphs of one chrome label land a fraction of a pixel from where 0.3.9 drew them; with 0.3.9's value put back, this picture equals the merge base's."
+    },
+    {
+      "page": "deepbuild/home",
+      "window": "opening",
+      "theme": "light",
+      "cause": "gpui-pre 0.3.11 sets a line's first text run at its exact point size, no longer a hair larger (gpui-pre-apple src/text_system.rs, break_ligature starts false), so two glyphs of one chrome label land a fraction of a pixel from where 0.3.9 drew them; with 0.3.9's value put back, this picture equals the merge base's."
+    },
+    {
+      "page": "deepbuild/home",
+      "window": "opening",
+      "theme": "dark",
+      "cause": "gpui-pre 0.3.11 sets a line's first text run at its exact point size, no longer a hair larger (gpui-pre-apple src/text_system.rs, break_ligature starts false), so two glyphs of one chrome label land a fraction of a pixel from where 0.3.9 drew them; with 0.3.9's value put back, this picture equals the merge base's."
+    },
+    {
+      "page": "deepbuild/home",
+      "window": "reference",
+      "theme": "light",
+      "cause": "gpui-pre 0.3.11 sets a line's first text run at its exact point size, no longer a hair larger (gpui-pre-apple src/text_system.rs, break_ligature starts false), so two glyphs of one chrome label land a fraction of a pixel from where 0.3.9 drew them; with 0.3.9's value put back, this picture equals the merge base's."
+    },
+    {
+      "page": "deepbuild/home",
+      "window": "reference",
+      "theme": "dark",
+      "cause": "gpui-pre 0.3.11 sets a line's first text run at its exact point size, no longer a hair larger (gpui-pre-apple src/text_system.rs, break_ligature starts false), so two glyphs of one chrome label land a fraction of a pixel from where 0.3.9 drew them; with 0.3.9's value put back, this picture equals the merge base's."
+    },
+    {
+      "page": "deepbuild/session",
+      "window": "opening",
+      "theme": "light",
+      "cause": "gpui-pre 0.3.11 fills a path by its winding at each pixel where 0.3.9 drew triangles under 4x MSAA, so the session line's edge pixels take other coverage; every differing pixel lies within 2 px of the line, and the line's ink is within half a percent of the merge base's."
+    },
+    {
+      "page": "deepbuild/session",
+      "window": "opening",
+      "theme": "dark",
+      "cause": "gpui-pre 0.3.11 fills a path by its winding at each pixel where 0.3.9 drew triangles under 4x MSAA, so the session line's edge pixels take other coverage; every differing pixel lies within 2 px of the line, and the line's ink is within half a percent of the merge base's."
+    },
+    {
+      "page": "deepbuild/session",
+      "window": "reference",
+      "theme": "light",
+      "cause": "gpui-pre 0.3.11 fills a path by its winding at each pixel where 0.3.9 drew triangles under 4x MSAA, so the session line's edge pixels take other coverage; every differing pixel lies within 2 px of the line, and the line's ink is within half a percent of the merge base's."
+    },
+    {
+      "page": "deepbuild/session",
+      "window": "reference",
+      "theme": "dark",
+      "cause": "gpui-pre 0.3.11 fills a path by its winding at each pixel where 0.3.9 drew triangles under 4x MSAA, so the session line's edge pixels take other coverage; every differing pixel lies within 2 px of the line, and the line's ink is within half a percent of the merge base's."
+    }
+  ]
+}
