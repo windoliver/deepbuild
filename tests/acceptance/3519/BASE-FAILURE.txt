@@ -1,0 +1,57 @@
+#3519 acceptance suite on the base, trimmed.
+
+Base: f0a816405 (origin/main, "Merge pull request #3354 ..."); merge base of HEAD with origin/main: f0a816405.
+Node v24.22.0, vitest 5.0.5, gpt-tokenizer 4.0.0 (o200k_base). macOS, load averages 47 / 106 / 93 at the end.
+deep-show built once in the worktree's target/: cargo build --locked --bin deep-show --no-default-features --features full.
+
+$ CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3519 \
+    --no-file-parallelism --cache=false --fsModuleCache=false --reporter=verbose
+
+ ✓ drift.test.ts > AC4 #3519.f27efbd8 ... > node scripts/canvas-skill.mjs --check finds no drift
+ × drift.test.ts > AC4 #3519.f27efbd8 ... > #508's first criterion passes unchanged: tests/acceptance/508 is the merge base's, and every test in its ac1-skill.test.ts passes
+ × guide.test.ts > AC2 #3519.a0dcc475 ... > the canvas skill's line names the guide, and deep_kinds op: read with that name returns every craft check as #2697's AC2 has it
+ × guide.test.ts > AC2 #3519.a0dcc475 ... > a planted canvas skill with no line naming the guide fails, naming the skill
+ × line.test.ts > AC3 #3519.0b8cfc3f ... > the line in the canvas skill and the line in the skill are byte-identical, on disk and as both generators write them
+ × line.test.ts > AC3 #3519.0b8cfc3f ... > a planted generator that words one of the lines differently fails, naming both
+ × words.test.ts > AC1 #3519.a718f309 the canvas skill holds no craft check's description, threshold or fix and is at most 16700 tokens by the pinned tokenizer, and the merge base's fails, naming its count
+
+ Test Files  4 failed (4)
+      Tests  6 failed | 1 passed (7)
+   Duration  45.37s
+
+Why each fails:
+
+AC1 words: skills/deepbuild-canvas/SKILL.md: 18452 tokens; the merge base's: 18452 tokens
+  AssertionError: skills/deepbuild-canvas/SKILL.md against craft.json and the ceiling:
+  skills/deepbuild-canvas/SKILL.md holds shot_length's description: "Each shot's length, read from the timeline, ..."
+  skills/deepbuild-canvas/SKILL.md holds shot_length's threshold: "min 2 s, max 6 s, hard_max 8 s; ..."
+  ... (all 48: 16 checks x description, threshold, fix)
+  skills/deepbuild-canvas/SKILL.md is 18452 tokens by o200k_base (gpt-tokenizer 4.0.0), over the ceiling of 16700
+
+AC2 guide, first test:
+  skills/deepbuild-canvas/SKILL.md has no line for craft checks: no line of its body says "craft"
+AC2 guide, plant test: fails at its precondition, for the same reason:
+  skills/deepbuild-canvas/SKILL.md names a guide deep_kinds serves, so a plant can drop it: ... expected undefined to be defined
+
+AC3 line, first test:
+  the two skills on disk: skills/deepbuild-canvas/SKILL.md (on disk) has 0 craft lines, not one
+AC3 line, plant test: fails at its precondition:
+  the two generators' skills, before the plant: skills/deepbuild-canvas/SKILL.md (as generated) has 0 craft lines, not one
+
+AC4 drift, #508 test: #508's suite is unchanged, but its AC1 test is BLOCKED on this checkout:
+  failed: AC1 #508.9e5770bb ... AssertionError: BLOCKED: no recorded claude-code run at
+  ~/private/deepbuild-core/.claude/worktrees/agent-a2ca1cd003e0477e3/docs/evidence/508/agents/claude-code.run.json: run ac1-sk...
+  (docs/evidence/508/agents/ does not exist at f0a816405.)
+
+AC4 drift, --check test: passes. The canvas skill on disk is what scripts/canvas-skill.mjs writes at the base, so
+this half is a regression check (README: On the base).
+
+Checked by hand, not committed: a canvas skill built in memory from the base's, with its section "Craft checks
+(craft@1)" replaced by the skill's craft line, is 16622 tokens and passes AC1's check, AC2's check (guide `craft`,
+every check served) and AC3's check, on disk and as generated. AC2's plant of it fails naming
+skills/deepbuild-canvas/SKILL.md ("has no line for craft checks"). AC3's two plants each fail with one line naming
+both skills ("the craft line of skills/deepbuild/SKILL.md and of skills/deepbuild-canvas/SKILL.md (p) differ: ...").
+
+node node_modules/typescript/bin/tsc -p tests/acceptance/3519/tsconfig.json --noEmit: clean.
+node scripts/repo-rules.mjs: exit 0 (its size NOTE counts this suite's 253-line fixture). scripts/text-lint.mjs
+scans Rust crates only.
