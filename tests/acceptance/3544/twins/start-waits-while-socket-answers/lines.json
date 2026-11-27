@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/service.ts": [
+    {
+      "find": [
+        "      } else if (Date.now() - moved >= wait) {"
+      ],
+      "wrong": [
+        "      } else if (Date.now() - moved >= Infinity) {"
+      ]
+    }
+  ]
+}
