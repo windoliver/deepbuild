@@ -169,7 +169,17 @@ pub fn serve(dir: &Path) -> std::io::Result<()> {
     }
     std::fs::create_dir_all(folder)?;
     let written = folder.join(format!(".panel.js.{}", std::process::id()));
-    std::fs::write(&written, source)?;
+    match std::fs::remove_file(&written) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
+        _ => {}
+    }
+    std::io::Write::write_all(
+        &mut std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&written)?,
+        source.as_bytes(),
+    )?;
     std::fs::rename(written, path)
 }
 
@@ -1133,6 +1143,15 @@ mod tests {
         std::os::unix::fs::symlink(&outside, dir.join("@deepbuild")).unwrap();
         serve(&dir).unwrap();
         assert!(!outside.join("panel.js").exists());
+        assert_eq!(std::fs::read_to_string(dir.join(SERVED)).unwrap(), source());
+        std::fs::remove_file(dir.join(SERVED)).unwrap();
+        let temporary = dir.join(format!("@deepbuild/.panel.js.{}", std::process::id()));
+        std::os::unix::fs::symlink(outside.join("kept"), &temporary).unwrap();
+        serve(&dir).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(outside.join("kept")).unwrap(),
+            "kept"
+        );
         assert_eq!(std::fs::read_to_string(dir.join(SERVED)).unwrap(), source());
         std::fs::remove_dir_all(&root).unwrap();
     }
