@@ -1,0 +1,119 @@
+Base commit: ebf1e7f44bedb850047741cea366ac08df62dcbc (origin/main when this suite was drafted).
+Build (handed to this job, not built by it or in place): packages/*/dist and target/debug/deep-hook are clones (cp -c) of the outputs of npm run build --workspaces and cargo build --locked -p deep-hook, both exit 0, in another clean checkout of this same commit: same commit and lockfiles, so the same build.
+Commands (one file at a time, each run once, each through the machine's test slot, which granted each; Node 24.22.0,
+vitest 5.0.5), for codex-watch.test.ts, codex-start.test.ts and claude-json.test.ts:
+  node scripts/throttle.mjs test --wait 240 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/1867 --no-file-parallelism --testTimeout=600000 <file>
+Date: 2026-11-25, 08:42 to 08:46 EST.
+Machine: darwin-arm64, Mac17,10, Apple M5 Max, 18 cores, shared with other sessions: 1-minute load 23 six minutes
+before the first run, 11 at the end of the last.
+Codex: codex-watch.test.ts ran the machine's own codex, against the test's own CODEX_HOME only (codex-cli 0.170.0 when
+the suite was drafted; its version was not read again for this run). No model was called.
+Checks at the base: tsc --noEmit -p tests/acceptance/1867/tsconfig.json exits 0. No file under target/ or
+packages/*/dist changed during the runs, so deep setup built nothing. No process and no folder under /tmp/dh1867-* was
+left behind.
+Every home folder is written as ~ (a test's own HOME too), temp folders as <tmp>, the checkout as <repo>; colour codes,
+Vitest's rules between blocks and repeated blank lines are left out. Nothing else of the output is changed or cut.
+
+Result: 4 tests, 3 failed, 1 passed. Each failure is at an assertion in its own test file. No test was BLOCKED or
+INCONCLUSIVE, and none failed at load, in a helper, at a build or at a timeout.
+
+Each criterion at the base:
+- AC1 #1867.e9a5b9d7, codex-watch.test.ts: FAILS at codex-watch.test.ts:65. DeepBuild's Stop entry, removed from
+  ~/.codex/hooks.json while the Codex call ran, is not back 30 s later. The hub only reports it (codex.readings), no
+  reading names the call and the file, and Codex's own hook list holds no such entry. The control before it held:
+  after the approval Codex's list reported the entry trusted. The link is still the link.
+- AC2 #1867.74eeacdf, codex-start.test.ts, first test: FAILS at codex-start.test.ts:70. The command of DeepBuild's
+  PreToolUse entry, changed in ~/.codex/hooks.json by the recorded Codex call, is still the changed one 30 s after the
+  next Codex session's start was recorded. The hub only reports it, and no reading names the call and the file.
+- AC2 #1867.74eeacdf, codex-start.test.ts, second test ("The same change made with no session running stays"):
+  PASSES, as it should. The base puts nothing back, so a change of yours stays there too. The run gave the hub its
+  chances: it was up for the change, the new thread's start is in the record, the file was read for 10 s more and the
+  hub still answered. The wrong program that fails this test is the twin puts-back-yours (twins/README.md), which
+  comes with the implementation; it was not run here.
+- AC3 #1867.5a700f0c, claude-json.test.ts: FAILS at claude-json.test.ts:56. DeepBuild's MCP server
+  (mcpServers.deepbuild), removed from ~/.claude.json while the Claude Code call ran, is not back 30 s later: the
+  file's mcpServers hold only deep-actions. No reading names the call and the file. Your own value in the file is as
+  it was.
+
+== codex-watch.test.ts
+
+RUN  v5.0.5 <repo>/tests/acceptance/1867
+
+ ❯ codex-watch.test.ts (1 test | 1 failed) 52777ms
+   ❯ AC1 #1867.e9a5b9d7 With a Codex session's shell call running, removing DeepBuild's Stop entry from hooks.json puts it back within a second, byte-identical, with a reading naming the call, and Codex's hook list still reports it trusted. A hub that only reports it in health fails this test, naming the entry (1)
+     × AC1 #1867.e9a5b9d7 a running shell call's script takes DeepBuild's Stop entry out of a linked ~/.codex/hooks.json: it is back within a second, byte for byte, through the link, a reading names the call, and Codex's own hook list still reports it trusted 52698ms
+
+ FAIL  codex-watch.test.ts > AC1 #1867.e9a5b9d7 With a Codex session's shell call running, removing DeepBuild's Stop entry from hooks.json puts it back within a second, byte-identical, with a reading naming the call, and Codex's hook list still reports it trusted. A hub that only reports it in health fails this test, naming the entry > AC1 #1867.e9a5b9d7 a running shell call's script takes DeepBuild's Stop entry out of a linked ~/.codex/hooks.json: it is back within a second, byte for byte, through the link, a reading names the call, and Codex's own hook list still reports it trusted
+AssertionError: AC1 #1867.e9a5b9d7 DeepBuild's Stop entry (exec '~/.deepbuild/bin/deep-hook' codex Stop) in ~/.codex/hooks.json, removed while the Codex call call_21d74d6287c4 ran: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC1 #1867.e9a5b9d7 DeepBuild's Stop entry (exec '~/.deepbuild/bin/deep-hook' codex Stop) was removed from ~/.codex/hooks.json while the Codex call call_21d74d6287c4 was running and was not put back: 30 s later the file holds no Stop entry of DeepBuild's. The hub only reports it: hub.health's codex.readings are [\"Codex's Stop entry was removed from ~/.codex/hooks.json, so that hook doesn't reach the hub\",\"Codex's hook list reports Stop missing from the list\"]",
++   "AC1 #1867.e9a5b9d7 a reading must name the Codex call call_21d74d6287c4 (\"'~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node' '<repo>/tests/acceptance/1867/fixtures/tamper.mjs' 'remove-hook' 'Stop' '361f11fb'\"), which was running when DeepBuild's Stop entry (exec '~/.deepbuild/bin/deep-hook' codex Stop) went from ~/.codex/hooks.json, and name that file: none does",
++   "AC1 #1867.e9a5b9d7 Codex's own hook list must still report DeepBuild's Stop entry (exec '~/.deepbuild/bin/deep-hook' codex Stop) trusted after the Codex call call_21d74d6287c4 removed it from ~/.codex/hooks.json: it reports no such entry",
++ ]
+
+ ❯ codex-watch.test.ts:65:81
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  08:42:34
+   Duration  52.92s (tests 100%)
+
+== codex-start.test.ts
+
+RUN  v5.0.5 <repo>/tests/acceptance/1867
+
+ ❯ codex-start.test.ts (2 tests | 1 failed) 63712ms
+   ❯ AC2 #1867.74eeacdf A recorded Codex call that changes our PreToolUse entry's command, then a new Codex session, finds the entry back at that session's start with a reading naming the call. The same change made with no session running stays (2)
+     × AC2 #1867.74eeacdf a recorded Codex shell call's script changes the command of DeepBuild's PreToolUse entry while the hub is stopped: at the next Codex session's start the entry is back as setup wrote it, with a reading naming the call 52423ms
+     ✓ AC2 #1867.74eeacdf the same change to the command of DeepBuild's PreToolUse entry, made by you with no session running, stays through the hub's watch and the next Codex session's start 11184ms
+
+ FAIL  codex-start.test.ts > AC2 #1867.74eeacdf A recorded Codex call that changes our PreToolUse entry's command, then a new Codex session, finds the entry back at that session's start with a reading naming the call. The same change made with no session running stays > AC2 #1867.74eeacdf a recorded Codex shell call's script changes the command of DeepBuild's PreToolUse entry while the hub is stopped: at the next Codex session's start the entry is back as setup wrote it, with a reading naming the call
+AssertionError: AC2 #1867.74eeacdf DeepBuild's PreToolUse entry (exec '~/.deepbuild/bin/deep-hook' codex PreToolUse) in ~/.codex/hooks.json, its command changed by the recorded Codex call call_388e15ee3900: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC2 #1867.74eeacdf the recorded Codex call call_388e15ee3900 changed the command of DeepBuild's PreToolUse entry (exec '~/.deepbuild/bin/deep-hook' codex PreToolUse) in ~/.codex/hooks.json to \"/usr/bin/true dh1867-81212943\", and the entry must be back as setup wrote it at the next Codex session's start (bfe5f5a5-1a7b-4366-a0f4-ec7540588a79): 30 s after that start was recorded the file's PreToolUse commands are [\"/usr/bin/true dh1867-81212943\"]. The hub only reports it: hub.health's codex.readings are [\"Codex's PreToolUse entry was removed from ~/.codex/hooks.json, so that hook doesn't reach the hub\"]",
++   "AC2 #1867.74eeacdf a reading must name the recorded Codex call call_388e15ee3900 (\"'~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node' '<repo>/tests/acceptance/1867/fixtures/tamper.mjs' 'set-command' 'PreToolUse' '/usr/bin/true dh1867-81212943' '4cac91cb' '~/.codex/hooks.json'\") as what changed DeepBuild's PreToolUse entry (exec '~/.deepbuild/bin/deep-hook' codex PreToolUse) in ~/.codex/hooks.json, and name that file: none does",
++ ]
+
+ ❯ codex-start.test.ts:70:86
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  08:43:41
+   Duration  63.81s (tests 100%)
+
+== claude-json.test.ts
+
+RUN  v5.0.5 <repo>/tests/acceptance/1867
+
+ ❯ claude-json.test.ts (1 test | 1 failed) 51343ms
+   ❯ AC3 #1867.5a700f0c With a Claude Code call running, removing the `deep` MCP server from ~/.claude.json puts it back within a second, with a reading naming the call (1)
+     × AC3 #1867.5a700f0c a running Bash call's script takes DeepBuild's MCP server out of ~/.claude.json: it is back within a second as setup wrote it, beside what is yours, and a reading names the call 51269ms
+
+ FAIL  claude-json.test.ts > AC3 #1867.5a700f0c With a Claude Code call running, removing the `deep` MCP server from ~/.claude.json puts it back within a second, with a reading naming the call > AC3 #1867.5a700f0c a running Bash call's script takes DeepBuild's MCP server out of ~/.claude.json: it is back within a second as setup wrote it, beside what is yours, and a reading names the call
+AssertionError: AC3 #1867.5a700f0c DeepBuild's MCP server (mcpServers.deepbuild: ~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node <repo>/packages/cli/dist/main.js mcp) in ~/.claude.json, removed while the Claude Code call toolu_1a0c8299b5eb251e65b1a28b ran: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC3 #1867.5a700f0c DeepBuild's MCP server (mcpServers.deepbuild: ~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node <repo>/packages/cli/dist/main.js mcp) was removed from ~/.claude.json while the Claude Code call toolu_1a0c8299b5eb251e65b1a28b was running and was not put back: 30 s later the file's mcpServers hold [\"deep-actions\"]",
++   "AC3 #1867.5a700f0c a reading must name the Claude Code call toolu_1a0c8299b5eb251e65b1a28b (\"'~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node' '<repo>/tests/acceptance/1867/fixtures/tamper.mjs' 'remove-server' 'deepbuild' '2bee3192'\"), which was running when DeepBuild's MCP server (mcpServers.deepbuild: ~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node <repo>/packages/cli/dist/main.js mcp) went from ~/.claude.json, and name that file: none does",
++ ]
+
+ ❯ claude-json.test.ts:56:81
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  08:44:54
+   Duration  51.46s (tests 100%)

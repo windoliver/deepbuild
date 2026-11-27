@@ -27,7 +27,7 @@ import type { Landing } from './landing.js';
 import type { Work } from './work.js';
 import { type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 
-import { ClaudeSettings } from './claude-settings.js';
+import { EntriesWatch } from './entries-watch.js';
 
 import { Confirmer } from './confirm.js';
 
@@ -108,7 +108,7 @@ export interface HubControlOptions {
     readonly spaces: WorkspaceService;
     readonly asks: Asks;
     readonly tasks: AskTasks;
-    readonly claudeSettings: ClaudeSettings;
+    readonly entries: EntriesWatch;
     readonly store: EvidenceStore;
     readonly devices: Devices;
     readonly confirmer: Confirmer;

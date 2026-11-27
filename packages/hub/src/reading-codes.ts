@@ -1,15 +1,23 @@
 // A session reading's code (#1456): what a reading is, which its session's state and row read, carried beside its words
-// (session.reading@2), so a reading can be reworded and no state moves. A reading recorded before codes, session.reading@1,
+// (session.reading@3), so a reading can be reworded and no state moves. A reading recorded before codes, session.reading@1,
 // has only its words: the one table below reads those words as the code they meant, and is kept here alone, so restored
 // history keeps its states and no other module reads a reading's words as logic.
 import { CAN_RUN, CANT_RUN } from './hook-programs.js';
 import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { activePlant } from './plant.js';
 
-/** The closed set of codes (session.reading@2's `code`). */
+/** The closed set of codes (session.reading@3's `code`). */
 export type ReadingCode =
   | 'hooks_cant_run' | 'hooks_run_again' | 'watch_only' | 'denied_ran_anyway' | 'mods_watch' | 'mods_gone' | 'ran_unleased'
-  | 'stop_not_held' | 'monitor_waiting' | 'monitor_ended' | 'interrupted' | 'older_set' | 'newer_set' | 'other';
+  | 'stop_not_held' | 'monitor_waiting' | 'monitor_ended' | 'interrupted' | 'older_set' | 'newer_set' | ModeCode | 'other';
+
+/**
+ * The mode a turn started in, for a session another tool runs that has no hooks of its own (#3429): one in which its
+ * agent approves its own calls and one its facts don't list, each a line that stays on the session's row, and one that
+ * asks, which takes that line back.
+ */
+export type ModeCode = 'mode_unchecked' | 'mode_unknown' | 'mode_asks';
+export const MODE_CODES: readonly ReadingCode[] = ['mode_unchecked', 'mode_unknown', 'mode_asks'];
 
 /** The codes that put a line on the session's row saying why its holds don't apply (status.ts: noted). */
 export const NOTED: readonly ReadingCode[] = ['hooks_cant_run', 'hooks_run_again', 'watch_only', 'denied_ran_anyway', 'mods_watch', 'mods_gone', 'ran_unleased', 'stop_not_held'];
