@@ -1,9 +1,3 @@
-// The glossary's form (#3412), run by the lint lane: GLOSSARY.md at the repo root lists the real names in its eight
-// groups, each entry a term in bold, one or two sentences that say what it is, and an optional `_Avoid_:` line of
-// words never to use for it. A term is listed once. No word to avoid is a word a person sees: the words of States people
-// see in the technical design, and the plain words contracts/plain-words.json gives. Each link lands: a file in the
-// repo, and a design doc's anchor where it names one. AGENTS.md names GLOSSARY.md in one line. One `FAIL glossary: …`
-// line per finding, or one PASS line; exit 1 on a finding.
 import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,8 +16,6 @@ const finish = () => {
   for (const line of findings) console.log(line);
   process.exit(findings.length ? 1 : 0);
 };
-
-// The words a person sees: the first column of States people see, and each plain word the table gives.
 const seen = new Map();
 const see = (word, list) => {
   const key = word.trim().toLowerCase();
@@ -43,9 +35,6 @@ if (!existsSync(FILE)) {
   fail(FILE, 'there is no glossary at the repo root', `Write ${FILE}: the real names in their eight groups, each a term in bold and one or two sentences.`);
   finish();
 }
-
-// A link lands when it leaves the repo, or names a file the repo has and, with an anchor, a heading or anchor of that
-// Markdown file; a link that is only an anchor is the glossary's own.
 const lands = (target) => {
   const inRepo = target.startsWith(REPO);
   if (!inRepo && /^[a-z][\w+.-]*:/i.test(target)) return true;
@@ -55,7 +44,7 @@ const lands = (target) => {
   let id = anchor;
   try {
     id = decodeURIComponent(anchor);
-  } catch { /* compared as written */ }
+  } catch {}
   return !id || (file.endsWith('.md') && anchors(file).has(id));
 };
 
