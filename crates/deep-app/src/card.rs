@@ -1407,11 +1407,12 @@ impl Card {
             let Some(picture) = listed.iter().find(|p| p.hash == hash) else {
                 continue;
             };
+            let slack = sizes().hairline / 2.;
             let inside = |b: &Bounds<Pixels>| {
-                b.left() >= shown.left() - px(0.5)
-                    && b.top() >= shown.top() - px(0.5)
-                    && b.right() <= shown.right() + px(0.5)
-                    && b.bottom() <= shown.bottom() + px(0.5)
+                b.left() >= shown.left() - slack
+                    && b.top() >= shown.top() - slack
+                    && b.right() <= shown.right() + slack
+                    && b.bottom() <= shown.bottom() + slack
             };
             let d = crate::pictures::Drawn {
                 scale: f64::from(f32::from(bounds.size.width) * ratio) / f64::from(picture.size[0]),
