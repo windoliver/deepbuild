@@ -406,19 +406,27 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
             Some(req) => {
                 for (key, value) in req {
                     match key.as_str() {
-                        "core" => {
-                            if value
-                                .as_str()
-                                .filter(|r| Range::parse(r).is_some())
-                                .is_none()
-                            {
-                                issues.push(bad(
-                                    "requires/core",
-                                    value.clone(),
-                                    "not a version range",
-                                ));
+                        // The range of cores the pack runs on against the build's own (#2058).
+                        "core" => match value.as_str().and_then(Range::parse) {
+                            None => issues.push(bad(
+                                "requires/core",
+                                value.clone(),
+                                "not a version range",
+                            )),
+                            Some(range) => {
+                                let build = registry::core_semver();
+                                if !range.matches(build) {
+                                    issues.push(bad(
+                                        "requires/core",
+                                        value.clone(),
+                                        &format!(
+                                            "pack `{}` requires core {range}; this build has core {build}",
+                                            id.text()
+                                        ),
+                                    ));
+                                }
                             }
-                        }
+                        },
                         "modules" => match value.as_object() {
                             None => {
                                 issues.push(bad("requires/modules", value.clone(), "not an object"))
@@ -1575,8 +1583,9 @@ pub fn manifest_of(
 #[derive(Clone, Debug, Default)]
 pub struct Packs {
     by_id: BTreeMap<String, Pack>,
-    /// The versions the pack check refused for a canvas module this build lacks, with those
-    /// issues: a document that names one is refused with the same `module_missing`.
+    /// The versions the pack check refused for a canvas module this build lacks or for a core
+    /// range that leaves out the build's (#2058), with those issues: a document that names one
+    /// is refused with the same issue.
     refused: BTreeMap<String, Vec<Issue>>,
     /// How often the pack check ran per `owner/name@version`: once, as a version is checked once.
     checks: BTreeMap<String, u32>,
@@ -1661,7 +1670,10 @@ impl Packs {
             Err(issues) => {
                 let missing: Vec<Issue> = issues
                     .iter()
-                    .filter(|i| i.code == "module_missing")
+                    .filter(|i| {
+                        i.code == "module_missing"
+                            || (i.path == "requires/core" && i.what.contains("this build has core"))
+                    })
                     .cloned()
                     .collect();
                 if !missing.is_empty() {
@@ -1816,12 +1828,13 @@ pub fn resolve<'a>(
             packs.get(&id.text())
         };
         let Some(pack) = found else {
-            // A version the pack check refused for a module this build lacks: the document
-            // that names it is refused the same way, naming the module.
+            // A version the pack check refused for a module this build lacks or for its core
+            // range: the document that names it is refused the same way, naming the module or
+            // the pack and its range.
             if let Some(missing) = packs.refused.get(&id.text()) {
                 for m in missing {
                     issues.push(Issue::envelope(
-                        "module_missing",
+                        m.code,
                         format!("{path}/{}", m.path),
                         m.actual.clone(),
                         &m.what,

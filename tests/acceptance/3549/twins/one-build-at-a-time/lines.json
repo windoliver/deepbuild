@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "    if (request.class === 'build') return roomForTest(slots, readings(), Date.now(), true, LIMITS.build);"
+      ],
+      "wrong": [
+        "    if (request.class === 'build') return held < 1;"
+      ]
+    }
+  ]
+}

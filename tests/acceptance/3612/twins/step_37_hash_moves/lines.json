@@ -1,0 +1,8 @@
+{
+  "crates/deep-logic/src/world.rs": [
+    {
+      "find": ["    let mut row = json!({\"hash\": hash.map(|h| format!(\"{h:016x}\")), \"fuel\": fuel, \"failed\": l.failed, \"pages\": pages,"],
+      "wrong": ["    let mut row = json!({\"hash\": hash.map(|h| format!(\"{:016x}\", if k == 37 { h ^ 1 } else { h })), \"fuel\": fuel, \"failed\": l.failed, \"pages\": pages,"]
+    }
+  ]
+}

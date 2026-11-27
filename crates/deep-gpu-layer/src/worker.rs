@@ -23,6 +23,8 @@ pub struct Session {
     pub workers: usize,
     /// The module's own pipelines and those its last frame drew (#140).
     pub installed: Arc<std::sync::Mutex<Installed>>,
+    /// The planted encode-sleep toggle (#3617).
+    pub sleeps_in_encode: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// A `view3d` call's session: a GPU-layer view drawing scene3d (#378), and what its render module
@@ -87,6 +89,7 @@ impl State {
             }
             let module = SceneModule::new(scene.clone());
             let installed = module.installed();
+            let sleeps_in_encode = module.sleeps_in_encode();
             let view = View::new(self.gpu.clone(), config, Box::new(module), pool)?;
             if self.releases_early {
                 view.ui().plant_early_release();
@@ -99,6 +102,7 @@ impl State {
                     path,
                     workers,
                     installed,
+                    sleeps_in_encode,
                 },
             );
         }

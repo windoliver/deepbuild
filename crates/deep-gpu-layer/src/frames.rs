@@ -13,7 +13,7 @@ use deep_gpu::encode::Encode;
 use deep_gpu::encode::Finish;
 use deep_gpu::ring::Mark;
 use deep_gpu::surface::Path;
-use deep_gpu::view::Ui;
+use deep_gpu::view::{DrawTimes, Ui};
 use image::ImageEncoder as _;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -21,6 +21,9 @@ use sha2::{Digest, Sha256};
 use crate::window::Card;
 use crate::worker::WORKERS;
 use crate::{refused, App, Planted};
+
+/// Planted timing faults (#3617): omit the largest part, or sleep 2 ms in encode on the pool.
+pub const PLANTED: [&str; 2] = ["leaves_out_part", "sleeps_in_encode"];
 
 pub fn hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
@@ -122,6 +125,7 @@ impl Args {
         }
         a.fences = call["fences"].as_bool().unwrap_or(false);
         a.timings = call["timings"].as_bool().unwrap_or(false);
+        a.hash = call["hash"].as_bool().unwrap_or(true);
         a.workers = call["workers"]
             .as_u64()
             .map_or(WORKERS, |w| w.clamp(1, 64) as usize);
@@ -162,6 +166,9 @@ pub struct Frame {
     pub blank: Option<bool>,
     pub handoff_ms: Option<f64>,
     pub ui_ms: Option<f64>,
+    pub draw_ms: Option<f64>,
+    pub draw_parts_ms: Option<[f64; 4]>,
+    pub omits_part: bool,
     pub encodes: Option<Vec<Encode>>,
     /// The device it drew on, and every scene pipeline it drew with the epoch of the device that
     /// compiled it (#140).
@@ -194,6 +201,31 @@ impl Frame {
         }
         if let Some(t) = self.ui_ms {
             o.insert("ui_ms".into(), json!(t));
+        }
+        if let Some(t) = self.draw_ms {
+            o.insert("draw_ms".into(), json!(t));
+        }
+        if let Some([encode, submit, gpu, wait]) = self.draw_parts_ms {
+            let entries = [
+                ("encode", encode),
+                ("submit", submit),
+                ("gpu", gpu),
+                ("wait", wait),
+            ];
+            let drop_idx = self.omits_part.then(|| {
+                entries
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.1.total_cmp(&b.1))
+                    .map_or(0, |(i, _)| i)
+            });
+            let mut map = serde_json::Map::new();
+            for (i, (k, v)) in entries.into_iter().enumerate() {
+                if drop_idx != Some(i) {
+                    map.insert(k.into(), json!(v));
+                }
+            }
+            o.insert("draw_parts_ms".into(), Value::Object(map));
         }
         if let Some(e) = &self.encodes {
             let list: Vec<Value> = e.iter().map(|e| json!({"layer": e.layer, "completed": e.completed, "submitted": e.submitted})).collect();
@@ -246,6 +278,7 @@ enum Drawn {
         settling: bool,
         pixel_hash: Option<String>,
         handoff: Duration,
+        draw: Option<DrawTimes>,
         encodes: Vec<Encode>,
         device_epoch: u64,
         pipelines: Vec<(String, u64)>,
@@ -390,20 +423,26 @@ pub fn drive(
         app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
     }
     if args.layer {
-        let (key, fail, leaves) = (
+        let (key, fail, leaves, sleeps, timings) = (
             args.scene.clone(),
             args.fail_resize,
             app.planted == Some(Planted::ResizeLeavesRendering),
+            app.planted == Some(Planted::Named("sleeps_in_encode")),
+            args.timings,
         );
         app.worker.call(move |state| {
             if let Some(s) = state.sessions.get_mut(&key) {
                 s.view.fail_resizes(fail);
+                s.view.record_timings(timings);
+                s.sleeps_in_encode
+                    .store(sleeps, std::sync::atomic::Ordering::Relaxed);
                 if leaves {
                     s.view.plant_resize_leaves_rendering();
                 }
             }
         });
     }
+    let omits_part = app.planted == Some(Planted::Named("leaves_out_part"));
     let noop = app.backend == Backend::Noop;
     let mut run = Run {
         frames: Vec::new(),
@@ -426,6 +465,9 @@ pub fn drive(
             blank: None,
             handoff_ms: None,
             ui_ms: None,
+            draw_ms: None,
+            draw_parts_ms: None,
+            omits_part,
             encodes: None,
             device_epoch: 0,
             pipelines: Vec::new(),
@@ -437,7 +479,13 @@ pub fn drive(
             let lose = args.lose_at == Some(n);
             let key = args.scene.clone();
             let hash = args.hash && !noop;
-            let (submitted_tx, submitted_rx) = mpsc::channel::<()>();
+            let timings = args.timings;
+            let (submitted_tx, submitted_rx) = if waits {
+                let (tx, rx) = mpsc::channel::<()>();
+                (Some(tx), Some(rx))
+            } else {
+                (None, None)
+            };
             let answer = app.worker.send(move |state| -> Result<Drawn, String> {
                 let s = state.sessions.get_mut(&key).ok_or("no session")?;
                 s.view.resize(slot_size);
@@ -449,23 +497,31 @@ pub fn drive(
                         Err(e) => return Err(e),
                     }
                 };
-                let _ = submitted_tx.send(());
-                let device_epoch = s.view.device().epoch;
-                let pipelines = s
-                    .installed
-                    .lock()
-                    .map(|i| i.drawn.clone())
-                    .unwrap_or_default();
+                if let Some(tx) = submitted_tx {
+                    let _ = tx.send(());
+                }
                 if lose {
                     s.view.lose_device();
                 }
                 if !s.view.wait_done(drawn.slot) {
                     return Ok(Drawn::Lost);
                 }
+                let device_epoch = s.view.device().epoch;
+                let pipelines = s
+                    .installed
+                    .lock()
+                    .map(|i| i.drawn.clone())
+                    .unwrap_or_default();
                 let handoff = s
                     .view
                     .times(drawn.slot)
                     .map_or(Duration::ZERO, |t| t.handoff());
+                let draw = if timings {
+                    s.view.resolve_gpu_time(drawn.slot);
+                    s.view.draw_times(drawn.slot)
+                } else {
+                    None
+                };
                 let pixel_hash = hash
                     .then(|| s.view.read(drawn.slot).map(|b| hex(&b)))
                     .flatten();
@@ -473,15 +529,16 @@ pub fn drive(
                     settling: drawn.settling,
                     pixel_hash,
                     handoff,
+                    draw,
                     encodes: drawn.encodes,
                     device_epoch,
                     pipelines,
                 })
             });
-            if waits {
+            if let Some(rx) = submitted_rx {
                 // The planted UI thread presents as soon as the frame is submitted, and its paint
                 // waits on the frame's fence.
-                let _ = submitted_rx.recv();
+                let _ = rx.recv();
                 let w = app.window.as_ref().expect("opened");
                 w.paint.borrow_mut().size = size;
                 w.present(&mut app.cx);
@@ -500,6 +557,7 @@ pub fn drive(
                     settling,
                     pixel_hash,
                     handoff,
+                    draw,
                     encodes,
                     device_epoch,
                     pipelines,
@@ -510,6 +568,16 @@ pub fn drive(
                     frame.pipelines = pipelines;
                     frame.pixel_hash = pixel_hash;
                     render_handoff = handoff;
+                    if let Some(d) = draw {
+                        let ms = |t: Duration| t.as_secs_f64() * 1e3;
+                        frame.draw_ms = Some(ms(d.total));
+                        frame.draw_parts_ms = Some([
+                            ms(d.parts.encode),
+                            ms(d.parts.submit),
+                            ms(d.parts.gpu),
+                            ms(d.parts.wait),
+                        ]);
+                    }
                     #[cfg(feature = "test-pool")]
                     if args.pool.is_some() {
                         frame.encodes = Some(encodes.clone());

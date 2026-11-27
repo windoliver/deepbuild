@@ -9,6 +9,7 @@ The macOS app shell on gpui-kit (issues #337, #338, #326, #327, #339, #105, #117
 - One module per surface in `src/` (`card.rs`, `question.rs`, `views.rs`, `list.rs` for the list's rows and when they move, `empties.rs`, `unread.rs`, `commands.rs` for ⌘K, `capture.rs` and so on), declared in `src/lib.rs`. `src/main.rs` holds only the app's start, its menu bar and its notifications; the probes the suites run as `deep-app --flag` are each a file in `src/probes/` (#1457).
 - Hub calls go through `src/hub.rs`, and the record is read only through `src/record.rs`. A view that draws the record or bound values observes them with `record::observe`, and an age it shows sets its next tick from `states::ages_written` (#1546), so a change marks the window dirty with no input.
 - Canvas text goes through deep-text-gpui (`src/text.rs`), never GPUI's text system, which stays for the chrome.
+- What the window says with nothing drawn is `src/said.rs` (#3232): the one polite live region, its last five lines as rows, and the closed list of changes it says. A new kind of line is a change read there from the record's events or the card's state table, in the copy table's words; no view announces anything itself.
 - Unit tests sit in a `#[cfg(test)]` module in the file; integration tests in `tests/`; pixel tests rendered offscreen in `screens.rs`.
 - Brand assets live in the repo's `brand/` folder, listed in `brand/surfaces.json`; `src/brand.rs` embeds their bytes as they are.
 

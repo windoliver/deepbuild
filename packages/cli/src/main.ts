@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -124,10 +124,38 @@ async function telemetryItems() {
   return telemetryDoctor(process.env);
 }
 
-// `deep debug bundle`: the hub's logs, the versions and the doctor's items in one gzipped JSON file under
-// ~/.deepbuild/debug, readable only by you, its path printed last. Every text in it is scrubbed as evidence is,
+/** What the bundle reads of a log at most, in bytes, from its end (#3548). */
+const LOG_END = 8_000_000;
+/**
+ * A log's end: its last `LOG_END` bytes from the first start of a line among them, and how many bytes before that were
+ * left out. The log is never read whole. The planted wrong program cuts by bytes alone.
+ */
+function logEnd(path: string, byBytes: boolean): { text: string; left_out: number } {
+  const fd = openSync(path, 'r');
+  try {
+    for (;;) {
+      const size = fstatSync(fd).size;
+      const cut = Math.max(0, size - LOG_END);
+      // The byte before the cut is read too: a line starts after the first newline from there.
+      const from = Math.max(0, cut - 1);
+      const end = Buffer.allocUnsafe(size - from);
+      let got = 0;
+      for (let n = 1; n > 0 && got < end.length; got += n) n = readSync(fd, end, got, end.length - got, from + got);
+      // A log the hub cut while it was read comes short, and is read again: its last line is whole too.
+      if (got < end.length) continue;
+      const start = cut === 0 ? 0 : byBytes ? 1 : end.indexOf(10) + 1 || got;
+      return { text: end.toString('utf8', start), left_out: from + start };
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
+
+// `deep debug bundle`: the end of each of the hub's logs, the versions and the doctor's items in one gzipped JSON file
+// under ~/.deepbuild/debug, readable only by you, its path printed last. Every text in it is scrubbed as evidence is,
 // with the control token among the values held, so no form of the token or of a secret-shaped string goes in
-// (#34's slice of #19's bundle).
+// (#34's slice of #19's bundle). A log is cut before it is scrubbed, at the start of a line, so the cut never splits
+// a line a value is on, and the bundle says how many bytes of each log it left out (#3548).
 async function debugBundle(): Promise<number> {
   const { scrubText } = await import('@deepbuild/evidence');
   const { activePlant, rootOf, rootToken } = await import('@deepbuild/hub');
@@ -143,11 +171,16 @@ async function debugBundle(): Promise<number> {
     const path = join(dir, name);
     return statSync(path).isDirectory() ? files(path) : [path];
   }) : []);
-  const logs = Object.fromEntries(files(join(root, 'logs')).map((path) => [relative(root, path), scrubLogs(readFileSync(path, 'utf8'))]));
+  // Each log's end is scrubbed as it is read, so no log's raw text waits for the others.
+  const ends = files(join(root, 'logs')).map((path) => {
+    const end = logEnd(path, process.env.DEEP_CLI_PLANT === 'bundle-cuts-by-bytes');
+    return { name: relative(root, path), text: scrubLogs(end.text), left_out: end.left_out };
+  });
   const bundle = {
     versions: { deepbuild: version(), node: process.version, platform: `${process.platform}-${process.arch}` },
     doctor: (await doctorItems(false)).map((item) => JSON.parse(scrub(JSON.stringify(item))) as unknown),
-    logs,
+    logs: Object.fromEntries(ends.map((end) => [end.name, end.text])),
+    logs_left_out: Object.fromEntries(ends.map((end) => [end.name, end.left_out])),
   };
   const dir = join(root, 'debug');
   mkdirSync(dir, { recursive: true, mode: 0o700 });

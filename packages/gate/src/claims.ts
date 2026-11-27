@@ -1,6 +1,3 @@
-// Which stops and calls make a claim (#29; design: Every stop is judged, and Claim): one claim per open ask a
-// source touched, never from a stop with no work since the turn began or from an answer, and never from the words
-// of the agent's last message. `deep_claim` and `gh pr create` make claims inside a turn, which wait for its stop.
 import { randomBytes } from 'node:crypto';
 
 export type ClaimSource = 'stop' | 'deep_claim' | 'gh_pr_create';
