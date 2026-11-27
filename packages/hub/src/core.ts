@@ -1240,7 +1240,7 @@ export class Core {
   }
   /** A session.reading for the session, appended as the core. */
   private appendReading(session: string, agent: string, reading: string, hook?: string, code: ReadingCode = 'other'): Promise<void> {
-    return this.appendCore('session.reading', { reading, code }, { v: 2, ...(hook && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(hook) ? { id: hook } : {}) }, { session, agent });
+    return this.appendCore('session.reading', { reading, code }, { v: 3, ...(hook && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(hook) ? { id: hook } : {}) }, { session, agent });
   }
 
   // ---- Hooks.
