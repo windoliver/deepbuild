@@ -207,7 +207,7 @@ impl Wgpu {
         // #231: a shader module's or a pipeline's making is a compile, timed where it happens
         // and listed under its label.
         let make = || {
-            let at = std::time::Instant::now();
+            let at = web_time::Instant::now();
             let object = make();
             if let Some(what) = compiles {
                 let ns = at.elapsed().as_nanos() as u64;

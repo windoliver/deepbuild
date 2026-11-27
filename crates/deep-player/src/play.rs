@@ -82,6 +82,9 @@ pub struct Played {
     logic: BTreeMap<String, Run1>,
     /// The time the session last framed, in flicks.
     t: i64,
+    /// #1042: the readings the export recorded, by handle, each `{value, as_of}` (Bound value):
+    /// what a bound value shows until a public source's value on the track replaces it.
+    recorded: BTreeMap<String, Value>,
     /// Each logic item's program as this player rewrote it, by item: the SHA-256 of its bytes.
     pub rewritten: BTreeMap<String, String>,
     /// The bundle's document as given, and the look's tokens, from which an entry plays again.
@@ -175,6 +178,7 @@ impl Played {
             worlds,
             logic,
             t: -1,
+            recorded: BTreeMap::new(),
             rewritten,
             source: doc.clone(),
             ground: look.light.get("ground").copied().unwrap_or([255; 3]),
@@ -212,6 +216,26 @@ impl Played {
         let (t, seq) = self.stamp();
         let entry = json!({"t": t, "seq": seq, "control": control, "value": value, "writer": "you", "player": 1});
         self.again(sealed, entry, read)
+    }
+
+    /// #1042: a value one of the piece's public sources gave, with its as-of time in microseconds
+    /// (Logic: readings): the input track gains it as a reading at the first step not yet run,
+    /// and the piece is made again on that track, the shown time kept. The entry it became.
+    pub fn read(
+        &mut self,
+        sealed: &'static Sealed,
+        source: &str,
+        value: Value,
+        as_of: i64,
+        read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<Value, String> {
+        let t = self.step_at() * self.step;
+        let at = |e: &&Value| e["t"].as_i64() == Some(t);
+        let seq = self.track.iter().filter(at).count();
+        let entry = json!({"t": t, "seq": seq, "reading": format!("reading:{source}"), "value": value,
+            "as_of": as_of, "writer": "you", "player": 1});
+        self.again(sealed, entry.clone(), read)?;
+        Ok(entry)
     }
 
     /// #860: the viewer's back on a piece that declares rewind, which is the reader's: a rewind to
@@ -254,6 +278,7 @@ impl Played {
         track.push(entry);
         track.sort_by_key(|e| (e["t"].as_i64().unwrap_or(0), e["seq"].as_i64().unwrap_or(0)));
         let mut again = Played::new(sealed, &self.source, &track, read, self.look.clone())?;
+        again.recorded = self.recorded.clone();
         again.frame(t);
         #[cfg(feature = "game2d")]
         {
@@ -275,10 +300,41 @@ impl Played {
         &self.doc
     }
 
+    /// #1042: the readings the export recorded (`{handle: {value, as_of}}`), which the next
+    /// frame reads.
+    pub fn set_recorded(&mut self, readings: BTreeMap<String, Value>) {
+        self.recorded = readings;
+        let t = std::mem::replace(&mut self.t, -1);
+        if t >= 0 {
+            self.frame(t);
+        }
+    }
+
+    /// #1042: the readings a frame at `t` reads from outside the document: the ones the export
+    /// recorded, each replaced by its source's last value on the track at or before `t`, so a
+    /// seek shows what a play showed there. A reading's as-of time is the record's milliseconds.
+    fn readings_at(&self, t: i64) -> BTreeMap<String, Value> {
+        let mut out = self.recorded.clone();
+        for e in &self.track {
+            let (Some(handle), Some(at)) = (e["reading"].as_str(), e["t"].as_i64()) else {
+                continue;
+            };
+            if at <= t {
+                let as_of = e["as_of"].as_i64().unwrap_or(0) / 1000;
+                out.insert(
+                    handle.to_string(),
+                    json!({"value": e["value"], "as_of": as_of}),
+                );
+            }
+        }
+        out
+    }
+
     /// The session framed at `t` flicks.
     pub fn frame(&mut self, t: i64) {
         let t = t.clamp(0, self.span);
         if t != self.t {
+            self.session.set_readings(self.readings_at(t));
             let view: [Value; 6] = Default::default();
             self.session.frame(&mut self.sched, t, &view);
             self.t = t;
@@ -326,6 +382,14 @@ impl Played {
         out.insert("step_hash".into(), Value::Object(hashes));
         out.insert("checkpoint_hashes".into(), Value::Object(checkpoints));
         out.insert("values".into(), Value::Object(self.values()));
+        // #1042: the reading entries on the input track, in its order.
+        let reading = |e: &Value| {
+            e.get("reading").map(
+                |r| json!({"t": e["t"], "reading": r, "value": e["value"], "as_of": e["as_of"]}),
+            )
+        };
+        let readings: Vec<Value> = self.track.iter().filter_map(reading).collect();
+        out.insert("readings".into(), Value::Array(readings));
         out
     }
 
