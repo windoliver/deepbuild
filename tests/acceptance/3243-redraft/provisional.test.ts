@@ -1,7 +1,7 @@
 import { availableParallelism, loadavg } from 'node:os';
 import { afterAll, describe, expect, it } from 'vitest';
 import {
-  Claude, allEvents, appendTranscript, callId, cleanup, control, loadReading, makeHome, newSession, payload, setup, sleep, startHub, tag, typedPrompt,
+  Claude, allEvents, appendTranscript, callId, cleanup, control, loadReading, makeHome, newSession, payload, setup, startHub, tag, typedPrompt,
   type Line,
 } from '../25/routes/helpers.ts';
 
@@ -54,7 +54,7 @@ describe(`${ID} A provisional ask still goes on at once`, () => {
     type Got = { reply?: Line; failed?: string; ms: number };
     const got: Got | undefined = await Promise.race([
       claude.request('tools/call', { name: 'deep_ask', arguments: args }, REPLY_MS).then((reply): Got => ({ reply, ms: Date.now() - t0 }), (e: unknown): Got => ({ failed: String(e), ms: Date.now() - t0 })),
-      sleep(REPLY_MS + 10_000).then(() => undefined),
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), REPLY_MS + 10_000)), // deadline: bounds the race only, so a deep_ask that never replies fails the test instead of hanging it
     ]);
     if (got?.failed && !/no (reply|answer)/.test(got.failed)) throw Error(`BLOCKED: the session's deep_ask call failed: ${got.failed}`);
     const reply = got?.reply;

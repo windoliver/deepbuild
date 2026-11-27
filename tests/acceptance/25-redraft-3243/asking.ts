@@ -73,8 +73,8 @@ export class Starved extends Error {
 
 export async function untilFed(ctx: TestContext, ac: string, body: (t: Try) => Promise<void>): Promise<void> {
   const starved: Starved[] = [];
-  const until = Date.now() + TRY_BUDGET_MS;
-  while (starved.length < TRIES && Date.now() < until) {
+  const until = Date.now() + TRY_BUDGET_MS; // deadline: no try starts past the budget, so the file stays inside its timeout
+  while (starved.length < TRIES && Date.now() < until) { // deadline: bounds the tries by time as by count
     const { home } = makeHome();
     const hub = await startHub(home, { noAskWait: true });
     await setup(home);
