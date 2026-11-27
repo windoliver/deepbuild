@@ -344,6 +344,8 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         data.disposition = 'handled';
         v = 2;
       }
+      // A channel's event, and the sender or server a prompt names, are user.ask@2's (#3405).
+      if (data.from === 'channel') v = 2;
       break;
     }
     case 'tool.before':

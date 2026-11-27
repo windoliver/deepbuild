@@ -1871,6 +1871,10 @@ export class Core {
         const sender = from === 'session' && !foreign ? await this.senderOf(meta.session, entry) : undefined;
         if (sender) data.sender = sender;
         else delete data.sender;
+        // The loop rule names and holds this sender (#352, #3405), as the record names it.
+        if (!draft.queued) live.turnSender = sender;
+        // The origin channel and the fields beside it are user.ask@2's (#3405).
+        if (from === 'channel' || data.sender !== undefined || data.server !== undefined) draft.v = 2;
         // The app's own resume prompt (#82): the stop it leads to gets one automatic continue while asks are open.
         if (from === 'continuation' && live.agent === 'claude-code') { live.resumed = true; this.judging.nudgeable.add(meta.session); this.askingSoon(); }
         // A subagent's report or a command's end notice ends its wait: the call the notice names, or else the oldest
@@ -2412,6 +2416,7 @@ export class Core {
     const session = this.state.sessions.get(meta.session);
     if (!live?.turnFrom || childPrompt(meta)) return undefined;
     return this.siblings.held(meta, live.turnFrom, async () => {
+      if (live.turnSender) return live.turnSender;
       const entry = session && meta.fields?.prompt_id ? (await turnFrom(session, meta.fields.prompt_id, this.transcriptReader))[0] : undefined;
       return this.senderOf(meta.session, entry);
     }, live.turnServer);
@@ -2427,14 +2432,16 @@ export class Core {
     const live = (id: string | undefined): string | undefined => (id && id !== receiver && this.state.sessions.get(id)?.ended !== true ? id : undefined);
     const address = /^uds:(.+)$/.exec(from)?.[1];
     if (address) {
-      const [row] = (await this.record.raw(`SELECT e.session_id AS id FROM events e JOIN sessions s ON s.id = e.session_id WHERE e.kind = 'session.start' AND json_extract(e.data, '$.inbox') = ? AND s.ended_log_pos IS NULL ORDER BY e.log_pos DESC LIMIT 1`, [address])) as { id: string }[];
+      // The newest start that reported the address, of a session with no end since: a session whose turn ended is
+      // still live (the record's finished), one whose SessionEnd came is not.
+      const [row] = (await this.record.raw(`SELECT e.session_id AS id FROM events e WHERE e.kind = 'session.start' AND json_extract(e.data, '$.inbox') = ? AND NOT EXISTS (SELECT 1 FROM events x WHERE x.session_id = e.session_id AND x.kind = 'session.end' AND x.log_pos > e.log_pos) ORDER BY e.log_pos DESC LIMIT 1`, [address])) as { id: string }[];
       // The planted wrong program names another live session for an address none reported.
       if (!row && this.options.plant === 'names-other-session-for-unreported-address') return [...this.state.sessions.values()].find((s) => s.id !== receiver && !s.ended)?.id;
       return live(row?.id);
     }
     const local = /^local_(.+)$/.exec(from)?.[1];
     if (!local) return undefined;
-    const [row] = (await this.record.raw(`SELECT id FROM sessions WHERE id = ? AND ended_log_pos IS NULL`, [local])) as { id: string }[];
+    const [row] = (await this.record.raw(`SELECT e.session_id AS id FROM events e WHERE e.kind = 'session.start' AND e.session_id = ? AND NOT EXISTS (SELECT 1 FROM events x WHERE x.session_id = e.session_id AND x.kind = 'session.end' AND x.log_pos > e.log_pos) ORDER BY e.log_pos DESC LIMIT 1`, [local])) as { id: string }[];
     return live(row?.id);
   }
   /**

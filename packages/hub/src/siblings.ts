@@ -260,8 +260,15 @@ export class Siblings {
       const raised: { ask: string; pair: string[]; at: number; channel?: string } = { ask: '', pair: [meta.session], at: now, ...(channel === undefined ? {} : { channel }) };
       open = raised;
       this.loops.set(key, raised);
+      // The sender is held from now too, before its own next prompt can come; the planted wrong program holds the
+      // receiver alone. A sender another loop ask holds stays held by that one.
+      const from = channel === undefined ? await sender().catch(() => undefined) : undefined;
+      if (from && from !== meta.session && this.o.plant !== 'loop-holds-receiver-alone') {
+        raised.pair.push(from);
+        if (!this.loops.has(from)) this.loops.set(from, raised);
+      }
       // One whose ask can't be raised holds nothing more: no prompt waits on an ask you can't see.
-      this.o.queue(() => this.askLoop(meta, raised, sender).catch((error: unknown) => {
+      this.o.queue(() => this.askLoop(meta, raised, from).catch((error: unknown) => {
         for (const id of raised.pair) if (this.loops.get(channel === undefined ? id : key) === raised) this.loops.delete(channel === undefined ? id : key);
         throw error;
       }));
@@ -270,7 +277,7 @@ export class Siblings {
     return `DeepBuild held this prompt: another session's messages started more than ${LOOP_TURNS} of this session's turns in 10 minutes with no prompt from you, so you're asked in your inbox whether to let them go on. It goes on once you answer, or with your next prompt to it.`;
   }
   /** The loop's one ask, naming the session and the sender when the facts name one, which it holds too. */
-  private async askLoop(meta: HookMeta, held: { ask: string; pair: string[]; at: number; channel?: string }, sender: () => Promise<string | undefined>): Promise<void> {
+  private async askLoop(meta: HookMeta, held: { ask: string; pair: string[]; at: number; channel?: string }, from: string | undefined): Promise<void> {
     if (held.channel !== undefined) {
       // A channel's events (#3405): its server is named, and no session but this one is held.
       const count = this.counted(meta.session, held.at, held.channel);
@@ -281,13 +288,6 @@ export class Siblings {
         recommended: 'hold', default: 'hold', fallback: 'you', provisional: false, owner: 'you', key: `loop:${meta.session}:channel:${held.channel}:${held.at}`,
       });
       return;
-    }
-    const from = await sender().catch(() => undefined);
-    // The planted wrong program names the sender but holds the receiver alone.
-    if (from && from !== meta.session && this.o.plant !== 'loop-holds-receiver-alone') {
-      held.pair.push(from);
-      // A sender another loop ask holds stays held by that one.
-      if (!this.loops.has(from)) this.loops.set(from, held);
     }
     const count = (this.turns.get(meta.session) ?? []).filter((t) => t.peer && held.at - t.at < LOOP_MS).length;
     const names = held.pair.map((id) => `${id} (${this.map.get(id)?.agent ?? meta.agent})`).join(' and ');
