@@ -6,6 +6,7 @@
 // own (#406's form). `deep-canvas-render check` (#397's surface) reads the table from the hub's evidence store and
 // answers the check and, in `numbers`, what each shown number traces to. Two machines (README): the Mac pair in two
 // clean homes, then this Mac and a Linux aarch64 host, which reads INCONCLUSIVE when none is given.
+import { writeFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { LABEL_GEO, LABEL_POP, labelsCsv } from './fixtures.ts';
 import {
@@ -64,7 +65,9 @@ describe(`${AC[8]} a label from an imported table passes honest numbers where a 
   it('one machine: imports the fetched file to a table of one row', async () => {
     const world = must(w, 'a hub with the import kind\'s table tool');
     const t = await imported(world);
-    console.log(`#3570 table sha256 ${t.sha256}`);
+    // The other machine's leg (README: Two machines) hands its table hash back in the file DEEP_3570_LEG names.
+    const leg = process.env['DEEP_3570_LEG'];
+    if (leg) writeFileSync(leg, `#3570 table sha256 ${t.sha256}\n`);
   }, TIMEOUT);
 
   it('the label passes honest numbers in a document that binds a reading, its trace naming the fetched file\'s URL and fetch time', async () => {

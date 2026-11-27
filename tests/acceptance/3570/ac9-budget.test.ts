@@ -24,7 +24,6 @@ describe(`${AC[9]} the 40 MB fixture imports in under 5 s on a fit reference Mac
     const receipt = must(receiptOf(world, ran.outcome), 'its receipt');
     expect(receipt['rows_kept'], 'the timed run is criterion 1\'s import').toBe(COUNTIES);
     const verdict = await judgeOnce(ran.ms, LIMIT_MS);
-    console.log(`#3570 AC9 ${verdict.status}: ${verdict.reason}`);
     expect(verdict.status, verdict.reason).toBe('PASS');
   }, TIMEOUT);
 });

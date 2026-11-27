@@ -35,12 +35,14 @@ npm ci                                   # once, if node_modules is missing
 npm run build --workspaces               # the hub runs packages/cli/dist/main.js
 export PATH=/opt/homebrew/opt/rustup/bin:$PATH
 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 sh scripts/lease cargo build --locked -j 6 -p deep-hook -p deep-marks-render --bin deep-hook --bin deep-canvas-render
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 sh scripts/lease cargo build --locked -j 6 --bin deep-show   # the canvas core a data pack's install needs
 NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3570 --no-file-parallelism --testTimeout=600000 --hookTimeout=180000
 node node_modules/typescript/bin/tsc -p tests/acceptance/3570/tsconfig.json
 ```
 
-The hub won't start without the debug `deep-hook`; criterion 8's check is the debug `deep-canvas-render` (both from
-`target/debug`, and a test names the one it lacks with `BLOCKED:`). Each file starts its own hub in a temp home under
+The hub won't start without the debug `deep-hook`; `deep install` of a data pack needs the canvas core, the debug
+`deep-show`; criterion 8's check is the debug `deep-canvas-render` (all from `target/debug`; a test names what it
+lacks with `BLOCKED:`). Each file starts its own hub in a temp home under
 `/tmp/dh3570-*` (criterion 8's two) and stops every process it started by its PID. Node built-ins, openssl for a test CA,
 and vitest. No network past 127.0.0.1, no model, no GPU, no app. The folder runs alone (`lane.json`).
 
@@ -61,8 +63,9 @@ Each test publishes its files the way a pack lists assets fetched on first use (
 under a test CA the hub trusts (`NODE_EXTRA_CA_CERTS`) serves them, and a data pack `agency/tables<n>@1.0.0`, installed
 with `deep install <folder>`, lists each by `url`, `sha256`, `size`, CC0 license and `upstream`. The test calls
 `deep_kinds {op: "fetch", pack, asset}`, answers its one authority ask yes on the trusted path (`deep inbox answer`),
-and calls again until it answers `{status: "fetched", asset: {sha256}}`. That path is the base's. Nothing is fetched by
-the job.
+and calls again until it answers `{status: "fetched", asset: {sha256}}`. That path is the base's: a probe at the base
+fetched `labels.csv` and the 42 MB `county.txt` through it (the server answers byte ranges, `Content-Range`, an ETag and
+`If-Match`, as the Source block reads a large file). Nothing is fetched by the job.
 
 ### The job
 
@@ -154,8 +157,8 @@ landing, ±1 s. How the source reaches the URL (inline, or through `job {kind, t
   the table is the same hash and the same bytes. This is a first leg, not two machines.
 - **This Mac and a Linux aarch64 host**, as #2892's suite names one: `DEEP_LINUX_AARCH64` (ssh destination) and
   `DEEP_LINUX_AARCH64_DIR` (a built checkout of the tested commit there, debug `deep-hook` included). The test runs
-  `DEEP_3570_LEG=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3570 ac8-trace.test.ts -t "one machine"`
-  there over ssh, reads the line `#3570 table sha256 <hex>` it prints, and compares. Without the two variables it reads
+  `DEEP_3570_LEG=/tmp/deep-3570-leg.txt node node_modules/vitest/vitest.mjs run --root tests/acceptance/3570 ac8-trace.test.ts -t "one machine"`
+  there over ssh, reads the line `#3570 table sha256 <hex>` that leg writes to that file, and compares. Without the two variables it reads
   **`INCONCLUSIVE:`**, never PASS; a host that prints no hash reads `BLOCKED:`.
 
 ### The budget (criterion 9)

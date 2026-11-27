@@ -121,13 +121,29 @@ async function openFiles(tls: { key: string; cert: string }): Promise<Files> {
   const routes = new Map<string, Buffer>();
   const served = new Map<string, number>();
   const waiters = new Set<() => void>();
+  // A file is served whole, or by the byte ranges the hub's Source block asks for (#1820: a large file is read in
+  // aligned blocks, each checked against its Content-Range, under the ETag of the first answer). `served` counts the
+  // answers that hold a file's last byte.
   const server: Server = createServer({ key: tls.key, cert: tls.cert }, (req, res) => {
     const path = new URL(req.url ?? '/', 'https://x.invalid').pathname;
     req.resume();
     const body = routes.get(path);
-    if (req.method !== 'GET' || !body) return void res.writeHead(404).end('not found');
-    res.on('finish', () => { served.set(path, (served.get(path) ?? 0) + 1); for (const w of [...waiters]) w(); });
-    res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': body.length }).end(body);
+    if ((req.method !== 'GET' && req.method !== 'HEAD') || !body) return void res.writeHead(404).end('not found');
+    const etag = `"${sha256(body).slice(0, 32)}"`;
+    const common = { 'content-type': 'application/octet-stream', 'accept-ranges': 'bytes', etag, 'last-modified': 'Thu, 01 Jan 2026 00:00:00 GMT' };
+    const match = req.headers['if-match'];
+    if (match !== undefined && match !== etag && match !== '*') return void res.writeHead(412, common).end();
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers['range'] ?? ''));
+    let start = 0, end = body.length - 1, status = 200;
+    if (range && (range[1] !== '' || range[2] !== '')) {
+      if (range[1] === '') { start = Math.max(0, body.length - Number(range[2])); } else { start = Number(range[1]); if (range[2] !== '') end = Math.min(end, Number(range[2])); }
+      if (start > end || start >= body.length) return void res.writeHead(416, { ...common, 'content-range': `bytes */${body.length}` }).end();
+      status = 206;
+    }
+    const part = body.subarray(start, end + 1);
+    if (req.method === 'GET' && end === body.length - 1) res.on('finish', () => { served.set(path, (served.get(path) ?? 0) + 1); for (const w of [...waiters]) w(); });
+    res.writeHead(status, { ...common, 'content-length': part.length, ...(status === 206 ? { 'content-range': `bytes ${start}-${end}/${body.length}` } : {}) });
+    res.end(req.method === 'HEAD' ? undefined : part);
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   closers.push(() => new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); }));
@@ -354,8 +370,8 @@ export async function fetchFile(w: World, p: Published): Promise<Fetched | strin
     const route = new URL(p.url).pathname;
     // A fetch your yes started answers held while it runs; once the server has sent the file, it lands.
     await new Promise<void>((resolve) => {
-      // deadline: a file the hub never asks the server for is waited on 10 minutes, then the fetch reads as it is.
-      const bound = setTimeout(() => { w.files.waiters.delete(wake); resolve(); }, 600_000);
+      // deadline: a file whose last byte the hub hasn't asked for in 2 minutes is polled for as it stands.
+      const bound = setTimeout(() => { w.files.waiters.delete(wake); resolve(); }, 120_000);
       const wake = () => { if ((w.files.served.get(route) ?? 0) > 0) { clearTimeout(bound); w.files.waiters.delete(wake); resolve(); } };
       w.files.waiters.add(wake);
       wake();
@@ -675,7 +691,8 @@ export function linuxHost(): { host: string; dir: string } | string {
 }
 /** The table hash the other machine's run of criterion 8's leg prints, or why it gave none. */
 export function remoteTable(h: { host: string; dir: string }): string {
-  const r = spawnSync('ssh', [h.host, `cd ${JSON.stringify(h.dir)} && DEEP_3570_LEG=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3570 ac8-trace.test.ts -t "one machine" --testTimeout=600000 --hookTimeout=180000`], { encoding: 'utf8', timeout: 1_800_000, maxBuffer: 64 << 20 });
+  const leg = '/tmp/deep-3570-leg.txt';
+  const r = spawnSync('ssh', [h.host, `cd ${JSON.stringify(h.dir)} && rm -f ${leg} && DEEP_3570_LEG=${leg} node node_modules/vitest/vitest.mjs run --root tests/acceptance/3570 ac8-trace.test.ts -t "one machine" --testTimeout=600000 --hookTimeout=180000; cat ${leg}`], { encoding: 'utf8', timeout: 1_800_000, maxBuffer: 64 << 20 });
   const m = /#3570 table sha256 ([0-9a-f]{64})/.exec(`${r.stdout ?? ''}${r.stderr ?? ''}`);
   return m ? m[1]! : `BLOCKED: the run on ${h.host} printed no table hash: exit ${String(r.status)}, ${(r.stdout ?? '').slice(-600)} ${(r.stderr ?? '').slice(-600)}`;
 }
