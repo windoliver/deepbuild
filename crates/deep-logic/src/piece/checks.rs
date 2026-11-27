@@ -886,6 +886,11 @@ pub fn check_in(
             )
         };
         let given = asset(&d.program).ok_or_else(|| missing("program", &d.program))?;
+        // #3604: an item whose program imports circuit@2, or links a library implementing it,
+        // declares its `circuit` under circuit@2.
+        let circuit2 = crate::interfaces::imported(&given)
+            .iter()
+            .any(|n| n == "circuit@2");
         // The linker first, before the subset check and the rewrite (#190); an item without links
         // is never linked.
         let (mut given, mut libraries, mut functions, mut lib_data, mut link_ns) =
@@ -914,6 +919,15 @@ pub fn check_in(
             given = links::empty_linking(given);
         }
         let linked = !d.links.is_empty() || planted.linker_adds_linking_section;
+        let circuit_major = if circuit2
+            || libraries
+                .iter()
+                .any(|l| l.implements.iter().any(|i| i == "circuit@2"))
+        {
+            2
+        } else {
+            1
+        };
         let lines = match &d.debug {
             None => None,
             Some(sha) => {
@@ -1072,7 +1086,8 @@ pub fn check_in(
             }
         };
         // #1181: the table `circuit` declares, its nodes and parts, is asset 0; each input that
-        // closes a part is found by its slot in the item's read region.
+        // closes a part is found by its slot in the item's read region, and under circuit@2
+        // (#3604) each of the item's own arrays that drives one by its place in the write region.
         let circuit = match &d.circuit {
             None => None,
             Some(v) => {
@@ -1083,7 +1098,22 @@ pub fn check_in(
                         .find(|e| e.region == "reads" && e.name == name && e.ty == "control")
                         .map(|e| e.offset)
                 };
-                let c = crate::circuit::build(v, &slot).map_err(|r| logic_refused(id, r))?;
+                let write = |name: &str| {
+                    layout
+                        .entries
+                        .iter()
+                        .find(|e| e.region == "writes" && e.name == name)
+                        .map(|e| {
+                            let size = if e.ty == "f64" { 8 } else { 4 };
+                            (e.offset, writes_at + e.offset, e.ty.clone(), e.size / size)
+                        })
+                };
+                let look = crate::circuit::Lookup {
+                    slot: &slot,
+                    write: &write,
+                };
+                let c = crate::circuit::build(v, circuit_major, &look)
+                    .map_err(|r| logic_refused(id, r))?;
                 assets.push((rewrite::hash(&c.bytes), c.bytes.clone()));
                 Some(std::sync::Arc::new(c))
             }
