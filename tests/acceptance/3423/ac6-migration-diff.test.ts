@@ -1,12 +1,3 @@
-// AC6 #3423.997b049e: "The change that adds the field to main's records differs from the merge base only in that
-// field: every call, hash and time is byte for byte the same"
-//
-// Every record the merge base holds is read twice: as the merge base holds it and as this checkout, the change, holds
-// it. A record with a call gains `maker` (README.md's shape) and nothing else changes: every other member parses to
-// the same value, each string the same to the byte, so every call, hash and time stays as it was. The one other edit
-// the field takes is dropping `by: "you"` from a record whose maker is an agent, the prose marker the lane refuses
-// (README.md, Migration). A record with no call stays byte for byte the same. Once the change has landed the merge
-// base already holds the field, and then the change must leave those records as they are.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -15,7 +6,6 @@ import { AC, REPO, TIMEOUT, callOf, mergeBase, recordPathsAt, showAt, type JsonO
 
 const isObj = (v: unknown): v is JsonObject => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** README.md's maker shape: a person by name, or an agent with its model and session (null when its words don't say). */
 function makerProblem(maker: unknown): string | null {
   if (!isObj(maker)) return `maker is not an object: ${JSON.stringify(maker)}`;
   const keys = Object.keys(maker);

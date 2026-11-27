@@ -1,9 +1,3 @@
-// AC3 #3423.16f305aa: "A reading that says wrong fails its criterion, and the suite's run says the work was sent back
-// by a reading"
-//
-// An agent's record saying wrong, before any deadline: `verdict` (README.md), the command a suite's taste test runs,
-// gives FAIL, says in its JSON that the work was sent back by a reading naming the record, and prints the line
-// "sent back by a reading" that the suite's run shows.
 import { describe, expect, it } from 'vitest';
 import { AC, agent, fixtureRepo, obj, record, recordPath, reply, taste } from './helpers.ts';
 

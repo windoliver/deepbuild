@@ -1,12 +1,3 @@
-// AC4 #3423.a83451d1: "A reading whose session authored a commit that the pictures' check ran on is refused, naming
-// the session. The same pictures read by a job given only the criterion and the files are accepted. A planted job that
-// was also given the diff fails, naming the input"
-//
-// A scratch repository with two commits: the first made by session-x, the second, which changes what the pictures
-// show, by session-b; the pictures' check ran on the second. The record's commits table (README.md: --commits) says
-// which session made each. Three readings of the same pictures go to `accept`: session-b's own is refused naming
-// session-b; a job's, given only the criterion and the files, is accepted; a planted job's, also given the diff, is
-// refused naming the input "diff".
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, agent, brief, fixtureRepo, list, obj, put, record, reply, scratchDir, taste } from './helpers.ts';

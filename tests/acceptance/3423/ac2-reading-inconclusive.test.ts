@@ -1,12 +1,3 @@
-// AC2 #3423.88a9d39c: "A record whose maker is an agent and whose call says right leaves its criterion INCONCLUSIVE
-// before the deadline and reads as a default after it. A planted lane that reads it as a person's call fails, naming
-// the record"
-//
-// A scratch repository holds two records on the same pictures, both saying right: one made by an agent with a taste
-// deadline, one by a person. `verdict` (README.md) gives the agent's INCONCLUSIVE with the reading as the recommended
-// answer before the deadline, and reads it as a default at and after it; the person's is a PASS, so the difference is
-// the maker alone. `lane` lists the agent's as a reading, never a call; a lane planted to read it as a person's call
-// (README.md, Twins: agent-read-as-person) fails the second test, which names the record.
 import { describe, expect, it } from 'vitest';
 import { AC, PERSON, TIMEOUT, agent, entryFor, fixtureRepo, record, recordPath, reply, taste } from './helpers.ts';
 

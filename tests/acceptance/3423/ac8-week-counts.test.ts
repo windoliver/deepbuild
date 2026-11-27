@@ -1,20 +1,3 @@
-// AC8 #3423.4573dacd: "The week's three counts equal a hand count of a fixture week's records"
-//
-// A scratch repository holds nine records over ISO weeks 2026-W46 (Mon Nov 9 to Sun Nov 15) and 2026-W47 (Mon Nov 16 to
-// Sun Nov 22), and `week --now 2026-11-20T12:00:00Z` (README.md) gives each week's three counts. The hand count, by
-// each record's `when` (UTC):
-//
-//   W46  p1 person, right                              -> a call a person made
-//   W46  r1 agent, right, no deadline                  -> a reading waiting on a person
-//   W47  p2 person, right                              -> a call a person made
-//   W47  p3 person, wrong                              -> a call a person made
-//   W47  p4 person, right                              -> a call a person made
-//   W47  r2 agent, right, deadline Nov 18 12:00 (past) -> a default taken
-//   W47  r3 agent, right, no deadline                  -> a reading waiting on a person
-//   W47  r4 agent, right, deadline Nov 21 12:00 (to come) -> a reading waiting on a person
-//   W47  n1 no call yet                                -> nothing
-//
-// W46: 1 call by a person, 1 reading waiting, 0 defaults. W47: 3 calls by a person, 2 readings waiting, 1 default.
 import { describe, expect, it } from 'vitest';
 import { AC, PERSON, TIMEOUT, agent, brief, fixtureRepo, obj, record, recordPath, reply, taste } from './helpers.ts';
 

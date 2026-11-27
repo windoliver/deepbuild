@@ -1,12 +1,3 @@
-// AC5 #3423.fca57d94: "An agent-made record that says `by: "you"` is refused, naming the field. The same record under
-// a signed tag that names it reads as that person's call, and under a tag by a key that isn't on the approvers list it
-// stays a reading"
-//
-// Three scratch repositories hold the same agent-made record with `by: "you"` and an approvers list
-// (`.deepbuild/approvers`) naming one security key's stand-in, approver-a. With no tag the lane refuses the record,
-// naming the field `by`. With a tag deep/approved/… signed by approver-a's key and holding `Approves: <the record>`, the
-// record reads as approver-a's call. With the same tag signed by outsider-a, a key the list doesn't hold, it stays a
-// reading.
 import { describe, expect, it } from 'vitest';
 import { AC, TIMEOUT, agent, approve, brief, entryFor, fixtureRepo, hardware, list, obj, record, recordPath, reply, taste } from './helpers.ts';
 
