@@ -168,7 +168,6 @@ export interface Runner {
   planWindows(): Map<string, { used: number; resets: number | null; at: number }>;
   /** The account `agent` is signed in to now, as its own sign-in records it under your home, or null (#1349). */
   account(agent: Agent): string | null;
-  /** Whether `agent`'s job can hand work to the sub-agents it names, as its parts say (#1880). */
   takesSubagents(agent: Agent): boolean;
   /** The most used of the live plan windows of the account `agent` runs on in `home`, in percent, or undefined with no reading (#1330's plan share). */
   windowUsed(agent: Agent, home: string): number | undefined;

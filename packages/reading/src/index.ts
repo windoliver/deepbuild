@@ -75,10 +75,8 @@ const MESSAGE = /^(session:[0-9A-Za-z]+)#[A-Za-z0-9][A-Za-z0-9._-]*$/;
 /** The tools server, built beside this file's compiled form. */
 const TOOLS = fileURLToPath(new URL('../dist/tools.mjs', import.meta.url));
 /** Where the node that runs the job's tools reads itself from: its binary's folder, and the folders of the libraries
- *  it loaded besides the system's and its addons, which a Homebrew node links from its own prefix. Linux names its
- *  vDSO, which no file holds, by a bare name (linux-vdso.so.1), and links /lib into /usr/lib. */
+ *  it loaded besides the system's and its addons, which a Homebrew node links from its own prefix. */
 let reads: string[] | undefined;
-/** Not the system's (whose macOS libraries live only in the dyld cache, no file to resolve) and no addon. */
 const own = (p: string): boolean => !/^\/(usr\/lib|System)\/|\.node$/.test(p);
 const nodeReads = (): string[] => {
   // Read once: a report takes milliseconds on the hub's loop, and the libraries node loaded at its start don't change.
@@ -261,8 +259,6 @@ export async function openReading(o: ReadingOptions): Promise<Reading> {
     async run(spec) {
       const reading = `reading:${ulid(now())}`;
       const agent = spec.agent ?? 'claude-code';
-      // Its sub-reads go to the reader sub-agent, so an agent whose parts take none gets no job: the reading ends
-      // BLOCKED, saying why, before any process starts.
       if (!runner.takesSubagents(agent)) {
         await append('reading.finished', {
           reading, kind: spec.kind, runs: [], state: 'BLOCKED', findings: 0, dropped: 0, undelivered: 0, plan: null,

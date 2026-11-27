@@ -404,8 +404,6 @@ it('reads a job that got no answer as stopped, by the error its stream-json name
   expect(failed.stop?.cause).toBe('unknown');
 }, 60_000);
 
-// #1880: a reading names a sub-agent, and Codex's parts take none. Its job is refused when it is submitted, saying
-// why, before any process of it starts: not even the version check runs, and no launch throws.
 it('refuses a job that names a sub-agent its agent takes none of, before any process of it starts', async () => {
   const bin = join(dir, 'codex-bin');
   const ran = join(dir, 'codex-ran');

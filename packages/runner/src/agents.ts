@@ -23,7 +23,6 @@ export interface AgentParts {
   confine(mcp: Record<string, McpServer>, subagents: Record<string, Subagent>, writes?: string): string[];
   /** Its job can write one folder. */
   writing?: true;
-  /** Its job can hand work to the sub-agents the job names. */
   subagents?: true;
   /** The account the agent records beside your sign-in, or null. */
   account(home: string, env: Record<string, string | undefined>): string | null;
@@ -122,8 +121,7 @@ export const AGENTS: Partial<Record<Agent, AgentParts>> = {
   },
   codex: {
     facts: 'codex.facts.json',
-    // The MCP servers go on the command line, since the facts' launch ignores your config. Codex has no sub-agents to
-    // name, so a job that names one is refused when it is submitted.
+    // The MCP servers go on the command line, since the facts' launch ignores your config. Codex has no sub-agents to name.
     confine: (mcp) => Object.entries(mcp).flatMap(([name, server]) => ['-c', `mcp_servers.${JSON.stringify(name)}=${inlineToml(server)}`]),
     account: (home, env) => {
       const v = readJson(join(codexHome(home, env), 'auth.json'));
