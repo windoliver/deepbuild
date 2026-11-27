@@ -812,6 +812,13 @@ pub(super) fn sources_of(piece: &Value) -> Result<Sources, Refused> {
     Ok(sources)
 }
 
+static PIECE_CHECKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// #3612: how many pieces this process has checked, a refused one counted too.
+pub fn piece_checks() -> u64 {
+    PIECE_CHECKS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Checks every item of a piece in order: the first refusal answers.
 pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<Piece, Refused> {
     check_bound(piece, planted, history, &[])
@@ -853,6 +860,7 @@ pub fn check_in(
     stored: &dyn Fn(&str) -> Option<Vec<u8>>,
     services: &[crate::services::Service],
 ) -> Result<Piece, Refused> {
+    PIECE_CHECKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
     let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
     let class = match piece.get("class") {
