@@ -1627,3 +1627,11 @@ timed.push('tests/acceptance/3467/players.test.ts');
 Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial'], ['3238', 'no-grant'], ['3240', 'line'], ['3334', 'stall'], ['3334', 'far-stalled'], ['3567', 'grant'], ['2820', 'failures']]
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3549/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3549/')));
+
+// #3402: #1352's section, routes and taste-call files find the section as the one heading holding its words and read
+// Decided rows under ### Decided alone, so they fail since #3138. Kept as written, by hand only; their blind redraft,
+// which finds the section by its anchor and reads every Decided table under Decisions, runs in their place.
+for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
+  redrafted[`tests/acceptance/1352/${name}.test.mjs`] = 'tests/acceptance/1352-redraft-3402/';
+  byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
+}
