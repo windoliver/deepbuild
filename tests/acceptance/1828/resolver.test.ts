@@ -1,14 +1,3 @@
-// AC2 #1828.6794e119: "On the same hub, a release package's resolver registered with `deep.registerResolver` answers a
-// matching ask before the ask shows." The hub is the shipped one, with acme/answers in its release (README, The
-// packages), set up with `deep setup`. Session A, in a repo, asks a choice pinned to a requirement through deep_ask
-// (#27's asking session), and you answer it green with `deep inbox answer`, which saves your answer as a decision for
-// the repo. acme/answers's rule file is then given that ask's key, the option and the decision. Session B, new, in the
-// same repo, asks the same question: acme/answers's resolver, asked by the hub before the ask shows, answers it green
-// naming that decision, and the ask closes as decided for you with no batch ever naming it.
-//
-// What this reading can't tell apart (README, Limits): resolver-decisions, shipped on by default and registered with
-// the asks core directly, answers from the same saved decision. So the reading also needs acme/answers's own note
-// that the hub consulted it about B's ask and that it answered with that decision before the ask closed.
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, expect, test } from 'vitest';
@@ -32,7 +21,6 @@ test(`${AC2} a release package's resolver registered with deep.registerResolver 
     const repo = makeRepo(w.home);
     const q = question({ point: `req:R1828${tag(4)}` });
 
-    // Session A asks; you answer green; the core saves your answer as a decision for the repo.
     const first = await (await beginAsk(hub, w.home, { cwd: repo.dir, q })).finish();
     const yours = await answer(w, first.handle, 'green');
     if (yours.code !== 0) throw Error(`BLOCKED: deep inbox answer ${first.handle} green must exit 0: ${shown(yours)}`);
@@ -43,7 +31,6 @@ test(`${AC2} a release package's resolver registered with deep.registerResolver 
     if (!asked || !saved) throw Error(`BLOCKED: your answer to ${first.handle} must be saved as a decision for the repo (deep inbox answer: ${shown(yours)}); the record holds ${saved ? 'it' : 'no decision.created for it'}`);
     writeFileSync(rule, JSON.stringify({ key: asked.data.key, answer: 'green', decision: `decision:${saved.id}` }));
 
-    // Session B, new, in the same repo, asks the same question.
     const second = await (await beginAsk(hub, w.home, { cwd: repo.dir, q })).finish();
     await second.claude.end();
     events = await allEvents(hub);

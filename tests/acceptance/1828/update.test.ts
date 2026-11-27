@@ -1,10 +1,3 @@
-// AC3 #1828.44a54c78: "On the same hub, an update that drops an interface an installed package uses raises one
-// `extension.update` ask and installs nothing before your yes." The hub is the shipped one, with acme/feed 1.0.0
-// (providing ext.acme.feed@1) and acme/board (using it) installed under its root, and acme/feed 2.0.0 (providing only
-// ext.acme.feed@2, with no adapter for @1) in its release too (README, The packages). You run `deep install` on
-// acme/feed 2.0.0 from your own terminal; while it waits, the record holds one ask about the update and the extension
-// host's installed.json still names 1.0.0; your yes with `deep inbox answer <ask> approve` lets the install finish,
-// and installed.json then names 2.0.0.
 import { join } from 'node:path';
 import { afterAll, expect, test } from 'vitest';
 import {
@@ -13,7 +6,6 @@ import {
 
 afterAll(cleanup, 180_000);
 
-/** How long the update is watched with its ask open and no answer, for anything it installs before your yes. */
 const UNANSWERED_MS = 5000;
 
 test(`${AC3} an update that drops an interface an installed package uses raises one extension.update ask and installs nothing before your yes`, async (ctx) => verdict(ctx, async () => {
@@ -37,7 +29,6 @@ test(`${AC3} an update that drops an interface an installed package uses raises 
       const events = await allEvents(hub);
       throw Error(`${AC3} \`deep install\` of ${named}, which drops ${FEED_V1} that ${BOARD} uses, raised no extension.update ask: it ended ${shown(install!)}; installed.json names ${FEED} ${String(installedVersion(w, FEED))}; asks naming ${FEED}: ${asksNaming(events, FEED).map(said).join('; ') || 'none'}`);
     }
-    // Unanswered for a while: nothing is installed, and the install still waits.
     await sleep(UNANSWERED_MS);
     const before = { version: installedVersion(w, FEED), waiting: install === undefined };
     const yes = await answer(w, `ask:${ask.id}`, 'approve');

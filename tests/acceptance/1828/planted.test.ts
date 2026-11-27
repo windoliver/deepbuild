@@ -1,8 +1,3 @@
-// AC1 #1828.65fe62dd, the wrong program: "A planted hub that opens the host with no asks core fails, naming
-// `deep.send`." A hub started with DEEP_HUB_PLANT=host-without-asks (chosen: README, Choices) opens the extension host
-// without the asks core it opened, as the base does, and is otherwise the shipped hub. It plays the scene send.test.ts
-// plays on the right program, and the same judge must fail here, naming `deep.send`. A hub that won't start with the
-// plant (the base lists no such plant) is BLOCKED, never a pass.
 import { afterAll, expect, test } from 'vitest';
 import { AC1, built, cleanup, failureOf, judgeSend, PLANT, sendScene, sendWorld, stopHub, verdict } from './helpers.ts';
 

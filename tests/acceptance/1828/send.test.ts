@@ -1,8 +1,3 @@
-// AC1 #1828.65fe62dd, the right program: "On a hub started by `deep hub run`, a plug-in send with no standing rule
-// raises one ask from the "action.send" source and goes out once on your yes." The hub is the shipped one, with
-// acme/notify in its release (README, The packages). acme/notify makes one send to you through the local HTTPS
-// stand-in, outside any action or schedule, and no standing rule of yours covers it; you answer its ask with
-// `deep inbox answer <ask> approve`. Its wrong program is planted.test.ts.
 import { afterAll, expect, test } from 'vitest';
 import { AC1, built, cleanup, judgeSend, loadReading, said, sendScene, sendWorld, stopHub, verdict } from './helpers.ts';
 

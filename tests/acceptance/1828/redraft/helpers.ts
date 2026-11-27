@@ -1,9 +1,3 @@
-// Tools for #1828's AC3, written blind (README.md): a real hub (`deep hub run`) in a temp home with the OS confirmation
-// stubbed (DEEP_HUB_TEST_CONFIRM), packages installed and answered through `deep` commands as you run them, and the
-// record read through the hub's socket (`events.read` on a cli connection, as `deep` reads it). No hub or CLI module is
-// imported; the two package helpers the fixtures are stamped with (packageDigest, d1Digest) come through their packages'
-// public entries. Processes are stopped by PID only, never by name or port.
-
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
@@ -20,15 +14,14 @@ export type Line = { [key: string]: any };
 const parse = (text: string): Line | undefined => { try { return JSON.parse(text) as Line; } catch { return undefined; } };
 export const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-// ---- Processes and folders this file made: stopped by PID and removed after the file.
 const owned = new Set<number>();
 const made: string[] = [];
 const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
 afterAll(async () => {
-  for (const pid of owned) try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ }
+  for (const pid of owned) try { process.kill(pid, 'SIGTERM'); } catch { }
   const deadline = Date.now() + 5000;
   while ([...owned].some(alive) && Date.now() < deadline) await sleep(50);
-  for (const pid of owned) if (alive(pid)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+  for (const pid of owned) if (alive(pid)) try { process.kill(pid, 'SIGKILL'); } catch { }
   owned.clear();
   for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true });
 }, 30_000);
@@ -40,7 +33,6 @@ export function tempDir(tag: string): string {
 
 if (!existsSync(CLI)) throw Error(`BLOCKED: ${CLI} isn't built; run npm run build --workspaces first`);
 
-/** This environment with HOME moved to the test's home and none of the hub's own settings, plus `extra`. */
 function childEnv(home: string, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -50,7 +42,6 @@ function childEnv(home: string, extra: Record<string, string> = {}): NodeJS.Proc
   return { ...env, HOME: home, XDG_CONFIG_HOME: join(home, '.config'), PATH: `${dirname(NODE)}:/usr/bin:/bin`, LC_ALL: 'C', NO_COLOR: '1', ...extra };
 }
 
-// ---- `deep <args>`, as you run it from your own terminal: a child of this test, never of an agent.
 export interface Ran { code: number | null; stdout: string; stderr: string }
 export interface Running { pid: number; ended: Ran | undefined; done: Promise<Ran>; output(): string }
 export function deepStart(home: string, args: readonly string[], timeoutMs = 300_000): Running {
@@ -71,7 +62,6 @@ export function deepStart(home: string, args: readonly string[], timeoutMs = 300
 }
 export const deep = (home: string, args: readonly string[], timeoutMs?: number): Promise<Ran> => deepStart(home, args, timeoutMs).done;
 
-// ---- The hub: `deep hub run` with HOME at the test's home, so its root is <home>/.deepbuild.
 export interface Hub { pid: number; home: string; root: string; output(): string }
 export async function startHub(): Promise<Hub> {
   const tmp = tempDir('hub');
@@ -97,7 +87,6 @@ export async function startHub(): Promise<Hub> {
   return { pid: child.pid!, home, root: join(home, '.deepbuild'), output: () => out };
 }
 
-/** Every event in the hub's record, read on one cli connection holding the control token, as `deep` reads it. */
 export async function events(hub: Hub): Promise<Line[]> {
   const token = readFileSync(join(hub.root, 'control.token'), 'utf8').trim();
   const sock = net.connect(join(hub.root, 'hub.sock'));
@@ -142,7 +131,6 @@ export async function events(hub: Hub): Promise<Line[]> {
   }
 }
 
-/** The versions of `id` the hub's extension host has installed, from its installed.json under the hub's root. */
 export function installedVersions(hub: Hub, id: string): string[] {
   const file = join(hub.root, 'extensions', 'installed.json');
   if (!existsSync(file)) return [];
@@ -150,7 +138,6 @@ export function installedVersions(hub: Hub, id: string): string[] {
   return Object.entries(entries).filter(([key]) => key === id).map(([, e]) => String(e.version));
 }
 
-// ---- Packages: a folder with deepbuild.json and index.ts, its envelope digest stamped as the installer checks it.
 export interface Shape { [key: string]: unknown }
 export const digestOf = (schema: Shape): string => d1Digest(schema as Parameters<typeof d1Digest>[0]);
 export function makePackage(o: { id: string; version: string; manifest: Record<string, unknown>; index: string }): string {
@@ -164,7 +151,6 @@ export function makePackage(o: { id: string; version: string; manifest: Record<s
   return dir;
 }
 
-/** Polls `probe` until it gives a value, or until `ms`; undefined then. */
 export async function until<T>(probe: () => Promise<T | undefined> | T | undefined, ms: number): Promise<T | undefined> {
   const end = Date.now() + ms;
   for (;;) {
