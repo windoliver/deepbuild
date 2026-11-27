@@ -1,1 +1,1 @@
-{ "alone": true, "why": "each file builds deep-show with cargo" }
+{ "alone": true, "why": "binary: each file builds deep-show with cargo" }

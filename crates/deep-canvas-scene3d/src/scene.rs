@@ -1245,23 +1245,13 @@ impl<'a> Items<'a> {
         state: &'a State,
         program: &Program,
     ) -> Self {
-        let slot: HashMap<&str, usize> = program
-            .items
-            .iter()
-            .enumerate()
-            .map(|(i, id)| (id.as_str(), i))
-            .collect();
+        let slot: HashMap<_, _> = program.items.iter().map(String::as_str).zip(0..).collect();
         let mut entries = HashMap::with_capacity(doc.len());
         let mut copies = written.iter().peekable();
         for (id, item) in doc {
-            let entry = match copies.next_if(|(w, _)| *w == id) {
-                Some((_, evaluated)) => (evaluated, None),
-                None => (
-                    item,
-                    slot.get(id.as_str()).copied().filter(|_| item.is_object()),
-                ),
-            };
-            entries.insert(id.as_str(), entry);
+            let at = slot.get(id.as_str()).copied().filter(|_| item.is_object());
+            let entry = copies.next_if(|(w, _)| *w == id).map(|(_, e)| (e, None));
+            entries.insert(id.as_str(), entry.unwrap_or((item, at)));
         }
         let assemblies = program
             .assemblies
