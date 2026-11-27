@@ -1481,6 +1481,7 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   process.on('SIGHUP', () => undefined);
   process.stdout.on('error', () => undefined);
   process.stderr.on('error', () => undefined);
+  (await import('./hub-log.js')).keepLog(join(root.logs, 'hub.log'), plant); // the hub that holds the lock holds its log to its size (#3548)
   const hub = new Hub(root, writeToken(root), lock, plant, vfs, options.safe === true);
   // On the installed hub a signal is a restart, not a stop (#2975): a command's child can send one with no confirmation,
   // and an exit 0 would keep the hub down till your next login. Logout and shutdown send it too, so it doesn't wait.

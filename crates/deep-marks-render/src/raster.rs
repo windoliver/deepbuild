@@ -25,8 +25,8 @@ use deep_canvas_marks::scene::{Blend, Drawn, Scope};
 use deep_canvas_marks::story;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
-    bez, brush, level_name, rasterizer, rect, sampler, settings, shape, solid, solid_at, stroke,
-    Canvas, Scopes,
+    bez, brush, image_at, level_name, rasterizer, rect, sampler, settings, shape, solid, solid_at,
+    stroke, Canvas, Scopes,
 };
 use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::{Affine, Cap, RoundedRect, Shape};
@@ -752,35 +752,24 @@ impl<C: Glyphs> Painter<'_, C> {
                     return Ok(());
                 }
                 let looks = (*opacity, adjust);
-                let placed = (*bounds, *fit, self.zoom);
                 let mut fresh = asset::Kept::default();
                 let mut kept = self.kept.map(|k| k.borrow_mut());
                 let kept = kept.as_deref_mut().unwrap_or(&mut fresh);
-                let cut = (*crop, tile.as_ref());
-                let (pixmap, [w, h], to) =
-                    kept.pixmap(self.store, hash, cut, looks, placed, item)?;
                 // #535: a turned image draws turned about its box's centre.
                 let unturned = self.ctx.transform();
                 let t = deep_canvas_marks::turn::turn_of(*bounds, *turn);
-                self.ctx.set_transform(unturned * Affine::new(t));
-                self.ctx.set_paint(
-                    Image {
-                        image: ImageSource::Pixmap(pixmap),
-                        sampler: sampler(*sampling),
-                    }
-                    .into(),
-                );
-                self.ctx.set_paint_transform(
-                    Affine::translate((to[0], to[1]))
-                        * Affine::scale_non_uniform(to[2] / f64::from(w), to[3] / f64::from(h)),
-                );
-                // The image inside its box: a cover image is cut at the box's edges.
-                let shown = rect(*bounds).intersect(rect(to));
-                if shown.width() > 0.0 && shown.height() > 0.0 {
-                    self.ctx.fill_rect(&shown);
+                // #2039: a nine-part frame draws each part of its cell; any other image, itself.
+                for part in deep_canvas_marks::atlas::parts(tile.as_ref(), *bounds) {
+                    let placed = (part.to, *fit, self.zoom);
+                    let cut = (*crop, part.cell.as_ref());
+                    let (pixmap, [w, h], to) =
+                        kept.pixmap(self.store, hash, cut, looks, placed, item)?;
+                    self.ctx.set_transform(unturned * Affine::new(t));
+                    // The image inside its box: a cover image is cut at the box's edges.
+                    let (px, by) = ([0.0, 0.0, f64::from(w), f64::from(h)], sampler(*sampling));
+                    image_at(&mut self.ctx, pixmap, by, px, to, part.over, part.repeat);
+                    self.ctx.set_transform(unturned);
                 }
-                self.ctx.reset_paint_transform();
-                self.ctx.set_transform(unturned);
             }
         }
         Ok(())
