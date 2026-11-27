@@ -19,7 +19,7 @@ Status: accepted. Moved from comments in `packages/gate` by #3454's first pass (
 
 ## Whose checks count
 
-- **A changed package.json counts only for its scripts.** `packages/gate/src/own.ts`, `ownChanges`. When its scripts changed and the run read it, the script target the check runs is the check's own.
+- **The root package.json counts only for its scripts.** `packages/gate/src/own.ts`, `ownChanges`. When its scripts changed and the run read it, the script target the check runs is the check's own. A package.json under one of the check's own folders counts like any file there.
 - **The files a test tool loads by its own rules are the check's own, wherever they lie.** `packages/gate/src/own.ts`, `ownChanges`. Beside the files a run read under the repo's test, fixture and script folders, a claim's changed files that are a runner's config, pytest's `conftest.py`, or a file a runner config names, such as a setup file, count as the check's own (#33).
 
 ## What a claim leaves open

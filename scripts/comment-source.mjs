@@ -28,7 +28,7 @@ function literalsOf(path, text) {
 function commentsOf(text, literals, script, lineEnd) {
   const comments = [];
   let next = 0;
-  let i = script && text.startsWith('#!') ? (text.indexOf('\n') + 1 || text.length) : 0;
+  let i = script && text.startsWith('#!') ? (lineEnd.exec(text)?.index ?? text.length) : 0;
   while ((i = text.indexOf('/', i)) !== -1) {
     while (next < literals.length && literals[next][1] <= i) next++;
     if (next < literals.length && literals[next][0] <= i) {
