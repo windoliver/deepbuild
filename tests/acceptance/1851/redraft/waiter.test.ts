@@ -1,17 +1,3 @@
-// #1851.35ae3eb0 AC1 With `~/.deepbuild/control.token` removed after the hub starts, an answer to an idle Claude Code
-//   session is still delivered by the waiter within 2 s; the waiter on the merge base can't connect and fails this
-//   test, naming the ask.
-// #1851.bbec9b71 AC2 A waiter started for session A that asks to wait on session B is refused, naming the binding, and
-//   B's answer never reaches A.
-// #1851.c13ec84e AC3 A process that isn't a child of the session's agent, saying hello as that session's waiter, is
-//   refused, naming the process.
-//
-// Every waiter here is the real `deep-hook claude-code waiter`, by the entry `deep setup` wrote under Stop, with a Stop
-// payload on stdin; exit 2 with the answer on stderr is the delivery (README, The surface). The sessions are the Claude
-// Code delivery suite's (../../25/routes): each its own Claude Code stand-in, whose hooks, `deep mcp` and waiter are
-// its children, asking through deep_ask and stopping, so its Stop goes through and it is idle. The merge base's waiter
-// says hello as the CLI with the token from the file: it never connects once the file is gone (AC1), and with the
-// file there it is served any session's answers from any process (AC2, AC3). BASE-FAILURE.txt holds that run.
 
 import { existsSync } from 'node:fs';
 import { afterEach, expect, test } from 'vitest';
@@ -23,9 +9,7 @@ import {
 
 afterEach(cleanup, 60_000);
 
-/** How long a waiter that is to be refused gets to connect and ask before you answer. */
 const ASKED_MS = 3000;
-/** The bounded time after your answer is accepted in which an answer that must never arrive would have. */
 const NEVER_MS = 5000;
 const LAST_WORDS = 'I asked which header colour you want; I will wait for your answer.';
 
@@ -33,13 +17,10 @@ test('#1851.35ae3eb0 AC1 with control.token removed after the hub starts, the an
   const { home } = makeHome();
   const hub = await startHub(home, { noAskWait: true, shortHold: true });
   await setup(home);
-  // The session asks while the file is still there (this suite reads the ask through it), and has not stopped yet.
   const a = await askingSession(hub, home);
-  // You hold the token, as the app does from the hub's launch; then the file is gone, before any waiter starts.
   const token = heldToken(home);
   const you = yourHome(hub, token);
   removeToken(home);
-  // The session stops: its hold ends with nothing answered, it is idle, and the waiter Claude Code started is running.
   const waiter = await stopToIdle(a);
   expect(existsSync(tokenFile(home)), 'BLOCKED: ~/.deepbuild/control.token must still be removed once the waiter is running').toBe(false);
 
@@ -60,16 +41,13 @@ test('#1851.bbec9b71 AC2 a waiter started under session A\'s agent that asks to 
   const hub = await startHub(home, { noAskWait: true, shortHold: true });
   await setup(home);
   const token = heldToken(home);
-  // Two idle sessions, each its own Claude Code with its own waiter running.
   const A = await idleSession(hub, home);
   const B = await idleSession(hub, home);
   const mark = await markNow(hub, token);
 
-  // Session A's Claude Code runs the waiter entry once more, as its own child, with a Stop payload naming session B.
   const asking = await waiterUnder(A.a.claude, stopWaiter(home), payload(B.a.s, 'Stop', { last_assistant_message: LAST_WORDS }));
   await sleep(ASKED_MS);
   const answered = await answerFrom(home, B.a.handle, B.a.green.id);
-  // Until B's answer went somewhere (to B's own waiter, or to the one under A), and at least the bounded time.
   await settle(async () => (await runNow(B.a.claude, B.waiter.pid)).code === 2 || tookAnswer(await runNow(A.a.claude, asking.pid), B.a), answered.ended, NEVER_MS, 30_000);
 
   const under = await runNow(A.a.claude, asking.pid);
@@ -98,7 +76,6 @@ test('#1851.c13ec84e AC3 a process that isn\'t a child of the session\'s agent, 
   const S = await idleSession(hub, home);
   const mark = await markNow(hub, token);
 
-  // The waiter entry run by this test process with the session's own Stop payload: no agent is above it.
   const outsider = outsiderWaiter(home, stopWaiter(home), S.a.s);
   await sleep(ASKED_MS);
   if (/not found|No such file|Permission denied/.test(outsider.stderr)) throw Error(`BLOCKED: the waiter entry didn't run from this test process: ${runShown(outsider)}`);

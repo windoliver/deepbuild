@@ -1,6 +1,3 @@
-// #1851: deep-hook's waiter waits for its session's answers on a credential bound to its own session, never with the
-// control token (README). Each test starts its own hub in a temporary home, runs `deep setup`, and drives the real
-// `deep-hook claude-code waiter` that setup's Stop entry names.
 
 import { availableParallelism, loadavg } from 'node:os';
 import { rmSync, existsSync } from 'node:fs';
@@ -13,12 +10,10 @@ import { answerAsYou, eventsWith, headWith, heldToken, outsiderWaiter, refusalNa
 
 afterEach(async () => { stopGroups(); await cleanup(); }, 60_000);
 
-/** Up to this long, after an answer, for a waiter that should not get it to show that it did (and for the right one to wake). */
 const NEVER_MS = 15_000;
 
 async function world(): Promise<{ home: string; hub: Awaited<ReturnType<typeof startHub>>; token: string }> {
   const { home } = makeHome();
-  // shortHold: a stop held with nothing answered goes through after 5 s, so a session is idle soon (#25's suite).
   const hub = await startHub(home, { noAskWait: true, shortHold: true });
   await setup(home);
   return { home, hub, token: heldToken(hub) };
@@ -29,12 +24,10 @@ describe('#1851 the waiter waits on its own session without the control token', 
     const { home, hub, token } = await world();
     const a = await (await beginAsk(hub, home)).finish();
 
-    // The token is removed after the hub started, before the Stop that starts the session's waiter.
     rmSync(join(hub.root, 'control.token'));
     const stop = await a.claude.hook('Stop', payload(a.s, 'Stop', { last_assistant_message: 'I asked which header colour you want; I will wait for your answer.' }));
     expect(stop.blocked, `nothing is answered yet, so ${a.s.id}'s stop goes through: ${firedShown(stop)}`).toBeUndefined();
     await waitFor(async () => (await a.claude.liveWaiters(a.s.id)).length > 0 || undefined, 30_000, `the waiter Claude Code started at ${a.s.id}'s Stop`);
-    // Give the waiter time to connect and wait: it starts with no token to read.
     await sleep(3000);
     expect(existsSync(join(hub.root, 'control.token')), 'control.token stays removed while the waiter waits').toBe(false);
 
@@ -54,7 +47,6 @@ describe('#1851 the waiter waits on its own session without the control token', 
     const { home, hub, token } = await world();
     const [A, B] = (await idleSessions(hub, home, 2)) as [Asking, Asking];
 
-    // Under A's agent, the real waiter is handed a Stop payload naming B: a waiter of A's asking to wait on B.
     const head = await headWith(hub, token);
     const outputFrom = hub.output().length;
     const forged = await waiterUnder(A.claude, home, B.s);
@@ -87,7 +79,6 @@ describe('#1851 the waiter waits on its own session without the control token', 
   it('AC3 #1851.c180d03e a process that is not a child of the session agent, saying hello as that session waiter, is refused, naming the process', async () => {
     const { home, hub, token } = await world();
     const [A] = (await idleSessions(hub, home, 1)) as [Asking];
-    // A waiter whose parent is a print run (`-p`) is done at once (#668): this test process isn't one, so the outsider waits.
     expect([...process.execArgv, ...process.argv].some((x) => x === '-p' || x === '--print'), 'BLOCKED: this test process runs as a print run').toBe(false);
 
     const head = await headWith(hub, token);

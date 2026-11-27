@@ -57,3 +57,7 @@ The issue's Proof also names `crates/deep-hook/tests/cli.rs` and the Claude Code
 ## How far these tests were checked
 
 Type-checked with this folder's tsconfig, and run on the base four times on a heavily loaded machine (`BASE-FAILURE.txt`). Each criterion failed at its own assertion in at least one run: AC1 with no waiter exiting 2, naming the ask; AC2 and AC3 with the wrong waiter exiting 2 with the answer. Under the load, #25's `deep_ask` step sometimes read the hub as unreachable and the test was BLOCKED before its criterion; no run had all three reach their assertion. One earlier AC3 failure was this suite's own fault (`exec exec`), fixed. No fix exists, so the passing side of each test, AC1's 2 s bound, the own-waiter controls and AC2's and AC3's refusal assertions are unverified until one does.
+
+## Notes
+
+Run Vitest as an ordinary run, never as a print run (`-p` or `--print`): a waiter whose parent is a print run is done at once (#668), so AC3's outsider would not wait, and AC3 is BLOCKED if this test process is one.
