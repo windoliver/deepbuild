@@ -6,10 +6,8 @@
 //! writes there before each load, re-exporting each name from the toolkit module the catalog says serves it.
 //!
 //! [`check`] runs at pack check (`panel@1`) and again at load. It refuses a panel that imports a toolkit module, naming
-//! the file and line; one that names a module any way but one plain string (#1847: a template literal, or an
-//! `import(…)` or `require(…)` of anything else), naming the file and line, since the served module resolves the
-//! toolkit and a name the check can't read could be the toolkit's; one that uses a name off the catalog, naming the
-//! closest name on it; and one that uses a component whose script runs per frame, naming the component.
+//! the file and line, or names any module some way the check can't read (`docs/adr/0006`); one that uses a name off the
+//! catalog, naming the closest name on it; and one that uses a component whose script runs per frame, naming it.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -43,8 +41,7 @@ const MENU: &str = include_str!("../panel-menu.js");
 const REACHED: [&str; 3] = ["div", "h_flex", "v_flex"];
 const REACH: &str = include_str!("../panel-reach.js");
 
-/// The most scripts, and the most folders, the check reads in a panel; a panel holding more is refused, so a package
-/// can't make the check walk forever.
+/// The most scripts, and the most folders, the check reads in a panel.
 const MAX_SCRIPTS: usize = 256;
 
 struct Catalog {
@@ -203,9 +200,6 @@ pub fn check(dir: &Path) -> Result<(), String> {
                     "{at} imports \"{specifier}\", the toolkit under DeepBuild's module; a panel imports only \"{MODULE}\""
                 ));
             }
-            // Anything else names a file under the panel's root, bare (`evil.txt`) or not, and a file of its own is
-            // one the check reads: a script, `.js` or `.mjs`, named in plain characters only, since the loader reads
-            // some others its own way (gpui-shell cuts a name at its first `?v=`, so `./a?v=1.js` loads `./a`).
             let plain_name = specifier
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'/' | b'-'));
@@ -253,10 +247,6 @@ fn refuse_name(at: &str, name: &str, per_frame_checked: bool) -> Result<(), Stri
     }
 }
 
-/// The panel's scripts: every `.js` and `.mjs` file under its root but the module DeepBuild serves there, kept out only
-/// while it holds what DeepBuild wrote. `Err`, rather than leave a script unread the runtime could still open, when
-/// there are more than the check reads, a folder or entry it can't list, an entry that is neither a file nor a folder
-/// (a pipe would hang the read), or a name past ASCII (a file system that folds case may match it to a script's).
 fn scripts(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut found = Vec::new();
     let mut open = vec![dir.to_path_buf()];
@@ -288,8 +278,6 @@ fn scripts(dir: &Path) -> Result<Vec<PathBuf>, String> {
                     "its name holds a character past ASCII".to_owned(),
                 ));
             }
-            // gpui-shell resolves `@deepbuild/panel` to a file of that very name before the served `panel.js` (its
-            // `.d.ts` typings beside them are no module), so the panel may bring nothing there, in any case.
             if name(&path).eq_ignore_ascii_case(MODULE) {
                 return Err(unread(
                     &path,
@@ -307,8 +295,6 @@ fn scripts(dir: &Path) -> Result<Vec<PathBuf>, String> {
                     "it is neither a file nor a folder".to_owned(),
                 ));
             } else if script(&path.to_string_lossy()) && path != dir.join(SERVED) {
-                // The served module is DeepBuild's: `serve` rewrites it before gpui-shell reads it, whatever an
-                // earlier build or the panel left there.
                 found.push(path);
             }
         }
@@ -322,9 +308,6 @@ fn scripts(dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(found)
 }
 
-/// Whether a file's name, or a specifier naming one, is a script's: it ends in `.js` or `.mjs`, in any case, since a
-/// file system may not tell them apart. The same test picks the files [`scripts`] reads and the files a panel may
-/// import, so a file a panel imports is always one the check read (`.js` alone included).
 fn script(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     name.ends_with(".js") || name.ends_with(".mjs")
@@ -334,25 +317,18 @@ fn script(name: &str) -> bool {
 /// takes the module whole (a namespace, `export *` or a dynamic import).
 #[derive(Debug, PartialEq)]
 struct Import {
-    /// The module's name, or why it isn't one this check reads.
     specifier: Result<String, Unread>,
     line: usize,
     names: Option<Vec<String>>,
 }
 
-/// Why an import's module isn't read: so it is refused, since a name the check can't read could be the toolkit's.
 #[derive(Debug, PartialEq)]
 enum Unread {
-    /// `import(…)` or `require(…)` taking anything but one plain string, a template literal naming a module, or a
-    /// module's name holding an escape or a control character.
     Spelled,
-    /// A `/` that reads as either a division or a regex literal, where the two readings see different code.
     Slash,
-    /// A character outside a literal or a comment that the check doesn't read: one past ASCII, a `\` or a control.
     Character,
 }
 
-/// Every import in `source`: `import … from`, `export … from`, `import "…"`, `import(…)` and `require(…)`, in order.
 fn imports(source: &str) -> Vec<Import> {
     let Scan {
         code,
@@ -361,7 +337,6 @@ fn imports(source: &str) -> Vec<Import> {
         calls,
         unread,
     } = scan(source);
-    // Where each line ends, by the lexer's own line terminators (`\r\n` once), so a refusal names the line it reads.
     let bytes = source.as_bytes();
     let mut ends = Vec::new();
     let mut at = 0;
@@ -380,8 +355,6 @@ fn imports(source: &str) -> Vec<Import> {
     for &(start, end) in &strings {
         let before = code[..start].trim_end();
         let text = &source[start + 1..end - 1];
-        // An escape spells the name some other way than its text (`"gpui\x2dkit"` is the toolkit's), and a control
-        // character may end it early where the runtime reads it.
         let specifier = if text.contains('\\') || text.contains(|c: char| c.is_ascii_control()) {
             Err(Unread::Spelled)
         } else {
@@ -395,7 +368,6 @@ fn imports(source: &str) -> Vec<Import> {
         } else if keyword_end(before, "import").is_some() {
             Some(Vec::new())
         } else if let Some(call) = before.strip_suffix('(') {
-            // The call scan found, not a property's (`this.import("en")` is a method's).
             let call = call.trim_end();
             let word = ["import", "require"]
                 .into_iter()
@@ -421,7 +393,6 @@ fn imports(source: &str) -> Vec<Import> {
         line: line(at),
         names: None,
     };
-    // A template literal as a statement's module name.
     for &start in &templates {
         let before = code[..start].trim_end();
         let named_here = keyword_end(before, "from").is_some_and(|head| statement(head).is_some())
@@ -430,10 +401,8 @@ fn imports(source: &str) -> Vec<Import> {
             found.push((start, refused(start, Unread::Spelled)));
         }
     }
-    // A call to `import` or `require` whose argument isn't one plain string literal.
     let starts: BTreeMap<usize, usize> = strings.iter().copied().collect();
     let bytes = code.as_bytes();
-    // The next token at or after `at`: white space in the code is skipped, a blanked literal isn't.
     let token = |mut at: usize| {
         while bytes.get(at).is_some_and(|&b| space(b) || line_end(b))
             && !starts.contains_key(&at)
@@ -443,7 +412,6 @@ fn imports(source: &str) -> Vec<Import> {
         }
         at
     };
-    // Each `(`'s matching `)`, found in one pass.
     let mut closes = BTreeMap::new();
     let mut open = Vec::new();
     for (at, &byte) in bytes.iter().enumerate() {
@@ -462,7 +430,6 @@ fn imports(source: &str) -> Vec<Import> {
         let after = token(end);
         let argument = match bytes.get(after) {
             Some(b'(') => token(after + 1),
-            // `` require`…` `` calls it with a template.
             _ if word == "require" && templates.contains(&after) => after,
             _ => continue,
         };
@@ -487,11 +454,6 @@ fn imports(source: &str) -> Vec<Import> {
     found.into_iter().map(|(_, import)| import).collect()
 }
 
-/// Whether the `(` whose `)` is at `close` begins the parameters of a method named `import` or `require`,
-/// `import(name) {`, not a call: the name stands where only a method's can (`before` ends with `{`, `}`, `;`, `,`, `*`,
-/// `static`, `get`, `set` or `async`), and its `)` is followed by `{` on the same line, with only white space between
-/// in the source (a template's blanked text is no white space: ``import(m)`${{}}` `` is a call). A call there followed
-/// by `{` doesn't parse; one elsewhere may (`class A extends import(n) {}`), so it stays a call.
 fn method(before: &str, code: &[u8], source: &[u8], close: usize) -> bool {
     let before = before.trim_end();
     let name_place = before.ends_with(['{', '}', ';', ',', '*'])
@@ -508,7 +470,6 @@ fn method(before: &str, code: &[u8], source: &[u8], close: usize) -> bool {
     source.get(at) == Some(&b'{') && code.get(at) == Some(&b'{')
 }
 
-/// Where the clause of the `import` or `export` statement whose `from` ends `head` starts, if one does.
 fn statement(head: &str) -> Option<usize> {
     ["import", "export"]
         .iter()
@@ -528,18 +489,14 @@ fn named(clause: &str) -> Option<Vec<String>> {
     )
 }
 
-/// JavaScript's white space within ASCII: space, tab, vertical tab and form feed. Anything past ASCII in code is
-/// refused rather than read, so the check never needs the rest.
 fn space(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | 0x0b | 0x0c)
 }
 
-/// An ASCII line terminator: `\n`, or `\r` alone or before `\n`.
 fn line_end(byte: u8) -> bool {
     matches!(byte, b'\n' | b'\r')
 }
 
-/// How many bytes of a line terminator start at `at`: `\n`, `\r\n`, `\r`, U+2028 or U+2029.
 fn terminator(bytes: &[u8], at: usize) -> usize {
     match bytes[at..] {
         [b'\r', b'\n', ..] => 2,
@@ -549,33 +506,21 @@ fn terminator(bytes: &[u8], at: usize) -> usize {
     }
 }
 
-/// What [`scan`] reads of a script.
 struct Scan {
-    /// The script with its comments, string literals, template literals' text (not their `${…}` code) and regex
-    /// literals blanked, newlines kept.
     code: String,
-    /// Where each plain string literal starts and ends, quotes included.
     strings: Vec<(usize, usize)>,
-    /// Where each template literal starts.
     templates: Vec<usize>,
-    /// Where each `import` and `require` in the code is, as a word of its own and not a property's name.
     calls: Vec<(usize, &'static str)>,
-    /// Where the first place is the scan can't read for certain, and why; the scan stops there.
     unread: Option<(usize, Unread)>,
 }
 
-/// What came before a `/`, which decides whether it divides or starts a regex literal.
 #[derive(Clone, Copy, PartialEq)]
 enum Before {
-    /// A value (a name, a number, a literal, `)` or `]`): a `/` divides.
     Value,
-    /// An operator, a keyword that takes an expression, an opening bracket or the start: a `/` starts a regex.
     Operator,
-    /// `}`, or a word that is a keyword only sometimes (`of`, `yield`, `await`): either reading may be the script's.
     Either,
 }
 
-/// The keywords after which an expression starts, so a `/` there starts a regex literal.
 const EXPRESSION_KEYWORDS: [&str; 13] = [
     "return",
     "typeof",
@@ -592,22 +537,16 @@ const EXPRESSION_KEYWORDS: [&str; 13] = [
     "default",
 ];
 
-/// Reads `source` as JavaScript's lexer does, far enough to tell code from comments and literals (see [`Scan`]).
 fn scan(source: &str) -> Scan {
     let bytes = source.as_bytes();
     let mut code = bytes.to_vec();
     let mut strings = Vec::new();
     let mut templates = Vec::new();
     let mut calls = Vec::new();
-    // For each open `(`: whether it is the head of `if`, `for`, `for await`, `while` or `with`, after which a `/`
-    // starts a regex.
     let mut parens: Vec<bool> = Vec::new();
-    // For each open `{`: whether it is a template literal's `${`.
     let mut braces: Vec<bool> = Vec::new();
     let mut before = Before::Operator;
-    // The two words just before, white space and comments aside, a property's name (after a `.`) as "".
     let mut words: [&str; 2] = ["", ""];
-    // Whether a `.` that reaches a property came just before, and a line terminator since the last token.
     let mut after_dot = false;
     let mut new_line = false;
     let blank = |code: &mut Vec<u8>, from: usize, to: usize| {
@@ -624,7 +563,6 @@ fn scan(source: &str) -> Scan {
         calls,
         unread,
     };
-    // A byte-order mark is no code.
     let mut at = if source.starts_with('\u{feff}') { 3 } else { 0 };
     blank(&mut code, 0, at);
     if source[at..].starts_with("#!") {
@@ -636,7 +574,6 @@ fn scan(source: &str) -> Scan {
     while at < bytes.len() {
         let byte = bytes[at];
         let next = bytes.get(at + 1).copied();
-        // Tokens set these again; white space and comments keep them.
         let (last_words, dotted, was_new_line) = (words, after_dot, new_line);
         words = [last_words[1], ""];
         after_dot = false;
@@ -662,8 +599,6 @@ fn scan(source: &str) -> Scan {
             }
             b'/' => {
                 let regex = regex_end(bytes, at);
-                // A line terminator after a value ends the statement where it can't go on (`let a`, `debugger`, an
-                // import with no `;`), and then the `/` starts a regex: the token before can't tell which.
                 let reading = if before == Before::Value && was_new_line {
                     Before::Either
                 } else {
@@ -673,9 +608,6 @@ fn scan(source: &str) -> Scan {
                     Before::Value => false,
                     Before::Operator => true,
                     Before::Either => {
-                        // Either reading may be the script's: they agree only when the would-be regex holds no
-                        // literal, bracket, `*`, import or slash of its own (`[/*]` opens a comment as division), and
-                        // no slash follows it.
                         let Some(end) = regex else {
                             before = Before::Operator;
                             at += 1;
@@ -683,8 +615,6 @@ fn scan(source: &str) -> Scan {
                         };
                         let body = &source[at..end];
                         let close = body.rfind('/').map_or(end, |slash| at + slash + 1);
-                        // Read as division, the text between the slashes must end in a value, or the closing `/`
-                        // starts a regex there (`a / / */`, `a / x in /`).
                         let inner = source[at + 1..close - 1].trim_end_matches([' ', '\t']);
                         let last = inner.rsplit(|c: char| !ident(c)).next().unwrap_or("");
                         let ends_in_value = inner.ends_with(ident)
@@ -739,7 +669,6 @@ fn scan(source: &str) -> Scan {
                         break;
                     }
                     if bytes[at] == b'\\' {
-                        // A `\` before a line terminator continues the string past it, `\r\n` whole.
                         at += 1 + terminator(bytes, at + 1).max(1);
                     } else {
                         at += 1;
@@ -747,7 +676,6 @@ fn scan(source: &str) -> Scan {
                 }
                 let end = (at + 1).min(bytes.len());
                 if !closed {
-                    // A string no quote closes is no script QuickJS runs; read no further.
                     return done(
                         code,
                         strings,
@@ -809,11 +737,8 @@ fn scan(source: &str) -> Scan {
                 at += 1;
             }
             b'+' | b'-' if next == Some(byte) => {
-                // Postfix after a value on its line (`a++ / b` divides); prefix otherwise (`++/re/.lastIndex`), as
-                // a line terminator before `++` ends the statement.
                 before = match before {
                     Before::Value if !was_new_line => Before::Value,
-                    // `of++` is postfix on a name `of`; `of ++x` isn't: what follows reads either way.
                     Before::Either => Before::Either,
                     _ => Before::Operator,
                 };
@@ -829,8 +754,6 @@ fn scan(source: &str) -> Scan {
             }
             _ if byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$' | b'#') => {
                 let start = at;
-                // A number's one `.` (`1.5`) is part of it, after decimal digits only; a second (`1.5.x`, `1..x`,
-                // `1e5.x`, `0x1.x`) reaches a property.
                 let number = byte.is_ascii_digit();
                 at += 1;
                 while at < bytes.len()
@@ -845,8 +768,6 @@ fn scan(source: &str) -> Scan {
                     at += 1;
                 }
                 let word = &source[start..at];
-                // A property's name is no keyword. A name after a number's own `.` is none (`1. in /re/`), as only
-                // a `.` of its own reaches a property.
                 let property = dotted;
                 if !dotted {
                     if let Some(call) = ["import", "require"].into_iter().find(|w| *w == word) {
@@ -885,7 +806,6 @@ fn scan(source: &str) -> Scan {
     done(code, strings, templates, calls, None)
 }
 
-/// Where the regex literal starting with the `/` at `at` ends (after its flags), if one ends on its line.
 fn regex_end(bytes: &[u8], at: usize) -> Option<usize> {
     let mut class = false;
     let mut end = at + 1;
@@ -917,8 +837,6 @@ fn regex_end(bytes: &[u8], at: usize) -> Option<usize> {
     Some(end)
 }
 
-/// Blanks a template literal's text from `at`, the byte after its `` ` `` or a `${…}`'s `}` (`opened`, blanked too),
-/// to its closing `` ` `` or its next `${`, which it opens on `braces`. Returns where the scan goes on.
 fn template_text(
     bytes: &[u8],
     code: &mut [u8],
@@ -950,7 +868,6 @@ fn template_text(
     at
 }
 
-/// Whether the template text that ended just before `at` ended at a `${`, so code resumes there.
 fn code_resumed(bytes: &[u8], at: usize) -> bool {
     at >= 2 && &bytes[at - 2..at] == b"${"
 }
@@ -1025,7 +942,6 @@ mod tests {
         );
     }
 
-    /// Each import `source` makes, as its specifier or `?` when it isn't read, with its line.
     fn read(source: &str) -> Vec<(String, usize)> {
         imports(source)
             .into_iter()
@@ -1058,7 +974,6 @@ mod tests {
     #[test]
     fn regex_literals_and_templates_hide_no_import() {
         let cases = [
-            // RUST-APP-15: the regex's quote isn't a string's.
             (
                 "const q = /\"/; import { Chart } from \"gpui-kit\";",
                 "gpui-kit",
@@ -1086,10 +1001,8 @@ mod tests {
                 read(source)
             );
         }
-        // And literals that only look like imports stay unread.
         let quiet = "const a = `import(\"gpui-kit\")`; const b = /import(\"gpui-kit\")/; obj.import(m); obj.require(m); function require(m) {} this.import(\"en\"); loader.require('lodash');\n";
         assert_eq!(read(quiet), vec![]);
-        // A refusal names the line as the lexer reads lines: a bare `\r` ends one.
         assert_eq!(
             read("// a\r// b\rconst m = await import(n);"),
             vec![("?".to_owned(), 3)]
@@ -1100,7 +1013,6 @@ mod tests {
     fn a_slash_after_a_brace_that_reads_two_ways_is_not_read() {
         let found = read("const o = {}\n/\"/; import { Chart } from \"gpui-kit\";\n");
         assert_eq!(found.first(), Some(&("?".to_owned(), 2)), "{found:?}");
-        // One that reads the same either way is read.
         assert_eq!(
             read("const x = {}.a / 2;\nimport(\"./a.js\");\n"),
             vec![("./a.js".to_owned(), 2)]
@@ -1109,7 +1021,6 @@ mod tests {
 
     #[test]
     fn what_the_review_found_is_not_read_or_is_read_as_the_toolkit() {
-        // Each line imports the toolkit in valid module code QuickJS runs; the reader must refuse it on its line.
         let cases = [
             "import { Chart } from \"gpui\\x2dkit\";",
             "const m = await import(\"gpui\\u002Dkit\");",
@@ -1129,11 +1040,8 @@ mod tests {
             "a\n++/'/.lastIndex; import { Chart } from \"gpui-kit\";",
             "1..if(0) / import(n) / 1;",
             "const m = await \\u0069mport(n);",
-            // Round 2: a heritage is a call followed by `{`.
             "try { class A extends import(n) {} } catch (e) {}",
             "class B extends require(n) {}",
-            // Round 8: a line terminator ends a statement that can't go on, so the `/` after it starts a regex;
-            // and a name after a number's own `.` is an operator or keyword, not a property.
             "import { View } from \"@deepbuild/panel\"\n/'/; import { Chart } from \"gpui-kit\"; //'",
             "let a\n/'/; import { Chart } from \"gpui-kit\"; //'",
             "debugger\n/'/; import { Chart } from \"gpui-kit\"; //'",
@@ -1141,13 +1049,9 @@ mod tests {
             "const r = 1. in /'/; import { Chart } from \"gpui-kit\"; //'",
             "const r = 1. instanceof /'/; import { Chart } from \"gpui-kit\"; //'",
             "let x = 1.\ntypeof /'/; import { Chart } from \"gpui-kit\"; //'",
-            // Round 9: as division, `[/*]` opens an array and a comment that hides the regex's end.
             "let a = 1\nlet x = a\n/ [/*] / \"*/ + import('gpui-kit') + /\"/ ]",
             "let x = {} / [/*] / \"*/ + import('gpui-kit') + /\"/ ];",
             "for (const x of [/*] / \"*/ + import('gpui-kit') + /\"/ ]) {}",
-            // Round 10, from a fuzzer checked against V8: a number's second `.` reaches a property; `of++` may be
-            // postfix; a template's text is no white space before a method's `{`; a slash read either way whose
-            // division ends in no value.
             "let x = 1.5. in / 1; import('gpui-kit'); x = x /1;",
             "let x = 1e5. in / 1; import('gpui-kit'); x = x /1;",
             "let of = 0;\nof++ / 1; import(\"gpui-kit\"); 0 /1;",
@@ -1179,7 +1083,6 @@ mod tests {
                 ("./side.mjs".to_owned(), 7),
             ]
         );
-        // A tagged `` require`…` `` is a call, whatever parentheses come later on the line.
         assert_eq!(
             read("x;\nrequire`gpui-kit`; function f(a) {}"),
             vec![("?".to_owned(), 2)]
@@ -1188,7 +1091,6 @@ mod tests {
 
     #[test]
     fn calls_that_never_close_are_read_in_one_pass() {
-        // Each `import(` used to scan to the end of the file for its `)`: 50 000 of them took minutes.
         let source = ";import(".repeat(50_000);
         let started = std::time::Instant::now();
         let found = imports(&source);
@@ -1227,10 +1129,8 @@ mod tests {
                 write(&[("main.js", &main), (evil.trim_start_matches("./"), kit)]).unwrap_err();
             assert!(refused.contains("main.js:2"), "{evil}: {refused}");
         }
-        // A bare name of a script of its own is read like any script.
         let refused = write(&[("main.js", "import \"sub/s.js\";"), ("sub/s.js", kit)]).unwrap_err();
         assert!(refused.contains("s.js:1"), "{refused}");
-        // A script named `.js` alone, or in capitals, is read too (round 3 of #1847's review).
         for (name, file) in [
             ("./.js", ".js"),
             (".js", ".js"),
@@ -1242,7 +1142,6 @@ mod tests {
             assert!(refused.contains(&format!("{file}:1")), "{name}: {refused}");
         }
         assert!(write(&[("main.js", "import \"./a\\u{0}.js\";")]).is_err());
-        // Round 5: the loader cuts `./a?v=1.js` to `./a`, which the check never read.
         let qv = write(&[
             ("main.js", "import \"./a?v=1.js\";"),
             ("a?v=1.js", ""),
@@ -1250,7 +1149,6 @@ mod tests {
         ])
         .unwrap_err();
         assert!(qv.contains("main.js:1"), "{qv}");
-        // A folder it can't list, an entry that is neither a file nor a folder, and a name past ASCII are refused.
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
@@ -1261,7 +1159,6 @@ mod tests {
             std::fs::write(dir.join("main.js"), main).unwrap();
             std::fs::write(hidden.join("evil.js"), kit).unwrap();
             std::fs::set_permissions(&hidden, std::fs::Permissions::from_mode(0o311)).unwrap();
-            // Unless the tests run as a user who lists it anyway.
             if std::fs::read_dir(&hidden).is_err() {
                 let refused = check(&dir).unwrap_err();
                 assert!(refused.contains("hidden"), "{refused}");
@@ -1276,10 +1173,8 @@ mod tests {
         assert!(write(&[("main.js", ""), ("evil.j\u{17f}", kit)])
             .unwrap_err()
             .contains("past ASCII"));
-        // A byte-order mark is no code.
         let marked = "\u{feff}import { View } from \"@deepbuild/panel\";\n";
         assert_eq!(write(&[("main.js", marked)]), Ok(()));
-        // Round 6: a file of the module's own name would load in place of the served one; typings beside it may stay.
         for shadow in [
             "@deepbuild/panel",
             "@DeepBuild/Panel",
@@ -1294,7 +1189,6 @@ mod tests {
             ("@deepbuild/gpui-kit.d.ts", ""),
         ];
         assert_eq!(write(&typed), Ok(()));
-        // A page entry the panel brought itself is read like any script.
         let page =
             "import { View, div } from \"@deepbuild/panel\";\nimport \"./.deepbuild-page.js\";\n";
         let refused = write(&[
@@ -1303,8 +1197,6 @@ mod tests {
         ])
         .unwrap_err();
         assert!(refused.contains(".deepbuild-page.js:1"), "{refused}");
-        // The served module left by an earlier load, by another build or brought by the panel, is DeepBuild's to
-        // write: `serve` rewrites it before gpui-shell reads it, so it neither refuses the panel nor runs.
         let stale = "// Written by DeepBuild each time it loads this panel (#1425)\nexport { quotes } from \"deepbuild\";\nexport { View, div } from \"gpui-kit\";";
         assert_eq!(
             write(&[
@@ -1322,7 +1214,6 @@ mod tests {
             ]),
             Ok(())
         );
-        // More scripts than the check reads is a refusal, not a pass on the ones it read.
         let many: Vec<(String, &str)> = (0..=MAX_SCRIPTS)
             .map(|n| (format!("s{n}.js"), ""))
             .collect();
@@ -1334,7 +1225,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A small seeded generator, so the property tests need no crate: xorshift64*.
     struct Seeded(u64);
     impl Seeded {
         fn below(&mut self, n: usize) -> usize {
@@ -1345,8 +1235,6 @@ mod tests {
         }
     }
 
-    /// Lines a panel may hold, each importing only `@deepbuild/panel` or its own files by one plain string, among
-    /// comments, strings, templates and regex literals that mention the toolkit and imports.
     const ALLOWED: [&str; 26] = [
         "import { View, div } from \"@deepbuild/panel\";",
         "import * as P from '@deepbuild/panel';",
@@ -1376,7 +1264,6 @@ mod tests {
         "const en = this.import(\"en\"); loader.require('lodash');",
     ];
 
-    /// Lines no panel may hold: each imports the toolkit, or names its module some other way than one plain string.
     const REFUSED: [&str; 10] = [
         "import { Chart } from \"gpui-kit\";",
         "const k = await import(`gpui-kit`);",
@@ -1398,14 +1285,12 @@ mod tests {
 
     #[test]
     fn property_a_panel_of_plain_imports_reads_only_its_plain_imports() {
-        // The first seven lines import one module each, the rest none.
         let counts: Vec<usize> = ALLOWED.iter().map(|line| read(line).len()).collect();
         assert_eq!(counts, [vec![1; 7], vec![0; ALLOWED.len() - 7]].concat());
         let mut seed = Seeded(0x1847);
         for _ in 0..2000 {
             let lines = panel(&mut seed);
             let source = lines.join(if seed.below(2) == 0 { "\n" } else { "\r\n" });
-            // Read whole, the panel's imports are each line's own, on its line: what comes before changes none.
             let alone: Vec<(String, usize)> = lines
                 .iter()
                 .enumerate()
