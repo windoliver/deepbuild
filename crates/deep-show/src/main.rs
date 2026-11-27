@@ -694,6 +694,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::Kinds(Value::Object(args)));
         }
         "sandbox" => return Some(Call::Sandbox),
+        "piece_checks" => return Some(Call::PieceChecks),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
         "validate" => {
             return Some(Call::Validate {
@@ -1589,6 +1590,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checker_fits_surface" => Planted::CheckerFitsSurface,
                 "deviation_one_way" => Planted::DeviationOneWay,
                 "normals_from_faces" => Planted::NormalsFromFaces,
+                "shaded_count_skips_depth_test" => Planted::ShadedCountSkipsDepthTest,
                 // #499: the mix's wrong programs.
                 "reverb_restores_without_tail" => Planted::ReverbRestoresWithoutTail,
                 "ring_drops_oldest" => Planted::RingDropsOldest,

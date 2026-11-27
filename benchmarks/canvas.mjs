@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { fingerprint, judgeLimit, references } from '../scripts/benchmark.mjs';
-import { BOARD_ITEMS, CLASS_LIMITS, COUNTS, DIRTY_BOARDS, EFFICIENCY, energyReading, FLOORS, judgeFloor, loadsOf, named, p95, RUNS, shownWindow, unjudged } from './canvas-judge.mjs';
+import { BOARD_ITEMS, CLASS_LIMITS, COUNTS, DIRTY_BOARDS, EFFICIENCY, energyReading, FLOORS, judgeDrawFinish, judgeFloor, loadsOf, named, p95, RUNS, shownWindow, unjudged } from './canvas-judge.mjs';
 import { FLARE_SIZE, flaresMirrors, fogLinear, lensFocus, localToneMap, water, waterFlow, waterShore } from './stages.mjs';
 import { manyLamps, occlusion } from './cities.mjs';
 
@@ -1067,6 +1067,8 @@ function judgeEfficiency(current) {
         : { status: 'BLOCKED', limit, runs: values, reason: `a count is judged on five runs, got ${JSON.stringify(values)}` };
     } else if (FLOORS.has(name)) {
       verdict = judgeFloor({ limit, runs: values, fingerprint: current.fingerprint, loads });
+    } else if (task === 'canvas-gpu-draw-finish') {
+      verdict = judgeDrawFinish({ limit, runs: values, fingerprint: current.fingerprint, loads });
     } else {
       verdict = judgeLimit({ limit, runs: values, fingerprint: current.fingerprint, loads });
     }
@@ -1505,6 +1507,7 @@ workloads['fx-pack'] = async () => (await import('./fx-pack.mjs')).fxPack({ root
 // plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).
 for (const task of ['playtest-maze', 'playtest-throughput', 'playtest-crawler']) workloads[task] = async () => (await import('./playtest.mjs')).playtest({ root, release, task, planted: planted() });
 workloads.catalog = async () => (await import('./catalog.mjs')).catalogBudgets({ root, release, once }); // #194's budgets
+workloads['draw-finish'] = async () => (await import('./draw-finish.mjs')).drawFinish({ root, release, runs }); // #3617's budget
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

@@ -55,6 +55,27 @@ pub fn opened_session(cx: &App) -> Option<String> {
         .map(|address| address.id)
 }
 
+/// Whether `window` is the one you're at: the key window, or a replica's, which stands for one (#1461).
+fn key(window: &Window) -> bool {
+    window.is_window_active() || crate::shown::forced().is_some()
+}
+
+/// The session whose page is open in the key window, which the notifier posts nothing for (#326) and the window
+/// says instead (#3232): none when the window isn't key or shows another page.
+pub fn looking_at(cx: &mut App) -> Option<String> {
+    opened_session(cx).filter(|_| is_key(cx))
+}
+
+/// Whether the shell's window is the key one.
+pub fn is_key(cx: &mut App) -> bool {
+    let window = selection(cx).window;
+    window.is_some_and(|window| {
+        window
+            .update(cx, |_, window, _| key(window))
+            .unwrap_or(false)
+    })
+}
+
 /// The shell's window, which the menu bar's items and the table's keys act in (#1462).
 pub fn window(cx: &App) -> Option<AnyWindowHandle> {
     cx.try_global::<Selection>()?.window
@@ -798,16 +819,12 @@ pub fn tick(now: u64, cx: &mut App) {
             });
         let seen = crate::shown::seen(window);
         crate::card::look(window, seen, cx);
-        let present = crate::unread::present(
-            window.is_window_active() || crate::shown::forced().is_some(),
-            seen,
-            views::last_input(),
-            now,
-        );
+        let present = crate::unread::present(key(window), seen, views::last_input(), now);
         let due = READER.with(|reader| reader.borrow_mut().due(row.as_deref(), present, now));
         if let Some(row) = due {
             record::mark_read(&row);
         }
+        crate::said::tick(now, key(window), cx);
         // #1461's planted app reads every row drawn in the list a second while you're present.
         if crate::plain::planted("read-when-drawn") {
             let drawn: Vec<String> = record::with_view(|view| {
