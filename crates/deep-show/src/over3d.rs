@@ -160,7 +160,7 @@ impl Hub<'_> {
         let no_marks = |d: &Arc<deep_canvas_marks::modules::Drawing>| {
             (d.frame.layers.iter()).all(|l| l.marks.iter().next().is_none())
         };
-        let bare = size[0] % 64 == 0
+        let bare = size[0].is_multiple_of(64)
             && drawing.drawing.as_ref().is_none_or(no_marks)
             && drawing.boxes.is_empty()
             && (drawing.status.as_ref()).is_none_or(|s| s.marks.is_empty() && s.legend.is_empty())

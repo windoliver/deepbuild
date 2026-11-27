@@ -319,6 +319,33 @@ pub fn merge(doc: &mut Value, expansions: &[Expansion]) {
     }
 }
 
+pub(super) fn join_channels(doc: &mut Value, expansions: &[Expansion], issues: &mut Vec<Issue>) {
+    let Some(doc) = doc.as_object_mut() else {
+        return;
+    };
+    for e in expansions.iter().filter(|e| !e.channels.is_empty()) {
+        let held = doc
+            .entry("channels")
+            .or_insert_with(|| Value::Object(Map::new()));
+        let Some(held) = held.as_object_mut() else {
+            continue;
+        };
+        for (id, channel) in &e.channels {
+            if held.contains_key(id) {
+                issues.push(Issue::error(
+                    "bad_id",
+                    &e.instance,
+                    format!("channels/{id}"),
+                    json!(id),
+                    "the document holds a channel at the ID a recipe's channel expands to",
+                ));
+            } else {
+                held.insert(id.clone(), channel.clone());
+            }
+        }
+    }
+}
+
 /// A film recipe's shots, markers, strips and transitions with every time resolved (#142): a
 /// time anchored on a marker (`@cues.c3`, `@cues.c3.end`) reads the markers the document and
 /// every expansion wrote, so cue lists' markers time the shots built on them; a shot written

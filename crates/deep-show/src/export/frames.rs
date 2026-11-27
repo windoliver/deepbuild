@@ -51,7 +51,7 @@ impl Hub<'_> {
         };
         let across = self.guard_planted(Guard::ReuseAcrossReadings);
         let mut drawn_at = None;
-        let waits = self.guard_planted(Guard::GuardWaits);
+        let waits = self.guard_planted(Guard::ExportGuardWaits);
         let on_cpu = self.guard_planted(Guard::HashesOnCpu);
         // #231: a 3D film's frames stay on the GPU for a writer that takes GPU surfaces; every
         // planted program, and an export that keeps its frames' bytes, draws through memory.

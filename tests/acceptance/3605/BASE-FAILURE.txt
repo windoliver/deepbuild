@@ -1,0 +1,131 @@
+# #3605's suite on the base, d303e2b64 (origin/main), before any implementation; written blind.
+# Run on macOS, Nov 27 2026, under one build grant of scripts/lease:
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/3605 \
+#     --testTimeout=600000 --hookTimeout=180000 --no-file-parallelism
+# Every test fails at its first assertion, the logic module's check of the fixture's level items: the base refuses
+# `settings: {mains: 230}` on a logic item ("logic@1 has no field settings"), so no level program can be built
+# against a read entry for the setting, before any replica or hub starts. (The first file's 266 s is the builds of
+# this suite's assembler and deep-logic.) Had it got past that, the base also refuses the fixture shell at check:
+# its `mains_choice` sets `custom.mains`, which the base's settings don't hold (`shell.control`), and the base's
+# replica knows none of the planted names (done-on-enter, done-in-save, setting-through-reads).
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-3605-687d68/agent-a98ac316909ec77c7/tests/acceptance/3605
+ ❯ ac01-done.test.ts (2 tests | 2 failed) 266429ms
+   ❯ #3605.2b30a7aa every level open from the start; completing level 4 first marks done[4] alone, at the step its own done turns true (2)
+     × #3605.2b30a7aa all six rows enabled and done all false at the start; level 4 completed first turns done[4] true at its step 900, its row shows Done, and the counts read 0 of 3 and 1 of 3 266416ms
+     × #3605.2b30a7aa a planted shell that marks a level when it is entered fails, naming the level and the step 11ms
+ ❯ ac03-relaunch.test.ts (2 tests | 2 failed) 1469ms
+   ❯ #3605.e582fe2c the marks come back on a relaunch from the shell's profile record; start fresh clears them for its run and keeps the record (2)
+     × #3605.e582fe2c a relaunch shows the same marks with nothing opened by hand, and start fresh shows them clear and leaves the record 1454ms
+     × #3605.e582fe2c a planted shell that keeps done in a run's save loses the marks on a new run and fails, naming the level 10ms
+ ❯ ac05-replay.test.ts (2 tests | 2 failed) 1461ms
+   ❯ #3605.1380fa30 the paused level's own track replays with no shell to the same arrays and hash; a value through the read region alone fails the replay (2)
+     × #3605.1380fa30 level 1's track, replayed as a piece with no shell, gives the same arrays at every step and the same full-state hash 1447ms
+     × #3605.1380fa30 a planted shell that hands the level the value through its read region with no entry fails the replay, naming the first step that differs 10ms
+ ❯ ac02-left-again-hash.test.ts (1 test | 1 failed) 1340ms
+   ❯ #3605.0f6b90fe a level left from pause stays unmarked, completing it marks it once, and the full-state hash covers done (1)
+     × #3605.0f6b90fe level 2 left from pause leaves done[2] false, completing it turns it true and again changes nothing; equal runs end on one hash and one more completion changes it 1336ms
+ ❯ ac04-setting.test.ts (1 test | 1 failed) 1375ms
+   ❯ #3605.fd7b096d a level reads the piece's own setting as an input entry: 230 untouched, 120 chosen before it starts, 240 from the step after it resumes (1)
+     × #3605.fd7b096d seen reads 230 untouched from step 0; 120 from another level's step 0; 120 through step 600 and 240 from step 601 after a change in pause 1370ms
+ ❯ ac09-shown.test.ts (1 test | 1 failed) 1324ms
+   ❯ #3605.14ffdae4 shown to you: a level select with marks and counts, and a settings screen with the custom choice, from the canvas's own frames (1)
+     × #3605.14ffdae4 the check run keeps the level select's and the settings screen's frames as evidence by hash; whether they look right is your taste call, so this stays INCONCLUSIVE 1320ms
+ ❯ ac07-refused.test.ts (1 test | 1 failed) 1409ms
+   ❯ #3605.50677298 a control that sets an undeclared name is refused with shell.setting; a level that reads the shell's custom array with shell.reads (1)
+     × #3605.50677298 custom.volts on a shell that declares only mains is refused with shell.setting naming volts_choice, and a level reading game.custom with shell.reads naming the level and the array 1405ms
+ ❯ ac08-devices.test.ts (1 test | 1 failed) 1547ms
+   ❯ #3605.47c041ca the custom choice is set with keys, a pad or touches alone, and the three runs end on one full-state hash (1)
+     × #3605.47c041ca mains_choice set to 120 with each device alone ends on the same full-state hash 1543ms
+ ❯ ac06-default.test.ts (1 test | 1 failed) 1466ms
+   ❯ #3605.840dc1ba with no shell, or a shell that declares no mains, a level reads its listed default 230 (1)
+     × #3605.840dc1ba level 0 played alone reads 230, and under a shell that declares no mains it reads 230 too 1463ms
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  ac01-done.test.ts > #3605.2b30a7aa every level open from the start; completing level 4 first marks done[4] alone, at the step its own done turns true > #3605.2b30a7aa all six rows enabled and done all false at the start; level 4 completed first turns done[4] true at its step 900, its row shows Done, and the counts read 0 of 3 and 1 of 3
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac01-done.test.ts:30:15
+ FAIL  ac01-done.test.ts > #3605.2b30a7aa every level open from the start; completing level 4 first marks done[4] alone, at the step its own done turns true > #3605.2b30a7aa a planted shell that marks a level when it is entered fails, naming the level and the step
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac01-done.test.ts:68:15
+ FAIL  ac02-left-again-hash.test.ts > #3605.0f6b90fe a level left from pause stays unmarked, completing it marks it once, and the full-state hash covers done > #3605.0f6b90fe level 2 left from pause leaves done[2] false, completing it turns it true and again changes nothing; equal runs end on one hash and one more completion changes it
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac02-left-again-hash.test.ts:28:15
+ FAIL  ac03-relaunch.test.ts > #3605.e582fe2c the marks come back on a relaunch from the shell's profile record; start fresh clears them for its run and keeps the record > #3605.e582fe2c a relaunch shows the same marks with nothing opened by hand, and start fresh shows them clear and leaves the record
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac03-relaunch.test.ts:35:15
+ FAIL  ac03-relaunch.test.ts > #3605.e582fe2c the marks come back on a relaunch from the shell's profile record; start fresh clears them for its run and keeps the record > #3605.e582fe2c a planted shell that keeps done in a run's save loses the marks on a new run and fails, naming the level
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac03-relaunch.test.ts:62:15
+ FAIL  ac04-setting.test.ts > #3605.fd7b096d a level reads the piece's own setting as an input entry: 230 untouched, 120 chosen before it starts, 240 from the step after it resumes > #3605.fd7b096d seen reads 230 untouched from step 0; 120 from another level's step 0; 120 through step 600 and 240 from step 601 after a change in pause
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac04-setting.test.ts:27:15
+ FAIL  ac05-replay.test.ts > #3605.1380fa30 the paused level's own track replays with no shell to the same arrays and hash; a value through the read region alone fails the replay > #3605.1380fa30 level 1's track, replayed as a piece with no shell, gives the same arrays at every step and the same full-state hash
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac05-replay.test.ts:58:15
+ FAIL  ac05-replay.test.ts > #3605.1380fa30 the paused level's own track replays with no shell to the same arrays and hash; a value through the read region alone fails the replay > #3605.1380fa30 a planted shell that hands the level the value through its read region with no entry fails the replay, naming the first step that differs
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac05-replay.test.ts:75:15
+ FAIL  ac06-default.test.ts > #3605.840dc1ba with no shell, or a shell that declares no mains, a level reads its listed default 230 > #3605.840dc1ba level 0 played alone reads 230, and under a shell that declares no mains it reads 230 too
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac06-default.test.ts:19:15
+ FAIL  ac07-refused.test.ts > #3605.50677298 a control that sets an undeclared name is refused with shell.setting; a level that reads the shell's custom array with shell.reads > #3605.50677298 custom.volts on a shell that declares only mains is refused with shell.setting naming volts_choice, and a level reading game.custom with shell.reads naming the level and the array
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac07-refused.test.ts:22:15
+ FAIL  ac08-devices.test.ts > #3605.47c041ca the custom choice is set with keys, a pad or touches alone, and the three runs end on one full-state hash > #3605.47c041ca mains_choice set to 120 with each device alone ends on the same full-state hash
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac08-devices.test.ts:20:15
+ FAIL  ac09-shown.test.ts > #3605.14ffdae4 shown to you: a level select with marks and counts, and a settings screen with the custom choice, from the canvas's own frames > #3605.14ffdae4 the check run keeps the level select's and the settings screen's frames as evidence by hash; whether they look right is your taste call, so this stays INCONCLUSIVE
+AssertionError: the levels' layouts: the logic module admits a level item that lists settings: {mains: 230}: {"ok":false,"code":"logic_refused","item":"l0","refusals":[{"rule":"field","what":"logic@1 has no field settings","field":"settings"}]}: expected false to be true // Object.is equality
+
+ ❯ regionMaps helpers.ts:140:122
+ ❯ regions shell.ts:57:10
+ ❯ programs shell.ts:92:16
+ ❯ ac09-shown.test.ts:24:15
+ Test Files  9 failed (9)
+      Tests  12 failed (12)
+   Start at  05:55:15
+   Duration  278.86s (tests 100%)

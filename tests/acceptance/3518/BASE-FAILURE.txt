@@ -1,0 +1,210 @@
+# #3518 acceptance tests: the run on the base, and the throwaway guess with its single faults
+
+Run on 2026-11-27 on a Mac17,10, 18 cores, shared with other sessions, on Node 24.22.0, in <checkout>, a worktree at
+the base c942af834a116e681b687d1dc2e1729e93c05e44 ("Merge pull request #3582") with `npm ci` done. Nothing was built:
+no cargo, no `npm run build`, no target/. Each run of the task's command had a HOME, an XDG_CACHE_HOME and a TMPDIR of
+the test's own. Each failure is an AssertionError [ERR_ASSERTION] thrown by `assertNoFailures` (helpers.mjs:45) from
+the line of the test given beside it; below each test's tag is its message, trimmed to the lines that say why.
+
+The suite was first written and run at d303e2b649c275e6ae96e71ad28648bc5681536f ("Merge pull request #3643"). Main
+moved twice while the work was under way. The merge of #3578 rebuilt the three sets, so the suite was taken to
+b134dd38f7a628c15a0764e299b77809fd5be230 ("Merge pull request #3646") and that base's sizes. Then main's rules for a
+suite changed (no comments in its code, the glossary's names), with the sets and their record as b134dd38f holds
+them, so the suite was taken to c942af834: the comments left its two code files and its helpers took new names,
+and no assertion, expected value or message changed (README: Readings). The first section below is the run at
+c942af834, of the files as delivered. The sections after it say which base each of their runs was at.
+
+## The base (c942af834)
+
+The file was started through the machine's throttle, as the lanes run a suite. The throttle let no test start in
+the wait, so it ran once directly, as this job's brief says to:
+
+$ node scripts/throttle.mjs test --wait 2 -- node --test tests/acceptance/3518/ceilings.test.mjs
+INCONCLUSIVE no grant: no test grant came within 2 min                  (exit 3; load 51 at the start, 69 at the end)
+
+$ node --test tests/acceptance/3518/ceilings.test.mjs                  (3.5 s; load 82 at the start, 88 at the end)
+
+✖ AC1 #3518.df764765 each set has a ceiling equal to its compressed size on the pinned base, and a planted sets.json whose game2d is 100,000 B larger fails, naming the set, both sizes and the difference
+✖ AC2 #3518.d99171b8 a planted record whose size for a set differs from the Brotli 11 size of the two files it names fails, naming the set and both numbers
+✖ AC3 #3518.9de0d983 a change that raises a ceiling with no approval is refused, naming the task and the field
+✖ AC4 #3518.fd5b7a48 a count that can't be read, such as a set whose file is missing, is missing and never 0, and its ceiling reads INCONCLUSIVE
+✖ AC5 #3518.3c8c36bf the report lists each set's bytes, its ceiling and its share of the 12 MB limit
+ℹ the task's report in the planted tree: null
+ℹ tests 5
+ℹ pass 0
+ℹ fail 5
+
+The failures' messages:
+
+✖ AC1 #3518.df764765   ceilings.test.mjs:17
+  benchmarks/budgets.json: web-export holds no ceiling report.figure_brotli_bytes (its limits: {}): the task has no limit for figure, which is 2556890 B on the pinned base
+  and benchmarks/budgets.json: web-export holds no ceiling report.game2d_brotli_bytes (its limits: {}): the task has no limit for game2d, which is 4977487 B on the pinned base
+  and benchmarks/budgets.json: web-export holds no ceiling report.full_brotli_bytes (its limits: {}): the task has no limit for full, which is 7973566 B on the pinned base
+  and a tree whose three sets are at their ceilings, with no built binary: the task's command exited 1, so the lanes read no count of it; its stderr ends "Error: deep-show run exited null: undefined", its stdout empty
+  and a planted crates/deep-player/web/dist/sets.json whose game2d is 100000 B larger than its ceiling passes: web-export holds no ceiling report.game2d_brotli_bytes (its limits: {}), so nothing fails the plant
+  and a planted crates/deep-player/web/dist/sets.json whose game2d is 100000 B larger than its ceiling: the task's command exited 1, so the lanes read no count of it; its stderr ends "Error: deep-show run exited null: undefined", its stdout empty
+
+✖ AC2 #3518.d99171b8   ceilings.test.mjs:30
+  the same files under a record that gives their Brotli 11 sizes: the task's command exited 1, so the lanes read no count of it; its stderr ends "Error: deep-show run exited null: undefined", its stdout empty
+  and a planted crates/deep-player/web/dist/sets.json that records full 1 B under its two files: no line the run printed names full and both numbers, the record's 8707 and the files' 8708; its stderr ends "Error: deep-show run exited null: undefined", its stdout empty
+  and a planted crates/deep-player/web/dist/sets.json that records game2d at its ceiling over two files 100,000 B larger: no line the run printed names game2d and both numbers, the record's 5608 and the files' 105608; its stderr ends "Error: deep-show run exited null: undefined", its stdout empty
+
+✖ AC3 #3518.9de0d983   ceilings.test.mjs:39
+  web-export holds no ceiling report.figure_brotli_bytes to raise (its limits: {}): a change that sets it 1 B over figure's size on the pinned base, at 2556891, isn't refused
+  and web-export holds no ceiling report.game2d_brotli_bytes to raise (its limits: {}): a change that sets it 1 B over game2d's size on the pinned base, at 4977488, isn't refused
+  and web-export holds no ceiling report.full_brotli_bytes to raise (its limits: {}): a change that sets it 1 B over full's size on the pinned base, at 7973567, isn't refused
+
+✖ AC4 #3518.fd5b7a48   ceilings.test.mjs:48
+  the same tree with every file there: the task's command exited 1, so the lanes read no count of it; its stderr ends "Error: deep-show run exited null: undefined", its stdout empty
+  and a tree where figure's crates/deep-player/web/dist/figure/player_bg.wasm and full's crates/deep-player/web/dist/full/player.js are missing: the task's command exited 1, so its ceilings read BLOCKED, not INCONCLUSIVE, and no set's count is read; its stderr ends "Error: deep-show run exited null: undefined", its stdout empty
+
+✖ AC5 #3518.3c8c36bf   ceilings.test.mjs:60
+  a tree whose three sets are under their ceilings: the task's command exited 1, so the lanes read no count of it; its stderr ends "Error: deep-show run exited null: undefined", its stdout empty
+
+No test passes at the base, and none should: each holds behaviour the base lacks.
+
+- AC1 fails for the reason its criterion gives for the merge base: the task has no limit, so nothing fails the plant.
+- AC3 fails for the same reason: with no ceiling there is none to raise, and `validateBudgets` takes a limit set 1 B
+  over the pinned size as a limit added.
+- AC2, AC4 and AC5 run the task's command in a planted tree, which holds no built binary, and the base's
+  benchmarks/web.mjs throws there before it prints a report. So at the base the true record doesn't stand, the two
+  differing records fail with a line that names neither the set nor a number, the missing files read BLOCKED where the
+  criterion says INCONCLUSIVE, and no report lists a set.
+
+The five messages are, byte for byte, those of the run at b134dd38f, the titles too; only the lines they are thrown
+from moved, with the comments gone (helpers.mjs:65 then; ceilings.test.mjs:30, 46, 55, 66 and 79 then).
+
+At b134dd38f the throttle was tried once with a wait of 2 minutes and let no test start (load 66), and the file ran
+directly once: 6.4 s at a load of 64, the five tests failing as above.
+
+At the first base, d303e2b64, the five tests failed the same way, each message the same but for that base's sizes
+(2553123, 4974280 and 7968686 B, and one more for each raise). The throttle was tried twice there with a wait of 10
+minutes and let no test start (loads of 129 to 105, then 72 to 64), and the file ran directly three times: 2.5 s at a
+load of 136 before the helper's messages had their last wording, then 7.1 s (load 114 to 115) and 4.1 s (load 68 to
+71) on the helper as it was then.
+
+## The throwaway guess, and the guess with one fault at a time (at d303e2b64; three runs at b134dd38f, two at c942af834)
+
+This section is the record of what ran at the earlier base, d303e2b64: its sizes are that base's (2553123, 4974280
+and 7968686 B), and the pinned sizes it names are those. What ran again at b134dd38f and at c942af834 is at its end.
+
+To see that the tests can pass and that each fails for its own reason, I wrote a guess at the change: a
+benchmarks/web.mjs that reads the size record and the task's limits from its tree, compresses each set's two files,
+exits 1 naming the set and both numbers when a record differs, leaves out the count and the share of a set with a
+missing file, prints the fields the README names with the export's numbers null where no binary is built, and writes
+one stderr line for a set over its ceiling; and a manifest whose web-export holds the three ceilings at the pinned
+sizes. It was never in the checkout: a scratch script laid it over a copy of benchmarks/, scripts/, the size record
+and this folder, in a folder outside the checkout, and ran the suite there with `node --test`. The guess, the copy and
+the script's output are deleted.
+
+Twenty-five variants, each run at d303e2b64 on the helper as it was there: 2.1 to 8.3 s a run at loads of 71 to 97.
+The numbers are the criteria's; the line under a variant is its failing test's reason, trimmed.
+
+- The guess with no fault: passed 1 2 3 4 5; failed none.
+- The guess with `full`'s ceiling at 8,000,000: passed 2 3 4 5; failed 1.
+    web-export's report.full_brotli_bytes is 8000000, not full's compressed size on the pinned base, 7968686 B
+- The guess with the ceilings at the issue's `5a81b58de` sizes: passed 2 3 4 5; failed 1.
+    report.figure_brotli_bytes is 2580017, not figure's compressed size on the pinned base, 2553123 B; report.full_brotli_bytes is 7833409, under the 7968686 B of the pinned base, while the committed record gives full 7968686 B
+- The guess with no ceiling for `game2d` in the manifest: passed 2 4 5; failed 1 3.
+    web-export holds no ceiling report.game2d_brotli_bytes; a change that sets it 1 B over game2d's size on the pinned base, at 4974281, isn't refused
+- The guess with no line for a set over its ceiling: passed 2 3 4 5; failed 1.
+    no line names game2d, both sizes (105608 and 5608) and the difference (100000): the ceiling's verdict reads "web-export: report.game2d_brotli_bytes: every reading is over 5608: 105608"
+- The guess with exit 1 on a set over its ceiling: passed 2 3 4 5; failed 1.
+    the task's command exited 1, so the lanes read no count of it; its stderr ends "web-export: game2d is 105608 B, 100000 B over its ceiling of 5608 B"
+- The guess with the difference given only as a field of the report, `game2d_over_bytes`: passed 1 2 3 4 5; failed none.
+- The guess with the export still needed, so it throws with no binary, as the base does: passed 3; failed 1 2 4 5.
+    the task's command exited 1, so the lanes read no count of it; its stderr ends "Error: deep-show run exited null: undefined"
+- The guess that never compares the record with its files: passed 1 3 4 5; failed 2.
+    records full 1 B under its two files: the task's command exited 0, its report giving full_brotli_bytes 8707: a record whose size for full (8707) differs from the Brotli 11 size of its two files (8708) fails the run
+- The guess with the record allowed to differ by 1%: passed 1 3 4 5; failed 2.
+    the same: exited 0, its report giving full_brotli_bytes 8707
+- The guess with a differing record's count left out, exit 0: passed 1 3 4 5; failed 2.
+    the task's command exited 0, its report giving full_brotli_bytes null
+- The guess with a differing record refused with no number: passed 1 3 4 5; failed 2.
+    no line the run printed names full and both numbers, the record's 8707 and the files' 8708; its stderr ends "web-export: full: the size record differs from its files"
+- The guess with the files' measured size reported, the record unread: passed 1 3 4 5; failed 2.
+    the task's command exited 0, its report giving full_brotli_bytes 8708
+- The guess with only the WebAssembly compressed, not the page glue: passed 3; failed 1 2 4 5.
+    the task's command exited 1; its stderr ends "web-export: figure: sets.json records 3,508 B, but its two files are 3,004 B at Brotli 11"
+- The guess with the ceilings in a file of the bench's own, the task's limits empty: passed 2; failed 1 3 4 5.
+    web-export holds no ceiling report.figure_brotli_bytes to raise (its limits: {}); nothing reads INCONCLUSIVE for figure; the report's figure_ceiling_bytes is 2553123, not figure's ceiling, the 4508 of the tree's manifest
+- The guess with a missing file's count read as 0: passed 1 2 3 5; failed 4.
+    the report's figure_brotli_bytes is 0: a count that can't be read is missing, never 0; figure's ceiling reads PASS, not INCONCLUSIVE, on 0
+- The guess with a missing file thrown on: passed 1 2 3 5; failed 4.
+    the task's command exited 1, so its ceilings read BLOCKED, not INCONCLUSIVE, and no set's count is read
+- The guess with a missing file not looked for, the record reported: passed 1 2 3 5; failed 4.
+    the report's figure_brotli_bytes is 3508: figure's count can't be read with a file of it missing
+- The guess with one missing file dropping every set's count: passed 1 2 3 5; failed 4.
+    the report's game2d_brotli_bytes is null, not the 5608 B recorded for game2d, whose two files are there
+- The guess with the export's numbers 0 with no binary: passed 1 2 3 5; failed 4.
+    the report's player_brotli_bytes is 0 in a tree with no built binary: a count that can't be read is missing, never 0
+- The guess with the share taken of the ceiling: passed 1 2 3 4; failed 5.
+    the report's figure_share is 0.7781721384205856, not figure's share of the 12 MB limit, 3508 / 12000000 = 0.00029233333333333336
+- The guess with the share taken of 12 MiB: passed 1 2 3 4; failed 5.
+    the report's figure_share is 0.00027879079182942707, not figure's share of the 12 MB limit
+- The guess with the share rounded to three places: passed 1 2 3 4; failed 5.
+    the report's figure_share is 0, not figure's share of the 12 MB limit
+- The guess with the bytes listed as the ceiling: passed 1 2 3 4; failed 5.
+    the report's figure_ceiling_bytes is 3508, not figure's ceiling, the 4508 of report.figure_brotli_bytes in the tree's benchmarks/budgets.json
+- The guess with no ceiling listed: passed 1 2 3 4; failed 5.
+    the report's figure_ceiling_bytes is no such field, not figure's ceiling
+
+At b134dd38f only the pinned sizes changed, which the first criterion's first sentence alone reads, so the guess was
+written again with no fault in its bench and run three times on the files as delivered, in the same way (10.4 to
+10.9 s a run at loads of 92 to 113). It is deleted too.
+
+- The guess with its ceilings at b134dd38f's sizes (2556890, 4977487, 7973566): passed 1 2 3 4 5; failed none.
+- The guess with its ceilings left at d303e2b64's sizes: passed 2 3 4 5; failed 1.
+    report.figure_brotli_bytes is 2553123, under the 2556890 B of the pinned base, while the committed record gives figure 2556890 B; report.game2d_brotli_bytes is 4974280, under the 4977487 B; report.full_brotli_bytes is 7968686, under the 7973566 B
+- The guess with `full`'s ceiling at 8,000,000: passed 2 3 4 5; failed 1.
+    web-export's report.full_brotli_bytes is 8000000, not full's compressed size on the pinned base, 7973566 B
+
+At c942af834 no size changed; the comments left the suite's two code files and its helpers took new names. So the
+guess was written a third time, as at b134dd38f, and run twice on the files as delivered (3.8 and 4.2 s at loads of
+51 and 52). It is deleted too.
+
+- The guess with its ceilings at the pinned sizes (2556890, 4977487, 7973566): passed 1 2 3 4 5; failed none.
+- The guess with `full`'s ceiling at 8,000,000: passed 2 3 4 5; failed 1.
+    web-export's report.full_brotli_bytes is 8000000, not full's compressed size on the pinned base, 7973566 B
+
+## The judges, on planted inputs
+
+Each judge in helpers.mjs was also run as a plain node script on planted runs, with no process started: 49 cases at
+d303e2b64, a good input passing and each wrong one failing with the words its criterion names, among them a share as
+a percent, a count that is a word, a line that names another set, a difference that is part of a longer number, and
+`validateBudgets` on a manifest with one ceiling missing. At b134dd38f the same script ran with that base's sizes
+and three more cases, 52 in all, each as expected: ceilings at d303e2b64's sizes under the record b134dd38f commits,
+ceilings at the issue's `5a81b58de` sizes, and `full` at 8,000,000. At c942af834 it ran again on the judges under
+their new names, the same 52 cases, each as expected. That script is a probe in this job's scratch folder, outside
+the checkout; it reads the base's scripts/benchmark.mjs and nothing of the work.
+
+## Readings of the bases, each taken once
+
+At c942af834:
+
+- Between b134dd38f and c942af834, 61 commits and eight first-parent merges: crates/deep-player/web/dist/,
+  benchmarks/ and scripts/benchmark.mjs are the same at both, and web-export still has "limits": {}. Of what the
+  README says was read, AGENTS.md, docs/technical-design.md, docs/parallel-proof.md, scripts/lanes.mjs,
+  scripts/lanes-lists.mjs and scripts/proof-guard.mjs changed, for the comment ratchet, the glossary and a suite's
+  lane file.
+- `node scripts/comment-ratchet.mjs` named both code files as they came from b134dd38f (ceilings.test.mjs with 19
+  comment lines, helpers.mjs with 93, each over its ceiling of 0) and names no file of this folder now. Its other
+  three findings are main's: packages/runner/src/agents.ts, packages/runner/src/runner.ts and scripts/shards.mjs.
+- The two code files against their copies from b134dd38f, token by token as scripts/comment-source.mjs reads them:
+  helpers.mjs holds 4,310 tokens of code and ceilings.test.mjs 758, as before; 93 and 78 of them differ, each the
+  new name of a helper, a constant or a local, and every string, template part and regular expression is the same.
+- `node scripts/glossary-lint.mjs` passes, and `node scripts/affected.mjs --list benchmarks/web.mjs` lists
+  tests/acceptance/3518/ceilings.test.mjs under `parallel node`.
+- `node scripts/wait-ratchet.mjs` and `node scripts/repo-rules.mjs` name no file of this folder, and the public text
+  lint prints nothing for it.
+
+At b134dd38f, whose sets this base holds unchanged:
+
+- Brotli 11 of the committed files, with scripts/player-wasm.mjs's parameters, on Node 24.22.0: figure 2,556,890 B
+  (132 s, load 75 to 61), game2d 4,977,487 B (297 s, load 61 to 65) and full 7,973,566 B (631 s, load 65 to 121), each
+  equal to what the committed record gives. The suite compresses none of them. At d303e2b64 the same probe gave
+  game2d 4,974,280 B and full 7,968,686 B, each equal to that base's record.
+- Between d303e2b64 and b134dd38f, 22 commits and four first-parent merges: crates/deep-player/web/dist/ changed in
+  the merge of #3578 alone (the three sets' two files, their player.json and the record); benchmarks/, AGENTS.md,
+  CONTRIBUTING.md, the two lockfiles and the suites and reports the README names didn't; under scripts/ only
+  public-text.mjs and studied-names.json did, and under docs/ only docs/evidence/.

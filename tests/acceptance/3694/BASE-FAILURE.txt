@@ -1,0 +1,314 @@
+#3694's acceptance suite on the base, 894a293f2, on the Mac (18 cores), 2026-11-27.
+
+On the owner's instruction (relayed by the parent session) the files ran without a throttle grant of the machine's:
+my one request, `node scripts/throttle.mjs test --stall 60 -- node --test ...` for the guess run, had waited from about 14:13Z with no grant and
+was stopped by its PID. Each file then ran once, one after another, as `node --test --test-reporter=spec <file>`,
+each after a check that the machine's table held no timed grant. The UTC start and end of each, and the machine's
+1-, 5- and 15-minute load then, are in the lines below.
+
+Result: 5 tests, 0 pass, 5 fail, 229 s in all (14:25:01Z to 14:28:52Z), at a 1-minute load of 76.8 to 84.4 on 18
+cores. Each fails at an assertion of the suite's own, for the reason the issue gives: on the base a plain test
+request beside a held test grant needs the 1-minute load below the cores, and its granted line marks no run and
+takes no turn.
+
+- admission.test.mjs, #3694.28023738: the plain request's wait of 0.5 min ran out with INCONCLUSIVE no grant beside
+  the run's grant at load 57 on 18 cores. That is the criterion's planted `roomForTest()` that reads the load.
+- turns.test.mjs, #3694.b252ab9d: the run's 17 jobs held the 17 tokens and its 3 late jobs were in the table, but the
+  plain request was not granted within 60 s, so it never waited for a token.
+- drain.test.mjs, #3694.2f5b9fe1, first test: the part the criterion says "still" holds passed on the base: the
+  plain request was refused while the timed request waited. The test fails at its control: once the timed request
+  had left the line, a plain request was still not granted, by the load.
+- drain.test.mjs, #3694.2f5b9fe1, second test: the part that says the request waits passed on the base: it stood in
+  line with its command unstarted while the ceiling's 2 grants were held. The test fails where room under the
+  ceiling opens: the plain request was not granted within 60 s, by the load.
+- log.test.mjs, #3694.24a531af: the plain request, alone on the table, was granted, as the base grants the first;
+  its granted line carries no `run` where an admitted build's carries `run: true`, and no turn follows.
+
+No test passes on the base. The two halves of criterion 3 that the base already meets pass inside their tests, as
+the criterion allows ("still holds", "waits"), and each test then fails at the assertion that shows the refusal or
+the wait is the drain's or the ceiling's and not the load's.
+
+The output below writes the checkout as <checkout>, the temporary folder as <tmp> and the home folder as ~.
+
+=== admission.test.mjs
+no timed grant held on the machine table at 2026-11-27T14:25:01Z
+start 2026-11-27T14:25:01Z load { 76.75 62.58 67.12 }
+✖ #3694.28023738 at load 57 on 18 cores with 50 GB available and one run's test grant held, a plain test request is granted as a top-level test grant and its command runs (33093.143333ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33236.473125
+
+✖ failing tests:
+
+test at tests/acceptance/3694/admission.test.mjs:5:1
+✖ #3694.28023738 at load 57 on 18 cores with 50 GB available and one run's test grant held, a plain test request is granted as a top-level test grant and its command runs (33093.143333ms)
+  AssertionError [ERR_ASSERTION]: the plain test request `node throttle.mjs test --wait 0.5 -- node stub.mjs plain exit` (throttle pid 67571) was not granted beside the run's test grant at load 57 on 18 cores with 50 GB available: its wait of 0.5 min ran out with INCONCLUSIVE no grant
+  notes:
+  {"name":"run","event":"start","at":1795789503591,"pid":67548,"throttle":"test:a2312f7940b57a57","makeflags":null}
+  log:
+  {"at":"2026-11-27T14:25:03.081Z","event":"granted","class":"test","grant":"top-level","id":"a2312f7940b57a57","pid":67422,"index":1,"load":76.75390625,"cores":18,"wait":1,"waited":4,"run":true,"readings":{"memory":50000000000,"load":57,"cores":18}}
+  {"at":"2026-11-27T14:25:34.893Z","event":"timeout","class":"test","id":"bfa60bca89a6499f","pid":67571,"wait":0.5,"waited":30102}
+  DEEP_THROTTLE_RUN=0 node throttle.mjs test --wait 1 -- node stub.mjs run hold: still running
+  
+  node throttle.mjs test --wait 0.5 -- node stub.mjs plain exit: exit 3
+  INCONCLUSIVE no grant: no test grant came within 0.5 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3694/admission.test.mjs:17:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1
+end 2026-11-27T14:25:35Z load { 84.42 66.36 68.33 }
+=== drain.test.mjs
+no timed grant held on the machine table at 2026-11-27T14:25:35Z
+start 2026-11-27T14:25:35Z load { 84.42 66.36 68.33 }
+✖ #3694.2f5b9fe1 with a timed request waiting beside a run's test grant, a plain test request is not granted and its command never starts, and once the timed request has left the line a plain test request is granted (61797.831958ms)
+✖ #3694.2f5b9fe1 with the test ceiling's grants held by admitted runs, a plain test request waits in line with its command unstarted, and is granted once one of them ends (65463.882ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 127534.283458
+
+✖ failing tests:
+
+test at tests/acceptance/3694/drain.test.mjs:5:1
+✖ #3694.2f5b9fe1 with a timed request waiting beside a run's test grant, a plain test request is not granted and its command never starts, and once the timed request has left the line a plain test request is granted (61797.831958ms)
+  AssertionError [ERR_ASSERTION]: once the timed request had left the line, the plain test request `node throttle.mjs test --wait 0.5 -- node stub.mjs after exit` (throttle pid 79625) was still not granted beside the run's grant at load 57 on 18 cores (exit 3): so the refusal above was no drain's
+  notes:
+  {"name":"run","event":"start","at":1795789536609,"pid":73393,"throttle":"test:cb568bc12d87fa41","makeflags":null}
+  log:
+  {"at":"2026-11-27T14:25:36.389Z","event":"granted","class":"test","grant":"top-level","id":"cb568bc12d87fa41","pid":73350,"index":1,"load":84.42138671875,"cores":18,"wait":1,"waited":22,"run":true,"readings":{"memory":50000000000,"load":57,"cores":18}}
+  {"at":"2026-11-27T14:25:45.401Z","event":"timeout","class":"test","id":"3f7d5428afae6207","pid":74072,"wait":0.1,"waited":6059}
+  {"at":"2026-11-27T14:26:07.206Z","event":"timeout","class":"timed","id":"d67aeda70949bb07","pid":73423,"wait":0.5,"waited":30059,"blockers":[{"class":"test","id":"cb568bc12d87fa41","pid":73350,"at":"2026-11-27T14:25:36.388Z","command":"/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <checkout>/scripts/throttle.mjs test --wait 1 -- /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <sandbox>/stub.mjs run hold"}]}
+  {"at":"2026-11-27T14:26:37.614Z","event":"timeout","class":"test","id":"6230e345ba9a3139","pid":79625,"wait":0.5,"waited":30168}
+  DEEP_THROTTLE_RUN=0 node throttle.mjs test --wait 1 -- node stub.mjs run hold: still running
+  
+  node throttle.mjs timed --wait 0.5 -- node stub.mjs timed exit: exit 3
+  INCONCLUSIVE no grant: no timed grant came within 0.5 min; blocked by test grant cb568bc12d87fa41 held by pid 73350 since 2026-11-27T14:25:36.388Z (/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <checkout>/scripts/throttle.mjs test --wait 1 -- /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <sandbox>/stub.mjs run hold)
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+  node throttle.mjs test --wait 0.1 -- node stub.mjs drained exit: exit 3
+  INCONCLUSIVE no grant: no test grant came within 0.1 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+  node throttle.mjs test --wait 0.5 -- node stub.mjs after exit: exit 3
+  INCONCLUSIVE no grant: no test grant came within 0.5 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3694/drain.test.mjs:26:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3694/drain.test.mjs:29:1
+✖ #3694.2f5b9fe1 with the test ceiling's grants held by admitted runs, a plain test request waits in line with its command unstarted, and is granted once one of them ends (65463.882ms)
+  AssertionError [ERR_ASSERTION]: once run-2 ended, leaving room under the test ceiling, the plain test request `node throttle.mjs test --wait 10 -- node stub.mjs plain exit` (throttle pid 86018) was not granted within 60 s at load 57 on 18 cores with 50 GB available
+  notes:
+  {"name":"run-1","event":"start","at":1795789598067,"pid":85950,"throttle":"test:c4c9a92f1a0d5f6f","makeflags":null}
+  {"name":"run-2","event":"start","at":1795789598346,"pid":86013,"throttle":"test:4f46708fe0d6cb7d","makeflags":null}
+  {"name":"run-2","event":"end","at":1795789602966,"pid":86013}
+  log:
+  {"at":"2026-11-27T14:26:38.004Z","event":"granted","class":"test","grant":"top-level","id":"c4c9a92f1a0d5f6f","pid":85872,"index":1,"load":72.40576171875,"cores":18,"wait":1,"waited":4,"run":true,"readings":{"memory":50000000000,"load":57,"cores":18}}
+  {"at":"2026-11-27T14:26:38.275Z","event":"granted","class":"test","grant":"top-level","id":"4f46708fe0d6cb7d","pid":85957,"index":2,"load":72.40576171875,"cores":18,"wait":1,"waited":5,"run":true,"readings":{"memory":50000000000,"load":57,"cores":18}}
+  {"at":"2026-11-27T14:26:43.012Z","event":"released","class":"test","id":"4f46708fe0d6cb7d","pid":85957,"run":true}
+  DEEP_THROTTLE_RUN=0 node throttle.mjs test --wait 1 -- node stub.mjs run-1 hold: still running
+  
+  DEEP_THROTTLE_RUN=0 node throttle.mjs test --wait 1 -- node stub.mjs run-2 hold: exit 0
+  
+  node throttle.mjs test --wait 10 -- node stub.mjs plain exit: still running
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3694/drain.test.mjs:49:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1
+end 2026-11-27T14:27:43Z load { 84.15 70.27 69.48 }
+=== log.test.mjs
+no timed grant held on the machine table at 2026-11-27T14:27:43Z
+start 2026-11-27T14:27:43Z load { 84.15 70.27 69.48 }
+✖ #3694.24a531af the log's granted line for a plain test request names its turn as an admitted build's does: it marks a run's admission as the build's does, and the turn dealt after it and that turn's release name its grant as run (641.761333ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 785.164625
+
+✖ failing tests:
+
+test at tests/acceptance/3694/log.test.mjs:15:1
+✖ #3694.24a531af the log's granted line for a plain test request names its turn as an admitted build's does: it marks a run's admission as the build's does, and the turn dealt after it and that turn's release name its grant as run (641.761333ms)
+  AssertionError [ERR_ASSERTION]: the granted line for the plain test request carries run undefined, where an admitted build's carries true: {"at":"2026-11-27T14:27:44.164Z","event":"granted","class":"test","grant":"top-level","id":"7791b9a363898f51","pid":98760,"index":1,"load":84.146484375,"cores":18,"wait":1,"waited":3,"readings":{"memory":50000000000,"load":57,"cores":18}}
+  notes:
+  {"name":"build","event":"start","at":1795789663905,"pid":98755,"throttle":"build:452b5101cc97ea80","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-BFz0V6/tokens"}
+  {"name":"build","event":"end","at":1795789663905,"pid":98755}
+  {"name":"plain","event":"start","at":1795789664213,"pid":98835,"throttle":"test:7791b9a363898f51","makeflags":null}
+  {"name":"plain","event":"end","at":1795789664214,"pid":98835}
+  log:
+  {"at":"2026-11-27T14:27:43.845Z","event":"granted","class":"build","grant":"top-level","id":"452b5101cc97ea80","pid":98698,"index":1,"load":84.146484375,"cores":18,"wait":1,"waited":5,"run":true}
+  {"at":"2026-11-27T14:27:43.847Z","event":"turn","id":"e1648b4b63f6a7cb","run":"452b5101cc97ea80","pid":98698}
+  {"at":"2026-11-27T14:27:43.909Z","event":"released","class":"turn","id":"e1648b4b63f6a7cb","pid":98698,"run":"452b5101cc97ea80"}
+  {"at":"2026-11-27T14:27:43.910Z","event":"released","class":"build","id":"452b5101cc97ea80","pid":98698,"run":true}
+  {"at":"2026-11-27T14:27:44.164Z","event":"granted","class":"test","grant":"top-level","id":"7791b9a363898f51","pid":98760,"index":1,"load":84.146484375,"cores":18,"wait":1,"waited":3,"readings":{"memory":50000000000,"load":57,"cores":18}}
+  {"at":"2026-11-27T14:27:44.221Z","event":"released","class":"test","id":"7791b9a363898f51","pid":98760}
+  node throttle.mjs build --wait 1 -- node stub.mjs build exit: exit 0
+  
+  node throttle.mjs test --wait 1 -- node stub.mjs plain exit: exit 0
+  
+  + actual - expected
+  
+  + undefined
+  - true
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3694/log.test.mjs:30:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+end 2026-11-27T14:27:44Z load { 84.15 70.27 69.48 }
+=== turns.test.mjs
+no timed grant held on the machine table at 2026-11-27T14:27:44Z
+start 2026-11-27T14:27:44Z load { 84.15 70.27 69.48 }
+✖ #3694.b252ab9d with the pool's 17 tokens all dealt to a run's jobs and three more of its jobs waiting, a plain test request asked after them starts only once a token is free, and gets that token ahead of the run's waiting jobs (67874.2975ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 67957.197042
+
+✖ failing tests:
+
+test at tests/acceptance/3694/turns.test.mjs:5:1
+✖ #3694.b252ab9d with the pool's 17 tokens all dealt to a run's jobs and three more of its jobs waiting, a plain test request asked after them starts only once a token is free, and gets that token ahead of the run's waiting jobs (67874.2975ms)
+  AssertionError [ERR_ASSERTION]: the plain test request `node throttle.mjs test --wait 10 -- node stub.mjs plain exit` (throttle pid 1353) was not granted within 60 s beside the run's test grant at load 57 on 18 cores with 50 GB available, so it never waited for a token
+  notes:
+  …,"pid":98918,"step":1,"job":"dealt-2","child":98952}
+  {"name":"run","event":"asked","at":1795789664971,"pid":98918,"step":2,"job":"dealt-3","child":98953}
+  {"name":"run","event":"asked","at":1795789664971,"pid":98918,"step":3,"job":"dealt-4","child":98954}
+  {"name":"run","event":"asked","at":1795789664972,"pid":98918,"step":4,"job":"dealt-5","child":98955}
+  {"name":"run","event":"asked","at":1795789664972,"pid":98918,"step":5,"job":"dealt-6","child":98956}
+  {"name":"run","event":"asked","at":1795789664978,"pid":98918,"step":6,"job":"dealt-7","child":98957}
+  {"name":"run","event":"asked","at":1795789664979,"pid":98918,"step":7,"job":"dealt-8","child":98958}
+  {"name":"run","event":"asked","at":1795789664980,"pid":98918,"step":8,"job":"dealt-9","child":98959}
+  {"name":"run","event":"asked","at":1795789664983,"pid":98918,"step":9,"job":"dealt-10","child":98960}
+  {"name":"run","event":"asked","at":1795789664984,"pid":98918,"step":10,"job":"dealt-11","child":98961}
+  {"name":"run","event":"asked","at":1795789664985,"pid":98918,"step":11,"job":"dealt-12","child":98963}
+  {"name":"run","event":"asked","at":1795789664985,"pid":98918,"step":12,"job":"dealt-13","child":98964}
+  {"name":"run","event":"asked","at":1795789664986,"pid":98918,"step":13,"job":"dealt-14","child":98965}
+  {"name":"run","event":"asked","at":1795789664986,"pid":98918,"step":14,"job":"dealt-15","child":98966}
+  {"name":"run","event":"asked","at":1795789664988,"pid":98918,"step":15,"job":"dealt-16","child":98967}
+  {"name":"run","event":"asked","at":1795789664991,"pid":98918,"step":16,"job":"dealt-17","child":98968}
+  {"name":"dealt-10","event":"start","at":1795789666408,"pid":99408,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-wxFmFV/tokens"}
+  {"name":"dealt-15","event":"start","at":1795789667546,"pid":99700,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-r7YJ3c/tokens"}
+  {"name":"dealt-13","event":"start","at":1795789667629,"pid":99736,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-eJj05y/tokens"}
+  {"name":"dealt-5","event":"start","at":1795789667648,"pid":99746,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-37nlKl/tokens"}
+  {"name":"dealt-1","event":"start","at":1795789667656,"pid":99760,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-6jcerT/tokens"}
+  {"name":"dealt-2","event":"start","at":1795789667674,"pid":99710,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-Phs86M/tokens"}
+  {"name":"dealt-3","event":"start","at":1795789667746,"pid":99780,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-zmNyLx/tokens"}
+  {"name":"dealt-14","event":"start","at":1795789667847,"pid":99830,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-c6vJr0/tokens"}
+  {"name":"dealt-4","event":"start","at":1795789667851,"pid":99845,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-ybKnzC/tokens"}
+  {"name":"dealt-6","event":"start","at":1795789668057,"pid":99877,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-fHjA6Q/tokens"}
+  {"name":"dealt-7","event":"start","at":1795789668338,"pid":99943,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-b6HQTY/tokens"}
+  {"name":"dealt-12","event":"start","at":1795789668423,"pid":99998,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-rZmI43/tokens"}
+  {"name":"dealt-11","event":"start","at":1795789668517,"pid":239,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-AsxJ5D/tokens"}
+  {"name":"dealt-17","event":"start","at":1795789668529,"pid":208,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-m0yOYX/tokens"}
+  {"name":"dealt-8","event":"start","at":1795789668886,"pid":309,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-NEbZKC/tokens"}
+  {"name":"dealt-16","event":"start","at":1795789668887,"pid":283,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-3ilNUd/tokens"}
+  {"name":"dealt-9","event":"start","at":1795789668991,"pid":299,"throttle":"test:0c51eb147c81a372","makeflags":"-j --jobserver-auth=fifo:<sandbox>/tmp/deep-turn-Whm1Ri/tokens"}
+  {"name":"run","event":"asked","at":1795789669007,"pid":98918,"step":17,"job":"waiting-1","child":464}
+  {"name":"run","event":"asked","at":1795789669008,"pid":98918,"step":18,"job":"waiting-2","child":467}
+  {"name":"run","event":"asked","at":1795789669009,"pid":98918,"step":19,"job":"waiting-3","child":470}
+  log:
+  {"at":"2026-11-27T14:27:44.821Z","event":"granted","class":"test","grant":"top-level","id":"0c51eb147c81a372","pid":98887,"index":1,"load":82.13232421875,"cores":18,"wait":1,"waited":3,"run":true,"readings":{"memory":50000000000,"load":57,"cores":18}}
+  {"at":"2026-11-27T14:27:45.862Z","event":"passed","class":"test","pid":98960,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:45.867Z","event":"turn","id":"20f207694a0d8962","run":"0c51eb147c81a372","pid":98960}
+  {"at":"2026-11-27T14:27:46.094Z","event":"passed","class":"test","pid":98966,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.250Z","event":"passed","class":"test","pid":98952,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.257Z","event":"passed","class":"test","pid":98964,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.268Z","event":"passed","class":"test","pid":98955,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.432Z","event":"passed","class":"test","pid":98951,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.448Z","event":"passed","class":"test","pid":98953,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.565Z","event":"passed","class":"test","pid":98965,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.600Z","event":"passed","class":"test","pid":98954,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.604Z","event":"passed","class":"test","pid":98956,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.624Z","event":"passed","class":"test","pid":98957,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.714Z","event":"passed","class":"test","pid":98963,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.724Z","event":"passed","class":"test","pid":98968,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.743Z","event":"passed","class":"test","pid":98961,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.832Z","event":"passed","class":"test","pid":98967,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:46.872Z","event":"passed","class":"test","pid":98959,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:47.047Z","event":"passed","class":"test","pid":98958,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:47.106Z","event":"turn","id":"3f651beef562d624","run":"0c51eb147c81a372","pid":98966}
+  {"at":"2026-11-27T14:27:47.169Z","event":"turn","id":"e02bd66772464da7","run":"0c51eb147c81a372","pid":98952}
+  {"at":"2026-11-27T14:27:47.259Z","event":"turn","id":"a9fb83531cff3ff3","run":"0c51eb147c81a372","pid":98964}
+  {"at":"2026-11-27T14:27:47.272Z","event":"turn","id":"5cdb5c14c4854e54","run":"0c51eb147c81a372","pid":98955}
+  {"at":"2026-11-27T14:27:47.324Z","event":"turn","id":"239ea66f128e22d0","run":"0c51eb147c81a372","pid":98951}
+  {"at":"2026-11-27T14:27:47.440Z","event":"turn","id":"665c40535dff14f7","run":"0c51eb147c81a372","pid":98953}
+  {"at":"2026-11-27T14:27:47.639Z","event":"turn","id":"836ee156307c236b","run":"0c51eb147c81a372","pid":98965}
+  {"at":"2026-11-27T14:27:47.741Z","event":"turn","id":"6e7478665c0d87e0","run":"0c51eb147c81a372","pid":98954}
+  {"at":"2026-11-27T14:27:47.849Z","event":"turn","id":"38c75f272b5118b3","run":"0c51eb147c81a372","pid":98956}
+  {"at":"2026-11-27T14:27:48.035Z","event":"turn","id":"6dc2eed5267c0170","run":"0c51eb147c81a372","pid":98957}
+  {"at":"2026-11-27T14:27:48.143Z","event":"turn","id":"b62fdbbb504886b6","run":"0c51eb147c81a372","pid":98963}
+  {"at":"2026-11-27T14:27:48.382Z","event":"turn","id":"86a2dc3d70270b68","run":"0c51eb147c81a372","pid":98968}
+  {"at":"2026-11-27T14:27:48.450Z","event":"turn","id":"99c9ba20eeafffcd","run":"0c51eb147c81a372","pid":98961}
+  {"at":"2026-11-27T14:27:48.625Z","event":"turn","id":"fb6f71d8de34fce2","run":"0c51eb147c81a372","pid":98967}
+  {"at":"2026-11-27T14:27:48.694Z","event":"turn","id":"54102d89509db0c7","run":"0c51eb147c81a372","pid":98959}
+  {"at":"2026-11-27T14:27:48.728Z","event":"turn","id":"7ac6a71bd77c51f3","run":"0c51eb147c81a372","pid":98958}
+  {"at":"2026-11-27T14:27:49.381Z","event":"passed","class":"test","pid":467,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:49.478Z","event":"passed","class":"test","pid":470,"through":"test:0c51eb147c81a372"}
+  {"at":"2026-11-27T14:27:49.526Z","event":"passed","class":"test","pid":464,"through":"test:0c51eb147c81a372"}
+  DEEP_THROTTLE_RUN=0 node throttle.mjs test --wait 1 -- node stub.mjs run drive <sandbox>/run.steps.json: still running
+  
+  node throttle.mjs test --wait 10 -- node stub.mjs plain exit: still running
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3694/turns.test.mjs:28:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1
+end 2026-11-27T14:28:52Z load { 81.09 70.95 69.72 }
