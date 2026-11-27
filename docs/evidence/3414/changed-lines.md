@@ -1,6 +1,6 @@
 # #3414: each changed line beside the line it replaced
 
-From the merge base `9539bc612` to the change, in docs/technical-design.md, docs/canvas-primitives.md, docs/parallel-proof.md, docs/extension-guide.md. Each changed line is shown as the words around each change, 140 characters either side, the changed words between ⟦ and ⟧; a line under 400 characters is shown whole: before, then after. A line that is new has no before.
+From the merge base `a75e1c56f` to the change, in docs/technical-design.md, docs/canvas-primitives.md, docs/parallel-proof.md, docs/extension-guide.md. Each changed line is shown as the words around each change, 140 characters either side, the changed words between ⟦ and ⟧; a line under 400 characters is shown whole: before, then after. A line that is new has no before.
 
 ## docs/technical-design.md
 

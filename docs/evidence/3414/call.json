@@ -1,0 +1,17 @@
+{
+  "criterion": "#3414.2b712213",
+  "who": "Claude, the implementing agent, on the owner's delegation (AGENTS.md, Delivery: a taste criterion is delegated; the owner overrules by reopening)",
+  "when": "2026-11-27T23:01:07.482Z",
+  "call": "right",
+  "why": "All 25 changed lines read beside the lines they replaced: each still says what it said, with only the layer's name changed, except the deliberate rewrites of the scope line, Building blocks' first sentence and its done-gate sentence, and the canvas section's sentence. The one list (the record, the contract with its two rules and the adapter contract, capabilities, the trusted path, the floor and verdicts, and asks) is the issue's draft. Noted: canvas-primitives.md:695 says \"core row\" where it said \"kernel row\", a reference to no row in either wording.",
+  "shown": {
+    "docs/evidence/3414/changed-lines.md": "71b6410263def2e4fb1ad1773b5a481b7ac8b93a4574d559bd40571a2b42c01d",
+    "docs/evidence/3414/core-list.md": "85c8ee23821dcfbb8f897b6ef06362383b85cef6c032a69e1d94be4a0d8c6c40"
+  },
+  "text": {
+    "docs/technical-design.md": "b2893053c6cf1594944dbfa4a89c343f5f103341567501d3ea058dfc3b1e3c8e",
+    "docs/canvas-primitives.md": "9abe193e6d37fa4913deacebc97d4e50896e63c51b7a67554598ed4e1ea93677",
+    "docs/parallel-proof.md": "0c85e21ff8a0a188c43e0a5a7662b462163a68d1c6357445a7fa13b46848775a",
+    "docs/extension-guide.md": "d5ca9ec4f206a0a9d11ee975d1d347f1eaaa44204cecdf83c7ab1e7675feb765"
+  }
+}
