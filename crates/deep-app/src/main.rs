@@ -665,6 +665,7 @@ mod notifications {
                 if !notifies {
                     // Only the notifier reads these; a window that doesn't notify lets them go.
                     record::take_unseen();
+                    cx.update(deep_app::said::take_asked);
                 } else if begun {
                     post(&mut notifier, now, cx);
                 } else if record::connected() {
@@ -723,11 +724,24 @@ mod notifications {
         for event in record::take_unseen() {
             notifier.saw(&event, now);
         }
+        // The session whose page is open in the key window posts nothing (#326, #1845): the window says its ask
+        // (#3232), as it opens or, when nothing was posted for it, as it comes due.
+        let (looking_at, asked) = cx.update(|cx| {
+            (
+                deep_app::open::looking_at(cx),
+                deep_app::said::take_asked(cx),
+            )
+        });
+        for ask in asked {
+            notifier.said(ask);
+        }
         let posted = record::with_view(|view| {
             // Sounds off in the box's words (#1998) leaves the question unsounded.
-            notifier.due(view, now, None, deep_app::hub::sounds_on())
+            notifier.due(view, now, looking_at.as_deref(), deep_app::hub::sounds_on())
         })
         .unwrap_or_default();
+        let unposted = notifier.take_unposted();
+        cx.update(|cx| deep_app::said::asks(&unposted, now, cx));
         for (ask, session) in notifier.newly_missed() {
             eprintln!(
                 "deep-app: not notified {session} {ask}: {}",

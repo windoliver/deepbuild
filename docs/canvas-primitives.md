@@ -876,7 +876,7 @@ The canvas core is a trusted-ring compositor nested in an OS window. Its model f
 
 **Semantics:** Renders into a free slot and signals completion with a fence, never a CPU wait; with no free slot, the frame is skipped. Shows the newest ready slot and holds it until GPUI's command buffer completes, then releases it. The slot stays premultiplied into the window: the GPUI patch composites a GPU surface with source factor one and destination factor one minus source alpha, never by dividing alpha out, and the copy path uploads the same bytes. Bloom adds to color and leaves alpha, so light beyond an object over a 2D page shows. A 2D layer anchored to a 3D layer's items draws from the evaluated data of the `frame_seq` its shown slot carries, and presentation feedback reports that `frame_seq`; other layers stay independent. Resizes allocate lazily, device loss rebuilds every canvas module's declared GPU resources from documents and assets by hash, proved by a forced device-loss test, and the copy path is declared and capped at 30 fps at a render scale of 0.5. Below internal_scale 1, a live view returns to full size through an edge-adaptive spatial upscale and a contrast-adaptive sharpen, two passes that read only this frame, instead of a bilinear stretch; canonical renders run at scale 1 and never use it. A live 3D view whose targets, slots and frame history wouldn't fit its window's GPU memory cap renders at a lower internal scale, down to 0.5, then with a shorter frame-history window, down to 2 frames, before any other rung, and the upscale returns it to full size. The check's memory estimate counts the slots, the HDR slots and frame history at the view's size, and refuses a document that can't fit at those floors, naming the size. The app's own surfaces take three renderer primitives so effects can reach them: a `layer` draws an element's subtree offscreen and composites it once, with group opacity, rounded clip radii and a soft edge; a `backdrop` is a copy of what's drawn so far under the element, at full, half or quarter scale; and an effect slot draws a shipped operator's output in the element's own paint order, premultiplied, with its clip and edge. A chrome effect stays inside its element or panel and never draws over the question card or an access or key prompt; an attempt is refused and recorded. It carries no shader text, draws nothing once settled or off screen, and holds its still pose past its budget. The replica draws the same primitives, and each change they need in the vendored renderer has a row in the carried list. A command buffer that failed never counts as a finished frame: the view that submitted it hears of it, abandons the slot and keeps the last good frame on screen, and repeated failures take the reopen path. A picture the app's canvas panel shows rasterizes at the panel's size in device pixels at the scale of the window's display, a move between displays presents a new one, and the evidence store keeps pictures by revision and scale.
 
-**Cost:** Slots × w × h × 4 B plus targets (about 148 MB at 1936×1584 after the memory fix, estimated); 0.7 to 0.9 ms zero copy against 6.6 to 6.8 ms by copy, as measured in the spike; ≤ 0.1 ms on the UI thread; the upscale's two passes about 0.15 to 0.3 ms at 1080p (estimate), only while the scale is below 1
+**Cost:** Slots × w × h × 4 B plus targets (about 148 MB at 1936×1584 after the memory fix, estimated); 0.7 to 0.9 ms zero copy against 6.6 to 6.8 ms by copy on an M3 Pro drawing the Map's 3D city at 1936×1584 (measured in the October 10 spike); 0.9 to 1.0 ms average draw-and-finish on a Mac17,10 (M5 Max) for a one-pass slot at 1936×1584 before #3617 (#1433 spike, loads 16.1 to 19.6), held to a draw-and-finish budget of under 0.5 ms at p95 on a reference Mac (M3 Pro, M3 or M5 Max) for the one-pass fixture (0.26 to 0.43 ms fastest-to-median at load 48.6 on Mac17,10 after #3617, reading only); ≤ 0.1 ms on the UI thread on a reference Mac (M3 Pro, M3 or M5 Max) for the surface-handoff fixture; the upscale's two passes about 0.15 to 0.3 ms at 1080p (estimate), only while the scale is below 1
 
 **It can never:** Be reached by a client; block the UI thread; be written while it's read; show an unchecked frame; upscale a canonical render, or read a frame from outside the live view's window to upscale
 
@@ -1360,9 +1360,11 @@ Every list the canvas documents is a registry, which names who may fill it, its 
 | Pack dependencies | Pack: dependencies | open: declared per pack | Exact versions and no cycle | — |
 | Paths and their answers | Paths: rays, finals and the web player | closed: ring | Real-time rays, a final and the web player are the renderers beside the real-time frame, each ring code, and same, stand_in, refused and not_applicable are the four answers every sealed 3D entry and every Paths row gives. Reopens with a renderer a release adds | nothing |
 
-Every field list of the sealed listing, generated from it with its closure (Registry and seal: registries), each list a canvas module reads outside its kinds' params among them (an emitter's distance models, foley's materials and actions, the light kinds and the GPU deforms). The drift lane holds this table to the listing and the one above to `packages/contracts/canvas-closures.json`.
+Every field list of the sealed listing, generated from it with its closure (Registry and seal: registries), each list a canvas module reads outside its kinds' params among them (an emitter's distance models, foley's materials and actions, the light kinds and the GPU deforms). Each group of lists, a list's name before its first `.` or `@`, has its table under a heading of its own, so a new list grows one small heading. The drift lane holds these tables to the listing and the table above to `packages/contracts/canvas-closures.json`.
 
 <!-- field lists: generated from the sealed listing by node scripts/canvas-closures.mjs table; do not edit -->
+
+#### Field lists: `arch`
 
 | Field list | Words | Closure | Reopens if | Instead |
 |---|---|---|---|---|
@@ -1378,13 +1380,28 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `arch.stair@1.type` | `straight`, `l`, `spiral` | closed: determinism | a stair needs a run none of the three makes, such as a U turn | two straight stairs joined by a landing slab |
 | `arch.wall@1.justify` | `center`, `left`, `right` | closed: determinism | a wall needs to stand on its line other than centred or to one side | move the wall's line by half its thickness |
 | `arch.wall@1.outside` | `left`, `right`, `none` | closed: determinism | a wall's outside face needs naming other than by its side | nothing |
+
+#### Field lists: `arrange`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `arrange@1.relations.rel` | `on`, `inside`, `next_to`, `against`, `facing`, `near`, `apart` | closed: determinism | an arrangement needs a relation none of the seven states | place the item with `at` or a constraint (`constraint@1`) |
+
+#### Field lists: `ball`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `ball@1.base` | `tetra`, `octa`, `icosa`, `dodeca` | closed: determinism | never: the solids a geodesic sphere starts from | nothing |
 | `ball@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `ball@1.tessellation` | `uv`, `geodesic` | closed: determinism | a sphere needs its faces laid out by a rule neither uv nor geodesic gives | nothing |
 | `ball@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `ball@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `ball@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `camera`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `camera@1.exposure` | `from_lens` | closed: interval_forms | exposure needs a rule other than the lens's closed form | an EV100 number |
 | `camera@1.far` | `auto` | closed: determinism | a far plane needs deriving by another rule than auto's, from the scene's bounds | a distance in m |
 | `camera@1.fit.avoid` | `overlay`, `none` | closed: determinism | framing needs to keep clear of something other than the overlays | `fit.pad` widens the margin around what framing keeps |
@@ -1396,22 +1413,52 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `camera@1.user.pivot` | `target`, `eye` | closed: determinism | a viewer's turn needs a pivot other than the target or the eye | set `target` to the point to turn about |
 | `camera@1.user.zoom_at` | `pointer`, `center` | closed: determinism | a zoom needs an anchor other than the pointer or the view's center | nothing |
 | `camera@1.yield.ease` | `in_out_cubic` | closed: interval_forms | a camera's ease back needs a curve other than in_out_cubic | `yield.ease_back` sets how long it takes |
+
+#### Field lists: `circle`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `circle@1.draw_order` | `back`, `body`, `front`, `auto` | closed: determinism | a part needs a draw place other than back, body or front | `z` orders items within a place |
+
+#### Field lists: `coil`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `coil@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `coil@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `coil@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `coil@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `curve`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `curve@1.frames` | `rmf`, `up` | closed: interval_forms | a curve needs frames turned by a rule other than least rotation or up | nothing |
 | `curve@1.mode` | `linear`, `bezier`, `catmull_rom`, `auto`, `bspline` | closed: interval_forms | a curve needs an interpolation whose bound an interval form can't give | more points |
+
+#### Field lists: `cutaway`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `cutaway@1.applies_to` | `all` | closed: record | never: all names every collection | a collection, or a list of collections |
 | `cutaway@1.cap` | `none` | closed: draw_path | never: none leaves the cut open | a role |
 | `cutaway@1.cap_light` | `auto`, `lit`, `flat` | closed: determinism | a cap needs lighting none of the three gives | nothing |
 | `cutaway@1.class` | `view`, `document` | closed: record | never: a cut belongs to the view or to the document | nothing |
 | `cutaway@1.mode` | `union`, `intersect` | closed: determinism | never: cut volumes combine by union or intersection | two cutaways for a difference |
 | `cutaway@1.shadows` | `cut`, `whole` | closed: determinism | a cut needs to treat shadows other than cut or whole | nothing |
+
+#### Field lists: `display`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `display@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `display@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `display@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `effect`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `effect@1.dof.coc` | `physical` | closed: interval_forms | depth of field needs a circle of confusion other than the lens's physical one | `max_coc` caps it |
 | `effect@1.dof.far_over_near` | `refuse` | closed: determinism | a far blur over a near one needs drawing rather than refusing | nothing |
 | `effect@1.dof.projection` | `perspective`, `orthographic` | closed: interval_forms | a shot needs a projection with a closed form the framing bound reads, beyond these two | nothing |
@@ -1420,16 +1467,41 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `effect@1.kind` | `flare`, `dof`, `wave_field`, `plume`, `arc`, `airflow` | closed: ring | a review with the app takes in a pack's effect graph that proved itself | a pack's effect graph, as fx@1's are |
 | `effect@1.resolution` | `full`, `half`, `quarter` | closed: budget | an effect needs a scale the three can't hold within its class's budget | nothing |
 | `effect@1.seed` | `item` | closed: determinism | never: item seeds the effect from its item's ID | a number |
+
+#### Field lists: `emitter`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `emitter.distance.model` | `inverse`, `linear`, `exponential` | closed: determinism | a voice needs a distance falloff none of the three distance models gives | `ref`, `max` and `rolloff` shape the three; a gain channel keyed by hand draws any other |
+
+#### Field lists: `extrude`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `extrude@1.caps` | `none`, `flat` | closed: determinism | an end needs a cap neither none nor flat builds | a separate item at the end |
 | `extrude@1.outline.align` | `start`, `center`, `end` | closed: determinism | never: an outline lines up at its start, its center or its end | nothing |
 | `extrude@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `extrude@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `extrude@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `extrude@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `fixture`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `fixture.world@1.inputs.kind` | `poke` | closed: record | a fixture world needs an input other than a poke | nothing |
+
+#### Field lists: `foley`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `foley.action` | `tap`, `hit`, `scrape`, `slide`, `whoosh`, `pop`, `tear`, `drip`, `click` | closed: ring | a film needs an action none of the nine sounds like, as first-party presets with their fixtures | a `synth.preset@1` graph a pack fills, played as a generator source |
 | `foley.material` | `paper`, `wood`, `metal`, `glass`, `plastic`, `rubber`, `ink`, `cloth`, `stone`, `electronic` | closed: ring | a film needs a material none of the ten sounds like, as first-party presets with their fixtures | a `synth.preset@1` graph a pack fills, played as a generator source |
+
+#### Field lists: `gpu`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `gpu.compute@1.applies_to` | `view` | closed: record | a pass needs to apply to something other than the view or a collection | a collection |
 | `gpu.compute@1.chain` | `effects`, `finish` | closed: determinism | a pass needs a place in the frame other than the effects chain or the finish | nothing |
 | `gpu.compute@1.determinism` | `exact`, `same_machine`, `live_only` | closed: determinism | WGSL guarantees more about float evaluation | nothing |
@@ -1451,13 +1523,33 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `gpu.pass@1.fuse` | `pixel_wise`, `none` | closed: determinism | two passes fuse by a rule other than pixel for pixel | nothing |
 | `gpu.pass@1.origin` | `shipped`, `pack`, `composed` | closed: record | a graph comes from somewhere other than the core, a pack or a composition of both | nothing |
 | `gpu.pass@1.resolution` | `full`, `half`, `quarter` | closed: budget | a pass needs a scale the three can't hold within its class's budget | nothing |
+
+#### Field lists: `graph`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `graph@1.groups` | `box`, `none` | closed: draw_path | a group needs a mark other than a box around its nodes | nothing |
 | `graph@1.layout.direction` | `down`, `right` | closed: determinism | a layered layout needs to run up or left | nothing |
+
+#### Field lists: `group`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `group@1.flip.keys.show` | `none` | closed: determinism | never: none shows no child | a child's ID |
+
+#### Field lists: `hull`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `hull@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `hull@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `hull@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `hull@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `instance`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `instance@1.attrs.<name>.as` | `bool`, `u8`, `u16`, `u32`, `i32`, `f32`, `f64` | closed: determinism | a logic array holds a value type none of the seven is | leave `as` out to read the array as its own type |
 | `instance@1.attrs.<name>.part` | `x`, `y`, `z`, `w` | closed: determinism | never: x, y, z and w name every part of a vector | nothing |
 | `instance@1.pos.as` | `bool`, `u8`, `u16`, `u32`, `i32`, `f32`, `f64` | closed: determinism | a logic array holds a value type none of the seven is | leave `as` out to read the array as its own type |
@@ -1470,12 +1562,22 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `instance@1.scale.part` | `x`, `y`, `z`, `w` | closed: determinism | never: x, y, z and w name every part of a vector | nothing |
 | `instance@1.yaw.as` | `bool`, `u8`, `u16`, `u32`, `i32`, `f32`, `f64` | closed: determinism | a logic array holds a value type none of the seven is | leave `as` out to read the array as its own type |
 | `instance@1.yaw.part` | `x`, `y`, `z`, `w` | closed: determinism | never: x, y, z and w name every part of a vector | nothing |
+
+#### Field lists: `lathe`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `lathe@1.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame | turn the item with `at.rot` |
 | `lathe@1.caps` | `none`, `flat`, `cut` | closed: determinism | an end needs a cap none of the three builds | a separate item at the end |
 | `lathe@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `lathe@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `lathe@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `lathe@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `light`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `light.area@1.casters` | `all` | closed: record | never: all names every collection | a collection, or a list of collections |
 | `light.area@1.power` | `from_file` | closed: determinism | a light's power needs reading from somewhere other than its distribution file | a power in lumens |
 | `light.area@1.range` | `auto` | closed: determinism | a light's range needs deriving by another rule than auto's, from its power and the threshold | a distance in m |
@@ -1493,11 +1595,26 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `light.spot@1.range` | `auto` | closed: determinism | a light's range needs deriving by another rule than auto's, from its power and the threshold | a distance in m |
 | `light.spot@1.receivers` | `all` | closed: record | never: all names every collection | a collection, or a list of collections |
 | `light.sun@1.shadow_far` | `auto` | closed: determinism | a sun's shadow reach needs deriving by another rule than auto's | a distance in m |
+
+#### Field lists: `logic`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `logic@1.clock` | `fixed`, `on_input` | closed: determinism | never: a logic item steps on a fixed clock or on input, so a replay steps it the same | nothing |
 | `logic@1.pages.init` | `zero` | closed: determinism | never: a world's pages start as zeros, an asset's or a provider's, each by hash, so a replay starts them the same | an asset in pages@1, or a provider's out: pages |
+
+#### Field lists: `look`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `look.finish@1.ao` | `none` | closed: determinism | never: none turns ambient occlusion off | its fields: radius, strength, samples, resolution, multi_bounce, specular |
 | `look.finish@1.bloom` | `none` | closed: determinism | never: none turns bloom off | its fields: intensity, radius, threshold, tint, dirt |
 | `look.finish@1.tone_map` | `none`, `filmic`, `agx`, `neutral` | closed: ring | a look needs a tone curve none of the four draws, reviewed with the app | agx's `white` and `contrast` shape its curve, and `local` compresses a frame's range before the curve |
+
+#### Field lists: `mark`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `mark.line@1.cap` | `butt`, `round`, `square` | closed: draw_path | never: the three caps every stroke draws | nothing |
 | `mark.line@1.edges.kind` | `all`, `quads`, `cage`, `crease` | closed: determinism | a mesh's edges need picking by a rule none of the four reads | nothing |
 | `mark.line@1.ends.end` | `none`, `arrow`, `open`, `stealth`, `dot`, `ring`, `square`, `diamond`, `bar` | closed: draw_path | a line needs an end shape the list lacks | a `path@1` item drawn at the end |
@@ -1508,12 +1625,22 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `mark.line@1.trail.window` | `since`, `whole` | closed: determinism | a trail needs a stretch of its source's path that none of span, since and whole draws | several trails on one source, each with its own window |
 | `mark.point@1.from` | `video` | closed: ring | a point cloud needs a source other than a video's depth | points written as data rows |
 | `mark.point@1.from.video.depth` | `luma`, `r` | closed: determinism | a point cloud needs its depth from another channel of the video | nothing |
+
+#### Field lists: `marks`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `marks@1.columns.<name>.as` | `bool`, `u8`, `u16`, `u32`, `i32`, `f32`, `f64` | closed: determinism | a logic array holds a value type none of the seven is | leave `as` out to read the array as its own type |
 | `marks@1.columns.<name>.part` | `x`, `y`, `z`, `w` | closed: determinism | never: x, y, z and w name every part of a vector | nothing |
 | `marks@1.grid.hex.offset` | `odd`, `even` | closed: determinism | never: a hex grid's rows offset odd or even | nothing |
 | `marks@1.grid.hex.orient` | `flat`, `pointy` | closed: determinism | never: a hex grid's cells point flat or pointy | nothing |
 | `marks@1.grid.shape` | `square`, `isometric`, `hex` | closed: draw_path | a mark set needs a grid shape none of the three lays out | tiles at free positions, each with an angle and a scale |
 | `marks@1.recipe.rules` | `corners_and_sides`, `corners`, `sides`, `edges_6` | closed: determinism | terrain needs matching by neighbours none of the four rule sets reads | `recipe.precedence` orders terrains where their edges meet |
+
+#### Field lists: `material`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `material@1.alpha_mode` | `opaque`, `mask`, `add` | closed: ring | a part needs a blend into what's behind it none of the modes gives | `transmission` for glass |
 | `material@1.catch` | `none`, `shadow` | closed: ring | a catcher needs to keep something other than shadow | nothing |
 | `material@1.flakes.color` | `base` | closed: determinism | never: base takes the material's own base color | a color |
@@ -1529,15 +1656,35 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `material@1.water.rings` | `none` | closed: determinism | never: none leaves the water without touch rings | `{on, speed, span, strength}` |
 | `material@1.water.wake` | `none` | closed: determinism | never: none leaves the water without a wake | `{item, span}` |
 | `material@1.water.waves` | `wind`, `sea` | closed: interval_forms | water needs waves that neither the wind's table, a sea's spectrum nor up to four trochoidal waves give | a list of up to four waves, each with its direction, length, amplitude and steepness |
+
+#### Field lists: `media`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `media.strip@1.align.onset` | `strongest`, `first` | closed: determinism | a strip needs aligning to an onset other than its strongest or its first | set `at` to the onset's time |
 | `media.strip@1.at_stage` | `play`, `wait` | closed: determinism | a strip needs a stage rule other than playing on or waiting | nothing |
 | `media.strip@1.fade_in.curve` | `linear`, `equal_power`, `exp` | closed: determinism | a fade needs a curve none of the three draws | a gain channel keyed by hand |
 | `media.strip@1.fade_out.curve` | `linear`, `equal_power`, `exp` | closed: determinism | a fade needs a curve none of the three draws | a gain channel keyed by hand |
 | `media.strip@1.rate.ramp.shape` | `linear`, `exp` | closed: interval_forms | a rate ramp needs a shape whose source time has a closed form we pin | a run of linear ramps |
+
+#### Field lists: `mesh`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `mesh.asset@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `mesh.sequence@1.interpolate` | `none`, `linear` | closed: determinism | frames need blending by more than a straight line | more frames |
 | `mesh.sequence@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
+
+#### Field lists: `modifier`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `modifier.gpu` | `mod.sway@1`, `mod.bob@1`, `mod.wave@1`, `mod.spin@1` | closed: ring | a case needs a per-instance deform on the GPU none of the four gives, as a first-party kind with its fixtures | a CPU deform (`mod.displace@1`, `mod.simple_deform@1`, `mod.curve_deform@1`) or an operator's `vertex_offset` output |
+
+#### Field lists: `plate`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `plate@1.overlays.roles` | `none` | closed: determinism | never: none leaves a cell of the overlay unpainted | a role |
 | `plate@1.overlays[].roles` | `none` | closed: determinism | never: none leaves a cell of the overlay unpainted | a role |
 | `plate@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
@@ -1546,20 +1693,50 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `plate@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `plate@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `plate@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `puff`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `puff@1.light.ambient` | `sky`, `none` | closed: determinism | a puff needs ambient light from something other than the sky | nothing |
 | `puff@1.light.sun` | `none` | closed: determinism | never: none lights a puff by no sun | the key sun |
 | `puff@1.near_fade` | `auto` | closed: determinism | a puff's near fade needs deriving by another rule than auto's | a distance in m |
+
+#### Field lists: `score`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `score.music@1.instruments.source` | `sampled`, `pluck`, `synth` | closed: determinism | an instrument needs a sound source none of the three makes | a `synth.preset@1` graph over synth's node list makes a new sound |
+
+#### Field lists: `series`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `series@1.decimate` | `m4`, `ohlc`, `minmax`, `none` | closed: determinism | a series needs its rows kept per pixel by a rule none of the four keeps | compute the column before drawing and set `decimate: none` |
+
+#### Field lists: `sky`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `sky@1.background` | `auto`, `sky`, `environment`, `video` | closed: ring | a background needs a source none of the four is | an item far behind the scene |
 | `sky@1.background_ground` | `none` | closed: determinism | never: none leaves the background without ground | `{height, radius}` |
 | `sky@1.environment.from` | `sky`, `studio` | closed: ring | an environment needs a source other than the sky, the studio or an HDR asset | an HDR asset by its sha256 in `environment.from` |
 | `sky@1.fog` | `background` | closed: determinism | never: background takes the background's own color | a color or a role |
 | `sky@1.fog_curve` | `exp`, `exp2`, `linear` | closed: interval_forms | fog needs a falloff with distance none of the three gives | a volume (`volume@1`) for fog that varies in space |
+
+#### Field lists: `slab`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `slab@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `slab@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `slab@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `slab@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `surface`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `surface@1.closed` | `auto` | closed: determinism | never: auto reads whether the surface closes from its own points | `true` or `false`, or `{u, v}` per direction |
 | `surface@1.closed.u` | `auto` | closed: determinism | never: auto reads whether the surface closes from its own points | `true` or `false` |
 | `surface@1.closed.v` | `auto` | closed: determinism | never: auto reads whether the surface closes from its own points | `true` or `false` |
@@ -1569,18 +1746,39 @@ Every field list of the sealed listing, generated from it with its closure (Regi
 | `surface@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `surface@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `surface@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `test`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `test.defaults@1.pace` | `slow`, `fast` | closed: record | never: a fixture kind of the core's test ring | nothing |
+
+#### Field lists: `tree`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `tree@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `tree@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `tree@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `tree@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `tube`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `tube@1.caps` | `none`, `flat`, `round` | closed: determinism | an end needs a cap none of the three builds | a separate item at the end |
 | `tube@1.shade` | `smooth`, `flat`, `by_angle` | closed: determinism | a surface needs normals none of smooth, flat or by-angle gives | a `mod.normals@1` step on the item's modifier stack |
 | `tube@1.twist` | `minimum`, `z_up` | closed: interval_forms | a tube needs its frames turned by a rule other than least twist or z up | nothing |
 | `tube@1.uv0` | `natural`, `box`, `planar`, `cylinder`, `sphere` | closed: determinism | a texture needs a projection none of the five gives | an imported mesh's own uv0 |
 | `tube@1.uv0.cylinder.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every cylindrical projection | turn the item with `at.rot` |
 | `tube@1.uv0.planar.axis` | `x`, `y`, `z` | closed: determinism | never: the three axes of the item's own frame name every planar projection | turn the item with `at.rot` |
+
+#### Field lists: `vector`
+
+| Field list | Words | Closure | Reopens if | Instead |
+|---|---|---|---|---|
 | `vector@1.write_on.order` | `term` | closed: determinism | a formula needs writing on in an order other than by term | nothing |
+
 <!-- /field lists -->
 
 ### A frame through these primitives
@@ -8312,7 +8510,7 @@ In a document, `ducking` is a map by ID beside `buses`, read by the media module
 - `codecs`: the platform's, plus our own audio decoders so every platform reads WAV, AIFF, CAF, MP3, AAC-LC and HE-AAC, ALAC, FLAC, Opus (Ogg, WebM) and Vorbis (Ogg)
 - `out: YUV planes + color tags | BGRA, each by GPU surface or in memory; PCM f32`
 
-**Semantics:** The decode worker is the trusted ring's host for the codecs seam (Seam and backend), never the media module's, and runs the asset probes, so tables, meshes, video frames, sequences, chunks and recordings are probed and decoded in a build without media. All probing, decoding and proxies happen here; encoding runs in the encode tool's own process (Export: encode job). FLAC and Opus always decode through our own decoders, never the platform's, Opus by a pure-Rust port of the reference decoder's float form with its math on pinned libm, so every machine and the web player get the same samples; integer samples, FLAC's like those of WAV, AIFF, CAF and ALAC, become f32 as sample ÷ 2^(depth − 1); an audio stream whose codec the list doesn't hold is refused `unsupported_codec`, naming its `codec` in the probe's own words, such as `ac3`; the web player, which has no decode worker, decodes only sound and images, with the same decoders, on its one thread while it loads, and gets the same samples (Export: web player: compressed sound). Evidence video hashes decoded YUV planes before color conversion; RGB conversion uses the stream's tagged matrix and range. export.fidelity takes a delivery's decoded planes as GPU surfaces, so its comparison runs on the GPU too. Speech aligners and other models run as runner jobs, never here. An MP4 sample, chunk or run count that its box's bytes or the file's bytes can't back is refused, naming the box, before any table is sized from it.
+**Semantics:** The decode worker is the trusted ring's host for the codecs seam (Seam and backend), never the media module's, and runs the asset probes, so tables, meshes, video frames, sequences, chunks and recordings are probed and decoded in a build without media. All probing, decoding and proxies happen here; encoding runs in the encode tool's own process (Export: encode job). FLAC and Opus always decode through our own decoders, never the platform's, Opus by a pure-Rust port of the reference decoder's float form with its math on pinned libm, so every machine and the web player get the same samples; integer samples, FLAC's like those of WAV, AIFF, CAF and ALAC, become f32 as sample ÷ 2^(depth − 1); an audio stream whose codec the list doesn't hold is refused `unsupported_codec`, naming its `codec` in the probe's own words, such as `ac3`; the web player, which has no decode worker, decodes only sound and images, with the same decoders, on its one thread while it loads, and gets the same samples (Export: web player: compressed sound). Evidence video hashes decoded YUV planes before color conversion; RGB conversion uses the stream's tagged matrix and range. export.fidelity takes a delivery's decoded planes as GPU surfaces, so its comparison runs on the GPU too. Speech aligners and other models run as runner jobs, never here. An MP4 sample, chunk or run count that its box's bytes or the file's bytes can't back is refused with `count_unbacked`, naming the box, the count and its limit, before any table is sized from it.
 
 **Cost:** Bounded by its caps and frame pools
 

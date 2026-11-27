@@ -1,0 +1,188 @@
+# Issue #3466's acceptance suite on the base commit 8feb93630b60d18c55d551e8b07554d51049e497 (origin/main when this job
+# started; its last merge is #3577), before any implementation.
+#
+# What ran. The first draft's five test files, each once, with the bytes this job's first phase wrote: the SHA-256 of
+# each test file and of helpers.ts was checked against the first phase's before the output was read, and none has
+# changed since, through the redraft too. The job's caller ran them in this job's checkout, inside one test grant of
+# scripts/throttle.mjs, on 2026-11-26 from 17:52:37 local time (UTC-5), with packages/cli/dist/main.js and
+# target/debug/deep-hook built from the base, Node v24.22.0, macOS (darwin-arm64), 18 cores. The load during those
+# runs wasn't recorded; at 17:56, three minutes after the last of them, the load averages were 39.21 24.77 24.03 (1, 5
+# and 15 minutes).
+#
+# Below, each command with its run's result trimmed to its failing assertion: vitest's FAIL block (the test's name,
+# its AssertionError, the difference, and where it failed) and the run's totals. Colour codes are dropped and the
+# checkout's path is written <repo>; the output held no other home path; nothing else is changed.
+# /private/tmp/dh322-* is a test's own temporary world.
+#
+# Of those five: 4 failed, 1 passed, 0 skipped. Each test of criteria 1 to 4 fails at an expect of its own, in its own
+# file, for the reason its criterion names:
+#   #3466.45462705  uncommitted.test.ts:40  the checkout's claim, whose base commit's spec lists lint, has a run of lint
+#   #3466.8e1d6afc  no-proposal.test.ts:31  learn.proposed with target .deepbuild/done.yaml, recorded after the approval
+#   #3466.13da4cdd  restart.test.ts:35      lint ran again on the claim a new hub process judged after the restart
+#   #3466.e6689637  put-back.test.ts:28, called at :58  the steps for the write held (no run of lint, the claim passed
+#                   with typecheck and unit, one proposal); the claim from the commit that puts lint back runs lint
+# #3466.dc3e4e56, no-kept-revision.test.ts, passes, as it should: the base keeps no revision for any repo, so the claim
+# is judged on its base commit's spec whatever the file holds on disk, and the difference is proposed, which is the
+# rule the test holds. Its wrong program is the planted twin worktree-file-while-none-kept (README, The wrong
+# programs), which can be planted only once the work exists.
+#
+# The redraft (README) added a sixth file, second-worktree.test.ts, a second test of #3466.8e1d6afc. This job ran it
+# once on the base, through scripts/throttle.mjs, on 2026-11-26 at 20:45:28 local time; the load averages were
+# 53.14 45.40 44.48 when the grant was asked for. It neither passes nor fails at its assertion there: it is BLOCKED
+# (second-worktree.test.ts:48), as it should be. Its expect of no proposal held on the base, for the base's own
+# reason: the base keeps no revision, judges the second worktree's claim on its base commit's spec (lint ran, and the
+# claim passed), and so has no difference to propose in a worktree whose file equals that spec. The guard after the
+# expect reads that as proving nothing, never as a pass. So the merge base is not this test's wrong program; the
+# planted twin stale-worktree-proposed is (README, The wrong programs), and it can be planted only once the work
+# exists. Its result follows the five, trimmed the same way: an Error thrown by the guard, not an AssertionError.
+
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/3466 --no-file-parallelism --testTimeout=3600000 --reporter=verbose uncommitted.test.ts
+
+ RUN  v5.0.5 <repo>/tests/acceptance/3466
+
+ FAIL  uncommitted.test.ts > #3466.45462705 with "stop checking lint in shop" approved on its card and the written file left uncommitted, the next claim in that checkout and the next claim in a second worktree each run typecheck and unit and not lint > #3466.45462705 the next claim in the checkout the file was written in, and the next claim in a second worktree of the repo, each have a run of typecheck and of unit and none of lint, though each one's base commit holds a spec that lists lint
+AssertionError: "stop checking lint in shop" was approved on its card and the written file is left uncommitted, so the next claim in the checkout the approved file was written in is judged on the revision you approved, which no longer lists lint in the done claim: it has no run of lint. Its base commit e217880307d1 holds a spec that lists lint, and lint ran: claim:01M8D0Z69BXZ4VHVXWA0SQXS1F: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run","lint: PASS on 1 clean run","typecheck: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: lint ("node --test tests/lint.test.js") passed, typecheck ("node --test tests/types.test.js") passed, unit ("node --test tests/unit.test.js") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "lint run:01M8D0Z6G86A3HCMJKP8KMKHGQ (\"node --test tests/lint.test.js\") passed",
++ ]
+
+ ❯ uncommitted.test.ts:40:362
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:52:37
+   Duration  5.51s (tests 99%, transform 1%)
+
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/3466 --no-file-parallelism --testTimeout=3600000 --reporter=verbose no-proposal.test.ts
+
+ RUN  v5.0.5 <repo>/tests/acceptance/3466
+
+ FAIL  no-proposal.test.ts > #3466.8e1d6afc after "stop checking lint in shop" is approved, no proposal names .deepbuild/done.yaml, before the written file is committed and after it is committed as written > #3466.8e1d6afc a claim made while the approved file is uncommitted, and one made from the commit that holds it as written, each leave the record with no proposal naming .deepbuild/done.yaml since the approval
+AssertionError: you approved "stop checking lint in shop" on its card (ask:01M8D0ZA79J86PNSBD6R2RFRKW), and the file it wrote is on disk as written, uncommitted, so nothing differs from the revision you approved: once the next claim is judged, no proposal made since the approval names .deepbuild/done.yaml. The change you approved is proposed again: learn.proposed at log_pos 27 {"layer":"learned","target":".deepbuild/done.yaml","diff":".deepbuild/done.yaml in /private/tmp/dh322-gZbMP4/shop: approved blob 32e87bf0a73221abc37d5064bd845813b22fd913, now ffdac68c60f67d295af6632564e8793e6b312126","scope":"session:0ddb4f5a072349f991d5879a8944ec94","replay":null,"applied_by":null,"supersedes":null,"evidence":[{"at":"claim:01M8D0ZAXRC10Y5GP1DSW6AXZ1","quote":".deepbuild/done.yaml in /private/tmp/dh322-gZbMP4/shop differs from the revision you approved; claim:01M8D0ZAXRC10Y5GP1DSW6AXZ1's checks run the approved revision"}]}; the claim: claim:01M8D0ZAXRC10Y5GP1DSW6AXZ1: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run","lint: PASS on 1 clean run","typecheck: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: lint ("node --test tests/lint.test.js") passed, typecheck ("node --test tests/types.test.js") passed, unit ("node --test tests/unit.test.js") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "learn.proposed at log_pos 27 {\"layer\":\"learned\",\"target\":\".deepbuild/done.yaml\",\"diff\":\".deepbuild/done.yaml in /private/tmp/dh322-gZbMP4/shop: approved blob 32e87bf0a73221abc37d5064bd845813b22fd913, now ffdac68c60f67d295af6632564e8793e6b312126\",\"scope\":\"session:0ddb4f5a072349f991d5879a8944ec94\",\"replay\":null,\"applied_by\":null,\"supersedes\":null,\"evidence\":[{\"at\":\"claim:01M8D0ZAXRC10Y5GP1DSW6AXZ1\",\"quote\":\".deepbuild/done.yaml in /private/tmp/dh322-gZbMP4/shop differs from the revision you approved; claim:01M8D0ZAXRC10Y5GP1DSW6AXZ1's checks run the approved revision\"}]}",
++ ]
+
+ ❯ no-proposal.test.ts:31:383
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:52:42
+   Duration  2.86s (tests 99%, transform 1%)
+
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/3466 --no-file-parallelism --testTimeout=3600000 --reporter=verbose restart.test.ts
+
+ RUN  v5.0.5 <repo>/tests/acceptance/3466
+
+ FAIL  restart.test.ts > #3466.13da4cdd after the hub is stopped and started again, the next claim is judged on the same kept revision > #3466.13da4cdd with "stop checking lint in shop" approved, the hub stopped and another started on its home, the next claim has a run of typecheck and of unit and none of lint
+AssertionError: "stop checking lint in shop" was approved before the hub (pid 84814) was stopped, so the hub started after it (pid 85072) judges the next claim on the same kept revision, which no longer lists lint in the done claim: the claim has no run of lint. Its base commit 57e85a1fed78 holds a spec that lists lint, and lint ran again: claim:01M8D0ZE980PX3BJMTXRMSQSNP: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run","lint: PASS on 1 clean run","typecheck: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: lint ("node --test tests/lint.test.js") passed, typecheck ("node --test tests/types.test.js") passed, unit ("node --test tests/unit.test.js") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "lint run:01M8D0ZEFEN9PSA1D94G2CY222 (\"node --test tests/lint.test.js\") passed",
++ ]
+
+ ❯ restart.test.ts:35:401
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:52:45
+   Duration  3.51s (tests 99%)
+
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/3466 --no-file-parallelism --testTimeout=3600000 --reporter=verbose put-back.test.ts
+
+ RUN  v5.0.5 <repo>/tests/acceptance/3466
+
+ FAIL  put-back.test.ts > #3466.e6689637 with a revision kept, a write the guard did not recognize that puts lint back in the file on disk, and a later commit that does the same, each leave the next claim with no run of lint, and one proposal names the file > #3466.e6689637 after lint is put back in .deepbuild/done.yaml on disk by a write no hook saw, and after that file is committed, the next claim has no run of lint and a run of typecheck and of unit, and one proposal names .deepbuild/done.yaml
+AssertionError: the commit a7b0725793ae put lint back in .deepbuild/done.yaml at the claim's base commit, as the write did on disk, which changes no check: the claim is judged on the revision you approved with "stop checking lint in shop", which doesn't list lint in the done claim, so it has no run of lint. Lint ran: claim:01M8D0ZJQ2RNCJ7C9J1CB5M6V0: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run","lint: PASS on 1 clean run","unit: PASS on 1 clean run","typecheck: PASS on 1 clean run"]; its runs: lint ("node --test tests/lint.test.js") passed, unit ("node --test tests/unit.test.js") passed, typecheck ("node --test tests/types.test.js") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "lint run:01M8D0ZJWCFJ7DE50XEZFZ0HF1 (\"node --test tests/lint.test.js\") passed",
++ ]
+
+ ❯ judgedOnKept put-back.test.ts:28:235
+
+ ❯ put-back.test.ts:58:5
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:52:49
+   Duration  3.70s (tests 99%)
+
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/3466 --no-file-parallelism --testTimeout=3600000 --reporter=verbose no-kept-revision.test.ts
+
+ RUN  v5.0.5 <repo>/tests/acceptance/3466
+
+ ✓ no-kept-revision.test.ts > #3466.dc3e4e56 in a repo with no kept revision, the revision the claim's base commit holds stands in, as #1864 has it > #3466.dc3e4e56 with nothing approved and lint taken out of .deepbuild/done.yaml on disk by a write no hook saw, the next claim still has a run of lint, of typecheck and of unit, and a proposal names .deepbuild/done.yaml 2553ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  17:52:53
+   Duration  2.65s (tests 99%, transform 1%, import 1%)
+
+$ node scripts/throttle.mjs test --wait 240 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/3466 --no-file-parallelism --testTimeout=2400000 --reporter=verbose second-worktree.test.ts
+
+ RUN  v5.0.5 <repo>/tests/acceptance/3466
+
+ FAIL  second-worktree.test.ts > #3466.8e1d6afc after "stop checking lint in shop" is approved, the next claim in a second worktree of the repo, whose own file still lists lint, leaves no proposal naming .deepbuild/done.yaml either > #3466.8e1d6afc with the approved file uncommitted in the checkout, the next claim in a second worktree is judged on the revision you approved, and the record holds no proposal naming .deepbuild/done.yaml since the approval
+Error: BLOCKED: no proposal names .deepbuild/done.yaml since the approval, but the claim in the second worktree was not judged on the revision you approved, which doesn't list lint: lint ran (lint run:01M8DAVR5ZY5W5GJ54293B4T30 ("node --test tests/lint.test.js") passed). A hub that judges the claim on its base commit's spec, which the worktree's own file equals, has no difference to propose there, so the absence proves nothing: claim:01M8DAVQMYMY3NB9N4BD67GN38: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run","lint: PASS on 1 clean run","typecheck: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: lint ("node --test tests/lint.test.js") passed, typecheck ("node --test tests/types.test.js") passed, unit ("node --test tests/unit.test.js") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed
+ ❯ must ../322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ second-worktree.test.ts:48:5
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  20:45:28
+   Duration  7.54s (tests 99%, transform 1%, import 1%)
+
+# What a scratch file showed on the base, for the steps a first failing assertion keeps the tests above from
+# reaching there (README, What ran only on the base). The file, scratch-base.test.ts, drove this suite's helpers.ts and
+# asserted only what the base does; it was deleted after this one run. This job ran it on 2026-11-26; the test grant
+# came at 18:14:12 local time, 18 minutes after it was asked for, and the load averages were 16.23 30.47 35.96 when the
+# run ended. Its SCRATCH lines, its tests and its totals follow, trimmed as above.
+#   1: with the approved file uncommitted in the checkout, the claim in the checkout and then the claim in the second
+#      worktree. Both pass on the base, each with runs of its own of lint, typecheck and unit: no spec check's result
+#      was carried from the first claim to the second. The base proposes at the checkout's claim alone.
+#   2: the approved file committed as written, lint put back on disk, a claim; that file committed, a claim. Both pass;
+#      the first has no run of lint and the base records one proposal; the second has a run of lint and the record
+#      still holds that one proposal.
+
+$ node scripts/throttle.mjs test --wait 240 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/3466 --no-file-parallelism --testTimeout=2400000 --reporter=verbose scratch-base.test.ts
+
+ RUN  v5.0.5 <repo>/tests/acceptance/3466
+
+SCRATCH 1 written "claims:\n  done:\n    checks: [ typecheck, unit ]\nchecks:\n  lint: { type: command, run: \"node --test tests/lint.test.js\" }\n  typecheck: { type: command, run: \"node --test tests/types.test.js\" }\n  unit: { type: command, run: \"node --test tests/unit.test.js\" }\n"
+SCRATCH 1 checkout: base is the one commit true; claim:01M8D26QX96B8YMVJZQXDAXN7E: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run","lint: PASS on 1 clean run","typecheck: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: lint ("node --test tests/lint.test.js") passed, typecheck ("node --test tests/types.test.js") passed, unit ("node --test tests/unit.test.js") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed
+SCRATCH 1 second worktree: base is the one commit true; its file lists lint,typecheck,unit; the checkout's file uncommitted true; claim:01M8D26SZ5PHJD7EDN4ACCAB6S: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run","unit: PASS on 1 clean run","lint: PASS on 1 clean run","typecheck: PASS on 1 clean run",".deepbuild/checks/says-rejects.sh carried its base run run:01M8D26S8AZ2QRTPD7JV5X86R9 from claim:01M8D26QX96B8YMVJZQXDAXN7E in session:7e88bee40c6042bb8cf8f13715b517b0"]; its runs: unit ("node --test tests/unit.test.js") passed, lint ("node --test tests/lint.test.js") passed, typecheck ("node --test tests/types.test.js") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed
+SCRATCH 1 proposals naming the file since the approval, once both claims were judged: learn.proposed at log_pos 30 {"layer":"learned","target":".deepbuild/done.yaml","diff":".deepbuild/done.yaml in /private/tmp/dh322-ndhB5v/shop: approved blob 32e87bf0a73221abc37d5064bd845813b22fd913, now ffdac68c60f67d295af6632564e8793e6b312126","scope":"session:7e88bee40c6042bb8cf8f13715b517b0","replay":null,"applied_by":null,"supersedes":null,"evidence":[{"at":"claim:01M8D26QX96B8YMVJZQXDAXN7E","quote":".deepbuild/done.yaml in /private/tmp/dh322-ndhB5v/shop differs from the revision you approved; claim:01M8D26QX96B8YMVJZQXDAXN7E's checks run the approved revision"}]}
+ ✓ scratch-base.test.ts > scratch at the base > scratch: the second worktree's session makes a claim that passes, with runs of its own of every spec check 5938ms
+SCRATCH 2 after the write: base is the kept commit true; claim:01M8D26WZ8WVKA7XHSAY98JGS1: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run","typecheck: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: typecheck ("node --test tests/types.test.js") passed, unit ("node --test tests/unit.test.js") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed; proposals learn.proposed at log_pos 29 {"layer":"learned","target":".deepbuild/done.yaml","diff":".deepbuild/done.yaml in /private/tmp/dh322-uKhBWG/shop: approved blob ffdac68c60f67d295af6632564e8793e6b312126, now 32e87bf0a73221abc37d5064bd845813b22fd913","scope":"session:b7abe66320af4cad9c7d4278e25cc5e9","replay":null,"applied_by":null,"supersedes":null,"evidence":[{"at":"claim:01M8D26WZ8WVKA7XHSAY98JGS1","quote":".deepbuild/done.yaml in /private/tmp/dh322-uKhBWG/shop differs from the revision you approved; claim:01M8D26WZ8WVKA7XHSAY98JGS1's checks run the approved revision"}]}
+SCRATCH 2 after the commit: base is that commit true; claim:01M8D26YWM59R5TZFD6PHJSZM3: verdict PASS [".deepbuild/checks/says-rejects.sh: PASS on 1 clean run","lint: PASS on 1 clean run","typecheck: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: lint ("node --test tests/lint.test.js") passed, unit ("node --test tests/unit.test.js") passed, typecheck ("node --test tests/types.test.js") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") passed, .deepbuild/checks/says-rejects.sh ("sh '.deepbuild/checks/says-rejects.sh'") failed; proposals since the approval learn.proposed at log_pos 29 {"layer":"learned","target":".deepbuild/done.yaml","diff":".deepbuild/done.yaml in /private/tmp/dh322-uKhBWG/shop: approved blob ffdac68c60f67d295af6632564e8793e6b312126, now 32e87bf0a73221abc37d5064bd845813b22fd913","scope":"session:b7abe66320af4cad9c7d4278e25cc5e9","replay":null,"applied_by":null,"supersedes":null,"evidence":[{"at":"claim:01M8D26WZ8WVKA7XHSAY98JGS1","quote":".deepbuild/done.yaml in /private/tmp/dh322-uKhBWG/shop differs from the revision you approved; claim:01M8D26WZ8WVKA7XHSAY98JGS1's checks run the approved revision"}]}
+ ✓ scratch-base.test.ts > scratch at the base > scratch: after lint is put back on disk and then committed, the proposals the record holds 5334ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  18:14:12
+   Duration  11.51s (tests 99%, transform 1%)

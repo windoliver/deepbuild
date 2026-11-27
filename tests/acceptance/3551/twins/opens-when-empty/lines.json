@@ -1,0 +1,12 @@
+{
+  "scripts/throttle.mjs": [
+    {
+      "find": [
+        "  return !held && since >= apart ? 'empty' : 'not yet';"
+      ],
+      "wrong": [
+        "  return !held ? 'empty' : 'not yet';"
+      ]
+    }
+  ]
+}
