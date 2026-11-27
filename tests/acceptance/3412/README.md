@@ -37,6 +37,8 @@ and suite `tests/acceptance/3533/` for the house shape.
 - **The lint lane.** The `lint` entry of the copy's own `scripts/lanes.mjs` `checks`, read at run time, so no check
   script's name is assumed. Only its node commands run (each one, whatever the others did, six at a time, each stopped after 300 s); its cargo commands (fmt,
   clippy) are left out: they can't read Markdown and take many minutes per run.
+  Six at a time because the commands only read the copy, and one after another a lane run took 6 minutes. The
+  `.mjs` files hold no comments (docs/adr/0001-code-carries-no-comments.md); what they would say is here.
 - **A scratch copy.** The checkout's working tree (tracked files and untracked ones git doesn't ignore, never `.git`)
   in a temp folder, with a fresh `git init`, the checkout's origin URL, everything committed as the base and
   `origin/main` pointed at it; a plant is one more commit. Git runs with no `GIT_*` variable, global or system config;

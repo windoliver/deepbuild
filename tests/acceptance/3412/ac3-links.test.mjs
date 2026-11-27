@@ -1,4 +1,3 @@
-// AC3: each link in GLOSSARY.md lands; a planted link to a heading neither design doc has fails, naming the link.
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { join, posix } from 'node:path';
@@ -12,7 +11,6 @@ const ANCHOR = 'zorvanthic-heading-3412';
 test(`${ID} AC3: each link in GLOSSARY.md lands`, async () => {
   const glossary = checkoutFile(GLOSSARY);
   assert.ok(glossary !== undefined, `${GLOSSARY} is not at the repo root of the checkout`);
-  // The design docs' anchors as the design links lane reads them (scripts/doc-links.mjs at the checkout).
   const { anchors } = await import(pathToFileURL(join(CHECKOUT, 'scripts', 'doc-links.mjs')).href);
   const links = [...glossary.replace(/(`+).+?\1/g, '').matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1]).filter((l) => !/^[a-z]+:/i.test(l));
   assert.ok(links.length, `${GLOSSARY} holds no link into the repo`);

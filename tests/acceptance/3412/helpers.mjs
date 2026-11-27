@@ -1,6 +1,3 @@
-// Helpers for #3412's acceptance tests: scratch copies of the checkout with their own git history, the issue's draft
-// GLOSSARY.md, planted entries, and one run of the lint lane's node commands as the copy's own scripts/lanes.mjs lists
-// them. The copy approach follows tests/acceptance/3533/helpers.mjs. Node built-ins only; the checkout is never written.
 import { spawn, spawnSync } from 'node:child_process';
 import { constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -8,7 +5,6 @@ import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const CHECKOUT = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
-/** The base commit this suite was written at. */
 export const BASE = 'b134dd38f';
 export const LANE = 'lint';
 export const GLOSSARY = 'GLOSSARY.md';
@@ -16,13 +12,10 @@ export const AGENTS = 'AGENTS.md';
 export const PLAIN_WORDS = 'contracts/plain-words.json';
 export const DESIGN = 'docs/technical-design.md';
 export const CANVAS = 'docs/canvas-primitives.md';
-/** An invented term no list, doc or product holds; every plant uses it, so a line naming it can only be about a plant. */
 export const TERM = 'Zorvanthic ledger';
 const COMMAND_TIMEOUT = 300_000;
-/** Lane commands run this many at a time: they only read the copy, and one after another a lane run took 6 min. */
 const AT_ONCE = 6;
 
-// Git with none of the caller's repository, config, hooks or signing.
 export function cleanEnv(extra = {}) {
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
@@ -35,14 +28,8 @@ function git(cwd, args, { allowFail = false } = {}) {
   return r;
 }
 
-/** A file of the checkout, or undefined when it isn't there. */
 export const checkoutFile = (path) => (existsSync(join(CHECKOUT, path)) ? readFileSync(join(CHECKOUT, path), 'utf8') : undefined);
 
-/**
- * A sandbox under the OS temp folder, removed after the test: `repo/` holds the checkout's working tree (tracked files
- * and untracked ones git doesn't ignore; never .git), with a fresh `git init`, the checkout's origin URL as origin, and
- * everything committed as the base with origin/main pointing at it, so a later commit is the change.
- */
 export function makeCopy(t) {
   const sandbox = realpathSync(mkdtempSync(join(tmpdir(), 'deep-3412-')));
   t.after(() => rmSync(sandbox, { recursive: true, force: true }));
@@ -63,28 +50,18 @@ export function makeCopy(t) {
   return { sandbox, repo };
 }
 
-/** Commits everything in a copy as one more commit of the change. */
 export function commit(repo, message) {
   git(repo, ['add', '-A']);
   git(repo, ['commit', '-q', '--allow-empty', '--no-verify', '--no-gpg-sign', '-m', message]);
 }
 
-/** Writes a file into a copy. */
 export function plantFile(repo, path, text) {
   mkdirSync(dirname(join(repo, path)), { recursive: true });
   writeFileSync(join(repo, path), text);
 }
 
-/**
- * The glossary a plant starts from: the checkout's GLOSSARY.md when it has one, else the issue's draft, so a plant
- * never fails only because the file is missing.
- */
 export const startingGlossary = () => checkoutFile(GLOSSARY) ?? readFileSync(new URL('./draft-glossary.txt', import.meta.url), 'utf8');
 
-/**
- * The glossary with entries inserted in the middle of its groups: before its second `### ` group heading (after the
- * first group's last entry), or at its end when it has fewer than two.
- */
 export function withEntries(glossary, entries) {
   const lines = glossary.split('\n');
   const groups = lines.flatMap((line, i) => (/^###\s/.test(line) ? [i] : []));
@@ -94,13 +71,11 @@ export function withEntries(glossary, entries) {
   return lines.join('\n');
 }
 
-/** Plants a glossary holding these entries, and commits it as the change. */
 export function plantGlossary(repo, entries, message) {
   plantFile(repo, GLOSSARY, withEntries(startingGlossary(), entries));
   commit(repo, message);
 }
 
-/** The sandboxed environment of a lane run: HOME, TMPDIR and XDG in the sandbox, no GitHub token. */
 export function laneEnv(sandbox) {
   const env = cleanEnv();
   for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GH_HOST', 'GH_REPO', 'DEEP_PREFLIGHT']) delete env[key];
@@ -115,14 +90,8 @@ export function laneEnv(sandbox) {
   };
 }
 
-/** Whether a lane command runs node: its program is node, as lanes.mjs writes it (process.execPath) or by name. */
 const isNode = (program) => /^node(\.exe)?$/.test(basename(String(program)));
 
-/**
- * Runs the node commands of the lint lane, as the copy's own scripts/lanes.mjs lists them, in the copy, each one
- * whatever the others did, AT_ONCE at a time (cargo's commands can't read Markdown and are left out). Resolves to each
- * command, in the lane's order, with its exit status and output lines, or `missing` when the copy lists no such lane.
- */
 export async function runLintLane(repo, env) {
   const program = `const { checks } = await import(${JSON.stringify(pathToFileURL(join(repo, 'scripts', 'lanes.mjs')).href)});
 const lane = checks.find((l) => l.name === ${JSON.stringify(LANE)});
@@ -150,10 +119,8 @@ console.log(JSON.stringify(lane ? lane.commands : null));`;
   return { runs };
 }
 
-/** The lines of failing commands (exit status not 0) that pass `test`, each as `<command>: <line>`. */
 export const failingLines = (lane, test) => lane.runs.filter((r) => r.status !== 0).flatMap((r) => r.lines.filter(test).map((l) => `${r.name}: ${l}`));
 
-/** Plants these entries into a copy, runs the lint lane's node commands, and returns the failing lines naming TERM. */
 export async function plantedRun(t, entries, message) {
   const { sandbox, repo } = makeCopy(t);
   plantGlossary(repo, entries, message);
@@ -161,17 +128,14 @@ export async function plantedRun(t, entries, message) {
   return { lane, named: failingLines(lane, (line) => names(line, TERM)) };
 }
 
-/** A short account of a lane run, for assertion messages. */
 export function summary(lane) {
   if (lane.missing) return lane.missing;
   return lane.runs.map((r) => `${r.status === 0 ? 'ok  ' : `exit ${r.status}`} ${r.name}${r.status === 0 ? '' : `\n      ${r.lines.slice(-4).join('\n      ').replaceAll(CHECKOUT, '<checkout>')}`}`).join('\n');
 }
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** Whether a line names a word or name whole, not inside a longer one; case is ignored. */
 export const names = (line, name) => new RegExp(`(?<![\\p{L}\\p{N}_-])${escape(name)}(?![\\p{L}\\p{N}_-])`, 'iu').test(line);
 
-/** The words a person sees: the plain words of contracts/plain-words.json, and the words of States people see. */
 export function seenWords(root) {
   const plain = Object.values(JSON.parse(readFileSync(join(root, PLAIN_WORDS), 'utf8')).words);
   const design = readFileSync(join(root, DESIGN), 'utf8');
@@ -180,5 +144,4 @@ export function seenWords(root) {
   return { plain, states };
 }
 
-/** The names a line may use for each list: the file for the plain words, the section for the state words. */
 export const LIST_NAMES = { plain: ['plain-words.json'], states: ['States people see', 'states-people-see'] };

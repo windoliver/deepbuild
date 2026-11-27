@@ -1,4 +1,3 @@
-// AC1: a planted term listed twice fails, naming it; a planted term with no sentence fails, naming it.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TERM, plantedRun, summary } from './helpers.mjs';

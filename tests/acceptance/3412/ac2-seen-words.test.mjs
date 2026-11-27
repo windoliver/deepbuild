@@ -1,19 +1,14 @@
-// AC2: no word a person sees is a word to avoid. The check reads the words of States people see and the plain words of
-// contracts/plain-words.json; a planted entry that lists "result" as a word to avoid fails, naming the term and the
-// list that holds the word.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CHECKOUT, GLOSSARY, LIST_NAMES, TERM, checkoutFile, failingLines, laneEnv, makeCopy, names, plantGlossary, runLintLane, seenWords, summary } from './helpers.mjs';
 
 const ID = '#3412.032a43e1';
 
-/** The lists, by key of LIST_NAMES, that hold a word in this tree. */
 function holders(root, word) {
   const seen = seenWords(root);
   return Object.keys(LIST_NAMES).filter((key) => seen[key].some((w) => w.toLowerCase() === word.toLowerCase()));
 }
 
-/** Plants an entry avoiding `word`; the failing lines must name the term and a list that holds the word. */
 async function plantAvoid(t, word) {
   const { sandbox, repo } = makeCopy(t);
   const lists = holders(repo, word);
