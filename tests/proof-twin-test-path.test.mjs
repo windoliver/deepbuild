@@ -24,7 +24,7 @@ const write = (root, files) => {
   }
 };
 
-function before(t, { base, change, twin }) {
+function lane(t, { base, change, twin }) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-twin-test-path-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const repo = join(dir, 'repo');
@@ -43,9 +43,13 @@ function before(t, { base, change, twin }) {
   for (const name of ['NODE_TEST_CONTEXT', 'NODE_V8_COVERAGE', 'DEEP_OPEN_ISSUES', 'DEEP_APPROVERS', 'DEEP_THROTTLE', 'DEEP_PREFLIGHT']) delete env[name];
   const result = spawnSync(process.execPath, [join(CHECKOUT, 'scripts/proof.mjs'), 'before'], { cwd: repo, env, encoding: 'utf8', timeout: 540_000 });
   const lines = result.stdout.split('\n').filter((line) => line.includes(` before: ${TEST} › ${TAG} `));
-  const said = `exit ${result.status}\n${result.stdout}\n${result.stderr.slice(-3000)}`;
+  return { lines, status: result.status, said: `exit ${result.status}\n${result.stdout}\n${result.stderr.slice(-3000)}` };
+}
+
+function before(t, fixture) {
+  const { lines, status, said } = lane(t, fixture);
   assert.deepEqual(lines.filter((line) => line.startsWith('PASS ')), [], said);
-  assert.notEqual(result.status, 0, said);
+  assert.notEqual(status, 0, said);
   return { lines, said };
 }
 
@@ -82,4 +86,15 @@ test('a twin is refused while an import of its tests under the test paths does n
 test('a twin of a helper its test imports under another case is refused', { timeout: 600_000 }, (t) => {
   const imports = SPAWNS('tests/tools/sum.mjs').replace("import test from 'node:test';", "import test from 'node:test';\nimport { sum } from '../../tools/sum.mjs';\nvoid sum;");
   refused(t, { base: { 'tests/tools/sum.mjs': `${WRONG}export const sum = 0;\n` }, change: { 'tests/tools/sum.mjs': `${RIGHT}export const sum = 0;\n`, [TEST]: imports }, twin: { 'tests/Tools/sum.mjs': `${WRONG}export const sum = 0;\n` } }, 'tests/Tools/sum.mjs');
+});
+
+test('a spawned twin that crashes proves the test even when the assertion message carries the twin\'s stack', { timeout: 600_000 }, (t) => {
+  const quoted = SPAWNS('tests/tools/sum.mjs').replace("assert.equal(spawnSync(process.execPath, [fileURLToPath(new URL('../../../tests/tools/sum.mjs', import.meta.url)), '2', '3'], { encoding: 'utf8' }).stdout, '5\\n');", "const run = spawnSync(process.execPath, [fileURLToPath(new URL('../../../tests/tools/sum.mjs', import.meta.url)), '2', '3'], { encoding: 'utf8' });\n  assert.equal(run.stdout, '5\\n', run.stderr);");
+  assert.ok(quoted.includes('run.stderr'));
+  const { lines, said } = lane(t, { base: { 'tests/tools/sum.mjs': WRONG }, change: { 'tests/tools/sum.mjs': RIGHT, [TEST]: quoted }, twin: { 'tests/tools/sum.mjs': "throw new Error('planted crash');\n" } });
+  assert.ok(lines.length && lines.every((line) => line.startsWith('PASS before: ')) && lines.some((line) => line.endsWith('failed on planted at its assertion')), said);
+});
+
+test('a twin of a script in a data folder named in another case is refused as test data', { timeout: 600_000 }, (t) => {
+  refused(t, { base: { 'tests/Fixtures/sum.mjs': WRONG }, change: { 'tests/Fixtures/sum.mjs': RIGHT, [TEST]: SPAWNS('tests/Fixtures/sum.mjs') }, twin: { 'tests/Fixtures/sum.mjs': WRONG } }, 'tests/Fixtures/sum.mjs');
 });
