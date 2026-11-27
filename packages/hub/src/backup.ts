@@ -52,6 +52,7 @@ const events = (n: number): string => `${n} event${n === 1 ? '' : 's'}`;
 /** What the restore would take away from the record there, as the sentence you confirm says it (#3459). */
 function lossSaid(loss: RestoreLoss, keeps: boolean): string {
   if (loss.kind === 'none') return keeps ? ', whose record holds no events yet' : ', where there is no record yet';
+  if (loss.kind === 'earlier') return ', an earlier copy of the backup\'s record, which holds no event the backup lacks';
   if (loss.kind === 'other') return `: the backup was not taken from this record, which holds ${events(loss.events)}`;
   if (!loss.events) return ', which holds no event past the backup\'s last';
   return `, which holds ${events(loss.events)} past the backup's last, the newest at ${utc(loss.newest ?? 0)}`;

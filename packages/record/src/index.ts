@@ -1249,46 +1249,52 @@ export interface PreparedRestore { generation: number; put(): void; discard(): v
 /**
  * What a restore of the backup at `from` takes away from the record at `to` (#3459), read before the OS asks you:
  * `none` where no record is there; `later` where the record holds the backup's last event at its log position, so the
- * backup is an earlier copy of it, with how many events it holds past that one and the newest one's time; `other`
- * where it doesn't, so the backup wasn't taken from it, with how many events it holds. Both files are only read.
+ * backup is an earlier copy of it, with how many events it holds past that one and the newest one's time; `earlier`
+ * where the backup holds the record's last event at its position, so the restore takes no event away; `other` where
+ * neither holds the other's last, so the backup wasn't taken from it, with how many events it holds. Both files are
+ * only read.
  */
-export type RestoreLoss = { kind: 'none' } | { kind: 'later'; events: number; newest?: number } | { kind: 'other'; events: number };
+export type RestoreLoss = { kind: 'none' } | { kind: 'later'; events: number; newest?: number } | { kind: 'earlier' } | { kind: 'other'; events: number };
+type Last = { id: string; log_pos: number } | undefined;
+const lastOf = (db: Db): Last => db.prepare('SELECT id, log_pos FROM events ORDER BY log_pos DESC LIMIT 1').get() as Last;
+const holds = (db: Db, e: NonNullable<Last>): boolean => db.prepare('SELECT 1 FROM events WHERE id = ? AND log_pos = ?').get(e.id, e.log_pos) !== undefined;
 export function restoreLoss(from: string, to: string): RestoreLoss {
   if (!existsSync(to)) return { kind: 'none' };
   const hasEvents = (db: Db) => db.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'events'").get() !== undefined;
   // A read-only connection to a file in WAL mode makes its -wal and -shm; those it made in the backup's folder go again.
   const made = [`${from}-wal`, `${from}-shm`].filter((f) => !existsSync(f));
-  let last: { id: string; log_pos: number } | undefined;
+  let backup: Db | undefined;
   try {
-    const backup = openReadOnly(from);
     try {
+      backup = openReadOnly(from);
       if (!hasEvents(backup)) throw new RecordError('storage', `${from} isn't a DeepBuild record: it holds no events table`);
-      last = backup.prepare('SELECT id, log_pos FROM events ORDER BY log_pos DESC LIMIT 1').get() as typeof last;
-    } finally {
-      backup.close();
+    } catch (error) {
+      throw error instanceof RecordError ? error : new RecordError('storage', `the backup at ${from} can't be read (${error instanceof Error ? error.message : String(error)})`);
     }
-  } catch (error) {
-    throw error instanceof RecordError ? error : new RecordError('storage', `the backup at ${from} can't be read (${error instanceof Error ? error.message : String(error)})`);
-  } finally {
-    for (const f of made) rmSync(f, { force: true });
-  }
-  try {
-    const record = openReadOnly(to);
+    const last = lastOf(backup);
     try {
-      if (!hasEvents(record)) return { kind: 'none' };
-      if (last && !record.prepare('SELECT 1 FROM events WHERE id = ? AND log_pos = ?').get(last.id, last.log_pos)) {
-        return { kind: 'other', events: Number((record.prepare('SELECT count(*) AS n FROM events').get() as { n: number }).n) };
+      const record = openReadOnly(to);
+      try {
+        if (!hasEvents(record)) return { kind: 'none' };
+        if (last && !holds(record, last)) {
+          const theirs = lastOf(record);
+          if (theirs && holds(backup, theirs)) return { kind: 'earlier' };
+          return { kind: 'other', events: Number((record.prepare('SELECT count(*) AS n FROM events').get() as { n: number }).n) };
+        }
+        const after = last?.log_pos ?? 0;
+        const past = Number((record.prepare('SELECT count(*) AS n FROM events WHERE log_pos > ?').get(after) as { n: number }).n);
+        // The newest is the one appended last, by its log position, whatever time its writer gave it.
+        const newest = record.prepare('SELECT ts FROM events WHERE log_pos > ? ORDER BY log_pos DESC LIMIT 1').get(after) as { ts: number } | undefined;
+        return { kind: 'later', events: past, ...(newest ? { newest: Number(newest.ts) } : {}) };
+      } finally {
+        record.close();
       }
-      const after = last?.log_pos ?? 0;
-      const past = Number((record.prepare('SELECT count(*) AS n FROM events WHERE log_pos > ?').get(after) as { n: number }).n);
-      // The newest is the one appended last, by its log position, whatever time its writer gave it.
-      const newest = record.prepare('SELECT ts FROM events WHERE log_pos > ? ORDER BY log_pos DESC LIMIT 1').get(after) as { ts: number } | undefined;
-      return { kind: 'later', events: past, ...(newest ? { newest: Number(newest.ts) } : {}) };
-    } finally {
-      record.close();
+    } catch (error) {
+      throw new RecordError('storage', `the record at ${to} can't be read (${error instanceof Error ? error.message : String(error)}): move it aside, then restore again`);
     }
-  } catch (error) {
-    throw new RecordError('storage', `the record at ${to} can't be read (${error instanceof Error ? error.message : String(error)}): move it aside, then restore again`);
+  } finally {
+    backup?.close();
+    for (const f of made) rmSync(f, { force: true });
   }
 }
 
