@@ -1,0 +1,124 @@
+{
+  "inputs": {
+    "one-row.csv": "edd06474d93ea5283432394874fbbfe37c9d337b68f2ea17b7d045f9790acc78",
+    "one-row-dollars.csv": "1b5e87a42140a67be69a93490f9f9c8a0406be36eba9f0c78a2445e3cc8bb72b"
+  },
+  "workers": {
+    "outputs": {
+      "table": "2716e5d64b37ac7de8c1161c1ff367db98b16b2983459718548474d84b31c3d3",
+      "lineage": "5eff9ea8b28628e21dea6d48d7ebec6d0151c3a3feb47407d50baa2b772844de",
+      "receipt": "28b24b15de3a021e8440e9dac5fa02e0ab44134cfa19fb1c8e03d406aeda98b0",
+      "record": "5fd1e75136ae1a9059bf5b08692e0ae2a20f7d0b493556a0812f29daf59e1cd1"
+    },
+    "table": "county,manufacturing,construction,mining,total\n1,120,30,0,150\n",
+    "record": {
+      "probe": {
+        "table": {
+          "rows": 1,
+          "columns": [
+            {
+              "name": "county",
+              "dtype": "i64",
+              "unit": null
+            },
+            {
+              "name": "manufacturing",
+              "dtype": "i64",
+              "unit": "workers"
+            },
+            {
+              "name": "construction",
+              "dtype": "i64",
+              "unit": "workers"
+            },
+            {
+              "name": "mining",
+              "dtype": "i64",
+              "unit": "workers"
+            },
+            {
+              "name": "total",
+              "dtype": "f64",
+              "unit": "workers"
+            }
+          ],
+          "key": "county"
+        }
+      },
+      "cells": {
+        "county": [
+          {
+            "bytes": [
+              47,
+              48
+            ],
+            "raw": "1"
+          }
+        ],
+        "manufacturing": [
+          {
+            "bytes": [
+              49,
+              52
+            ],
+            "raw": "120"
+          }
+        ],
+        "construction": [
+          {
+            "bytes": [
+              53,
+              55
+            ],
+            "raw": "30"
+          }
+        ],
+        "mining": [
+          {
+            "bytes": [
+              56,
+              57
+            ],
+            "raw": "0"
+          }
+        ],
+        "total": [
+          {
+            "bytes": [
+              58,
+              61
+            ],
+            "raw": "150"
+          }
+        ]
+      },
+      "sha256": "2716e5d64b37ac7de8c1161c1ff367db98b16b2983459718548474d84b31c3d3",
+      "kind": "table",
+      "source": {
+        "job": {
+          "kind": "table.derive",
+          "tool": "table-derive@1.0.0",
+          "input": {
+            "county": "edd06474d93ea5283432394874fbbfe37c9d337b68f2ea17b7d045f9790acc78"
+          }
+        }
+      },
+      "lineage": "5eff9ea8b28628e21dea6d48d7ebec6d0151c3a3feb47407d50baa2b772844de"
+    }
+  },
+  "dollars": {
+    "status": "refused",
+    "reason": "table.derive: the expression \"manufacturing + construction + mining\" adds workers and dollars, two different units",
+    "receipt": {
+      "kind": "table.derive",
+      "tool": "table-derive@1.0.0",
+      "key": "0fece090ce94c9697e55958b96cbcb997f73b621d0edba0e4dc996b4d2ad6c7c",
+      "build": "d1:9d26996a71a7e43fbe1a4bd8a2700e8d9cc724e96a6ffa9d5420fb08e75718b7",
+      "cache": "miss",
+      "inputs": {
+        "county": "1b5e87a42140a67be69a93490f9f9c8a0406be36eba9f0c78a2445e3cc8bb72b",
+        "#tables": "50b442e6bf5f8c91a709adcc62abb98feecf6de8fddfe2ff84f119a5f1277455"
+      }
+    }
+  }
+}

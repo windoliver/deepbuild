@@ -1,0 +1,24 @@
+{
+  "id": "deepbuild/asset-tools",
+  "version": "1.0.0",
+  "digest": "d1:a1fdb84f1452a4a220f1ac078c7b008edcd6e017f00d2e30218eb71fc0b76575",
+  "checks": [
+    "data.derived"
+  ],
+  "jobs": [
+    "table.derive"
+  ],
+  "job_tools": [
+    {
+      "kind": "table.derive",
+      "tool": "table-derive@1.0.0"
+    }
+  ],
+  "requires": {
+    "preview": [
+      "deep.registerCheck",
+      "deep.registerJob",
+      "deep.registerJobTool"
+    ]
+  }
+}

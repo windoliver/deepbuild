@@ -1,0 +1,136 @@
+{
+  "inputs": {
+    "counties-pay.csv": "a36de293e201c15e0516d69ac6f10fbfec1131886b7c7a4e36961cbd7c27947b",
+    "metros.csv": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d"
+  },
+  "right": {
+    "outputs": {
+      "table": "0a6ba81109226e6cf3b7fd7dd7249f7e6373bc6b0c898893a6f4a7bbe043bbcc",
+      "lineage": "5984acc8dac18af06f40cfa8a10b2f411686bb0b371cb6ffc258312d3856b5dd",
+      "receipt": "33e45da4dd3818b5b249d972a9cfe8a5521604ce59fe106e9ab0e6476af45650",
+      "record": "8afed4b379eb3f88c475564e3758210259e11f61c25876f81d78c263f92c725d"
+    },
+    "table": "metro,workers,payroll,counties\nA,250,8691357.899999999,4\nB,307,10000001.120000001,2\n",
+    "receipt": {
+      "rows_in": 6,
+      "rows_out": 2,
+      "dropped": 0,
+      "skipped": {},
+      "nonfinite": {}
+    },
+    "lineage": {
+      "format": 1,
+      "key": "metro",
+      "inputs": {
+        "county": {
+          "sha256": "a36de293e201c15e0516d69ac6f10fbfec1131886b7c7a4e36961cbd7c27947b",
+          "key": "county"
+        },
+        "metro": {
+          "sha256": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+          "key": "link"
+        }
+      },
+      "columns": {
+        "metro": {
+          "unit": null,
+          "reads": [
+            {
+              "input": "metro",
+              "column": "metro"
+            }
+          ]
+        },
+        "workers": {
+          "unit": "workers",
+          "reads": [
+            {
+              "input": "county",
+              "column": "manufacturing"
+            }
+          ]
+        },
+        "payroll": {
+          "unit": "dollars",
+          "reads": [
+            {
+              "input": "county",
+              "column": "payroll"
+            }
+          ]
+        },
+        "counties": {
+          "unit": "count",
+          "reads": [
+            {
+              "input": "metro",
+              "column": "metro"
+            }
+          ]
+        }
+      },
+      "rows": {
+        "A": {
+          "county": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          "metro": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "B": {
+          "county": [
+            "5",
+            "6"
+          ],
+          "metro": [
+            "5",
+            "6"
+          ]
+        }
+      }
+    }
+  },
+  "sums_in_f32": {
+    "status": "failed",
+    "check": "data.derived",
+    "outcome": "failed",
+    "reason": "sums-in-f32@1.0.0's output fails table.derive's output check data.derived (failed: data.derived: payroll for metro A: the job wrote 8691358 and the recount reads 8691357.9; data.derived: payroll for metro B: the job wrote 10000001 and the recount reads 10000001.120000001; data.derived: payroll: the table's total plus what was dropped or skipped isn't the total of payroll in county); nothing was kept, so no item can name it",
+    "receipt": {
+      "kind": "table.derive",
+      "tool": "sums-in-f32@1.0.0",
+      "key": "a766ce6b18bb0d3da1c3a68e560314c9566c6ef72a2675d303c9092979dabae1",
+      "build": "d1:c395df58360405d05f46f7931e119ec4c62964ed4bb0251b947c6424a0e4bf1a",
+      "cache": "miss",
+      "inputs": {
+        "county": "a36de293e201c15e0516d69ac6f10fbfec1131886b7c7a4e36961cbd7c27947b",
+        "metro": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+        "#tables": "ee915c4e1393e6d131dfa6bd3404950e570375e80ea39a0fbb0b01929b39ad4b"
+      }
+    }
+  },
+  "counts_row_twice": {
+    "status": "failed",
+    "check": "data.derived",
+    "outcome": "failed",
+    "reason": "counts-row-twice@1.0.0's output fails table.derive's output check data.derived (failed: data.derived: workers for metro B: the job wrote 347 and the recount reads 307; data.derived: payroll for metro B: the job wrote 11234569.010000002 and the recount reads 10000001.120000001; data.derived: counties for metro B: the job wrote 3 and the recount reads 2; data.derived: workers: the table's total plus what was dropped or skipped isn't the total of manufacturing in county; data.derived: payroll: the table's total plus what was dropped or skipped isn't the total of payroll in county); nothing was kept, so no item can name it",
+    "receipt": {
+      "kind": "table.derive",
+      "tool": "counts-row-twice@1.0.0",
+      "key": "7d6ff26fefe3637eb65c31e9ea58c0331bc48acab01ac11dd5fc985edd35bc57",
+      "build": "d1:620ed3b18f13659c68456b96acf0460fa2cbdf2b3751c5310ef92a22ea971402",
+      "cache": "miss",
+      "inputs": {
+        "county": "a36de293e201c15e0516d69ac6f10fbfec1131886b7c7a4e36961cbd7c27947b",
+        "metro": "65e3d5d869f7c1f7c69673793c66a4fcc12849465d99b440052dbee932e5551d",
+        "#tables": "ee915c4e1393e6d131dfa6bd3404950e570375e80ea39a0fbb0b01929b39ad4b"
+      }
+    }
+  }
+}
