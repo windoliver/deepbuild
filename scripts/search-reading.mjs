@@ -69,6 +69,8 @@ async function learn(root, claims) {
 function mcp(env, cwd, started) {
   const child = spawn(process.execPath, [CLI, 'mcp'], { cwd, env, stdio: ['pipe', 'pipe', 'ignore'] });
   started.push(child);
+  // A write after deep mcp exits fails the ask through the exit below, never the process.
+  child.stdin.on('error', () => {});
   const replies = new Map();
   const waiting = new Map();
   child.once('exit', () => { for (const fail of [...waiting.values()]) fail(); });
@@ -139,9 +141,10 @@ async function main(file) {
     await new Promise((ready, fail) => {
       const timer = setTimeout(() => fail(Error(`the hub did not start in 120 s: ${log.slice(0, 2000)}`)), 120_000);
       let first = '';
-      hub.stdout.setEncoding('utf8').on('data', (d) => {
+      hub.stdout.setEncoding('utf8').on('data', function line(d) {
         first += d;
         if (!first.includes('\n')) return;
+        hub.stdout.off('data', line);
         clearTimeout(timer);
         let said;
         try { said = JSON.parse(first.split('\n')[0]); } catch { /* not the ready line */ }
