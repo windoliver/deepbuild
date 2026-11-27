@@ -76,6 +76,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         },
         dof: deep_scene3d_render::dof::Planted {
             linear_coc: p == Some(Planted::CocLinearInDistance),
+            reads_shared_before_write: p == Some(Planted::DofReadsSharedBeforeWrite),
         },
         local_tone: deep_scene3d_render::local_tone::Planted {
             edge_blind: p == Some(Planted::LocalBaseIgnoresEdges),
