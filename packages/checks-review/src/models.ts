@@ -7,7 +7,6 @@ import type { KindBudget } from '@deepbuild/conformance';
 import type { JobRecord } from '@deepbuild/runner';
 import type { ClaimCheck, Run } from '@deepbuild/verdicts';
 
-/** The session that made the change: its route as its adapter recorded it at its start, or null where no start recorded one (#1886). */
 export interface ChangeSession { agent: string; transcript: string; route: SessionRoute | null }
 export interface ReviewAt { claim: string; commit: string; check: ClaimCheck }
 export interface Independence { answered: string; change: string; counted: boolean; reason: string | null; note: string | null }
@@ -60,7 +59,6 @@ export function independence(answeredRaw: string, change: ChangeSession, plant?:
   const canon = plant === 'raw-names' ? (m: string) => m : canonicalModel;
   const family = (m: string): string | undefined => familyOf(plant === 'raw-family' ? m : canonicalModel(m));
   const proxied = plant !== 'trusts-proxied-transcript' && PROXIED.some((k) => change.route?.[k]);
-  // A route no start recorded may be a proxy's: the transcript's model is then nobody's word (#1886).
   const unrecorded = change.route == null;
   const named = proxied || unrecorded ? undefined : transcriptModel(change.transcript);
   const changeModel = named === undefined ? 'unknown' : canon(named);

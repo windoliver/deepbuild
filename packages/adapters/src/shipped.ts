@@ -111,10 +111,7 @@ export const claudeParts: AdapterParts = {
   unsupported: TERMINAL_ONLY,
   doctor: () => notChecked('claude'),
   readUsage: readClaudeUsage,
-  // Behind a base URL of its own the transcript's model is the endpoint's word, not the provider's: Anthropic's, or one
-  // for any other provider Claude Code reaches (most often an LLM gateway), each read as ANTHROPIC_BASE_URL. Foundry's
-  // own resource URL reads so too, which errs toward a moved route. A provider reached at its default endpoint names
-  // its own models.
+  // Behind a base URL of its own the transcript's model is the proxy's word; Bedrock and Vertex name their own models.
   routeAtStart: (env) => ({
     ...Object.fromEntries(['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'].map((k) => [k, !!env[k]])),
     ANTHROPIC_BASE_URL: ['ANTHROPIC_BASE_URL', 'ANTHROPIC_BEDROCK_BASE_URL', 'ANTHROPIC_VERTEX_BASE_URL', 'ANTHROPIC_FOUNDRY_BASE_URL', 'ANTHROPIC_AWS_BASE_URL', 'ANTHROPIC_BEDROCK_MANTLE_BASE_URL', 'ANTHROPIC_GOOGLE_CLOUD_BASE_URL'].some((k) => !!env[k]),
@@ -164,23 +161,17 @@ export const codexParts: AdapterParts = {
   doctor: () => notChecked('codex'),
   readUsage: readCodexUsage,
   // Codex's model provider, from its config.toml, and OPENAI_BASE_URL: each other than the default moves its route.
-  // The file is read whole, never parsed (#1886): any provider other than OpenAI's, a profile, a profiles or provider
-  // table, or a base URL or OSS provider key, wherever it stands, reads as moved, so a config this misreads errs toward
-  // a moved route. Command-line overrides and config layers other than this home's are not seen, and with no
-  // CODEX_HOME named there's no config to read, so the route reads moved.
   routeAtStart: (env) => {
     const home = env.CODEX_HOME;
     if (!home) return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: true };
     let moved = false;
     try {
       const config = readFileSync(join(home, 'config.toml'), 'utf8');
-      // A bare or quoted key, and a basic or a literal TOML string.
       const providers = [...config.matchAll(/^\s*(?:model_provider|"model_provider"|'model_provider')\s*=\s*(?:"([^"]*)"|'([^']*)')/gm)].map((m) => m[1] ?? m[2]);
       moved = providers.some((p) => p !== 'openai')
         || /^\s*["']?(?:profile|profiles|model_providers|openai_base_url|chatgpt_base_url|oss_provider)["']?\s*[.=]/m.test(config)
         || /^\s*\[{1,2}\s*["']?(?:profiles|model_providers)["']?\s*[.\]]/m.test(config);
     } catch (error) {
-      // No config is the default provider; one that can't be read is no word for it.
       moved = (error as NodeJS.ErrnoException).code !== 'ENOENT';
     }
     return { OPENAI_BASE_URL: !!env.OPENAI_BASE_URL, model_provider: moved };

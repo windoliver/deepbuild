@@ -315,7 +315,6 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       data = { agent, worktree: meta.cwd || '-', branch: null, thread: meta.session || '-', loads: [] };
       // Which billing keys the agent had set, never their values.
       if (request.billing) data.billing = request.billing;
-      // The route to its model, read once here by its adapter from the keys the start reported set (#1886).
       if (request.route) {
         const route = routeAt(name, request.route, request.billing ?? {}, meta.transcript);
         if (route) data.route = route;
@@ -530,17 +529,11 @@ function errorLine(error: string): string {
   return own.find((l) => /^(!|error\b|fatal\b|\w*(Error|Exception)\b)/i.test(l)) ?? own[0] ?? '';
 }
 
-/**
- * A session's route as its adapter reads it at its start (#1886): from the route and billing keys its SessionStart
- * reported set, true or false and never a value, and, for Codex's model provider, the config in its home, the folder
- * its rollout sits under, none read as moved; undefined for an adapter that reads none.
- */
 function routeAt(name: string, route: Record<string, boolean>, billing: Record<string, boolean>, transcript: string): Record<string, boolean> | undefined {
   const read = registry().get(name).routeAtStart;
   if (!read) return undefined;
   const env: Record<string, string | undefined> = {};
   for (const [key, set] of Object.entries({ ...billing, ...route })) env[key] = set ? '1' : undefined;
-  // Only the home its rollout sits under, never a reported key's or the hub's own, which is no word for the agent's.
   const at = transcript.lastIndexOf('/sessions/');
   env.CODEX_HOME = at > 0 ? transcript.slice(0, at) : undefined;
   return read(env);

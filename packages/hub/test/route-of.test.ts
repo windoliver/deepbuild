@@ -1,6 +1,3 @@
-// The route a review reads a session's model on (#1886): every start the session's record keeps counts, so a session
-// started behind a proxy and resumed on the agent's own route still reads as proxied, since its transcript may name the
-// proxy's model; one whose start recorded no route, or with no start, has none, and its model reads as unknown.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

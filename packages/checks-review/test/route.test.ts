@@ -1,6 +1,3 @@
-// A transcript's model is trusted only on a route its session's start recorded as the agent's own (#1886): a session
-// whose start recorded no route may be behind a proxy, so its model is unknown and a review of it counts neither way
-// (AGENTS.md invariant 2).
 import { expect, it } from 'vitest';
 import { independence } from '../src/models.js';
 

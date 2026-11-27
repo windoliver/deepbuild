@@ -1,6 +1,3 @@
-// A session's route is read once at its start (#1886): from the variables its SessionStart reports set, through its
-// adapter's routeAtStart, onto the session.start the record keeps, true or false and never a value. The hub is real,
-// on a temp home, and each request is the line deep-hook sends.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -39,10 +36,7 @@ describe('the route a session started on', () => {
       };
       await start(PROXIED, { ANTHROPIC_BASE_URL: true, OPENAI_BASE_URL: false });
       await start(OWN, { ANTHROPIC_BASE_URL: false, OPENAI_BASE_URL: false });
-      // A base URL for any of Claude Code's other providers, each alone: its endpoint's word is the proxy's, as Anthropic's is.
       for (const g of GATEWAYS) await start(g.id, { ANTHROPIC_BASE_URL: false, [g.key]: true, OPENAI_BASE_URL: false });
-      // Codex sessions whose home, the folder its rollout sits under, sets a model provider other than OpenAI's, in a
-      // basic and in a literal TOML string, and under a quoted key.
       const codex = async (id: string, folder: string, config: string | null, rolloutAt?: string, route: Record<string, boolean> = {}) => {
         const codexHome = join(home, folder);
         const day = rolloutAt ?? join(codexHome, 'sessions', '2026', '11', '22');
@@ -61,27 +55,17 @@ describe('the route a session started on', () => {
       await codex(CODEX, '.codex-work', 'model_provider = "ollama"\n');
       await codex(LITERAL, '.codex-literal', "model_provider = 'ollama'\n");
       await codex(QUOTED, '.codex-quoted', '"model_provider" = "ollama"\n');
-      // A provider a profile names: the first profile's says OpenAI's, the selected one's doesn't.
       await codex(PROFILE, '.codex-profile', 'profile = "work"\n\n[profiles.a]\nmodel_provider = "openai"\n\n[profiles.work]\nmodel_provider = "ollama"\n');
-      // Codex's own route: OpenAI's provider beside a table of other settings, and no config at all.
       await codex(OPENAI, '.codex-openai', 'model_provider = "openai"\n\n[tui]\nnotifications = true\n');
       await codex(NO_CONFIG, '.codex-none', null);
-      // A provider after a value whose lines start with a bracket, and OpenAI's own base URL moved by a provider table.
       await codex(AFTER_ARRAY, '.codex-array', 'notify = [\n  ["say", "done"],\n]\nmodel_provider = "ollama"\n');
       await codex(BASE_URL, '.codex-base', '[model_providers.openai]\nbase_url = "http://127.0.0.1:9/v1"\n');
-      // Each other key or line that may move the route, on its own.
       for (const [i, m] of MOVED.entries()) await codex(m.id, `.codex-moved-${i}`, m.config);
-      // A config that can't be read is no word for the default provider.
       mkdirSync(join(home, '.codex-unreadable', 'config.toml'), { recursive: true });
       await codex(UNREADABLE, '.codex-unreadable', null);
-      // A start whose rollout names no Codex home: the hub's own home, on OpenAI's provider here, is no word for the
-      // agent's, which may sit elsewhere.
       await codex(NO_ROLLOUT, '.codex', 'model_provider = "openai"\n', join(home, 'elsewhere'));
-      // A reported key never names the home: a line that says CODEX_HOME is set still has no home its rollout names.
       await codex(NAMED_HOME, '.codex', 'model_provider = "openai"\n', join(home, 'elsewhere'), { CODEX_HOME: true, HOME: true });
-      // An ordinary config on OpenAI's provider: its tables move nothing.
       await codex(TYPICAL, '.codex-typical', 'approval_policy = "on-request"\nsandbox_mode = "workspace-write"\n\n[tui]\nnotifications = true\n\n[mcp_servers.docs]\ncommand = "npx"\nargs = ["-y", "docs-mcp"]\n\n[projects."/work"]\ntrust_level = "trusted"\n\n[history]\npersistence = "save-all"\n');
-      // A start whose line reports no route, as an older deep-hook sends it: the record keeps none, never "own route".
       const old = session(home, UNREPORTED);
       expect(await send(join(root, 'hub.sock'), hookLine(ulid(Date.now()), 'SessionStart', old.payload('SessionStart', { source: 'startup' }), { ppid: process.pid, billing: { ANTHROPIC_API_KEY: false } }))).toContain('"ack"');
       expect(await recorded(root, UNREPORTED, 'session.start', 1), 'the unreported session.start is recorded').toBe(1);

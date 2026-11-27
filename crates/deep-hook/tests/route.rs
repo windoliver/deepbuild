@@ -1,10 +1,8 @@
-// What SessionStart reports of the route to the agent's model (#1886), in its own test binary beside cli.rs.
 use std::io::Write;
 use std::process::Command;
 
 #[test]
 fn a_session_start_reports_whether_each_route_variable_is_set_never_its_value() {
-    // #1886: the route to the agent's model is read from what SessionStart reports set, as billing keys are.
     let url = "http://127.0.0.1:9/dh1886-bridge";
     let start = |case: &str, env: &[(&str, &str)]| {
         let home = std::env::temp_dir().join(format!("dh1886-route-{case}-{}", std::process::id()));
@@ -42,7 +40,6 @@ fn a_session_start_reports_whether_each_route_variable_is_set_never_its_value() 
         behind.contains(r#""route":{"ANTHROPIC_BASE_URL":true,"ANTHROPIC_BEDROCK_BASE_URL":false,"ANTHROPIC_VERTEX_BASE_URL":false,"ANTHROPIC_FOUNDRY_BASE_URL":false,"ANTHROPIC_AWS_BASE_URL":false,"ANTHROPIC_BEDROCK_MANTLE_BASE_URL":false,"ANTHROPIC_GOOGLE_CLOUD_BASE_URL":false,"OPENAI_BASE_URL":false}"#),
         "the SessionStart says which route variables are set: {behind:?}"
     );
-    // An empty variable moves no route, as Claude Code and Codex read it.
     let empty = start(
         "empty",
         &[("ANTHROPIC_BASE_URL", ""), ("OPENAI_BASE_URL", url)],
@@ -51,7 +48,6 @@ fn a_session_start_reports_whether_each_route_variable_is_set_never_its_value() 
         empty.contains(r#""route":{"ANTHROPIC_BASE_URL":false,"ANTHROPIC_BEDROCK_BASE_URL":false,"ANTHROPIC_VERTEX_BASE_URL":false,"ANTHROPIC_FOUNDRY_BASE_URL":false,"ANTHROPIC_AWS_BASE_URL":false,"ANTHROPIC_BEDROCK_MANTLE_BASE_URL":false,"ANTHROPIC_GOOGLE_CLOUD_BASE_URL":false,"OPENAI_BASE_URL":true}"#),
         "an empty variable reads unset: {empty:?}"
     );
-    // A base URL for any of Claude Code's other providers moves the route as Anthropic's does, each reported alone.
     for key in [
         "ANTHROPIC_BEDROCK_BASE_URL",
         "ANTHROPIC_VERTEX_BASE_URL",

@@ -39,7 +39,6 @@ export interface CommandRun extends CheckResult {
   timing: { repeat: number; flushed: boolean }[] | null;
   clock: number;
 }
-/** The session a review reads the change's model of: its transcript, and the route its adapter read at its starts, null where a start recorded none (#1886). */
 export interface ReviewOf {
   claim: string; task: string; agent: string; transcript: string | undefined; pr?: string | undefined; route: SessionRoute | null;
   /** How many of a PR's bugs a review pass found on a replay the record keeps under `key` for `model` (#2748); undefined when it keeps none. */
