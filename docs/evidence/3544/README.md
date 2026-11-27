@@ -82,3 +82,9 @@ a load of 28 to 46:
 | `packages/cli/test/cli.test.ts` | 51 of 52 pass; one reads BLOCKED, no Node older than 24.22.0 on this machine |
 | `tests/acceptance/1812/hub-start.test.ts`, `hub-down.test.ts` | 1 passes; `hub-down` reads BLOCKED on a command its own table doesn't list, `deep host add` |
 | `tests/acceptance/2570/` (`deep hub start` beside a hub that is exiting) | 4 pass, 3 fail; the same 3 fail on the base `2edb19ff4`, run in the same grant: their own `deep hub stop --root` step gets no answer in 15 s |
+
+## Again on the branch's last tree
+
+Main was merged once more and took `server.ts`'s last free line, so the replay's state moved out of the Hub class
+(`77f42ae64`). On that tree's own build, under one test grant, load 26 to 35: the suite passes 6 of 6 in 57.8 s, and
+each of the six twins fails its test at the same assertion as above.
