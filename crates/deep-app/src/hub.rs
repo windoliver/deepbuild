@@ -39,9 +39,6 @@ pub fn address() -> PathBuf {
     configured_address().unwrap_or_else(|| root().join("hub.sock"))
 }
 
-/// The control token file of the hub at `socket` (#2958): the one beside the socket, as a hub run with `--root`
-/// writes it, else the installed root's, as a forwarded socket has none beside it (#16 AC2). Every hello the app and
-/// the replica say takes its token from here.
 pub fn token(socket: &Path) -> PathBuf {
     let file = "control.token";
     socket
@@ -317,8 +314,6 @@ impl HubClient {
 mod tests {
     use super::{root, token};
 
-    /// A socket with no token beside it, as a forwarded one, takes the installed root's; once a hub run with
-    /// `--root` writes one beside its socket, that one (#2958).
     #[test]
     fn the_token_beside_the_socket_else_the_installed_roots() {
         let installed = token(&root().join("hub.sock"));

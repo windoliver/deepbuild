@@ -449,7 +449,6 @@ impl View {
 #[derive(Default)]
 pub struct RecordReader {
     socket: PathBuf,
-    /// The token file it presents; `None` for the hub's own, picked again at each connect (#2958).
     token_file: Option<PathBuf>,
     client: Option<HubClient>,
     view: View,
@@ -477,8 +476,7 @@ impl RecordReader {
 
     /// Issue #1172: as [`RecordReader::unopened`], for the window: its sidebar and session pages read the folded
     /// record, so each new read also folds what the record held before the app or the hub started. Issue #41: it
-    /// calls nothing on a hub whose hello doesn't cover what the app calls. Issue #2958: it presents the token of the
-    /// hub at `socket`, picked at each connect, so a hub started after the app is answered too.
+    /// calls nothing on a hub whose hello doesn't cover what the app calls.
     pub fn unopened_folded(socket: &Path) -> RecordReader {
         RecordReader {
             socket: socket.to_path_buf(),
@@ -1070,8 +1068,6 @@ pub fn history() -> Vec<Value> {
 mod tests {
     use super::*;
 
-    /// Issue #2958: the window's reader, made before a hub run with `--root` started, presents the token that hub
-    /// wrote beside its socket once it answers, never the one picked when the app started.
     #[test]
     fn the_windows_reader_presents_the_token_of_a_hub_started_after_it() {
         use std::io::{BufRead, BufReader, Write};
@@ -1108,7 +1104,6 @@ mod tests {
         let hello = heard.recv_timeout(Duration::from_secs(10));
         std::fs::remove_dir_all(&dir).unwrap();
         let hello = hello.expect("the reader said hello to the hub at its socket");
-        // Never the token itself in the message: a wrong one is the installed root's.
         assert!(
             hello["token"] == "the later hub's token",
             "the reader presented another token than the one beside the socket"

@@ -116,7 +116,6 @@ pub fn start(views: Vec<String>, window: AnyWindowHandle, socket: &Path, cx: &mu
     .detach();
 }
 
-/// A connection as the app, presenting the token of the hub at `socket`, picked at each connect (#2958).
 fn connect(socket: &Path) -> Result<HubClient, HubError> {
     let token = std::fs::read_to_string(crate::hub::token(socket))?;
     let mut client = HubClient::connect(socket)?;
