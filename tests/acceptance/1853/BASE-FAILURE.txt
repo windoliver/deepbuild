@@ -1,0 +1,155 @@
+# #1853 acceptance tests on the base 118ec119f (origin/main), 2026-11-23, macOS, Node 24.22.0, before any source change.
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/1853 --no-file-parallelism   (exit 1: 7 of 7 fail, each at an assertion)
+# Home and worktree paths redacted.
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1853
+
+ ❯ evidence.test.ts (2 tests | 2 failed) 8544ms
+   ❯ AC3 #1853.873fd8fa deep.evidence.put of a file in its granted folder returns its sha256 and the store holds it with the extension as origin; a file outside its grant is refused, naming the path (2)
+     × AC3 a file in the package's folder: its sha256 comes back, and the store holds its bytes with test/caller as origin 6441ms
+     × AC3 a file outside the grant is refused, naming its path, and isn't stored 1616ms
+ ❯ asks.test.ts (3 tests | 3 failed) 5887ms
+   ❯ AC1 #1853.01b6e40d a test extension's deep.asks.create with a choice ask opens an ask in Needs you, written as that extension (1)
+     × AC1 the choice ask is in Needs you, and its ask.created is written as ext:test/caller 2028ms
+   ❯ AC2 #1853.0137571d an ask the extension creates that carries an answer or an outcome is refused, naming the field (2)
+     × AC2 an ask carrying answer is refused, naming answer, and no ask opens 1687ms
+     × AC2 an ask carrying outcome is refused, naming outcome, and no ask opens 1862ms
+ ❯ walk.test.ts (2 tests | 2 failed) 5410ms
+   ❯ AC4 #1853.de6b19fd the walk of every published method, holding each method's grant, ends with 0 calls in the host's not-wired error (1)
+     × AC4 every published method is called once, and none ends in "isn't wired into this host yet" 3073ms
+   ❯ AC5 #1853.f5e2722b a planted published method that needs no grant and has no case in the host fails the walk, naming the method (1)
+     × AC5 (wrong program) the planted host's deep.planted.unwired ends in the not-wired error and the walk names it 2128ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  asks.test.ts > AC1 #1853.01b6e40d a test extension's deep.asks.create with a choice ask opens an ask in Needs you, written as that extension > AC1 the choice ask is in Needs you, and its ask.created is written as ext:test/caller
+AssertionError: deep.asks.create answers the choice ask: expected { outcome: 'error', …(1) } to deeply equal { outcome: 'ok', error: null }
+
+- Expected
++ Received
+
+  {
+-   "error": null,
+-   "outcome": "ok",
++   "error": "deep.asks.create isn't wired into this host yet",
++   "outcome": "error",
+  }
+
+ ❯ asks.test.ts:13:103
+     11|     const { w, h } = await openHost();
+     12|     const [call] = await callAs(h, [{ method: 'deep.asks.create', args…
+     13|     expect({ outcome: call?.outcome, error: call?.error }, 'deep.asks.…
+       |                                                                                                       ^
+     14|     const handle = call!.value as string;
+     15|     expect(handle, 'deep.asks.create returns the ask\'s handle').toMat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  asks.test.ts > AC2 #1853.0137571d an ask the extension creates that carries an answer or an outcome is refused, naming the field > AC2 an ask carrying answer is refused, naming answer, and no ask opens
+ FAIL  asks.test.ts > AC2 #1853.0137571d an ask the extension creates that carries an answer or an outcome is refused, naming the field > AC2 an ask carrying outcome is refused, naming outcome, and no ask opens
+AssertionError: the refusal is the asks core's, not the host's not-wired error: expected 'deep.asks.create isn\'t wired into th…' not to contain 'isn\'t wired into this host yet'
+
+Expected: "isn't wired into this host yet"
+Received: "deep.asks.create isn't wired into this host yet"
+
+ ❯ asks.test.ts:30:105
+     28|       const [call] = await callAs(h, [{ method: 'deep.asks.create', ar…
+     29|       expect(call?.outcome, 'the ask is refused').toBe('error');
+     30|       expect(call?.error ?? '', 'the refusal is the asks core\'s, not …
+       |                                                                                                         ^
+     31|       expect(call?.error ?? '', `the refusal names the field ${field}`…
+     32|       const opened = (await w.events('ask.created')).filter((e) => (e.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  evidence.test.ts > AC3 #1853.873fd8fa deep.evidence.put of a file in its granted folder returns its sha256 and the store holds it with the extension as origin; a file outside its grant is refused, naming the path > AC3 a file in the package's folder: its sha256 comes back, and the store holds its bytes with test/caller as origin
+AssertionError: deep.evidence.put stores the file: expected { outcome: 'error', …(1) } to deeply equal { outcome: 'ok', error: null }
+
+- Expected
++ Received
+
+  {
+-   "error": null,
+-   "outcome": "ok",
++   "error": "deep.evidence.put isn't wired into this host yet",
++   "outcome": "error",
+  }
+
+ ❯ evidence.test.ts:15:97
+     13|     const bytes = readFileSync(join(FIXTURES, 'caller', 'evidence.txt'…
+     14|     const [call] = await callAs(h, [{ method: 'deep.evidence.put', arg…
+     15|     expect({ outcome: call?.outcome, error: call?.error }, 'deep.evide…
+       |                                                                                                 ^
+     16|     expect(call?.value, 'it returns the file\'s sha256').toBe(sha256(b…
+     17|     const held = await w.evidence.get(sha256(bytes));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  evidence.test.ts > AC3 #1853.873fd8fa deep.evidence.put of a file in its granted folder returns its sha256 and the store holds it with the extension as origin; a file outside its grant is refused, naming the path > AC3 a file outside the grant is refused, naming its path, and isn't stored
+AssertionError: the refusal is the grant's, not the host's not-wired error: expected 'deep.evidence.put isn\'t wired into t…' not to contain 'isn\'t wired into this host yet'
+
+Expected: "isn't wired into this host yet"
+Received: "deep.evidence.put isn't wired into this host yet"
+
+ ❯ evidence.test.ts:30:99
+     28|     const [call] = await callAs(h, [{ method: 'deep.evidence.put', arg…
+     29|     expect(call?.outcome, 'the put is refused').toBe('error');
+     30|     expect(call?.error ?? '', 'the refusal is the grant\'s, not the ho…
+       |                                                                                                   ^
+     31|     expect(call?.error ?? '', 'the refusal names the path').toContain(…
+     32|     expect(await w.evidence.get(sha256(readFileSync(outside))), 'the o…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  walk.test.ts > AC4 #1853.de6b19fd the walk of every published method, holding each method's grant, ends with 0 calls in the host's not-wired error > AC4 every published method is called once, and none ends in "isn't wired into this host yet"
+AssertionError: calls in the not-wired error: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep.evidence.put: deep.evidence.put isn't wired into this host yet",
++   "deep.asks.create: deep.asks.create isn't wired into this host yet",
++ ]
+
+ ❯ walk.test.ts:17:140
+     15|     expect(EXTENSION_API.map((m) => m.method).sort(), 'the host\'s sch…
+     16|     const calls = await walk(EXTENSION_API);
+     17|     expect(calls.filter((c) => (c.error ?? '').includes(NOT_WIRED)).ma…
+       |                                                                                                                                            ^
+     18|     expect(walkProblems(EXTENSION_API, calls), 'every method was calle…
+     19|   }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  walk.test.ts > AC5 #1853.f5e2722b a planted published method that needs no grant and has no case in the host fails the walk, naming the method > AC5 (wrong program) the planted host's deep.planted.unwired ends in the not-wired error and the walk names it
+AssertionError: the planted method is published and reaches the host, which has no case for it: expected { outcome: 'missing', error: null } to deeply equal { outcome: 'error', …(1) }
+
+- Expected
++ Received
+
+  {
+-   "error": StringContaining "deep.planted.unwired isn't wired into this host yet",
+-   "outcome": "error",
++   "error": null,
++   "outcome": "missing",
+  }
+
+ ❯ walk.test.ts:28:8
+     26|     const call = calls.find((c) => c.method === PLANTED.method);
+     27|     expect({ outcome: call?.outcome, error: call?.error }, 'the plante…
+     28|       .toEqual({ outcome: 'error', error: expect.stringContaining(`${P…
+       |        ^
+     29|     expect(walkProblems(schema, calls), 'the walk fails, naming the pl…
+     30|   }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  7 failed (7)
+   Start at  20:24:46
+   Duration  25.23s (tests 82%, transform 12%, import 6%)
+

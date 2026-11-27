@@ -5,7 +5,8 @@
 // asks for a budget window (section 12a): once one is due, a timed grant that waits for every slot to empty, around budget-window.mjs.
 // `throttle.mjs load [--report]` reads the machine's load by who made it (#3067), its GPU time and the cores idle beside
 // the requests in line (#3240), and the threads under each grant (#3550): a sample a minute, and their table.
-// An affected.mjs run's test grant is its admission, and its jobs take turns on one pool of job tokens (#3221).
+// An affected.mjs run's test grant is its admission, and its jobs take turns on one pool of job tokens (#3221). A build
+// asked for under no grant is admitted as a run is and takes a turn on that pool, as a run of one job (#3549).
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, closeSync, existsSync, linkSync, mkdirSync, mkdtempSync, constants as modes, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeFileSync, writeSync } from 'node:fs';
@@ -13,9 +14,10 @@ import { constants, cpus, freemem, homedir, loadavg, tmpdir, totalmem, userInfo 
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The Mac has one bay pair and one build at a time; the Spark, Linux, has the cores for more. test's number is its
-// ceiling: a test grant past the first starts only while the machine's readings leave room (roomForTest).
-const LIMITS = process.platform === 'darwin' ? { build: 1, 'bay-pair': 1, test: 2, timed: 1 } : { build: 2, 'bay-pair': 3, test: 6, timed: 1 };
+// The Mac has one bay pair; the Spark, Linux, has the cores for more. test's and build's numbers are ceilings: a grant
+// past the class's first starts only while the machine's readings leave room (roomForTest), and the pool bounds what
+// the admitted builds and runs run at once (#3221, #3549).
+const LIMITS = process.platform === 'darwin' ? { build: 4, 'bay-pair': 1, test: 2, timed: 1 } : { build: 6, 'bay-pair': 3, test: 6, timed: 1 };
 const CLASSES = Object.keys(LIMITS);
 const POLL_MS = 200;
 // A CLI grant's default bound, in minutes: the longest full run seen on the Spark was about 9 hours.
@@ -32,11 +34,12 @@ const SETTLING_MS = 5 * 60_000;
  * Whether another test grant may start beside `held` (the table's test grants), by `readings` of the machine: the
  * first always may; past it, while fewer than the ceiling hold, the load is under the cores and the memory available,
  * less a run's for each held grant still settling (or of no known time), leaves room for one more run. Without
- * readings, as for a test's own table given none, only the ceiling decides.
+ * readings, as for a test's own table given none, only the ceiling decides. A build under no grant is decided as a run
+ * is, beside the table's build grants and under `ceiling`, the build class's (#3549).
  */
-export function roomForTest(held, readings, now = Date.now(), run = false) {
+export function roomForTest(held, readings, now = Date.now(), run = false, ceiling = LIMITS.test) {
   if (!held.length) return true;
-  if (held.length >= LIMITS.test) return false;
+  if (held.length >= ceiling) return false;
   if (!readings) return true;
   const { memory, load, cores } = readings;
   const settling = held.filter((grant) => !(now - grant.at >= SETTLING_MS)).length;
@@ -338,7 +341,10 @@ function grantable(table, procs, request, seen) {
   if (first?.id !== request.id) return false;
   if (request.class !== 'timed') {
     if (!request.nested && draining) return false;
-    if (request.class !== 'test') return held < LIMITS[request.class];
+    if (request.class === 'bay-pair') return held < LIMITS['bay-pair'];
+    // A build under no grant is admitted as a run is, without the load (#3549). Only the request first in line under
+    // its ceiling comes this far, so a line of builds, each looking five times a second, doesn't read the machine.
+    if (request.class === 'build') return roomForTest(slots, readings(), Date.now(), true, LIMITS.build);
     // A run's admission also waits for the free disk its shards need (#3221).
     return (!request.disk || freeDisk() >= request.disk) && roomForTest(slots, seen, Date.now(), request.run);
   }
@@ -359,22 +365,26 @@ let blocked = [];
  * and is released with it. With `turns` false it takes no turn of the pool inside an admitted run either, as
  * scripts/lease asks (#3238). The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
  * run down while a window is open: a window outlasts a wait, and only its end decides when the next build starts.
+ * A build from a chain that holds no grant is admitted in the wait, then takes a turn of the pool with no limit, as a
+ * run of one job (#3549): its grant names that turn as `turn`, and release gives both back.
  */
 export function acquire(cls, { wait = 30, stall, window = false, run, turns = true } = {}) {
   if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
   const pid = process.pid;
   // A readings variable the table can't take is refused before anything is asked.
   readings();
-  const bound = (stall ?? wait) * 60_000;
-  let deadline = Date.now() + bound, polled = Date.now(), hands;
-  const request = locked((table, procs) => {
+  const bound = (stall ?? wait) * 60_000, asked = Date.now();
+  let deadline = asked + bound, polled = asked, hands;
+  let request = locked((table, procs) => {
     const held = inherited(table, procs, chain(procs, pid));
     const id = randomBytes(8).toString('hex'), start = procs.get(pid).start, seq = () => (table.seq = (table.seq ?? 0) + 1);
     if (held.length && (cls === 'build' || cls === 'test' || (cls === 'timed' && held.some((grant) => grant.class === 'timed')))) {
       // A run asked under a caller's grant is admitted at once, with no slot; inside an admitted run, a request under no
-      // turn waits for one (#3221).
-      const turn = held.some((grant) => grant.class === 'turn');
-      const admitted = !turn && turns && cls !== 'timed' && held.find((grant) => grant.run === true);
+      // turn waits for one (#3221). An admitted build's own turn is no job's: a request under it is as under the
+      // build's grant alone, so a run asked there is admitted and its jobs take their turns (#3549).
+      const builds = held.filter((grant) => grant.class === 'build').map((grant) => grant.id);
+      const turn = held.some((grant) => grant.class === 'turn' && !builds.includes(grant.run));
+      const admitted = !turn && turns && cls !== 'timed' && held.find((grant) => grant.class === 'test' && grant.run === true);
       if (!turn && !admitted && cls === 'test' && run !== undefined) {
         const entry = { id, class: cls, pid, start, nested: true, run: true, used: 0, at: Date.now() };
         table.grants.push(entry);
@@ -395,6 +405,8 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
   if (request.granted) return { class: cls, id: request.granted.id, token: `${cls}:${request.granted.id}`, pass: false };
   // A turn has no wait limit: its run was admitted (#3221).
   if (request.class === 'turn') deadline = Infinity;
+  // An admitted build's grant, while it waits for its turn (#3549).
+  let build = null;
   // A full disk leaves the table as it was (#2869): a waiting request's look whose write fails with ENOSPC is one more
   // look with no grant, and the request keeps its place. Once the wait has run out the ENOSPC is thrown, marked
   // `waited`, rather than no grant returned: the request it couldn't take out of the table stays there until this
@@ -415,8 +427,8 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
       const now = Date.now();
       if ([...table.grants, ...table.requests].some((other) => other.window && other.id !== request.id)) deadline += now - polled;
       polled = now;
-      // A grant of the class taken or given back since the last look starts a stall's bound again.
-      if (stall !== undefined) {
+      // A grant of the class taken or given back since the last look starts a stall's bound again; a turn has no bound.
+      if (stall !== undefined && pending.class !== 'turn') {
         const held = table.grants.filter((other) => other.class === cls).map((other) => other.id).sort().join();
         if (held !== hands) deadline = now + bound;
         hands = held;
@@ -445,22 +457,37 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
       }
       const taken = new Set(table.grants.filter((other) => other.class === cls).map((other) => other.index));
       const index = Array.from({ length: LIMITS[cls] }, (_, k) => k + 1).find((k) => !taken.has(k));
-      const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now, ...pending.run && { run: true, used: 0 } };
+      // A build in the table was asked under no grant, so its grant is an admission, as a run's is (#3549).
+      const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now, ...(pending.run || cls === 'build') && { run: true, used: 0 } };
       table.grants.push(entry);
       const load = loadavg()[0], cores = cpus().length;
-      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, ...stall !== undefined ? { stall } : { wait }, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
-      return entry;
+      // A top-level request's entry says how long it waited since it asked, in milliseconds (#3549).
+      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, ...stall !== undefined ? { stall } : { wait }, ...!entry.nested && { waited: now - asked }, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
+      if (cls !== 'build') return entry;
+      // The admitted build asks for its turn, the one job of its run, in the same write.
+      const turn = { id: randomBytes(8).toString('hex'), class: 'turn', run: entry.id, pid, start: entry.start, nested: true, seq: (table.seq += 1) };
+      table.requests.push(turn);
+      return { admitted: entry, turn };
     });
+    // Once the table holds the admission, the wait is for the turn, with no limit; a write that failed asks again.
+    if (grant?.admitted) {
+      build = grant.admitted;
+      request = grant.turn;
+      deadline = Infinity;
+      continue;
+    }
     if (grant === 'timeout') {
       // The request is out of the table, so a log line a full disk refuses changes nothing.
       try {
-        log({ event: 'timeout', class: cls, id: request.id, pid, ...stall !== undefined ? { stall } : { wait }, ...blocked.length ? { blockers: blocked } : {} });
+        log({ event: 'timeout', class: cls, id: request.id, pid, ...stall !== undefined ? { stall } : { wait }, ...!request.nested && { waited: Date.now() - asked }, ...blocked.length ? { blockers: blocked } : {} });
       } catch (error) {
         if (error.code !== 'ENOSPC') throw error;
       }
       return null;
     }
-    // A turn's command keeps its run's grant as DEEP_THROTTLE, as a job passing through on it always has.
+    // A turn's command keeps its run's grant as DEEP_THROTTLE, as a job passing through on it always has; an admitted
+    // build's is the build's own grant, which names the turn.
+    if (grant?.class === 'turn' && build) return { class: cls, id: build.id, index: build.index, token: `${cls}:${build.id}`, pass: false, turn: grant.id };
     if (grant?.class === 'turn') return { class: 'turn', id: grant.id, run: grant.run, token: process.env.DEEP_THROTTLE, pass: false };
     if (grant) return { class: cls, id: grant.id, index: grant.index, token: `${cls}:${grant.id}`, pass: false };
     sleep(POLL_MS * (0.75 + Math.random() / 2));
@@ -538,11 +565,14 @@ export function release(grant) {
   for (let attempt = 0; ; attempt++) {
     try {
       return locked((table) => {
-        const at = table.grants.findIndex((other) => other.id === grant.id);
-        if (at < 0) return;
-        const [gone] = table.grants.splice(at, 1);
-        served(table, gone);
-        log({ event: 'released', class: grant.class, id: grant.id, pid: process.pid, ...gone.run && { run: gone.run } });
+        // An admitted build gives its turn back, then its grant (#3549).
+        for (const id of grant.turn ? [grant.turn, grant.id] : [grant.id]) {
+          const at = table.grants.findIndex((other) => other.id === id);
+          if (at < 0) continue;
+          const [gone] = table.grants.splice(at, 1);
+          served(table, gone);
+          log({ event: 'released', class: gone.class, id, pid: process.pid, ...gone.run && { run: gone.run } });
+        }
       });
     } catch (error) {
       if (attempt === 9) throw error;
@@ -555,8 +585,8 @@ export function release(grant) {
  * A turn's compiles (#3221): a jobserver of the job's own, GNU make's named pipe through CARGO_MAKEFLAGS, empty at first,
  * since cargo runs its first compile on no token, the turn's. Each look takes back what the pipe holds unread and lends
  * it the pool's free tokens up to an even share, the pool over the turns held less the turn's own, or none while a job
- * waits for a turn. A token a killed build held stays lent until the turn goes back. `look` says false once the turn
- * is gone.
+ * waits for a turn. A token a killed build held stays lent until the turn goes back. `look` says false once the turn,
+ * named by its ID, is gone. An admitted build's turn lends its command a pipe the same way (#3549).
  */
 function lender(turn) {
   const dir = mkdtempSync(join(tmpdir(), 'deep-turn-')), fifo = join(dir, 'tokens');
@@ -579,7 +609,7 @@ function lender(turn) {
       let more;
       try {
         more = locked((table) => {
-          const me = table.grants.find((grant) => grant.id === turn.id);
+          const me = table.grants.find((grant) => grant.id === turn);
           if (!me) return null;
           const turns = table.grants.filter((grant) => grant.class === 'turn');
           me.lent = Math.max(0, me.lent - free);
@@ -984,11 +1014,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
   // A window's record holds how long its grant took and the grants it waited on (#3551).
   const drained = window && JSON.stringify({ drain: Date.now() - asked, waited: plan.waited });
   if (window) log({ event: 'window-open', id: grant.id, pid: process.pid });
-  // A turn's command gets a jobserver of its own, lent from the pool (#3221).
+  // A turn's command gets a jobserver of its own, lent from the pool (#3221), an admitted build's too (#3549).
+  const turn = grant.class === 'turn' ? grant.id : grant.turn;
   let pipe = null;
-  if (grant.class === 'turn') {
+  if (turn) {
     try {
-      pipe = lender(grant);
+      pipe = lender(turn);
       pipe.look();
     } catch (error) {
       try { release(grant); } catch {}
@@ -1055,10 +1086,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== 'l
       } catch {
         return;
       }
-      if (!kept) end(`INCONCLUSIVE throttle: the run of turn ${grant.id} ended while its job ran; the job was stopped\n  Fix: Run it again; its run is gone.`);
+      if (!kept) end(`INCONCLUSIVE throttle: the run of turn ${turn} ended while its job ran; the job was stopped\n  Fix: Run it again; its run is gone.`);
     }, 1_000);
     watch.unref();
-  } else if (!grant.pass && !window) {
+  }
+  // An admitted build holds a grant of its own beside its turn, so it has both watches (#3549).
+  if (grant.class !== 'turn' && !grant.pass && !window) {
     // A monotonic clock, so a machine that slept doesn't count the sleep. A request waits once it was pending at the
     // last look too, so one about to be granted at once doesn't count; and a grant given back early has nothing to end.
     // A job waiting for its turn isn't waiting on a slot, so a run's bound is as #2744 left it.

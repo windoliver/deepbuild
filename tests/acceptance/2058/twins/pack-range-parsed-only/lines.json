@@ -1,0 +1,12 @@
+{
+  "crates/deep-canvas/src/document/packs.rs": [
+    {
+      "find": [
+        "                                if !range.matches(build) {"
+      ],
+      "wrong": [
+        "                                if false && !range.matches(build) {"
+      ]
+    }
+  ]
+}

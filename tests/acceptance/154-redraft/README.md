@@ -94,7 +94,7 @@ Names the issue and the design give are used as given; names they don't are mark
    (the OS confirmation stubbed by `DEEP_HUB_TEST_CONFIRM`), exiting 0 *(chosen: #1819's suite installs
    `deepbuild/bakes` the same way)*. Its job kind is `score.render` on the tool `score-render@1.0.0` (As built).
 2. **A sample library** is a pack folder installed with `deep install <folder>` (#1820): `pack.json` with `id`
-   (`testlib/<name>`), `name`, `version` `1.0.0`, `license`, `description`, `requires: {core: "^1", modules: {media:
+   (`testlib/<name>`), `name`, `version` `1.0.0`, `license`, `description`, `requires: {core: ">=0.0.0", modules: {media:
    "^1"}}` *(chosen)*, `assets` (each take by `path`, `url`, `sha256`, `size`, `license`, `upstream`) and `samples:
    {<preset>: {sustained, zones: [{lo, hi, root, takes: [<asset path>]}]}}` (Score: Fields). Takes are 16-bit mono WAV
    at 48 kHz *(chosen: the design names no take format)*, served by the world's take server.

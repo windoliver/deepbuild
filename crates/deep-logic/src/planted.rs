@@ -97,6 +97,8 @@ pub struct Planted {
     pub reads_wall_clock: bool,
     /// #2662: a runner that shares one store between a world's forks of an item.
     pub forks_share_store: bool,
+    /// #3612: a fixture's run that checks its piece again for its logic.determinism run.
+    pub fixture_checks_piece_twice: bool,
 }
 
 impl Planted {
@@ -169,6 +171,7 @@ impl Planted {
             "pager_applies_moves_as_reads_finish" => p.pagers.applies_in_read_order = true,
             "store_keeps_one_copy_per_page" => p.page_store.overwrites_by_page = true,
             "save_drops_page_map" => p.save_drops_page_map = true,
+            "fixture_checks_piece_twice" => p.fixture_checks_piece_twice = true,
             _ => return None,
         }
         Some(self)

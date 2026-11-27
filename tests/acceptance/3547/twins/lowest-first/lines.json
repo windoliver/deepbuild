@@ -1,0 +1,12 @@
+{
+  "scripts/shards.mjs": [
+    {
+      "find": [
+        "  for (const k of shards.toSorted((a, b) => b - a)) {"
+      ],
+      "wrong": [
+        "  for (const k of shards.toSorted((a, b) => a - b)) {"
+      ]
+    }
+  ]
+}

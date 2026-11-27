@@ -1,6 +1,7 @@
 // What `node benchmarks/canvas.mjs judge` holds a report to (issues #379, #854, #896, #1551 and #2870): each budget
 // class's frame limits, where each efficiency task's targets are read from its runs, which targets are counts and which
 // floors, and what a failed target names; with the runs and boards those tasks measure.
+import { availableParallelism } from 'node:os';
 import { judgeLimit } from '../scripts/benchmark.mjs';
 
 export const CLASS_LIMITS = {
@@ -88,6 +89,7 @@ export const EFFICIENCY = {
   // #556: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-crawler': Object.fromEntries(['crawler_80_runs_s', 'legal_added_s', 'reach_200_floors_s', 'idle_work'].map((k) => [k, (r) => r[k]])),
   'catalog-budgets': Object.fromEntries(['pack_10000_rows_ms', 'reach_5000_recipes_ms', 'economy_5000_recipes_ms', 'idle_work'].map((k) => [k, (r) => r[k]])), // #194 (benchmarks/catalog.mjs)
+  'canvas-gpu-draw-finish': { draw_finish_p95_ms: (r) => r.draw_finish_p95_ms }, // #3617 (benchmarks/draw-finish.mjs)
 };
 export const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material', 'light_lists_bytes', 'checkpoint_50_bytes']);
 /** Targets that are floors, each reading at or above its limit (#184's multiple of real time). */
@@ -104,6 +106,26 @@ export function judgeFloor({ limit, runs, fingerprint, loads }) {
   if (verdict.status === 'BLOCKED') verdict.reason = `a floor is judged on five readings taken after warm-up, got ${JSON.stringify(runs)}`;
   else if (verdict.status === 'FAIL') verdict.reason = under('all five runs are');
   else if (verdict.reason?.startsWith('the five runs')) verdict.reason = under(`the five runs are neither all at or above ${limit} nor all`);
+  return verdict;
+}
+
+export const DRAW_PARTS = ['encode', 'submit', 'gpu', 'wait'];
+
+/** #3617 AC5: load at or above the core count (>=) reads INCONCLUSIVE for canvas-gpu-draw-finish. */
+export function judgeDrawFinish({ limit, runs, fingerprint, loads }) {
+  const verdict = judgeLimit({ limit, runs, fingerprint, loads });
+  if (verdict.status === 'BLOCKED' || verdict.status === 'INCONCLUSIVE') return verdict;
+  const cores = availableParallelism();
+  const readings = Array.isArray(loads) ? loads.flatMap((load) => [load?.start, load?.end]) : [];
+  if (readings.some((load) => Number.isFinite(load) && load >= cores)) {
+    return {
+      status: 'INCONCLUSIVE',
+      limit,
+      runs,
+      margin: verdict.margin,
+      reason: `a reading, not a budget result: load ${Math.max(...readings)} at a run's start or end is at or above the ${cores} cores`,
+    };
+  }
   return verdict;
 }
 
@@ -138,6 +160,11 @@ export const named = {
   first_settled_ms: (runs) => {
     const first = [...new Set(runs.flatMap((r) => r.pipelines.filter((p) => p.on_first_frame).map((p) => p.name)))];
     return [first.length ? `pipelines compiled on the first frame: ${first.join(', ')}` : 'no pipeline compiled on the first frame'];
+  },
+  draw_finish_p95_ms: (runs) => {
+    const means = DRAW_PARTS.map((p) => [p, runs.reduce((s, r) => s + (r.parts_mean_ms?.[p] ?? 0), 0) / runs.length]);
+    const [part] = means.reduce((a, b) => (b[1] > a[1] ? b : a));
+    return [`the time went to ${part}`];
   },
 };
 
