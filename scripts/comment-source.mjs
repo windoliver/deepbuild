@@ -25,7 +25,7 @@ function literalsOf(path, text) {
   return literals;
 }
 
-function commentsOf(text, literals, script, rust) {
+function commentsOf(text, literals, script, lineEnd) {
   const comments = [];
   let next = 0;
   let i = script && text.startsWith('#!') ? (text.indexOf('\n') + 1 || text.length) : 0;
@@ -34,8 +34,8 @@ function commentsOf(text, literals, script, rust) {
     if (next < literals.length && literals[next][0] <= i) {
       i = literals[next][1];
     } else if (text[i + 1] === '/') {
-      const end = rust ? text.indexOf('\n', i) - i : text.slice(i).search(/[\n\r\u2028\u2029]/);
-      comments.push([i, end < 0 ? text.length : i + end]);
+      lineEnd.lastIndex = i;
+      comments.push([i, lineEnd.exec(text)?.index ?? text.length]);
       i = comments.at(-1)[1];
     } else if (text[i + 1] === '*') {
       let end = i + 2;
@@ -52,7 +52,7 @@ function commentsOf(text, literals, script, rust) {
 export function read(path, text) {
   if (!text.includes('//') && !text.includes('/*')) return { comments: [], literals: null };
   const literals = literalsOf(path, text);
-  return { comments: commentsOf(text, literals, !/\.(?:rs|wgsl)$/.test(path), path.endsWith('.rs')), literals };
+  return { comments: commentsOf(text, literals, !/\.(?:rs|wgsl)$/.test(path), path.endsWith('.rs') ? /\n/g : path.endsWith('.wgsl') ? /[\n\v\f\r\u0085\u2028\u2029]/g : /[\n\r\u2028\u2029]/g), literals };
 }
 
 const WORD = /[\p{L}\p{N}_$]/u;
