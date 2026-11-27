@@ -459,7 +459,7 @@ export class Holds {
         }
       }
       const ts = this.o.now();
-      await this.o.append(this.o.connection(session, agent), { v: 1, id: ulid(ts), kind: 'mcp.tools_listed', ts, data: { ...list, ...(held ? { held } : {}) } as unknown as JsonValue });
+      await this.o.append(this.o.connection(session, agent), { v: 3, id: ulid(ts), kind: 'mcp.tools_listed', ts, data: { ...list, ...(held ? { held } : {}) } as unknown as JsonValue });
     }
   }
   /**

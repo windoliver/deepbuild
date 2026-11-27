@@ -8,6 +8,10 @@ import { createInterface } from 'node:readline';
 const socket = process.argv[2] ?? '';
 /** The handshake revisions held, oldest first: a copy of mcp.handshake@1's list, which a test holds equal (#2854). */
 const HELD = ['2025-06-18', '2025-11-25'];
+const ALONE = [[2026, '07', 28].join('-')];
+const SUPPORTED = [...ALONE].reverse().concat([...HELD].reverse());
+const META = 'io.modelcontextprotocol/';
+const INFO = { name: 'deepbuild-reading', version: '1' };
 /** What a client that loads tools by search reads at the start in place of the list (#2897). */
 const INSTRUCTIONS = "This reading job's only way into the sessions, evidence and wiki pages it was given. Read each handle you were given a slice at a time, continuing with next until the reply has none; call find for the message handles of your sessions that hold a query."; // scripts/skill.mjs writes this line
 // Each tool's title and hints (#2898), as packages/hub/annotations.json states them, which scripts/skill.mjs generates;
@@ -45,13 +49,23 @@ function call(name: string, args: unknown): Promise<{ text: string; error: boole
 
 const send = (message: unknown): void => { process.stdout.write(`${JSON.stringify(message)}\n`); };
 const lines = createInterface({ input: process.stdin });
+let opened = false;
 lines.on('line', (line) => {
-  let m: { id?: number | string; method?: string; params?: { protocolVersion?: string; name?: string; arguments?: unknown } };
+  let m: { id?: number | string; method?: string; params?: { protocolVersion?: string; name?: string; arguments?: unknown; _meta?: Record<string, unknown> } };
   try { m = JSON.parse(line) as typeof m; } catch { return; }
   if (m.id === undefined) return; // a notification
-  const reply = (result: unknown) => send({ jsonrpc: '2.0', id: m.id, result });
-  if (m.method === 'initialize') reply({ protocolVersion: HELD.includes(m.params?.protocolVersion as string) ? m.params?.protocolVersion : HELD[HELD.length - 1], capabilities: { tools: {} }, serverInfo: { name: 'deepbuild-reading', version: '1' }, instructions: INSTRUCTIONS });
-  else if (m.method === 'ping') reply({});
+  if (m.method === 'initialize') opened = true;
+  const asked = !opened && m.params?._meta && typeof m.params._meta === 'object' ? m.params._meta[`${META}protocolVersion`] : undefined;
+  if (asked !== undefined && !SUPPORTED.includes(asked as string)) {
+    send({ jsonrpc: '2.0', id: m.id, error: { code: -32022, message: 'Unsupported protocol version', data: { supported: SUPPORTED, requested: asked } } });
+    return;
+  }
+  const alone = ALONE.includes(asked as string);
+  const cached = m.method === 'tools/list' ? { ttlMs: 0, cacheScope: 'private' } : {};
+  const reply = (result: unknown) => send({ jsonrpc: '2.0', id: m.id, result: alone ? { resultType: 'complete', ...(result as object), ...cached } : result });
+  if (m.method === 'initialize') reply({ protocolVersion: HELD.includes(m.params?.protocolVersion as string) ? m.params?.protocolVersion : HELD[HELD.length - 1], capabilities: { tools: {} }, serverInfo: INFO, instructions: INSTRUCTIONS });
+  else if (m.method === 'server/discover') send({ jsonrpc: '2.0', id: m.id, result: { resultType: 'complete', supportedVersions: SUPPORTED, capabilities: { tools: {} }, _meta: { [`${META}serverInfo`]: INFO }, instructions: INSTRUCTIONS, ttlMs: 0, cacheScope: 'private' } });
+  else if (m.method === 'ping' && !alone) reply({});
   else if (m.method === 'tools/list') reply({ tools: TOOLS });
   else if (m.method === 'tools/call') {
     void call(String(m.params?.name), m.params?.arguments ?? {}).then(({ text, error }) => reply({ content: [{ type: 'text', text }], ...(error ? { isError: true } : {}) }));
