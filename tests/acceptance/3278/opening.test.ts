@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { AC, REPO, tempDir } from './helpers.ts';
 
 const SUITE = 'tests/acceptance/490-redraft-2/opening.test.ts';
+// deadline: that suite's own limits, its builds (two hours) and its three tests (half an hour each), stop it first
 const SUITE_MS = 4 * 60 * 60_000;
 
 interface Assertion { fullName: string; status: string; failureMessages?: string[] }
@@ -26,5 +27,5 @@ describe(`${AC.opening} #490's redraft-2 opening suite passes`, () => {
     expect(all.some((a) => a.fullName.includes('every content key, golden and corpus snapshot of the shipped fixtures')), `it is #490's opening suite: ${all.map((a) => a.fullName).join('; ')}`).toBe(true);
     const notPassed = all.filter((a) => a.status !== 'passed').map((a) => `${a.status}: ${a.fullName}\n    ${(a.failureMessages ?? []).join('\n').split('\n').slice(0, 12).join('\n    ')}`);
     expect(notPassed, `${SUITE}'s tests that did not pass:\n  ${notPassed.join('\n  ')}`).toEqual([]);
-  }, SUITE_MS + 10 * 60_000);
+  }, SUITE_MS + 10 * 60_000); // deadline: the child run's own limit, and ten minutes to read its report
 });

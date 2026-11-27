@@ -22,5 +22,5 @@ describe(`${AC.stable} ${FIXTURE} keeps its content keys across two runs of one 
       }
     }
     expect(moved, `content keys that moved between the two runs:\n  ${moved.join('\n  ')}`).toEqual([]);
-  }, BUILD_MS);
+  }, BUILD_MS); // deadline: three deep-show runs of a few calls each, minutes only under heavy load
 });

@@ -28,6 +28,7 @@ export function canon(v: JsonValue | undefined): string {
   return JSON.stringify(v);
 }
 
+// deadline: a cold debug build of deep-show on a loaded machine; the lanes supply the binary and skip it
 export const BUILD_MS = 15 * 60_000;
 const supplied = process.env['DEEP_BIN_DIR'];
 export const SHOW_BIN = join(supplied === undefined ? join(REPO, 'target', 'debug') : resolve(supplied), 'deep-show');
@@ -58,6 +59,7 @@ afterAll(() => {
 
 export const DOC = '01JB327800000000000000000A';
 export const YOU = { pid: 3002, start: 3_000 };
+// deadline: one deep-show run of a handful of calls; minutes only when the machine is very loaded
 const RUN_MS = 5 * 60_000;
 
 export function scenario(evidence: string, calls: JsonObject[], extra: JsonObject = {}): JsonObject {
