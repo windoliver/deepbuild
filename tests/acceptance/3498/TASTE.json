@@ -1,9 +1,12 @@
 {
   "issue": 3498,
   "criterion": "#3498.826f8cd5",
-  "verdict": null,
-  "who": null,
-  "when": null,
-  "files": {},
-  "note": "No call recorded yet. A person fills this in once, on what one run of shown.test.ts wrote to $DA3498_SHOWN: verdict reads_right or reads_wrong, who, when, and files with the SHA-256 of before.txt and of after.txt, as that run printed them."
+  "verdict": "reads_right",
+  "who": "the agent that did the work, on the owner's delegation (AGENTS.md, Delivery: a taste criterion is delegated, and the owner overrules by reopening)",
+  "when": "2026-11-27T23:28:00Z",
+  "files": {
+    "before.txt": "6c067facc26314dcc5cd323244f1a834cbe21c09ef0500cfb164dbacc7a9ae2c",
+    "after.txt": "a3b90ef918acabc6858431de4e05af1cfe959eb586f6bf639f0d620cd48330da"
+  },
+  "note": "Judged on the seven sentences as deep prints them, before and after. Each new sentence holds no listed word and says the same fact in the list's own plain words: result for verdict, says done for claim, saved change for commit, draft for branch. Most open to another reading: the stale row, which now says the work has changed since where it said a commit had moved; the unpushed flag's \"not shared yet\" for \"on no remote branch\"; and \"Push the draft\", which keeps push because the flag's own name is unpushed. The owner did not see these in session."
 }
