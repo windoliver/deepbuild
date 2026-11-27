@@ -46,6 +46,9 @@ slow.push('tests/acceptance/27/redraft-3178/waits.test.ts');
 // which copies the whole tree, runs in their place.
 byHand.push(...['ac1-planted', 'ac2-invariants', 'ac3-checks', 'ac4-canvas'].map((file) => `tests/acceptance/2339/${file}.test.mjs`));
 
+// #3605's criterion 9 ends INCONCLUSIVE until your taste call on its frames; it runs by hand.
+byHand.push('tests/acceptance/3605/ac09-shown.test.ts');
+
 // #3033's folder (blind) runs alone by its lane.json; budgets.test.ts times a sea at 1080p with judgeLimit.
 timed.push('tests/acceptance/3033/budgets.test.ts');
 timed.push('tests/acceptance/3454/budgets.test.mjs');

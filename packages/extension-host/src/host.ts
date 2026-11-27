@@ -70,7 +70,7 @@ export type { NoticeRow } from './sends.js';
 import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
 import { AnswerTooLarge, declareSource, handleOf, nodeFetch, nodeHttp, osSecrets, Sources, HostSources, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
-import { shellRefusal, type ShellInput } from './shell-plays.js';
+import { levelTracks, shellRefusal, type ShellInput } from './shell-plays.js';
 import type { ProjectTrust } from './trust.js';
 import type { ActionCall, ActionListing, ActionResult, Conformance, ExtensionHost, HookReply, HookRequest, InstallFrom, Load, Loaded, PackageTests, Refused, RunningEnvironment, RuntimeEnvironment } from './host-api.js';
 export type { ActionCall, ActionListing, ActionResult, ActionTarget, Conformance, ExtensionHost, HookReply, HookRequest, InstallFrom, Load, Loaded, PackageTests, Refused, RunningEnvironment, RuntimeEnvironment } from './host-api.js';
@@ -1824,7 +1824,7 @@ class Host implements ExtensionHost {
         // #556: an array recorded only at the steps it changed is read as surely as one read at every step.
         const values = [reply.values, reply.changes].some((r) => isPlain(r) && Object.values(r).some((v) => Array.isArray(v) && v.length > 0));
         running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values, ...(off ? { off: off.row as number } : {}), ...startedAt(r, reply) });
-        if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
+        for (const t of [reply.entries, ...levelTracks(reply)]) if (Array.isArray(t)) running.tracks.add(canonical(t));
         // #1048: a probe's track for each copy that trapped or broke a range, the run's recorded entries and what it
         // put, which the check plays again in a fresh replica.
         if (Array.isArray(reply.tests)) for (const t of reply.tests as { track?: unknown }[]) if (Array.isArray(t?.track)) running.tracks.add(canonical(t.track));
