@@ -652,7 +652,7 @@ fn opened(
             .zip(&s.globals)
             .map(|((_, ty), x)| val(ty, *x))
             .collect();
-        let mut live: Live = World::load(&item.bytes, item, &s.memory, &globals)?;
+        let mut live: Live = World::load(&item.bytes, item, &s.memory, &globals, &planted)?;
         live.failed = s.failed;
         live.next = k;
         // As a restore: the step before the save's ran last (Logic: turn clock).
