@@ -6,7 +6,7 @@
 // `throttle.mjs load [--report]` reads the machine's load by who made it (#3067), its GPU time and the cores idle beside
 // the requests in line (#3240), and the threads under each grant (#3550): a sample a minute, and their table.
 // An affected.mjs run's test grant is its admission, and its jobs take turns on one pool of job tokens (#3221). A build
-// asked for under no grant is admitted as a run is and takes a turn on that pool, as a run of one job (#3549).
+// or test asked for under no grant is admitted as a run is and takes a turn on that pool, a run of one job (#3549, #3694).
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, closeSync, existsSync, linkSync, mkdirSync, mkdtempSync, constants as modes, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeFileSync, writeSync } from 'node:fs';
@@ -323,11 +323,9 @@ const PASS_MS = 60 * 60_000;
 let overtaken = [];
 function heldBy(request, slots, seen, now) {
   if (!roomForTest(slots, seen, now, true)) return true;
-  if (request.disk) {
-    const free = freeDisk();
-    if (free < request.disk) return `disk ${(free / 1e9).toFixed(1)} GB free < ${(request.disk / 1e9).toFixed(1)} GB`;
-  }
-  return request.run || roomForTest(slots, seen, now, false) ? null : `load ${seen.load.toFixed(1)} ≥ ${seen.cores} cores`;
+  if (!request.disk) return null;
+  const free = freeDisk();
+  return free < request.disk ? `disk ${(free / 1e9).toFixed(1)} GB free < ${(request.disk / 1e9).toFixed(1)} GB` : null;
 }
 function grantable(table, procs, request, seen) {
   const mine = chain(procs, request.pid);
@@ -366,10 +364,7 @@ function grantable(table, procs, request, seen) {
         continue;
       }
       if (rule === null || rule === true) return false;
-      if (!(now - (other.asked ?? Date.parse(`${other.start} UTC`)) < PASS_MS)) {
-        if (rule.startsWith('load')) return false;
-        closed = other.id;
-      }
+      if (!(now - (other.asked ?? Date.parse(`${other.start} UTC`)) < PASS_MS)) closed = other.id;
       overtaken.push({ waiter: other, rule });
     }
     return false;
@@ -399,8 +394,8 @@ let blocked = [];
  * and is released with it. With `turns` false it takes no turn of the pool inside an admitted run either, as
  * scripts/lease asks (#3238). The grant's `token` is what DEEP_THROTTLE carries to the holder's descendants. A wait doesn't
  * run down while a window is open: a window outlasts a wait, and only its end decides when the next build starts.
- * A build from a chain that holds no grant is admitted in the wait, then takes a turn of the pool with no limit, as a
- * run of one job (#3549): its grant names that turn as `turn`, and release gives both back.
+ * A build or plain test from a chain that holds no grant is admitted in the wait, then takes a turn of the pool with no
+ * limit, as a run of one job (#3549, #3694): its grant names that turn as `turn`, and release gives both back.
  */
 export function acquire(cls, { wait = 30, stall, window = false, run, turns = true } = {}) {
   if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
@@ -414,11 +409,11 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
     const id = randomBytes(8).toString('hex'), start = procs.get(pid).start, seq = () => (table.seq = (table.seq ?? 0) + 1);
     if (held.length && (cls === 'build' || cls === 'test' || (cls === 'timed' && held.some((grant) => grant.class === 'timed')))) {
       // A run asked under a caller's grant is admitted at once, with no slot; inside an admitted run, a request under no
-      // turn waits for one (#3221). An admitted build's own turn is no job's: a request under it is as under the
-      // build's grant alone, so a run asked there is admitted and its jobs take their turns (#3549).
-      const builds = held.filter((grant) => grant.class === 'build').map((grant) => grant.id);
-      const turn = held.some((grant) => grant.class === 'turn' && !builds.includes(grant.run));
-      const admitted = !turn && turns && cls !== 'timed' && held.find((grant) => grant.class === 'test' && grant.run === true);
+      // turn waits for one (#3221). An admitted build's or plain test's own turn is no job's: a request under it is as
+      // under that grant alone, so a run asked there is admitted and its jobs take their turns (#3549, #3694).
+      const ones = held.filter((grant) => grant.class === 'build' || grant.one).map((grant) => grant.id);
+      const turn = held.some((grant) => grant.class === 'turn' && !ones.includes(grant.run));
+      const admitted = !turn && turns && cls !== 'timed' && held.find((grant) => grant.class === 'test' && grant.run === true && !grant.one);
       if (!turn && !admitted && cls === 'test' && run !== undefined) {
         const entry = { id, class: cls, pid, start, nested: true, run: true, used: 0, at: Date.now() };
         table.grants.push(entry);
@@ -439,8 +434,8 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
   if (request.granted) return { class: cls, id: request.granted.id, token: `${cls}:${request.granted.id}`, pass: false };
   // A turn has no wait limit: its run was admitted (#3221).
   if (request.class === 'turn') deadline = Infinity;
-  // An admitted build's grant, while it waits for its turn (#3549).
-  let build = null;
+  // An admitted build's or plain test's grant, while it waits for its turn (#3549, #3694).
+  let admission = null;
   // A full disk leaves the table as it was (#2869): a waiting request's look whose write fails with ENOSPC is one more
   // look with no grant, and the request keeps its place. Once the wait has run out the ENOSPC is thrown, marked
   // `waited`, rather than no grant returned: the request it couldn't take out of the table stays there until this
@@ -491,22 +486,23 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
       }
       const taken = new Set(table.grants.filter((other) => other.class === cls).map((other) => other.index));
       const index = Array.from({ length: LIMITS[cls] }, (_, k) => k + 1).find((k) => !taken.has(k));
-      // A build in the table was asked under no grant, so its grant is an admission, as a run's is (#3549).
-      const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now, ...(pending.run || cls === 'build') && { run: true, used: 0 } };
+      // A build or test in the table was asked under no grant: an admission, a plain one a run of one job (#3549, #3694).
+      const one = cls === 'build' || (cls === 'test' && !pending.run);
+      const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now, ...(pending.run || one) && { run: true, used: 0 }, ...one && { one } };
       table.grants.push(entry);
       const load = loadavg()[0], cores = cpus().length;
       // A top-level request's entry says how long it waited since it asked, in milliseconds (#3549).
       if (cls === 'test') for (const { waiter, rule } of overtaken) log({ event: 'passed-over', class: cls, id: waiter.id, pid: waiter.pid, by: entry.id, byPid: pid, rule });
       log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, ...stall !== undefined ? { stall } : { wait }, ...!entry.nested && { waited: now - asked }, ...entry.run && { run: true }, ...cls === 'test' ? { readings: seen } : {} });
-      if (cls !== 'build') return entry;
-      // The admitted build asks for its turn, the one job of its run, in the same write.
+      if (!one) return entry;
+      // The admitted build or test asks for its turn, the one job of its run, in the same write.
       const turn = { id: randomBytes(8).toString('hex'), class: 'turn', run: entry.id, pid, start: entry.start, nested: true, seq: (table.seq += 1) };
       table.requests.push(turn);
       return { admitted: entry, turn };
     });
     // Once the table holds the admission, the wait is for the turn, with no limit; a write that failed asks again.
     if (grant?.admitted) {
-      build = grant.admitted;
+      admission = grant.admitted;
       request = grant.turn;
       deadline = Infinity;
       continue;
@@ -521,8 +517,8 @@ export function acquire(cls, { wait = 30, stall, window = false, run, turns = tr
       return null;
     }
     // A turn's command keeps its run's grant as DEEP_THROTTLE, as a job passing through on it always has; an admitted
-    // build's is the build's own grant, which names the turn.
-    if (grant?.class === 'turn' && build) return { class: cls, id: build.id, index: build.index, token: `${cls}:${build.id}`, pass: false, turn: grant.id };
+    // build's or test's is its own grant, which names the turn.
+    if (grant?.class === 'turn' && admission) return { class: cls, id: admission.id, index: admission.index, token: `${cls}:${admission.id}`, pass: false, turn: grant.id };
     if (grant?.class === 'turn') return { class: 'turn', id: grant.id, run: grant.run, token: process.env.DEEP_THROTTLE, pass: false };
     if (grant) return { class: cls, id: grant.id, index: grant.index, token: `${cls}:${grant.id}`, pass: false };
     sleep(POLL_MS * (0.75 + Math.random() / 2));
@@ -721,6 +717,27 @@ function threadsByProcess() {
   return counts;
 }
 
+const compileKey = (args) => {
+  const metadata = args.match(/(?:^|\s)-C\s*metadata=(\S+)/)?.[1], out = args.match(/(?:^|\s)--out-dir[=\s]+(\S+)/)?.[1];
+  return metadata && out ? `${metadata}\n${out}` : null;
+};
+function compilesAsked(procs, byTree) {
+  const servers = [...procs].filter(([pid, proc]) => proc.command === 'sccache' && !byTree(pid)).map(([pid]) => pid);
+  if (!servers.length) return new Map();
+  const listing = spawnSync('ps', ['-A', '-ww', '-o', 'pid=,args='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, LC_ALL: 'C' } });
+  if (listing.status !== 0) return new Map();
+  const clients = new Map(), compiles = [];
+  for (const line of listing.stdout.split('\n')) {
+    const [, number, args] = line.match(/^\s*(\d+)\s+(.*)$/) ?? [];
+    const pid = Number(number), proc = procs.get(pid), key = proc && compileKey(args);
+    if (!key) continue;
+    const owner = byTree(pid);
+    if (owner && proc.command === 'sccache') clients.set(key, owner);
+    else if (!owner && servers.includes(chain(procs, pid).slice(1).find((at) => procs.get(at)?.command === 'sccache'))) compiles.push([pid, key]);
+  }
+  return new Map(compiles.filter(([, key]) => clients.has(key)).map(([pid, key]) => [pid, clients.get(key)]));
+}
+
 /** Each CPU's ticks, busy and in all, as os.cpus() counts them. */
 const ticks = () => cpus().map(({ times }) => ({ busy: times.user + times.nice + times.sys + times.irq, all: times.user + times.nice + times.sys + times.irq + times.idle }));
 
@@ -789,7 +806,9 @@ function sample() {
   // A holder of two grants counts under the one it took first; the other still has its entry.
   const entries = held.filter((grant) => procs.get(grant.pid)?.start === grant.start).map((grant) => ({ id: grant.id, class: grant.class, pid: grant.pid, tally: tally() }));
   const grants = new Map([...entries].reverse().map((entry) => [entry.pid, entry]));
-  const ownerOf = (pid) => grants.get(chain(procs, pid).findLast((at) => grants.has(at)));
+  const byTree = (pid) => grants.get(chain(procs, pid).findLast((at) => grants.has(at)));
+  const asked = compilesAsked(procs, byTree);
+  const ownerOf = (pid) => byTree(pid) ?? chain(procs, pid).map((at) => asked.get(at)).find(Boolean);
   const outside = tally();
   const used = [];
   for (const [pid, proc] of procs) {
@@ -958,6 +977,32 @@ function apportion(sums, total) {
   return new Map(exact.map((part) => [part.name, part]));
 }
 
+function claimSampler() {
+  const mark = join(folder(), 'load.pid'), mine = `${process.pid} ${processes({ fresh: true }).get(process.pid).start}`;
+  for (let look = 0; ; look++) {
+    try {
+      writeFileSync(mark, mine, { flag: 'wx', mode: 0o600 });
+      return null;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+    let held = '';
+    try {
+      held = readFileSync(mark, 'utf8');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      continue;
+    }
+    const [pid, ...start] = held.split(' ');
+    if (!(Number(pid) > 0) && look < 10) {
+      sleep(50);
+      continue;
+    }
+    if (Number(pid) > 0 && Number(pid) !== process.pid && alive(processes({ fresh: true }), { pid: Number(pid), start: start.join(' ') })) return Number(pid);
+    rmSync(mark, { force: true });
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'load') {
   const options = process.argv.slice(3);
   const write = () => appendFileSync(join(folder(), 'load.log'), `${JSON.stringify(sample())}\n`);
@@ -978,6 +1023,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'l
       process.exit(0);
     }
     mkdirSync(folder(), { recursive: true, mode: 0o700 });
+    const other = claimSampler();
+    if (other) {
+      console.log(`INCONCLUSIVE load: another sampler, pid ${other}, writes this log`);
+      process.exit(3);
+    }
     write();
   } catch (error) {
     console.log(`BLOCKED throttle: ${error.message}`);

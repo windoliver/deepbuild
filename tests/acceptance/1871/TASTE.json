@@ -1,0 +1,12 @@
+{
+  "issue": 1871,
+  "criterion": "#1871.f656387e",
+  "verdict": "looks_right",
+  "who": "Claude, delegated by the owner in the session",
+  "when": "2026-11-25T07:52:38Z",
+  "screenshots": {
+    "tooth-2d.png": "e346393c5c7e45dcb27b949c4bfd89359a1235bac2069e09c4ddcbedb6a70a93",
+    "tooth-3d.png": "6f021e1a785e1db360d20354a2aee5df75be2cc483d2ec90eac9a88a53c3ee51"
+  },
+  "note": "Call made by Claude under the owner's standing delegation of judgement calls, after both screenshots were shown in the session and a separate agent checked them by eye and by pixel values. Looks right: the 3D paper carries the image tooth's bit-reversed stripes at the same level spacing as the 2D page, world-anchored (stripes widen and lean with the perspective), with no error state, blank frame or artifacts, and the box is closed and cleanly shaded. Reservations: the box faces carry no tooth, as the look's fills are flat there; the 3D paper reads lighter than the 2D page, which carries a light stroke across it."
+}
