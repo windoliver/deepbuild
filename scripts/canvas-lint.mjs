@@ -475,7 +475,7 @@ function runClippy(scope) {
 
 function clippyRun(cargoArgs, base, own = null) {
   // Every target and every feature, so code behind a Cargo feature or a cfg is read too.
-  const result = cargo(['clippy', ...cargoArgs, '--all-targets', '--all-features', '--message-format=json', '--', ...lints.flatMap((lint) => ['-F', lint])]);
+  const result = cargo(['clippy', ...cargoArgs, '--all-targets', '--all-features', '--keep-going', '--message-format=json', '--', ...lints.flatMap((lint) => ['-F', lint])]);
   const seen = new Set();
   let messages = 0;
   for (const line of result.stdout.split('\n')) {
