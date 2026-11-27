@@ -193,7 +193,11 @@ pub(crate) fn msaa_planted(p: Option<Planted>) -> Planted3 {
     Planted3 {
         single_sample: matches!(
             p,
-            Some(Planted::SingleSampleTargets | Planted::ClaimsMsaaOverSingleSample)
+            Some(
+                Planted::SingleSampleTargets
+                    | Planted::ClaimsMsaaOverSingleSample
+                    | Planted::EnvironmentTextureRace
+            )
         ),
         resolve_accumulates: p == Some(Planted::ResolveAccumulatesFrames),
         missing_lobe_turned_on: p == Some(Planted::MissingLobeTurnedOn),

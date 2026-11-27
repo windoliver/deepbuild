@@ -1,0 +1,10 @@
+{
+ "docs/technical-design.md": [
+  {
+   "find": [
+    "- **Moving.** Your record and files move between a hosted hub and a computer you own at any time, as `deep backup` and `deep restore` already do (see [Backups](#ship)), with your clones, so work not yet pushed moves too. Restoring raises the writer generation, so every client refuses the stale copy left behind and it can never write again, and you can then delete the hosted machine and its key. Not taken: keeping both running and syncing them, since that is two writers."
+   ],
+   "wrong": []
+  }
+ ]
+}
