@@ -1,0 +1,26 @@
+{
+  "#3428.c21bc24c": [
+    "range-left-at-0.16",
+    "facts-ahead-of-run"
+  ],
+  "#3428.ffe37f29": [
+    "installs-any-version",
+    "says-no-versions",
+    "refuses-every-version"
+  ],
+  "#3428.25c11692": [
+    "listed-is-set-up",
+    "plugin-item-warns",
+    "reason-dropped"
+  ],
+  "#3428.cfb1bd37": [
+    "source-from-npmjs",
+    "items-without-paseo"
+  ],
+  "#3428.53c885f5": [
+    "edits-config-first",
+    "source-unnamed",
+    "undo-removes-anyway",
+    "refuses-every-version"
+  ]
+}
