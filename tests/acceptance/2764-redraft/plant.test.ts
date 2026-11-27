@@ -1,6 +1,3 @@
-// #2764.f88db370 (wrong program): a hub whose proceed-turn query counts a subagent's prompt as ending the turn
-// (DEEP_HUB_PLANT=proceed-ends-at-child-prompt, README: The plant) lets the delete run, and the criterion's judgement
-// fails on it, naming the call. A hub that refuses the plant's name never starts: BLOCKED, so this test fails.
 import { afterEach, describe, expect, it } from 'vitest';
 import { AC, DELETE, Inconclusive, PLANT, breaches, cleanup, replay } from './helpers.ts';
 

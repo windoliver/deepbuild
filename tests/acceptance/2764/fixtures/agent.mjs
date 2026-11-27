@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-// One Codex session's Codex, as far as its hooks go (README): a long-lived process per session whose
-// children are that session's deep-hook runs, as a real thread's hook commands are Codex's children. So the
-// hub binds the session to this process, never to the test runner, and `deep inbox answer` run by the test (a
-// sibling of this process, not its descendant) is your terminal, outside every session's process tree. It decides
-// nothing about DeepBuild. After tests/acceptance/25/routes/fixtures/claude.mjs (same repo, same license), cut down
-// to running one hook command; copied from tests/acceptance/1836/fixtures/agent.mjs (same repo, same license).
-//
-//   node agent.mjs <deep-hook>      one JSON command per stdin line, JSON answers per stdout line, by `n`
-//
-// Command: {n, args, cwd, input, timeoutMs}: runs `<deep-hook> <args…>` in `cwd`, `input` on its stdin, this
-// process's environment, and stops it (SIGKILL) at `timeoutMs`. Answers {n, pid} once it starts, then
-// {n, code, signal, stdout, stderr, ms, timedOut, ended} once it ends. On SIGTERM, or when stdin closes, it stops
-// every run still going, then exits.
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
@@ -43,7 +30,7 @@ createInterface({ input: process.stdin }).on('line', (raw) => {
   child.stdin.end(c.input ?? '');
 });
 const stop = () => {
-  for (const child of running) try { child.kill('SIGKILL'); } catch { /* gone */ }
+  for (const child of running) try { child.kill('SIGKILL'); } catch { }
   process.exit(0);
 };
 process.on('SIGTERM', stop);

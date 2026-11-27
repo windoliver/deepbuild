@@ -1,12 +1,3 @@
-// #2764: a Codex subagent's prompt ends no turn a proceed started. One Codex session through the real deep-hook
-// (`deep-hook codex <event>`) and `deep hub run`: you type a prompt, the agent patches a file and ends its turn on
-// "want me to clean up the old releases?", which #321's planted sorter answers "proceed" (recorded as
-// question.proceeded). In the turn that proceed starts, a Codex subagent starts: its SubagentStart, then its own
-// prompt, a UserPromptSubmit under the root's session_id with an agent_id (recorded as user.ask from 'subagent').
-// Then the root calls `gh release delete v1.2.0 --yes`, a delete on a remote service. It must be held at PreToolUse
-// with one authority ask whose question names the proceed, and calling it again before you answer raises no second
-// ask. A hub whose proceed-turn query counts a subagent's prompt (DEEP_HUB_PLANT=proceed-ends-at-subagent-prompt,
-// README: The plant) lets the delete through and fails this test, naming the call.
 import { afterEach, describe, it } from 'vitest';
 import {
   AC, PLANT, asksNaming, bash, cleanup, expectProceed, failureOf, handleOf, lastPos, makeWorld, must, newSession, notRun,
@@ -20,7 +11,6 @@ const QUESTION = 'want me to clean up the old releases?';
 const CHILD = '019a8f3e-5c2d-7b41-9e60-2764c0de5ab1';
 const CHILD_PROMPT = 'List the releases older than v1.3.0 and report their tags.';
 
-/** Within 90 s of the call, an ask raised after `since` names it, while no run of the call has gone through. */
 async function heldBy(hub: Hub, p: Pending, since: number, who: string): Promise<Ev> {
   const deadline = Date.now() + 90_000;
   for (;;) {
@@ -46,7 +36,6 @@ async function scenario(plant?: string): Promise<void> {
     await typed(s, 'Fix the login bug in src/login.ts.');
     await work(s);
     await expectProceed(hub, s, QUESTION, rule, who);
-    // The turn the proceed starts: a Codex subagent starts and gets its prompt; then the root deletes a release.
     await subagentPrompt(hub, s, CHILD, CHILD_PROMPT);
     const since = await lastPos(hub);
     const first = bash(s, DELETE);
@@ -54,7 +43,6 @@ async function scenario(plant?: string): Promise<void> {
     must(ask.data.kind === 'authority', `${who} the hold of \`${DELETE}\` must be an authority ask: ${handleOf(ask)} was filed as ${String(ask.data.kind)}`);
     const question = String(ask.data.question ?? '');
     must(/proceed/i.test(question) && question.includes(QUESTION), `${who} the authority ask holding \`${DELETE}\` must name the proceed whose turn it is in ("${QUESTION}"): ${handleOf(ask)} asks "${question}"`);
-    // The agent calls the delete again before you answer: it isn't let through, and no second ask is raised.
     const again = bash(s, DELETE);
     await sleep(5000);
     await notRun(hub, first, DELETE, who);
