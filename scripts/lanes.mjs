@@ -52,6 +52,7 @@ byHand.push('tests/acceptance/3605/ac09-shown.test.ts');
 // #3033's folder (blind) runs alone by its lane.json; budgets.test.ts times a sea at 1080p with judgeLimit.
 timed.push('tests/acceptance/3033/budgets.test.ts');
 timed.push('tests/acceptance/3454/budgets.test.mjs');
+timed.push('tests/acceptance/3611/ac6-first-reply.test.mjs');
 
 /**
  * Why each `alone` entry is alone (#3066; docs/parallel-proof.md, section 7), one reason an entry: `binary`, a sibling's
