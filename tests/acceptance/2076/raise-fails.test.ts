@@ -1,6 +1,3 @@
-// AC2 (#2076): with the ask's raise planted to fail (DEEP_HUB_PLANT=hold-raise-fails, README: invented surface 1), an
-// agent's Edit deleting a rule line still leaves the line held, and the session's record names the failure. Scope: the
-// proposal that couldn't be raised is raised at the next rules sync, once the raise works again.
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   NEVER_MOMENT, RAISE_FAILS, Session, cleanupAll, deleteLine, hubFor, inboxAsks, momentWorld, nextStart, proposals, readingsNaming, ruleNamed, said, settle, show, stopHub, syncRules,
@@ -33,7 +30,6 @@ describe(`${AC2} a held rule line whose proposal can't be raised`, () => {
       expect(readings.length, `the editing session's record holds one reading naming the rule "${NEVER_MOMENT}"; the session's readings: ${log.filter((e) => e.kind === 'session.reading' && e.session === s.id).map(said).join(' | ') || 'none'}`).toBe(1);
       expect(String(readings[0]!.data.reading), `that reading names the failure, the planted raise's error (${RAISE_FAILS})`).toContain(RAISE_FAILS);
 
-      // Scope: raised again at the next rules sync, once the raise works.
       await stopHub(hub);
       hub = undefined;
       hub = await hubFor(w);

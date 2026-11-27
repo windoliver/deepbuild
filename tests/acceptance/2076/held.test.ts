@@ -1,7 +1,3 @@
-// AC1 (#2076): with `rejected: \`moment\`.` saved, an agent's Edit that deletes `never use moment` from AGENTS.md leaves
-// the rule held on the rules page and in the next session's start set, with one proposal in the inbox naming the line.
-// A hub that drops the line when its proposal is refused (the base: `propose` refuses the change, since the rule's text
-// names the rejected direction) shows no rule and no proposal, and fails here, naming the rule.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -24,7 +20,6 @@ describe(`${AC1} a deleted rule line that names a rejected direction`, () => {
       const before = ruleNamed(await syncRules(w), NEVER_MOMENT);
       expect(before, `the control: the rules page lists "${NEVER_MOMENT}" before the edit`).toBeDefined();
 
-      // The agent's own Edit removes the line.
       await deleteLine(s);
       expect(readFileSync(join(w.repo, 'AGENTS.md'), 'utf8'), 'the agent\'s Edit took the line out of the file').not.toContain(NEVER_MOMENT);
       await settle(hub, (e) => proposals(e, NEVER_MOMENT).length > 0, 20_000);
@@ -45,7 +40,6 @@ describe(`${AC1} a deleted rule line that names a rejected direction`, () => {
 
       const next = await nextStart(w);
       expect(next.reply, `the next session's start set carries the held rule "${NEVER_MOMENT}"; its SessionStart reply was ${JSON.stringify(next.reply.slice(0, 1500))}`).toContain(NEVER_MOMENT);
-      // Syncing again raises no second proposal for the same deletion.
       await syncRules(w);
       expect(proposals(await settle(hub, () => true, 0), NEVER_MOMENT).length, `one proposal for "${NEVER_MOMENT}", never the same one twice`).toBe(1);
     } finally {

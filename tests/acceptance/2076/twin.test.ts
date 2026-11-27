@@ -1,7 +1,3 @@
-// AC3 (#2076), the twin: an agent's own deep_propose that names a rejected direction is still refused, as #111 has it:
-// a tool error citing the decision, and no ask for you. It passes on the base; a fix that lets the hub's held-line
-// proposal through by dropping the revival check for every caller fails it. A direction you didn't reject still
-// reaches you, so a hub that refuses every proposal fails it too.
 import { afterAll, describe, expect, it } from 'vitest';
 import { callTool } from '../111/helpers.ts';
 import { MOMENT, agentIn, cleanupAll, hubFor, inbox, momentWorld, proposals, rejectMoment, settle, stopHub } from './helpers.ts';
