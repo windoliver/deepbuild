@@ -272,7 +272,7 @@ fn a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_f
             }
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
-        drop(stdin);
+        drop((stdin, child.wait().unwrap(), control.wait().unwrap()));
         let [(exited, took), (control_exited, control_took)] = ended.map(Option::unwrap);
         let spooled = spool(&home);
         let control_spooled = spool(&control_home).contains("echo closed late");
