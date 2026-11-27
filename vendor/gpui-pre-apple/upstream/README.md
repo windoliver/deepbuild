@@ -9,7 +9,7 @@ Zed closed our pull request unmerged on October 28, 2026: https://github.com/zed
 | The panel's crypto module uses final RSA, with mandatory sha2 and explicit PKCS#1 v1.5 signing. From gpui-kit 0.8.1 the module is quickjs-jit-stdlib's own copy of LLRT's, which asks for an RSA release candidate | #2359 | `vendor/quickjs-jit-stdlib/Cargo.toml`, `vendor/quickjs-jit-stdlib/src/llrt/llrt_crypto/provider/rust/mod.rs` | `tests/acceptance/2359/dependencies.test.mjs › AC1 #2359.74e0b9bf: locked rsa on its affected path` | — | quickjs-jit-stdlib asks for final RSA's features upstream |
 | MiTeX's command-spec reader and writer use rkyv 0.8, retaining checked access and shared-pointer pooling | #2359 | `vendor/mitex-spec/Cargo.toml`, `vendor/mitex-spec/src/lib.rs`, `vendor/mitex-spec/src/stream.rs` | `tests/acceptance/2359/dependencies.test.mjs › AC1 #2359.74e0b9bf: locked rkyv on its affected path` | — | MiTeX updates its archive reader/writer to rkyv 0.8.17 or later |
 | MiTeX's compiled-in spec is migrated to rkyv 0.8 with every command, alias, argument shape and environment preserved | #2359 | `vendor/mitex-spec-gen/Cargo.toml`, `vendor/mitex-spec-gen/build.rs`, `vendor/mitex-spec-gen/assets/default.rs` | `tests/mitex-archive.test.mjs › the migrated MiTeX archive preserves every pinned upstream command value` | — | MiTeX publishes the same command spec in the fixed rkyv format |
-| The sRGB layer tag: the window's `CAMetalLayer` is tagged sRGB, which GPUI leaves to AppKit unless it was asked for Display P3 | #140 | `vendor/gpui-pre-apple/src/metal_renderer.rs`, `vendor/gpui-pre-apple/src/metal_renderer/layer_colorspace.rs` | `tests/vendor-srgb.test.mjs › gpui-pre-apple tags the layer it configures sRGB` | — | gpui-pre's `MetalRenderer` tags the layer it configures with an sRGB colorspace |
+| The sRGB layer tag: the window's `CAMetalLayer` is tagged sRGB, which GPUI leaves to AppKit unless it was asked for Display P3; one unit test of upstream's that reads a font from upstream's own tree is left out, so the crate's tests, this row's among them, build from the published crate | #140 | `vendor/gpui-pre-apple/src/metal_renderer.rs`, `vendor/gpui-pre-apple/src/metal_renderer/layer_colorspace.rs`, `vendor/gpui-pre-apple/src/text_system.rs` | `tests/vendor-srgb.test.mjs › gpui-pre-apple tags the layer it configures sRGB` | — | gpui-pre's `MetalRenderer` tags the layer it configures with an sRGB colorspace |
 | The drawable read-back: the next frame a window draws reads back from its layer, for the color check | #140 | `vendor/gpui-pre-apple/src/metal_renderer.rs`, `vendor/gpui-pre-apple/src/metal_renderer/layer_colorspace.rs` | `tests/acceptance/140/gpu/color.live.test.ts › AC5 status color swatches read back from the surface as the same 8-bit values (live) › AC5 every status color of the look, drawn through each Metal layer the app presents through, reads back from that layer as the look's 8-bit values` | — | gpui-pre hands a window's last presented drawable back for reading |
 | Presented times: a hook gets each drawable's label and `presentedTime` | #140 | `vendor/gpui-pre-apple/src/metal_renderer.rs`, `vendor/gpui-pre-apple/src/metal_renderer/presentation.rs` | `tests/acceptance/140/view/timing.test.ts › #140.81e434c9 (C2) display timing: predicted presentation within one refresh at 60 and 120 Hz; a still scene schedules no wakeups › #140.81e434c9 (C2) a moving film in the app's window, paced at 60 Hz and at 120 Hz: every presented frame's predicted presentation is within one refresh of its measured one` | — | gpui-pre reports each drawable's label and `presentedTime` through a public hook |
 | The exact gradient mode: `ColorSpace::OklabExact`, through the sRGB curve, premultiplied, with no dither | #391 | `vendor/gpui-pre/src/color.rs`, `vendor/gpui-pre-apple/vendor/gpui/src/color.rs`, `vendor/gpui-pre-apple/src/shaders.metal`, `vendor/gpui-pre-apple/src/shaders_carried.metal` | `tests/acceptance/391/gradient.test.ts › AC6 a two-stop OKLab gradient from black to sRGB 0.2, drawn by GPUI through the patch's exact gradient mode, reads 13 at its midpoint, with identical rows › AC6 the exact mode: the midpoint reads 13 and every row of the horizontal gradient is identical` | — | gpui-pre adds a gradient mode that mixes in Oklab, through the sRGB curve, premultiplied and undithered |
@@ -65,35 +65,33 @@ A row leaves the table above when the pinned release meets its removal condition
 
 ## Rebase trial
 
-Tried: gpui-pre 0.3.9 -> 0.3.11, gpui-pre-apple 0.3.9 -> 0.3.11, gpui-kit 0.8.0 -> 0.9.0 (November 6, 2026, the newest of each)
-Outcome: pin left
+Tried: gpui-pre 0.3.9 -> 0.3.14, gpui-pre-apple 0.3.9 -> 0.3.14, gpui-pre-macos 0.3.9 -> 0.3.14, gpui-kit 0.8.0 -> 0.11.0 (November 27, 2026, the newest of each)
+Outcome: pin moved
 
 | Suite | Result |
 |---|---|
-| #377 | not run |
-| #390 | not run |
-| #391 | not run |
-| #140 | not run |
-| #358 | not run |
+| #377 | pass |
+| #390 | pass |
+| #391 | pass |
+| #140 | not run: its sRGB test passes; the live color check and the pacing test read INCONCLUSIVE on this machine |
+| #358 | not run: not reached within the hour |
+| #124 | pass |
+| #177 | not run: not reached within the hour |
+| #499 | not run: not reached within the hour |
+| #542 | pass |
+| #1427 | fail: the lab panel's launch is refused for importing gpui-kit, as it is at the merge base |
+| #1431 | not run: not reached within the hour |
+| #1434 | pass |
+| #1480 | pass |
+| #1482 | fail: counts.test.ts AC13, "no view outside the list", names 8 views; its hover, wheel and access tests pass |
+| #1489 | not run: not reached within the hour |
+| #1546 | pass |
+| #1551 | not run: not reached within the hour; #3502's own still-window test, on the same surface, passes |
+| #1843 | not run: not reached within the hour |
+| #2471 | not run: its test skips on macOS; it needs the Linux lane |
+| #3232 | not run: its unseen-window test passes; live.test.ts was not reached within the hour |
 
-The merges of `gpui-pre` and `gpui-pre-apple` onto this tree stop at these conflicts, so no suite could build. gpui-kit 0.9.0 needs `gpui-pre` at exactly 0.3.11, so it moves with them and was not built either.
-
-```
-CONFLICT vendor/gpui-pre/src/platform.rs:4
-CONFLICT vendor/gpui-pre-apple/Cargo.toml:252
-CONFLICT vendor/gpui-pre-apple/build.rs:172
-CONFLICT vendor/gpui-pre-apple/src/metal_renderer.rs:143
-CONFLICT vendor/gpui-pre-apple/src/metal_renderer.rs:242
-CONFLICT vendor/gpui-pre-apple/src/metal_renderer.rs:428
-CONFLICT vendor/gpui-pre-apple/src/metal_renderer.rs:670
-CONFLICT vendor/gpui-pre-apple/src/metal_renderer.rs:732
-CONFLICT vendor/gpui-pre-apple/src/metal_renderer.rs:747
-CONFLICT vendor/gpui-pre-apple/src/metal_renderer.rs:1004
-CONFLICT vendor/gpui-pre-apple/src/metal_renderer.rs:1502
-CONFLICT vendor/gpui-pre-apple/src/metal_renderer.rs:1623
-```
-
-Three are small: `platform.rs` and `Cargo.toml` are neighboring additions, and `build.rs` a neighboring rename. The nine in `metal_renderer.rs` have one cause: 0.3.11 moves `gpui_apple`'s renderer from `metal-rs` to `objc2-metal`, about 1,800 changed lines. That's why the pin can't move by a merge: our carried files call the old API, so `src/metal_renderer/bgra_surface.rs`, `layer_colorspace.rs` and `presentation.rs` need porting even though they can't conflict. Moving the additions into new files took the lines of ours inside those conflicts from 231 to 62.
+A suite's result here is the result of its carried rows' tests, the ones the table above names, each run once on this tree on a loaded Mac17,10. `pass` means every one of them passed. The workspace builds (`cargo build --workspace --locked`) and `node scripts/vendor-rebase.mjs check` passes. With suites unrun and two failing, this trial is open: the pin is moved on the branch, and the move is not proven.
 
 ## What was offered upstream (#711)
 

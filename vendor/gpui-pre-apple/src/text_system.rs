@@ -863,6 +863,7 @@ mod tests {
         }
     }
 
+    #[cfg(any())] // DeepBuild patch (windoliver/deepbuild#140): this test's font is in upstream's tree, not in the crate
     #[test]
     fn test_layout_line_breaks_ligatures_between_runs() {
         let fonts = AppleTextSystem::new();
