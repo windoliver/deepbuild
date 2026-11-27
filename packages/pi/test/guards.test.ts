@@ -1,7 +1,7 @@
 // Guards on real pi: deep-hook, the one matcher, reads each call before it runs. A matched entry's call never runs and
 // its name is on the record; with the hub away a fail-closed entry still holds; nothing else is touched.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 // `deep setup` runs for real on a temp home, as tests/acceptance/19 does.
 import { createServer } from 'node:net';
 import { join } from 'node:path';
@@ -106,6 +106,32 @@ describe('guards on a pi call', () => {
     const end = await run(w.pi);
     expect(end.isError, said(end)).toBe(true);
     expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(false);
+  }, 90_000);
+
+  async function lost(script: Step[]): Promise<{ pi: Pi; cwd: string; home: string }> {
+    const w = await world(script);
+    w.hub.child.kill();
+    await new Promise((done) => w.hub.child.once('exit', done));
+    const file = join(w.home, '.deepbuild/config.json');
+    const { hook: _, ...rest } = JSON.parse(readFileSync(file, 'utf8')) as Line;
+    writeFileSync(file, JSON.stringify(rest));
+    rmSync(join(w.home, '.deepbuild/rules.json'));
+    return w;
+  }
+
+  it('#3477.38d1fd38 with no deep-hook recorded, rules.json removed after setup holds a call with the hub away', async () => {
+    const w = await lost([bash('touch ran.txt')]);
+    const end = await run(w.pi);
+    expect(end.isError, said(end)).toBe(true);
+    expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(false);
+  }, 90_000);
+
+  it('#3477.2f3bbca8 with no deep-hook recorded and no rules.json, a home whose setup never finished lets a call run with the hub away', async () => {
+    const w = await lost([bash('touch ran.txt')]);
+    rmSync(join(w.home, '.deepbuild/setup-finished.json'));
+    const end = await run(w.pi);
+    expect(end.isError, said(end)).toBe(false);
+    expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(true);
   }, 90_000);
 
   it('a line deep-hook can\'t read is unread, never a call that matched nothing', () => {

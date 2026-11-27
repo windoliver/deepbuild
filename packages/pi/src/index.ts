@@ -240,7 +240,8 @@ export default function deepbuild(pi: Pi): void {
   /** A call read against your rules: 'no setup' in a home with no rules to read it against, 'unread' when there are and nothing could. */
   async function read(call: Obj): Promise<Ruling | 'unread' | 'unparsed' | 'no setup'> {
     const binary = hookBinary();
-    if (!binary) return existsSync(join(process.env.HOME ?? homedir(), '.deepbuild', 'rules.json')) ? 'unread' : 'no setup';
+    const root = join(process.env.HOME ?? homedir(), '.deepbuild');
+    if (!binary) return existsSync(join(root, 'rules.json')) || existsSync(join(root, 'setup-finished.json')) ? 'unread' : 'no setup';
     let build: number;
     try { build = statSync(binary).mtimeMs; } catch { return 'unread'; }
     if (binary !== matcher?.binary || build !== matcher.build) { matcher?.stop(); matcher = new Matcher(binary, build); }
