@@ -3,6 +3,7 @@
 //! replacing what's under it; a scene's layers are independent writer layers, each composited over
 //! the ones before it (premultiplied over) and encoded by an encode worker of its own.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use bytemuck::{Pod, Zeroable};
@@ -405,6 +406,7 @@ pub fn compile_named(
 struct Built {
     epoch: u64,
     regions: wgpu::Buffer,
+    written: deep_gpu::counted::Written,
     bind: wgpu::BindGroup,
     replace: wgpu::RenderPipeline,
     over: wgpu::RenderPipeline,
@@ -429,6 +431,7 @@ pub struct SceneModule {
     pub scene: Arc<Scene>,
     built: Option<Built>,
     installed: Arc<Mutex<Installed>>,
+    sleeps_in_encode: Arc<AtomicBool>,
     /// The texture fill's bytes, uploaded again after every build.
     texture: Option<Arc<[u8]>>,
     pending_upload: Option<(wgpu::Buffer, Arc<[u8]>)>,
@@ -444,6 +447,7 @@ impl SceneModule {
             scene,
             built: None,
             installed: Arc::default(),
+            sleeps_in_encode: Arc::new(AtomicBool::new(false)),
             texture,
             pending_upload: None,
         }
@@ -452,6 +456,21 @@ impl SceneModule {
     /// What the view installs its compile-thread jobs' pipelines into.
     pub fn installed(&self) -> Arc<Mutex<Installed>> {
         self.installed.clone()
+    }
+
+    /// The planted toggle (#3617): sleeps 2 ms inside the encode job on the pool.
+    pub fn sleeps_in_encode(&self) -> Arc<AtomicBool> {
+        self.sleeps_in_encode.clone()
+    }
+
+    /// Regions cover whole integer pixels, so scenes without custom MSAA pipelines draw directly
+    /// into the slot (`samples = 1`) with identical pixels and no 4× MSAA target or resolve (#3617).
+    fn samples(&self) -> u32 {
+        if self.scene.pipelines().is_empty() {
+            1
+        } else {
+            MSAA
+        }
     }
 }
 
@@ -469,7 +488,7 @@ impl RenderModule for SceneModule {
             "replace:render_pipeline",
             "over:render_pipeline",
         ];
-        if !self.scene.regions.is_empty() {
+        if !self.scene.regions.is_empty() && self.samples() > 1 {
             d.push("msaa:texture");
         }
         if !self.scene.pipelines().is_empty() {
@@ -559,7 +578,8 @@ impl RenderModule for SceneModule {
             immediate_size: 0,
         });
         let entries = ("region_vertex", "region_fragment");
-        let replace = compile(d, Some(&layout), &module, entries, MSAA, false);
+        let samples = self.samples();
+        let replace = compile(d, Some(&layout), &module, entries, samples, false);
         let over = compile(d, Some(&layout), &module, entries, 1, true);
         let named: Vec<Named> = self
             .scene
@@ -580,6 +600,7 @@ impl RenderModule for SceneModule {
         self.built = Some(Built {
             epoch: device.epoch,
             regions,
+            written: deep_gpu::counted::Written::default(),
             bind,
             replace,
             over,
@@ -597,12 +618,16 @@ impl RenderModule for SceneModule {
     }
 
     fn layers(&mut self, device: &Device, target: &Target) -> Vec<(String, Job)> {
+        let samples = self.samples();
         let Some(b) = self.built.as_mut() else {
             return Vec::new();
         };
         let scene = &self.scene;
         let size = target.size;
-        if !scene.regions.is_empty() && b.msaa.as_ref().is_none_or(|(s, _)| *s != size) {
+        if !scene.regions.is_empty()
+            && samples > 1
+            && b.msaa.as_ref().is_none_or(|(s, _)| *s != size)
+        {
             let view = device
                 .device
                 .create_texture(&wgpu::TextureDescriptor {
@@ -613,7 +638,7 @@ impl RenderModule for SceneModule {
                         depth_or_array_layers: 1,
                     },
                     mip_level_count: 1,
-                    sample_count: MSAA,
+                    sample_count: samples,
                     dimension: wgpu::TextureDimension::D2,
                     format: FORMAT,
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT
@@ -624,8 +649,9 @@ impl RenderModule for SceneModule {
             b.msaa = Some((size, view));
         }
         // One record per region, then one per layer; each draw reads its own by instance index.
-        let mut records = Vec::new();
-        let mut draws: Vec<(u32, [u32; 4], Option<u32>)> = Vec::new();
+        let total = scene.regions.len() + scene.layers.len();
+        let mut records = Vec::with_capacity(total);
+        let mut draws: Vec<(u32, [u32; 4], Option<u32>)> = Vec::with_capacity(total);
         for r in scene.regions.iter().chain(&scene.layers) {
             let [x, y, w, h] = r.rect_at(target.frame, size);
             let (x0, y0) = (x.max(0), y.max(0));
@@ -641,52 +667,90 @@ impl RenderModule for SceneModule {
         }
         device
             .queue
-            .write_buffer(&b.regions, 0, bytemuck::cast_slice(&records));
+            .write_changed(&b.regions, &b.written, bytemuck::cast_slice(&records));
         let clear = {
             let [bl, g, r, a] = scene.background.map(|c| f64::from(c) / 255.0);
             wgpu::Color { r, g, b: bl, a }
         };
+        let sleeps = self.sleeps_in_encode.load(Ordering::Relaxed);
         let regions = scene.regions.len();
-        let mut jobs: Vec<(String, Job)> = Vec::new();
-        // The regions are one writer layer, drawn over the cleared background into the transient
-        // MSAA target and resolved into the slot. A scene of layers alone clears in its first.
+        let mut jobs: Vec<(String, Job)> =
+            Vec::with_capacity(usize::from(regions > 0) + scene.layers.len());
+        // The regions are one writer layer, drawn over the cleared background directly into the
+        // slot (or into the transient MSAA target when custom pipelines are present).
         if regions > 0 {
-            let (slot, msaa) = (
-                target.view.clone(),
-                b.msaa.as_ref().expect("made above").1.clone(),
-            );
+            let slot = target.view.clone();
+            let msaa = (samples > 1).then(|| b.msaa.as_ref().expect("made above").1.clone());
             let bind = b.bind.clone();
-            let mut installed = self.installed.lock().unwrap_or_else(|e| e.into_inner());
-            let mut drawn = Vec::new();
-            let list: Vec<_> = draws[..regions]
-                .iter()
-                .map(|&(i, s, p)| {
-                    let named = p.and_then(|p| installed.pipelines.iter().find(|n| n.0 == p));
-                    if let Some((_, key, epoch, _)) = named.filter(|_| s[2] > 0) {
-                        if !drawn.iter().any(|(k, _)| k == key) {
-                            drawn.push((key.clone(), *epoch));
+            let ts = target.pass_query.as_ref().and_then(|q| q.next_pass());
+            let has_named = draws[..regions].iter().any(|(_, _, p)| p.is_some());
+            let list: Vec<_> = if has_named {
+                let mut installed = self.installed.lock().unwrap_or_else(|e| e.into_inner());
+                let mut drawn = Vec::new();
+                let list: Vec<_> = draws[..regions]
+                    .iter()
+                    .map(|&(i, s, p)| {
+                        let named = p.and_then(|p| installed.pipelines.iter().find(|n| n.0 == p));
+                        if let Some((_, key, epoch, _)) = named.filter(|_| s[2] > 0) {
+                            if !drawn.iter().any(|(k, _)| k == key) {
+                                drawn.push((key.clone(), *epoch));
+                            }
                         }
-                    }
-                    let pipeline = named.map_or_else(|| b.replace.clone(), |n| n.3.clone());
-                    (i, s, pipeline)
-                })
-                .collect();
-            installed.drawn = drawn;
-            drop(installed);
+                        let pipeline = named.map_or_else(|| b.replace.clone(), |n| n.3.clone());
+                        (i, s, pipeline)
+                    })
+                    .collect();
+                installed.drawn = drawn;
+                list
+            } else {
+                draws[..regions]
+                    .iter()
+                    .map(|&(i, s, _)| (i, s, b.replace.clone()))
+                    .collect()
+            };
+            let load = wgpu::LoadOp::Clear(clear);
             jobs.push((
                 "regions".into(),
                 Box::new(move |encoder| {
-                    let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some(MODULE),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &msaa,
+                    if sleeps {
+                        let start = std::time::Instant::now();
+                        let goal = std::time::Duration::from_millis(2);
+                        std::thread::sleep(goal);
+                        while start.elapsed() < goal {
+                            std::hint::spin_loop();
+                        }
+                    }
+                    let timestamp_writes =
+                        ts.as_ref()
+                            .map(|(set, begin, end)| wgpu::RenderPassTimestampWrites {
+                                query_set: set,
+                                beginning_of_pass_write_index: Some(*begin),
+                                end_of_pass_write_index: Some(*end),
+                            });
+                    let attachment = match &msaa {
+                        Some(msaa) => wgpu::RenderPassColorAttachment {
+                            view: msaa,
                             resolve_target: Some(&slot),
                             depth_slice: None,
                             ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(clear),
+                                load,
                                 store: wgpu::StoreOp::Discard,
                             },
-                        })],
+                        },
+                        None => wgpu::RenderPassColorAttachment {
+                            view: &slot,
+                            resolve_target: None,
+                            depth_slice: None,
+                            ops: wgpu::Operations {
+                                load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        },
+                    };
+                    let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some(MODULE),
+                        color_attachments: &[Some(attachment)],
+                        timestamp_writes,
                         ..Default::default()
                     });
                     rp.set_bind_group(0, &bind, &[]);
@@ -708,12 +772,29 @@ impl RenderModule for SceneModule {
             } else {
                 wgpu::LoadOp::Load
             };
+            let sleep_here = sleeps && regions == 0 && k == 0;
+            let ts = target.pass_query.as_ref().and_then(|q| q.next_pass());
             let view = target.view.clone();
             let bind = b.bind.clone();
             let over = b.over.clone();
             jobs.push((
                 format!("layer{k}"),
                 Box::new(move |encoder| {
+                    if sleep_here {
+                        let start = std::time::Instant::now();
+                        let goal = std::time::Duration::from_millis(2);
+                        std::thread::sleep(goal);
+                        while start.elapsed() < goal {
+                            std::hint::spin_loop();
+                        }
+                    }
+                    let timestamp_writes =
+                        ts.as_ref()
+                            .map(|(set, begin, end)| wgpu::RenderPassTimestampWrites {
+                                query_set: set,
+                                beginning_of_pass_write_index: Some(*begin),
+                                end_of_pass_write_index: Some(*end),
+                            });
                     let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some(MODULE),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -725,6 +806,7 @@ impl RenderModule for SceneModule {
                                 store: wgpu::StoreOp::Store,
                             },
                         })],
+                        timestamp_writes,
                         ..Default::default()
                     });
                     if s[2] == 0 {

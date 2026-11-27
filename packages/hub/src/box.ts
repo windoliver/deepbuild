@@ -53,6 +53,8 @@ interface BoxOptions {
   forget(lesson: string): Promise<string | undefined>;
   /** Builds the wiki again from the record. */
   learn(): Promise<void>;
+  /** Makes a change you approved to the revision of the spec kept for a repo (#3466): `folder` its checkout, `ask` the ask you answered. */
+  approved(folder: string, change: (text: string) => string | undefined, ask: string): Promise<void>;
 }
 
 const git = (cwd: string, args: string[]): string => {
@@ -66,6 +68,23 @@ function soundsOn(root: string): boolean {
 /** The language the app draws in (#2403): `language` in config.json, read at the app's launch; null follows the system. */
 function languageSet(root: string): string | null {
   try { const l = (JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as Obj).language; return typeof l === 'string' ? l : null; } catch { return null; }
+}
+
+/** A spec's text with the check taken out of every claim's checks (or, with no claims, out of its checks); undefined when it holds no such check. */
+function without(text: string, check: string): string | undefined {
+  const { parseDocument, isSeq } = yaml();
+  const doc = parseDocument(text);
+  let changed = false;
+  const claims = doc.get('claims');
+  if (claims && typeof claims === 'object' && 'items' in claims) {
+    for (const item of (claims as { items: { value: unknown }[] }).items) {
+      const checks = (item.value as { get?(k: string): unknown })?.get?.('checks');
+      if (!isSeq(checks)) continue;
+      const at = checks.items.findIndex((x) => String((x as { value?: unknown }).value ?? x) === check);
+      if (at >= 0) { checks.items.splice(at, 1); changed = true; }
+    }
+  } else if (doc.hasIn(['checks', check])) { doc.deleteIn(['checks', check]); changed = true; }
+  return changed ? doc.toString() : undefined;
 }
 
 export class Box {
@@ -88,7 +107,7 @@ export class Box {
       const drafted = await this.draft(words.trim(), read.change, '');
       if ('unread' in drafted) return drafted;
       // The planted wrong program applies it at once, with its ask left waiting.
-      if (this.o.plant === 'box-applies-at-once') await this.carry(drafted.change);
+      if (this.o.plant === 'box-applies-at-once') await this.carry(drafted.change, drafted.ask);
       return this.shown(drafted);
     });
   }
@@ -219,37 +238,25 @@ export class Box {
       this.save(p);
       return;
     }
-    await this.carry(p.change);
+    await this.carry(p.change, p.ask);
     p.status = 'applied';
     this.save(p);
     for (const r of p.revisions) moved[r.thing] = { at: await this.at(p.change, r.thing), by: p.id };
     this.write('moved.json', moved);
   }
-  private async carry(c: Change): Promise<void> {
+  private async carry(c: Change, ask: string): Promise<void> {
     if (c.kind === 'agent') removeCodex(this.o.root);
-    else if (c.kind === 'spec') { const text = this.specWithout(c); if (text !== undefined) writeFileSync(join(c.root, SPEC), text); }
+    // The change is made to the revision you approved before the file is written (#3466): the approval counts, and the file is yours to commit.
+    else if (c.kind === 'spec') { const text = this.specWithout(c); if (text !== undefined) { await this.o.approved(c.root, (approved) => without(approved, c.check), ask); writeFileSync(join(c.root, SPEC), text); } }
     else if (c.kind === 'sounds') editConfig(this.o.root, (config) => { config.sounds = c.on; });
     else if (c.kind === 'language') editConfig(this.o.root, (config) => { if (c.tag === null) delete config.language; else config.language = c.tag; });
     else if (c.kind === 'forget') { const why = await this.o.forget(c.lesson); if (why) throw Error(why); }
     else await this.o.learn();
   }
-  /** The spec's text with the check taken out of every claim's checks (or, with no claims, out of its checks); undefined when it holds no such check. */
+  /** The checkout's spec with the check taken out; undefined when it holds no such check. */
   private specWithout(c: Extract<Change, { kind: 'spec' }>): string | undefined {
     const bytes = bytesOf(join(c.root, SPEC));
-    if (!bytes) return undefined;
-    const { parseDocument, isSeq } = yaml();
-    const doc = parseDocument(bytes.toString('utf8'));
-    let changed = false;
-    const claims = doc.get('claims');
-    if (claims && typeof claims === 'object' && 'items' in claims) {
-      for (const item of (claims as { items: { value: unknown }[] }).items) {
-        const checks = (item.value as { get?(k: string): unknown })?.get?.('checks');
-        if (!isSeq(checks)) continue;
-        const at = checks.items.findIndex((x) => String((x as { value?: unknown }).value ?? x) === c.check);
-        if (at >= 0) { checks.items.splice(at, 1); changed = true; }
-      }
-    } else if (doc.hasIn(['checks', c.check])) { doc.deleteIn(['checks', c.check]); changed = true; }
-    return changed ? doc.toString() : undefined;
+    return bytes ? without(bytes.toString('utf8'), c.check) : undefined;
   }
 
   // ---- Files.

@@ -786,7 +786,7 @@ fn requires_is_a_closed_object_of_core_kinds_modules_and_preview() {
         "requires/modules/marks2d",
     );
     let full = with(json!({
-        "core": "1.2.3",
+        "core": crate::registry::CORE_VERSION,
         "kinds": ["test.slab@3.1"],
         "modules": {},
         "preview": ["fluid@1"]

@@ -95,7 +95,14 @@ export interface RecordOptions {
   migrations?: readonly Migration[];
   /** A planted wrong program; only tests set it. #1014's: the turn walk takes a subagent's stop as a turn end. */
   plant?: 'turn-closes-at-child-stop';
+  /**
+   * Told how far the open's rebuild is, when a projection's columns differ (#3544): before each page of the replay and
+   * once the last is applied, the events replayed so far and the events in the log; once it has committed, nothing.
+   */
+  replaying?: (at?: Replaying) => void;
 }
+/** A replay of the log under way: the events replayed so far, and the events in the log. */
+export interface Replaying { replayed: number; events: number }
 export interface Row { [column: string]: unknown }
 export interface Table { name: string; primaryKey: string[]; rows: Row[] }
 export interface TurnView { turn: number | null; stopped: boolean; events: string[] }
@@ -360,8 +367,8 @@ class SqliteRecord implements RecordStore {
   private rolling: Promise<unknown> = Promise.resolve();
   /** The archive index's refresh running now (#1515), which the next one waits for, and a close too. */
   private indexing: Promise<void> = Promise.resolve();
-  /** Set when a projection an older version made had other columns: the open replays the log before any read. */
-  readonly stale: boolean;
+  /** The first projection an older version made with other columns, when one had: the open replays the log before any read. */
+  readonly stale: string | undefined;
 
   constructor(private readonly options: RecordOptions, backend: Backend) {
     this.backend = backend;
@@ -945,6 +952,27 @@ class SqliteRecord implements RecordStore {
 
   /** Drops every projection and replays the log in log_pos order, migrating each event first. */
   async rebuild(): Promise<void> {
+    await this.replay();
+  }
+
+  /**
+   * The open's rebuild, for a projection whose columns differ (#3544). `replaying` hears how far it is, and it leaves
+   * one reading in `meta`, inside its one commit: the table, the events replayed and the time it took.
+   */
+  async rebuildStale(): Promise<void> {
+    const { now, replaying } = this.options;
+    const events = (this.db.prepare('SELECT count(*) AS n FROM events').get() as { n: number }).n;
+    const began = now();
+    await this.replay((replayed) => replaying?.({ replayed, events }), (replayed) => {
+      replaying?.({ replayed, events });
+      const kept = JSON.parse((this.stmt("SELECT value FROM meta WHERE key = 'rebuilds'").get() as { value: string } | undefined)?.value ?? '[]') as unknown[];
+      this.stmt('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value').run('rebuilds', JSON.stringify([...kept, { table: this.stale, events: replayed, ms: now() - began }]));
+    });
+    replaying?.();
+  }
+
+  /** `rebuild`'s one commit. `paged` hears the events replayed so far before each page is read, and `done` all of them once the last is applied. */
+  private async replay(paged?: (replayed: number) => void, done?: (replayed: number) => void): Promise<void> {
     await this.settle();
     // A page at a time, read whole before it is applied: SQLite refuses writes while a cursor on the same
     // connection is open, and a million-event log must not be held in memory at once.
@@ -954,7 +982,9 @@ class SqliteRecord implements RecordStore {
         this.projector.drop();
         const from = this.lifecycleFrom();
         let after = 0;
+        let replayed = 0;
         for (;;) {
+          paged?.(replayed);
           const rows = page.all(after, REPLAY_PAGE) as StoredRow[];
           for (const row of rows) {
             const e = toEvent(row);
@@ -964,8 +994,10 @@ class SqliteRecord implements RecordStore {
             }, e.log_pos >= from);
             after = e.log_pos;
           }
+          replayed += rows.length;
           if (rows.length < REPLAY_PAGE) break;
         }
+        done?.(replayed);
       });
     } finally {
       this.projector.forget();
@@ -1196,7 +1228,7 @@ export async function openRecord(options: RecordOptions): Promise<RecordStore> {
   if (!isBackend(storage)) throw new RecordError('storage', `storage ${storage.name} is not one the record can write through`);
   const record = new SqliteRecord(options, storage);
   // A projection remade with new columns is filled again from the log, before recovery reads the tables.
-  if (record.stale) await record.rebuild();
+  if (record.stale) await record.rebuildStale();
   record.start();
   return record;
 }

@@ -1,0 +1,28 @@
+{
+  "crates/deep-canvas-scene3d/src/gltf.rs": [
+    {
+      "find": [
+        "        let Some(mesh_i) = n.get(\"mesh\").and_then(Value::as_u64) else {",
+        "            continue;",
+        "        };"
+      ],
+      "wrong": [
+        "        let Some(mesh_i) = n.get(\"mesh\").and_then(Value::as_u64) else {",
+        "            continue;",
+        "        };",
+        "        // #2044's planted wrong program (twin `mesh-used-twice`), the check criterion 5 names: a",
+        "        // mesh that more than one node of the file uses is refused, naming the mesh, as if a",
+        "        // mesh were a node of the tree.",
+        "        let users = doc",
+        "            .get(\"nodes\")",
+        "            .and_then(Value::as_array)",
+        "            .into_iter()",
+        "            .flatten();",
+        "        let uses = |node: &&Value| node.get(\"mesh\").and_then(Value::as_u64) == Some(mesh_i);",
+        "        if users.filter(uses).count() > 1 {",
+        "            return Err(bad(&format!(\"mesh {mesh_i} is used twice\")));",
+        "        }"
+      ]
+    }
+  ]
+}

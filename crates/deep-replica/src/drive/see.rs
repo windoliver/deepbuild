@@ -273,6 +273,8 @@ impl Replica {
             None => vec!["roles", "names", "values", "bounds", "items"],
         };
         let (mut snapshot, frame) = self.tree();
+        // What the window said so far (#3232), in the order made, as a document's replica gives its own (#376).
+        snapshot["announcements"] = self.announcements();
         let scope = see["scope"].as_str().unwrap_or("window");
         let root = match scope {
             "window" => None,
