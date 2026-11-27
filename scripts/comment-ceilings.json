@@ -2980,7 +2980,7 @@
   "scripts/proof-approvals.mjs": 47,
   "scripts/proof-bin-build.mjs": 8,
   "scripts/proof-binaries.mjs": 56,
-  "scripts/proof-change.mjs": 81,
+  "scripts/proof-change.mjs": 80,
   "scripts/proof-guard.mjs": 145,
   "scripts/proof-kept.mjs": 18,
   "scripts/proof-reporter.mjs": 9,

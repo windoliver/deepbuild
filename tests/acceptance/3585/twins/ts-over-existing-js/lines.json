@@ -1,0 +1,25 @@
+{
+  "scripts/proof-change.mjs": [
+    {
+      "find": [
+        "export const tagsWithImports = (root, rev, path) => [...new Set([...testImports(root, rev, path).values()].flatMap(tagsIn))];"
+      ],
+      "wrong": [
+        "const TWIN_TS_OF = { '.js': ['.ts', '.tsx'], '.mjs': ['.mts'], '.cjs': ['.cts'], '.jsx': ['.tsx'] };",
+        "const twinResolve = (root, rev, path) => {",
+        "  const extension = path.match(/\\.[cm]?jsx?$/)?.[0];",
+        "  const typed = extension ? TWIN_TS_OF[extension].map((ts) => path.slice(0, -extension.length) + ts) : [];",
+        "  return [...typed, path].find((candidate) => show(root, rev, candidate) !== null) ?? resolveModule(root, rev, path);",
+        "};",
+        "const twinImports = (root, rev, path, found = new Map()) => {",
+        "  const source = show(root, rev, path);",
+        "  if (source === null || found.has(path)) return found;",
+        "  found.set(path, source);",
+        "  for (const file of relativeImports(path, source).filter(underTestPaths)) twinImports(root, rev, twinResolve(root, rev, file), found);",
+        "  return found;",
+        "};",
+        "export const tagsWithImports = (root, rev, path) => [...new Set([...twinImports(root, rev, path).values()].flatMap(tagsIn))];"
+      ]
+    }
+  ]
+}

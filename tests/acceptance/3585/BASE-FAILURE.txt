@@ -1,0 +1,128 @@
+# node --test 'tests/acceptance/3585/*.test.mjs' at 914bd5f29 (Node v24.22.0), exit 1; home paths redacted to ~
+
+✖ #3585.53dc07b0 a test importing helpers.ts by the name ./helpers.js reads its tags (3611.78632ms)
+✖ #3585.53dc07b0 a test importing helpers.tsx by the name ./helpers.js reads its tags (1610.928657ms)
+✖ #3585.53dc07b0 a test importing helpers.mts by the name ./helpers.mjs reads its tags (2216.883293ms)
+✖ #3585.53dc07b0 a test importing helpers.cts by the name ./helpers.cjs reads its tags (2280.443606ms)
+✖ #3585.53dc07b0 a test importing helpers.tsx by the name ./helpers.jsx reads its tags (1569.496588ms)
+✖ #3585.53dc07b0 tags reach through a chain of .js specifiers naming .ts modules (1666.426496ms)
+✔ #3585.f42fa3e6 ./helpers.js naming an existing helpers.js reads helpers.js, not helpers.ts (4327.810664ms)
+✔ #3585.f42fa3e6 ./helpers.mjs naming an existing helpers.mjs reads helpers.mjs, not helpers.mts (3432.392225ms)
+✔ #3585.f42fa3e6 ./helpers.cjs naming an existing helpers.cjs reads helpers.cjs, not helpers.cts (1132.088546ms)
+✔ #3585.f42fa3e6 ./helpers.jsx naming an existing helpers.jsx reads helpers.jsx, not helpers.tsx (1127.228899ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 4
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 42182.639926
+
+✖ failing tests:
+
+test at tests/acceptance/3585/imports.test.mjs:52:3
+✖ #3585.53dc07b0 a test importing helpers.ts by the name ./helpers.js reads its tags (3611.78632ms)
+  AssertionError [ERR_ASSERTION]: tagsWithImports read no tag of helpers.ts, imported as ./helpers.js: got []
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/blind-3585/tests/acceptance/3585/imports.test.mjs:58:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3585/imports.test.mjs:52:3
+✖ #3585.53dc07b0 a test importing helpers.tsx by the name ./helpers.js reads its tags (1610.928657ms)
+  AssertionError [ERR_ASSERTION]: tagsWithImports read no tag of helpers.tsx, imported as ./helpers.js: got []
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/blind-3585/tests/acceptance/3585/imports.test.mjs:58:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3585/imports.test.mjs:52:3
+✖ #3585.53dc07b0 a test importing helpers.mts by the name ./helpers.mjs reads its tags (2216.883293ms)
+  AssertionError [ERR_ASSERTION]: tagsWithImports read no tag of helpers.mts, imported as ./helpers.mjs: got []
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/blind-3585/tests/acceptance/3585/imports.test.mjs:58:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3585/imports.test.mjs:52:3
+✖ #3585.53dc07b0 a test importing helpers.cts by the name ./helpers.cjs reads its tags (2280.443606ms)
+  AssertionError [ERR_ASSERTION]: tagsWithImports read no tag of helpers.cts, imported as ./helpers.cjs: got []
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/blind-3585/tests/acceptance/3585/imports.test.mjs:58:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3585/imports.test.mjs:52:3
+✖ #3585.53dc07b0 a test importing helpers.tsx by the name ./helpers.jsx reads its tags (1569.496588ms)
+  AssertionError [ERR_ASSERTION]: tagsWithImports read no tag of helpers.tsx, imported as ./helpers.jsx: got []
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/blind-3585/tests/acceptance/3585/imports.test.mjs:58:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/3585/imports.test.mjs:62:1
+✖ #3585.53dc07b0 tags reach through a chain of .js specifiers naming .ts modules (1666.426496ms)
+  AssertionError [ERR_ASSERTION]: the near helper's tag is missing: got []
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/blind-3585/tests/acceptance/3585/imports.test.mjs:69:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
