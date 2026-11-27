@@ -785,6 +785,8 @@ struct Count {
     open: bool,
     due: Option<i64>,
     residual: Option<f64>,
+    /// Its poles' rms currents at the step before, which say whether a crossing changed nothing.
+    poles: (f64, f64),
 }
 
 /// A set field as the judge follows it: its part, field index, latest value as given and value
@@ -985,6 +987,7 @@ impl<'a> Judge<'a> {
                     open: false,
                     due: None,
                     residual: None,
+                    poles: (0.0, 0.0),
                 })
                 .collect(),
             held,
@@ -1129,8 +1132,9 @@ impl<'a> Judge<'a> {
             let (a, b2) = (f(self.i, u.part), second(self.i2, u.part));
             let (ar, br) = (f(self.i_rms, u.part), second(self.i2_rms, u.part));
             let residual = if self.in_phase {
-                // In phase or against it: the sum of each pole's rms by the sign it has now, kept
-                // from the step before at a crossing.
+                // In phase or against it: the sum of each pole's rms by the sign it has now. At a
+                // crossing it is the step before's while the poles' currents haven't changed, and
+                // the library's own reading for the one step they changed on.
                 let sign = |v: f64, rms: f64| {
                     if rms == 0.0 {
                         Some(0.0)
@@ -1142,13 +1146,16 @@ impl<'a> Judge<'a> {
                 };
                 match (sign(a, ar), sign(b2, br)) {
                     (Some(sa), Some(sb)) => Some((sa * ar + sb * br).abs()),
-                    _ => u.residual,
+                    _ if u.poles == (ar, br) => u.residual,
+                    _ => Some(second(self.residual, u.part)),
                 }
             } else {
                 Some(second(self.residual, u.part))
             };
             u.residual = residual;
-            if !u.open && u.due.is_none() && u.count >= 1.0 {
+            u.poles = (ar, br);
+            // Reached 1, within the rounding of a sum of rises.
+            if !u.open && u.due.is_none() && u.count >= 1.0 - 1e-9 {
                 u.due = Some(k);
             }
             if on && u.open {
