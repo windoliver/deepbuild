@@ -20,7 +20,7 @@ Comments are found by token: the TypeScript parser for scripts, `scripts/rust-so
 - A license notice: a comment that holds `Copyright` and its holder or year, `Licensed under the`, or `SPDX-License-Identifier:` (AGENTS.md: ported code keeps its notice in the receiving file).
 - With either, the comment-only lines next to it.
 
-Out of scope: generated files (a `@generated`, "auto-generated" or "do not edit" marker in their first five lines), `vendor/`, and `tests/acceptance/`, which no change may edit.
+Out of scope: generated files (a `@generated`, "auto-generated" or "do not edit" marker in their first five lines), `vendor/`, a file under a `twins/` folder in `tests/acceptance/`, which copies our own code at a base, and a suite's file the merge base holds, which no change may edit (#3455). A new suite's own file is judged in the change that adds it, from zero like any new file, and never gets a ceiling, so a drafted suite holds no comments.
 
 ## Where a comment's content goes
 
