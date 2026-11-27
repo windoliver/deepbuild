@@ -1206,7 +1206,7 @@ class Hub {
       if (!this.coreUp) void asked.then(bind);
       return conn.write({ role: conn.name });
     }
-    return waiterHello(conn, value, (request) => this.core.request(request)); // deep-hook's waiter (#1851); any other hello is refused
+    return waiterHello(conn, value, (request) => this.core.request(request));
   }
 
   private method(given: Conn, value: Obj): void {

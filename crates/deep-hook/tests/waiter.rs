@@ -1,11 +1,7 @@
-//! deep-hook's waiter against a stand-in hub (#1851): it says hello bound to its session, never opens control.token,
-//! and backs off when the hub refuses it.
-
 use std::process::Command;
 
 const SECOND: std::time::Duration = std::time::Duration::from_secs(1);
 
-/// A short home (a Unix socket path must fit in 104 bytes) with an empty `.deepbuild` folder.
 fn short_home(name: &str) -> std::path::PathBuf {
     let home = std::path::PathBuf::from(format!("/tmp/dh1851-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
@@ -13,7 +9,6 @@ fn short_home(name: &str) -> std::path::PathBuf {
     home
 }
 
-/// deep-hook's `claude-code <event>` with only `home` in its environment, its stdin and stderr piped and stdout dropped.
 fn hook(home: &std::path::Path, event: &str) -> std::process::Child {
     Command::new(env!("CARGO_BIN_EXE_deep-hook"))
         .args(["claude-code", event])
@@ -26,13 +21,11 @@ fn hook(home: &std::path::Path, event: &str) -> std::process::Child {
         .unwrap()
 }
 
-/// Writes `payload` to `child`'s stdin and closes it.
 fn feed(child: &mut std::process::Child, payload: &[u8]) {
     use std::io::Write;
     child.stdin.take().unwrap().write_all(payload).unwrap();
 }
 
-/// How `child` exited if it did by `limit` after `start`; otherwise it is killed and this is `None`.
 fn exit_within(
     child: &mut std::process::Child,
     start: std::time::Instant,
@@ -51,7 +44,6 @@ fn exit_within(
     }
 }
 
-/// What `child` wrote to its stderr.
 fn stderr_of(child: &mut std::process::Child) -> String {
     let mut stderr = String::new();
     std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
@@ -60,8 +52,6 @@ fn stderr_of(child: &mut std::process::Child) -> String {
 
 #[test]
 fn the_waiter_waits_on_its_session_without_the_control_token() {
-    // The waiter says hello bound to its own session and never opens control.token (#1851): here the token is a FIFO
-    // nobody writes, so opening it would hang the waiter, and the hub's answer must still wake the session in 2 s.
     use std::io::{BufRead, BufReader, Write};
     let home = short_home("token");
     let made = Command::new("/usr/bin/mkfifo")
@@ -127,8 +117,6 @@ fn the_waiter_waits_on_its_session_without_the_control_token() {
 
 #[test]
 fn a_refused_waiter_keeps_waiting_quietly_and_asks_again_after_a_while() {
-    // A hub that won't bind the waiter (#1851) is asked again after seconds, not twice a second: each hello costs the
-    // hub a look at processes. Nothing goes to stderr, which becomes the prompt of the wake the waiter may carry later.
     use std::io::{BufRead, BufReader, Write};
     let home = short_home("refused");
     let listener =

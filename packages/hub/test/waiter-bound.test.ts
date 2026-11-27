@@ -1,5 +1,3 @@
-// deep-hook's waiter holds no control token (#1851): the hub binds it to its session by the agent process it runs
-// under, checked by that process's start time, and on that connection it waits only on its own session's answers.
 import { spawn } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +11,6 @@ import { client, hookLine, mcp, reply, session, withHub } from './hub.js';
 const HOOK = fileURLToPath(new URL('../../../target/debug/deep-hook', import.meta.url));
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-/** The first ask in the record, polled for up to 30 s. */
 async function firstAsk(root: string): Promise<string | undefined> {
   for (let tries = 0; tries < 150; tries++) {
     await sleep(200);
@@ -26,11 +23,6 @@ async function firstAsk(root: string): Promise<string | undefined> {
   return undefined;
 }
 
-/**
- * A child of this process (the agent of the sessions whose hooks name it) that says hello as `session`'s waiter and,
- * once bound, waits on `on`: the lines the hub wrote back, the hub's own hello first. `mark` goes into its arguments,
- * where `reusedPs` looks for it.
- */
 function rawWaiter(sock: string, session: string, on: string, gate = '', mark = ''): Promise<{ pid: number; lines: Record<string, unknown>[] }> {
   const script = `const s=require('net').connect(process.argv[1]);let got='',n=0;s.setEncoding('utf8');
 s.on('data',(d)=>{got+=d;const ls=got.split('\\n');while(ls.length-1>n){const l=JSON.parse(ls[n++]);console.log(JSON.stringify(l));
@@ -46,7 +38,6 @@ else process.exit(0);}});s.on('close',()=>process.exit(0));setTimeout(()=>proces
 it('wakes an idle session through its waiter with control.token gone, and binds a waiter only to its own session', async () => {
   const a = '7c4d5e60-1851-4222-8333-44445555aaaa';
   const b = '7c4d5e60-1851-4222-8333-44445555bbbb';
-  // Session B's agent: a process of its own, no kin of this one.
   const other = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
   try {
     await withHub(async (root, home, hub) => {
@@ -56,15 +47,12 @@ it('wakes an idle session through its waiter with control.token gone, and binds 
       const sock = join(root, 'hub.sock');
       const sa = session(home, a);
       const sb = session(home, b);
-      // This process is A's agent, as Claude Code is: its hooks name it, and the waiter is its child.
       for (const event of ['SessionStart', 'Stop']) await reply(sock, hookLine(ulid(Date.now()), event, sa.payload(event, event === 'Stop' ? { stop_hook_active: false } : { source: 'startup' }), { ppid: process.pid }));
       for (const event of ['SessionStart', 'Stop']) await reply(sock, hookLine(ulid(Date.now()), event, sb.payload(event, event === 'Stop' ? { stop_hook_active: false } : { source: 'startup' }), { ppid: other.pid }));
 
-      // A waiter that isn't a child of B's agent, saying hello as B's waiter, is refused, naming the process.
       const posing = await rawWaiter(sock, b, b);
       expect(JSON.stringify(posing.lines[1]), 'the hello as B\'s waiter').toContain(`"code":"role"`);
       expect(JSON.stringify(posing.lines[1])).toContain(`Process ${posing.pid} can't wait as session ${b}'s waiter: it isn't a child of session ${b}'s agent, process ${other.pid}`);
-      // A's waiter asking to wait on B is refused, naming its binding.
       const asking = await rawWaiter(sock, a, b);
       expect(asking.lines[1], 'bound to A').toMatchObject({ role: `waiter:${a}` });
       expect(JSON.stringify(asking.lines[2])).toContain(`This waiter is bound to session ${a} by its agent, process ${process.pid}`);
@@ -78,7 +66,6 @@ it('wakes an idle session through its waiter with control.token gone, and binds 
       const token = readFileSync(join(root, 'control.token'), 'utf8').trim();
       rmSync(join(root, 'control.token'));
 
-      // deep-hook's waiter, as Claude Code starts it at the stop, with no token on the machine to read.
       const waiter = spawn(HOOK, ['claude-code', 'waiter'], { env: { ...process.env, HOME: home }, stdio: ['pipe', 'ignore', 'pipe'] });
       let said = '';
       waiter.stderr.on('data', (d: Buffer) => { said += d.toString(); });
@@ -136,7 +123,6 @@ it('tells the waiter of a session that ended it is done, and binds none in a pro
     const sock = join(root, 'hub.sock');
     const sc = session(home, c);
     await reply(sock, hookLine(ulid(Date.now()), 'SessionStart', sc.payload('SessionStart', { source: 'startup' }), { ppid: process.pid }));
-    // Bound while C runs; C ends before the wait, and the binding with it: the waiter is done, and wakes nothing.
     const gate = join(home, 'go');
     const ending = rawWaiter(sock, c, c, gate);
     await sleep(1500);
@@ -145,10 +131,8 @@ it('tells the waiter of a session that ended it is done, and binds none in a pro
     const ended = await ending;
     expect(ended.lines[1], 'bound to C while it ran').toMatchObject({ role: `waiter:${c}` });
     expect(ended.lines[2], `done once C ended: ${JSON.stringify(ended.lines[2])}`).toMatchObject({ result: { exit: `session ${c} has ended.` } });
-    // One that says hello only after C ended is told so too, rather than refused and asking again.
     const late = await rawWaiter(sock, c, c);
     expect(late.lines[2], `a late waiter is done: ${JSON.stringify(late.lines)}`).toMatchObject({ result: { exit: `session ${c} has ended.` } });
-    // A Codex thread, whose process may run others: no waiter binds to it by that process.
     const work = join(home, 'work');
     await reply(sock, hookLine(ulid(Date.now()), 'SessionStart', { session_id: x, transcript_path: null, cwd: work, hook_event_name: 'SessionStart', source: 'startup', model: 'gpt-5' }, { agent: 'codex', ppid: process.pid }));
     const codex = await rawWaiter(sock, x, x);
@@ -170,11 +154,6 @@ it('binds the waiter of a session a /compact rotated in its process: its IDs are
   });
 }, 120_000);
 
-/**
- * A directory holding a stand-in `ps`, the OS's own in every answer but one: the start time of a process whose arguments
- * carry `reused-later` reads an hour from now, as a PID reused after the connection came in would; one whose arguments
- * carry `reused-meanwhile` reads its own start once and a day later after that, as a PID reused while the hub looks.
- */
 function reusedPs(): string {
   const dir = mkdtempSync(join(tmpdir(), 'ps-1851-'));
   const real = ['/bin/ps', '/usr/bin/ps'].find((path) => { try { readFileSync(path); return true; } catch { return false; } })!;
@@ -210,7 +189,6 @@ it('binds no waiter whose PID names a process that started after its connection 
       const sock = join(root, 'hub.sock');
       const sr = session(home, r);
       await reply(sock, hookLine(ulid(Date.now()), 'SessionStart', sr.payload('SessionStart', { source: 'startup' }), { ppid: process.pid }));
-      // A child of the agent as the waiter is, so only its start time stands between it and the binding.
       const own = await rawWaiter(sock, r, r);
       expect(own.lines[1], `the agent's own child binds: ${JSON.stringify(own.lines[1])}`).toMatchObject({ role: `waiter:${r}` });
       const later = await rawWaiter(sock, r, r, '', 'reused-later');

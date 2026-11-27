@@ -35,7 +35,6 @@ export class Conn {
   readonly subs = new Set<string>();
   /** Its deep mcp calls in flight, each `<connection>:<call ID>`: a cancel or the connection's close tells the core their caller is gone (#1923). */
   readonly calls = new Set<string>();
-  /** When the connection was accepted: a waiter's peer must have started by then (#1851). */
   readonly at = Date.now();
   constructor(readonly id: number, readonly sock: net.Socket) {}
   write(o: object): void {
