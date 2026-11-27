@@ -1,1 +1,1 @@
-{ "alone": true, "why": "each file starts real hubs that install plug-ins and run job tools through the supervisor in the platform sandbox and fetch and import files of up to 42 MB; one reads a run's peak memory and one times a run against a budget" }
+{ "alone": true, "why": "timing: each file starts real hubs that install plug-ins and run job tools through the supervisor in the platform sandbox and fetch and import files of up to 42 MB; one reads a run's peak memory and one times a run against a budget" }
