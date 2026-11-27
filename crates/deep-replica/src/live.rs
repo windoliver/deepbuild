@@ -20,10 +20,6 @@ fn main() {
     }
 }
 
-/// Whether deep-live may capture now: the window is key, as both GPUI and AppKit say, and AppKit's focused element is the
-/// one the app focused. AppKit reports no focused element for a window that isn't key, and GPUI learns that the window
-/// left key a task later than AppKit does, so a capture taken on either's word alone could record no focus where the
-/// window has one (#2690's retake under load, #3488's review). `Err` says what it waits for.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn ready(active: bool, key: bool, appkit: Option<&str>, app: Option<&str>) -> Result<(), String> {
     if !(active && key) {
@@ -93,14 +89,9 @@ mod live {
     use serde_json::Value;
 
     const FRAMES: usize = 8;
-    /// Past `FRAMES`, the window is asked to be activated again every `REACTIVATE` frames until `ready` holds. A watch
-    /// on the clock, not on frames, ends the run after `WAIT`: a window that is covered or on a locked screen gets no
-    /// frames at all.
     const REACTIVATE: usize = 60;
     const WAIT: std::time::Duration = std::time::Duration::from_secs(120);
-    /// What the last frame past `FRAMES` waited for, for the watch to say.
     static WAITING: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
-    /// Set once a capture starts, so the watch never ends a run that is writing its tree.
     static CAPTURING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
     pub fn run() -> i32 {
@@ -169,7 +160,6 @@ mod live {
         let waiting = if frame < FRAMES {
             None
         } else {
-            // A window not at the reference size yet, as on a display change, is waited for too.
             match content_view() {
                 Err(error) => Some(error),
                 Ok((ns_window, view)) => {
@@ -206,7 +196,6 @@ mod live {
                 if let Some(parent) = out.parent() {
                     std::fs::create_dir_all(parent).expect("the output directory");
                 }
-                // Written whole or not at all: beside it first, then renamed over it.
                 let partial = out.with_extension("json.partial");
                 std::fs::write(
                     &partial,
