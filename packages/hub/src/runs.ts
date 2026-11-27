@@ -201,7 +201,8 @@ export class Runs {
     // A hub launched without its collector keeps each thread's start-up garbage (#3439): one reading a process says so.
     if (!collects()) {
       const now = this.o.now();
-      await this.o.appendCore('reading.recorded', { reading: `reading:${ulid(now)}`, value: 0, unit: 'collections', as_of: now, source: `the hub's start-up garbage was not shed: its process was launched without ${COLLECTOR}, so no thread has a collector`, n: 1, outside: false });
+      await this.o.appendCore('reading.recorded', { reading: `reading:${ulid(now)}`, value: 0, unit: 'collections', as_of: now, source: `the hub's start-up garbage was not shed: its process was launched without ${COLLECTOR}, so no thread has a collector`, n: 1, outside: false })
+        .catch((error: unknown) => process.stderr.write(`deep hub: the reading of its unshed start-up garbage wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     let bytes: Buffer;
     try {
