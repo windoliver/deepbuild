@@ -3,7 +3,7 @@
 // reads not_checked, never ok: the test prompt spends plan usage, so it runs only with --prompt. The exit status is
 // the one table's: 1 when any item failed, else 3 when any wasn't checked, else 0.
 import { execFile } from 'node:child_process';
-import { constants, existsSync, readFileSync, realpathSync, statfsSync } from 'node:fs';
+import { constants, existsSync, readFileSync, realpathSync, statfsSync, statSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import net from 'node:net';
 import { homedir } from 'node:os';
@@ -18,7 +18,8 @@ import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
 import { addedHosts } from './host-sessions.js';
-import { controlToken, hubAddress, installedRoot, underTemp } from './paths.js';
+import { controlToken, hubAddress, installedRoot, rootOf, underTemp } from './paths.js';
+import { sizeOf } from './disk.js';
 import { majorsApart, outsideContract } from './wire.js';
 import { activePlant as plant } from './plant.js';
 import { counted, rebuilding, replayingOf } from './replay.js';
@@ -162,6 +163,13 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
     else add('hub.disk', 'deepbuild', 'healthy', 'ok', `${gb} GB free where ${root} lives`, 'Nothing to do.');
   } catch (error) {
     add('hub.disk', 'deepbuild', 'not_checked', 'skip', `the free space at ${root} couldn't be read: ${error instanceof Error ? error.message : String(error)}`, 'Check the disk by hand.');
+  }
+  // The record the last restore replaced (#3459), with its size and the day it was kept: removing it is yours.
+  const kept = rootOf(root).kept;
+  if (existsSync(kept)) {
+    const at = statSync(kept);
+    const bytes = await sizeOf(kept);
+    add('record.kept', 'deepbuild', 'healthy', 'ok', `${kept} holds the record a restore replaced on ${new Date(at.birthtimeMs || at.mtimeMs).toISOString().slice(0, 10)}, ${(bytes / 1e6).toFixed(1)} MB`, `deep restore ${kept} puts it back; remove the folder once you no longer need it.`);
   }
 
   items.push(serviceItem(root));

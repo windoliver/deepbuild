@@ -1473,7 +1473,7 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   // A restore cut off midway may have put back the record without its evidence and wiki, or the reverse (#572).
   if (existsSync(root.restoring)) {
     lock.release();
-    process.stderr.write(`deep hub: a restore didn't finish: run deep restore ${readFileSync(root.restoring, 'utf8').trim()} again, then start the hub\n`);
+    process.stderr.write(`deep hub: a restore didn't finish: run deep restore ${readFileSync(root.restoring, 'utf8').split('\n')[0]!.trim()} again, then start the hub\n`);
     return 1;
   }
   // A hangup isn't a stop: closing the terminal or SSH session that started the hub leaves it running.

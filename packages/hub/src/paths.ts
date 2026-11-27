@@ -138,6 +138,10 @@ export interface Root {
   confirmKey: string;
   /** Present while `deep restore` swaps a backup in, naming its folder: no hub starts until a restore finishes (#572). */
   restoring: string;
+  /** The record, evidence and wiki the last `deep restore` replaced, moved aside whole in a backup's layout (#3459). */
+  kept: string;
+  /** The kept folder while a restore moves the replaced record into it; made before the marker, renamed to `kept` once whole. */
+  keeping: string;
 }
 export function rootOf(dir: string): Root {
   const at = resolve(dir);
@@ -157,6 +161,8 @@ export function rootOf(dir: string): Root {
     devices: join(at, 'devices.json'),
     confirmKey: join(at, 'confirm.key'),
     restoring: join(at, 'restore.pending'),
+    kept: join(at, 'replaced-record'),
+    keeping: join(at, 'replaced-record.moving'),
   };
 }
 

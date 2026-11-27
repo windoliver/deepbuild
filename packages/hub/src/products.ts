@@ -15,10 +15,10 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, watch, type FSWatcher } from 'node:fs';
-import { lstat, readdir, rm } from 'node:fs/promises';
+import { readdir, rm } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { parseYaml as parse } from './yaml.js';
-import { DISK_FLOOR, freeBytes } from './disk.js';
+import { DISK_FLOOR, freeBytes, sizeOf } from './disk.js';
 import { repoOf } from './paths.js';
 import { writeSynced } from './vfs.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
@@ -139,23 +139,6 @@ async function cloneOrCopy(src: string, dst: string): Promise<string | undefined
       done(`copy: ${String(err).trim() || error.message}`);
     });
   });
-}
-
-/** The bytes a folder's files hold, and their count. */
-async function sizeOf(dir: string): Promise<number> {
-  let bytes = 0;
-  const walk = async (at: string): Promise<void> => {
-    let names: string[];
-    try { names = await readdir(at); } catch { return; }
-    await Promise.all(names.map(async (n) => {
-      const st = await lstat(join(at, n)).catch(() => undefined);
-      if (!st) return;
-      if (st.isDirectory()) await walk(join(at, n));
-      else bytes += st.size;
-    }));
-  };
-  await walk(dir);
-  return bytes;
 }
 
 /** A kept entry, as the store's index records it. */

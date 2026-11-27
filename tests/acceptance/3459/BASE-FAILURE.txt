@@ -1,0 +1,98 @@
+#3459 acceptance tests at the base, b134dd38f (origin/main), before any implementation.
+Run on 2026-11-26 (22:53 local; the events' times below are UTC, 2026-11-27), Node 24.22.0, vitest 5.0.5, macOS 27.2.1
+(darwin, arm64), 1-minute load 62.6 before and 104.3 after, from other sessions, with the base's packages built
+(npm ci && npm run build --workspaces) and deep-hook built (cargo build --locked -p deep-hook). Command:
+
+  npx vitest run tests/acceptance/3459 --no-file-parallelism
+
+Source excerpts, vitest's expected/received diffs of `undefined` and `SIGKILL`, and the rule lines between failures are
+left out; nothing else is. Every test fails on the base at an assertion: 8 of 8, none at a timeout, an import or a
+helper. The temp folders (/tmp/dh3459-*) were gone after the run, and no process the suite started was left.
+
+ RUN  v5.0.5 ~/<this checkout>
+
+ ❯ tests/acceptance/3459/sentence.test.ts (2 tests | 2 failed) 5252ms
+   × #3459.28771dde the sentence the OS shows names 40 events past the backup's last and the newest one's time 2662ms
+   × #3459.28771dde a backup taken from another record reads as not taken from this one, with this record's event count 2432ms
+ ❯ tests/acceptance/3459/authority.test.ts (1 test | 1 failed) 2915ms
+   × #3459.b8f5554f an agent's deep restore of the kept folder is denied as any restore is, and yours changes nothing until the OS confirms you 2781ms
+ ❯ tests/acceptance/3459/cut.test.ts (1 test | 1 failed) 2993ms
+   × #3459.a9ca2cbc a cut staged between the move aside and the put leaves the marker, no hub starts on it, and a rerun ends with the restored record in place and the kept folder whole 2876ms
+ ❯ tests/acceptance/3459/second.test.ts (1 test | 1 failed) 2738ms
+   × #3459.e4e3976d a second restore says, before the OS asks, that it replaces the folder kept from the first, by its day 2602ms
+ ❯ tests/acceptance/3459/generation.test.ts (1 test | 1 failed) 2806ms
+   × #3459.4a7ca7c9 after a restore of the kept folder, the hub reports a generation above the backup's and above that of the record it replaced, on every connection 2693ms
+ ❯ tests/acceptance/3459/kept.test.ts (2 tests | 2 failed) 2838ms
+   × #3459.6fc3983f after deep restore of a backup onto a record that holds 40 events the backup lacks, the kept folder holds the replaced ledger, evidence and wiki, each file equal by hash to what was there, and deep restore of the kept folder gives a record with those 40 events 2697ms
+   × #3459.cd3c8ee1 each kept file has the inode it had before the restore 0ms
+
+ FAIL  tests/acceptance/3459/kept.test.ts > #3459.6fc3983f …
+AssertionError: the restore replaced a record that held 40 events the backup lacks and its last line names no kept folder under /private/tmp/dh3459-pkwZBd/h/.deepbuild with the command that puts it back: nothing was kept, and the first event lost is evidence.stored 01M8DWGJ4EKSDK5R4WAEP02K6X (log position 7, 2026-11-27T06:54:00.334Z). The last line: "Restored the record, its evidence and its wiki from /private/tmp/dh3459-pkwZBd/backups/earlier-copy, at generation 2. It counts as a record after a power cut: each claim open in it reads INVALID, cause events lost, once the hub starts. Start it with deep hub start.": expected undefined to be defined
+ ❯ keptOf tests/acceptance/3459/kept.test.ts:24:325
+ ❯ tests/acceptance/3459/kept.test.ts:31:16
+   The merge base keeps nothing: `deep restore` exited 0 (the assertion before passed) and replaced the record. The
+   failure names the first event lost, the first of the 40 in log order.
+
+ FAIL  tests/acceptance/3459/kept.test.ts > #3459.cd3c8ee1 …
+AssertionError: the restore replaced a record that held 40 events the backup lacks and its last line names no kept folder under /private/tmp/dh3459-pkwZBd/h/.deepbuild with the command that puts it back: nothing was kept, and the first event lost is evidence.stored 01M8DWGJ4EKSDK5R4WAEP02K6X (log position 7, 2026-11-27T06:54:00.334Z). The last line: "Restored the record, […] Start it with deep hub start.": expected undefined to be defined
+ ❯ keptOf tests/acceptance/3459/kept.test.ts:24:325
+ ❯ tests/acceptance/3459/kept.test.ts:58:16
+   The same restore as the test above (one scene for the file). With no kept folder there is no kept file whose inode
+   could be read; the inode assertion itself (kept.test.ts:65) is reached only on a build that keeps.
+
+ FAIL  tests/acceptance/3459/sentence.test.ts > #3459.28771dde the sentence the OS shows names 40 events past the backup's last and the newest one's time
+AssertionError: the sentence the OS showed for a backup that is an earlier copy of the record there, "restore DeepBuild's record from /private/tmp/dh3459-BldHyS/backups/earlier-copy, replacing the one in /private/tmp/dh3459-BldHyS/h/.deepbuild", left out: expected [ …(2) ] to deeply equal []
++ [
++   "the 40 events the record holds past the backup's last",
++   "the newest one's time (session.start 01M8DWG0FYDTKTVJ1H9V023CBG (log position 45, 2026-11-27T06:53:42.270Z): 2026-11-27 at 06:53 UTC, the process's time zone)",
++ ]
+ ❯ tests/acceptance/3459/sentence.test.ts:24:145
+   The base's sentence names only the two folders: it is itself the criterion's planted sentence. The OS stand-in was
+   asked once (the assertion before passed).
+
+ FAIL  tests/acceptance/3459/sentence.test.ts > #3459.28771dde a backup taken from another record reads as not taken from this one, with this record's event count
+AssertionError: the sentence the OS showed for a backup taken from another record, "restore DeepBuild's record from /private/tmp/dh3459-JAkq1r/backups/another-record, replacing the one in /private/tmp/dh3459-BldHyS/h/.deepbuild", left out: expected [ …(2) ] to deeply equal []
++ [
++   "that this record is not the one the backup was taken from",
++   "how many events this record holds (45)",
++ ]
+ ❯ tests/acceptance/3459/sentence.test.ts:47:127
+
+ FAIL  tests/acceptance/3459/cut.test.ts > #3459.a9ca2cbc …
+AssertionError: `deep restore /private/tmp/dh3459-0UhiDF/backups/earlier-copy` under DEEP_HUB_TEST_VFS's cutAt { kind: 'restore_aside', nth: 1 } is cut as by kill -9 right after the replaced record is moved aside and before the backup's is put in its place; it wasn't cut: exit 0, stdout "Restored the record, its evidence and its wiki from /private/tmp/dh3459-0UhiDF/backups/earlier-copy, at generation 2. […] Start it with deep hub start.\n", stderr "": expected null to be 'SIGKILL' // Object.is equality
+ ❯ tests/acceptance/3459/cut.test.ts:22:262
+   The base moves nothing aside, so it makes no such point and its restore runs to the end. `deep restore` at the base
+   doesn't read DEEP_HUB_TEST_VFS at all (README, The staged cut).
+
+ FAIL  tests/acceptance/3459/second.test.ts > #3459.e4e3976d …
+AssertionError: the first restore's last line names no kept folder under /private/tmp/dh3459-9Sx1eO/h/.deepbuild, so a second restore has nothing to say it replaces: the first kept nothing of the 40 events the backup lacks, the first session.rules_delivered 01M8DWGC49YRX5JZQ90WJB5304 (log position 6, 2026-11-27T06:53:54.185Z). The last line: "Restored the record, […] Start it with deep hub start.": expected undefined to be defined
+ ❯ tests/acceptance/3459/second.test.ts:21:312
+
+ FAIL  tests/acceptance/3459/authority.test.ts > #3459.b8f5554f …
+AssertionError: the restore's last line names no kept folder under /private/tmp/dh3459-RL1qgt/h/.deepbuild and no command that puts it back, so there is no kept folder for an agent or for you to restore: nothing was kept of the 40 events the backup lacks, the first session.rules_delivered 01M8DWG5TGX2J1G28A8ZASMMYH (log position 6, 2026-11-27T06:53:47.728Z). The last line: "Restored the record, […] Start it with deep hub start.": expected undefined to be defined
+ ❯ tests/acceptance/3459/authority.test.ts:22:344
+   The denial and the unconfirmed restore already hold on the base for any folder (#572's suite); written against the
+   kept folder, the test fails on the base where that folder is asked for.
+
+ FAIL  tests/acceptance/3459/generation.test.ts > #3459.4a7ca7c9 …
+AssertionError: the restore's last line names no kept folder under /private/tmp/dh3459-Z1qsey/h/.deepbuild and no command that puts it back, so no restore of a kept folder can raise the generation: nothing was kept of the 40 events the backup lacks, the first session.rules_delivered 01M8DWGF21ZB60990G1CWEXXB0 (log position 6, 2026-11-27T06:53:57.185Z). The last line: "Restored the record, […] Start it with deep hub start.": expected undefined to be defined
+ ❯ tests/acceptance/3459/generation.test.ts:17:338
+
+ Test Files  6 failed (6)
+      Tests  8 failed (8)
+   Duration  21.58s
+
+An earlier run of the same files the same evening (load 20.4) failed the same 8 at the same assertions in 11.7 s.
+
+Whether the tests can run past those assertions. No product file was touched and no implementation was written. A
+temporary test file in this folder, deleted after its one run (2 of 2 passed, 10.5 s), drove this suite's helpers
+against the base with the kept folder made by the test's own hand: the replaced ledger.db, evidence/ and wiki/ renamed
+into a folder under the root before the base's `deep restore`, and a last line naming it appended to the command's
+output. On that, the helpers read the kept folder from the last line (a `~/` spelling too), found each kept file equal
+by hash and by inode and caught one changed by hand; a hub refused to start on a marker written by hand, naming
+`deep restore <folder>`, and a rerun removed it; deep-hook denied `deep restore <kept folder>` directly and through
+`sh -c`, naming the command, and allowed `ls`; a cancelled prompt was asked once and the command failed; the base's
+`deep restore <kept folder>` put every replaced event back; and the hub then reported one generation, one above the
+replaced record's, on a hook, an app and a cli connection. The day, time and count patterns were checked against
+spellings that must and must not match. That is a check of the tests' own reading, never of a change: the sentence's
+new words, the staged cut and the second restore's sentence exist only on the change and were not stood in for.
