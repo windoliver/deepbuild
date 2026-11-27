@@ -95,7 +95,7 @@ const result = (outcome: CheckResult['outcome'], test: string, file: string, mes
 const STATED = /\b(\d[\d,]*(?:\.\d+)?)\b([^()`]*?)\(\s*`?((?:SELECT|WITH)\b(?:[^`()]|\([^`()]*\))*?)`?\s+on\s+`?([\w./-]+)`?\s*\)/gi;
 /** Load actual fills at first use; the routing table itself remains part of the core's startup graph. */
 export async function openKinds(o: KindsOptions): Promise<Kinds> {
-  const [{ reviewFill }, { numbersFill }, { workFill }] = await Promise.all([
+  const [{ reviewFill }, { numbersFill }, { workFill, workKinds }] = await Promise.all([
     import('@deepbuild/checks-review'), import('@deepbuild/checks-numbers'), import('@deepbuild/checks-work'),
   ]);
   return new Kinds(o, [
@@ -103,7 +103,7 @@ export async function openKinds(o: KindsOptions): Promise<Kinds> {
     [{ slot: 'check.kind@1', revision: 1, kind: 'command', budget: { time_ms: 24 * 3_600_000, cost_usd: 0 }, run: async (spec, ctx) => (await import('@deepbuild/checks-command')).commandCheckKind(o.host()).run(spec, ctx) }, ['spec', 'definition']],
     [reviewFill(() => { throw Error('a review runs only through the hub\'s runner job'); }), ['pr']],
     [numbersFill(), ['number']],
-    ...(['service', 'data', 'document', 'message'] as const).map((k): [CheckRunnerFill, Route[]] => [workFill(k), o.plant === 'kind-without-route' && k === 'message' ? [] : ['definition']]),
+    ...workKinds().map((k): [CheckRunnerFill, Route[]] => [workFill(k), o.plant === 'kind-without-route' && k === 'message' ? [] : ['definition']]),
   ]);
 }
 
