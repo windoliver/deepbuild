@@ -1,0 +1,1 @@
+{ "alone": true, "why": "shared: the sandbox log stream; each test starts real hubs (deep hub run, with this checkout's deep-hook from target/), whose supervisor reads the system's one log stream, and each claim's checks run in the platform sandbox" }

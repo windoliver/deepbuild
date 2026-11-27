@@ -64,9 +64,11 @@ mod regions;
 mod relation;
 mod reseed;
 mod scene;
+mod sea;
 mod seam;
 mod serve;
 mod session3;
+mod shader_layout;
 mod simplify;
 mod spawn;
 mod status;
@@ -256,6 +258,9 @@ pub enum Planted {
     MirrorSamplesFullFrame,
     /// #468: a circle of confusion linear in |d − s|, matched to the physical one at 10 m.
     CocLinearInDistance,
+    /// #3506: the depth of field copies the image it shares with motion blur into the linear one
+    /// before its gather writes it.
+    DofReadsSharedBeforeWrite,
     /// #166: the water's foam carried from frame to frame as simulation state.
     WaterFoamKeepsState,
     /// #268: the shore's field measured from each item's centre, not where it meets the water.
@@ -279,6 +284,11 @@ pub enum Planted {
     HiddenViewWithoutOwnDepth,
     HiddenViewWritesIds,
     HiddenViewAfterStatus,
+    /// #3033's wrong seas (tests/acceptance/3033/README.md: Planted programs): every amplitude
+    /// of the table halved; every row at the longest wave's speed; only its four longest kept.
+    WaterSeaAmplitudesHalved,
+    WaterSeaSpeedOfLongest,
+    WaterSeaDrawsFourLongest,
     /// #971: the local tone map's base brought back up with a range weight of 1 at every tap.
     LocalBaseIgnoresEdges,
     /// #971: the local tone map's pyramid has the look's `levels` at every output size.
@@ -314,6 +324,7 @@ pub enum Planted {
     ClaimsMsaaOverSingleSample,
     PuffBlockCopy,
     ResolveAccumulatesFrames,
+    EnvironmentTextureRace,
     /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
     /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
     /// whatever its spike record says; each sector of a group composited on its own.
@@ -395,6 +406,8 @@ pub enum Planted {
     HalftonePopTakesDotPasses,
     InkFillFlat,
     RimKeepsFirst,
+    /// #1857's wrong program: a look's check admits a line profile's break of 0, and draws it.
+    ProfileAdmitsZeroBreaks,
     /// #1561's wrong programs (tests/acceptance/1561/README.md: Planted programs): a live window
     /// that hands a 2D document's frames no page and none of its look's drawn fields; and a
     /// frame that reuses the last frame's marks drawn with no page.
@@ -778,6 +791,7 @@ impl Planted {
             "mirror_halves_twice" => Planted::MirrorHalvesTwice,
             "mirror_samples_full_frame" => Planted::MirrorSamplesFullFrame,
             "coc_linear_in_distance" => Planted::CocLinearInDistance,
+            "dof_reads_shared_before_write" => Planted::DofReadsSharedBeforeWrite,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
@@ -792,6 +806,9 @@ impl Planted {
             "hidden_view_without_own_depth" => Planted::HiddenViewWithoutOwnDepth,
             "hidden_view_writes_ids" => Planted::HiddenViewWritesIds,
             "hidden_view_after_status" => Planted::HiddenViewAfterStatus,
+            "water_sea_amplitudes_halved" => Planted::WaterSeaAmplitudesHalved,
+            "water_sea_speed_of_longest" => Planted::WaterSeaSpeedOfLongest,
+            "water_sea_draws_four_longest" => Planted::WaterSeaDrawsFourLongest,
             "local_base_ignores_edges" => Planted::LocalBaseIgnoresEdges,
             "local_pyramid_fixed_levels" => Planted::LocalPyramidFixedLevels,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
@@ -817,6 +834,7 @@ impl Planted {
             "claims_msaa_over_single_sample" => Planted::ClaimsMsaaOverSingleSample,
             "puff_block_copy" => Planted::PuffBlockCopy,
             "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
+            "environment_texture_race" => Planted::EnvironmentTextureRace,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
             "grid_keeps_previous_step" => Planted::GridKeepsPreviousStep,
             "grid_role_before_rebuild" => Planted::GridRoleBeforeRebuild,
@@ -889,6 +907,7 @@ impl Planted {
             "halftone_pop_takes_dot_passes" => Planted::HalftonePopTakesDotPasses,
             "ink_fill_flat" => Planted::InkFillFlat,
             "rim_keeps_first" => Planted::RimKeepsFirst,
+            "profile_admits_zero_breaks" => Planted::ProfileAdmitsZeroBreaks,
             "live_passes_no_page" => Planted::LivePassesNoPage,
             "reuse_drops_page" => Planted::ReuseDropsPage,
             "drops_clouds" => Planted::DropsClouds,
@@ -1028,7 +1047,12 @@ impl Planted {
             "raster_lists_nothing" => Planted::RasterListsNothing,
             _ => {
                 let named = deep_canvas_scene3d::spans::PLANTED.iter().map(|p| p.0);
-                Planted::Named(named.chain(particles::PLANTED).find(|p| *p == name)?)
+                Planted::Named(
+                    named
+                        .chain(particles::PLANTED)
+                        .chain(frames::PLANTED)
+                        .find(|p| *p == name)?,
+                )
             }
         })
     }

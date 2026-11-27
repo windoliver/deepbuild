@@ -21,6 +21,8 @@ pub(super) struct Declared {
     carry: Option<Value>,
     carry_in: Option<crate::carry::CarryIn>,
     profile: Option<Value>,
+    /// #3605: the shell settings it takes, each with its default, in declaration order.
+    settings: Vec<(String, f64)>,
     /// #276: the seats a profile's read entry has a block for: the piece's `players`, else 1.
     seats: u32,
     emits: Vec<Emit>,
@@ -66,6 +68,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "carry",
             "carry_in",
             "profile",
+            "settings",
             "emits",
             "fires",
             "services",
@@ -361,6 +364,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
                 .map(|_| Some(v.clone()))
                 .map_err(|r| logic_refused(id, vec![r]))?,
         },
+        settings: settings_of(params.get("settings")).map_err(|r| logic_refused(id, vec![r]))?,
         seats: 1,
         emits,
         fires,
@@ -628,6 +632,18 @@ pub(super) fn region_map(
             read: Read::Profile,
         });
     }
+    // #3605: each shell setting it takes, after those, as a number control's slot.
+    for (name, _) in &d.settings {
+        let at = entries.last().map_or(at, |e| align8(e.offset + e.size));
+        entries.push(Region {
+            region: "reads",
+            name: setting_read(name),
+            offset: at,
+            size: crate::piece::SLOT,
+            ty: "control".into(),
+            read: Read::Control,
+        });
+    }
     let mut at = 0u32;
     for w in &d.writes {
         entries.push(Region {
@@ -779,6 +795,34 @@ fn reading_max(r: &Read) -> u32 {
     }
 }
 
+/// #3605: the track key and read entry of shell setting `name`, which no control's ID can be.
+pub fn setting_read(name: &str) -> String {
+    format!("settings.{name}")
+}
+
+/// #3605: `settings: {name → default}`, each default a number.
+fn settings_of(v: Option<&Value>) -> Result<Vec<(String, f64)>, Value> {
+    let Some(v) = v else { return Ok(Vec::new()) };
+    let o = v.as_object().ok_or_else(|| {
+        refusal(
+            "field",
+            "settings is {name → default number}".into(),
+            json!({"field": "settings"}),
+        )
+    })?;
+    o.iter()
+        .map(|(n, d)| {
+            d.as_f64().map(|d| (n.clone(), d)).ok_or_else(|| {
+                refusal(
+                    "field",
+                    format!("settings.{n}'s default is a number"),
+                    json!({"field": "settings", "setting": n}),
+                )
+            })
+        })
+        .collect()
+}
+
 pub(super) type Controls = BTreeMap<String, (u32, &'static str)>;
 /// A piece's sources by the reading each delivers, `reading:<source>` (#533), and (#182) the
 /// readings its worlds declare that a logic item may read, `world_reads`.
@@ -810,6 +854,13 @@ pub(super) fn sources_of(piece: &Value) -> Result<Sources, Refused> {
         sources.insert(format!("reading:{name}"), source(name, src)?);
     }
     Ok(sources)
+}
+
+static PIECE_CHECKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// #3612: how many pieces this process has checked, a refused one counted too.
+pub fn piece_checks() -> u64 {
+    PIECE_CHECKS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Checks every item of a piece in order: the first refusal answers.
@@ -853,6 +904,7 @@ pub fn check_in(
     stored: &dyn Fn(&str) -> Option<Vec<u8>>,
     services: &[crate::services::Service],
 ) -> Result<Piece, Refused> {
+    PIECE_CHECKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
     let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
     let class = match piece.get("class") {
@@ -878,6 +930,11 @@ pub fn check_in(
             )
         };
         let given = asset(&d.program).ok_or_else(|| missing("program", &d.program))?;
+        // #3604: an item whose program imports circuit@2, or links a library implementing it or
+        // exporting its builders, declares its `circuit` under circuit@2.
+        let circuit2 = crate::interfaces::imported(&given)
+            .iter()
+            .any(|n| n == "circuit@2");
         // The linker first, before the subset check and the rewrite (#190); an item without links
         // is never linked.
         let (mut given, mut libraries, mut functions, mut lib_data, mut link_ns) =
@@ -906,6 +963,19 @@ pub fn check_in(
             given = links::empty_linking(given);
         }
         let linked = !d.links.is_empty() || planted.linker_adds_linking_section;
+        // A library linked by its own name that claims no interface still reads circuit@2's table
+        // when it exports circuit@2's builders.
+        let circuit_major = if circuit2
+            || libraries.iter().any(|l| {
+                l.implements.iter().any(|i| i == "circuit@2")
+                    || l.exports.iter().any(|e| {
+                        ["breaker", "rcd", "changeover", "transformer"].contains(&e.as_str())
+                    })
+            }) {
+            2
+        } else {
+            1
+        };
         let lines = match &d.debug {
             None => None,
             Some(sha) => {
@@ -1064,7 +1134,8 @@ pub fn check_in(
             }
         };
         // #1181: the table `circuit` declares, its nodes and parts, is asset 0; each input that
-        // closes a part is found by its slot in the item's read region.
+        // closes a part is found by its slot in the item's read region, and under circuit@2
+        // (#3604) each of the item's own arrays that drives one by its place in the write region.
         let circuit = match &d.circuit {
             None => None,
             Some(v) => {
@@ -1075,7 +1146,22 @@ pub fn check_in(
                         .find(|e| e.region == "reads" && e.name == name && e.ty == "control")
                         .map(|e| e.offset)
                 };
-                let c = crate::circuit::build(v, &slot).map_err(|r| logic_refused(id, r))?;
+                let write = |name: &str| {
+                    layout
+                        .entries
+                        .iter()
+                        .find(|e| e.region == "writes" && e.name == name)
+                        .map(|e| {
+                            let size = if e.ty == "f64" { 8 } else { 4 };
+                            (e.offset, writes_at + e.offset, e.ty.clone(), e.size / size)
+                        })
+                };
+                let look = crate::circuit::Lookup {
+                    slot: &slot,
+                    write: &write,
+                };
+                let c = crate::circuit::build(v, circuit_major, &look)
+                    .map_err(|r| logic_refused(id, r))?;
                 assets.push((rewrite::hash(&c.bytes), c.bytes.clone()));
                 Some(std::sync::Arc::new(c))
             }
@@ -1195,7 +1281,13 @@ pub fn check_in(
                     .expect("due names a write")
                     .offset
             }),
-            reads: d.reads.clone(),
+            reads: d
+                .reads
+                .iter()
+                .cloned()
+                .chain(d.settings.iter().map(|(n, _)| setting_read(n)))
+                .collect(),
+            settings: d.settings.clone(),
             writes: d.writes.clone(),
             layout,
             reads_at,

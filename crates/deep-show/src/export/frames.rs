@@ -9,6 +9,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
 use deep_canvas::schedule::{Scheduler, Session as DocSession};
 use deep_canvas::timecode;
@@ -18,7 +19,7 @@ use serde_json::{json, Value};
 #[cfg(feature = "test-export-guards")]
 use super::test_guards;
 use super::tools::{Run as Run_, Tool};
-use super::{feed, program, stopped, Guard, Job, Shard};
+use super::{feed, program, reuse, stopped, work, Guard, Job, Shard};
 use crate::hub::{Hub, Planted};
 
 impl Hub<'_> {
@@ -36,6 +37,29 @@ impl Hub<'_> {
         let mut sched = Scheduler::new(&self.startup.sealed, self.options());
         let mut session: DocSession = self.new_session();
         session.load(&mut sched, doc);
+        // #231: a look's exposure of several drawn frames is drawn whole, never held.
+        let exposes = self.exposes(&sched, &session, doc);
+        let mut held: Option<reuse::Shown> = None;
+        // #231: a compile or an asset's decode inside a phase is the receipt's `prepare`, and
+        // no phase's (planted: compiles stay under `draw`).
+        let under_draw = self.guard_planted(Guard::BooksCompilesUnderDraw);
+        // The planted reuses, and the planted guard and hash.
+        let lax = reuse::Lax {
+            ignores_until: self.guard_planted(Guard::ReuseIgnoresValidUntil),
+            keyless: self.guard_planted(Guard::KeyWithoutSpectrumBand)
+                && reuse::reads_spectrum(doc),
+        };
+        let across = self.guard_planted(Guard::ReuseAcrossReadings);
+        let mut drawn_at = None;
+        let waits = self.guard_planted(Guard::ExportGuardWaits);
+        let on_cpu = self.guard_planted(Guard::HashesOnCpu);
+        // #231: a 3D film's frames stay on the GPU for a writer that takes GPU surfaces; every
+        // planted program, and an export that keeps its frames' bytes, draws through memory.
+        let scenario = self.scenario;
+        let plain = scenario.planted.is_none() && scenario.module_planted.is_none();
+        #[cfg(feature = "test-export-guards")]
+        let plain = plain && !test_guards::reads_frame(doc);
+        let on_gpu = plain && !run.readback && deep_canvas_scene3d::scene::has_3d(doc);
         for k in shard.frames.clone() {
             #[cfg(feature = "test-export-guards")]
             if test_guards::loses_device_at(doc, k) {
@@ -43,19 +67,70 @@ impl Hub<'_> {
                     g.force_loss();
                 }
             }
-            let t = k * shard.frame;
-            let (mut px, size) = self
-                .exposed_frame(&mut sched, &mut session, doc, t, shard.size, shard.opaque)
-                .map_err(|u| {
-                    stopped(
-                        k,
-                        u.code,
-                        &format!("frame {k} can't be drawn: {} at {}", u.code, u.path),
-                    )
-                })?;
-            for p in px.as_chunks_mut::<4>().0 {
-                p.swap(0, 2);
+            // Planted: one guard waits 8.4 ms on every frame.
+            if waits {
+                let at = Instant::now();
+                std::thread::sleep(std::time::Duration::from_micros(8_400));
+                run.phases.guards += at.elapsed();
             }
+            let t = k * shard.frame;
+            let unfit = |u: crate::snapshot::Unfit| {
+                stopped(
+                    k,
+                    u.code,
+                    &format!("frame {k} can't be drawn: {} at {}", u.code, u.path),
+                )
+            };
+            let (size, opaque) = (shard.size, shard.opaque);
+            let (mut at, mut prepared) = (Instant::now(), self.preparing());
+            let drawn = if exposes {
+                self.exposed_frame(&mut sched, &mut session, doc, t, size, opaque)
+            } else {
+                // Planted: the frame is first read with the record as the last drawn frame read
+                // it, so no reading or status binding that changed since tells it apart.
+                self.media.readings_until = drawn_at.filter(|_| across);
+                let mut painted = self
+                    .export_evaluated(&mut sched, &mut session, doc, t)
+                    .map_err(unfit)?;
+                // #231: a frame that shows what the frame before it showed, through the same
+                // view and before that frame's `valid_until`, is that frame again.
+                let mut shown = self.frame_shown(&sched, &session, doc, t, &painted, opaque);
+                let holds = |shown: &Option<reuse::Shown>| matches!((&held, shown), (Some(h), Some(s)) if h.holds(s, t, lax));
+                let mut again = holds(&shown);
+                if !again && self.media.readings_until.take().is_some() {
+                    painted = self
+                        .export_evaluated(&mut sched, &mut session, doc, t)
+                        .map_err(unfit)?;
+                    shown = self.frame_shown(&sched, &session, doc, t, &painted, opaque);
+                    again = holds(&shown);
+                }
+                self.media.readings_until = None;
+                held = shown;
+                let preparing = self.preparing();
+                run.phases.evaluate += at.elapsed().saturating_sub(preparing - prepared);
+                if again && run.seen.is_some() {
+                    self.held_frame(sink, &shard.frames, k, run)?;
+                    continue;
+                }
+                (at, prepared) = (Instant::now(), preparing);
+                drawn_at = Some(t);
+                if on_gpu && self.surface_frame(doc, shard, k, &painted, run, sink)? {
+                    continue;
+                }
+                self.export_drawn(&mut sched, &mut session, doc, t, painted, size, opaque)
+            };
+            let (mut px, size) = drawn.map_err(unfit)?;
+            run.work.draws += 1;
+            // A 3D frame comes back from the GPU through memory before it is hashed; planted,
+            // every frame is read back to be hashed on the CPU.
+            let read_back = on_cpu || deep_canvas_scene3d::scene::has_3d(doc);
+            run.work.frames_read_back += u64::from(read_back);
+            deep_gpu::surface::swap_red_blue(&mut px);
+            let preparing = match under_draw {
+                true => Default::default(),
+                false => self.preparing() - prepared,
+            };
+            run.phases.draw += at.elapsed().saturating_sub(preparing);
             run.size = size;
             if run.readback {
                 let sha = crate::evidence::put(&self.scenario.evidence, &px)
@@ -87,7 +162,9 @@ impl Hub<'_> {
                 let joins = self.scenario.planted == Some(Planted::ChunkTreeWrongOrder);
                 // #518: a 4:2:0 codec's tool reads the conversion pass's planes of each frame.
                 let nv12 = sink.nv12().then(|| self.nv12_pass(&gpu));
-                run.seen = Some(Seen::new(gpu, size, joins, nv12));
+                let mut seen = Seen::new(gpu, size, joins, nv12);
+                seen.cpu = on_cpu.then(Vec::new);
+                run.seen = Some(seen);
             }
             let keep = if self.guard_planted(Guard::WrapAgainstSecond) {
                 1
@@ -95,6 +172,7 @@ impl Hub<'_> {
                 0
             };
             let seen = run.seen.as_mut().expect("made above");
+            let at = Instant::now();
             seen.push(&px, keep).map_err(|()| {
                 stopped(
                     k,
@@ -102,6 +180,9 @@ impl Hub<'_> {
                     &format!("the GPU device was lost at frame {k}"),
                 )
             })?;
+            run.phases.hash += at.elapsed();
+            run.work.hashes += 1;
+            let at = Instant::now();
             // frames.finite: each float target the frame drew, counted on the GPU.
             for (item, target) in float_targets(doc, k, size, &seen.gpu) {
                 let found =
@@ -119,11 +200,13 @@ impl Hub<'_> {
                         "what": format!("frame {k}'s float target from `{item}` holds {} non-finite values, the first at {:?}", found.count, found.first)}));
                 }
             }
+            run.phases.guards += at.elapsed();
             // Planted (#518): the hand-off never gives the encode job the last frame's buffer.
             if run.dropped == Some(k) {
                 continue;
             }
             // The frame is handed over once its hash and its planes are done on the GPU.
+            let at = Instant::now();
             let planes = match sink.nv12() {
                 true => Some(seen.converted().map_err(|()| {
                     stopped(
@@ -134,11 +217,156 @@ impl Hub<'_> {
                 })?),
                 false => None,
             };
+            // A tool that takes no surface gets the planes through memory.
+            if planes.is_some() {
+                run.phases.convert += at.elapsed();
+                run.work.frames_read_back += u64::from(!read_back);
+            }
             let key = k == shard.frames.start || run.chapters.contains(&k);
             let bytes = planes.as_deref().unwrap_or(&px);
+            // #231: a writer that takes each frame as a copy and keeps none gets a held frame's
+            // bytes again, so the export keeps the bytes it last handed such a writer.
+            if sink.resends() {
+                run.last.clear();
+                run.last.extend_from_slice(bytes);
+            }
             self.sink_push(sink, &shard.frames, k, bytes, size, key, run)?;
         }
         self.sink_end_shard(sink)
+    }
+
+    /// #231: frame `k` of a 3D film, evaluated as `painted`, kept on the GPU: drawn into a
+    /// texture and hashed from it. A writer that takes GPU surfaces gets it by a copy into a slot
+    /// of the ring from the buffer it was hashed in, so only its digest is read back; one that
+    /// takes the conversion pass's planes gets those through memory, and the frame itself never
+    /// comes back. `Ok(false)` when the writer takes the frame's own bytes or the frame is more
+    /// than that texture: the caller then draws it through memory.
+    fn surface_frame(
+        &mut self,
+        doc: &Value,
+        shard: &Shard,
+        k: i64,
+        painted: &crate::frames::Painted,
+        run: &mut Run,
+        sink: &mut Sink,
+    ) -> Result<bool, Value> {
+        let t = k * shard.frame;
+        let shown = crate::played::at(doc, t);
+        let doc = shown.as_ref();
+        let size = (shard.size).unwrap_or_else(|| crate::snapshot::px(painted.size));
+        let planes = sink.nv12();
+        if !planes && !matches!(sink, Sink::Program { .. }) {
+            return Ok(false);
+        }
+        if sink.open_size().is_some_and(|s| s != size) {
+            self.sink_abort(sink);
+        }
+        if sink.open_size().is_none() {
+            self.sink_open(sink, &shard.frames, size, run)?;
+        }
+        if (!planes && sink.resends()) || self.tour_pointer(doc, t, false).is_some() {
+            return Ok(false);
+        }
+        let (at, prepared) = (Instant::now(), self.preparing());
+        let bare = self.frame3d_bare(doc, t, Some(size), painted);
+        let bare = bare.map_err(|u| {
+            stopped(
+                k,
+                u.code,
+                &format!("frame {k} can't be drawn: {} at {}", u.code, u.path),
+            )
+        })?;
+        let Some((texture, size)) = bare else {
+            return Ok(false);
+        };
+        let preparing = self.preparing() - prepared;
+        run.phases.draw += at.elapsed().saturating_sub(preparing);
+        run.work.draws += 1;
+        run.size = size;
+        if run.seen.is_none() {
+            let gpu = self
+                .gpu3()
+                .map(|g| g.device().clone())
+                .ok_or_else(|| stopped(k, "gpu_unavailable", "no GPU to hash the frames on"))?;
+            let nv12 = planes.then(|| self.nv12_pass(&gpu));
+            run.seen = Some(Seen::new(gpu, size, false, nv12));
+        }
+        let lost = |()| {
+            stopped(
+                k,
+                "device_lost",
+                &format!("the GPU device was lost at frame {k}"),
+            )
+        };
+        let seen = run.seen.as_mut().expect("made above");
+        let at = Instant::now();
+        seen.push_texture(&texture).map_err(lost)?;
+        run.phases.hash += at.elapsed();
+        run.work.hashes += 1;
+        let key = k == shard.frames.start || run.chapters.contains(&k);
+        if let Sink::Program {
+            open: Some((session, _)),
+            ..
+        } = sink
+        {
+            if !planes {
+                session.push_from(k, seen.hasher.input(), key)?;
+                return Ok(true);
+            }
+        }
+        // The planes come through memory, as the frame itself never does.
+        let at = Instant::now();
+        let bytes = seen.converted().map_err(lost)?;
+        run.phases.convert += at.elapsed();
+        run.work.frames_read_back += 1;
+        if sink.resends() {
+            run.last.clear();
+            run.last.extend_from_slice(&bytes);
+        }
+        self.sink_push(sink, &shard.frames, k, &bytes, size, key, run)?;
+        Ok(true)
+    }
+
+    /// #231: frame `k`, one of `frames`, is the frame before it again: nothing is drawn or
+    /// hashed, its hash and its readings are that frame's, and the writer gets that frame's
+    /// buffer again.
+    fn held_frame(
+        &mut self,
+        sink: &mut Sink,
+        frames: &std::ops::Range<i64>,
+        k: i64,
+        run: &mut Run,
+    ) -> Result<(), Value> {
+        let keep = usize::from(self.guard_planted(Guard::WrapAgainstSecond));
+        if let Some(seen) = run.seen.as_mut() {
+            seen.repeat(keep);
+        }
+        run.work.reused += 1;
+        if let Some(sha) = run.back.last().cloned().filter(|_| run.readback) {
+            run.back.push(sha);
+        }
+        if let Some(px) = run.kept.last().cloned() {
+            run.kept.push(px);
+        }
+        // Planted (#518): the hand-off never gives the encode job the last frame's buffer.
+        if run.dropped == Some(k) {
+            return Ok(());
+        }
+        let key = run.chapters.contains(&k);
+        match sink {
+            Sink::Parts { open, .. } | Sink::Png { open, .. } => {
+                let part = open.as_mut().expect("opened by the frame before");
+                part.repeat(self.encode_tool()?, k, key)
+            }
+            Sink::Program { open, .. } => {
+                let (session, _) = open.as_mut().expect("opened by the frame before");
+                session.repeat(k, &run.last, key)
+            }
+            Sink::Raw(_) => {
+                let size = run.size;
+                self.sink_push(sink, frames, k, &run.last, size, key, run)
+            }
+        }
     }
 
     /// #518: opens the sink's next encode job at `size`, for `frames` when it is a shard's part
@@ -297,6 +525,7 @@ impl Hub<'_> {
                     },
                     nv12,
                     opened: None,
+                    spent: [0.0; 2],
                 })
             }
             ("png", Some("media"), Some(tool)) => Ok(Sink::Png {
@@ -384,6 +613,7 @@ impl Hub<'_> {
             done,
             encoder,
             opened,
+            spent,
             ..
         } = sink
         {
@@ -392,6 +622,9 @@ impl Hub<'_> {
                 *opened = opened.or(part.opened);
                 let reply = part.finish(self.encode_tool()?)?;
                 *encoder = reply["encoder"].clone();
+                for (i, s) in spent.iter_mut().enumerate() {
+                    *s += reply["spent"][i].as_f64().unwrap_or(0.0);
+                }
                 done.push(path);
             }
         }
@@ -436,13 +669,16 @@ impl Hub<'_> {
                 done,
                 encoder,
                 opened,
+                spent,
                 ..
             } => {
                 let (reply, pid) = self.media_job(ENCODE_TOOL, join(json!(done)));
                 reply.get("frames").ok_or_else(|| failed(&reply))?;
                 let mut encoder = named(&tool, encoder["hardware"].clone(), &encoder);
                 encoder["process"] = json!({"pid": pid, "role": ENCODE_TOOL});
-                Ok(json!({"encoder": encoder, "audio": reply["audio"], "open": opened}))
+                Ok(
+                    json!({"encoder": encoder, "audio": reply["audio"], "open": opened, "spent": spent}),
+                )
             }
             Sink::Png { tool, open, .. } => {
                 let part = open.ok_or_else(|| json!({"code": "no_frames"}))?;
@@ -451,7 +687,7 @@ impl Hub<'_> {
                 reply.get("frames").ok_or_else(|| failed(&reply))?;
                 let mut encoder = named(&tool, json!(tool.hardware), &reply["encoder"]);
                 encoder["process"] = json!({"pid": pid(self), "role": ENCODE_TOOL});
-                Ok(json!({"encoder": encoder, "open": opened}))
+                Ok(json!({"encoder": encoder, "open": opened, "spent": reply["spent"]}))
             }
             Sink::Program {
                 tool, open, part, ..
@@ -470,7 +706,9 @@ impl Hub<'_> {
                     reply.get("frames").ok_or_else(|| failed(&reply))?;
                     sound = reply["audio"].clone();
                 }
-                Ok(json!({"encoder": encoder, "audio": sound, "open": opened, "handoff": handoff}))
+                Ok(
+                    json!({"encoder": encoder, "audio": sound, "open": opened, "handoff": handoff, "spent": done["spent"]}),
+                )
             }
             Sink::Raw(file) => {
                 drop(file);
@@ -495,6 +733,8 @@ pub(super) enum Sink {
         nv12: bool,
         /// The first part's open, in seconds, as the tool timed it.
         opened: Option<f64>,
+        /// #231: the seconds the parts' hand-offs took, and their tool said it encoded.
+        spent: [f64; 2],
     },
     /// Media's PNG sequence: one job over every frame, writing the folder at `out`.
     Png {
@@ -528,6 +768,18 @@ impl Sink {
         }
     }
 
+    /// #231: whether a held frame reaches the writer as the bytes of the frame before it, sent
+    /// again: a plug-in's tool that takes copies, and a test module's writer. The build's own
+    /// tools keep the frame they were last sent, and a tool that takes GPU surfaces is handed the
+    /// same slot.
+    fn resends(&self) -> bool {
+        match self {
+            Sink::Program { open, .. } => open.as_ref().is_none_or(|(s, _)| s.handoff() == "copy"),
+            Sink::Raw(_) => true,
+            Sink::Parts { .. } | Sink::Png { .. } => false,
+        }
+    }
+
     /// The size its open encode job was opened for, when one is open.
     fn open_size(&self) -> Option<[u16; 2]> {
         match self {
@@ -553,6 +805,11 @@ pub(super) struct Run {
     pub(super) nonfinite: Vec<Value>,
     /// #518, planted: the frame whose buffer the hand-off never gives the encode job.
     pub(super) dropped: Option<i64>,
+    /// #231: what the frames cost, counted; and the bytes last handed to a writer that takes
+    /// copies and keeps none, which a held frame sends again.
+    pub(super) work: work::Work,
+    pub(super) phases: work::Phases,
+    last: Vec<u8>,
 }
 
 impl Run {
@@ -567,6 +824,9 @@ impl Run {
             kept: Vec::new(),
             nonfinite: Vec::new(),
             dropped: None,
+            work: work::Work::default(),
+            phases: work::Phases::default(),
+            last: Vec::new(),
         }
     }
 }
@@ -582,6 +842,11 @@ pub(super) struct Seen {
     hashes: Vec<[u8; 32]>,
     reads: Vec<deep_gpu::frame_checks::Reading>,
     pushed: usize,
+    /// #231: each exported frame's place among the frames pushed: a held frame's is the place
+    /// of the frame before it.
+    frames: Vec<usize>,
+    /// #231, planted: each pushed frame's digest, hashed on the CPU from its bytes.
+    cpu: Option<Vec<[u8; 32]>>,
 }
 
 impl Seen {
@@ -611,18 +876,46 @@ impl Seen {
             hashes: Vec::new(),
             reads: Vec::new(),
             pushed: 0,
+            frames: Vec::new(),
+            cpu: None,
         }
+    }
+
+    /// #231: hashes and reads one frame from the GPU texture it was drawn into, kept for the
+    /// wrap when it is the film's first.
+    pub(super) fn push_texture(&mut self, texture: &wgpu::Texture) -> Result<(), ()> {
+        let before = self.hasher.push_texture(texture).map_err(|_| ())?;
+        self.hashes.extend(before);
+        self.pushed(0)
     }
 
     /// Hashes and reads one frame, keeping it for the wrap when it is frame `keep` of the film.
     pub(super) fn push(&mut self, bgra: &[u8], keep: usize) -> Result<(), ()> {
         self.hashes.extend(self.hasher.push(bgra).map_err(|_| ())?);
+        if let Some(cpu) = &mut self.cpu {
+            cpu.push(*blake3::hash(bgra).as_bytes());
+        }
+        self.pushed(keep)
+    }
+
+    /// The frame just pushed, read for film.blank and film.wrap and counted.
+    fn pushed(&mut self, keep: usize) -> Result<(), ()> {
         self.reads.extend(self.stats.after_push().map_err(|_| ())?);
-        if self.pushed == keep {
+        if self.frames.len() == keep {
             self.stats.keep();
         }
+        self.frames.push(self.pushed);
         self.pushed += 1;
         Ok(())
+    }
+
+    /// #231: the next frame is the frame last pushed again: nothing is hashed or read, and it
+    /// is kept for the wrap when it is frame `keep` of the film, as the frame it repeats is.
+    pub(super) fn repeat(&mut self, keep: usize) {
+        if self.frames.len() == keep {
+            self.stats.keep();
+        }
+        self.frames.push(self.pushed.saturating_sub(1));
     }
 
     /// #518: the NV12 planes of the frame just pushed, by the conversion pass on the GPU, taken
@@ -655,7 +948,20 @@ impl Seen {
         } else {
             None
         };
-        Ok((self.hashes, self.reads, wrap))
+        // #231: every exported frame's digest and reading, a held frame's those of the frame
+        // it repeats; `self.frames` says which frames were held.
+        let digests = self.cpu.as_ref().unwrap_or(&self.hashes);
+        let hashes = self.frames.iter().map(|&i| digests[i]).collect();
+        let reads = (self.frames.iter().map(|&i| self.reads[i].clone())).collect();
+        Ok((hashes, reads, wrap))
+    }
+
+    /// #231: for each exported frame so far, whether it was held: the frame before it again.
+    pub(super) fn held(&self) -> Vec<bool> {
+        let before = std::iter::once(None).chain(self.frames.iter().map(Some));
+        (before.zip(&self.frames))
+            .map(|(b, f)| b == Some(f))
+            .collect()
     }
 }
 

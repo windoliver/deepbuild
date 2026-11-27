@@ -38,7 +38,7 @@ pub struct Host {
     pub rewrites: u64,
     pub runs: u64,
     /// Each program's check and rewrite, by its sha256 and role: once per program.
-    rewritten: BTreeMap<(String, String), Result<Rewritten, Vec<Refusal>>>,
+    rewritten: BTreeMap<(String, String), Checked>,
     /// Each provider's output, by its content key: once per key.
     outputs: BTreeMap<String, Made>,
     /// The providers each document's current revision ran or took by content key.
@@ -101,12 +101,15 @@ fn refusals_what(r: &[Refusal]) -> String {
         .join("; ")
 }
 
+/// A program's check and rewrite: its rewritten bytes, or why the check refused it.
+type Checked = Result<Rewritten, Vec<Refusal>>;
+
 /// What a passed pack check gave the host it ran in, kept for the next host of this process.
 #[derive(Clone)]
 struct Vetted {
     rows: Vec<Value>,
     programs: Vec<((String, String), Value)>,
-    rewritten: Vec<((String, String), Result<Rewritten, Vec<Refusal>>)>,
+    rewritten: Vec<((String, String), Checked)>,
     validated: Vec<((String, String), Value)>,
     entries: Vec<SealedEntry>,
     vetted: Vec<String>,
@@ -214,7 +217,12 @@ impl Host {
         sealed: &Sealed,
     ) -> (Vec<Value>, Vec<Issue>) {
         // The other packs this host holds are in the key: a provider's output may name one's layout.
-        let others: Vec<String> = self.packs.keys().filter(|k| **k != pack.id.text()).cloned().collect();
+        let others: Vec<String> = self
+            .packs
+            .keys()
+            .filter(|k| **k != pack.id.text())
+            .cloned()
+            .collect();
         let key = (
             pack.id.text(),
             hash(manifest.to_string().as_bytes()),
@@ -226,7 +234,10 @@ impl Host {
         // and its partial check is not kept; so is one whose evidence lost bytes the check kept.
         let again = self.vetted.contains(&key.1);
         let cached = VETTED.with(|c| c.borrow().get(&key).cloned()).filter(|v| {
-            !again && v.kept.iter().all(|sha| crate::evidence::has(&self.evidence, sha))
+            !again
+                && v.kept
+                    .iter()
+                    .all(|sha| crate::evidence::has(&self.evidence, sha))
         });
         if let Some(v) = cached {
             self.packs.insert(pack.id.text(), manifest.clone());
@@ -247,7 +258,12 @@ impl Host {
             let v = Vetted {
                 rows: rows.clone(),
                 // A program entry's key names no version, so another version's is overwritten.
-                programs: self.programs.iter().filter(|(k, v)| programs.get(*k) != Some(*v)).map(|(k, v)| (k.clone(), v.clone())).collect(),
+                programs: self
+                    .programs
+                    .iter()
+                    .filter(|(k, v)| programs.get(*k) != Some(*v))
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
                 rewritten: added(&self.rewritten, &rewritten),
                 validated: added(&self.validated, &validated),
                 entries: self.layout_entries[entries..].to_vec(),

@@ -19,7 +19,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io};
 
-use deep_contracts::{parse, parse_lossy, Value};
+use deep_contracts::generated::{HookAckV2, HookReplyV2};
+use deep_contracts::{parse, parse_lossy, Contract, Value};
 
 use deep_hook::matcher;
 
@@ -135,6 +136,7 @@ fn current_cwd() -> Option<PathBuf> {
 fn address() -> PathBuf {
     let config = config();
     let hub = |key: &str| member(member(config.as_ref()?, "hub")?, key);
+    remote::note_forwarded(hub("forwarded"));
     if let Some(path) = worktree_hub(hub("use")) {
         return path;
     }
@@ -742,13 +744,6 @@ fn integer(value: Option<&Value>) -> Option<f64> {
     }
 }
 
-/// Whether a socket line is an object of exactly `fields`, its `v` 1: a hook line's contract, before its values.
-fn shaped(value: &Value, fields: &[&str]) -> bool {
-    matches!(value, Value::Object(members)
-        if members.len() == fields.len() && members.iter().all(|(key, _)| fields.contains(&key.as_str())))
-        && integer(member(value, "v")) == Some(1.0)
-}
-
 /// How long a hub has to put a removed rules.json back and say hello (#1856): it writes the file synced first.
 const PUT_BACK: Duration = Duration::from_millis(250);
 
@@ -768,12 +763,10 @@ fn exchange(
     id: &str,
     line: impl Fn(&[&str]) -> String,
 ) -> (Option<String>, Outcome, String) {
-    // A joined project's hub (#1338) has the network route's time to acknowledge, short of its fail-open time.
+    // A joined project's hub (#1338), or one behind a forwarded socket (#999), has the network route's time to acknowledge.
     let joined = REMOTE.get().and_then(Option::as_ref);
-    let ack_due = start
-        + joined.map_or(ACK_BUDGET, |_| {
-            remote::FAIL_OPEN - Duration::from_millis(30)
-        });
+    let network = joined.is_some() || remote::forwarded(&hub_address());
+    let ack_due = start + remote::ack_budget(network).unwrap_or(ACK_BUDGET);
     // Only the planted connect-timeout-only build reads with no deadline.
     let ack_deadline = (!cfg!(feature = "plant-connect-timeout-only")).then_some(ack_due);
     let late = Outcome::Down { late: true };
@@ -861,28 +854,22 @@ fn exchange(
         Got::Timeout => return (Some(request), late, hello),
         Got::Closed => return (Some(request), down, hello),
     };
-    // Only a hook.ack@2 of this request: one of another, or out of shape, is the hub away.
-    let ack = match parse(ack_text.trim_end()) {
-        Ok(ack)
-            if shaped(&ack, &["v", "ack", "hold_until_ms"])
-                && matches!(member(&ack, "ack"), Some(Value::String(acked)) if acked == id)
-                && (matches!(member(&ack, "hold_until_ms"), Some(Value::Null))
-                    || integer(member(&ack, "hold_until_ms"))
-                        .is_some_and(|ms| (0.0..=9_007_199_254_740_991.0).contains(&ms))) =>
-        {
-            ack
-        }
+    // Only a hook.ack@2 of this request: one of another, or one the contract's type doesn't decode, is the hub away.
+    let ack = match parse(ack_text.trim_end()).and_then(|line| HookAckV2::from_json(&line, "")) {
+        Ok(ack) if ack.ack == id => ack,
         _ => return (Some(request), down, ack_text),
     };
     // A reply is due by the hold the hub acknowledged, however far ahead; with no hold, by the same deadline. A hold
     // past what this machine's clock can hold is the hub away.
-    let due = match integer(member(&ack, "hold_until_ms")) {
+    let due = match ack.hold_until_ms {
         Some(ms) if !cfg!(feature = "plant-fixed-deadline") => {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis() as f64;
-            match Instant::now().checked_add(Duration::from_millis((ms - now).max(0.0) as u64)) {
+            match Instant::now()
+                .checked_add(Duration::from_millis((ms as f64 - now).max(0.0) as u64))
+            {
                 Some(due) => Some(due),
                 None => return (Some(request), down, ack_text),
             }
@@ -896,25 +883,15 @@ fn exchange(
         Got::Timeout => return (Some(request), late, ack_text),
         Got::Closed => return (Some(request), down, ack_text),
     };
-    // Only a reply that holds to hook.reply@2 is printed; never bytes deep-hook couldn't parse.
-    let Ok(reply) = parse(reply_text.trim_end()) else {
-        return (Some(request), down, reply_text);
-    };
-    if !shaped(&reply, &["v", "exit", "stdout", "stderr"]) {
-        return (Some(request), down, reply_text);
-    }
-    match (
-        integer(member(&reply, "exit")),
-        member(&reply, "stdout"),
-        member(&reply, "stderr"),
-    ) {
-        (Some(exit), Some(Value::String(stdout)), Some(Value::String(stderr)))
-            if (0.0..=255.0).contains(&exit) =>
-        {
+    // Only a reply the contract's type decodes is printed; never bytes deep-hook couldn't parse. An exit the schema
+    // allows and a process can't return is the hub away too.
+    let reply = parse(reply_text.trim_end()).and_then(|line| HookReplyV2::from_json(&line, ""));
+    match reply.map(|reply| (u8::try_from(reply.exit), reply)) {
+        Ok((Ok(exit), reply)) => {
             let outcome = Outcome::Reply {
-                exit: exit as u8,
-                stdout: stdout.clone(),
-                stderr: stderr.clone(),
+                exit,
+                stdout: reply.stdout,
+                stderr: reply.stderr,
             };
             (Some(request), outcome, reply_text)
         }
@@ -1212,7 +1189,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             .as_deref()
             .and_then(|cwd| remote::joined(&home(), cwd))
     });
-    if joined.is_some() {
+    if joined.is_some() || remote::forwarded(&hub_address()) {
         WATCH_MS.store(
             (remote::FAIL_OPEN - Duration::from_millis(2)).as_millis() as u64,
             Ordering::SeqCst,
@@ -1307,7 +1284,20 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             })
             .collect::<Vec<_>>()
             .join(",");
-        format!(",\"billing\":{{{keys}}}")
+        // The session's own inbox address, the path Claude Code exports to its hooks (#3405), never the token beside it.
+        let inbox = env::var("CLAUDE_CODE_MESSAGING_SOCKET")
+            .ok()
+            .filter(|path| !path.is_empty())
+            .map(|path| format!(",\"inbox\":{}", quoted(&path)))
+            .unwrap_or_default();
+        // The planted wrong program (#3405's AC7) reports the token beside the address.
+        let token = match hub_plant().as_deref() {
+            Some("session-start-reports-token") => env::var("CLAUDE_CODE_MESSAGING_TOKEN")
+                .map(|token| format!(",\"inbox_token\":{}", quoted(&token)))
+                .unwrap_or_default(),
+            _ => String::new(),
+        };
+        format!(",\"billing\":{{{keys}}}{inbox}{token}")
     } else {
         String::new()
     };
@@ -1890,8 +1880,9 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
+        [arg] if arg == "--contract" => println!("{CONTRACT}"),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook peer               a Unix socket on stdin: the PID at its other end\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook --contract         the contract version it speaks\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook peer               a Unix socket on stdin: the PID at its other end\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),

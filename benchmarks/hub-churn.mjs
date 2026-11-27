@@ -1,8 +1,11 @@
-// The hub across churn (issue #824): node benchmarks/hub-churn.mjs [--cycles n] [--home dir] [--merge-base].
-// A hub on a temp home runs fixed cycles: a session starts, ten tool calls with their hooks, an ask created and answered,
-// an action called with a request ID that reads a 64 KB source and a series source's new set of 100 names now (#2650),
-// a check run, a job whose agent prints 256 KB and ends (#2650), a promise armed and woken, an extension reloaded
-// (installed again, so its running copy stops and the new one loads) and the session ending. After a warm-up of 100
+// The hub across churn (issue #824): node benchmarks/hub-churn.mjs [--cycles n] [--killed] [--home dir] [--merge-base].
+// A hub on a temp home runs fixed cycles: a session starts, ten tool calls with their hooks (an edit, a call whose
+// permission prompt is asked and answered and a commit among them, #1866), an ask created and answered, an action called
+// with a request ID that reads a 64 KB source and a series source's new set of 100 names now (#2650), a plug-in's send
+// held for your answer, one revision shown through deep_show, the change claimed at a stop that carries usage and judged
+// to PASS (#1866), a check run, a job whose agent prints 256 KB and ends (#2650), a promise armed and woken, an extension
+// reloaded (installed again, so its running copy stops and the new one loads) and the session ending: with --killed
+// (#1866), by its agent's process killed and no SessionEnd. After a warm-up of 100
 // cycles, its retained heap after a full collection, all its threads together, and its resident memory are read every
 // 100 cycles, and the heap each of the four stores #2650 bounds retains is read from a heap snapshot after warm-up and
 // after the last cycle. The readings come through the hub's inspector, so the hub needs no method of its own and the
@@ -10,7 +13,7 @@
 // BLOCKED, and stops the hub it started by PID.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import https from 'node:https';
 import net from 'node:net';
 import { join } from 'node:path';
@@ -23,12 +26,21 @@ const EVERY = 100;
 const HEAP_PER_1000 = 200_000;
 const RSS_PER_1000 = 2_000_000;
 const STEP_MS = 60_000;
+/** How long a cycle gives the claim's verdict before its agent stops again, past the stop's own hold; and at all. */
+const TURN_MS = 15_000;
+const LATE_MS = 300_000;
 /** Read now keeps a source's answer from the last 2 s, so a view is read again no sooner than this. */
 const KEPT_MS = 2_100;
 /** Each cycle's set of 100 names is new, drawn from these 113: so an hour's rollup holds at most 113 series. */
 const POOL = Array.from({ length: 113 }, (_, i) => `n${String(i).padStart(3, '0')}`);
 /** The account the stand-in agent is signed in to, and the four stores (#2650), by key: their owner and its fields. */
 const ACCOUNT = '0a0a0a0a-2650-4000-8000-000000000001';
+/** The prompt each cycle's change answers (#1866), with a definition handed for it, and the file its edit changes. */
+const CHANGE = 'make the value module give the cycle its number';
+const CHANGED = 'src/value.mjs';
+const CHECK = '.deepbuild/checks/value.sh';
+/** The one document each cycle shows a revision of, through deep_show (#1866). */
+const DOC = '0CHVRN1866000000000000000A';
 const STORES = {
   answers: { owner: 'Sources', fields: ['recorded', 'binary'], what: "the host's recorded source answers" },
   results: { owner: 'Host', fields: ['requests'], what: "the host's action results by request ID" },
@@ -96,12 +108,27 @@ async function inspect(url) {
     if (exceptionDetails) throw new Blocked(`${expression}: ${exceptionDetails.exception?.description ?? exceptionDetails.text}`);
     return result.value;
   };
+  /** A thread's timers not yet finished, found by V8's walk of its heap, which clears every inline cache in it. */
+  const timersOf = async (session) => {
+    const { result: proto } = await send('Runtime.evaluate', { expression: '(() => { const t = setTimeout(() => {}, 0); clearTimeout(t); return Object.getPrototypeOf(t); })()' }, session);
+    const { objects } = await send('Runtime.queryObjects', { prototypeObjectId: proto.objectId, objectGroup: 'churn' }, session);
+    const { result } = await send('Runtime.callFunctionOn', { objectId: objects.objectId, functionDeclaration: 'function () { return this.filter((t) => !t._destroyed && t._idleTimeout >= 0).length; }', returnByValue: true }, session);
+    await send('Runtime.releaseObjectGroup', { objectGroup: 'churn' }, session);
+    return result.value;
+  };
   return {
     close: () => socket.close(),
-    /** The retained heap of every thread after a full collection, and the process's resident memory. */
+    /**
+     * The retained heap of every thread after a full collection, and the process's resident memory. Each reading walks
+     * the heap first: the inline caches a walk clears are about 1 MB of the hub's, so a reading that found them warm
+     * would read them as growth over one taken after a walk (#1866).
+     */
     async memory() {
       let heapBytes = 0;
       for (const session of threads()) {
+        await timersOf(session);
+        // What a native object held, such as a finished statement's row function, goes on its thread's next turn.
+        await sleep(100);
         await send('HeapProfiler.collectGarbage', {}, session);
         await send('HeapProfiler.collectGarbage', {}, session);
         heapBytes += await value('process.memoryUsage().heapUsed', session);
@@ -114,13 +141,7 @@ async function inspect(url) {
     /** Timers not yet finished, across its threads. The hub's are unref'd, so only the heap can count them. */
     async timers() {
       let count = 0;
-      for (const session of threads()) {
-        const { result: proto } = await send('Runtime.evaluate', { expression: '(() => { const t = setTimeout(() => {}, 0); clearTimeout(t); return Object.getPrototypeOf(t); })()' }, session);
-        const { objects } = await send('Runtime.queryObjects', { prototypeObjectId: proto.objectId, objectGroup: 'churn' }, session);
-        const { result } = await send('Runtime.callFunctionOn', { objectId: objects.objectId, functionDeclaration: 'function () { return this.filter((t) => !t._destroyed && t._idleTimeout >= 0).length; }', returnByValue: true }, session);
-        count += result.value;
-        await send('Runtime.releaseObjectGroup', { objectGroup: 'churn' }, session);
-      }
+      for (const session of threads()) count += await timersOf(session);
       return count;
     },
     /**
@@ -265,7 +286,13 @@ async function openCounts(pid, inspector) {
     const next = fromOs(pid);
     least = { sockets: Math.min(least.sockets, next.sockets), children: Math.min(least.children, next.children) };
   }
-  return { ...least, timers: await inspector.timers() };
+  // An answer handed to a turn waits ten seconds to be shown (#906), so its timer may end a moment after them.
+  let timers = await inspector.timers();
+  for (let i = 0; i < 4; i++) {
+    await sleep(1000);
+    timers = Math.min(timers, await inspector.timers());
+  }
+  return { ...least, timers };
 }
 
 /** One request and its reply on a connection of its own, as deep-hook makes them. */
@@ -288,10 +315,14 @@ function hook(socket, request) {
     });
   });
 }
-/** A connection under one role: `call` resolves with a reply, `onFrame` gets each stream frame. */
-function connect(socket, hello) {
+/**
+ * A connection under one role: `call` resolves with a reply, `onFrame` gets each stream frame. `to` is the hub's socket,
+ * or a process that holds a connection of its own to it (#1866), its stdin and stdout the two ways.
+ */
+function connect(to, hello) {
   return new Promise((resolve, reject) => {
-    const sock = net.connect(socket);
+    const sock = typeof to === 'string' ? net.connect(to) : to.stdin;
+    const heard = typeof to === 'string' ? sock : to.stdout;
     const waiting = new Map();
     let buffer = '';
     let n = 0;
@@ -304,9 +335,9 @@ function connect(socket, hello) {
       }), method),
       close: () => sock.destroy(),
     };
-    sock.setEncoding('utf8');
+    heard.setEncoding('utf8');
     sock.on('error', reject);
-    sock.on('data', (chunk) => {
+    heard.on('data', (chunk) => {
       buffer += chunk;
       for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
         const line = JSON.parse(buffer.slice(0, i));
@@ -320,9 +351,9 @@ function connect(socket, hello) {
     });
   });
 }
-const within = (promise, what) => {
+const within = (promise, what, ms = STEP_MS) => {
   let timer;
-  const late = new Promise((_, reject) => { timer = setTimeout(() => reject(new Blocked(`${what}: nothing within ${STEP_MS / 1000} s`)), STEP_MS).unref(); });
+  const late = new Promise((_, reject) => { timer = setTimeout(() => reject(new Blocked(`${what}: nothing within ${ms / 1000} s`)), ms).unref(); });
   return Promise.race([promise, late]).finally(() => clearTimeout(timer));
 };
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -432,6 +463,95 @@ export default class Board extends View {
 }
 
 /**
+ * The repo each cycle's session works in (#1866): a value module on a branch of its own, and the drafted check its
+ * change is judged by. Every cycle's edit gives the module a new value, so its check runs on it and carries nothing.
+ */
+function repository(work) {
+  const git = (...args) => execFileSync('/usr/bin/git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], {
+    cwd: work, encoding: 'utf8',
+    env: { PATH: '/usr/bin:/bin', HOME: work, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.invalid' },
+  });
+  const files = {
+    [CHANGED]: valueModule('none'),
+    'test/value.test.mjs': "import assert from 'node:assert/strict';\nimport { test } from 'node:test';\nimport { value } from '../src/value.mjs';\n\ntest('the value module gives a value', () => assert.equal(typeof value, 'string'));\n",
+    [CHECK]: 'node --test test/value.test.mjs\n',
+    'package.json': `${JSON.stringify({ name: 'value', version: '1.0.0', type: 'module' })}\n`,
+  };
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(join(work, path, '..'), { recursive: true });
+    writeFileSync(join(work, path), text);
+  }
+  git('init', '-q', '-b', 'main');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'the value module and its drafted check');
+  git('checkout', '-q', '-b', 'churn');
+  return git;
+}
+const valueModule = (value) => `export const value = '${value}';\n`;
+/** The definition handed for each cycle's change (#1866): one requirement, judged by the drafted check. */
+const DRAFTS = { drafts: [{ ask: CHANGE, requirements: [{ id: 'R1', text: 'The value module gives a value', source_line: 'ask#L1', refuted_by: 'a run where it gives none', check: CHECK, on_base: 'passes', asserts: [], depth: 'unit', oracle: 'code', near_misses: [] }], deliverables: [CHANGED], budget: null }] };
+
+/** The document each cycle shows a revision of (#1866): two items, the bar a size of its own at each cycle. */
+const shown = (n) => JSON.stringify({
+  format: 1, profile: 'board', title: 'Churn', description: 'What the churn benchmark shows.', size: [320, 200],
+  items: {
+    back: { id: 'back', kind: 'rect@1', name: 'Backdrop', order: 'a0', params: { box: [0, 0, 320, 200], paint: { fill: { role: 'ground' } } } },
+    bar: { id: 'bar', kind: 'rect@1', name: 'Bar', order: 'a1', params: { box: [0, 0, 1 + (n % 300), 1 + (Math.floor(n / 300) % 180)], paint: { fill: { role: 'muted' } } } },
+  },
+});
+
+/** The package whose action sends (#1866): held for your answer at every call, and nothing leaves when it runs. */
+async function sendsPackage(cli, home) {
+  const { packageDigest } = await import(new URL('../../extension-host/dist/index.js', `file://${cli}`).href);
+  const dir = join(home, 'sends-package');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'index.ts'), `export default function (deep: any): void {
+  deep.registerAction('ext.sends.note', {
+    declares: 'send',
+    input: { type: 'object', properties: { to: { type: 'string' } }, required: ['to'], additionalProperties: false },
+    output: { type: 'object', properties: { to: { type: 'string' } }, required: ['to'], additionalProperties: false },
+  }, async (input: { to: string }) => ({ output: { to: input.to }, report: { verified: true, checked: 'sent nothing' } }));
+}
+`);
+  const manifest = { id: 'bench/sends', version: '1.0.0', digest: `d1:${'0'.repeat(64)}`, access: { words: [] }, checks: [], actions: ['ext.sends.note'], requires: { preview: ['deep.registerAction'] } };
+  writeFileSync(join(dir, 'deepbuild.json'), JSON.stringify(manifest));
+  manifest.digest = packageDigest(dir);
+  writeFileSync(join(dir, 'deepbuild.json'), JSON.stringify(manifest));
+  return dir;
+}
+
+/**
+ * A killed session's agent (#1866): a process of its own the session's hooks name as their parent, which connects to the
+ * hub when told to and passes lines both ways, so its MCP connection binds to its session as an agent's does.
+ */
+function standInSession(home, socket) {
+  const file = join(home, 'agent.pl');
+  if (!existsSync(file)) {
+    writeFileSync(file, `use strict; use IO::Socket::UNIX; use IO::Select;
+$| = 1;
+my $go = <STDIN>;
+exit 0 unless defined $go;
+my $hub = IO::Socket::UNIX->new(Type => SOCK_STREAM, Peer => $ARGV[0]) or exit 1;
+my $ready = IO::Select->new(\\*STDIN, $hub);
+while (my @from = $ready->can_read) {
+  for my $from (@from) {
+    my $n = sysread($from, my $bytes, 65536);
+    exit 0 unless $n;
+    my $to = $from == $hub ? \\*STDOUT : $hub;
+    while (length $bytes) { my $w = syswrite($to, $bytes); exit 0 unless $w; substr($bytes, 0, $w) = ''; }
+  }
+}
+`);
+  }
+  const child = spawn('/usr/bin/perl', [file, socket], { stdio: ['pipe', 'pipe', 'ignore'] });
+  child.stdin.on('error', () => undefined);
+  const gone = new Promise((resolve) => child.on('exit', resolve));
+  const stop = () => child.kill('SIGKILL');
+  leaving.add(stop);
+  return { pid: child.pid, stdin: child.stdin, stdout: child.stdout, kill: async () => { stop(); await gone; leaving.delete(stop); } };
+}
+
+/**
  * The agent each cycle's job runs (#2650): a stand-in `claude` that gives a version its facts cover and, run headless,
  * prints 256 KB of stream-json assistant lines, then a result, and ends. Signed in to ACCOUNT under the test HOME.
  */
@@ -469,13 +589,18 @@ const roomy = () => {
 };
 
 /** The fixed cycles against a hub, read through its inspector, and the hub stopped by PID. */
-async function run({ cli, home, cycles }) {
+async function run({ cli, home, cycles, killed }) {
   const root = join(home, '.deepbuild');
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const work = join(home, 'work');
   const transcripts = join(home, '.claude', 'projects', 'work');
   mkdirSync(work, { recursive: true });
   mkdirSync(transcripts, { recursive: true });
+  const git = repository(work);
+  const drafts = join(home, 'drafts.json');
+  writeFileSync(drafts, JSON.stringify(DRAFTS));
+  // The newest Claude Code version this hub's facts cover: each transcript entry carries it.
+  const covered = JSON.parse(readFileSync(new URL('../../../adapters/claude-code.facts.json', `file://${cli}`), 'utf8')).versions.at(-1);
   const confirm = join(home, 'confirm');
   writeFileSync(confirm, 'confirmed');
   // The source host the stores package calls, and the agent each cycle's job runs on its login PATH (#2650).
@@ -487,7 +612,7 @@ async function run({ cli, home, cycles }) {
   await draftAskSettings(root);
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key === 'DEEP_HUB_PLANT' || !/^(DEEP_|CLAUDE|ANTHROPIC|OPENAI|CODEX|GH_TOKEN|GITHUB_TOKEN|NODE_OPTIONS|NODE_EXTRA_CA_CERTS)/.test(key)));
   // V8's optimizing tiers keep compiling long after warm-up: about 0.7 MB over 500 cycles, as much as the leaks this looks for.
-  const hub = spawn(process.execPath, ['--inspect=127.0.0.1:0', '--no-opt', '--no-maglev', '--no-sparkplug', cli, 'hub', 'run'], { cwd: work, env: { ...env, HOME: home, DEEP_HUB_TEST_CONFIRM: confirm, NODE_EXTRA_CA_CERTS: source.ca }, stdio: ['ignore', 'ignore', 'pipe'] });
+  const hub = spawn(process.execPath, ['--inspect=127.0.0.1:0', '--no-opt', '--no-maglev', '--no-sparkplug', cli, 'hub', 'run'], { cwd: work, env: { ...env, HOME: home, DEEP_HUB_TEST_CONFIRM: confirm, DEEP_HUB_TEST_DRAFTS: drafts, NODE_EXTRA_CA_CERTS: source.ca }, stdio: ['ignore', 'ignore', 'pipe'] });
   const exited = new Promise((resolve) => hub.on('exit', resolve));
   leaving.add(() => hub.kill('SIGTERM'));
   let stderr = '';
@@ -531,13 +656,16 @@ async function run({ cli, home, cycles }) {
       if (at >= 0) wanted.splice(at, 1)[0].done(event);
       else seen.push(event);
     };
-    const frame = (what, test) => {
+    const frame = (what, test, ms) => {
       const at = seen.findIndex(test);
       if (at >= 0) return Promise.resolve(seen.splice(at, 1)[0]);
-      return within(new Promise((done) => wanted.push({ test, done })), what);
+      return within(new Promise((done) => wanted.push({ test, done })), what, ms);
     };
-    const parent = { pid: process.pid, start: execFileSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } }).trim() };
+    const startOf = (pid) => execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } }).trim();
+    const parent = { pid: process.pid, start: startOf(process.pid) };
     const pkg = await churnPackage(cli, home);
+    const sends = await within(cliConn.call('extension.install', { from: await sendsPackage(cli, home) }), 'the sends package\'s install');
+    if (sends.error || sends.result?.status !== 'installed' || sends.result.not_loaded) throw new Blocked(`the sends package didn't load: ${JSON.stringify(sends.error ?? sends.result)}`);
     // The stores package (#2650), installed once. Its view's panel has no kit to pass where no replica is built; the
     // package still loads, and its action reads the view's sources now.
     const installed = await within(cliConn.call('extension.install', { from: await storesPackage(cli, home, source.host) }), 'the stores package\'s install');
@@ -554,12 +682,41 @@ async function run({ cli, home, cycles }) {
       const session = randomUUID();
       const transcript = join(transcripts, `${session}.jsonl`);
       writeFileSync(transcript, '');
-      const fire = async (event, extra = {}) => {
+      // A killed session's agent is a process of its own (#1866); any other session's is this one.
+      const agent = killed ? standInSession(home, socket) : { pid: process.pid };
+      let prompt;
+      const fire = async (event, extra = {}, ms = STEP_MS) => {
         const reply = await within(hook(socket, {
-          v: 1, agent: 'claude-code', event, seq: String(seq += 1000n), id: ulid(), pid: process.pid, ppid: process.pid, matched: [],
-          payload: { session_id: session, transcript_path: transcript, cwd: work, hook_event_name: event, ...extra },
-        }), `cycle ${n}: ${event}`);
+          v: 1, agent: 'claude-code', event, seq: String(seq += 1000n), id: ulid(), pid: process.pid, ppid: agent.pid, matched: [],
+          payload: { session_id: session, transcript_path: transcript, cwd: work, hook_event_name: event, ...(prompt ? { prompt_id: prompt } : {}), ...extra },
+        }), `cycle ${n}: ${event}`, ms);
         if (reply.error) throw new Blocked(`cycle ${n}: ${event}: ${JSON.stringify(reply.error)}`);
+        return reply;
+      };
+      /** One transcript entry, as Claude Code writes it. */
+      let entryBefore = null;
+      const entry = (value) => {
+        const uuid = randomUUID();
+        appendFileSync(transcript, `${JSON.stringify({ parentUuid: entryBefore, isSidechain: false, ...value, uuid, timestamp: new Date().toISOString(), userType: 'external', entrypoint: 'cli', cwd: work, sessionId: session, version: covered, gitBranch: 'churn' })}\n`);
+        entryBefore = uuid;
+      };
+      const assistant = (content, stop) => entry({ type: 'assistant', message: { model: 'claude-haiku-5-5', id: `msg_${randomUUID()}`, type: 'message', role: 'assistant', content, stop_reason: stop, usage: { input_tokens: 2, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 10 } } });
+      /** A prompt typed in the session, in its transcript first as Claude Code writes it. */
+      const typed = async (text) => {
+        prompt = randomUUID();
+        entry({ promptId: prompt, type: 'user', message: { role: 'user', content: text }, origin: { kind: 'human' }, promptSource: 'typed', turnOrigin: 'human' });
+        await fire('UserPromptSubmit', { prompt: text });
+      };
+      let calls = 0;
+      /** One tool call with its two hooks; `asks` shows its permission prompt, and `effect` is what it does. */
+      const tool = async (tool_name, tool_input, { effect, asks = false, response = { stdout: '', stderr: '', interrupted: false, isImage: false } } = {}) => {
+        const call = { tool_name, tool_input, tool_use_id: `toolu_${n}_${calls++}` };
+        assistant([{ type: 'tool_use', id: call.tool_use_id, name: tool_name, input: tool_input }], 'tool_use');
+        await fire('PreToolUse', call);
+        if (asks) await fire('PermissionRequest', { tool_name, tool_input });
+        await effect?.(call.tool_use_id);
+        entry({ promptId: prompt, type: 'user', message: { role: 'user', content: [{ tool_use_id: call.tool_use_id, type: 'tool_result', content: 'done' }] }, toolUseResult: response });
+        await fire('PostToolUse', { ...call, tool_response: response, duration_ms: 40 });
       };
       const of = (kind) => (event) => event.kind === kind && (event.session_id ?? event.session) === session;
       seen.length = 0;
@@ -577,47 +734,111 @@ async function run({ cli, home, cycles }) {
         if (ended.data?.state !== 'finished') throw new Blocked(`cycle ${n}: the job didn't finish: ${JSON.stringify(ended.data)}`);
       })();
       jobDone.catch(() => undefined);
-      await fire('UserPromptSubmit', { prompt: 'what does the deploy say?' });
-      for (let i = 0; i < 10; i++) {
-        const call = { tool_name: 'Bash', tool_input: { command: `ls src/${i}` }, tool_use_id: `toolu_${n}_${i}` };
-        await fire('PreToolUse', call);
-        await fire('PostToolUse', { ...call, tool_response: { stdout: '', stderr: '', exit_code: 0 } });
+      // A change asked for, its definition handed at once (#1866): what the edit below is judged by.
+      await typed(CHANGE);
+      await frame(`cycle ${n}: definition.locked`, (event) => event.kind === 'definition.locked' && String(event.data?.task_ref).startsWith(`session:${session.replace(/[^0-9A-Za-z]/g, '')}#`));
+      for (let i = 0; i < 7; i++) await tool('Bash', { command: `ls src/${i}` });
+      // A permission prompt your saved decision covers, raised as an ask and answered by it. The first is answered in its
+      // agent's terminal, offered back and saved.
+      await tool('Bash', { command: 'make value' }, { asks: true });
+      if (!n) {
+        const { result: inbox } = await within(app.call('inbox.read', {}), 'inbox.read');
+        const offer = inbox?.offers?.find((o) => o.command === 'make value');
+        const saved = await within(cliConn.call('offer.save', { offer: offer?.offer }), 'offer.save');
+        if (saved.error) throw new Blocked(`the prompt's yes wasn't saved as a decision: ${JSON.stringify({ inbox, error: saved.error })}`);
       }
+      const path = join(work, CHANGED);
+      const [from, to] = [readFileSync(path, 'utf8'), valueModule(`cycle-${n}-${session}`)];
+      await tool('Edit', { file_path: path, old_string: from, new_string: to, replace_all: false }, { effect: () => writeFileSync(path, to), response: { filePath: path, oldString: from, newString: to, replaceAll: false, structuredPatch: [], userModified: false } });
+      // Committed once the hub has read the head the edit left: a hook's reply comes before its reading, where an agent's
+      // own call takes longer than that.
+      await tool('Bash', { command: 'git commit -am value' }, { effect: async (id) => {
+        await frame(`cycle ${n}: tool.before`, (event) => event.kind === 'tool.before' && event.data?.call === id);
+        await sleep(50);
+        git('commit', '-q', '-am', 'value');
+      } });
+      await frame(`cycle ${n}: commit.made`, of('commit.made'));
 
-      const mcp = await within(connect(socket, { hello: 'mcp', parent, cwd: work }), `cycle ${n}: the MCP hello`);
+      if (killed) agent.stdin.write('go\n');
+      const mcp = await within(connect(killed ? agent : socket, { hello: 'mcp', parent: killed ? { pid: agent.pid, start: startOf(agent.pid) } : parent, cwd: work }), `cycle ${n}: the MCP hello`);
       if (mcp.role !== `mcp:${session}`) throw new Blocked(`cycle ${n}: the MCP connection didn't bind to its session: it is ${mcp.role}`);
-      const asked = mcp.call('mcp.call', { tool: 'deep_ask', arguments: { kind: 'choice', question: `Which header for screen ${n}?`, options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], recommended: 'a', steps: null, where: null, why: null, check: null, subject: null } });
-      const refused = asked.then((reply) => { if (reply.error) throw new Blocked(`cycle ${n}: deep_ask: ${JSON.stringify(reply.error)}`); return new Promise(() => undefined); });
-      const created = await Promise.race([frame(`cycle ${n}: ask.created`, of('ask.created')), refused]);
-      const answer = await within(cliConn.call('ask.answer', { ask: `ask:${created.id}`, option: 'a' }), `cycle ${n}: ask.answer`);
-      if (answer.error) throw new Blocked(`cycle ${n}: ask.answer: ${JSON.stringify(answer.error)}`);
-      await within(asked, `cycle ${n}: deep_ask`);
-      // One action call with a request ID (#2650): a read that reads one view's two sources now, the 64 KB answer and a
-      // new set of 100 names. Read now keeps an answer from the last 2 s, so a view read sooner waits out the rest.
-      const view = n % 2;
-      await sleep(Math.max(0, KEPT_MS - (performance.now() - lastRead[view])));
-      const acted = await within(mcp.call('mcp.call', { tool: 'call_action', arguments: { action: 'ext.stores.read_now', request: `churn-${n}-${randomUUID()}`, input: JSON.stringify({ view: `ext.stores.board${view}` }) } }), `cycle ${n}: call_action`);
-      lastRead[view] = performance.now();
-      const read = acted.result?.status === 'done' ? JSON.parse(acted.result.output?.result ?? 'null') : null;
-      if (!read?.sources?.length || read.sources.some((s) => s.status !== 'read')) throw new Blocked(`cycle ${n}: the stores' sources weren't read now: ${JSON.stringify(acted.error ?? acted.result)}`);
-      mcp.close();
+      // What the session and the hub do at once here overlaps, so a cycle takes the longest part and not their sum.
+      const asking = async () => {
+        const asked = mcp.call('mcp.call', { tool: 'deep_ask', arguments: { kind: 'choice', question: `Which header for screen ${n}?`, options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], recommended: 'a', steps: null, where: null, why: null, check: null, subject: null } });
+        const refused = asked.then((reply) => { if (reply.error) throw new Blocked(`cycle ${n}: deep_ask: ${JSON.stringify(reply.error)}`); return new Promise(() => undefined); });
+        const created = await Promise.race([frame(`cycle ${n}: ask.created`, (event) => of('ask.created')(event) && event.data?.kind === 'choice'), refused]);
+        // In words, so it saves no decision: one you save stands until you revoke it, and a hub keeps each.
+        const answer = await within(cliConn.call('ask.answer', { ask: `ask:${created.id}`, words: 'The plain one' }), `cycle ${n}: ask.answer`);
+        if (answer.error) throw new Blocked(`cycle ${n}: ask.answer: ${JSON.stringify(answer.error)}`);
+        await within(asked, `cycle ${n}: deep_ask`);
+      };
+      const reading = async () => {
+        // One action call with a request ID (#2650): a read that reads one view's two sources now, the 64 KB answer and a
+        // new set of 100 names. Read now keeps an answer from the last 2 s, so a view read sooner waits out the rest.
+        const view = n % 2;
+        await sleep(Math.max(0, KEPT_MS - (performance.now() - lastRead[view])));
+        const acted = await within(mcp.call('mcp.call', { tool: 'call_action', arguments: { action: 'ext.stores.read_now', request: `churn-${n}-${randomUUID()}`, input: JSON.stringify({ view: `ext.stores.board${view}` }) } }), `cycle ${n}: call_action`);
+        lastRead[view] = performance.now();
+        const read = acted.result?.status === 'done' ? JSON.parse(acted.result.output?.result ?? 'null') : null;
+        if (!read?.sources?.length || read.sources.some((s) => s.status !== 'read')) throw new Blocked(`cycle ${n}: the stores' sources weren't read now: ${JSON.stringify(acted.error ?? acted.result)}`);
+      };
+      const sending = async () => {
+        // A send held for your answer (#1866), answered in words as the ask above is: your yes would be saved for the repo
+        // and answer every later cycle's send.
+        const held = await within(mcp.call('mcp.call', { tool: 'call_action', arguments: { action: 'ext.sends.note', request: `send-${n}-${session}`, input: JSON.stringify({ to: `cycle-${n}` }) } }), `cycle ${n}: the send`);
+        if (held.result?.status !== 'held') throw new Blocked(`cycle ${n}: the send wasn't held: ${JSON.stringify(held.error ?? held.result)}`);
+        const told = await within(cliConn.call('ask.answer', { ask: held.result.ask, words: 'Not yet' }), `cycle ${n}: the send's answer`);
+        if (told.error) throw new Blocked(`cycle ${n}: the send's answer: ${JSON.stringify(told.error)}`);
+      };
+      const showing = async () => {
+        // One revision of the one document (#1866).
+        const drawn = await within(mcp.call('mcp.call', { tool: 'deep_show', arguments: { doc: DOC, document: shown(n), patch: null, removes: null, t: '0s', size: null, include: ['issues'], rev: null, camera: null, probes: null, sheet: null, mode: null, cursor: null, item: null, reference: null, select: null, span: null, depth: null } }), `cycle ${n}: deep_show`);
+        if (drawn.result?.outcome !== 'presented') throw new Blocked(`cycle ${n}: deep_show: ${JSON.stringify(drawn.error ?? drawn.result)}`);
+      };
+      const checked = (async () => {
+        const started = await within(app.call('run.start', { check: 'churn', claim: `claim:${ulid()}`, commit: '0'.repeat(40), argv: ['/usr/bin/true'], cwd: work }), `cycle ${n}: run.start`);
+        if (started.error) throw new Blocked(`cycle ${n}: run.start: ${JSON.stringify(started.error)}`);
+        await frame(`cycle ${n}: run.finished`, (event) => event.kind === 'run.finished' && event.subject === started.result.run);
+      })();
+      checked.catch(() => undefined);
+      await Promise.all([asking(), reading(), sending(), showing()]);
+      // A killed session's agent holds its connection to its end.
+      if (!killed) mcp.close();
 
-      const started = await within(app.call('run.start', { check: 'churn', claim: `claim:${ulid()}`, commit: '0'.repeat(40), argv: ['/usr/bin/true'], cwd: work }), `cycle ${n}: run.start`);
-      if (started.error) throw new Blocked(`cycle ${n}: run.start: ${JSON.stringify(started.error)}`);
-      await frame(`cycle ${n}: run.finished`, (event) => event.kind === 'run.finished' && event.subject === started.result.run);
-
+      const reloaded = (async () => {
+        const installed = await within(cliConn.call('extension.install', { from: pkg }), `cycle ${n}: extension.install`);
+        if (installed.error || installed.result?.status !== 'installed' || installed.result.not_loaded) throw new Blocked(`cycle ${n}: the extension didn't reload: ${JSON.stringify(installed.error ?? installed.result)}`);
+      })();
+      reloaded.catch(() => undefined);
+      // The change is claimed at the stop, whose turn's usage its transcript holds, and judged to PASS (#1866).
+      assistant([{ type: 'text', text: 'Done.' }], 'end_turn');
+      let stopped = await fire('Stop', { stop_hook_active: false, last_assistant_message: 'Done.' });
+      const claimed = await frame(`cycle ${n}: claim.made`, of('claim.made'));
+      const judged = frame(`cycle ${n}: verdict.made`, (event) => event.kind === 'verdict.made' && event.subject === `claim:${claimed.id}` && event.data?.outcome !== 'PENDING', LATE_MS);
+      // A check that missed the stop's time, as on a busy machine, starts once the turn ends: an agent the stop's reply
+      // sent on takes that reply into its turn and stops again, and the hub holds the last of its stops for a minute.
+      let verdict;
+      while (!(verdict = await Promise.race([judged, sleep(TURN_MS)]))) {
+        entry({ promptId: prompt, type: 'user', message: { role: 'user', content: `Stop hook feedback:\n${JSON.parse(stopped.stdout || '{}').reason ?? ''}` } });
+        assistant([{ type: 'text', text: 'Done.' }], 'end_turn');
+        stopped = await fire('Stop', { stop_hook_active: true, last_assistant_message: 'Done.' }, LATE_MS);
+      }
+      if (verdict.data?.outcome !== 'PASS') throw new Blocked(`cycle ${n}: the claim's verdict isn't PASS: ${JSON.stringify(verdict.data)}`);
+      await fire('UserPromptSubmit', { prompt: 'what does the deploy say?' });
       await fire('Stop', { last_assistant_message: "I'll check the deploy again in half a second." });
       await frame(`cycle ${n}: promise.set`, of('promise.set'));
       await frame(`cycle ${n}: promise.due`, of('promise.due'));
       await fire('UserPromptSubmit', { prompt: 'and now?' });
       await frame(`cycle ${n}: promise.woken`, of('promise.woken'));
 
-      const installed = await within(cliConn.call('extension.install', { from: pkg }), `cycle ${n}: extension.install`);
-      if (installed.error || installed.result?.status !== 'installed' || installed.result.not_loaded) throw new Blocked(`cycle ${n}: the extension didn't reload: ${JSON.stringify(installed.error ?? installed.result)}`);
-
-      await jobDone;
-      await fire('SessionEnd', { reason: 'other' });
-      await frame(`cycle ${n}: session.end`, of('session.end'));
+      await Promise.all([jobDone, checked, reloaded]);
+      if (killed) {
+        await agent.kill();
+        await frame(`cycle ${n}: session.gone`, of('session.gone'));
+      } else {
+        await fire('SessionEnd', { reason: 'other' });
+        await frame(`cycle ${n}: session.end`, of('session.end'));
+      }
       rmSync(transcript, { force: true });
     };
 
@@ -648,7 +869,7 @@ async function run({ cli, home, cycles }) {
     return {
       bench: 'hub-churn', cycles, warmup: WARMUP, every: EVERY, readings, heapGrowthBytes, rssGrowthBytes,
       heapGrowthPer1000Bytes: Math.round((heapGrowthBytes * 1000) / cycles), rssGrowthPer1000Bytes: Math.round((rssGrowthBytes * 1000) / cycles),
-      stores, open: { afterWarmup, afterLast },
+      stores, open: { afterWarmup, afterLast }, killed,
     };
   } finally {
     inspector?.close();
@@ -672,13 +893,15 @@ async function mergeBaseSide() {
     execFileSync('npm', ['ci', '--no-audit', '--no-fund'], { cwd: copy, stdio: 'ignore' });
     // A first build can fail on declaration order; the second passes.
     if (spawnSync('npm', ['run', 'build', '--workspaces'], { cwd: copy, stdio: 'ignore' }).status) execFileSync('npm', ['run', 'build', '--workspaces'], { cwd: copy, stdio: 'ignore' });
-    // A hub starts only with a deep-hook built under its checkout. It runs outside the heap measured here, so the copy
-    // borrows this checkout's newest build rather than compiling Rust.
-    const hook = ['release', 'debug'].map((p) => join(ROOT, 'target', p, 'deep-hook')).filter((p) => existsSync(p)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
-    if (!hook) throw Error(`no deep-hook is built under ${join(ROOT, 'target')} for its hub to start with; run cargo build -p deep-hook first`);
+    // A hub starts only with a deep-hook built under its checkout, and draws only with a deep-show (#1866). Both run outside
+    // the heap measured here, so the copy borrows this checkout's newest builds rather than compiling Rust.
     mkdirSync(join(copy, 'target', 'debug'), { recursive: true });
-    copyFileSync(hook, join(copy, 'target', 'debug', 'deep-hook'));
-    chmodSync(join(copy, 'target', 'debug', 'deep-hook'), 0o755);
+    for (const name of ['deep-hook', 'deep-show']) {
+      const built = ['release', 'debug'].map((p) => join(ROOT, 'target', p, name)).filter((p) => existsSync(p)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+      if (!built) throw Error(`no ${name} is built under ${join(ROOT, 'target')} for its hub; run cargo build --bin ${name} first`);
+      copyFileSync(built, join(copy, 'target', 'debug', name), constants.COPYFILE_FICLONE);
+      chmodSync(join(copy, 'target', 'debug', name), 0o755);
+    }
     return { copy, commit, done };
   } catch (error) {
     done({});
@@ -692,7 +915,7 @@ function runBase(side, cycles) {
   mkdirSync(home);
   const { DEEP_HUB_PLANT: _plant, ...env } = process.env;
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '--cli', join(side.copy, 'packages/cli/dist/main.js'), '--cycles', String(cycles), '--home', home], { env, stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '--cli', join(side.copy, 'packages/cli/dist/main.js'), '--cycles', String(cycles), '--home', home, ...(killed ? ['--killed'] : [])], { env, stdio: ['ignore', 'pipe', 'ignore'] });
     side.stop = () => child.kill('SIGTERM');
     leaving.add(() => { child.kill('SIGTERM'); rmSync(side.copy, { recursive: true, force: true }); rmSync(scratch, { recursive: true, force: true }); });
     let out = '';
@@ -708,6 +931,7 @@ function runBase(side, cycles) {
 }
 
 const cycles = Number(flag('cycles') ?? 5000);
+const killed = process.argv.includes('--killed');
 if (!Number.isSafeInteger(cycles) || cycles < 1) throw Error(`--cycles takes a whole number of cycles, not ${flag('cycles')}`);
 const given = flag('home');
 const home = given ?? join(realpathSync(mkdtempSync('/tmp/deep-churn-')), 'h');
@@ -717,7 +941,7 @@ let base, beside;
 try {
   base = process.argv.includes('--merge-base') ? await mergeBaseSide() : undefined;
   beside = base && runBase(base, cycles);
-  const line = await run({ cli: flag('cli') ?? join(ROOT, 'packages/cli/dist/main.js'), home: realpathSync(home), cycles });
+  const line = await run({ cli: flag('cli') ?? join(ROOT, 'packages/cli/dist/main.js'), home: realpathSync(home), cycles, killed });
   if (beside) line.mergeBase = await beside;
   if (line.mergeBase?.blocked) throw new Blocked(line.mergeBase.blocked);
   console.log(JSON.stringify(line));

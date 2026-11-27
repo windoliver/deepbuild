@@ -122,12 +122,23 @@ pub fn through(view: &View, items: &mut Map<String, Value>) {
 
 /// A look@1 object read for a document of `size`, its `fw` and `fh` literals converted.
 pub fn read_look(def: &Value, size: [f64; 2]) -> Result<Option<Arc<Look>>, Refused> {
+    read_look_in(def, size, false)
+}
+
+/// [`read_look`], or with `unguarded` by #1857's planted parser, which admits a break of 0.
+pub fn read_look_in(
+    def: &Value,
+    size: [f64; 2],
+    unguarded: bool,
+) -> Result<Option<Arc<Look>>, Refused> {
     let mut lowered = def.clone();
     lower_frame_literals(&mut lowered, (size[0] as u32, size[1] as u32));
     let Value::Object(map) = &lowered else {
         return Ok(None);
     };
-    Look::read(map).map(|l| Some(Arc::new(l))).map_err(refused)
+    Look::read_in(map, unguarded)
+        .map(|l| Some(Arc::new(l)))
+        .map_err(refused)
 }
 
 fn refused(r: spec::Refused) -> Refused {

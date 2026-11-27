@@ -1,7 +1,8 @@
 {
-  "schema": "adapter.facts@3",
+  "schema": "adapter.facts@11",
   "versions": [
-    "0.15.0"
+    "0.15.0",
+    "0.17.6"
   ],
   "agent": "paseo",
   "hookTimeouts": {
@@ -94,7 +95,8 @@
             "bind": "string"
           },
           "optional": {
-            "turn_id": "string"
+            "turn_id": "string",
+            "mode": "string"
           }
         },
         "agent.turn.after": {
@@ -109,7 +111,74 @@
           },
           "optional": {
             "turn_id": "string",
-            "error": "string"
+            "error": "string",
+            "reason": "string"
+          }
+        },
+        "agent.permission.before": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string",
+            "request_id": "string",
+            "permission_kind": "string",
+            "tool_name": "string",
+            "tool_input": "object"
+          },
+          "optional": {
+            "turn_id": "string",
+            "title": "string"
+          }
+        },
+        "agent.permission.after": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string",
+            "request_id": "string",
+            "behavior": "string",
+            "from": "string"
+          },
+          "optional": {
+            "turn_id": "string"
+          }
+        }
+      },
+      "0.17.6": {
+        "agent.turn.before": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string"
+          },
+          "optional": {
+            "turn_id": "string",
+            "mode": "string"
+          }
+        },
+        "agent.turn.after": {
+          "required": {
+            "hook_event_name": "string",
+            "session_id": "string",
+            "cwd": "string",
+            "provider": "string",
+            "paseo_agent": "string",
+            "bind": "string",
+            "outcome": "string"
+          },
+          "optional": {
+            "turn_id": "string",
+            "error": "string",
+            "reason": "string"
           }
         },
         "agent.permission.before": {
@@ -165,6 +234,46 @@
       "kind": "agent.stop",
       "data": {
         "outcome": "outcome"
+      },
+      "by": {
+        "field": "outcome",
+        "values": {
+          "completed": {
+            "kind": "agent.stop",
+            "data": {
+              "outcome": "=finished"
+            }
+          },
+          "failed": {
+            "kind": "agent.stop",
+            "data": {
+              "outcome": "=failed"
+            },
+            "cause": {
+              "field": "error",
+              "values": {
+                "401": "sign_in_required",
+                "403": "sign_in_required",
+                "authentication": "sign_in_required",
+                "unauthorized": "sign_in_required",
+                "invalid api key": "sign_in_required",
+                "no api key": "sign_in_required",
+                "429": "rate_limited",
+                "rate limit": "rate_limited",
+                "overloaded": "rate_limited",
+                "context length": "context_overflow",
+                "context window": "context_overflow"
+              },
+              "otherwise": "unknown"
+            }
+          },
+          "canceled": {
+            "kind": "turn.interrupted",
+            "data": {
+              "reason": "reason"
+            }
+          }
+        }
       }
     },
     "agent.permission.before": {
@@ -218,6 +327,14 @@
       "hooks": "plugin",
       "bridge": "1.0.105",
       "permissions": "Each tool call asks through ACP's session/request_permission with allow_once, allow_always and reject_once options; only allow_once is ever chosen, from your decision or your answer, never by default.",
+      "modes": {
+        "asks": [
+          "https://agentclientprotocol.com/protocol/session-modes#agent"
+        ],
+        "approvesOwnCalls": [
+          "allow-all"
+        ]
+      },
       "modelCheck": "The session's model, as paseo's snapshot reads it in runtimeInfo.model, is checked against the model you picked before the first prompt goes in; a different one holds the prompt and asks you.",
       "timeouts": {
         "initialize": 30000,

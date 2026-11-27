@@ -353,6 +353,10 @@
           "spec": "* path=../deep-marks-raster",
           "why": "Issue #1498: the replica's copy of the hub's canvas core: render-back's raster."
         },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #3605: a shell screen's driven data values written where its templates read them, as the scheduler writes them, so a level select's chapter counts show the shell's done."
+        },
         "deep-text": {
           "spec": "* path=../deep-text",
           "why": "Issue #1498: the replica's copy of the hub's canvas core: the shaper."
@@ -1236,6 +1240,10 @@
         "miniz_oxide": {
           "spec": "^0.9",
           "why": "Issue #2892: the player's prebuilt module sets stored as gzip once per build, by the export's own compressor (src/export/gzip.rs); both already in the lockfile."
+        },
+        "ignore": {
+          "spec": "^0.4",
+          "why": "Issue #3299: the build script's source digest skips what the workspace's .gitignore names, by git's own rules; already in the lockfile."
         }
       },
       "dependencies": {
@@ -1430,6 +1438,22 @@
         "deep-groups-render": {
           "spec": "* path=../deep-groups-render",
           "why": "Issue #1561: `frames` draws a 2D document under a drawn look through the compositor and the passes the live window and film2d run, on the GPU this binary has on macOS; and #1250's clips read their frames' indices through its indexed reader on every platform."
+        },
+        "skera": {
+          "spec": "^0.10",
+          "why": "Issue #1042: subsets each bundled face of a web player's bundle to the glyphs the piece's text can show, renumbering glyphs and closing them over the layout tables so a subset sets the text as the whole face does; the subsetter of the font crates the shaper already reads faces with. In deep-show only, never in the player."
+        },
+        "read-fonts": {
+          "spec": "^0.47",
+          "why": "Issue #1042: the font reader at the version skera takes its font and its sets of characters, tags and name IDs in; the shaper's own, older version stays under parley."
+        },
+        "rustls": {
+          "spec": "^0.23",
+          "why": "Issue #1042: a web export asks each public source it declares once over https, with no key, to refuse one that answers only with a key; ring as its one provider, as deep-relay; already in the lockfile."
+        },
+        "rustls-native-certs": {
+          "spec": "^0.8",
+          "why": "Issue #1042: the platform's own authorities, which the export's one request to a declared public source trusts; already in the lockfile."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -2893,6 +2917,62 @@
         }
       }
     },
+    "spikes/3031/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../crates/deep-canvas",
+          "why": "Spike #3031: the viewer's offsets a frame is evaluated with, at their defaults."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../../crates/deep-canvas-scene3d",
+          "why": "Spike #3031: evaluates each fixture's document into the scene a frame draws."
+        },
+        "deep-effects-render": {
+          "spec": "* path=../../crates/deep-effects-render",
+          "why": "Spike #3031: the shipped pairing of the evaluations at t ± s/2 that motion blur by velocity draws from."
+        },
+        "deep-gpu": {
+          "spec": "* path=../../crates/deep-gpu",
+          "why": "Spike #3031: the app's device, opened as the app opens it, and its allocated size."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../../crates/deep-scene3d-render",
+          "why": "Spike #3031: the renderer whose frames are read, through its public entry."
+        },
+        "wgpu": {
+          "spec": "=30.0.1",
+          "why": "Spike #3031: the wgpu the app pins, with its API trace on; outside the workspace with its own lockfile, so the trace feature never reaches the app."
+        },
+        "pollster": {
+          "spec": "^0.4",
+          "why": "Spike #3031: blocks on wgpu's device request in the headless reader."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Spike #3031: reads the documents and writes the reader's rows, keys in order."
+        }
+      }
+    },
+    "docs/spikes/3444/own-device/Cargo.toml": {
+      "dependencies": {
+        "wgpu": {
+          "spec": "=30.0.1",
+          "why": "Spike #3444: timestamp query sets on the wgpu the app pins, on Metal, with its internal counters on; outside the workspace with its own lockfile, so nothing it pins reaches the app."
+        },
+        "pollster": {
+          "spec": "^0.4",
+          "why": "Spike #3444: blocks on wgpu's adapter, device and error-scope futures in the headless probe."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Spike #3444: the probe's report of each attempt, keys in order."
+        },
+        "log": {
+          "spec": "^0.4",
+          "why": "Spike #3444: the logger that collects wgpu-hal's errors, Metal's own words among them, into the probe's report."
+        }
+      }
+    },
     "tests/acceptance/533/wat/Cargo.toml": {
       "dependencies": {
         "wat": {
@@ -3006,6 +3086,10 @@
         "deep-scene3d-render": {
           "spec": "* path=../deep-scene3d-render",
           "why": "Issue #172: the 3D renderer, on one thread in the web player."
+        },
+        "deep-effects-render": {
+          "spec": "* path=../deep-effects-render",
+          "why": "Issue #1042: the effects' post stage, for the pass that draws a painted scene's sun shadow in the web player as the app's frames draw it."
         },
         "deep-text": {
           "spec": "* path=../deep-text",
@@ -3256,6 +3340,42 @@
         "wasmparser": {
           "spec": "=0.263.0",
           "why": "Issue #851's blind suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/3605/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #3605's blind suite: its own assembler for the fixtures, #851's suite's, renamed, apart from the code under test; the version earlier suites pin."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #3605's blind suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/2700/probe/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../../../crates/deep-canvas",
+          "why": "Issue #2700: the acceptance probe calls the canvas core's public entry, built from each checkout's own copy; test-only, outside the workspace."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2700: the probe prints what it saw as one JSON line, with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
+        }
+      }
+    },
+    "tests/acceptance/2700/probe-reached/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../../../../crates/deep-canvas",
+          "why": "Issue #2700: the acceptance probe calls the canvas core's public entry, built from each checkout's own copy; test-only, outside the workspace."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2700: the probe prints what it saw as one JSON line, with the canvas core's own serde_json and its preserve_order feature; already in the tree, test-only."
         }
       }
     }

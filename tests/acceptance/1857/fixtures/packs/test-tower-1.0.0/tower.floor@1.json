@@ -1,0 +1,24 @@
+{
+  "id": "tower.floor",
+  "version": "1.0",
+  "title": "Floor",
+  "license": "MIT",
+  "author": "the #1857 acceptance suite",
+  "description": "1,024 rooms.",
+  "steps": {
+    "rooms": {
+      "op": "recipe",
+      "kind": "tower.room@1",
+      "params": {},
+      "repeat": {
+        "count": 1024,
+        "as": "i"
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "rooms"
+    ]
+  }
+}

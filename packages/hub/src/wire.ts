@@ -15,6 +15,16 @@ export const FEATURES: readonly string[] = [
 ];
 /** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
 export const CONTRACT = '1.0';
+/** Whether two contracts, each major.minor, are a major apart: neither side then reads the other's lines (design: Version skew). */
+export const majorsApart = (a: string | null | undefined, b: string | null | undefined): boolean => Boolean(a && b && a.split('.')[0] !== b.split('.')[0]);
+/** A host's deep-hook a contract major apart from the hub (#999), in the words its sessions' rows and `deep doctor` say, naming both. */
+export const outsideContract = (host: string, hookVersion: string | null, hookContract: string, hubVersion: string | null, hubContract: string): string =>
+  `${host}'s deep-hook ${hookVersion ?? 'of no version it reports'} speaks contract ${hookContract} and the hub ${hubVersion ?? ''} speaks contract ${hubContract}, a major apart, so its hooks send the hub nothing`.replace('  ', ' ');
+/** The contract a hub says it speaks: the planted hub of #1334 speaks one a major ahead and #999's one a minor ahead, so every deep-hook is the older side, outside the contract or within it. */
+export function contractOf(plant: string | undefined): string {
+  const [major, minor] = CONTRACT.split('.').map(Number) as [number, number];
+  return plant === 'contract-major-ahead' ? `${major + 1}.0` : plant === 'contract-minor-ahead' ? `${major}.${minor + 1}` : CONTRACT;
+}
 /** What a stream subscribe asks for (#1575): one session's events, or the list's rows; with none, every event, as the app subscribes. */
 export type Scope = { kind: 'session'; session: string } | { kind: 'list' };
 
@@ -80,6 +90,9 @@ export const derivedId = (ms: number, key: string): string => ulid(ms, createHas
 
 /** An event a hook request maps to, its data held to its kind's catalogue fields; the core fills the counters. */
 export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' | 'loads'; queued?: boolean }
+/** What a provider's facts say of the mode a turn started in (#3429): the reading, and its code. */
+export interface ModeRead { code: ModeCode; reading: string }
+
 /** What the parser read of a hook request that the core needs to check and bind it. */
 export interface HookMeta {
   /** A Claude Code network stop's try of the host its API calls go to (#85), made before it queues. */
@@ -116,12 +129,20 @@ export interface HookMeta {
   person?: string;
   /** Only the actor-from-payload plant reads it. */
   payloadActor?: string;
+  /** The host whose forwarded socket the hook came over (#999), set by the event loop alone; none for this machine. */
+  host?: string;
   /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
   denied?: string;
   /** Set by the server on a PreToolUse its guard entries blocked: the entries, by name, for a PostToolUse that shows it ran anyway (#1033). */
   blockedBy?: string[];
   /** What a hook said beside its turn, for the core to append as a session.reading (#39). */
   reading?: string;
+  /** The reading's code (#1456): what it is, which its session's state reads. */
+  readingCode?: ReadingCode;
+  /** The hook ends a turn you interrupted, its facts' turn.interrupted (#39, #3430): no stop, no claim. */
+  interrupted?: boolean;
+  /** A reading naming a payload value the facts don't list (#3430), for the core to record the hook unverified. */
+  unlisted?: string;
   /** A caller name the payload's own fields contradict, for the core to append once per session as a reading (#993). */
   caller?: string;
   /** Set by the server on a hook whose agent's hook program the last check found can't run (#993): its gates watch-only. */
@@ -133,16 +154,18 @@ export interface HookMeta {
   rules?: { notices: string[]; before?: { file: string; scope: string; rules: string[] }[] };
   /** A shell call's command line; only the matches-text plant reads it. */
   command?: string;
+  /** At SessionStart, the session's own inbox address, the path its agent exported to its hooks (#3405); never its token. */
+  inbox?: string;
   /** The agent version the session's transcript names; unset until it holds an entry. */
   version?: string;
   /** Set for a session on a version its facts don't cover: recorded unverified, its holds and every block but the floor watch-only (#1501). */
   watchOnly?: boolean;
   /**
    * A line from paseo's plugin (#55): the agent's provider and paseo's own agent ID, the token its DeepBuild MCP server
-   * binds by, a permission request's ID and kind, an answer's source; and, for a provider the facts don't cover, what
-   * they lack.
+   * binds by, a permission request's ID and kind, an answer's source; for a provider the facts don't cover, what
+   * they lack; and, at a turn's start of a provider the plugin gates, what its facts say of the mode it starts in (#3429).
    */
-  paseo?: { provider: string; agent: string; bind: string; request?: string; kind?: string; behavior?: string; from?: string; lacks?: string };
+  paseo?: { provider: string; agent: string; bind: string; request?: string; kind?: string; behavior?: string; from?: string; lacks?: string; mode?: ModeRead };
   /**
    * What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and
    * subagent, a stop's last message, Codex's turn, and a FileChanged hook's path.
@@ -228,6 +251,7 @@ export type Parsed =
   | { kind: 'refused'; id: string | null; error: Refusal };
 
 import type { Plant } from './plant.js';
+import type { ModeCode, ReadingCode } from './reading-codes.js';
 export { activePlant, plantOf, type Plant } from './plant.js';
 
 /**

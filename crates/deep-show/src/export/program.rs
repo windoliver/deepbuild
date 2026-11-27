@@ -24,8 +24,8 @@ const FINISH: Duration = Duration::from_secs(600);
 enum Said {
     /// Its encoder is open, this long after it was asked.
     Ready(f64),
-    /// Its encoder let a frame go, and with it the slot the frame was in.
-    Coded(Option<usize>),
+    /// Its encoder let a frame go, and with it the slot the frame was in, at this time.
+    Coded(Option<usize>, Instant),
     /// `out` is whole: its last line.
     Done(Value),
     Failed(String),
@@ -50,6 +50,10 @@ pub(crate) struct Slots {
     gpu: std::sync::Arc<deep_gpu::device::Device>,
     slots: Vec<deep_gpu::surface::Slot>,
     free: Vec<usize>,
+    /// #231: how many frames each slot is out for (a held frame is its slot again), and the
+    /// slot last handed over.
+    out: Vec<usize>,
+    last: Option<usize>,
     /// The ring's name in the bootstrap namespace, this export's own.
     pub(crate) name: String,
 }
@@ -72,6 +76,8 @@ impl Slots {
             gpu,
             slots,
             free: (0..n).rev().collect(),
+            out: vec![0; n],
+            last: None,
             name: format!("deepbuild.encode.{}.{k}", std::process::id()),
         })
     }
@@ -80,6 +86,32 @@ impl Slots {
 #[cfg(not(target_os = "macos"))]
 pub(crate) struct Slots {
     free: Vec<usize>,
+    out: Vec<usize>,
+    last: Option<usize>,
+}
+
+impl Slots {
+    /// The slot the next frame goes out in: a free one, or, for a held frame, the slot last
+    /// handed over again, whether the tool still holds it or has let it go.
+    fn take(&mut self, again: bool) -> Option<usize> {
+        let i = match again {
+            true => self.last.inspect(|i| self.free.retain(|f| f != i))?,
+            false => self.free.pop()?,
+        };
+        self.out[i] += 1;
+        self.last = Some(i);
+        Some(i)
+    }
+
+    /// The tool let slot `i` go for one frame: it is free once it is out for none.
+    fn back(&mut self, i: usize) {
+        if let Some(n) = self.out.get_mut(i).filter(|n| **n > 0) {
+            *n -= 1;
+            if *n == 0 {
+                self.free.push(i);
+            }
+        }
+    }
 }
 
 /// One encode job in a plug-in's program.
@@ -96,6 +128,11 @@ pub(crate) struct Session {
     planted: Planted,
     /// The ring of GPU surfaces the tool was handed, when it takes its frames that way.
     ring: Option<Slots>,
+    /// #231: how long the tool has held at least one frame, since when it holds one now, and
+    /// how long handing it its frames took.
+    busy: Duration,
+    since: Option<Instant>,
+    handing: Duration,
 }
 
 fn failed(tool: &str, code: &str, what: String) -> Value {
@@ -170,7 +207,7 @@ impl Session {
                 } else if let Some(e) = v.get("error") {
                     Said::Failed(e.as_str().map_or_else(|| e.to_string(), str::to_string))
                 } else if v.get("frame").is_some() {
-                    Said::Coded(v["slot"].as_u64().map(|i| i as usize))
+                    Said::Coded(v["slot"].as_u64().map(|i| i as usize), Instant::now())
                 } else {
                     continue;
                 };
@@ -201,6 +238,9 @@ impl Session {
             opened: None,
             planted,
             ring,
+            busy: Duration::ZERO,
+            since: None,
+            handing: Duration::ZERO,
         })
     }
 
@@ -221,10 +261,13 @@ impl Session {
     fn heard(&mut self, said: Said) -> Result<Option<Value>, Value> {
         match said {
             Said::Ready(seconds) => self.opened = Some(seconds),
-            Said::Coded(slot) => {
+            Said::Coded(slot, at) => {
                 self.out = self.out.saturating_sub(1);
+                if let Some(since) = self.since.take_if(|_| self.out == 0) {
+                    self.busy += at.saturating_duration_since(since);
+                }
                 if let (Some(r), Some(i)) = (&mut self.ring, slot) {
-                    r.free.push(i);
+                    r.back(i);
                 }
             }
             Said::Done(v) => return Ok(Some(v)),
@@ -280,6 +323,36 @@ impl Session {
     /// Hands frame `k` to the tool once it is open and fewer than its window's frames are out;
     /// `key` asks for a key frame.
     pub(crate) fn push(&mut self, k: i64, bytes: &[u8], key: bool) -> Result<(), Value> {
+        self.hand(k, bytes, key, false, None)
+    }
+
+    /// #231: hands frame `k` to a tool that takes GPU surfaces from `input`, the buffer the
+    /// frame's BGRA8 rows were hashed in: a free slot takes it by a copy on the GPU, so the
+    /// frame's pixels never pass through memory.
+    pub(crate) fn push_from(
+        &mut self,
+        k: i64,
+        input: &wgpu::Buffer,
+        key: bool,
+    ) -> Result<(), Value> {
+        self.hand(k, &[], key, false, Some(input))
+    }
+
+    /// #231: hands frame `k` to the tool as the frame before it again: by GPU surface the same
+    /// slot's index, which nothing is drawn into; by copy the same `bytes`.
+    pub(crate) fn repeat(&mut self, k: i64, bytes: &[u8], key: bool) -> Result<(), Value> {
+        self.hand(k, bytes, key, true, None)
+    }
+
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+    fn hand(
+        &mut self,
+        k: i64,
+        bytes: &[u8],
+        key: bool,
+        again: bool,
+        from: Option<&wgpu::Buffer>,
+    ) -> Result<(), Value> {
         if !self.until(Some(WAIT), |s| s.opened.is_some())? {
             return Err(stalled(k));
         }
@@ -292,10 +365,17 @@ impl Session {
         let full = bytes;
         // By GPU surface: the frame is put in a free slot on the GPU, and the slot's index is
         // sent once that work, and the frame's hash before it, is done. Nothing else crosses.
-        let slot = self.ring.as_mut().and_then(|r| r.free.pop());
+        let at = Instant::now();
+        let slot = self.ring.as_mut().and_then(|r| r.take(again));
+        if self.ring.is_some() && slot.is_none() {
+            return Err(stalled(k));
+        }
         #[cfg(target_os = "macos")]
-        if let (Some(r), Some(i), false) = (&self.ring, slot, self.planted.before_hash) {
-            r.slots[i].fill(&r.gpu, bytes);
+        if let (Some(r), Some(i), false) = (&self.ring, slot, self.planted.before_hash || again) {
+            match from {
+                Some(input) => r.slots[i].take(&r.gpu, input),
+                None => r.slots[i].fill(&r.gpu, bytes),
+            }
         }
         let (head, bytes) = match slot {
             Some(i) => (json!({"frame": k, "key": key, "slot": i}), &[][..]),
@@ -323,13 +403,17 @@ impl Session {
             }
             sent
         });
+        self.handing += at.elapsed();
         match sent {
             Some(true) => {
+                if self.out == 0 {
+                    self.since = Some(Instant::now());
+                }
                 self.out += 1;
                 // Planted: the slot went out before the frame was in it. The frame is put there
                 // only once the tool has let the slot go, so the tool read what it held before.
                 #[cfg(target_os = "macos")]
-                if let (Some(i), true) = (slot, self.planted.before_hash) {
+                if let (Some(i), true) = (slot, self.planted.before_hash && !again) {
                     let _ = self.until(Some(WAIT), |s| {
                         s.ring.as_ref().is_some_and(|r| r.free.contains(&i))
                     })?;
@@ -360,8 +444,14 @@ impl Session {
                 .said
                 .recv_timeout(deadline.saturating_duration_since(Instant::now()))
                 .unwrap_or(Said::Gone);
-            if let Some(done) = self.heard(said)? {
+            if let Some(mut done) = self.heard(said)? {
                 let _ = self.child.wait();
+                // #231: with its last line, the seconds the hand-off took and the tool held a
+                // frame.
+                if let Some(o) = done.as_object_mut() {
+                    let spent = json!([self.handing.as_secs_f64(), self.busy.as_secs_f64()]);
+                    o.insert("spent".into(), spent);
+                }
                 return Ok(done);
             }
         }

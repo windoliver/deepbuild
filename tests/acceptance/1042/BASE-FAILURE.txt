@@ -1,0 +1,136 @@
+#1042: what every test does at the base ebf1e7f44. A record of runs of the suite there.
+
+What was run at the base, ebf1e7f44bedb850047741cea366ac08df62dcbc, on November 26, 2026 (macOS arm64, Google Chrome
+158.0.8127.38 headless with WebGPU, the shared Mac's one-minute load average between 58 and 97 over the runs):
+
+- each of the four test files once, one at a time, by the caller's runner from this job's scripts, with the README's
+  run command (`node node_modules/vitest/vitest.mjs run --no-file-parallelism --root tests/acceptance/1042
+  <file>.test.ts --testTimeout=3600000`), `deep-show` (`full`, debug) built there first by `cargo build --locked
+  --bin deep-show --no-default-features --features full`. Each file's own cargo step compiled nothing: the binary's
+  SHA-256 was the same before and after every run;
+- `ac01-public-sources.test.ts` once more, after the one fault of the suite those runs showed was repaired (Faults of
+  the suite, 3). The results quoted for that file are the second run's; the first run's differ by the one line said
+  there;
+- a scratch check (not committed) of the browser mechanics and of the session's own logic on a hand-written stand-in
+  page, with this folder's `web.ts` driving it (The stand-in, below). It proves the test's logic, never the base, and
+  no result below rests on it.
+
+No test is BLOCKED at the base. Six tests: four of new behaviour fail at their own assertions, the taste test is
+INCONCLUSIVE, and one test of behaviour that must not change passes.
+
+Per test
+
+- ac01-public-sources.test.ts (2 tests, 2 failed, 205 s)
+  - AC1 #1042.c144d9ce "over a 10-minute scripted session …": FAILS at its own assertion (ac01-public-sources.test.ts,
+    `none(read.failures, …)`), 197 s into the test. The 600 s gauge is presented and exported with its declared
+    source; the planted cookies are kept and the source's travels on the test's own request; the page loads, its
+    player is ready on WebGPU, 600 s long, and plays. Then:
+      "over the 600 s session (the source was asked 0 times and gave []; left out of the page's record as the
+      browser's own: chrome-extension://fignfifoniblkonapihmkfakmlgkbkcf/service_worker.js) the player asks only for
+      its own files and its declared source, with no cookie or credential, and each value is one input entry at the
+      first step not yet run, shown with its source and age:
+        the player asked the piece's declared public source https://127.0.0.1:<port>/outside.json for no value in
+        the first 180 s of play (the piece asks every 60 s; the player's first request to its declared source
+        https://127.0.0.1:<port>/outside.json, or the end of the play: nothing within 180000 ms); the page shows no
+        bound value, and probe().readings is undefined, not the list of the reading entries on the player's input
+        track
+        probe().readings is undefined, not the list of the reading entries on the player's input track"
+    Those two failures and no other: every request of the session, in the browser's record, the page-side log and
+    the bundle's server's record, was for one of the bundle's own files, and none the player made carried a cookie.
+    The session is cut short there: a player that asks no source is not played on to its end.
+  - AC1 #1042.c144d9ce "a source that answers only with a key is refused at export …": FAILS at its own assertion
+    (`none(keyedRefusalFailures(…))`). The stand-ins answer 200, 401 and 200 (no key, the keyed one with no key, the
+    keyed one with the made-up key); both gauges are presented; the one with its public source alone is exported.
+    Then:
+      "the export of a piece with a source that answers only with a key is refused, naming that source:
+        the export of a piece whose source 01JB1042R00000000000000002 answers only with a key is "exported", not
+        refused"
+
+- ac02-ray-shadow-fallback.test.ts (1 test, 1 failed, 17 s)
+  - AC2 #1042.8f1f57d3 "the yard, whose light policy names ray-traced shadows, exports without a refusal, plays in the
+    web player to its end, and its receipt lists today's light as the fallback for its shadowed light": FAILS at its
+    own assertion, the last of the test (`none(fallbackFailures(receipt, SUN), …)`). Before it, all of these hold at
+    the base: the yard is presented and exported with no refusal; the index page's player is ready, 4 s long, on
+    WebGPU; played from its start it reaches `ended` with nothing stopped, at step 240, having drawn frames. Then:
+      "the receipt lists today's light as the fallback for the shadowed light sun:
+        the receipt lists 0 fallbacks for sun on the web path, not one: its stand_in is []"
+
+- ac03-font-subset.test.ts (2 tests, 1 failed, 1 passed, 15 s)
+  - AC3 #1042.5bc230da "the scroll's bundle holds one font cut from the CJK face, under 200 KB, that keeps the face's
+    name and licence, and not the whole face": FAILS at its own assertion (`none(failures, …)`), after the scroll is
+    presented and exported and its manifest names one font of NotoSansSC-Regular.otf:
+      "the bundle holds a subset of the CJK face under 200,000 bytes that keeps the face's name and licence (29
+      files):
+        the bundle's CJK font is 8,331,336 bytes, not under 200,000 (the whole face)
+        the bundle still holds the whole CJK face
+        (7553c6fafe1692158145cbd2f323768f2070cf5aa26ba96c9e4b63c3535b473f.gz, 8,331,336 bytes)"
+  - AC3 #1042.5bc230da "the bundle's fonts draw the forty graphemes as the app does, every pixel within one code value;
+    a bundle whose CJK font names other glyphs for them does not": PASSES, as it should. It is a test of behaviour
+    that must not change: at the base the bundle's CJK font is the app's whole face, so the bundle's fonts already
+    draw the text as the app does. Seen in the run: the app's still of the scroll's first frame shows the text; the
+    same frame read back from the base player's canvas is the same size with every pixel's every channel within one
+    code value of it; and the wrong program, the copy of that bundle whose CJK font names the glyph after its own for
+    each of the forty graphemes, is loaded by the base's player, is ready, draws its frame and fails the same
+    comparison by pixels "more than one code value" from the app's. That copy is the wrong program this test
+    catches: a subset whose glyphs aren't the ones the text shows, a player that sets the text in another face, or a
+    blank frame fails it the same way.
+
+- ac04-taste.test.ts (1 test, 1 failed, under 1 s)
+  - AC4 #1042.ed73d00d "the recorded call on exactly the check run's pictures says they look right; with none the
+    run is INCONCLUSIVE, never PASS": INCONCLUSIVE, as it should be with no picture and no call:
+      "INCONCLUSIVE: the check run's pictures are not in docs/evidence/1042/: player-ray-shadow-fallback.png,
+      player-cjk-subset.png; this is not a pass"
+
+Faults of the suite that runs at the base showed, each repaired
+
+1. The browser's flags. A first run, on November 25, of the suite as its second sitting left it: every test that
+   opens a page was BLOCKED ("offers no WebGPU here (no navigator.gpu)"; "doesn't send the planted cookie"). The
+   resolver's rule mapped every host to nowhere, this machine's loopback address among them, so no page of the
+   suite's own server loaded. Loopback is now left out of the rule. A page the browser doesn't load, and a control
+   request the stand-in source doesn't answer, are now BLOCKED by their own names, not as a missing adapter or a
+   cookie that didn't travel.
+2. A second page in one browser. In a run of November 25 with only that rule changed, the render test's second
+   bundle was never ready within 180 s, with no notice and no page error. It was not the bundle: the browser's own
+   session tells of every attach, the test's attach to a new page included, and the suite gave that event to the
+   page opened before, which then took the new page's session for a context of its own, so the new page never heard
+   its load event. A page now hears its own session and the contexts under it only. Confirmed on the stand-in: with
+   the old dispatch a second page met "the second page hears its load event: nothing within 20000 ms" while the page
+   itself was loaded and ready; with the new one a second and a third page were ready. The render test's wrong
+   program was changed in the same sitting, from a face with no Han glyph to the face with its character map moved
+   by one glyph, so that it is one the player loads and draws; the run above is the first of it.
+3. The browser's own worker in a page's record. The first run of ac01's session on November 26 failed with the two
+   failures quoted above and a third that was the suite's fault:
+     "the page asked for chrome-extension://fignfifoniblkonapihmkfakmlgkbkcf/tts_extension.js, which is neither one
+     of the bundle's own files nor a declared public source (request, the browser's record)"
+   Some time into a session the browser starts a worker of an extension it ships. The suite takes every shared or
+   service worker that starts under the browser into the record of the page now open, so that a worker a page
+   registers can't ask for anything unseen, and it took this one too. A context whose script the browser serves from
+   itself (`chrome-extension:`, `chrome:`, `chrome-untrusted:`, `devtools:`) is now left out of a page's record: it
+   runs on, and the session's message names it, as the run quoted above does. A request a page itself makes to such
+   an address is still in its record and still fails. Nothing else of the session changed between the two runs.
+
+Two more were repaired on reading, with no run to show them: a wait that met its deadline named only the DevTools
+command left unanswered, and now names what was awaited (the session's first failure above carries one); and a later
+wait of the session that met its deadline with the play not over was dropped without a word, and is now a failure.
+
+The stand-in (a scratch check, not committed; it proves the suite's own logic and the browser mechanics, never the base)
+
+The base's player asks no source, so the base can't show the session past its first wait. A hand-written page with a
+stand-in `<deep-player>`, 40 s long and asking every 5 s, was put through `playSession` as the test calls it, in the
+same Chrome, each run with its own throwaway certificate, stand-in source and browser:
+
+- a stand-in that asks its declared source with no cookie, keeps each value as an entry at the step not yet run and
+  shows it with its source and age: the session ended with 0 failures (the source asked 8 times, 6 values given, two
+  alike, one of them while the player was held paused; 2,400 steps). So, in this browser: a planted cookie is kept
+  and travels to the source's host on a request that asks for it; the browser trusts the stand-in's certificate by
+  its pin; the held source gives each value when the test says; a value given while paused is shown while paused;
+  and the three records of requests agree that the page asked for its own files and its declared source only;
+- the same stand-in sending cookies to the source, asking another host and keeping only its last value: 25 failures,
+  naming each ("went out with a cookie header", "the request to the source for /outside.json carries a cookie
+  header", "the page asked for https://outside.invalid/beacon", "1 earlier reading entry is gone from the input
+  track", "the session gained 1 reading entries for the 7 values the source gave");
+- a page on a host that isn't this machine's loopback is not loaded and reaches nothing: "didn't load
+  http://outside.invalid/index.html (net::ERR_PROXY_CONNECTION_FAILED)".
+
+Not seen anywhere: a real player through the ten minutes of criterion 1. The stand-in's session was 40 s long, and
+the base's is judged for its first 180 s of play and the requests made in them.

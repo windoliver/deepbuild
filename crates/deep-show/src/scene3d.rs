@@ -288,11 +288,19 @@ impl Gpu3 {
     }
 
     /// The app's GPU, or `None` where there is none to draw 3D on; it evaluates with the sealed
-    /// build's fills.
-    pub fn open(sealed: &deep_canvas::registry::Sealed, planted: Option<String>) -> Option<Gpu3> {
+    /// build's fills. `count_untested` is #3507's planted count.
+    pub fn open(
+        sealed: &deep_canvas::registry::Sealed,
+        planted: Option<String>,
+        count_untested: bool,
+    ) -> Option<Gpu3> {
         let gpu = Gpu::open(Backend::Gpu).ok()?;
         let device = gpu.recover().ok()?;
-        let renderer = Renderer::new(&device, Planted::default());
+        let wrong = Planted {
+            shaded_count_skips_depth_test: count_untested,
+            ..Planted::default()
+        };
+        let renderer = Renderer::new(&device, wrong);
         let fx = Arc::new(Mutex::new(Effects::new(
             Default::default(),
             Default::default(),
@@ -340,9 +348,7 @@ impl Gpu3 {
             .finish
             .apply(&self.device, None, "", bytes, scene.size, &[], true)
             .ok()?;
-        for p in bytes.as_chunks_mut::<4>().0 {
-            p.swap(0, 2);
-        }
+        deep_gpu::surface::swap_red_blue(&mut bytes);
         Some(bytes)
     }
 
@@ -350,6 +356,24 @@ impl Gpu3 {
     fn offscreen(&mut self, scene: &Scene, look: &Look3, post: bool) -> Option<Vec<u8>> {
         let post = post.then_some(&mut self.post as &mut dyn Post);
         draw_offscreen(&self.device, &mut self.renderer, scene, look, post)
+    }
+
+    /// #231: [`Gpu3::draw`]'s frame as the BGRA8 texture it is drawn into, which nothing reads
+    /// back; `None` for a frame with readouts, whose labels are a second draw, or with a look's
+    /// operator finish, which runs over the frame's bytes.
+    pub fn draw_texture(&mut self, frame: &Frame3d) -> Option<wgpu::Texture> {
+        let Staged { scene, look, .. } = &frame.staged;
+        if !scene.readouts.is_empty() || !frame.finish.is_empty() {
+            return None;
+        }
+        (self.fx.lock().unwrap_or_else(|e| e.into_inner())).stage(&frame.staged);
+        *self.drawn.lock().unwrap_or_else(|e| e.into_inner()) = frame.drawn.clone();
+        self.renderer.core.want = frame.staged.want;
+        let post = Some(&mut self.post as &mut dyn Post);
+        let (device, renderer) = (&self.device, &mut self.renderer);
+        Some(deep_scene3d_render::draw_offscreen_texture(
+            device, renderer, scene, look, post,
+        ))
     }
 
     /// #427: `doc` at `t` on a frame of `size`, its `mesh.asset@1` items read from `assets`: the

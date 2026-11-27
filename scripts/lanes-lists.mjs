@@ -1,7 +1,7 @@
 // The lane lists, moved out of scripts/lanes.mjs whole (#2360): the files the unit lane runs alone, slow, exclusive,
 // by hand or under a timed grant, each suite's entries in them, and the blind redrafts that run in their originals' place.
 // scripts/lanes.mjs re-exports each list and is still the one entry every reader imports them from.
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,7 +14,7 @@ export const ownLane = ['tests/acceptance/684/lean.test.ts'];
  * runner. tests/acceptance/327/ holds answers-redraft/, the blind redraft that is #327 AC2's hub-side test (its README);
  * the earlier answers.test.ts there keeps AC7, AC15 and AC16, so the folder runs whole.
  */
-export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/acceptance/149-redraft-ac5/', 'tests/acceptance/149-redraft-ac10/', 'tests/acceptance/84/', 'tests/acceptance/580/', 'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/1487/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/', 'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/492/', 'tests/acceptance/492-gaps/', 'tests/acceptance/493/', 'tests/acceptance/493-redraft-ac7/', 'tests/acceptance/493-redraft-ac12/', 'tests/acceptance/493-redraft-ac18/', 'tests/acceptance/494/', 'tests/acceptance/495/', 'tests/acceptance/496/', 'tests/acceptance/497/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/464/', 'tests/acceptance/1646/', 'tests/acceptance/1619/', 'tests/dither-fill.test.ts', 'tests/acceptance/467/', 'tests/acceptance/467-redraft-ac2/', 'tests/acceptance/465/', 'tests/acceptance/166/', 'tests/acceptance/268/', 'tests/acceptance/268-redraft-ac4/', 'tests/acceptance/968/', 'tests/acceptance/481/', 'tests/acceptance/486/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/claude.test.ts', 'tests/acceptance/1015/codex.test.ts', 'tests/acceptance/1015/focused.test.ts', 'tests/acceptance/1015/waiter.test.ts', 'tests/acceptance/1015/memory.test.ts', 'tests/acceptance/1015/gpu.test.ts', 'tests/acceptance/1015/redraft/own-repo.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1018/', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/1417/', 'tests/acceptance/1417-redraft-ac1/', 'tests/acceptance/1417-redraft-ac3/', 'tests/acceptance/87/gate/', 'tests/acceptance/1537/', 'tests/acceptance/1022/',
+export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/acceptance/149-redraft-ac5/', 'tests/acceptance/149-redraft-ac10/', 'tests/acceptance/84/', 'tests/acceptance/580/', 'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/1581/proposal.test.ts', 'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/1487/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/', 'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/492/', 'tests/acceptance/492-gaps/', 'tests/acceptance/493/', 'tests/acceptance/493-redraft-ac7/', 'tests/acceptance/493-redraft-ac12/', 'tests/acceptance/493-redraft-ac18/', 'tests/acceptance/494/', 'tests/acceptance/495/', 'tests/acceptance/496/', 'tests/acceptance/497/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/464/', 'tests/acceptance/1646/', 'tests/acceptance/1619/', 'tests/dither-fill.test.ts', 'tests/acceptance/467/', 'tests/acceptance/467-redraft-ac2/', 'tests/acceptance/465/', 'tests/acceptance/166/', 'tests/acceptance/268/', 'tests/acceptance/268-redraft-ac4/', 'tests/acceptance/968/', 'tests/acceptance/481/', 'tests/acceptance/486/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/claude.test.ts', 'tests/acceptance/1015/codex.test.ts', 'tests/acceptance/1015/focused.test.ts', 'tests/acceptance/1015/waiter.test.ts', 'tests/acceptance/1015/memory.test.ts', 'tests/acceptance/1015/gpu.test.ts', 'tests/acceptance/1015/redraft/own-repo.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1018/', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/1417/', 'tests/acceptance/1417-redraft-ac1/', 'tests/acceptance/1417-redraft-ac3/', 'tests/acceptance/87/gate/', 'tests/acceptance/1537/', 'tests/acceptance/1022/',
   'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/420/', 'tests/acceptance/421/', 'tests/acceptance/423/', 'tests/acceptance/424/', 'tests/acceptance/430/', 'tests/group-compositor.test.ts', 'tests/acceptance/446/', 'tests/acceptance/419/', 'tests/acceptance/428/', 'tests/acceptance/1297/', 'tests/acceptance/1297-redraft-2047/', 'tests/acceptance/422/', 'tests/acceptance/426/', 'tests/acceptance/425/', 'tests/acceptance/427/', 'tests/scene3d-interface.test.ts', 'tests/scene3d-shading.test.ts', 'tests/scene3d-contact.test.ts', 'tests/scene3d-culled-casters.test.ts', 'tests/acceptance/441/', 'tests/acceptance/440/', 'tests/acceptance/1640/', 'tests/acceptance/1782/', 'tests/acceptance/443/', 'tests/acceptance/433/', 'tests/acceptance/671/', 'tests/acceptance/1162/', 'tests/acceptance/381/', 'tests/acceptance/398/', 'tests/acceptance/397/', 'tests/acceptance/406/', 'tests/acceptance/238/', 'tests/acceptance/415/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/105/', 'tests/acceptance/498/', 'tests/acceptance/806/', 'tests/acceptance/402/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/1413/', 'tests/acceptance/777/', 'tests/acceptance/823/', 'tests/acceptance/856/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/redraft-ac12/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/', 'tests/acceptance/37/', 'tests/acceptance/315/', ...['replay', 'budgets', 'process-start'].map((f) => `tests/acceptance/21/${f}.test.ts`), 'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/884/', 'tests/acceptance/139/',
   'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/567/fast.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/386/', 'tests/acceptance/1174/', 'tests/acceptance/1173/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/', 'tests/acceptance/429/', 'tests/acceptance/431/', 'tests/acceptance/432/', 'tests/acceptance/483/', 'tests/acceptance/484/', 'tests/acceptance/252/', 'tests/acceptance/1993/',
@@ -44,21 +44,36 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/1334-redraft-2565/'];
 
 /**
- * A suite's own lane file (#1327): `tests/acceptance/<issue>/lane.json` says its folder runs alone, and why, as
- * `{ "alone": true, "why": "<reason>" }` and nothing else. Running alone only makes a run stricter, so a new one lands
- * with its suite with no approval; anything else a lane decides (a skip, by hand, a timed grant, leaving a lane) stays
- * in this file. The folder runs alone while the disk holds the file, whatever it holds, so nothing in it can loosen a
- * run; the guard refuses any other shape or place, and the edit or removal of a landed one
- * (docs/parallel-proof.md, section 7).
+ * A suite's own lane file (#1327, #3419), in `tests/acceptance/<issue>/`, a redraft or oracle folder `<issue>-<suffix>/`
+ * or a redraft or oracle subfolder: `{ "alone": true, "why": "<reason>" }`, with `timed` and `slow` lists of its own
+ * folder's files. The folder runs alone while the disk holds the file, whatever it holds; its lists count only in that
+ * shape. Anything else a lane decides stays in this file; the guard refuses any other shape or place, and the edit or
+ * removal of a landed one (docs/parallel-proof.md, section 7).
  */
-export const LANE_FILE = /^tests\/acceptance\/(\d+)\/lane\.json$/;
-// A copy of scripts/ with no suites beside it reads none.
-const suites = join(root, 'tests/acceptance');
-for (const folder of existsSync(suites) ? readdirSync(suites, { withFileTypes: true }) : []) {
-  if (!folder.isDirectory() || !LANE_FILE.test(`tests/acceptance/${folder.name}/lane.json`)) continue;
-  // As the disk finds it, so a name it folds to lane.json counts too and can't stand in for one.
-  if (statSync(join(suites, folder.name, 'lane.json'), { throwIfNoEntry: false })?.isFile()) alone.push(`tests/acceptance/${folder.name}/`);
+export const LANE_FILE = /^tests\/acceptance\/(\d+)(-[a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)?\/(?:([a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)\/)?lane\.json$/;
+function laneLists(text, folder, isFile) {
+  let lane;
+  try { lane = JSON.parse(text); } catch { return null; }
+  if (!lane || typeof lane !== 'object' || Array.isArray(lane) || lane.alone !== true || typeof lane.why !== 'string' || !lane.why.trim()) return null;
+  if (Object.keys(lane).some((key) => !['alone', 'why', 'timed', 'slow'].includes(key))) return null;
+  const names = (key) => lane[key] ?? [];
+  const fits = (list) => Array.isArray(list) && list.every((name) => typeof name === 'string' && /^(?!\.{1,2}(?:\/|$))(?:[\w.-]+\/)*[\w.-]+\.test\.(?:ts|mjs|js)$/.test(name) && !name.split('/').includes('..') && isFile(`${folder}${name}`));
+  return fits(names('timed')) && fits(names('slow')) ? { timed: names('timed').map((name) => `${folder}${name}`), slow: names('slow').map((name) => `${folder}${name}`) } : null;
 }
+// As the disk finds them, so a name it folds to lane.json counts too. A copy of scripts/ with no suites reads none.
+const suites = join(root, 'tests/acceptance');
+const isFile = (path) => statSync(join(root, path), { throwIfNoEntry: false })?.isFile() ?? false;
+const laneFolders = [];
+export const fromLaneFiles = { alone: [], timed: [], slow: [] };
+for (const folder of existsSync(suites) ? readdirSync(suites, { withFileTypes: true }) : []) {
+  if (!folder.isDirectory() || !/^\d+(?:-[a-z0-9-]*(?:redraft|oracle)[a-z0-9-]*)?$/.test(folder.name)) continue;
+  const at = `tests/acceptance/${folder.name}/`;
+  const subfolders = readdirSync(join(suites, folder.name), { withFileTypes: true }).filter((sub) => sub.isDirectory()).map((sub) => `${at}${sub.name}/`);
+  for (const entry of [at, ...subfolders]) if (LANE_FILE.test(`${entry}lane.json`) && isFile(`${entry}lane.json`)) laneFolders.push(entry);
+}
+// Landed where lanes.mjs read none before #3419, so it stays unread until an approved edit takes it out of here.
+const unread = ['tests/acceptance/231-oracle/'];
+for (const entry of laneFolders) if (!unread.includes(entry) && !alone.includes(entry)) alone.push(entry), fromLaneFiles.alone.push(entry);
 
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
@@ -106,6 +121,21 @@ export const slow = [
   'tests/acceptance/965/grace.test.ts', 'tests/acceptance/965/starts.test.ts', 'tests/acceptance/992/agree.test.ts',
   'tests/live-instancers.test.ts', 'tests/scene3d-interface.test.ts', 'tests/acceptance/2648/instructions.test.ts', 'tests/acceptance/2648/seen.test.ts',
   ...['held', 'judged', 'restart', 'plants', 'heap'].map((f) => `tests/acceptance/2653/${f}.test.ts`),
+  // Added 2026-11-26 (#3512): the fastest of two or more passing runs the worktrees' caches hold is over two minutes.
+  'packages/checks/test/catalog.test.ts', 'tests/acceptance/1325/gate-secret.test.ts', 'tests/acceptance/1457/release.test.ts',
+  'tests/acceptance/1480/upload.test.ts', 'tests/acceptance/1634/key-lights.test.ts', 'tests/acceptance/1634/no-pipeline.test.ts',
+  'tests/acceptance/1662/ac2-symbols.test.ts', 'tests/acceptance/191/ac9-trial.test.ts', 'tests/acceptance/1918/ac2-rigid-fixtures.test.ts',
+  'tests/acceptance/1918/ac3-column-view.test.ts', 'tests/acceptance/1921/ac5-seek-columns.test.ts', 'tests/acceptance/1937/estimate.test.ts',
+  'tests/acceptance/1937/fix.test.ts', 'tests/acceptance/1941/fix.test.ts', 'tests/acceptance/2013/ac2-rest-on.test.ts',
+  'tests/acceptance/2018/states.test.ts', 'tests/acceptance/2977/extension-host.test.ts', 'tests/acceptance/33/failure-modes.test.ts',
+  'tests/acceptance/33/rows.test.ts', 'tests/acceptance/399/kit.test.ts', 'tests/acceptance/425/climb.test.ts',
+  'tests/acceptance/425/hold.test.ts', 'tests/acceptance/449/ac3-turbulence-table.test.ts', 'tests/acceptance/46/unguarded.test.ts',
+  'tests/acceptance/485/registries.test.ts', 'tests/acceptance/509-oracle/transcriber.test.ts', 'tests/acceptance/522-oracle/snapshot-roundtrip.test.ts',
+  'tests/acceptance/522/ac3-module-inputs.test.ts', 'tests/acceptance/522/ac7-late-joint.test.ts', 'tests/acceptance/524/ac4-skins.test.ts',
+  'tests/acceptance/524/ac6-soft-cube.test.ts', 'tests/acceptance/824/leftovers.test.ts', 'tests/acceptance/824/planted.test.ts',
+  'tests/acceptance/980/ac10-taste.test.ts',
+  // #3562's README: order.test.ts makes 20 runs on one hub, and unchanged.test.ts runs #907's and #965's files.
+  'tests/acceptance/3562/order.test.ts', 'tests/acceptance/3562/unchanged.test.ts',
 ];
 /**
  * Folders and files the alone block runs with nothing beside them, not even another shard: #16's and #315's files start
@@ -340,6 +370,8 @@ alone.push('tests/acceptance/1731/');
 // #534's files build deep-logic, write 64 MiB saves and freeze and kill their writer by PID; its budgets are timed.
 alone.push('tests/acceptance/534/');
 timed.push('tests/acceptance/534/ac04-budgets.test.ts');
+// #3256's folder (blind) runs alone by its lane.json; ac7-budget.test.mjs holds the shader_layout tests' time with judgeLimit.
+timed.push('tests/acceptance/3256/ac7-budget.test.mjs');
 // #1820 starts the same real hub and sandboxed library fixture, plus the pack's HTTPS source.
 alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
@@ -1252,6 +1284,15 @@ byHand.push('tests/acceptance/2760/budgets.test.ts');
 timed.push('tests/acceptance/2386/ac6-budget.test.ts');
 // Its blind redraft of the pixel-hash test (tests/acceptance/2386-redraft-ac6-hashes/DISPUTE.md) builds deep-canvas-render.
 alone.push('tests/acceptance/2386-redraft-ac6-hashes/');
+// #2039's folder (blind) runs alone by its lane.json; ac4-budget.test.ts times 500 nine-part atlas rows on a release
+// deep-show. Its Oracle lane builds deep-canvas-render.
+timed.push('tests/acceptance/2039/ac4-budget.test.ts');
+alone.push('tests/acceptance/2039-oracle/');
+// #1456's first-draft AC2 and AC4 tests: their twins widen Plant to string, which builds neither at the base nor on the
+// work, so they can't be proven. Their blind redraft (tests/acceptance/1456-redraft-ac2-ac4/DISPUTE.md) runs in their
+// place, alone: its hubs run deep-hook from target/, and #992's suite it runs builds deep-drive with cargo.
+byHand.push('tests/acceptance/1456/legacy.test.ts', 'tests/acceptance/1456/agree.test.ts');
+alone.push('tests/acceptance/1456-redraft-ac2-ac4/');
 // #2897's files (blind) start a hub and DeepBuild's MCP servers as Claude Code, as #26's do. Its AC6 runs as its blind
 // redraft: the first draft reads deep_status's argument-free schema, which AC7 keeps, as empty on any program, so it is
 // kept by hand (tests/acceptance/2897-redraft-ac6/DISPUTE.md).
@@ -1354,6 +1395,9 @@ timed.push('tests/acceptance/1255/ac5-budget.test.ts');
 // #1181's folder (blind) runs alone by its lane.json; ac09-budget.test.ts times a 64-node, 128-part circuit's step with
 // judgeLimit.
 timed.push('tests/acceptance/1181/ac09-budget.test.ts');
+// #3604's folder (blind) runs alone by its lane.json; ac15-budget.test.ts times a 64-node, 128-part board with breakers, RCDs,
+// changeovers and a transformer with judgeLimit.
+timed.push('tests/acceptance/3604/ac15-budget.test.ts');
 
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');
@@ -1552,12 +1596,19 @@ byHand.push('tests/acceptance/1492/idle-energy.test.ts', 'tests/acceptance/1551/
 timed.push('tests/acceptance/1815/budget.test.ts');
 byHand.push('tests/acceptance/1815/shown.test.ts');
 
+// #1866's folder (blind) runs alone by its lane.json: its files run real hubs through the churn benchmark and read their
+// heaps. budgets.long runs the benchmark's 5,000 cycles beside the merge base's, as they are and with --killed, on a
+// reference Mac, by hand, gated by environmentProblem().
+byHand.push('tests/acceptance/1866/budgets.long.test.ts');
+timed.push('tests/acceptance/1866/budgets.long.test.ts');
+
 // #96's AC6, AC9, AC14 and Proof run as their blind redraft, 96-redraft-1412/, on the owner's ruling ("Use the
 // redraft", Nov 24): the first draft validates every recorded event as doc.patched@1, which can't carry the revision
 // hash the design's Revision text and #1412 require, so no program passes both (96-redraft-1412/DISPUTE.md). Its
 // commit.test.ts (AC6, AC14), proof.test.ts and AC9, moved unchanged into undo-ac9-first-draft.test.ts, are kept by hand.
 alone.push('tests/acceptance/96-redraft-1412/');
 byHand.push('tests/acceptance/96/commit.test.ts', 'tests/acceptance/96/proof.test.ts', 'tests/acceptance/96/undo-ac9-first-draft.test.ts');
+
 // #3295: the before lane lays the change's files under the test paths over the merge base, crates/*/tests included, so
 // the original suite's #3295.fae86cca test runs the fixed late-close test there and passes by construction. The
 // original file, kept as written, maps to its blind redraft and runs by hand only. Its three tests run in its place, in
@@ -1568,3 +1619,72 @@ byHand.push('tests/acceptance/3295/late-close.test.mjs');
 // #3257's folder (blind) runs alone by its lane.json: its files build deep-gpu, the merge base's too, and draw on Metal.
 // ac7-budget.test.ts times the mask map's chain against the merge base's on the reference Mac.
 timed.push('tests/acceptance/3257/ac7-budget.test.ts');
+
+// #1857's folder (blind) runs alone by its lane.json. cap.test.ts and budgets.test.ts each judge a check's time and a
+// child's peak on the reference Mac.
+timed.push('tests/acceptance/1857/cap.test.ts', 'tests/acceptance/1857/budgets.test.ts');
+
+// #1867's folder (blind) runs alone by its lane.json: each file starts hubs of its own. Two of its files read a
+// put-back against the criterion's second, and read INCONCLUSIVE past it while the load is over the cores.
+timed.push('tests/acceptance/1867/codex-watch.test.ts', 'tests/acceptance/1867/claude-json.test.ts');
+
+// #2750's folder (blind) runs alone by its lane.json: each test starts real hubs, a forge on 127.0.0.1 and git
+// repositories. budgets.test.ts times a rebuild from the event log on the reference Mac.
+timed.push('tests/acceptance/2750/budgets.test.ts');
+
+// #3461's once.test.ts compares with a recording made where no canvas core was built, so it fails on the merge base's
+// own program wherever deep-show is built (tests/acceptance/3461-redraft-once/DISPUTE.md). Kept as written, by hand
+// only; its blind redraft, which runs the merge base's program beside the checkout's, runs in its place.
+Object.assign(redrafted, { 'tests/acceptance/3461/once.test.ts': 'tests/acceptance/3461-redraft-once/' });
+byHand.push('tests/acceptance/3461/once.test.ts');
+
+// #3467's folder (blind) runs alone by its lane.json: each file draws on Metal and decodes on the hardware decoder.
+// players.test.ts judges #499's five players' frames a second on the real clock on a reference Mac.
+timed.push('tests/acceptance/3467/players.test.ts');
+
+// #3549 makes the build number a ceiling, 4 on the Mac and 6 on the Spark, so these files, which fill the build class
+// with the old 1 and 2, no longer hold their scene on the right program (tests/acceptance/<issue>/DISPUTE-3549.md).
+// Each, kept as written, maps to its blind redraft, which reads the count from throttle.mjs's LIMITS line and runs in
+// its place with every test of the file; the originals run by hand until the owner rules on the swap.
+Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial'], ['3238', 'no-grant'], ['3240', 'line'], ['3334', 'stall'], ['3334', 'far-stalled'], ['3567', 'grant'], ['2820', 'failures']]
+  .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3549/`])));
+byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3549/')));
+
+// #3694 admits a plain test request without the load and gives it a turn on the pool, so these files, whose scene held
+// such a request on the load or ran its command beside a pool all held, no longer hold it on the right program
+// (tests/acceptance/<issue>/DISPUTE-3694.md). Each, kept as written, maps to its blind redraft, which runs in its place
+// with every test of the file; the originals run by hand until the owner rules on the swap.
+Object.assign(redrafted, Object.fromEntries([['2924', 'test-grants'], ['2924', 'blocked'], ['2924', 'log'], ['3238', 'inherited'], ['3549', 'passes'], ['3549', 'timed'], ['3549', 'window']]
+  .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3694/`])));
+byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3694/')));
+
+// #3507's folder (blind) runs alone by its lane.json: its files build deep-show and deep-gpu and draw on Metal.
+// ac3-timing.test.mjs times the geometry pass against the merge base's on the reference Mac, where a pass changed.
+timed.push('tests/acceptance/3507/ac3-timing.test.mjs');
+
+// #3507's criterion 2 was reworded by the owner (2026-11-26: the class fixtures count from 1 to 2 a covered pixel).
+// ac2-classes.test.mjs, written for the criterion as it was, is kept as written, by hand only; its blind redraft
+// runs in its place, alone: it draws on Metal under the machine's GPU lease.
+Object.assign(redrafted, { 'tests/acceptance/3507/ac2-classes.test.mjs': 'tests/acceptance/3507-redraft-ac2/' });
+byHand.push('tests/acceptance/3507/ac2-classes.test.mjs');
+alone.push('tests/acceptance/3507-redraft-ac2/');
+
+// #3617's folder (blind) runs alone by its lane.json: each file builds deep-gpu and runs GPU surface frames at 1936 x 1584.
+// ac2-onepass.test.ts judges the five-run draw-and-finish p95 on a reference Mac.
+timed.push('tests/acceptance/3617/ac2-onepass.test.ts');
+
+// #3402: #1352's section, routes and taste-call files find the section as the one heading holding its words and read
+// Decided rows under ### Decided alone, so they fail since #3138. Kept as written, by hand only; their blind redraft,
+// which finds the section by its anchor and reads every Decided table under Decisions, runs in their place.
+for (const name of ['ac1-section', 'ac3-agent-routes', 'ac5-taste-call']) {
+  redrafted[`tests/acceptance/1352/${name}.test.mjs`] = 'tests/acceptance/1352-redraft-3402/';
+  byHand.push(`tests/acceptance/1352/${name}.test.mjs`);
+}
+
+for (const entry of laneFolders.filter((folder) => !unread.includes(folder))) {
+  let text = '';
+  try { text = readFileSync(join(root, entry, 'lane.json'), 'utf8'); } catch {}
+  const lists = laneLists(text, entry, isFile);
+  for (const file of lists?.timed ?? []) if (!timed.includes(file)) timed.push(file), fromLaneFiles.timed.push(file);
+  for (const file of lists?.slow ?? []) if (!slow.includes(file)) slow.push(file), fromLaneFiles.slow.push(file);
+}

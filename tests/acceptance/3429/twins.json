@@ -1,0 +1,21 @@
+{
+  "#3429.c0361f49": [
+    "recording-contradicts-daemon"
+  ],
+  "#3429.97f78b7f": [
+    "mode-unread"
+  ],
+  "#3429.51266e12": [
+    "reading-every-turn",
+    "line-stays-after-switch"
+  ],
+  "#3429.d3ca9d44": [
+    "unlisted-as-asking"
+  ],
+  "#3429.9ecaeb87": [
+    "unguarded-skips-send-back"
+  ],
+  "#3429.0888aab7": [
+    "reads-mode-for-relayed"
+  ]
+}

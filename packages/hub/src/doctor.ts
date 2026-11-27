@@ -17,8 +17,12 @@ import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, t
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
+import { addedHosts } from './host-sessions.js';
 import { controlToken, hubAddress, installedRoot, underTemp } from './paths.js';
+import { majorsApart, outsideContract } from './wire.js';
 import { activePlant as plant } from './plant.js';
+import { counted, rebuilding, replayingOf } from './replay.js';
+import { covered, listedPlugin, paseoCovered, paseoVersion, PLUGIN_ID, pluginProblem, pluginSource, sourceProblem } from './paseo-reading.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
@@ -80,8 +84,8 @@ async function firstFree(from: number, to: number): Promise<number | undefined> 
   return undefined;
 }
 
-/** Every item, in the order a person reads them; `prompt` sends each signed-in agent its test prompt. */
-export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string }): Promise<Item[]> {
+/** Every item, in the order a person reads them; `prompt` sends each signed-in agent its test prompt; `said` takes a sentence that can't wait for the items. */
+export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string; said?: (sentence: string) => void }): Promise<Item[]> {
   const root = installedRoot();
   const items: Item[] = [];
   const add = (item: string, agent: string, code: Item['code'], level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
@@ -96,6 +100,11 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
     // Before setup, `deep hub start` would start a hub that no hook reaches: setup adds the hooks and starts it.
     else add('hub.socket', 'deepbuild', 'hub_unreachable', 'fail', `no hub answers at unix:${socket}`, installed(root) ? 'Run `deep hub start`; deep setup installs it as a login service.' : 'Run `deep setup`, which adds the hooks and starts the hub at login.');
   }
+  // Each added host's deep-hook (#999): within the hub's contract it records, whatever its version; a major apart, its hooks send nothing.
+  for (const [host, h] of Object.entries(addedHosts(root))) {
+    if (majorsApart(h.contract, h.hubContract)) add('host.hook', 'deepbuild', 'hook_outside_contract', 'fail', outsideContract(host, h.version, h.contract!, h.hubVersion, h.hubContract), `Run \`deep host add ${host}\`, which installs the deep-hook this hub's contract speaks; sessions running there keep running.`);
+    else add('host.hook', 'deepbuild', 'healthy', 'ok', `${host}'s deep-hook ${h.version ?? 'of no version it reports'} speaks contract ${h.contract ?? 'none it reports'}, within the hub's ${h.hubContract} (hub ${h.hubVersion})`, 'Nothing to do.');
+  }
   // Linux's trusted path (#70): polkit knows the action only from a root-owned file, and without it nothing you confirm counts.
   if (process.platform === 'linux') {
     const known = await new Promise<boolean>((done) => { execFile('/usr/bin/pkaction', ['--action-id', 'dev.deepbuild.confirm'], { timeout: 5000 }, (error) => done(!error)); });
@@ -108,6 +117,12 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
     try {
       const reply = await call(socket, controlToken(socket), 'hub.health', {});
       if ('error' in reply) throw Error(`${reply.error.code}: ${reply.error.remediation}`);
+      // A hub whose record replays reads none of what follows until the replay ends (#3544): said at once, ahead of the items that take their time.
+      const replaying = replayingOf(reply.result);
+      if (replaying) {
+        options.said?.(rebuilding(replaying));
+        throw Error(`the hub is rebuilding its tables from the log, ${counted(replaying.replayed)} of ${counted(replaying.events)} events replayed, and reads its jobs, packs and notification setting once that ends`);
+      }
       const jobs = isObj(reply.result.jobs) ? reply.result.jobs : {};
       const failing = Object.entries(jobs).flatMap(([name, job]) => {
         const f = isObj(job) && isObj(job.failing) ? job.failing : undefined;
@@ -183,8 +198,8 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   // Each agent's binary, version, sign-in and billing; Claude Code's token lifetime, test prompt and jobs' binary.
   const path = env.PATH ?? '';
   const loginPath = loginPathOf(root);
-  const [claude, codex] = await Promise.all([which('claude', path), which('codex', path)]);
-  await Promise.all([claudeItems(claude, loginPath, env, options.prompt, add), codexItems(codex, env, add)]);
+  const [claude, codex, paseo] = await Promise.all([which('claude', path), which('codex', path), which('paseo', path)]);
+  await Promise.all([claudeItems(claude, loginPath, env, options.prompt, add), codexItems(codex, env, add), paseo ? paseoItems(paseo, add) : undefined]);
   // The canvas: its GPU adapter and tier, a fixture rendered headless against its golden, and its verdict (#140).
   items.push(...(await canvasItems(env)));
   // The app's footprint beside the gauges for what it owns (#1431).
@@ -362,6 +377,28 @@ async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add
   else add('codex.sign_in', agent, 'signed_out', 'fail', signedIn === 'signed_out' ? 'codex login status exits non-zero: not signed in' : "codex login status couldn't be read: not signed in", 'Run codex login.');
   billing(agent, 'Codex', env, add);
 }
+/**
+ * paseo's items (#3428), only with a paseo on your PATH: its version against the versions the facts cover, DeepBuild's
+ * plugin installed, enabled and loaded as paseo lists it (one paseo refused with paseo's own reason), and the source
+ * setup installs it from.
+ */
+async function paseoItems(paseo: string, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
+  const agent = 'paseo';
+  const [read, listed, unresolved] = await Promise.all([paseoVersion(paseo, 30_000), listedPlugin(paseo, 30_000), sourceProblem(30_000)]);
+  if ('unread' in read) add('paseo.binary', agent, 'binary_missing', 'fail', read.unread, 'Reinstall paseo.');
+  else if (!paseoCovered(read.version)) add('paseo.binary', agent, 'version_uncovered', 'fail', `${paseo} is paseo ${read.version}, not a version DeepBuild's plugin covers (${covered()}): paseo refuses to load the plugin, so agents with no hooks of their own run there ungated`, `Install a paseo the facts cover (${covered()}), or a DeepBuild that covers ${read.version}.`);
+  else add('paseo.binary', agent, 'healthy', 'ok', `${paseo} is paseo ${read.version}, which DeepBuild's plugin covers`, 'Nothing to do.');
+  if ('unread' in listed) add('paseo.plugin', agent, 'not_checked', 'skip', `${listed.unread}, so whether paseo loaded DeepBuild's plugin wasn't read`, "Start paseo's daemon, then run deep doctor again.");
+  else if (!listed.plugin) add('paseo.plugin', agent, 'hooks_missing', 'fail', `paseo lists no plugin ${PLUGIN_ID}, so agents with no hooks of their own run there ungated`, 'Run `deep setup`, which installs it through paseo plugin install.');
+  else {
+    const problem = pluginProblem(listed.plugin);
+    if (!problem) add('paseo.plugin', agent, 'healthy', 'ok', `paseo lists its plugin ${PLUGIN_ID} installed, enabled and loaded`, 'Nothing to do.');
+    else if (listed.plugin.status === 'disabled' || listed.plugin.enabled === false) add('paseo.plugin', agent, 'hooks_disabled', 'fail', problem, `Run \`paseo plugin enable ${PLUGIN_ID}\`.`);
+    else add('paseo.plugin', agent, 'not_loaded', 'fail', problem, 'Fix what paseo names, then run `paseo plugin reload deepbuild`.');
+  }
+  if (unresolved) add('paseo.source', agent, 'source_unresolved', 'fail', `${unresolved}, so deep setup can't install the plugin`, 'Update DeepBuild to a release whose plugin source resolves.');
+  else add('paseo.source', agent, 'healthy', 'ok', `the plugin's source ${pluginSource()} resolves`, 'Nothing to do.');
+}
 /** A billing key set where your sessions start makes them bill an API account; never shows its value. */
 function billing(agent: string, name: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): void {
   const set = (facts(agent).billing?.apiKeyVariables ?? []).filter((k) => env[k]);
@@ -465,7 +502,7 @@ export async function doctorCommand(args: readonly string[], also: () => Promise
   }
   const json = args.includes('--json');
   const agents: Record<string, string> = { 'claude-code': 'Claude Code', codex: 'Codex', deepbuild: 'DeepBuild' };
-  const items = [...(await doctorItems(process.env, { prompt: args.includes('--prompt'), cwd: process.cwd() })), ...(await also())];
+  const items = [...(await doctorItems(process.env, { prompt: args.includes('--prompt'), cwd: process.cwd(), said: (sentence) => process.stderr.write(`${sentence}\n`) })), ...(await also())];
   // A person reads `Fix:` only where something needs fixing, and how to check an item that wasn't (#1455).
   const fixes = (i: Item) => i.level === 'warn' || i.level === 'fail' || (plant() === 'doctor-healthy-fix' && i.item === 'hub.socket');
   const next = (i: Item) => (fixes(i) ? `\n  Fix: ${i.fix}` : i.code === 'not_checked' ? `\n  To check: ${i.fix}` : '');

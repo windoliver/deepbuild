@@ -2213,6 +2213,8 @@ impl Render for Shipped {
                 let planted_nothing = crate::plain::planted("hub-down-nothing-needs-you")
                     && matches!(empty, crate::empties::Empty::Unreachable { .. });
                 let mut drawn: Vec<AnyElement> = Vec::new();
+                // #3282's planted list draws its topmost ask row's time 0 wide.
+                let mut plant_left = crate::plain::planted("ask-time-0-wide");
                 // What's drawn above the rows that scroll: Needs you's heading and what goes under it.
                 let mut heading_ends = None;
                 for (n, item) in items.iter().enumerate() {
@@ -2300,7 +2302,13 @@ impl Render for Shipped {
                                 still: cx.reduce_motion(),
                                 width: self.list_room.get().map(|area| area.width),
                             };
-                            let drawn_row = RowDrawn::of(row, selected, ring, shape, now, window);
+                            let mut drawn_row =
+                                RowDrawn::of(row, selected, ring, shape, now, window);
+                            if row.id.starts_with("ask:")
+                                && std::mem::replace(&mut plant_left, false)
+                            {
+                                drawn_row.timed = false;
+                            }
                             drawn.push(self.row_in_view(row, drawn_row, window, cx));
                         }
                     }
@@ -3522,7 +3530,7 @@ impl Render for Shell {
                     .px(s.space(1))
                     .child(said)
             }))
-            .child(crate::notice::notices(window))
+            .children(crate::said::with(crate::notice::notices(window), cx))
             .children(context_menu(window))
             .children(self.commands.clone())
     }

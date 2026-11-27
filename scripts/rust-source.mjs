@@ -2,11 +2,15 @@
 // spaces (newlines kept, so line and column numbers hold). A line-based strip would let a string
 // holding `//` hide the rest of its line, so this walks the tokens that can contain `//` or `"`.
 // With `keepComments`, the comments stay as written and only the literals are blanked.
-export function stripRust(source, { keepComments = false } = {}) {
+export function stripRust(source, { keepComments = false, literals } = {}) {
   let out = '';
   let i = 0;
   const blank = (end) => {
     for (; i < end && i < source.length; i++) out += source[i] === '\n' ? '\n' : ' ';
+  };
+  const literal = (end) => {
+    literals?.push([i, Math.min(end, source.length)]);
+    blank(end);
   };
   const comment = (end) => {
     if (!keepComments) return blank(end);
@@ -31,14 +35,14 @@ export function stripRust(source, { keepComments = false } = {}) {
       const open = /^b?r(#*)"/.exec(source.slice(i, i + 8));
       const close = `"${open[1]}`;
       const end = source.indexOf(close, i + open[0].length);
-      blank(end < 0 ? source.length : end + close.length);
+      literal(end < 0 ? source.length : end + close.length);
     } else if (source[i] === '"' || (source[i] === 'b' && source[i + 1] === '"')) {
       let j = i + (source[i] === 'b' ? 2 : 1);
       while (j < source.length && source[j] !== '"') j += source[j] === '\\' ? 2 : 1;
-      blank(j + 1);
+      literal(j + 1);
     } else if (source[i] === "'" && /^'(\\.[^']*|[^'\\])'/.test(source.slice(i, i + 12))) {
       // A char literal; a lifetime (`'a`) has no closing quote and falls through.
-      blank(i + /^'(\\.[^']*|[^'\\])'/.exec(source.slice(i, i + 12))[0].length);
+      literal(i + /^'(\\.[^']*|[^'\\])'/.exec(source.slice(i, i + 12))[0].length);
     } else {
       out += source[i];
       i++;
