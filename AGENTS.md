@@ -13,7 +13,7 @@ These hold in the core and every extension:
 
 ## Proof
 
-- Acceptance tests come first, in `tests/acceptance/<issue>/`: a job that sees only the issue, the design and the base commit writes them with the issue's expected values, through surfaces those name. Never edit one; a dispute goes to that job's blind redraft (design: Dogfooding).
+- Acceptance tests come first, in `tests/acceptance/<issue>/`: a job that sees only the issue, the design and the base commit writes them with the issue's expected values, through surfaces those name. Never edit one; a dispute goes to that job's blind redraft (design: Dogfooding). A new suite or redraft folder says how it runs in its own `lane.json` (alone, why, and its timed and slow files), never in `scripts/lanes-lists.mjs`.
 - Every behavior fix starts with a test failing for the expected reason. Commit it first only when authorized; otherwise save failing output and leave changes uncommitted. Make it pass unchanged.
 - Reuse sufficient tests; add one only for required behavior or a regression existing coverage misses. It must fail on a wrong program as its criterion names (the merge base or a reverted fix for a fix; a planted twin or a mutant for new code), or it proves nothing.
 - Test behavior, not implementation. A test that would still pass if every function it calls returned nothing is not a test; rewrite or delete it.
