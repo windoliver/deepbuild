@@ -56,14 +56,6 @@ pub(crate) struct AxNode {
     pub(crate) style: StyleRefinement,
 }
 
-impl IntoElement for AxNode {
-    type Element = Self;
-
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl Styled for AxNode {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style

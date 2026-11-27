@@ -543,14 +543,6 @@ pub(crate) fn with(beside: impl IntoElement, cx: &mut App) -> [AnyElement; 2] {
 /// An element as it is, and a polite live region to an assistive client: GPUI's elements have no such mark.
 struct Polite<E>(E);
 
-impl<E: Element> IntoElement for Polite<E> {
-    type Element = Self;
-
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl<E: Element> Element for Polite<E> {
     type RequestLayoutState = E::RequestLayoutState;
     type PrepaintState = E::PrepaintState;

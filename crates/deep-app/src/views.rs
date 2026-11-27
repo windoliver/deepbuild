@@ -2419,8 +2419,8 @@ impl Render for Shipped {
                                     .min_h_0()
                                     .w_full()
                                     .overflow_hidden()
-                                    .on_scroll_wheel(cx.listener(
-                                        |this, event: &ScrollWheelEvent, window, cx| {
+                                    .on_scroll(cx.listener(
+                                        |this, event: &ScrollEvent, window, cx| {
                                             let delta =
                                                 event.delta.pixel_delta(window.line_height());
                                             if delta.y != px(0.) {

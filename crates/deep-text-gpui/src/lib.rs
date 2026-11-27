@@ -4,7 +4,7 @@
 //! instance. Nothing here calls GPUI's text system, so a label's pixels don't depend on the
 //! user's font-smoothing setting (canvas primitives: Text `text@1`, Semantics). Issue #1479: a
 //! glyph above [`OUTLINE_ABOVE`] device px draws as a GPUI path from its outline instead, its
-//! triangles cached by content key and zoom bucket, so large text never leaves the atlas a page
+//! contours cached by content key and zoom bucket, so large text never leaves the atlas a page
 //! of one glyph and never vanishes past the atlas's limit.
 
 use std::{
@@ -29,10 +29,10 @@ const ATLAS: u32 = 0;
 /// one glyph would take about 64 KB of a 1 MB page).
 pub const OUTLINE_ABOVE: f32 = 64.;
 
-/// The most glyph tessellations kept; the cache empties whole past it, as the shaped runs do.
+/// The most glyph outlines kept; the cache empties whole past it, as the shaped runs do.
 const OUTLINES: usize = 4_096;
 
-/// #1431: the text cache, its shaped runs (`Text::shaped`) and glyph tessellations (`Text::outlines`), in the heap;
+/// #1431: the text cache, its shaped runs (`Text::shaped`) and glyph outlines (`Text::outlines`), in the heap;
 /// each empties whole past either of its bounds.
 static SHAPED: Gauge = Gauge::new("Text::shaped", Place::Heap, 4_096, 32_000_000);
 static OUTLINED: Gauge = Gauge::new("Text::outlines", Place::Heap, OUTLINES as u64, 64_000_000);
@@ -42,9 +42,11 @@ fn shaped_bytes(s: &Shaped) -> u64 {
     80 * (s.glyphs.len() + s.decorations.len()) as u64
 }
 
-/// What a tessellation holds: three corners of four f32s a triangle.
-fn outline_bytes(t: &Option<Triangles>) -> u64 {
-    t.as_ref().map_or(0, |t| 48 * t.len() as u64)
+/// What an outline holds: two f32s a point of its rings.
+fn outline_bytes(rings: &Option<Rings>) -> u64 {
+    rings
+        .as_ref()
+        .map_or(0, |rings| rings.iter().map(|ring| 8 * ring.len() as u64).sum())
 }
 
 /// A Text item's fields a label needs (canvas primitives: Text `text@1`).
@@ -221,9 +223,8 @@ struct OutlineKey {
     bucket: i32,
 }
 
-/// A glyph's triangles: each corner's position in u about the pen position, then GPUI's curve
-/// coordinates `(s, t)` for it.
-type Triangles = Arc<[[[f32; 4]; 3]]>;
+/// A glyph's outline: its closed contours, each a ring of points in u about the pen position.
+type Rings = Arc<[Vec<[f32; 2]>]>;
 
 /// One glyph as a label draws it.
 enum Shown {
@@ -235,42 +236,18 @@ enum Shown {
         k: f32,
         grapheme: usize,
     },
-    /// As a path: its triangles in u about its pen position, and that position in u.
+    /// As a path: its outline's rings in u about its pen position, and that position in u.
     Path {
-        triangles: Triangles,
+        rings: Rings,
         pen: [f32; 2],
         grapheme: usize,
     },
 }
 
-/// How far a glyph's edge band reaches past its edge and inside it, in device px at its bucket's
-/// scale: a pixel whose centre lies within half a pixel of the edge takes its coverage from the
-/// band, and its corners reach √½ px past that, so the band covers every such pixel whole and
-/// MSAA never cuts its coverage (as deep-marks-gpui's stroke strip does).
-const FRINGE_PX: f64 = 1.25;
 /// Curves flattened within this many device px at the bucket's scale.
 const FLAT_PX: f64 = 0.02;
-/// `s` over `t` in a band's curve coordinates: GPUI's path shader takes a triangle whose `s`
-/// doesn't vary as solid, and `s²` stays a negligible part of the implicit `s² − t`.
-const S_PER_T: f64 = 0.05;
-/// A corner whose offset point would lie farther than this many band widths from it is beveled.
-const MITER: f64 = 4.;
 
 type P = [f64; 2];
-
-fn sub(a: P, b: P) -> P {
-    [a[0] - b[0], a[1] - b[1]]
-}
-fn dot(a: P, b: P) -> f64 {
-    a[0] * b[0] + a[1] * b[1]
-}
-fn along(p: P, d: P, k: f64) -> P {
-    [p[0] + d[0] * k, p[1] + d[1] * k]
-}
-fn unit(d: P) -> Option<P> {
-    let l = dot(d, d).sqrt();
-    (l > 1e-9).then(|| [d[0] / l, d[1] / l])
-}
 
 /// The outline's contours as closed rings of points, its curves flattened within `tol` u as any
 /// path's are (deep-canvas-marks' `path::flatten`); a glyph's open contour closes, as a fill does.
@@ -298,150 +275,20 @@ fn rings(cmds: &[Cmd], tol: f64) -> Vec<Vec<P>> {
     rings
 }
 
-/// A triangle's corners with their signed distance inside the edge, in u.
-fn band(out: &mut Vec<[[f32; 4]; 3]>, corners: [(P, f64); 3]) {
-    out.push(corners.map(|(p, t)| [p[0] as f32, p[1] as f32, (S_PER_T * t) as f32, t as f32]));
-}
-
-/// A glyph's outline as triangles in u about its pen position, with GPUI's curve coordinates, so
-/// its edges take analytic coverage as Vello CPU's do: every edge gets a band reaching
-/// [`FRINGE_PX`] device px to each side of it, each corner carrying its distance inside the edge,
-/// and the outline shrunk by that much fills solid (nonzero) between the bands. Curves are
-/// flattened within [`FLAT_PX`] device px, all at the bucket's scale. A glyph whose bands cross
-/// at a corner fills its outline whole, edges by GPUI's MSAA. Empty for a blank glyph; `None` for
-/// one its face holds no outline for.
-fn tessellate(glyph: &Glyph, bucket: i32) -> Option<Vec<[[f32; 4]; 3]>> {
+/// A glyph's outline as rings in u about its pen position, its curves flattened within
+/// [`FLAT_PX`] device px at the bucket's scale. GPUI fills the rings by the nonzero rule and takes
+/// each edge's coverage from the path's own winding at the pixel (gpui-pre 0.3.11 on), so the
+/// outline goes to it as it is. Empty for a blank glyph; `None` for one its face holds no outline
+/// for.
+fn flattened(glyph: &Glyph, bucket: i32) -> Option<Vec<Vec<[f32; 2]>>> {
     let cmds = outline_of(glyph)?;
     let u_per_px = 1. / 2f64.powi(bucket);
-    let rings = rings(&cmds, FLAT_PX * u_per_px);
-    if rings.is_empty() {
-        return Some(Vec::new());
-    }
-    let w = FRINGE_PX * u_per_px;
-    // The side the inside lies on: outer contours run clockwise in TrueType and the other way in
-    // CFF, so the glyph's whole signed area says which, for holes too.
-    let area: f64 = rings
-        .iter()
-        .flat_map(|r| (0..r.len()).map(|i| (r[i], r[(i + 1) % r.len()])))
-        .map(|(a, b)| a[0] * b[1] - b[0] * a[1])
-        .sum();
-    let inward = if area > 0. { 1. } else { -1. };
-    let mut out = Vec::new();
-    let mut shrunk: Vec<Vec<P>> = Vec::with_capacity(rings.len());
-    let mut whole = false;
-    'rings: for ring in &rings {
-        let n = ring.len();
-        let dirs: Vec<P> = (0..n)
-            .map(|i| unit(sub(ring[(i + 1) % n], ring[i])).unwrap_or([1., 0.]))
-            .collect();
-        let normal = |i: usize| [-dirs[i][1] * inward, dirs[i][0] * inward];
-        let lens: Vec<f64> = (0..n)
-            .map(|i| {
-                dot(
-                    sub(ring[(i + 1) % n], ring[i]),
-                    sub(ring[(i + 1) % n], ring[i]),
-                )
-                .sqrt()
-            })
-            .collect();
-        let mut inner = Vec::with_capacity(n);
-        // Per vertex and side (inside, then outside): where the band of the segment before it
-        // ends, where the next one's starts, and the beveled corner's points between.
-        let mut ends: Vec<[(P, P); 2]> = Vec::with_capacity(n);
-        for (j, &p) in ring.iter().enumerate() {
-            let (prev, next) = ((j + n - 1) % n, j);
-            let mut sides = [(p, p); 2];
-            for (k, side) in [1., -1.].into_iter().enumerate() {
-                let (a, b) = (normal(prev), normal(next));
-                let (a, b) = ([a[0] * side, a[1] * side], [b[0] * side, b[1] * side]);
-                let Some(m) = unit([a[0] + b[0], a[1] + b[1]]) else {
-                    whole = true;
-                    break 'rings;
-                };
-                let cos = dot(m, a);
-                // The side is inside the turn when the next segment heads toward it.
-                let inside_turn = dot(dirs[next], a) > 0.;
-                // Inside a turn the miter cuts each neighbour's band short by its reach along it,
-                // which must leave the band of a short segment room at its other end too.
-                let reach = w * (1. / (cos * cos) - 1.).max(0.).sqrt();
-                let fits = !inside_turn || reach <= 0.5 * lens[prev].min(lens[next]);
-                if 1. / cos <= MITER && fits {
-                    let q = along(p, m, w / cos);
-                    sides[k] = (q, q);
-                    if k == 0 {
-                        inner.push(q);
-                    }
-                } else if inside_turn {
-                    // A sharp corner's miter would reach past a short neighbour: the two bands
-                    // end square at the corner instead, overlapping within a band of it.
-                    let (e1, e2) = (along(p, a, w), along(p, b, w));
-                    sides[k] = (e1, e2);
-                    if k == 0 {
-                        inner.extend([e1, e2]);
-                    }
-                } else {
-                    let (e1, c, e2) = (along(p, a, w), along(p, m, w), along(p, b, w));
-                    let t = |q: P, seg: usize| dot(sub(q, p), normal(seg));
-                    band(&mut out, [(p, 0.), (e1, t(e1, prev)), (c, t(c, prev))]);
-                    band(&mut out, [(p, 0.), (c, t(c, next)), (e2, t(e2, next))]);
-                    sides[k] = (e1, e2);
-                    if k == 0 {
-                        inner.extend([e1, c, e2]);
-                    }
-                }
-            }
-            ends.push(sides);
-        }
-        for i in 0..n {
-            let (a, b) = (ring[i], ring[(i + 1) % n]);
-            let t = |q: P| dot(sub(q, a), normal(i));
-            for (start, end) in ends[i].iter().zip(&ends[(i + 1) % n]) {
-                let (q0, q1) = (start.1, end.0);
-                // A band shorter than the corners it ends at would fold over its neighbour's.
-                if dot(sub(q1, q0), dirs[i]) < 0. {
-                    whole = true;
-                    break 'rings;
-                }
-                band(&mut out, [(a, 0.), (b, 0.), (q1, t(q1))]);
-                band(&mut out, [(a, 0.), (q1, t(q1)), (q0, t(q0))]);
-            }
-        }
-        shrunk.push(inner);
-    }
-    let fill = |rings: &[Vec<P>]| -> Option<Vec<[[f32; 4]; 3]>> {
-        let mut builder = PathBuilder::fill().with_style(PathStyle::Fill(
-            FillOptions::default().with_fill_rule(FillRule::NonZero),
-        ));
-        for ring in rings {
-            let points: Vec<Point<Pixels>> = ring
-                .iter()
-                .map(|q| point(px(q[0] as f32), px(q[1] as f32)))
-                .collect();
-            builder.add_polygon(&points, true);
-        }
-        let path = builder.build().ok()?;
-        let corner = |v: &PathVertex<Pixels>| {
-            [
-                f32::from(v.xy_position.x),
-                f32::from(v.xy_position.y),
-                0.,
-                1.,
-            ]
-        };
-        Some(
-            path.vertices
-                .as_chunks::<3>()
-                .0
-                .iter()
-                .map(|t| [corner(&t[0]), corner(&t[1]), corner(&t[2])])
-                .collect(),
-        )
-    };
-    if whole {
-        return fill(&rings);
-    }
-    out.extend(fill(&shrunk)?);
-    Some(out)
+    Some(
+        rings(&cmds, FLAT_PX * u_per_px)
+            .into_iter()
+            .map(|ring| ring.into_iter().map(|p| [p[0] as f32, p[1] as f32]).collect())
+            .collect(),
+    )
 }
 
 struct Text {
@@ -449,9 +296,9 @@ struct Text {
     atlas: Atlas,
     // cache: entries 4_096, bytes 32_000_000
     shaped: HashMap<ShapeKey, Arc<Shaped>>,
-    /// #1479: glyph tessellations; `None` for a glyph its face holds no outline for.
+    /// #1479: glyph outlines; `None` for a glyph its face holds no outline for.
     // cache: entries 4_096, bytes 64_000_000
-    outlines: HashMap<OutlineKey, Option<Triangles>>,
+    outlines: HashMap<OutlineKey, Option<Rings>>,
     /// #1431: the bytes `shaped` and `outlines` hold.
     held: [u64; 2],
     /// #1479: glyphs above [`OUTLINE_ABOVE`] device px drawn from the atlas's largest raster,
@@ -518,9 +365,9 @@ impl Text {
         shaped
     }
 
-    /// The glyph's triangles at `scale`'s bucket, tessellated on first sight; `None` for a glyph
+    /// The glyph's outline at `scale`'s bucket, flattened on first sight; `None` for a glyph
     /// its face holds no outline for.
-    fn outline(&mut self, glyph: &Glyph, scale: f32) -> Option<Triangles> {
+    fn outline(&mut self, glyph: &Glyph, scale: f32) -> Option<Rings> {
         let key = OutlineKey {
             blob: glyph.font.data.id(),
             index: glyph.font.index,
@@ -534,7 +381,7 @@ impl Text {
         if let Some(found) = self.outlines.get(&key) {
             return found.clone();
         }
-        let made: Option<Triangles> = tessellate(glyph, key.bucket).map(Into::into);
+        let made: Option<Rings> = flattened(glyph, key.bucket).map(Into::into);
         let bytes = outline_bytes(&made);
         if self.outlines.len() >= OUTLINES || self.held[1] + bytes > OUTLINED.bound.bytes {
             OUTLINED.sub(self.outlines.len() as u64, self.held[1]);
@@ -566,10 +413,10 @@ impl Text {
                 let grapheme = glyph.grapheme;
                 let before = self.atlas.rasterized();
                 let placed = if device > OUTLINE_ABOVE {
-                    if let Some(triangles) = self.outline(glyph, scale) {
-                        if !triangles.is_empty() {
+                    if let Some(rings) = self.outline(glyph, scale) {
+                        if !rings.is_empty() {
                             shown.push(Shown::Path {
-                                triangles,
+                                rings,
                                 pen: [at[0] / scale, at[1] / scale],
                                 grapheme,
                             });
@@ -888,24 +735,23 @@ pub fn paint_runs(
         for glyph in shown {
             let (place, at, k, grapheme) = match glyph {
                 Shown::Path {
-                    triangles,
+                    rings,
                     pen,
                     grapheme,
                 } => {
-                    let p = |v: [f32; 4]| point(px(v[0] + pen[0]), px(v[1] + pen[1]));
-                    let st = |v: [f32; 4]| point(v[2], v[3]);
-                    let mut path = Path::new(p(triangles[0][0]));
-                    for t in triangles.iter() {
-                        path.push_triangle(
-                            (p(t[0]), p(t[1]), p(t[2])),
-                            (st(t[0]), st(t[1]), st(t[2])),
-                        );
+                    let mut builder = PathBuilder::fill().with_style(PathStyle::Fill(FillOptions {
+                        fill_rule: FillRule::NonZero,
+                    }));
+                    for ring in rings.iter() {
+                        let points: Vec<Point<Pixels>> = ring
+                            .iter()
+                            .map(|q| point(px(q[0] + pen[0]), px(q[1] + pen[1])))
+                            .collect();
+                        builder.add_polygon(&points, true);
                     }
-                    // GPUI composites a path's MSAA target over its bounds, which cover only the
-                    // pixels whose centres lie inside them: a device pixel more on every side
-                    // keeps an edge pixel's partial coverage instead of dropping it.
-                    path.bounds = path.bounds.dilate(px(1. / scale));
-                    window.paint_path(path, color_of(grapheme));
+                    if let Ok(path) = builder.build() {
+                        window.paint_path(path, color_of(grapheme));
+                    }
                     continue;
                 }
                 Shown::Sprite {

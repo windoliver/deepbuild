@@ -1250,7 +1250,7 @@ impl Replica {
             for _ in 0..events {
                 let delta = ScrollDelta::Pixels(point(px(0.), px(-dy)));
                 self.input(
-                    ScrollWheelEvent {
+                    ScrollEvent {
                         position,
                         delta,
                         ..Default::default()
@@ -1314,7 +1314,7 @@ impl Replica {
                 if keys.is_empty() {
                     return Err(fail("refused", "act press needs its keys, as space-separated keystrokes"));
                 }
-                if let Some(bad) = keys.iter().find(|k| Keystroke::parse(k).is_err()) {
+                if let Some(bad) = keys.iter().find(|k| Keystroke::parse_with_os(k, deep_app::actions::host()).is_err()) {
                     return Err(fail("refused", format!("{bad:?} is no keystroke")));
                 }
                 for key in keys {
@@ -1327,7 +1327,7 @@ impl Replica {
                 self.input(MouseMoveEvent { position, pressed_button: None, modifiers: Modifiers::default() }.to_platform_input());
                 for _ in 0..SCROLL_FRAMES {
                     let delta = ScrollDelta::Pixels(point(px(-dx / SCROLL_FRAMES as f32), px(-dy / SCROLL_FRAMES as f32)));
-                    self.input(ScrollWheelEvent { position, delta, ..Default::default() }.to_platform_input());
+                    self.input(ScrollEvent { position, delta, ..Default::default() }.to_platform_input());
                     self.tick();
                 }
             }

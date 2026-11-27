@@ -346,10 +346,10 @@ fn theme(dark: bool, cx: &mut App) {
     // The kit's type, faces, radii and spacing are the look's too (#1458): its five text sizes fall on
     // the three roles, and every radius but none and full is the one radius.
     let s = sizes();
-    let token = |t: Text| TextStyleToken {
-        size: t.size,
-        line_height: t.line,
-        weight: t.weight,
+    let token = |t: Text| {
+        let mut token = TextStyleToken::default();
+        (token.size, token.line_height, token.weight) = (t.size, t.line, t.weight);
+        token
     };
     let ty = &mut theme.tokens.typography;
     ty.sans = s.face.clone();

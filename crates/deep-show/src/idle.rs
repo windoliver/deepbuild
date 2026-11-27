@@ -257,9 +257,6 @@ pub unsafe fn pointer_move(
     // SAFETY: the class method returns an autoreleased event or nil, which `retain` keeps.
     objc2::rc::Retained::retain(event).map(Posted)
 }
-    let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
-    let _: () = msg_send![&*app, postEvent: event, atStart: false];
-}
 
 /// Has the window take pointer moves queued for it. GPUI's normal window hears the real cursor
 /// through a tracking area and turns this off, so AppKit would drop a queued move; on, the window

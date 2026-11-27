@@ -472,11 +472,12 @@ impl Render for Bench {
             window.on_next_frame(move |window, cx| {
                 applied.borrow_mut().applied = Some(Instant::now());
                 window.dispatch_event(
-                    PlatformInput::ScrollWheel(ScrollWheelEvent {
+                    PlatformInput::Scroll(ScrollEvent {
                         position: at,
                         delta: ScrollDelta::Pixels(point(px(0.), px(-dy))),
                         modifiers: Modifiers::default(),
                         touch_phase: TouchPhase::Moved,
+                        ..Default::default()
                     }),
                     cx,
                 );
@@ -1360,7 +1361,7 @@ fn access() -> i32 {
                 match rx.try_recv() {
                     Ok(cmd) => {
                         let key = cmd["key"].as_str().unwrap_or("");
-                        let stroke = Keystroke::parse(key).expect("a keystroke");
+                        let stroke = Keystroke::parse_with_os(key, deep_app::actions::host()).expect("a keystroke");
                         let _ = cx.update_window(w, |_, window, cx| {
                             window.dispatch_event(
                                 PlatformInput::KeyDown(KeyDownEvent { keystroke: stroke, is_held: false, prefer_character_input: false }),

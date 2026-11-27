@@ -153,14 +153,6 @@ struct Lines {
     color: Hsla,
 }
 
-impl IntoElement for Lines {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
 impl Element for Lines {
     type RequestLayoutState = Rc<RefCell<Tops>>;
     type PrepaintState = Vec<AnyElement>;

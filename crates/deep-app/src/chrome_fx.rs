@@ -400,13 +400,6 @@ pub struct LayerElement {
     child: AnyElement,
 }
 
-impl IntoElement for LayerElement {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 impl Element for LayerElement {
     type RequestLayoutState = ();
     type PrepaintState = ();
