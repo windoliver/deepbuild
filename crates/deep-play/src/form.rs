@@ -24,7 +24,14 @@ pub fn played(
     track: &[Value],
     read: &dyn Fn(&str) -> Option<Vec<u8>>,
 ) -> Result<Value, Box<Issue>> {
-    let mut form = with_track(doc, track);
+    // #1042: a reading a public source gave is on the track for the logic items alone (Logic:
+    // readings). It is no control's entry, so the form's inline track, which motion compiles,
+    // holds none.
+    let controls: Vec<Value> = (track.iter())
+        .filter(|e| e.get("reading").is_none())
+        .cloned()
+        .collect();
+    let mut form = with_track(doc, &controls);
     // #194: what the logic items fire, baked before the worlds that take it, as the app does.
     #[cfg(feature = "logic")]
     if crate::fires::any(&form) {

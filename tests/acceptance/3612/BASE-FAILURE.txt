@@ -1,0 +1,186 @@
+The #3612 acceptance tests at the base, fd2899677b778284ddc6e860010b8831823b3901 (origin/main; its last merge is #3614).
+
+The base was built once in <checkout> by the caller, under the machine's throttle: npm run build --workspaces, then
+cargo build --locked --bin deep-logic, --bin deep-show and --bin deep-hook, debug, with CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0 (built 21:04 to 21:11 on November 26, 2026). Node v24.22.0, a MacBook Pro Mac17,10 (18
+cores), macOS 27.2, shared with other sessions: its one-minute load stood between 30 and 89 through these runs.
+
+Each file was run alone, through the throttle, with CPATH and CARGO_TARGET_DIR unset and no DEEP_BIN_DIR, so each
+file's own cargo build found the binaries fresh and compiled nothing:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs test --wait 10 -- node --test tests/acceptance/3612/<file>
+
+Results of the last run, of the files as delivered (22:39, load 77 to 89):
+
+  ac1-logic.test.mjs      2 tests, 2 fail   2.0 s
+  ac2-fixtures.test.mjs   1 test,  1 pass  10.4 s
+  ac3-planted.test.mjs    1 test,  1 pass   5.6 s
+  ac1-core.test.mjs       1 test,  1 fail  12.0 s
+
+
+1. The three tests of new behaviour fail at their own assertion (criterion 1, #3612.77719146)
+----------------------------------------------------------------------------------------------
+
+Each is node:assert's AssertionError [ERR_ASSERTION], thrown from must (tests/acceptance/3612/common.mjs:29), called
+from the test's own file. The merge base keeps no count of piece checks and answers the call that asks for one with
+{"ok": false, "code": "bad_input"}, so each fails at the assertion that reads the count, saying so. That is as near
+as the merge base comes to the reason the criterion names: it can't show 109, because nothing at the base lets a
+test read a count of piece checks from a binary (README: The count).
+
+ac1-core.test.mjs
+✖ AC1 #3612.77719146 a fresh canvas core with the shipped packs answers its first call having checked each fixture's piece once: 57 piece checks for 57 pieces
+  AssertionError [ERR_ASSERTION]: AC1 #3612.77719146: the canvas core answered its first call, with all 21 shipped
+  packs installed, and keeps no count of the pieces its logic module checked for them: its piece_checks call answered
+  {"ok":false,"code":"bad_input"}, not {"ok": true, "reply": {"piece_checks": <whole number>}} (README: The count).
+  Nothing shows each fixture's piece was checked once; the issue reads 109 piece checks for 57 pieces on the merge base
+      at must (tests/acceptance/3612/common.mjs:29:10)
+      at TestContext.<anonymous> (tests/acceptance/3612/ac1-core.test.mjs:27:5)
+
+ac1-logic.test.mjs
+✖ AC1 #3612.77719146 the logic module checks each shipped fixture's piece once: 57 piece checks for the 57 pieces the shipped packs' checks make, and one for a fixture's piece at its library's link
+  AssertionError [ERR_ASSERTION]: AC1 #3612.77719146: deep-logic keeps no count of the pieces it checked: its
+  piece_checks call answered {"ok":false,"code":"bad_input"}, not {"ok": true, "piece_checks": <whole number>}
+  (README: The count). Nothing shows each fixture's piece was checked once; the issue reads 109 piece checks for 57
+  pieces on the merge base
+      at must (tests/acceptance/3612/common.mjs:29:10)
+      at readings (tests/acceptance/3612/ac1-logic.test.mjs:29:5)
+
+✖ AC1 #3612.77719146 the merge base's fixture run, planted, counts 109 piece checks for the same 57 pieces and fails, naming a fixture whose piece was checked twice
+  AssertionError [ERR_ASSERTION]: AC1 #3612.77719146: deep-logic --planted fixture_checks_piece_twice doesn't run:
+  {"ok":false,"code":"bad_input"}. The merge base's fixture run can't be read with a count without the planted runner
+  fixture_checks_piece_twice (README: The planted runner)
+      at must (tests/acceptance/3612/common.mjs:29:10)
+      at readings (tests/acceptance/3612/ac1-logic.test.mjs:27:5)
+
+  (The base's deep-logic refuses a planted name it doesn't know: it prints that line and exits 2.)
+
+
+2. The two tests of what stays as it is pass, as they should (criteria 2 and 3)
+--------------------------------------------------------------------------------
+
+ac2-fixtures.test.mjs
+✔ AC2 #3612.0873686d every fixture of every shipped pack reaches the step hashes and the logic.determinism verdict it reached on the merge base
+ℹ 7 packs' checks, 28 library fixtures' pieces, 2609 step hashes read
+
+  It passes because base.json is the merge base's own recording, made from this build, and the base answers the same
+  lines the same way again. Its wrong program is the twin step_37_hash_moves (README: The wrong programs).
+
+ac3-planted.test.mjs
+✔ AC3 #3612.5bdaac1f each planted runner that fails a fixture's logic.determinism run on the merge base still fails it, naming the fixture, by what the run compared there
+ℹ 7 fixture runs asked again under 2 planted runners: restore_keeps_regions_only, logic_reads_wall_clock
+ℹ the control fails as it must: the check of circuit-1.0.0 under the planted runner restore_keeps_regions_only fails
+  fixture 5ef57dca6a9c85f7f6a6f47950d4b1bb91c041cf1c93d14e76ef1033cdcf1d45 (packs/circuit-1.0.0/fixtures/fault.json)
+  under logic.determinism, but not by what it compared on the merge base: {"item":"fixture","run":"seek","from":0,
+  "at":0,"checkpoint":null,"step":0,"field":"step_hash",…} where the merge base gave {"item":"fixture","run":"probe",
+  "from":0,"at":0,"checkpoint":null,"step":0,"field":"deep_hash","array":"fixture.i_rms",…,"control":"fault"}
+  (1 failures now, 2 then)
+
+  It passes because each of the 7 kept fixture runs is refused again for the same fixture with the same failures, and
+  the control (the same runner with check_compares_step_hashes) fails the judge. Its wrong program is the twin
+  compares_step_hashes_only.
+
+
+3. Earlier runs, and one finding in a test
+------------------------------------------
+
+Every file ran three times, because two corrections followed the first run. The results above are the third's.
+
+- First run (21:48 to 22:08, load 52 to 81). ac1-logic.test.mjs got no test grant within the 10 minutes
+  ("INCONCLUSIVE no grant: no test grant came within 10 min", exit 3), so it was run once directly, as the brief
+  says: both tests failed as in section 1, in 1.9 s. The other three files got their grants (ac2-fixtures after
+  about 7.8 minutes): ac1-core failed as in section 1 (13.5 s) and ac3-planted passed (3.6 s).
+- The finding: ac2-fixtures.test.mjs did not pass on that run. It stopped before it started deep-logic, at a guard
+  of its own: "BLOCKED: base.json holds no reading of interfaces-1.0.0's fixture 2debaa37…: it is the merge base's
+  recording, and the shipped packs have moved since". The guard was wrong, not the base: that fixture,
+  packs/interfaces-1.0.0/fixtures/fall.json, is the second fixture of physics2d.lib@1, whose one planted library
+  fails the first, and no shipped library implements the interface, so no check runs it on the merge base (README:
+  Readings). The guard was removed (the judge already reads BLOCKED when the recording and the packs don't hold the
+  same fixtures) and the file passed (7.9 s).
+- Second run (22:26, load 30 to 32), after the limits were shortened (a reply 5 minutes, a test 10 or 12) and
+  ac1-core's naming of a fixture was kept from hiding its count when it can't run: ac1-core fail 19.0 s, ac1-logic
+  2 fail 1.5 s, ac2-fixtures pass 8.7 s, ac3-planted pass 5.2 s. Every file got its grant at once.
+- Third run (22:39), after a type note in common.mjs that changes nothing it does: the table at the top.
+
+
+4. Readings at the base (probes of the base's own binaries; none changes a source)
+----------------------------------------------------------------------------------
+
+The pieces the shipped packs' checks make, read from each pack_check's own reply (logic.mjs piecesOf), and each
+check's time in one deep-logic process (load 47):
+
+  circuit-1.0.0      14 pieces (11 fixture runs, 3 kit twins)   1.1 s
+  interfaces-1.0.0    3 pieces ( 3 fixture runs)                0.04 s
+  lanes-1.0.0         6 pieces ( 6 fixture runs)                0.5 s
+  modslib-1.0.0       5 pieces ( 5 fixture runs)                0.3 s
+  process-1.0.0       9 pieces ( 9 fixture runs)                2.7 s
+  sense-1.0.0         6 pieces ( 6 fixture runs)                0.3 s
+  separation-1.0.0   14 pieces (12 fixture runs, 2 kit twins)   1.3 s
+  in all             57 pieces (52 fixture runs, 5 kit twins)
+
+  That is the issue's 57: 52 fixture runs and 5 kit twins. 28 of the 52 are on the six shipped libraries (22 of
+  their interfaces' fixtures and 6 of their own) and 24 on the 13 planted libraries, each up to the fixture it fails.
+
+One fixture alone (README): in a process of its own, after a claim for each interface a library implements (PASS for
+all six), the check of the piece of its own fixture answered ok, and its receipt said its own fixture ran and none of
+its interfaces' did, for each of circuit_ref@1.0.0, lanes_ref@1.0.0, mods.tree@1.0.0, process_ref@1.0.0,
+sense.sight@1.0.0 and separation_ref@1.0.0. The count around it can't be read at the base.
+
+The canvas core: given the 21 packs' own folders as deepbuild/<name>, it took the world in 0.15 s and answered packs
+in 6.2 s (load 56) with 21 rows, each installed, checks 1, no issues; piece_checks answered {"ok":false,"code":
+"bad_input"} in 1 ms; packs again answered in 1 ms with checks still 1 a row.
+
+The recording: node tests/acceptance/3612/record.mjs took 8 min 21 s and wrote base.json; node
+tests/acceptance/3612/record.mjs --check took 7 min 15 s and printed "same as base.json … 7 packs, 7 planted fixture
+runs". Of the 65 planted runners of planted.rs, two fail a fixture's logic.determinism run: restore_keeps_regions_only
+(the checks of circuit, lanes and process, and the links of their libraries) and logic_reads_wall_clock (the link of
+separation_ref@1.0.0). Some of the 63 that don't, at each pack's check:
+
+  replay_changes_step_37     modslib refused for an expected value (totals[0] at step 37 is 5e-324, outside 0 within
+                             "exact"); the other six pass
+  logic_reads_wall_clock     five packs refused for an expected value at step 0 or 2, separation for a kit twin's
+                             rule, interfaces passes: at a check it never reaches logic.determinism
+  checkpoint_drops_globals, restore_copies_assets, seek_restores_arrays_only, tracker_skips_memory_copy
+                             all seven pass
+  runs_unchecked             six refused: "the rewritten program lacks sandbox.fuel"
+
+The twin compares_step_hashes_only, without a build: deep-logic --planted <runner> --planted
+check_compares_step_hashes is the same program. On each of the 7 kept entries the judge of criterion 3 fails, naming
+the entry's fixture: the run still fails it, by a step_hash failure alone where the merge base gave a deep_hash, a
+probe or a playback failure.
+
+The twin step_37_hash_moves was not built or run. Its judge was given the recording with step 37's hash changed in
+every fixture of 38 steps or more: it failed each of the 10, naming the fixture and step 37, and nothing else.
+
+What the proof lanes would build for each file (scripts/proof-binaries.mjs binaryPlan): ac1-core deep-logic and
+deep-show; the other three deep-logic alone; each file's own cargo build with CARGO_INCREMENTAL=0 and
+CARGO_PROFILE_DEV_DEBUG=0.
+
+
+5. That the tests can pass and can fail (a model, not a measurement)
+--------------------------------------------------------------------
+
+No implementation existed, and none was written into the checkout. To see the tests read, judge and name as written,
+a throwaway stand-in was put in the caller's scratch folder and deleted after: a script named deep-logic that passed
+every line to the base's deep-logic and answered piece_checks from a count it worked out from the replies (one a
+fixture run, or two under the planted name), and one named deep-show that passed every line to the base's deep-show
+and answered piece_checks with a fixed number. Run with DEEP_BIN_DIR naming it:
+
+  one check a fixture run, a core that answers 57     all 6 tests pass: ac1-core 10.8 s, ac1-logic 21.5 s (both
+                                                      tests whole), ac2-fixtures 6.9 s, ac3-planted 2.7 s
+  two checks a fixture run, a core that answers 109   ac1-core fails: "counted 109 piece checks before its first
+                                                      answer, for 57 pieces. A fixture whose piece was checked twice:
+                                                      2840e1a5… . Linking each shipped library alone, the piece of
+                                                      circuit_ref@1.0.0's fixture 2840e1a5… (packs/circuit-1.0.0/
+                                                      fixtures/lamp_own.json) was checked 2 times at the library's
+                                                      link, not once; …"; ac1-logic's first test fails: "the shipped
+                                                      packs' checks made 109 piece checks for 57 pieces. A fixture
+                                                      whose piece was checked twice: 2840e1a5… . the check of
+                                                      circuit-1.0.0 made 25 piece checks for 14 pieces (11 fixture
+                                                      runs and 3 kit twins) …"; its planted test passes (109, the
+                                                      judge fails, a fixture is named)
+  one check a fixture run, a core that answers 114    ac1-core fails: "counted 114 piece checks … Linking each
+                                                      shipped library alone checks each of its own fixtures' pieces
+                                                      once, so no single fixture is named: the core checked whole
+                                                      pieces again"
+
+The stand-in's count is this job's own arithmetic, so these runs show nothing about the logic module.

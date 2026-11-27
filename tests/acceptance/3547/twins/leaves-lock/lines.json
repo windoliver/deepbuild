@@ -1,0 +1,15 @@
+{
+  "scripts/shards.mjs": [
+    {
+      "find": [
+        "    } finally {",
+        "      rmSync(taken, { recursive: true, force: true });",
+        "    }"
+      ],
+      "wrong": [
+        "    } finally {",
+        "    }"
+      ]
+    }
+  ]
+}

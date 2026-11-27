@@ -23,6 +23,14 @@ These hold in the core and every extension:
 - Verify with `node scripts/affected.mjs`, not whole neighbouring suites: it runs only the tests that can see the change and sets main's known failures (`scripts/known-failures.json`) apart; report its WIDE and INCONCLUSIVE lines.
 - A PR says `Closes #n` only when every acceptance criterion in the issue is proven. Otherwise it says `Part of #n` and lists what's open.
 
+## Delivery
+
+- An issue is one task: work until its PR is open, mergeable on main's head, and the issue is closed or names what's still open. Committing, pushing, opening the PR and merging main once are part of it; don't wait to be asked.
+- Before reporting, close every gap you can: run what's unrun, fix what fails. Report once, listing only what needs a person.
+- Testing a change takes at most an hour, waits for a grant and any run on the merge base included. Stop what still runs then, by PID, and report it `INCONCLUSIVE` by name; don't wait longer or run it again to finish. A lint finding that names no file you changed is main's: list it, don't prove it.
+- A budget or timing criterion is best effort under load: take one reading without waiting for a timed grant or a quiet machine, and record it with the load. If it reads `INCONCLUSIVE`, leave its box unticked, say `Part of #n`, and close the issue on its other criteria.
+- A taste criterion ("Shown to you") is delegated: judge the run's pictures, record the call as the owner's delegation and attach them to the PR. The owner overrules by reopening.
+
 ## Machine and safety
 
 - Never kill processes by name or port. Stop only processes you started, by PID.
@@ -39,4 +47,5 @@ These hold in the core and every extension:
 - Delete your additions whose removal changes neither required behavior nor proof, and code your change leaves without a caller; revert unrelated edits. Preserve others' code and work and required failing checks.
 - No option, flag, fallback, config key, dependency, export or duplicate test the task doesn't need.
 - Add a shared abstraction only when two callers need it now.
+- Write no comments: names say what code does, and a decision goes in `docs/adr/` ([0001](docs/adr/0001-code-carries-no-comments.md)). The comment ratchet only goes down.
 - Reach a module only through its public entry. No import cycles, and the core never imports an extension.

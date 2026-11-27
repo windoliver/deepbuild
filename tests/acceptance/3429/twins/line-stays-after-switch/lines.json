@@ -1,0 +1,12 @@
+{
+  "packages/hub/src/status.ts": [
+    {
+      "find": [
+        "  const modes = new Map(standing.filter((r) => MODE_CODES.includes(r.code)).map((r) => [r.session_id, r]));"
+      ],
+      "wrong": [
+        "  const modes = new Map(standing.filter((r) => MODE_CODES.includes(r.code) && r.code !== 'mode_asks').map((r) => [r.session_id, r]));"
+      ]
+    }
+  ]
+}
