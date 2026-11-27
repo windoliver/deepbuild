@@ -351,7 +351,6 @@ export type Plant =
   // #1512's: a review whose rubric holds every rule the hub knows, whatever its scope, how it was known or what enforces
   // it, with no size bound; and a hub that holds the review kind but adds the review to no claim that opens a PR.
   | 'rubric-holds-every-rule' | 'review-without-caller'
-  // #2076's: a hub whose proposal for a rule line an agent's edit removed can't be raised.
   | 'hold-raise-fails'
   // #2748's: a hub that runs every review pass whatever its scope, one that reads the passes from a file in the claim's
   // checkout, one that records a pass's findings and sends none back, one that sends back a finding on a line the

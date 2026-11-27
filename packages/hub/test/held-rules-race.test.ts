@@ -1,5 +1,3 @@
-// A held rule line (#344, #2076) is never lost to a reader of the held file: the reader that prunes the lines you
-// applied waits on the record for each, and a line an agent's edit removed is held in the meantime.
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,8 +20,6 @@ it('a line held or raised while the applied ones are pruned stays as saved, and 
     };
     const memory = new SessionMemory({ services: { root: { dir }, record: { raw } } } as unknown as SessionMemoryOptions);
     const pruning = (memory as unknown as { heldRules(): Promise<Held[]> }).heldRules();
-    // An agent's edit takes a line out while the pruning waits on the record: the line is held.
-    // Meanwhile too, a held line's proposal is raised and saved on it.
     saveHeld(dir, [...readHeld(dir).map((h) => (h.id === 'raised' ? { ...h, ask: 'ask:raised' } : h)), held('new', null)]);
     answer();
     await pruning;

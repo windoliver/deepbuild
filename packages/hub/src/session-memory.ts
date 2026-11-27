@@ -126,7 +126,6 @@ export class SessionMemory {
       const [answer] = (await this.options.services.record.raw(`SELECT json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'ask.answered' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [h.ask])) as { answer: unknown }[];
       if (answer?.answer === 'apply') applied.add(h);
     }
-    // Read again after the waits: a line held or raised meanwhile (#2076) stays as it was saved; only the applied leave.
     const gone = (h: Held) => [...applied].some((a) => a.id === h.id && a.repo === h.repo && a.ask === h.ask);
     const held = readHeld(dir);
     const kept = held.filter((h) => !gone(h));
@@ -273,11 +272,7 @@ export class SessionMemory {
     if (before && repo) await this.holdRemoved(meta.session, meta.agent, repo, before);
   }
 
-  /**
-   * Each rule line an agent's edit removed stays in force, held, and becomes one proposal to you (#2076). The line is held
-   * first, whether or not its proposal can be raised; one that can't be is named in the session's record with the error
-   * and raised again at the next rules sync.
-   */
+  /** Each rule line an agent's edit removed stays in force, held, and becomes one proposal to you, as deep_propose's are. */
   private async holdRemoved(session: string, agent: string, repo: string, before: { file: string; scope: string; rules: string[] }[]): Promise<void> {
     this.ruleFiles.delete(repo);
     const held = readHeld(this.options.services.root.dir);
@@ -295,12 +290,10 @@ export class SessionMemory {
     saveHeld(this.options.services.root.dir, held);
     for (const h of fresh) {
       const error = await this.raiseHeld(h);
-      // Each part cut, so the reading fits session.reading@1 (8192 characters) however long the rule or the error.
       if (error !== undefined) await this.options.events.appendReading(session, agent, `The rule “${h.text.slice(0, 3000)}” in ${h.file.slice(0, 500)} stays held: an agent's edit took its line out, and its proposal to you couldn't be raised (${error.slice(0, 3000)}). It is raised again at the next rules sync.`).catch(() => undefined);
     }
   }
 
-  /** Raises a held rule's proposal and saves it on the held entry; what went wrong, when it couldn't be raised. */
   private async raiseHeld(h: Held): Promise<string | undefined> {
     try {
       const made = await this.options.mcp().proposeRuleRemoval(h.session ?? '', h.repo, `wiki:rules#${h.id}`, `Remove the rule “${h.text}” from ${h.file}. An agent's edit took this line out; the rule stays in force on the rules page until you apply this.`);
@@ -348,7 +341,6 @@ export class SessionMemory {
 
   /** `deep rules sync`: the rules page, each rule with its file, scope, size and what enforces it, written through the wiki. */
   async syncRules(): Promise<Obj> {
-    // A held rule whose proposal couldn't be raised is raised again here (#2076); it stays held either way.
     for (const h of readHeld(this.options.services.root.dir)) if (h.ask === null) await this.raiseHeld(h);
     this.ruleFiles.clear();
     this.ruleLost.clear();

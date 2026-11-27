@@ -49,10 +49,6 @@ export interface Rule {
   line?: number;
   index?: true;
 }
-/**
- * A rule line an agent's edit removed, held in force (#2076): `proposal` and `ask` are null while its proposal couldn't
- * be raised, and `session` is the session whose edit it was, so the next rules sync raises it again.
- */
 export interface Held { id: string; text: string; file: string; scope: string; repo: string; proposal: string | null; ask: string | null; session?: string }
 
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');

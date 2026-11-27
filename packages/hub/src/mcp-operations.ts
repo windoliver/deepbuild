@@ -693,11 +693,6 @@ export class McpOperations {
     return this.raiseProposal(session, cwd, target, change, (args.evidence as { at: string; quote: string }[] | null) ?? []);
   }
 
-  /**
-   * The hub's own proposal to remove a rule line an agent's edit took out (#2076): raised as deep_propose's are, for the
-   * session that made the edit and in its repo, but never refused for naming a direction you rejected, since the change
-   * quotes your rule rather than proposing anything an agent chose.
-   */
   async proposeRuleRemoval(session: string, repo: string, target: string, change: string): Promise<Obj> {
     if (this.options.settings.plant === 'hold-raise-fails') throw Error('DEEP_HUB_PLANT=hold-raise-fails: the planted raise failed');
     const scrub = (text: string, max: number) => scrubText(text, { held: this.options.settings.held }).slice(0, max);
