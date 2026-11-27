@@ -99,7 +99,6 @@ function call(facts, payload) {
 
 // A prompt's origin: the first of the facts' rules that holds, either a prefix of the prompt text the
 // agent's own app writes, or a field of the transcript entries the prompt joins to.
-// A rule's `data` names fields the event carries beside its origin, each read from the entry that matched (#3405).
 function origin(rule, payload, transcript) {
   const entries = rule.join ? transcript.filter((one) => get(one, rule.join.transcript) !== undefined && get(one, rule.join.transcript) === payload[rule.join.payload]) : [];
   const matching = (match) => entries.find((entry) => Object.entries(match).every(([path, value]) => get(entry, path) === value));

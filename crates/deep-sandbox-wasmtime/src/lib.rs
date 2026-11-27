@@ -77,6 +77,24 @@ pub fn compiles() -> u64 {
     COMPILES.load(Ordering::Relaxed)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+static REWRITES: AtomicU64 = AtomicU64::new(0);
+#[cfg(not(target_arch = "wasm32"))]
+static RUNS: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn rewrites_and_runs() -> (u64, u64) {
+    (
+        REWRITES.load(Ordering::Relaxed),
+        RUNS.load(Ordering::Relaxed),
+    )
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn rewrote() {
+    REWRITES.fetch_add(1, Ordering::Relaxed);
+}
+
 /// #2662: a program compiled once. Each `runner` is a fresh instance of it in a store of its own,
 /// so every runner keeps its own memory, globals, fuel and trap.
 #[cfg(not(target_arch = "wasm32"))]
@@ -299,6 +317,7 @@ impl Runner {
     }
 
     pub fn call(&mut self, call: &Call) -> Result<Outcome, String> {
+        RUNS.fetch_add(1, Ordering::Relaxed);
         if self.faults.wasmtime_fuel {
             // wasmtime's own fuel in place of the rewrite's, which is set past any budget.
             st(&mut self.store)

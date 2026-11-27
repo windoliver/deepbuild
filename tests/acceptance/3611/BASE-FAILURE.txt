@@ -1,0 +1,336 @@
+# #3611's acceptance tests at the base
+
+Base: 35956a44a7c4b20023055f50229821330e09b69f (origin/main when this job started; its last merge is #3492).
+Host: this job's Mac (Mac17,10, macOS 27.2, Apple silicon, 18 cores), shared with many other sessions. Its one-minute
+load was 52 to 88 while the runs below ran; each run's own load is beside it.
+Built once by this job's caller, in <checkout>: npm run build --workspaces, then cargo build --locked --bin deep-show
+and --bin deep-hook, debug, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 (cargo 1.99.1, Node 24.22.0). No release
+build. The canvas core names its own build, the `fingerprint` call's `build`:
+a165a670a261a844ac1ac494a4795d55aad9eebcae6f955126a4e6e7b29e365d.
+Run November 27, 2026, each file once, one at a time, between 06:12 and 06:15 local time, with the same PATH and
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0. The probes (Readings, below) ran from 06:05 to 06:18.
+
+The machine's throttle gave no grant. It was asked once, with the short wait this job was told to use:
+
+  $ node scripts/throttle.mjs test --wait 5 -- node --test tests/acceptance/3611/ac2-changed.test.mjs
+  INCONCLUSIVE no grant: no test grant came within 5 min
+    Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+  (exit 3)
+
+It was not asked again. Each file was then run once directly, by its own command as README.md gives it:
+
+  $ node --test tests/acceptance/3611/<file>
+
+No run compiled a workspace crate. The files' own cargo step, run once by itself first, found both binaries fresh
+(`cargo build --locked --bin deep-show`: "Finished `dev` profile" in 1.04 s; `--bin deep-hook`: in 0.45 s), and each
+run's output was watched for a `Compiling` line, at which its process would have been stopped by its PID: none came.
+
+## Summary
+
+Twelve tests, twelve failures, each an AssertionError thrown by `must` in this suite's core.mjs: none at load, none
+by a helper that couldn't run, none BLOCKED or INCONCLUSIVE. No test passes at the base, and none should.
+
+| File | Test | Criterion | At the base | Took |
+|---|---|---|---|---|
+| ac1-second-core.test.mjs | 1 | #3611.d8311031 | FAIL at its assertion, after the first core: its `packs` reply holds no `counts`, and it left no row for any of the 21 shipped versions, so a second core has no store to start on and runs every check again | 16.5 s |
+| ac2-changed.test.mjs | 1 | #3611.8b256396 | FAIL at its assertion, after the first core: it kept no row for any of the four test packs, so no row is of another digest or build and none is replaced | 17.4 s, the three |
+| | 2 | #3611.8b256396 | FAIL at its assertion: the core doesn't take a world whose `planted` is `takes_row_of_another_digest`. The base has no such core, and no row for one to take | |
+| | 3 | #3611.8b256396 | FAIL at its assertion: the same for `takes_row_of_another_build` | |
+| ac3-damaged.test.mjs | 1 | #3611.ce0f9025 | FAIL at its assertion, after the first core: it kept no row for any of the six test packs, so there is no row to remove, cut short or change | 19.8 s, the three |
+| | 2 | #3611.ce0f9025 | FAIL at its assertion: the core doesn't take a world whose `planted` is `admits_on_unreadable_row` | |
+| | 3 | #3611.ce0f9025 | FAIL at its assertion: with the evidence its check kept still there, a second core checked the shipped library pack again (`checks` 1) | |
+| ac4-beside.test.mjs | 1 | #3611.f11db91d | FAIL at its assertion, after the first core: it kept no row for any of the three test packs, so the hub has no row for another process to write beside | 5.9 s |
+| ac4-hub.test.mjs | 1 | #3611.f11db91d | FAIL at its assertion, after a real hub's core answered `deep_kinds list`: the hub's store holds no row for any of the 21 shipped versions | 17.9 s |
+| ac5-refused.test.mjs | 1 | #3611.55062395 | FAIL at its assertion, naming each of the three refused packs: refused by the first core's check, it was checked again by the second (`checks` 1) | 6.2 s |
+| ac6-task.test.mjs | 1 | #3611.3b726ffd | FAIL at its assertion: benchmarks/budgets.json holds no task that names the criterion | 0.1 s |
+| ac6-first-reply.test.mjs | 1 | #3611.3b726ffd | FAIL at its assertion, after one short-lived core: a core given a store and one pack kept no result of its check, so there is no filled store to time a first reply on. Nothing was timed | 5.7 s |
+
+The eight files took 89.5 s together. Where a short test's 5 to 6 s went was not measured. A planted core's test,
+which runs the file's `cargo build --locked --bin deep-show` (it compiled nothing) and starts one core whose world is
+refused, took 5.8 to 5.9 s; a core given one test pack answered its first call 0.2 s after its start in the probes,
+and 4.9 s after it the first time the binary ran. In the trimmed output below, a temporary HOME of a test's own is
+written `~`, and the name of one pack main ships, which the public text lane refuses in any file (#3533), is written
+`<pack>` in the two failures that list it.
+
+Why three of the criteria's tests fail before their own last step. Criteria 2, 3 and 4 say what a core does with a row
+that changed, was damaged or was written by another process. At the base that behaviour holds emptily: no core reads a
+row, so every check always runs. Each of those tests therefore first holds what its criterion rests on, that the first
+core kept each result as a row, and its last step holds that a row nobody touched is taken. The base fails the first
+of the two, naming each pack and the file that isn't there. Criterion 5's test fails on the criterion's own words.
+
+The three planted cores can't exist at the base, where no core reads a row. Their tests were run there all the same
+and fail at the suite's assertion that the core takes a world that plants them; they are not a proof that the planted
+cores fail the judges. That proof needs the work: README.md, The planted cores.
+
+## Each file's run, trimmed to its failing assertion
+
+### ac1-second-core.test.mjs
+
+  $ node --test tests/acceptance/3611/ac1-second-core.test.mjs
+  (exit 1; 16.5 s; one-minute load 52.9 at its start, 54.0 at its end)
+  ✖ AC1 #3611.d8311031 a second fresh canvas core with the shipped packs, started on the store the first filled, runs no pack check: its counts are 0, and its deep_kinds listing and packs rows equal the first core's but for the count of checks run (16397 ms)
+  ℹ tests 1
+  ℹ pass 0
+  ℹ fail 1
+
+  ✖ failing tests:
+
+  test at tests/acceptance/3611/ac1-second-core.test.mjs:39:1
+  ✖ AC1 #3611.d8311031 a second fresh canvas core with the shipped packs, started on the store the first filled, runs no pack check: its counts are 0, and its deep_kinds listing and packs rows equal the first core's but for the count of checks run (16397 ms)
+    AssertionError [ERR_ASSERTION]: AC1 #3611.d8311031: the first core, started on an empty store with the 21 shipped packs:
+      the first core's `packs` reply holds no `counts` (undefined): a core's own count of the kits, field checks, rewrites, runs and compiles its pack checks ran
+      the first core left no row under <root>/packs/checked/ for 21 of the 21 shipped versions (deepbuild/art@1.0.0, deepbuild/<pack>@1.0.0, deepbuild/chrome-fx@1.0.0, deepbuild/circuit@1.0.0, …): it filled no store, so a second core has none to start on and runs every check again
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at none (file://<checkout>/tests/acceptance/3611/core.mjs:40:3)
+        at file://<checkout>/tests/acceptance/3611/ac1-second-core.test.mjs:47:66
+        at play (file://<checkout>/tests/acceptance/3611/ac1-second-core.test.mjs:30:11)
+        at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac1-second-core.test.mjs:47:19)
+
+### ac2-changed.test.mjs
+
+  $ node --test tests/acceptance/3611/ac2-changed.test.mjs
+  (exit 1; 17.4 s; one-minute load 77.4 at its start, 68.6 at its end)
+  ✖ AC2 #3611.8b256396 a pack whose bytes changed under the same folder, a version it requires at another digest, a build of other sources and a planted build each run the check again and replace the row (5583 ms)
+  ✖ AC2 #3611.8b256396 a planted core that takes a row of another digest fails, naming the pack and that its digest differed (5908 ms)
+  ✖ AC2 #3611.8b256396 a planted core that takes a row of another build fails, naming the pack and that its build differed (5773 ms)
+  ℹ tests 3
+  ℹ pass 0
+  ℹ fail 3
+
+  ✖ failing tests:
+
+  test at tests/acceptance/3611/ac2-changed.test.mjs:84:1
+  ✖ AC2 #3611.8b256396 a pack whose bytes changed under the same folder, a version it requires at another digest, a build of other sources and a planted build each run the check again and replace the row (5583 ms)
+    AssertionError [ERR_ASSERTION]: AC2 #3611.8b256396: the first core checked 4 test packs and keeps each result as the design step says, under <root>/packs/checked/:
+      test/kept3611changed@1.0.0: the core kept no row at /private/tmp/dh3611-5GJjg3/root/packs/checked/decd03c13eaf003d6e5fecba9ff8d6de9565552a93ee743b13fb97aafeaf919e.json
+      test/kept3611required@1.0.0: the core kept no row at /private/tmp/dh3611-5GJjg3/root/packs/checked/b856e590443a946141ffc7e762530f3b0a5b1cd3346761b3fe030fb63a0babd6.json
+      test/kept3611requiring@1.0.0: the core kept no row at /private/tmp/dh3611-5GJjg3/root/packs/checked/2eabd4bfe8c896d71e7fab6e9c343140b3822fcd0965484c5d00dab6731c1797.json
+      test/kept3611built@1.0.0: the core kept no row at /private/tmp/dh3611-5GJjg3/root/packs/checked/39e3421387ae0e3b51d364c6a0821b8fcca4281fa5b0565d6975b6504f52c1df.json
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at none (file://<checkout>/tests/acceptance/3611/core.mjs:40:3)
+        at sequence (file://<checkout>/tests/acceptance/3611/ac2-changed.test.mjs:57:5)
+        at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac2-changed.test.mjs:86:16)
+
+  test at tests/acceptance/3611/ac2-changed.test.mjs:90:1
+  ✖ AC2 #3611.8b256396 a planted core that takes a row of another digest fails, naming the pack and that its digest differed (5908 ms)
+    AssertionError [ERR_ASSERTION]: the first core with takes_row_of_another_digest planted: the core doesn't take a world whose `planted` is `takes_row_of_another_digest` (README: The planted cores): it answered {"ok":false,"code":"bad_input"}
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at openCore (file://<checkout>/tests/acceptance/3611/core.mjs:169:5)
+        at async sequence (file://<checkout>/tests/acceptance/3611/ac2-changed.test.mjs:48:18)
+        at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac2-changed.test.mjs:92:16)
+
+  test at tests/acceptance/3611/ac2-changed.test.mjs:96:1
+  ✖ AC2 #3611.8b256396 a planted core that takes a row of another build fails, naming the pack and that its build differed (5773 ms)
+    AssertionError [ERR_ASSERTION]: the first core with takes_row_of_another_build planted: the core doesn't take a world whose `planted` is `takes_row_of_another_build` (README: The planted cores): it answered {"ok":false,"code":"bad_input"}
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at openCore (file://<checkout>/tests/acceptance/3611/core.mjs:169:5)
+        at async sequence (file://<checkout>/tests/acceptance/3611/ac2-changed.test.mjs:48:18)
+        at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac2-changed.test.mjs:98:16)
+
+### ac3-damaged.test.mjs
+
+  $ node --test tests/acceptance/3611/ac3-damaged.test.mjs
+  (exit 1; 19.8 s; one-minute load 66.9 at its start, 63.6 at its end)
+  ✖ AC3 #3611.ce0f9025 a row that is missing, unreadable, cut short or whose kept hash doesn't match runs the check and never reads as installed (5856 ms)
+  ✖ AC3 #3611.ce0f9025 a planted core that admits on an unreadable row fails, naming the pack (5785 ms)
+  ✖ AC3 #3611.ce0f9025 a row whose check kept evidence that is gone runs the check: a core given an empty evidence store doesn't take it (8067 ms)
+  ℹ tests 3
+  ℹ pass 0
+  ℹ fail 3
+
+  ✖ failing tests:
+
+  test at tests/acceptance/3611/ac3-damaged.test.mjs:65:1
+  ✖ AC3 #3611.ce0f9025 a row that is missing, unreadable, cut short or whose kept hash doesn't match runs the check and never reads as installed (5856 ms)
+    AssertionError [ERR_ASSERTION]: AC3 #3611.ce0f9025: the first core checked 6 test packs and keeps each result as the design step says, under <root>/packs/checked/, for a row of each to be damaged:
+      test/kept3611missing@1.0.0: the core kept no row at /private/tmp/dh3611-S5EGgY/root/packs/checked/677ae6ce35d16186395801910cf3c3ecaa79be1ee846ba6da226140274ab2657.json
+      test/kept3611unreadable@1.0.0: the core kept no row at /private/tmp/dh3611-S5EGgY/root/packs/checked/2564be6b674b3fcab6a60b6730242383ecea29fd660f1c420235ce46bb81a668.json
+      test/kept3611cutrow@1.0.0: the core kept no row at /private/tmp/dh3611-S5EGgY/root/packs/checked/4d37b2bda2796f0f36bb02de9274ec685b320893c4f0d8f9462a8cf3ffbda676.json
+      test/kept3611cutmark@1.0.0: the core kept no row at /private/tmp/dh3611-S5EGgY/root/packs/checked/fd3ae0f6f0923df3ddc492db0ccc439da5a592d13ae9fe3d889351408db7d6cd.json
+      test/kept3611hash@1.0.0: the core kept no row at /private/tmp/dh3611-S5EGgY/root/packs/checked/70e21c8ead5c765697bd5c291d404b3bef96bff79deab720513c398fa7bafc6b.json
+      test/kept3611whole@1.0.0: the core kept no row at /private/tmp/dh3611-S5EGgY/root/packs/checked/2c5e7e93348fa0aa5c7926d9dc8a0a95d59161986e6c167ae5ff228b4a4e5935.json
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at none (file://<checkout>/tests/acceptance/3611/core.mjs:40:3)
+        at sequence (file://<checkout>/tests/acceptance/3611/ac3-damaged.test.mjs:54:5)
+        at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac3-damaged.test.mjs:67:21)
+
+  test at tests/acceptance/3611/ac3-damaged.test.mjs:70:1
+  ✖ AC3 #3611.ce0f9025 a planted core that admits on an unreadable row fails, naming the pack (5785 ms)
+    AssertionError [ERR_ASSERTION]: the first core with admits_on_unreadable_row planted: the core doesn't take a world whose `planted` is `admits_on_unreadable_row` (README: The planted cores): it answered {"ok":false,"code":"bad_input"}
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at openCore (file://<checkout>/tests/acceptance/3611/core.mjs:169:5)
+        at async packsOnce (file://<checkout>/tests/acceptance/3611/core.mjs:242:16)
+        at async sequence (file://<checkout>/tests/acceptance/3611/ac3-damaged.test.mjs:50:18)
+        at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac3-damaged.test.mjs:73:16)
+
+  test at tests/acceptance/3611/ac3-damaged.test.mjs:88:1
+  ✖ AC3 #3611.ce0f9025 a row whose check kept evidence that is gone runs the check: a core given an empty evidence store doesn't take it (8067 ms)
+    AssertionError [ERR_ASSERTION]: AC3 #3611.ce0f9025: a row whose check kept evidence that is gone runs the check:
+      deepbuild/lanes@1.0.0: with the evidence its check kept still there, a second core didn't take its row: state "installed", checks 1
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at none (file://<checkout>/tests/acceptance/3611/core.mjs:40:3)
+        at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac3-damaged.test.mjs:105:5)
+
+### ac4-beside.test.mjs
+
+  $ node --test tests/acceptance/3611/ac4-beside.test.mjs
+  (exit 1; 5.9 s; one-minute load 59.5 at its start, 57.7 at its end)
+  ✖ AC4 #3611.f11db91d a row written beside the hub's by a process that is not the hub, as an agent's child would write it, is not taken: the check runs, and the hub's own row beside it is taken (5796 ms)
+  ℹ tests 1
+  ℹ pass 0
+  ℹ fail 1
+
+  ✖ failing tests:
+
+  test at tests/acceptance/3611/ac4-beside.test.mjs:26:1
+  ✖ AC4 #3611.f11db91d a row written beside the hub's by a process that is not the hub, as an agent's child would write it, is not taken: the check runs, and the hub's own row beside it is taken (5796 ms)
+    AssertionError [ERR_ASSERTION]: AC4 #3611.f11db91d: the first core keeps each result as the design step says, under <root>/packs/checked/, marked with the launch key: the hub's rows, beside which another process writes its own:
+      test/kept3611open@1.0.0: the core kept no row at /private/tmp/dh3611-ucLk0P/root/packs/checked/500c4aa288302e75eb1af2c99d032f0434c3fa442cf6ad2ff23580b9dd0d5355.json
+      test/kept3611shut@1.0.0: the core kept no row at /private/tmp/dh3611-ucLk0P/root/packs/checked/b21e6444e8449d1ee8bbaeaa4f89557bb92c423bedb89f3442e4b5d4154247f1.json
+      test/kept3611kept@1.0.0: the core kept no row at /private/tmp/dh3611-ucLk0P/root/packs/checked/ea6840cf155f7098a37dad0ef00e321ca14cd5fb0e6ef02199ba79b8acbebb9c.json
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at none (file://<checkout>/tests/acceptance/3611/core.mjs:40:3)
+        at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac4-beside.test.mjs:40:5)
+
+### ac4-hub.test.mjs
+
+  $ node --test tests/acceptance/3611/ac4-hub.test.mjs
+  (exit 1; 17.9 s; one-minute load 58.3 at its start, 88.2 at its end)
+  ✖ AC4 #3611.f11db91d at a real hub, the store its canvas core fills holds a marked row for each shipped version, and a process that is not the hub finds under the hub's root no key to mark a row of its own with (17852 ms)
+  ℹ the hub's core answered deep_kinds list 14.9 s after it was asked; the process that is not the hub read 309 files under the hub's root (0 it couldn't) and tried 0 keys on 0 rows
+  ℹ tests 1
+  ℹ pass 0
+  ℹ fail 1
+
+  ✖ failing tests:
+
+  test at tests/acceptance/3611/ac4-hub.test.mjs:27:1
+  ✖ AC4 #3611.f11db91d at a real hub, the store its canvas core fills holds a marked row for each shipped version, and a process that is not the hub finds under the hub's root no key to mark a row of its own with (17852 ms)
+    AssertionError [ERR_ASSERTION]: AC4 #3611.f11db91d: the hub's rows carry a mark no process that is not the hub can make:
+      the hub's core kept no result under <home>/.deepbuild/packs/checked/ for 21 of the 21 versions the release ships: deepbuild/art@1.0.0: the core kept no row at ~/.deepbuild/packs/checked/4b899669d94f2b9f8bb6d51517e9da169af7b63081024998ba16042d6d63de39.json; deepbuild/<pack>@1.0.0: the core kept no row at ~/.deepbuild/packs/checked/b995d36bd2294d3f3d5226a2ce7bdbb6246339c3f0e009d52dbb494113682f14.json; deepbuild/chrome-fx@1.0.0: the core kept no row at ~/.deepbuild/packs/checked/359f6e90d1fbb81a74392fb26c0a213e2865fcf9194fce5cbc3838841ad4b810.json; …
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at none (file://<checkout>/tests/acceptance/3611/core.mjs:40:3)
+        at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac4-hub.test.mjs:44:5)
+
+### ac5-refused.test.mjs
+
+  $ node --test tests/acceptance/3611/ac5-refused.test.mjs
+  (exit 1; 6.2 s; one-minute load 57.7 at its start, 55.7 at its end)
+  ✖ AC5 #3611.55062395 a refused version stays refused from the store, with its issues, and is checked again only when its digest or the build changes (6094 ms)
+  ℹ tests 1
+  ℹ pass 0
+  ℹ fail 1
+
+  ✖ failing tests:
+
+  test at tests/acceptance/3611/ac5-refused.test.mjs:23:1
+  ✖ AC5 #3611.55062395 a refused version stays refused from the store, with its issues, and is checked again only when its digest or the build changes (6094 ms)
+    AssertionError [ERR_ASSERTION]: AC5 #3611.55062395: a refused version stays refused from the store, with its issues:
+      test/kept3611stays@1.0.0: refused by the first core's check, it was checked again by the second core (state "refused", checks 1), though neither its digest nor the build changed: its refusal isn't taken from the store
+      test/kept3611fixed@1.0.0: refused by the first core's check, it was checked again by the second core (state "refused", checks 1), though neither its digest nor the build changed: its refusal isn't taken from the store
+      test/kept3611rebuilt@1.0.0: refused by the first core's check, it was checked again by the second core (state "refused", checks 1), though neither its digest nor the build changed: its refusal isn't taken from the store
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at none (file://<checkout>/tests/acceptance/3611/core.mjs:40:3)
+        at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac5-refused.test.mjs:45:5)
+
+### ac6-task.test.mjs
+
+  $ node --test tests/acceptance/3611/ac6-task.test.mjs
+  (exit 1; 0.1 s; one-minute load 55.7 at its start, 55.7 at its end)
+  ✖ AC6 #3611.3b726ffd benchmarks/budgets.json holds a task that names this criterion, with the issue's 500 ms as its target, compared with the merge base at the lane's margin, and passes the lane's validator (2 ms)
+  ℹ tests 1
+  ℹ pass 0
+  ℹ fail 1
+
+  ✖ failing tests:
+
+  test at tests/acceptance/3611/ac6-task.test.mjs:21:1
+  ✖ AC6 #3611.3b726ffd benchmarks/budgets.json holds a task that names this criterion, with the issue's 500 ms as its target, compared with the merge base at the lane's margin, and passes the lane's validator (2 ms)
+    AssertionError [ERR_ASSERTION]: AC6 #3611.3b726ffd: the budget window's task for a first reply on a filled store:
+      benchmarks/budgets.json holds no task whose `criteria` name #3611.3b726ffd: the budget window measures no first reply against the merge base
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at none (file://<checkout>/tests/acceptance/3611/core.mjs:40:3)
+        at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac6-task.test.mjs:24:3)
+
+### ac6-first-reply.test.mjs
+
+  $ node --test tests/acceptance/3611/ac6-first-reply.test.mjs
+  (exit 1; 5.7 s; one-minute load 55.7 at its start, 54.2 at its end)
+  ✖ AC6 #3611.3b726ffd on a reference Mac at rest, a fresh canvas core with the shipped packs and a filled store answers its first call in under 500 ms in five runs after a warm-up, its memory after each reply read (5612 ms)
+  ℹ tests 1
+  ℹ pass 0
+  ℹ fail 1
+
+  ✖ failing tests:
+
+  test at tests/acceptance/3611/ac6-first-reply.test.mjs:75:1
+  ✖ AC6 #3611.3b726ffd on a reference Mac at rest, a fresh canvas core with the shipped packs and a filled store answers its first call in under 500 ms in five runs after a warm-up, its memory after each reply read (5612 ms)
+    AssertionError [ERR_ASSERTION]: AC6 #3611.3b726ffd: a core given a store and one pack kept no result of its check (no row for test/kept3611timed@1.0.0 under <root>/packs/checked/): this build has no filled store, so there is no first reply on one to time; every fresh core runs every check
+        at must (file://<checkout>/tests/acceptance/3611/core.mjs:35:10)
+        at TestContext.<anonymous> (file://<checkout>/tests/acceptance/3611/ac6-first-reply.test.mjs:84:5)
+
+## Readings at the base
+
+Probes this job ran around the files' runs, each a node script that drove `target/debug/deep-show canvas` through
+the suite's own core.mjs, or the checkout's hub through its hub.mjs: the test packs, the library pack and the 21
+packs before the files; the two cores side by side, the hub's root and criterion 6's unreached steps after them. They
+read the base only. None showed a fixture or a helper to be wrong, so no test file changed after phase 1.
+
+The test packs (packs.mjs), on a fresh core:
+- A test pack installs: `{"pack":"test/kept3611good","version":"1.0.0","state":"installed","checks":1,"issues":[],
+  "layouts":[],"named_by":0}`. A `packs` row holds `named_by` at the base beside the six members the suite reads.
+- With its input's default 0, it is refused with one issue: `{"check":"document.validate","code":"out_of_range",
+  "severity":"error","ids":[],"path":"recipes/kept3611bad.bars@1/inputs/n/default","actual":0,"what":"outside 1 to 12",
+  "fix":"Give the field a value of its type inside its range."}`.
+- A pack that lists another in `requires.packs` and uses nothing of it installs, after the one it requires.
+- Bytes changed under the same folder, read by another fresh core: the pack that passed is refused with one issue, the
+  refused one installs, and the one written again 18 wide installs.
+- The `packs` reply holds no `counts`, each row's `checks` is 1 in every fresh core, and nothing is written to the
+  store's folder.
+- A world with `"planted": "esc_to_root"` is taken, and its `packs` rows are those of a core without it. A world with
+  `"planted": "takes_row_of_another_digest"` answers `{"ok":false,"code":"bad_input"}`.
+- `fingerprint` answers in canvas mode: `{"fingerprint":{"backend":"vello_cpu","environment":"vello_cpu/vello_cpu
+  0.3/macos/cpu","build":"<64 hex digits>"},"core":"core@0.0.0","set_digest":"<64 hex digits>"}`.
+
+The shipped library pack of ac3's third test, `deepbuild/lanes@1.0.0`:
+- A core with no pack leaves its evidence store empty. A core that checks this pack leaves 10 objects there, so its
+  check keeps evidence an empty store lacks. Its first reply took 1.1 s.
+
+The release's 21 packs, on a fresh core, at a load of 55 to 58:
+- The first `packs` reply came 10.0 s after the core's start, and 10.8 s and 8.8 s in two more cores: 21 rows, all
+  installed, each `checks` 1.
+- `deep_kinds list` is 19 pages, 8.8 KB to 120.9 KB of JSON each, and takes 2.2 to 2.4 s to page whole.
+- Two fresh cores asked what ac1 asks (`packs`, the whole listing, `packs`) give listings equal page for page, and
+  rows equal once `checks` is taken out of each (it is 1 in both). So criterion 1's equality across two processes
+  holds where both run every check, and a difference on the change is the change's.
+
+The hub of ac4-hub (hub.mjs), in a home of the probe's own:
+- `deep hub run` starts and `deep mcp`, started by hand, answers `deep_kinds list` 8.2 s after it was asked (14.9 s
+  in the test's own run), inside the 55 s `deep mcp` gives a call, so the call was asked once.
+- The hub's root then holds 310 files. With one row of the probe's own put in `packs/checked/`, marked with a key the
+  probe made, forger.mjs's search read all 310, tried 356 things that read as 32 bytes, and found no key, in 0.1 s.
+  With that key then written into a JSON file under the root, it found it, naming the file and "64 hex digits".
+
+What the base never reaches of criterion 6's files:
+- A core written its world and a `packs` call at once answers both in order; its first reply came 158 ms after its
+  start with one test pack.
+- The perf lane's judge, in a child process as ac6-first-reply runs it, answered INCONCLUSIVE for five runs of about
+  150 ms: "a reading, not a budget result: off the reference Macs (…): thermal state is "fair", not "nominal"; load 61
+  at a run's start or end is above the 18 cores". The suite's judge then reads INCONCLUSIVE for a dev build and for a
+  release build alike.
+- The lane's validator, in a child process as ac6-task runs it, answers `valid` for the base's benchmarks/budgets.json
+  with README.md's example task added, against the base's own file, and "invalid margin" for that task with a margin
+  below 0. The probe ran no git; the test's two git commands were not run, since the test fails before them.
+
+## Not run, and not checked
+
+- No test was seen to pass: the base has nothing of the work. That each test can pass, and that each fails on one
+  fault, was seen in phase 1 on a stand-in for the core, not on the program (README.md, What was run).
+- The three planted cores (above).
+- ac6-first-reply past its first step: no time was taken, the memory reader (benchmarks/process-reader.mjs) was not
+  loaded, and no release build was there to choose.
+- ac4-hub's search with rows of the hub's own to try a key on: the base's hub keeps none, so the test's own search
+  tried no key. The probe above stands for it.
+- The binaries' own hashes. After the runs, some time between 06:18 and 08:33, <checkout>/target was removed by
+  something outside this job; nothing this job ran removes it. Every run and probe above had ended by then. The
+  build is named above by the source digest the core gave.

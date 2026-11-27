@@ -1150,20 +1150,17 @@ impl<'a> Hub<'a> {
         dir: &std::path::Path,
         session: Option<&str>,
     ) -> Value {
-        let sealed = &self.startup.sealed;
-        let sandbox = &mut self.sandbox;
-        let evidence = &self.scenario.evidence;
         let reply = crate::packs::install(
             &mut self.packs,
             &mut self.pack_rows,
-            sealed,
-            id,
-            dir,
-            self.scenario.pack_planted.as_deref(),
-            &mut |manifest, pack| {
-                let (rows, mut issues) = sandbox.vet(manifest, pack, sealed);
-                issues.extend(crate::packs::kind_meshes(pack, sealed, evidence));
-                (rows, issues)
+            &self.startup.sealed,
+            &mut self.sandbox,
+            crate::packs::Offer {
+                id,
+                dir,
+                twin: self.scenario.pack_planted.as_deref(),
+                evidence: &self.scenario.evidence,
+                kept: self.scenario.pack_checks.as_ref(),
             },
         );
         // #200: a pack installed through a session is that agent's own: its entries are listed
