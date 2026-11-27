@@ -1627,3 +1627,14 @@ timed.push('tests/acceptance/3467/players.test.ts');
 Object.assign(redrafted, Object.fromEntries([['1113', 'cli'], ['3238', 'serial'], ['3238', 'no-grant'], ['3240', 'line'], ['3334', 'stall'], ['3334', 'far-stalled'], ['3567', 'grant'], ['2820', 'failures']]
   .map(([issue, file]) => [`tests/acceptance/${issue}/${file}.test.mjs`, `tests/acceptance/${issue}-redraft-3549/`])));
 byHand.push(...Object.keys(redrafted).filter((path) => redrafted[path].endsWith('-redraft-3549/')));
+
+// #3507's folder (blind) runs alone by its lane.json: its files build deep-show and deep-gpu and draw on Metal.
+// ac3-timing.test.mjs times the geometry pass against the merge base's on the reference Mac, where a pass changed.
+timed.push('tests/acceptance/3507/ac3-timing.test.mjs');
+
+// #3507's criterion 2 was reworded by the owner (2026-11-26: the class fixtures count from 1 to 2 a covered pixel).
+// ac2-classes.test.mjs, written for the criterion as it was, is kept as written, by hand only; its blind redraft
+// runs in its place, alone: it draws on Metal under the machine's GPU lease.
+Object.assign(redrafted, { 'tests/acceptance/3507/ac2-classes.test.mjs': 'tests/acceptance/3507-redraft-ac2/' });
+byHand.push('tests/acceptance/3507/ac2-classes.test.mjs');
+alone.push('tests/acceptance/3507-redraft-ac2/');
