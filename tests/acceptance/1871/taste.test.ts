@@ -1,13 +1,3 @@
-// AC4 #1871.f656387e: Shown to you: screenshots of the 3D scene on the image tooth beside #149's 2D page, taken by the
-// check run from `deep-gpu run`, are attached to the PR and shown to you in the session. Whether they look right is one
-// taste call, recorded; without it the run stays INCONCLUSIVE, never PASS, and no criterion above reads a picture to
-// judge it.
-//
-// One run draws both pictures through `deep-gpu run`, the 3D scene through the same `view3d` call AC1 makes and #149's
-// 2D page (its pressure figure, on the same tooth under the same look) through `film2d`, and writes them to
-// `docs/evidence/1871/` byte for byte the renderer's PNGs, printing each SHA-256 (README: The taste call). It then reads
-// `tests/acceptance/1871/TASTE.json`: none, or one made on other pictures, is INCONCLUSIVE; `looks_wrong` fails;
-// `looks_right` on exactly these passes. No other test reads these pictures or the call.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
