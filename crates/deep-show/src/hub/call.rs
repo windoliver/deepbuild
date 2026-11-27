@@ -519,7 +519,6 @@ pub struct Scenario {
     pub delays: Vec<crate::stepped::Delay>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
-    /// #3611: the hub's store of kept pack check results and its launch key (`pack_checks`).
     pub pack_checks: Option<crate::packs::checked::Store>,
     /// #518: the encode tools the hub holds from installed plug-ins, in registration order.
     pub job_tools: Vec<crate::export::tools::Tool>,

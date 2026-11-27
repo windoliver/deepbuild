@@ -145,7 +145,6 @@ export class HubCanvas {
   private async canvasWorld(): Promise<CanvasWorld> {
     const store = this.packsNeeded ? this.options.libraries()?.packs : undefined;
     const packs = await store?.installed(this.canvas());
-    // #3611: with its packs the core gets the store of kept check results and this launch's key, never a world file's.
     const file: Obj = { ...this.worldFile.read(), packs: packs ?? [], pack_checks: store?.checks };
     // The hub slot check.kind@1's fills deep_kinds lists: each check kind a plug-in registered, with its kit at install (#1415).
     const host = this.options.extensions();

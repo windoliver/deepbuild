@@ -116,10 +116,6 @@ export async function exportCommand(args: readonly string[]): Promise<number> {
     rmSync(evidence, { recursive: true, force: true });
   }
 }
-/**
- * Where a canvas core this hub starts keeps each pack check's result, and the key that marks its rows (#3611; canvas
- * primitives, Pack: a check's result, kept): the world's `pack_checks`.
- */
 export interface PackChecks { dir: string; key: string }
 
 /**

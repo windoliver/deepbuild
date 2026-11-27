@@ -26,8 +26,6 @@ pub struct Row {
     pub layouts: Vec<Value>,
 }
 
-/// One offer of a pack version to the store: its folder, the twin a scenario plants, the
-/// evidence store, and the store's kept check results where the hub named them (#3611).
 pub struct Offer<'o> {
     pub id: &'o str,
     pub dir: &'o Path,
@@ -65,13 +63,10 @@ pub fn lib_check(version: &str, check: impl FnOnce() -> Value) -> Value {
     reply
 }
 
-/// The logic module's reply this process holds for `version`, which a kept check result keeps
-/// (#3611).
 pub fn lib_kept(version: &str) -> Option<Value> {
     LIB_CHECKS.with(|c| c.borrow().get(version).cloned())
 }
 
-/// Holds the logic module's reply for `version`, as its check left it.
 pub fn lib_take(version: &str, reply: Value) {
     LIB_CHECKS.with(|c| c.borrow_mut().insert(version.to_string(), reply));
 }
@@ -112,10 +107,6 @@ pub fn manifest_of(reference: &str) -> Option<Value> {
 
 /// Installs one pack version: the folder read, the pack check run once, the store's row kept.
 /// The reply is `install_pack`'s.
-///
-/// #3611: where the hub named its store of kept check results, a version this process hasn't
-/// admitted is taken from its row when this core may take it, and no part of its check runs;
-/// any other row runs the check, whose result replaces it.
 pub fn install(
     packs: &mut Packs,
     rows: &mut Vec<Row>,
@@ -152,9 +143,6 @@ pub fn install(
                 crate::math_twins::twin(planted, id, &mut manifest);
             }
             let version = manifest["version"].as_str().unwrap_or_default().to_string();
-            // A row names one version's bytes beside the versions it requires. A twin, a version
-            // the store already holds (a republish is refused for what the store holds) and one
-            // with a provider (run against the layouts of the packs beside it) keep none.
             let held = packs.get(&format!("{id}@{version}")).is_some();
             let row = kept
                 .filter(|_| twin.is_none() && known.is_none() && !held)
@@ -168,8 +156,6 @@ pub fn install(
                     Some((None, found))
                 }
                 false => {
-                    // A planted core's row may hold nothing a check left, or what another
-                    // digest's check left: its verdict stands with nothing admitted.
                     let core = (found.left.get("core"))
                         .and_then(|left| packs.admit_kept(&manifest, sealed, left).cloned());
                     let pack = core.and_then(|pack| {

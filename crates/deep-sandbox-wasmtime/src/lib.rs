@@ -82,8 +82,6 @@ static REWRITES: AtomicU64 = AtomicU64::new(0);
 #[cfg(not(target_arch = "wasm32"))]
 static RUNS: AtomicU64 = AtomicU64::new(0);
 
-/// #3611: how many programs this process has rewritten and how many calls into a program it has
-/// made, so a pack check taken from the store is seen to add neither.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn rewrites_and_runs() -> (u64, u64) {
     (

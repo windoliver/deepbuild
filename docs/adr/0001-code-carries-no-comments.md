@@ -45,6 +45,7 @@ One page per module topic. Each decision names the file and the symbol it govern
 - [0003](0003-gate-checkouts-and-base-runs.md): the gate's temporary checkouts and base runs
 - [0004](0004-gate-lanes-holds-and-slots.md): the gate's lanes, holds and slots
 - [0005](0005-gate-floor-verdict-and-measures.md): the gate's floor, a claim's verdict record, price and size
+- [0006](0006-kept-pack-checks.md): a pack check's result kept in the store, what a taken row gives a core, and its counts
 
 ## Open
 

@@ -1362,7 +1362,6 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #466's boil and blur in deep-show's frames.
                 || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
                 || caption_design::PLANTED.contains(p) || scene3d::PLANTED.contains(p) || kit::lease::PLANTED.contains(p) || packs::PLANTED.contains(p)
-                // #3611: the cores that take a kept pack check they must not.
                 || packs::checked::PLANTED.iter().any(|(name, _)| name == p)
         })
         .map(str::to_string);

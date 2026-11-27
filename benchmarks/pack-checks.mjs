@@ -1,10 +1,3 @@
-// #3611's budget, the `pack-checks` mode of benchmarks/canvas.mjs (task `canvas-pack-checks`): a fresh canvas core's
-// first reply with the release's packs, on a store of kept check results an earlier core filled. A run is one fresh
-// `deep-show canvas` of a release build, given the world a hub gives it (each folder of packs/ that holds a pack.json,
-// an evidence folder, and `pack_checks`: the store's folder and a key made for this command), then deep_kinds'
-// listing and `packs`. `first_reply_ms` runs from just before the process starts to the listing's answer. One core
-// that isn't timed fills the store, then one warm-up run and five. A timed core that ran any part of a pack check is
-// no reading of a filled store, so the command fails, naming what it ran.
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -14,7 +7,6 @@ import { performance } from 'node:perf_hooks';
 import { createInterface } from 'node:readline';
 import { RUNS } from './canvas-judge.mjs';
 
-/** One fresh core given `lines`: each answer with the ms since just before the process started. */
 function core(binary, lines) {
   return new Promise((done, fail) => {
     const started = performance.now();

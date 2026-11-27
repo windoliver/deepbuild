@@ -37,7 +37,6 @@ pub struct Host {
     pub links: u64,
     pub rewrites: u64,
     pub runs: u64,
-    /// #3611: the registry kits its half of a pack's check ran.
     pub kits: u64,
     /// Each program's check and rewrite, by its sha256 and role: once per program.
     rewritten: BTreeMap<(String, String), Result<Rewritten, Vec<Refusal>>>,
@@ -261,7 +260,6 @@ impl Host {
         (rows, issues)
     }
 
-    /// What a passed check of a version is kept under in this process.
     fn vet_key(&self, manifest: &Value, pack: &Pack) -> VetKey {
         // The other packs this host holds are in the key: a provider's output may name one's layout.
         let others: Vec<String> = self
@@ -279,11 +277,6 @@ impl Host {
         )
     }
 
-    /// #3611: what a passed check of this version left in the host, as the store's row keeps it
-    /// (Pack: a check's result, kept): its layouts' rows, its program entries, each rewritten
-    /// program's hash, its data verdicts, its registry entries with their kits, the hashes it
-    /// kept in the evidence store and the logic module's reply. `None` when this process holds
-    /// no passed check of it.
     pub fn left(&self, manifest: &Value, pack: &Pack) -> Option<Value> {
         let key = self.vet_key(manifest, pack);
         let v = VETTED.with(|c| c.borrow().get(&key).cloned())?;
@@ -303,9 +296,6 @@ impl Host {
         }))
     }
 
-    /// #3611: admits the version with what a kept check left ([`Host::left`]) and runs nothing:
-    /// a program is rewritten again when a piece first runs it. False when what was left doesn't
-    /// fit this build's registries, and the check runs.
     pub fn take(&mut self, manifest: &Value, pack: &Pack, sealed: &Sealed, left: &Value) -> bool {
         let pairs = |key: &str| -> Option<Vec<((String, String), Value)>> {
             let list = left.get(key)?.as_array()?.iter();
@@ -358,17 +348,13 @@ impl Host {
             crate::packs::lib_take(&key.1, reply.clone());
         }
         VETTED.with(|c| c.borrow_mut().insert(key, v));
-        // The host is given what the check left as a later host of the checking process is.
         self.vet(manifest, pack, sealed).1.is_empty()
     }
 
-    /// #3611: the refusal this host holds of a version its half of the check refused, which a
-    /// document naming one of its providers fails with.
     pub fn refusal(&self, key: &str) -> Option<&Vec<Value>> {
         self.refused.get(key)
     }
 
-    /// Holds a kept refusal's issues as [`Host::refusal`] gave them, when its half refused.
     pub fn refuse_kept(&mut self, key: &str, refusal: &Value) {
         if let Some(issues) = refusal.as_array() {
             self.refused.insert(key.to_string(), issues.clone());

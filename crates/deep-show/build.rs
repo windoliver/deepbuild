@@ -52,8 +52,6 @@ fn main() {
         .unwrap_or_default();
     println!("cargo:rustc-env=DEEP_TOOLCHAIN={toolchain}");
     println!("cargo:rustc-env=DEEP_SOURCE_DIGEST={}", source_digest(&dir));
-    // Issue #3611: the Cargo features beside the shipped set, which a kept pack check names as
-    // the wrong programs its build was compiled with.
     let mut features: Vec<String> = std::env::vars()
         .filter_map(|(name, _)| Some(name.strip_prefix("CARGO_FEATURE_")?.to_lowercase()))
         .filter(|f| f != "default" && f != "full")

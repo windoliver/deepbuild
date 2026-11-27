@@ -308,9 +308,6 @@ pub struct Pack {
 }
 
 impl Pack {
-    /// What its check left beside the manifest's own bytes (#3611; Pack: a check's result, kept):
-    /// each registry entry's kit result and its twin's, and each kind's kit result with its
-    /// counts and meshes. [`Packs::admit_kept`] admits the version from it.
     pub fn left(&self) -> Value {
         let entries: Vec<Value> = self.entries.iter().map(|e| {
             json!({"registry": e.registry, "name": e.name, "kit": e.kit.kept(), "twin": e.twin.as_ref().map(|t| t.kept())})
@@ -373,18 +370,12 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
     run_check(manifest, sealed, planted, None, &mut Ran::default())
 }
 
-/// What a pack's check ran (#3611; Pack: a check's result, kept): its kits, one per registry
-/// entry, per entry's twin, per kind and per census, and its modules' field checks. A version
-/// admitted from a kept result adds nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Ran {
     pub kits: u64,
     pub fields: u64,
 }
 
-/// The pack check, counting what it runs into `ran`. With `left`, what an earlier check of the
-/// same bytes on the same build left ([`Pack::left`]), it takes each entry's kit result from
-/// there and runs no kit and no field check.
 fn run_check(
     manifest: &Value,
     sealed: &Sealed,
@@ -758,7 +749,6 @@ fn check_entries(
                     v
                 }
             };
-            // #3611: a kept result holds the entry's kit and its twin's; one it lacks runs both.
             let kept = left.and_then(|l| {
                 let mut held = l["entries"].as_array()?.iter();
                 let e = held.find(|e| e["registry"] == **name && e["name"] == *entry)?;
@@ -1663,7 +1653,6 @@ pub struct Packs {
     refused: BTreeMap<String, Vec<Issue>>,
     /// How often the pack check ran per `owner/name@version`: once, as a version is checked once.
     checks: BTreeMap<String, u32>,
-    /// What those checks ran (#3611).
     pub ran: Ran,
     /// The versions uninstalled while something names them: kept, and taking no new instance.
     retired: BTreeSet<String>,
@@ -1772,15 +1761,10 @@ impl Packs {
         self.by_id.entry(pack.id.text()).or_insert(pack)
     }
 
-    /// Admits a version with what an earlier check of the same bytes on the same build left
-    /// ([`Pack::left`]), running no kit and no field check (#3611; Pack: a check's result, kept).
-    /// `None` when `left` doesn't fit the manifest or the store already holds the version: the
-    /// caller runs the check.
     pub fn admit_kept(&mut self, manifest: &Value, sealed: &Sealed, left: &Value) -> Option<&Pack> {
         let key = manifest_id(manifest).filter(|k| !self.by_id.contains_key(k))?;
         let mut ran = Ran::default();
         let pack = run_check(manifest, sealed, self.planted, Some(left), &mut ran);
-        // An entry the result didn't hold ran its kit: counted, and the whole check runs.
         self.ran.kits += ran.kits;
         let mut pack = pack.ok().filter(|_| ran == Ran::default())?;
         deps::cycle(self, &pack).ok()?;
@@ -1797,8 +1781,6 @@ impl Packs {
         Some(&*self.by_id.entry(key).or_insert(pack))
     }
 
-    /// A kept refusal's issues (#3611): those for a canvas module this build lacks are held as
-    /// [`Packs::admit`] holds them, so a document that names the version is refused the same way.
     pub fn refuse_kept(&mut self, key: &str, issues: &[Value]) {
         let missing: Vec<Issue> = issues
             .iter()

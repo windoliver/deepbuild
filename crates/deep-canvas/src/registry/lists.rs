@@ -181,15 +181,11 @@ impl KitResult {
         self.rules.iter().all(|r| r.pass)
     }
 
-    /// What a pack's kept check result holds of it (#3611; Pack: a check's result, kept): each
-    /// rule's verdict, with why and what it read.
     pub fn kept(&self) -> Value {
         let rule = |r: &RuleResult| json!({"rule": r.rule, "pass": r.pass, "why": r.why, "report": r.report});
         json!({"entry": self.entry, "rules": self.rules.iter().map(rule).collect::<Vec<_>>()})
     }
 
-    /// The result [`KitResult::kept`] wrote, each rule named as `kit` names it; `None` when it
-    /// holds a rule that is none of `kit`'s, so the kit runs.
     pub fn from_kept(kit: &[KitRule], kept: &Value) -> Option<KitResult> {
         let rules = kept.get("rules")?.as_array()?.iter().map(|r| {
             let of = kit.iter().find(|k| r["rule"] == k.rule)?;

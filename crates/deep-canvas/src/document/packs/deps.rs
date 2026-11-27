@@ -175,15 +175,11 @@ pub(super) fn cycle(packs: &Packs, pack: &Pack) -> Result<(), Vec<Issue>> {
     Err(vec![cycle_issue("requires/packs".into(), found, &what)])
 }
 
-/// Every version `manifest`'s `requires.packs` reaches, through other packs, each with the digest
-/// `packs` holds it at, or with none for a version the store lacks (#3611: what a kept check
-/// result names beside the pack's own bytes).
 pub fn reached(packs: &Packs, manifest: &Value) -> BTreeMap<String, String> {
     let listed = member(manifest, "requires").and_then(|r| r.get("packs"));
     let mut next: Vec<String> = (listed.and_then(Value::as_array).into_iter().flatten())
         .filter_map(|d| d.as_str().map(String::from))
         .collect();
-    // A pack's full ID, `owner/name@version`, names it as its name does (#142).
     let named = |dep: &str| match dep.rsplit_once('@') {
         Some((name, v)) => format!("{}@{v}", name.rsplit_once('/').map_or(name, |(_, n)| n)),
         None => dep.to_string(),

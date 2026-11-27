@@ -90,11 +90,6 @@ export interface Refusal { ref: string; digest: string; issues: unknown[]; check
 export class Packs {
   private readonly held = new Map<string, PackVersion>();
   private readonly folder: string;
-  /**
-   * The store of kept check results and this launch's key, which a canvas core gets only on its input pipe. The key
-   * is made here and lives in memory alone: a command's child can write every file under the root, so a key kept in
-   * one would let it write a row a core takes. A hub started again makes a new key, and its first core checks again.
-   */
   readonly checks: PackChecks;
   /** The release's packs, read, checked and installed once a process, as the canvas core starts (#1720). */
   private shipping?: ReturnType<typeof releasePacks>;
