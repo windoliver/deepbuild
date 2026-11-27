@@ -1654,3 +1654,5 @@ timed.push('tests/acceptance/3617/ac2-onepass.test.ts');
 // three tests over unchanged, runs in its place.
 Object.assign(redrafted, { 'tests/acceptance/138/manifest.test.ts': 'tests/acceptance/138-redraft-3648/' });
 byHand.push('tests/acceptance/138/manifest.test.ts');
+// Its files build deep-show's full set, and with test-kit-formula, into target/debug, as #138's own folder does.
+alone.push('tests/acceptance/138-redraft-3648/');
