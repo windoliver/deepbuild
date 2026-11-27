@@ -160,7 +160,7 @@ fn hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_runnin
             break;
         }
         bursts += 1;
-        let writers: Vec<_> = (0..4)
+        let mut writers: Vec<_> = (0..4)
             .map(|w| {
                 let _ = std::fs::remove_file(home.join(format!("busy-{w}.bin")));
                 Command::new("dd")
@@ -171,6 +171,15 @@ fn hooks_spooling_on_a_stalled_disk_leave_one_sync_and_the_spool_s_makers_runnin
                     .unwrap()
             })
             .collect();
+        let spawned = std::time::Instant::now();
+        while spawned.elapsed() < std::time::Duration::from_secs(60)
+            && writers.iter_mut().enumerate().any(|(w, writer)| {
+                !home.join(format!("busy-{w}.bin")).exists()
+                    && matches!(writer.try_wait(), Ok(None))
+            })
+        {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         std::thread::sleep(std::time::Duration::from_millis(wait));
         let hooks: Vec<_> = (0..20)
             .map(|n| {
