@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Generates skills/deepbuild-canvas/SKILL.md (#508), the one skill an outside agent learns our documents from
 // (technical design: For an outside agent), from the kinds' schemas: the canvas core's own listing as
-// `deep-show kinds --dump` writes it (kinds.dump@1), the document keys the core reads, craft@1's table
-// (crates/deep-canvas/src/craft.json) and the gallery's figure (crates/deep-show/gallery/figure.json). Never edit the
+// `deep-show kinds --dump` writes it (kinds.dump@1), the document keys the core reads, the craft line
+// scripts/skill.mjs gives both skills (#3519) and the gallery's figure (crates/deep-show/gallery/figure.json). Never edit the
 // skill by hand. --check exits 1 when the skill on disk isn't what this writes, naming the first differing line, or
 // when it names a name@major the listing doesn't hold.
 //   node scripts/canvas-skill.mjs [--check]
@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CRAFT_LINE } from './skill.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = 'skills/deepbuild-canvas/SKILL.md';
@@ -78,8 +79,6 @@ const ENVELOPE = {
   packs: 'the packs it names, such as the pack of a piece recipe.',
   audit: '{"support": {"floating": ["<item ID>"]}}: the items the geometry audit takes as held in place, such as a floor.',
 };
-/** The craft@1 checks, as the checks themselves read them (#409). */
-const CRAFT = JSON.parse(read('crates/deep-canvas/src/craft.json'));
 /** A field in brief: its name, then its type (unless free JSON), unit, [min, max] and = default (unless none). */
 const fieldLine = (f) => {
   const type = f.type === 'json' ? (f.forms ?? []).join(' | ') : f.list ? `[${f.type}]` : f.type;
@@ -104,7 +103,7 @@ export function canvasSkill(dump) {
   return [
     '---',
     'name: deepbuild-canvas',
-    `description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild ${version}'s kinds' schemas, module set ${dump.module_set}; never edit by hand.`,
+    `description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and where to read the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild ${version}'s kinds' schemas, module set ${dump.module_set}; never edit by hand.`,
     `version: ${version}`,
     '---',
     '',
@@ -145,11 +144,9 @@ export function canvasSkill(dump) {
     '',
     'An effect@1 item draws an explainer effect at its anchor: {"kind": "effect@1", "params": {"kind": "<effect kind>", "anchor": "<item ID>", "axis": [x, y, z], "<effect kind>": {…its own params}}}. Each kind\'s params sit under its own name; the kinds and their params are under effect@1 in the kinds below. A driver can set one of them from a control, such as "items/plume/params/plume/reach". An effect never feeds a check.',
     '',
-    `## Craft checks (${CRAFT.pack})`,
+    '## Craft checks',
     '',
-    'A film\'s brief names the checks it wants; each runs only when named and never passes a film on its own.',
-    '',
-    ...CRAFT.checks.map((c) => `- ${c.name}. ${c.description} Threshold: ${c.threshold}. Fix: ${c.fix}`),
+    CRAFT_LINE,
     '',
     '## Example: a figure that passes the checks',
     '',
@@ -186,8 +183,7 @@ export function drift(dump, onDisk) {
     while (a[at] === b[at]) at++;
     out.push(`${OUT} differs from what scripts/canvas-skill.mjs writes at line ${at + 1}: it has ${JSON.stringify(a[at] ?? '(the end)')}, the generator writes ${JSON.stringify(b[at] ?? '(the end)')}`);
   }
-  // craft@1's own words name packs, which the listing doesn't hold; #409's suite pins those.
-  const listed = new Set([...dump.registries.flatMap((r) => [r.name, ...r.entries.map((e) => e.name)]), ...namedKinds(JSON.stringify(CRAFT))]);
+  const listed = new Set(dump.registries.flatMap((r) => [r.name, ...r.entries.map((e) => e.name)]));
   for (const name of namedKinds(onDisk ?? '')) if (!listed.has(name)) out.push(`${OUT} names ${name}, which the kinds listing doesn't hold`);
   return out;
 }
