@@ -5,9 +5,6 @@ import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-// The guard's approvals and the stop's watcher, beside this script in a checkout. A copy of perf and this script alone,
-// as a test's fixture holds, has neither: it reads no approvals, so a budget's raise there is refused, as it is without
-// an approval, and its captured run is stopped by its process group alone, naming nothing.
 const beside = (file) => existsSync(new URL(file, import.meta.url));
 const approvals = beside('./proof-approvals.mjs') ? await import('./proof-approvals.mjs') : null;
 const stop = beside('./proof-stop.mjs') ? await import('./proof-stop.mjs') : null;
