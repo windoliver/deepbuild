@@ -110,11 +110,6 @@ const THREAD_REPLY = /\/pulls\/\d+\/comments\/\d+\/replies\b/;
 export class Holds {
   constructor(private readonly o: HoldOptions) {}
 
-  /**
-   * The planted sorter's rule for a question; none unless a test set one. An absolute path names a file with its rule
-   * and the questions it answers "proceed"; any other value is the rule itself, and answers every question so (#321
-   * AC1's blind draft, #321.70212996).
-   */
   private sorted(question: string): string | undefined {
     if (!this.o.sorter || !question) return undefined;
     if (!isAbsolute(this.o.sorter)) return this.o.sorter;
