@@ -1,7 +1,7 @@
 // Guards on real pi: deep-hook, the one matcher, reads each call before it runs. A matched entry's call never runs and
 // its name is on the record; with the hub away a fail-closed entry still holds; nothing else is touched.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 // `deep setup` runs for real on a temp home, as tests/acceptance/19 does.
 import { createServer } from 'node:net';
 import { join } from 'node:path';
@@ -214,6 +214,39 @@ describe('guards on a pi call', () => {
     expect(end.isError, said(end)).toBe(true);
     expect(said(end)).toContain('no-kill-by-name');
     expect(existsSync(join(w.cwd, 'ran.txt'))).toBe(false);
+  }, 90_000);
+
+  async function heldForRules(spoil: (file: string) => void, why: string, removed = false): Promise<void> {
+    const w = await world([bash(`pkill -f '[d]eepbuild-no-such-${word()}'; touch ran.txt`)]);
+    w.hub.child.kill();
+    await new Promise((done) => w.hub.child.once('exit', done));
+    spoil(join(w.home, '.deepbuild/rules.json'));
+    const config = join(w.home, '.deepbuild/config.json');
+    const set = readFileSync(config);
+    const hub = await startHub(w.home);
+    writeFileSync(config, set);
+    const file = join(w.home, '.deepbuild/rules.json');
+    if (removed) {
+      await waitFor(() => existsSync(file), 10_000, 'the product-store entry');
+      rmSync(file);
+    }
+    const client = await Client.open(hub);
+    const end = await run(w.pi);
+    if (removed && existsSync(file)) throw Error('INCONCLUSIVE: the hub read its product-store rules.json before it was removed and put it back; rerun');
+    expect(end.isError, said(end)).toBe(true);
+    expect(said(end)).toContain(`rules.json ${why}`);
+    expect(existsSync(join(w.cwd, 'ran.txt')), 'the held command ran').toBe(false);
+    await before(client, w.pi.session);
+    const closed = await waitFor(async () => (await client.events()).find((e) => e.kind === 'tool.after' && e.session === w.pi.session), 15_000, 'tool.after');
+    expect(closed.data.outcome).toBe('failed');
+  }
+
+  it('with the hub up, a rules.json cut short holds the call, naming the file and why', async () => {
+    await heldForRules((file) => writeFileSync(file, readFileSync(file).subarray(0, 40)), 'isn\'t JSON');
+  }, 90_000);
+
+  it('with the hub up, a rules.json removed after setup that the hub never read holds the call', async () => {
+    await heldForRules((file) => rmSync(file), 'was removed after setup', true);
   }, 90_000);
 
   it('in a home with no setup, a hub that refuses a call is still obeyed', async () => {
