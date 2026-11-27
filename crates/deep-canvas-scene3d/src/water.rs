@@ -1194,7 +1194,7 @@ mod tests {
             });
             crate::scene::evaluate(&doc, 0, &look, &mut crate::label::Labels::new())
         };
-        let refused = on([400.0, 99.0]).err().expect("99 m is under 100 m");
+        let refused = on([400.0, 99.0]).expect_err("99 m is under 100 m");
         assert_eq!(refused.code, "out_of_range");
         assert!(
             refused
@@ -1203,7 +1203,7 @@ mod tests {
             "{}",
             refused.path
         );
-        let scene = on([400.0, 100.0]).ok().expect("100 m holds a sea");
+        let scene = on([400.0, 100.0]).expect("100 m holds a sea");
         let rows = &scene.water.as_ref().unwrap().sea.as_ref().unwrap().rows;
         assert_eq!(rows.len(), SEA_WAVES);
         assert!(rows
