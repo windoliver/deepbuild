@@ -35,11 +35,13 @@ node node_modules/typescript/bin/tsc --noEmit -p tests/acceptance/3544/tsconfig.
 rm -rf tests/acceptance/3544/node_modules                                              # vitest's cache
 ```
 
-No run has timed the suite (How the tests were checked). By its holds, the five hub tests should take about two
-minutes on a correct program: three of them wait out ten pages held a second each, and the record is built once, in
-about the time of 47,500 appends. `budget.test.ts` takes the time of `record-replay-100k`. With no built CLI or no
-deep-hook every hub test fails `BLOCKED: …` before it starts anything, never a pass. `lane.json` runs the folder
-alone (`timing:`): the tests judge `deep hub start` and three commands against a 2 s wait on the real clock.
+On the base the suite takes 9.8 s at a one-minute load of 16 (`BASE-FAILURE.txt`): the base holds no page, so each
+test ends within two seconds, and the record's 47,500 appends are under 2 s of it (4.2 s in a scratch run at a load
+of 55). No run has timed it on a correct program. By its holds, the five hub tests should then take about two
+minutes: three of them wait out ten pages held a second each. `budget.test.ts` then takes the time of
+`record-replay-100k`. With no built CLI or no deep-hook every hub test fails `BLOCKED: …` before it starts anything,
+never a pass. `lane.json` runs the folder alone (`timing:`): the tests judge `deep hub start` and three commands
+against a 2 s wait on the real clock.
 
 ## The setup
 
@@ -183,14 +185,14 @@ Nothing else is new. The record's file (`<root>/ledger.db`), the hook protocol, 
 
 All five hub tests are in `rebuild.test.ts`, one tagged test each, no subtests; the sixth is `budget.test.ts`.
 
-| Criterion | Test | What it holds | On the base, as read from its code (not yet run) | Wrong program |
+| Criterion | Test | What it holds | On the base, as run (`BASE-FAILURE.txt`) | Wrong program |
 |---|---|---|---|---|
-| `#3544.93bc058e` the record with one projection's columns planted to differ, the start's wait 2 s, a fold that holds each of ten pages 1 s: `deep hub start` prints the rebuild sentence with a count that rises, and exits 0 once the core answers | first | `deep hub start --root` with the wait `2000` and the fold `page-1s`, run to its end (150 s at most). It printed at least one rebuild sentence; it exited 0; each sentence names more events replayed than the one before (so none is printed twice for one count); at least 5 of the ten pages' counts were printed; and `hub.health` read right after the exit answers with `start`, `pid` and no `rebuilding` | Fails at the first assertion: the base reads neither setting, replays in seconds, prints `The hub is up.` and no rebuild sentence | `start-waits-once`: the merge base's one wait, under the test's 2 s. It exits 3 saying the core didn't start, and the exit assertion fails quoting that line. This holds the criterion's sentence about the merge base, which the real base can't show |
-| `#3544.efcb2f1f` the same record, a fold that never returns from its third page: `deep hub start` exits 3 one wait after the count last moved, naming the position | second | The wait `2000` and the fold `page-3-never`, the command given 30 s. It printed the rebuild sentence; it exited before the deadline; it exited 3; `hub.health` then reads `rebuilding {replayed: 10000, events: 47500}`; it had printed the sentence for 10,000; its last line names 10,000; it exited at least 1,750 ms and under 4,000 ms after that sentence came; its last line came at least 1,750 ms after that sentence; and the record's file still holds `commits` with the planted column (Scope: the rebuild is not split into several commits) | Fails at the first assertion, as above | `start-waits-while-socket-answers`: never exits, and the deadline assertion fails naming the 30 s |
-| `#3544.916857a5` during the replay `deep hub status`, `deep doctor` and `deep` each report rebuilding with the same two counts at one reading, within 2 s, and none prints a count of asks | third | The fold `page-3-never`; once `deep hub start` has printed the sentence for 10,000 (or ended), `hub.health` reads `rebuilding {replayed: 10000, events: 47500}`. Then the three commands run one after another, each to its end (30 s at most). `hub.health` reads the same after them (else `BLOCKED`). For each command: it reported rebuilding with exactly the health's two counts; the report came within 2,000 ms of its start; it ended; its whole output holds no count of asks. Each message starts with the command's name | Fails at the health assertion: the base's start ends with the core up and its health holds no `rebuilding` | `status-waits-for-core`: `deep hub status` waits 25 s and exits 3, the criterion's sentence about the merge base, which the real base can't show. `deep-prints-zero-asks`: `deep` prints `0 asks need you` |
-| `#3544.7b62fddb` twenty hooks sent during the replay, one matching a fail-closed entry: nineteen are in the record once each after it, in the order sent, and the one is denied | fourth | With no hub running, deep-hook denies the entry's call with exit 2 and the entry's reason and next step (else `BLOCKED`). The fold `page-1s`, the shipped wait; once `deep hub start` prints a rebuild sentence, `hub.health` holds `rebuilding`. Twenty hooks of one session follow, one after another: nineteen `PreToolUse` request lines, each `echo dhr-hook-<n>` with its own ID, and as the eighth the entry's call through deep-hook. `hub.health` still holds `rebuilding` after the twentieth (else `BLOCKED`). All nineteen were acknowledged; the one was denied, exit 2 with the entry's reason and next step, as with the hub down; `deep hub start` exits 0. One more hook is sent and awaited on the hub's stream of the log. Then the record's file holds, for each of the nineteen in the order sent, one event with its ID and its command once under that ID; their log positions rise in that order, above 47,500 and below the last hook's | Fails at the health assertion, as the third | `drops-acknowledged-hooks`: the first hook's ID is in no event, and the message names it |
-| `#3544.99834caf` after the replay the hub's health holds one reading with the table that was stale, the events replayed and the milliseconds taken, and a second open of the same record rebuilds nothing and adds no reading | fifth | The fold `page-1s`, the shipped wait. `deep hub start` exits 0 and `hub.health` holds no `rebuilding`; its `rebuilds` is a list of one; the reading's `table` is `commits` and its `events` 47,500; its `ms` is a whole number, at least 10,000 (ten pages held 1 s each) and at most the time `deep hub start` itself ran; the record's file holds `commits` with `created` again. The hub is stopped on its token, and `deep hub start` runs again with the same fold: it exits 0, prints no rebuild sentence, and `hub.health` holds no `rebuilding` and the same `rebuilds`, unchanged | Fails at the `rebuilds` assertion: the base's health has no such field | `rebuilds-on-every-open`: the second start prints the rebuild sentence |
-| `#3544.37bd1895` budget: `record-replay-100k` within its margin of the merge base, 20 samples a side | `budget.test.ts` | `benchmarks/budgets.json` is valid against the merge base's (`validateBudgets`); the task keeps the merge base's `command` and `margin` and names the criterion in its `criteria`; its command runs and exits 0 | Fails at the criteria assertion: the task doesn't name it | the merge base |
+| `#3544.93bc058e` the record with one projection's columns planted to differ, the start's wait 2 s, a fold that holds each of ten pages 1 s: `deep hub start` prints the rebuild sentence with a count that rises, and exits 0 once the core answers | first | `deep hub start --root` with the wait `2000` and the fold `page-1s`, run to its end (150 s at most). It printed at least one rebuild sentence; it exited 0; each sentence names more events replayed than the one before (so none is printed twice for one count); at least 5 of the ten pages' counts were printed; and `hub.health` read right after the exit answers with `start`, `pid` and no `rebuilding` | Fails at the first assertion (`rebuild.test.ts:42`): the base reads neither setting, replays within the 1.2 s its start runs, exits 0 and prints `The hub is up.` and no rebuild sentence | `start-waits-once`: the merge base's one wait, under the test's 2 s. It exits 3 saying the core didn't start, and the exit assertion fails quoting that line. This holds the criterion's sentence about the merge base, which the real base can't show |
+| `#3544.efcb2f1f` the same record, a fold that never returns from its third page: `deep hub start` exits 3 one wait after the count last moved, naming the position | second | The wait `2000` and the fold `page-3-never`, the command given 30 s. It printed the rebuild sentence; it exited before the deadline; it exited 3; `hub.health` then reads `rebuilding {replayed: 10000, events: 47500}`; it had printed the sentence for 10,000; its last line names 10,000; it exited at least 1,750 ms and under 4,000 ms after that sentence came; its last line came at least 1,750 ms after that sentence; and the record's file still holds `commits` with the planted column (Scope: the rebuild is not split into several commits) | Fails at the first assertion (`:62`), as above: exit 0 after 1.4 s, no rebuild sentence | `start-waits-while-socket-answers`: never exits, and the deadline assertion fails naming the 30 s |
+| `#3544.916857a5` during the replay `deep hub status`, `deep doctor` and `deep` each report rebuilding with the same two counts at one reading, within 2 s, and none prints a count of asks | third | The fold `page-3-never`; once `deep hub start` has printed the sentence for 10,000 (or ended), `hub.health` reads `rebuilding {replayed: 10000, events: 47500}`. Then the three commands run one after another, each to its end (30 s at most). `hub.health` reads the same after them (else `BLOCKED`). For each command: it reported rebuilding with exactly the health's two counts; the report came within 2,000 ms of its start; it ended; its whole output holds no count of asks. Each message starts with the command's name | Fails at the health assertion (`:101`): the base's start ends with the core up and its health holds no `rebuilding`. The three commands are not reached | `status-waits-for-core`: `deep hub status` waits 25 s and exits 3, the criterion's sentence about the merge base, which the real base can't show. `deep-prints-zero-asks`: `deep` prints `0 asks need you` |
+| `#3544.7b62fddb` twenty hooks sent during the replay, one matching a fail-closed entry: nineteen are in the record once each after it, in the order sent, and the one is denied | fourth | With no hub running, deep-hook denies the entry's call with exit 2 and the entry's reason and next step (else `BLOCKED`). The fold `page-1s`, the shipped wait; once `deep hub start` prints a rebuild sentence, `hub.health` holds `rebuilding`. Twenty hooks of one session follow, one after another: nineteen `PreToolUse` request lines, each `echo dhr-hook-<n>` with its own ID, and as the eighth the entry's call through deep-hook. `hub.health` still holds `rebuilding` after the twentieth (else `BLOCKED`). All nineteen were acknowledged; the one was denied, exit 2 with the entry's reason and next step, as with the hub down; `deep hub start` exits 0. One more hook is sent and awaited on the hub's stream of the log. Then the record's file holds, for each of the nineteen in the order sent, one event with its ID and its command once under that ID; their log positions rise in that order, above 47,500 and below the last hook's | Fails at the health assertion (`:141`), as the third, after deep-hook denied the entry's call with no hub running (`:136` passed). No hook is sent to the hub | `drops-acknowledged-hooks`: the first hook's ID is in no event, and the message names it |
+| `#3544.99834caf` after the replay the hub's health holds one reading with the table that was stale, the events replayed and the milliseconds taken, and a second open of the same record rebuilds nothing and adds no reading | fifth | The fold `page-1s`, the shipped wait. `deep hub start` exits 0 and `hub.health` holds no `rebuilding`; its `rebuilds` is a list of one; the reading's `table` is `commits` and its `events` 47,500; its `ms` is a whole number, at least 10,000 (ten pages held 1 s each) and at most the time `deep hub start` itself ran; the record's file holds `commits` with `created` again. The hub is stopped on its token, and `deep hub start` runs again with the same fold: it exits 0, prints no rebuild sentence, and `hub.health` holds no `rebuilding` and the same `rebuilds`, unchanged | Fails at the `rebuilds` assertion (`:189`): the start exits 0, the health answers with no `rebuilding`, and it has no such field | `rebuilds-on-every-open`: the second start prints the rebuild sentence |
+| `#3544.37bd1895` budget: `record-replay-100k` within its margin of the merge base, 20 samples a side | `budget.test.ts` | `benchmarks/budgets.json` is valid against the merge base's (`validateBudgets`); the task keeps the merge base's `command` and `margin` and names the criterion in its `criteria`; its command runs and exits 0 | Fails at the criteria assertion (`budget.test.ts:33`): the budgets are valid and the task unchanged, and it names `#3440.e9dfc29b` alone. Its command is not run | the merge base |
 
 `twins.json` names the twins and `twins/README.md` says what each breaks, the file its lines change and the
 assertion it fails at. Their `lines.json` are the implementer's to add.
@@ -255,31 +257,59 @@ assertion it fails at. Their `lines.json` are the implementer's to add.
 
 ## How the tests were checked
 
-**The base run was not made: BLOCKED, never a pass.** When the suite was written the base build of this checkout
-(`npm run build --workspaces`, then `cargo build --locked -p deep-hook`) was still waiting in the machine's build
-line, so there was no built CLI, no `dist` for the record package and no deep-hook, and no test could start. There is
-no `BASE-FAILURE.txt` yet; this job is resumed to make the run once the build is there, and adds it then. Until
-that run, these are read from the base's code and not seen:
+**The base run was made once**, on 2026-11-26, on the base `2edb19ff4` built with `npm run build --workspaces` and
+`cargo build --locked -p deep-hook`, under a test grant of the machine's throttle:
 
-- that each of the five hub tests fails on the base at the assertion the table names;
-- that the record builds as the setup says (47,500 `commit.made` events at log positions 1 to 47,500, the hub's core
-  starting on it), and how long that takes;
-- that deep-hook reads the suite's guard entry (`run:dhrfixture apply`) and denies its call with the hub down, the
-  fourth test's `BLOCKED` check;
-- that a hook's event keeps its command in `data.command`, which the fourth test reads beside its ID.
+```sh
+node scripts/throttle.mjs test --wait 240 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/3544 --no-file-parallelism
+```
 
-What was run, with no build needed: the type-check (`tsc --noEmit -p tests/acceptance/3544/tsconfig.json`, clean);
-the wait ratchet (`node scripts/wait-ratchet.mjs`, no finding in this folder); the twins lint (none for this
-folder); the public text lane's name check over every file here (nothing); and the loose readers of `helpers.ts`
-(`countsOf`, `numbersIn`, `asksCounted`) against sample lines, in a scratch script outside the checkout. No stand-in
-for the work was written, so no test was seen to pass, and no twin was planted.
+All six tests fail, each at the assertion the table names, none by a helper's throw, a `BLOCKED` of the setup or the
+runner's timeout; the suite took 9.8 s at a one-minute load of 16. `BASE-FAILURE.txt` is that run's output. No test,
+helper or line under Defined here was changed for it or after it. What the run showed beside the failures:
+
+- the record builds as the setup says (47,500 `commit.made` events at log positions 1 to 47,500, as many rows in
+  `commits`), and the base's hub starts on it: `deep hub start` exits 0 within 1.1 to 1.6 s, its replay inside that;
+- deep-hook reads the suite's guard entry (`run:dhrfixture apply`) and denies its call with no hub running, with
+  exit 2 and the entry's reason and next step: the fourth test's `BLOCKED` check passed;
+- each hub a test started was stopped and its folder removed: no process and no `/tmp/dhr-*` folder was left.
+
+A scratch script outside the checkout, run on the base's built record package with no hub, showed the rest of the
+setup: with the column planted, the next `openRecord` replays the whole log and leaves `commits` with this build's
+columns and 47,500 rows; an open after that replays nothing; and the whole replay took 0.7 s at a load of 55, about
+70 ms a page, so a page's fold leaves most of each 2 s wait to the planted fold's 1 s hold.
+
+The base stops each hub test at the first thing it needs the work to say, so the suite's own run never reaches the
+steps after that. A throwaway probe file drove those steps through the same helpers against a base hub, whose core
+is up since it holds no page: one more granted run, at a load of 17, the file removed after it (a copy is in the
+job's scratch folder). It judged nothing, and showed that the helpers hold on a real hub:
+
+- the nineteen request lines were each acknowledged (`{v: 1, ack: <its ID>, hold_until_ms: null}`), the twenty hooks
+  taking 21 ms in all; the entry's call through deep-hook was denied by the hub's reply, exit 2 with the entry's
+  reason and next step, as with no hub running;
+- the hook sent last came on `stream.subscribe` 72 ms after its acknowledgement, and the record's file then held each
+  of the nineteen once, under its ID and with its command in `data.command`, at rising log positions above 47,500
+  and below the last hook's;
+- `deep hub status`, `deep doctor` and `deep` printed their first line 94, 160 and 49 ms after they started and
+  ended at once, so the 2 s leaves room; `deep` on the base prints `0 asks need you`, which `asksCounted` reads as a
+  count of asks;
+- the hub stopped on its token in 90 ms, with nothing left on its socket, and a second `deep hub start` on the same
+  root exited 0.
+
+Not seen on any program: a hub that holds `rebuilding`, so every assertion past the ones the base fails at.
+
+Also run, with no hub: the type-check (`tsc --noEmit -p tests/acceptance/3544/tsconfig.json`, clean); the wait
+ratchet (`node scripts/wait-ratchet.mjs`, no finding in this folder); the twins lint (none for this folder); the
+public text lane's name check over every file here (nothing); and the loose readers of `helpers.ts` (`countsOf`,
+`numbersIn`, `asksCounted`) against sample lines, in a scratch script outside the checkout. No stand-in for the work
+was written, so no test was seen to pass, and no twin was planted.
 
 ## Files
 
 - `rebuild.test.ts`: criteria one to five. `budget.test.ts`: the sixth.
 - `helpers.ts`: the numbers, the record, a world, a command's lines, the socket, hooks, the stop.
-- `twins.json`, `twins/README.md`: the planted wrong programs. `lane.json`, `tsconfig.json`. `BASE-FAILURE.txt`
-  comes with the base run.
+- `twins.json`, `twins/README.md`: the planted wrong programs. `lane.json`, `tsconfig.json`.
+- `BASE-FAILURE.txt`: the suite's output on the base.
 
 No fixture holds a secret or personal data; every path is a temp folder's, and a failure's message writes the scratch
 home as `~` and this checkout as `<checkout>`.

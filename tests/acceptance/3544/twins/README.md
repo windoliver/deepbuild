@@ -19,5 +19,5 @@ names the real ones. The tests run unchanged on a twin and select none: the two 
 `#3544.37bd1895` (the budget) has no twin: its wrong program is the merge base, whose task doesn't name it.
 
 None of these could be planted when the tests were drafted: each is a fault in work that didn't exist. The real base
-is read to fail all five tests one step earlier, where each first needs the hub or `deep hub start` to say it is
-rebuilding (`../README.md`; `../BASE-FAILURE.txt` once the base run is made).
+fails all five tests one step earlier, where each first needs the hub or `deep hub start` to say it is rebuilding
+(`../BASE-FAILURE.txt`, `../README.md`).
