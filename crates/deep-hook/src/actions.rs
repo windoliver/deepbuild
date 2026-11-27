@@ -34,6 +34,8 @@ const CAP_TEXT: &str = "16 MiB (16,777,216 bytes)";
 
 enum Capped {
     Line(String),
+    /// The last line, which the stream ended before its newline.
+    Unended(String),
     /// A line passed the cap here; the rest of it is dropped by the next read.
     TooLong,
     End,
@@ -58,7 +60,10 @@ impl<R: BufRead> Lines<R> {
             };
             if read.is_empty() {
                 return match (self.dropping, line.is_empty()) {
-                    (false, false) => whole(line),
+                    (false, false) => match whole(line) {
+                        Capped::Line(line) => Capped::Unended(line),
+                        end => end,
+                    },
                     _ => Capped::End,
                 };
             }
@@ -157,7 +162,8 @@ fn unreachable(why: &str) -> Value {
     ])
 }
 
-/// error@2 for a hub reply past the cap, in `deep mcp`'s words: the call may have acted, so it isn't retryable.
+/// error@2 for a hub reply past the cap, in `deep mcp`'s words but for this server's name: the call may have acted,
+/// so it isn't retryable.
 fn too_large() -> Value {
     object(vec![
         ("code", text("too_large")),
@@ -292,8 +298,8 @@ impl Hub {
                 let line = match lines.next() {
                     Capped::Line(line) => line,
                     end => {
-                        // Closed, or a reply past the cap, which is a fault, not an answer: every call still waiting
-                        // on it is told so, and the next call connects again.
+                        // Closed, mid-reply too, or a reply past the cap, which is a fault, not an answer: every call
+                        // still waiting on it is told so, and the next call connects again.
                         let refusal = match end {
                             Capped::TooLong => {
                                 let _ = lines.reader.get_ref().shutdown(Shutdown::Both);
@@ -451,7 +457,7 @@ pub fn serve() -> ExitCode {
         };
         loop {
             let raw = match lines.next() {
-                Capped::Line(raw) => raw,
+                Capped::Line(raw) | Capped::Unended(raw) => raw,
                 Capped::TooLong => {
                     send(
                         &Value::Null,
