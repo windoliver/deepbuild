@@ -1,0 +1,14 @@
+{
+  "benchmarks/budgets.json": [
+    {
+      "find": [
+        "        \"report.wakeupsPerSecond\": 50,",
+        "        \"report.instructionsPerSecond\": 4500000"
+      ],
+      "wrong": [
+        "        \"report.wakeupsPerSecond\": 500,",
+        "        \"report.instructionsPerSecond\": 4500000"
+      ]
+    }
+  ]
+}

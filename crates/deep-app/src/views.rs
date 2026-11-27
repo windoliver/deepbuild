@@ -3530,7 +3530,7 @@ impl Render for Shell {
                     .px(s.space(1))
                     .child(said)
             }))
-            .child(crate::notice::notices(window))
+            .children(crate::said::with(crate::notice::notices(window), cx))
             .children(context_menu(window))
             .children(self.commands.clone())
     }

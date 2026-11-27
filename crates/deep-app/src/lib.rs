@@ -76,6 +76,8 @@ pub mod question;
 pub mod record;
 mod rows;
 pub mod rules;
+/// #3232: the window's one polite live region, and what it says.
+pub mod said;
 /// #2494: a 3D writer layer in the canvas panel, drawn through a GPU-layer view.
 #[cfg(target_os = "macos")]
 pub mod scene_view;

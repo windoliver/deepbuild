@@ -18,7 +18,7 @@ function box(): { box: Box; root: string; asks: string[] } {
   const b = new Box({
     root, plant: undefined, now: () => Date.UTC(2026, 10, 18),
     raise: async () => { const id = `ask:${asks.length + 1}`; asks.push(id); return id; },
-    folders: async () => [], lessons: async () => [], forget: async () => undefined, learn: async () => undefined,
+    folders: async () => [], lessons: async () => [], forget: async () => undefined, learn: async () => undefined, approved: async () => undefined,
   });
   return { box: b, root, asks };
 }

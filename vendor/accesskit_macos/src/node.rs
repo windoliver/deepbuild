@@ -1076,6 +1076,12 @@ declare_class!(
                 } else if attr == ns_string!("AXBrailleRoleDescription") && node.has_braille_role_description() {
                     return Some(NSString::from_str(node.braille_role_description().unwrap()))
                 }
+                // DeepBuild patch (windoliver/deepbuild#3232): a live region's own politeness, as AXARIALive.
+                let live = node.data().live().filter(|_| attr == ns_string!("AXARIALive"));
+                if let Some(live) = live.filter(|live| *live != accesskit::Live::Off) {
+                    let polite = live == accesskit::Live::Polite;
+                    return Some(NSString::from_str(if polite { "polite" } else { "assertive" }));
+                }
 
                 None
             })
@@ -1273,6 +1279,7 @@ declare_class!(
                 }
                 if selector == sel!(accessibilityAttributeValue:) {
                     return node.has_braille_label() || node.has_braille_role_description()
+                        || node.data().live().is_some() // DeepBuild patch (windoliver/deepbuild#3232)
                 }
                 if selector == sel!(accessibilityURL) {
                     return node.supports_url();

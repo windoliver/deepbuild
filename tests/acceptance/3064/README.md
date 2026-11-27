@@ -126,7 +126,7 @@ every test fails on it at its first assertion.
 | AC1 | `#3064.25bec8c3` | `settled.test.mjs`, a run | The run prints the line, `90001`'s test doesn't run while the others run and pass, the summary reads `INCONCLUSIVE affected:` and the exit is 2 |
 | AC2 | `#3064.1c658f8a` | `runs.test.mjs`, names S's issue | The change is a commit over `origin/main` whose message says `Part of #90001`: `90001` runs. With `Closes #90001`, `--list` selects it. With no issue named, `--list` leaves it on the SETTLED line |
 | AC2 | `#3064.1c658f8a` | `runs.test.mjs`, edits a file of S | The change's paths hold `tests/acceptance/90001/started.test.mjs`: `90001` runs |
-| AC2 | `#3064.1c658f8a` | `runs.test.mjs`, S's own package | `90001`'s test also imports `packages/a/src/util.mjs` itself; the change is `packages/a/src/main.mjs`: `90001` runs |
+| AC2 | `#3064.1c658f8a` | retired by #3593 | S's own package: the test and its twin `skips-own-package` were removed by #3593 (owner decision 2026-11-26), under which a settled suite the change reaches by import is left to the watch |
 | AC3 | `#3064.a5a02f7e` | `watch.test.mjs`, 9 clean runs | The tenth run's list doesn't hold `90012/`, and with it `--list` selects `90012`'s file |
 | AC3 | `#3064.a5a02f7e` | `watch.test.mjs`, an open issue | The tenth run's list doesn't hold `90013/`, and with it `--list` selects `90013`'s file |
 | AC3 | `#3064.a5a02f7e` | `changed-suite.test.mjs` | The list names `90001/` by the folder's ID at one commit, a later commit on main edits its file, and a run of the change runs `90001` |

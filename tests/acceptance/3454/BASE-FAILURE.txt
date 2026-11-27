@@ -1,0 +1,68 @@
+Acceptance tests for #3454 on the base 338f6dfe7 (no comment ratchet, no scripts/comment-only.mjs), run on 2026-11-26
+with Node v24.22.0 in a fresh clone of the base with this folder added, after npm ci:
+
+  node --test --test-reporter=tap 'tests/acceptance/3454/*.test.mjs'
+
+Trimmed to one failure reason per test, each an AssertionError (code ERR_ASSERTION); the lane's command list is given
+in full once and shortened with … after. Stack traces are left out, so no local path appears below.
+
+# tests 20
+# pass 0
+# fail 20
+# cancelled 0
+# skipped 0
+# todo 0
+
+not ok 1 - #3454.355ba129 AC8: the comment ratchet adds under 10 s to the lint lane on this checkout, on a reference Mac
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs","scripts/vendor-rebase.mjs check","scripts/canvas-lint.mjs","scripts/size-ratchet.mjs","scripts/wait-ratchet.mjs","scripts/doc-ceilings.mjs","scripts/reading-rule.mjs","scripts/conformance-lint.mjs","scripts/slots-check.mjs","scripts/canvas-closures.mjs closures","scripts/canvas-closures.mjs drift","scripts/canvas-closures.mjs paths","scripts/record-reader-guard.mjs","scripts/render-lint.mjs","scripts/plant-lint.mjs","scripts/loads-lint.mjs","scripts/budget-table.mjs check","scripts/cache-lint.mjs","scripts/blocking-call-guard.mjs","scripts/ask-sources-guard.mjs","scripts/keymap-guard.mjs","scripts/color-literal-guard.mjs","scripts/guide.mjs --check","scripts/panel-catalog.mjs","scripts/known-failures-check.mjs","scripts/fetch-lock.mjs lint","scripts/exit-lint.mjs","scripts/app-copy-lint.mjs","scripts/alone-lint.mjs","scripts/built-escapes.mjs"]
+not ok 2 - #3454.74c0b5ea AC6: scripts/comment-only.mjs passes a change that removes only comments, and fails one that edits a line of code, naming the file; a code edit outside the path is not its to judge
+    this checkout has no scripts/comment-only.mjs
+not ok 3 - #3454.74c0b5ea AC6: scripts/comment-only.mjs passes typeof/* of */b turned into typeof b, and fails it turned into typeofb, naming the file
+    this checkout has no scripts/comment-only.mjs
+not ok 4 - #3454.b2b03e5f AC7: packages/gate holds at least 269 fewer comment lines than on its merge base, and scripts/comment-only.mjs packages/gate passes
+    this checkout has no scripts/comment-only.mjs
+not ok 5 - #3454.8e62c50b AC4: a planted // deadline: bounds the wait beside a timer passes, on the line above it and on its line; // deadline with no reason fails the lint lane, naming the file
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 6 - #3454.8e62c50b AC4: a two-line license notice passes; the same two lines saying something else fail the lint lane, naming the file
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 7 - #3454.c7f7a59e AC5: a generated file with comments passes; the same comments in a hand-written file beside it fail the lint lane, naming it
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 8 - #3454.c7f7a59e AC5: a file under vendor/ with comments passes; the same file outside vendor/ fails the lint lane, naming it
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 9 - #3454.c7f7a59e AC5: a file under tests/acceptance/ with comments passes; the same file outside it fails the lint lane, naming it
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 10 - the lint lane runs scripts/comment-ratchet.mjs as a command of its own, beside the size and wait ratchets
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 11 - #3454.7c3ae88a AC1: a comment planted in a listed file at its ceiling fails the lint lane, naming the file, its count and its ceiling; at its ceiling it passes
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 12 - #3454.7c3ae88a AC1: a comment planted in a file the list doesn't hold fails the lint lane, naming the file; its twin with no comment passes
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 13 - #3454.7c3ae88a AC1: a comment planted in a Rust file at its ceiling fails the lint lane, naming the file, its count and its ceiling; at its ceiling it passes
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 14 - #3454.7c3ae88a AC1: a comment planted in a WGSL file at its ceiling fails the lint lane, naming the file, its count and its ceiling; at its ceiling it passes
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 15 - #3454.7c3ae88a AC1: the // in 'https://example.invalid//x', in a regular expression and in a template is no comment, so the file passes with no ceiling; a comment planted beside them fails, naming the file
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 16 - #3454.7b17acdf AC2: a file whose comments dropped fails, naming it, until its ceiling is lowered to its count
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 17 - #3454.7b17acdf AC2: --write lowers the ceiling of a file whose comments dropped, and drops the entry of a file with none left
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 18 - #3454.ba67856c AC3: a ceiling raised by hand above the merge base's fails the lint lane, naming the file, for a listed file and for one the merge base doesn't list
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 19 - #3454.ba67856c AC3: --write can't raise a ceiling above the merge base's: after it the lint lane still fails, naming the file, for a listed file and for one the merge base doesn't list
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+not ok 20 - on this checkout the guard passes without changing git status, and the checked-in ceilings are the checkout's own
+    the lint lane runs no scripts/comment-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/built-escapes.mjs"]
+
+Checked while drafting, in a throwaway copy outside this checkout (this checkout's flat scripts/ files and this
+folder, with a reference guard and a reference comment-only script written from the issue alone and a lint-lane
+entry for the guard; deleted after, nothing of it is in this commit): the reference passes the 17 scratch-repository
+tests. Each wrong program fails the test that names its fault:
+  - comments found by pattern (any line holding // or /*): AC1 fails, as the issue requires (the token fixture, and
+    the Rust file's string, whose base twin no longer holds its ceiling);
+  - the marker's word taken alone, with no reason: AC4's deadline test fails;
+  - ceilings read only from the work tree, never the merge base: both AC3 tests fail;
+  - a guard that passes everything, and one that fails everything: every AC1 to AC5 test fails;
+  - comment-only comparing text with comments and white space removed: AC6's typeofb test fails.
+The two tests that read this checkout (AC7, AC8) and the checkout test were not run against a reference: the oracle's
+count was checked on its own, 468 at 8f64ca337 as the issue states and 472 at the base.
