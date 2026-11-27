@@ -35,6 +35,7 @@ const OLD = { 'ask-task': 'task', 'unblock task': 'unblock ask', 'standing grant
 const PHRASE = new RegExp(`(?<![\\p{L}\\p{N}_-])(${Object.keys(OLD).map((phrase) => phrase.replace(' ', '\\s+')).join('|')})(s?)(?![\\p{L}\\p{N}_-])`, 'giu');
 const ASK_DONE = /definition of done of (?:each |every |the |an? |that |this |its )?(?:open )?asks?(?![\p{L}\p{N}_-])|(?<![\p{L}\p{N}_-])asks?['’]s? definition of done/iu;
 const before = findings.length;
+const replaced = new Set();
 for (const doc of DOCS) {
   const lines = [...prose(readFileSync(doc, 'utf8'))];
   for (const { number, line } of lines) {
@@ -42,6 +43,7 @@ for (const doc of DOCS) {
     for (const [, phrase, plural] of text.matchAll(PHRASE)) {
       const old = phrase.toLowerCase().replace(/\s+/, ' ');
       if (old === 'session run' && plural) continue;
+      replaced.add(`${doc}:${number}`);
       fail(`${doc}:${number}`, `the prose says "${phrase}${plural}"`, `Say ${OLD[old]}, as GLOSSARY.md has it; inside code the name may stay.`);
     }
     if (ASK_DONE.test(text)) fail(`${doc}:${number}`, 'the prose gives an ask a definition of done', 'Only a task has a definition of done: say task, as GLOSSARY.md has it.');
@@ -62,7 +64,7 @@ for (const doc of DOCS) {
   }
 }
 const worded = findings.length - before;
-if (worded) findings.push(`FAIL glossary: the design docs' prose holds ${worded} finding${worded === 1 ? '' : 's'} against GLOSSARY.md`);
+if (worded) findings.push(`FAIL glossary: the design docs' prose holds ${worded} finding${worded === 1 ? '' : 's'} against GLOSSARY.md, a word it replaces in ${replaced.size} place${replaced.size === 1 ? '' : 's'}`);
 
 if (!existsSync(FILE)) {
   fail(FILE, 'there is no glossary at the repo root', `Write ${FILE}: the real names in their eight groups, each a term in bold and one or two sentences.`);
